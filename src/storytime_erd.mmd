@@ -1,0 +1,80 @@
+erDiagram
+  USER {
+    int id
+    string email
+    string password_hash
+    string name
+    string avatar_url
+    string role
+    timestamp created_at
+    timestamp updated_at
+  }
+  CHILD_PROFILE {
+    int id
+    int user_id
+    string name
+    int age
+    string avatar_url
+    timestamp created_at
+    timestamp updated_at
+  }
+  STORY {
+    int id
+    string title
+    string description
+    string language
+    string theme
+    string cover_image_url
+    string audio_url
+    bool is_interactive
+    int age_min
+    int age_max
+    timestamp created_at
+    timestamp updated_at
+  }
+  STORY_PROGRESS {
+    int id
+    int child_profile_id
+    int story_id
+    float progress_percent
+    bool completed
+    timestamp last_accessed
+  }
+  FAVOURITE_STORY {
+    int id
+    int child_profile_id
+    int story_id
+    timestamp created_at
+  }
+  DAILY_CHALLENGE {
+    int id
+    int story_id
+    date challenge_date
+    string word_of_the_day
+    string meaning
+  }
+  REWARD {
+    int id
+    int child_profile_id
+    string type
+    int amount
+    string description
+    timestamp created_at
+  }
+  PARENTAL_CONTROL {
+    int id
+    int user_id
+    bool explicit_content_filter
+    int max_screen_time_minutes
+    timestamp created_at
+    timestamp updated_at
+  }
+  USER ||--o{ CHILD_PROFILE : has
+  USER ||--o{ PARENTAL_CONTROL : has
+  CHILD_PROFILE ||--o{ STORY_PROGRESS : tracks
+  CHILD_PROFILE ||--o{ FAVOURITE_STORY : favourites
+  CHILD_PROFILE ||--o{ REWARD : earns
+  STORY ||--o{ STORY_PROGRESS : is_tracked_by
+  STORY ||--o{ FAVOURITE_STORY : is_favourited_by
+  STORY ||--o{ DAILY_CHALLENGE : features
+} 
