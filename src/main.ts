@@ -10,19 +10,21 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
-  
+
   const configService = app.get(ConfigService);
-  
+
   app.setGlobalPrefix('api/v1');
-  app.use(helmet())
+  app.use(helmet());
   app.enableCors();
-  
+
   // Enable validation pipes
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    transform: true,
-  }));
-  
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }),
+  );
+
   // Swagger setup
   const config = new DocumentBuilder()
     .setTitle('Storytime API')
@@ -36,10 +38,12 @@ async function bootstrap() {
       persistAuthorization: true,
     },
   });
-  
+
   const port = configService.get('PORT', 3000);
   await app.listen(port);
   logger.log(`Application is running on: ${await app.getUrl()}`);
-  logger.log(`Swagger documentation is available at: http://localhost:${port}/docs`);
+  logger.log(
+    `Swagger documentation is available at: http://localhost:${port}/docs`,
+  );
 }
 bootstrap();
