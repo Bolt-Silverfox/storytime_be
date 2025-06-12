@@ -8,37 +8,76 @@ datasource db {
 }
 
 model User {
-  id           Int       @id @default(autoincrement())
-  email        String    @unique
-  passwordHash String
-  name         String?
-  avatarUrl    String?
-  role         String    @default("user")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  settings     Settings?
-  auth         Auth[]
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String
+  title           String?
+  name            String?
+  avatarUrl       String?
+  isEmailVerified Boolean   @default(false)
+  role            String    @default("user")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  profile         Profile?
+  auth            Session[]
+  Token           Token[]
+  kids            Kid[]
+
+  @@map("users")
 }
 
-model Auth {
-  id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    Int
-  provider  String   // e.g., 'local', 'google', 'facebook'
-  providerId String? // e.g., OAuth provider user id
-  accessToken String?
-  refreshToken String?
+model Kid {
+  id        String  @id @default(uuid())
+  name      String?
+  avatarUrl String?
+
+  parentId  String
+  parent    User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("kids")
 }
 
-model Settings {
-  id                Int      @id @default(autoincrement())
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, token])
+  @@map("sessions")
+}
+
+// this can be verification token, password reset token, otp, etc
+model Token {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  type      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, type])
+  @@index([userId, token])
+  @@map("tokens")
+}
+
+model Profile {
+  id                String   @id @default(uuid())
   user              User     @relation(fields: [userId], references: [id])
-  userId            Int      @unique
+  userId            String   @unique
   explicitContent   Boolean  @default(true)
   maxScreenTimeMins Int?
-  language          String?  // Preferred language
+  language          String? // Preferred language
+  country           String? // Preferred language
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  @@map("profiles")
 }
