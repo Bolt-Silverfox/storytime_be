@@ -275,6 +275,14 @@ export class StoryController {
     return this.storyService.getPreferredVoice(req.authUserData.userId);
   }
 
+  @Get('voices/available')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List all available ElevenLabs voices' })
+  async listAvailableVoices(): Promise<any[]> {
+    return this.storyService.fetchAvailableVoices();
+  }
+
   // --- Story Path / Choice Tracking ---
   @Post('story-path/start')
   @ApiOperation({ summary: 'Start a story path for a kid' })

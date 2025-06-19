@@ -14,7 +14,10 @@ export class ElevenLabsService {
     private readonly configService: ConfigService,
   ) {}
 
-  async generateAudioBuffer(text: string, voice: string = this.defaultVoice): Promise<{ buffer: Buffer, filename: string }> {
+  async generateAudioBuffer(
+    text: string,
+    voice: string = this.defaultVoice,
+  ): Promise<{ buffer: Buffer; filename: string }> {
     try {
       const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
       const response = await firstValueFrom(
@@ -28,7 +31,7 @@ export class ElevenLabsService {
             },
             responseType: 'arraybuffer',
           },
-        )
+        ),
       );
       const buffer = Buffer.from(response.data);
       const filename = `story-${Date.now()}`;
@@ -38,4 +41,14 @@ export class ElevenLabsService {
       throw error;
     }
   }
-} 
+
+  async fetchAvailableVoices(): Promise<any[]> {
+    const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
+    const response = await firstValueFrom(
+      this.httpService.get('https://api.elevenlabs.io/v2/voices', {
+        headers: { 'xi-api-key': apiKey },
+      }),
+    );
+    return response.data.voices; // Array of voices
+  }
+}

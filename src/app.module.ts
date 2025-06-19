@@ -9,6 +9,8 @@ import { NotificationModule } from './notification/notification.module';
 import { CloudinaryModule } from './upload/cloudinary.module';
 import { UploadModule } from './upload/upload.module';
 import { StoryModule } from './story/story.module';
+import { RewardModule } from './reward/reward.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { StoryModule } from './story/story.module';
     CloudinaryModule,
     UploadModule,
     StoryModule,
+    RewardModule,
+    AnalyticsModule,
   ],
   providers: [PrismaService],
 })

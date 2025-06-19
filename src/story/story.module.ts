@@ -11,4 +11,4 @@ import { UploadService } from '../upload/upload.service';
   controllers: [StoryController],
   providers: [StoryService, PrismaService, ElevenLabsService, UploadService],
 })
-export class StoryModule {} 
+export class StoryModule {}

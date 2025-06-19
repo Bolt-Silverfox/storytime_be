@@ -357,4 +357,8 @@ export class StoryService {
     const path = await this.prisma.storyPath.findUnique({ where: { id } });
     return path ? this.toStoryPathDto(path) : null;
   }
+
+  async fetchAvailableVoices(): Promise<any[]> {
+    return this.elevenLabs.fetchAvailableVoices();
+  }
 }
