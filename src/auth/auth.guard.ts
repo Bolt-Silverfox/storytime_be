@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import * as jwt from 'jsonwebtoken';
+import { ConfigService } from '@nestjs/config';
 
 export interface JwtPayload {
   userId: string;
@@ -23,10 +24,14 @@ export interface AuthenticatedRequest extends Request {
 /**
  * Verifies and decodes a JWT token
  * @param token The JWT token to verify
+ * @param configService The ConfigService instance
  * @returns The decoded token payload or null if invalid
  */
-export function checkJwtToken(token: string): JwtPayload | null {
-  const jwtSecret = process.env.SECRET || 'your-secret-key';
+export function checkJwtToken(
+  token: string,
+  configService: ConfigService,
+): JwtPayload | null {
+  const jwtSecret = configService.get<string>('SECRET') || 'your-secret-key';
   const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
 
   if (!decoded.authSessionId) {
@@ -42,7 +47,7 @@ export function checkJwtToken(token: string): JwtPayload | null {
 
 @Injectable()
 export class AuthSessionGuard implements CanActivate {
-  constructor() {}
+  constructor(private readonly configService: ConfigService) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
@@ -60,7 +65,7 @@ export class AuthSessionGuard implements CanActivate {
 
     const token = authHeader.split(' ')[1];
     try {
-      const payload = checkJwtToken(token);
+      const payload = checkJwtToken(token, this.configService);
       if (!payload) {
         throw new UnauthorizedException('Invalid or expired token');
       }

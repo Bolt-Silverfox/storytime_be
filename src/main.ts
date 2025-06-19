@@ -39,11 +39,12 @@ async function bootstrap() {
     },
   });
 
-  const port = configService.get('PORT', 3000);
+  const port = configService.get<number>('PORT', 3000);
   await app.listen(port);
   logger.log(`Application is running on: ${await app.getUrl()}`);
   logger.log(
     `Swagger documentation is available at: http://localhost:${port}/docs`,
   );
 }
+
 bootstrap();
