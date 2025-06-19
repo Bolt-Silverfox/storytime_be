@@ -8,6 +8,7 @@ import PrismaService from './prisma/prisma.service';
 import { NotificationModule } from './notification/notification.module';
 import { CloudinaryModule } from './upload/cloudinary.module';
 import { UploadModule } from './upload/upload.module';
+import { StoryModule } from './story/story.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { UploadModule } from './upload/upload.module';
     NotificationModule,
     CloudinaryModule,
     UploadModule,
+    StoryModule,
   ],
   providers: [PrismaService],
 })

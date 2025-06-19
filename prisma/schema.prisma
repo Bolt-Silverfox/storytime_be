@@ -7,21 +7,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  admin
+  parent
+  kid
+}
+
 model User {
-  id              String    @id @default(uuid())
-  email           String    @unique
-  passwordHash    String
-  title           String?
-  name            String?
-  avatarUrl       String?
-  isEmailVerified Boolean   @default(false)
-  role            String    @default("user")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  profile         Profile?
-  auth            Session[]
-  Token           Token[]
-  kids            Kid[]
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String
+  title            String?
+  name             String?
+  avatarUrl        String?
+  isEmailVerified  Boolean   @default(false)
+  role             Role      @default(parent)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  profile          Profile?
+  auth             Session[]
+  Token            Token[]
+  kids             Kid[]
+  voices           Voice[]
+  preferredVoiceId String? // FK to Voice
+  preferredVoice   Voice?    @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
+  Reward           Reward[]
+  notificationPreferences NotificationPreference[]
+  activityLogs ActivityLog[]
 
   @@map("users")
 }
@@ -35,6 +47,18 @@ model Kid {
   parent    User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  rewards   Reward[]
+
+  preferredVoiceId String?
+  preferredVoice   Voice?   @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
+
+  // New relations
+  dailyChallenges  DailyChallengeAssignment[]
+  notificationPreferences NotificationPreference[]
+  rewardRedemptions RewardRedemption[]
+  activityLogs ActivityLog[]
+  storyPaths StoryPath[]
 
   @@map("kids")
 }
@@ -80,4 +104,194 @@ model Profile {
   updatedAt         DateTime @updatedAt
 
   @@map("profiles")
+}
+
+model Story {
+  id            String   @id @default(uuid())
+  title         String
+  description   String
+  language      String
+  theme         String
+  category      String
+  coverImageUrl String?
+  audioUrl      String?
+  isInteractive Boolean  @default(false)
+  ageMin        Int?
+  ageMax        Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  images   StoryImage[]
+  branches StoryBranch[]
+
+  favorites       Favorite[]
+  progresses      StoryProgress[]
+  dailyChallenges DailyChallenge[]
+  paths StoryPath[]
+
+  @@map("stories")
+}
+
+model StoryImage {
+  id        String   @id @default(uuid())
+  url       String
+  caption   String?
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("story_images")
+}
+
+model StoryBranch {
+  id        String   @id @default(uuid())
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  prompt    String
+  optionA   String
+  optionB   String
+  nextA     String? // id of next branch or null if end
+  nextB     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("story_branches")
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@map("favorites")
+}
+
+model StoryProgress {
+  id           String   @id @default(uuid())
+  userId       String
+  storyId      String
+  story        Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  progress     Float    @default(0)
+  completed    Boolean  @default(false)
+  lastAccessed DateTime @default(now())
+
+  @@unique([userId, storyId])
+  @@map("story_progress")
+}
+
+model DailyChallenge {
+  id            String   @id @default(uuid())
+  storyId       String
+  story         Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  challengeDate DateTime
+  wordOfTheDay  String
+  meaning       String
+  assignments   DailyChallengeAssignment[]
+
+  @@map("daily_challenges")
+}
+
+model Voice {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  name              String
+  type              String   // 'uploaded' or 'elevenlabs'
+  url               String?  // For uploaded audio
+  elevenLabsVoiceId String?  // For ElevenLabs custom voices
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  usersPreferring   User[]   @relation("PreferredVoice")
+  kidsPreferring    Kid[]    @relation("KidPreferredVoice")
+
+  @@map("voices")
+}
+
+model Reward {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  points      Int
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+
+  kidId       String?
+  kid         Kid?     @relation(fields: [kidId], references: [id])
+
+  redemptions RewardRedemption[]
+
+  @@map("rewards")
+}
+
+model DailyChallengeAssignment {
+  id          String   @id @default(uuid())
+  kidId       String
+  kid         Kid      @relation(fields: [kidId], references: [id])
+  challengeId String
+  challenge   DailyChallenge @relation(fields: [challengeId], references: [id])
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  assignedAt  DateTime @default(now())
+
+  @@map("daily_challenge_assignments")
+}
+
+model NotificationPreference {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  kidId     String?
+  kid       Kid?     @relation(fields: [kidId], references: [id])
+  type      String   // e.g. 'email', 'push', etc.
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notification_preferences")
+}
+
+model RewardRedemption {
+  id        String   @id @default(uuid())
+  rewardId  String
+  reward    Reward   @relation(fields: [rewardId], references: [id])
+  kidId     String
+  kid       Kid      @relation(fields: [kidId], references: [id])
+  redeemedAt DateTime @default(now())
+  status    String   // e.g. 'pending', 'approved', 'rejected', 'completed'
+
+  @@map("reward_redemptions")
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  kidId     String?
+  kid       Kid?     @relation(fields: [kidId], references: [id])
+  action    String   // e.g. 'story_read', 'reward_redeemed', etc.
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@map("activity_logs")
+}
+
+model StoryPath {
+  id        String   @id @default(uuid())
+  kidId     String
+  kid       Kid      @relation(fields: [kidId], references: [id])
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id])
+  path      String   // JSON or delimited string of choices
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+
+  @@map("story_paths")
 }
