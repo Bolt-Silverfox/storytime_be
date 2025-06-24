@@ -178,6 +178,10 @@ export class kidDto {
   @ApiProperty({ example: 'https://example.com' })
   @Optional()
   avatarUrl?: string;
+
+  @ApiProperty({ example: '1-3' })
+  @Optional()
+  ageRange?: string;
 }
 
 export class updateKidDto {
