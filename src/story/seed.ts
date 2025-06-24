@@ -34,4 +34,9 @@ async function main() {
   console.log('Seeded stories!');
 }
 
-main().finally(() => prisma.$disconnect()); 
+void main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(() => void prisma.$disconnect());
