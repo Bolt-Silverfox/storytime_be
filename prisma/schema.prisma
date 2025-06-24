@@ -42,6 +42,7 @@ model Kid {
   id        String  @id @default(uuid())
   name      String?
   avatarUrl String?
+  ageRange  String?
 
   parentId  String
   parent    User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
