@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
@@ -170,7 +171,7 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new UnauthorizedException('Email already exists');
+      throw new BadRequestException('Email already exists');
     }
 
     const user = await this.prisma.user.create({
@@ -341,6 +342,7 @@ export class AuthService {
             name: kid.name,
             avatarUrl: kid.avatarUrl,
             parentId: userId,
+            ageRange: kid.ageRange,
           },
         }),
       ),

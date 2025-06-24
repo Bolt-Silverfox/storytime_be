@@ -21,7 +21,8 @@
     "generate": "npx prisma generate",
     "migrate": "npx prisma migrate deploy",
     "make-migration": "npx prisma migrate dev",
-    "db:reset": "npx prisma migrate reset"
+    "db:reset": "npx prisma migrate reset",
+    "deploy:dev": "pnpm make-migration && pnpm generate && pnpm run build"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.0",
