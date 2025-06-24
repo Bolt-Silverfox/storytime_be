@@ -61,7 +61,7 @@ jobs:
     - name: Rsync files to EC2
       if: startsWith(github.ref, 'refs/heads/develop-v')
       run: |
-        rsync -avz --delete --exclude='.git' --exclude='node_modules' --exclude='.github' --exclude='.env' \
+        rsync -avz --exclude='dist' --exclude='.git' --exclude='node_modules' --exclude='.github' --exclude='.env' \
           -e "ssh -i ${{ secrets.EC2_SSH_KEY }} -o StrictHostKeyChecking=no" \
           ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/storytime-api/
     - name: Install and restart on EC2
