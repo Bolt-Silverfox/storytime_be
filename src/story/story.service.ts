@@ -39,13 +39,13 @@ export class StoryService {
     recommended?: boolean;
   }) {
     const where: any = {};
-    if (filter.theme) where.theme = filter.theme;
-    if (filter.category) where.category = filter.category;
+    if (filter.theme) where.themes = { some: { name: filter.theme } };
+    if (filter.category) where.categories = { some: { name: filter.category } };
     if (filter.recommended !== undefined)
       where.recommended = filter.recommended;
     return this.prisma.story.findMany({
       where,
-      include: { images: true, branches: true },
+      include: { images: true, branches: true, categories: true, themes: true },
     });
   }
 
