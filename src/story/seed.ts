@@ -29,8 +29,49 @@ async function main() {
         ageMin: 5,
         ageMax: 10,
       },
+      {
+        title: 'The Lost Spaceship',
+        description:
+          'A thrilling journey through space to find a missing spaceship.',
+        language: 'English',
+        theme: 'Sci-Fi',
+        category: 'Space',
+        coverImageUrl: 'https://example.com/cover3.jpg',
+        audioUrl: 'https://example.com/audio3.mp3',
+        isInteractive: false,
+        ageMin: 7,
+        ageMax: 12,
+      },
+      {
+        title: 'The Underwater Kingdom',
+        description:
+          'Explore the mysteries of the ocean in this underwater adventure.',
+        language: 'English',
+        theme: 'Adventure',
+        category: 'Ocean',
+        coverImageUrl: 'https://example.com/cover4.jpg',
+        audioUrl: 'https://example.com/audio4.mp3',
+        isInteractive: true,
+        ageMin: 6,
+        ageMax: 11,
+        recommended: true,
+      },
+      {
+        title: 'The Robot Who Learned to Love',
+        description: 'A robot discovers the meaning of friendship and love.',
+        language: 'English',
+        theme: 'Emotional',
+        category: 'Robots',
+        coverImageUrl: 'https://example.com/cover5.jpg',
+        audioUrl: 'https://example.com/audio5.mp3',
+        isInteractive: false,
+        ageMin: 8,
+        ageMax: 13,
+        recommended: true,
+      },
     ],
   });
+
   console.log('Seeded stories!');
 }
 
