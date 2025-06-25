@@ -21,7 +21,6 @@ import {
   ApiBearerAuth,
   ApiResponse,
   ApiOkResponse,
-  ApiProperty,
 } from '@nestjs/swagger';
 import { StoryService } from './story.service';
 import {
@@ -42,23 +41,11 @@ import {
   StartStoryPathDto,
   UpdateStoryPathDto,
   StoryPathDto,
+  CategoryDto,
+  ThemeDto,
 } from './story.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
-
-class CategoryDto {
-  @ApiProperty()
-  id: string;
-  @ApiProperty()
-  name: string;
-}
-
-class ThemeDto {
-  @ApiProperty()
-  id: string;
-  @ApiProperty()
-  name: string;
-}
 
 @ApiTags('stories')
 @Controller('stories')

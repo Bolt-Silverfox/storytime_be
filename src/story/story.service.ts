@@ -18,10 +18,12 @@ import {
   StartStoryPathDto,
   UpdateStoryPathDto,
   StoryPathDto,
+  CategoryDto,
+  ThemeDto,
 } from './story.dto';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
-import { Category, Prisma, Theme, Voice } from '@prisma/client';
+import { Prisma, Voice } from '@prisma/client';
 
 @Injectable()
 export class StoryService {
@@ -374,11 +376,11 @@ export class StoryService {
     return this.elevenLabs.fetchAvailableVoices();
   }
 
-  async getCategories(): Promise<Category[]> {
+  async getCategories(): Promise<CategoryDto[]> {
     return await this.prisma.category.findMany();
   }
 
-  async getThemes(): Promise<Theme[]> {
+  async getThemes(): Promise<ThemeDto[]> {
     return await this.prisma.theme.findMany();
   }
 }
