@@ -74,8 +74,8 @@ export class StoryService {
         ageMax: data.ageMax ?? 9,
         images: data.images ? { create: data.images } : undefined,
         branches: data.branches ? { create: data.branches } : undefined,
-        categories: { connect: data.categoryNames.map((name) => ({ name })) },
-        themes: { connect: data.themeNames.map((name) => ({ name })) },
+        categories: { connect: data.categoryIds.map((id) => ({ id })) },
+        themes: { connect: data.themeIds.map((id) => ({ id })) },
       },
       include: { images: true, branches: true },
     });
@@ -102,11 +102,11 @@ export class StoryService {
         audioUrl,
         images: data.images ? { create: data.images } : undefined,
         branches: data.branches ? { create: data.branches } : undefined,
-        categories: data.categoryNames
-          ? { set: data.categoryNames.map((name) => ({ name })) }
+        categories: data.categoryIds
+          ? { set: data.categoryIds.map((id) => ({ id })) }
           : undefined,
-        themes: data.themeNames
-          ? { set: data.themeNames.map((name) => ({ name })) }
+        themes: data.themeIds
+          ? { set: data.themeIds.map((id) => ({ id })) }
           : undefined,
       },
       include: { images: true, branches: true },
