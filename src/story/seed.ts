@@ -54,6 +54,7 @@ async function main() {
         isInteractive: true,
         ageMin: 6,
         ageMax: 11,
+        recommended: true,
       },
       {
         title: 'The Robot Who Learned to Love',
@@ -66,6 +67,7 @@ async function main() {
         isInteractive: false,
         ageMin: 8,
         ageMax: 13,
+        recommended: true,
       },
     ],
   });

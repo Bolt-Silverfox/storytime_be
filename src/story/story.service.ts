@@ -67,7 +67,7 @@ export class StoryService {
         coverImageUrl: data.coverImageUrl ?? '',
         isInteractive: data.isInteractive ?? false,
         ageMin: data.ageMin ?? 0,
-        ageMax: data.ageMax ?? 0,
+        ageMax: data.ageMax ?? 9,
         images: data.images ? { create: data.images } : undefined,
         branches: data.branches ? { create: data.branches } : undefined,
       },
