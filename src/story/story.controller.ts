@@ -57,11 +57,22 @@ export class StoryController {
   })
   @ApiQuery({ name: 'theme', required: false, type: String })
   @ApiQuery({ name: 'category', required: false, type: String })
+  @ApiQuery({ name: 'recommended', required: false, type: Boolean })
   async getStories(
     @Query('theme') theme?: string,
     @Query('category') category?: string,
+    @Query('recommended') recommended?: string,
   ) {
-    return this.storyService.getStories({ theme, category });
+    return this.storyService.getStories({
+      theme,
+      category,
+      recommended:
+        recommended === 'true'
+          ? true
+          : recommended === 'false'
+            ? false
+            : undefined,
+    });
   }
 
   @Post()

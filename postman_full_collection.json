@@ -1,0 +1,856 @@
+{
+  "info": {
+    "_postman_id": "full-collection-uuid",
+    "name": "Full API Collection",
+    "description": "# Environment Setup\n\n- Set `baseUrl` to your API base URL (e.g., http://localhost:3000 or your deployed endpoint).\n- Set `token` to a valid JWT for authenticated endpoints.\n\n# Usage\n\n- Use the folders to explore endpoints grouped by controller.\n- Example request bodies are provided for all endpoints that accept a body.\n- Replace placeholder values (e.g., user-id, kid-id, etc.) with real data as needed.\n\n# Environment Variables\n\n```json\n{\n  \"baseUrl\": \"http://localhost:3000\",\n  \"token\": \"YOUR_JWT_TOKEN_HERE\"\n}\n```\n\nImport this as a Postman environment for easy switching.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh?token=REFRESH_TOKEN",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"],
+              "query": [{ "key": "token", "value": "REFRESH_TOKEN" }]
+            }
+          }
+        },
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"title\": \"Mr\",\n  \"fullName\": \"John Doe\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "Logout All",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout-all"]
+            }
+          }
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-email?token=TOKEN",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "verify-email"],
+              "query": [{ "key": "token", "value": "TOKEN" }]
+            }
+          }
+        },
+        {
+          "name": "Send Verification",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/send-verification?email=user@example.com",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "send-verification"],
+              "query": [{ "key": "email", "value": "user@example.com" }]
+            }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"avatarUrl\": \"https://avatar.com/jane\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Add Kids",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[{\n  \"name\": \"Kid One\",\n  \"avatarUrl\": \"https://avatar.com/kid1\",\n  \"ageRange\": \"1-3\"\n}]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/kids",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "kids"]
+            }
+          }
+        },
+        {
+          "name": "Get Kids",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/kids",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "kids"]
+            }
+          }
+        },
+        {
+          "name": "Update Kids",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[{\n  \"id\": \"kid-id\",\n  \"name\": \"Kid Updated\"\n}]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/kids",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "kids"]
+            }
+          }
+        },
+        {
+          "name": "Delete Kids",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "[\"kid-id\"]" },
+            "url": {
+              "raw": "{{baseUrl}}/auth/kids",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "kids"]
+            }
+          }
+        },
+        {
+          "name": "Request Password Reset",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/request-password-reset?email=user@example.com",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "request-password-reset"],
+              "query": [{ "key": "email", "value": "user@example.com" }]
+            }
+          }
+        },
+        {
+          "name": "Validate Reset Token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/validate-reset-token?token=TOKEN&email=user@example.com",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "validate-reset-token"],
+              "query": [
+                { "key": "token", "value": "TOKEN" },
+                { "key": "email", "value": "user@example.com" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password?token=TOKEN&newPassword=NEWPASS",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset-password"],
+              "query": [
+                { "key": "token", "value": "TOKEN" },
+                { "key": "newPassword", "value": "NEWPASS" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/user/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Update User by ID",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"avatarUrl\": \"https://avatar.com/jane\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/user/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", ":id"]
+            }
+          }
+        },
+        {
+          "name": "List All Users (Admin Only)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/user",
+              "host": ["{{baseUrl}}"],
+              "path": ["user"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/user/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "me"]
+            }
+          }
+        },
+        {
+          "name": "Delete User (Admin Only)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/user/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Get User Role (Admin Only)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/user/:id/role",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", ":id", "role"]
+            }
+          }
+        },
+        {
+          "name": "Update User Role (Admin Only)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/user/:id/role",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", ":id", "role"]
+            }
+          }
+        },
+        {
+          "name": "Set Kid Preferred Voice",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"voiceId\": \"voice-id\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/user/kids/:kidId/voice",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "kids", ":kidId", "voice"]
+            }
+          }
+        },
+        {
+          "name": "Get Kid Preferred Voice",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/user/kids/:kidId/voice",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "kids", ":kidId", "voice"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stories",
+      "item": [
+        {
+          "name": "Get All Stories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stories",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories"],
+              "query": [
+                { "key": "theme", "value": "", "disabled": true },
+                { "key": "category", "value": "", "disabled": true },
+                { "key": "recommended", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Story",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Sample Story\",\n  \"description\": \"A story description.\",\n  \"language\": \"English\",\n  \"theme\": \"Adventure\",\n  \"category\": \"Animals\",\n  \"coverImageUrl\": \"https://example.com/cover.jpg\",\n  \"audioUrl\": \"https://example.com/audio.mp3\",\n  \"isInteractive\": false,\n  \"ageMin\": 4,\n  \"ageMax\": 8\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories"]
+            }
+          }
+        },
+        {
+          "name": "Update Story",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Story\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Delete Story",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stories/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Add Image to Story",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.com/image.jpg\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/:id/images",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", ":id", "images"]
+            }
+          }
+        },
+        {
+          "name": "Add Branch to Story",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Branch Title\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/:id/branches",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", ":id", "branches"]
+            }
+          }
+        },
+        {
+          "name": "Add Favorite",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyId\": \"story-id\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/favorites",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "favorites"]
+            }
+          }
+        },
+        {
+          "name": "Remove Favorite",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/stories/favorites/:storyId",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "favorites", ":storyId"]
+            }
+          }
+        },
+        {
+          "name": "Get Favorites",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/stories/favorites",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "favorites"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reward",
+      "item": [
+        {
+          "name": "Create Reward",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Gold Star\",\n  \"description\": \"Awarded for good behavior\",\n  \"points\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rewards",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards"]
+            }
+          }
+        },
+        {
+          "name": "List All Rewards",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rewards",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards"]
+            }
+          }
+        },
+        {
+          "name": "List Rewards for Kid",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rewards/kid/:kidId",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards", "kid", ":kidId"]
+            }
+          }
+        },
+        {
+          "name": "Get Reward by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rewards/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Update Reward",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Reward\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rewards/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Delete Reward",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rewards/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Redeem Reward",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kidId\": \"kid-id\",\n  \"rewardId\": \"reward-id\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rewards/redeem",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards", "redeem"]
+            }
+          }
+        },
+        {
+          "name": "Update Reward Redemption Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"redemptionId\": \"redemption-id\",\n  \"status\": \"completed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rewards/redemption/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards", "redemption", "status"]
+            }
+          }
+        },
+        {
+          "name": "List Reward Redemptions for Kid",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rewards/redemption/kid/:kidId",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards", "redemption", "kid", ":kidId"]
+            }
+          }
+        },
+        {
+          "name": "Get Reward Redemption by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rewards/redemption/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards", "redemption", ":id"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Get User Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/settings/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["settings", ":userId"]
+            }
+          }
+        },
+        {
+          "name": "Update User Settings",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"explicitContent\": false,\n  \"maxScreenTimeMins\": 120,\n  \"language\": \"fr\",\n  \"country\": \"france\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/settings/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["settings", ":userId"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Get System Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "stats"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Activity Logs",
+      "item": [
+        {
+          "name": "Log Activity",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-id\",\n  \"action\": \"login\",\n  \"details\": \"User logged in\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/activity-logs",
+              "host": ["{{baseUrl}}"],
+              "path": ["activity-logs"]
+            }
+          }
+        },
+        {
+          "name": "Get Activity Logs for User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/activity-logs/user/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["activity-logs", "user", ":userId"]
+            }
+          }
+        },
+        {
+          "name": "Get Activity Logs for Kid",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/activity-logs/kid/:kidId",
+              "host": ["{{baseUrl}}"],
+              "path": ["activity-logs", "kid", ":kidId"]
+            }
+          }
+        },
+        {
+          "name": "Get Activity Log by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/activity-logs/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["activity-logs", ":id"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notification Preferences",
+      "item": [
+        {
+          "name": "Create Notification Preference",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-id\",\n  \"type\": \"email\",\n  \"enabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/notification-preferences",
+              "host": ["{{baseUrl}}"],
+              "path": ["notification-preferences"]
+            }
+          }
+        },
+        {
+          "name": "Update Notification Preference",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"enabled\": false\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/notification-preferences/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["notification-preferences", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Get Notification Preferences for User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notification-preferences/user/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["notification-preferences", "user", ":userId"]
+            }
+          }
+        },
+        {
+          "name": "Get Notification Preferences for Kid",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notification-preferences/kid/:kidId",
+              "host": ["{{baseUrl}}"],
+              "path": ["notification-preferences", "kid", ":kidId"]
+            }
+          }
+        },
+        {
+          "name": "Get Notification Preference by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notification-preferences/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["notification-preferences", ":id"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Upload",
+      "item": [
+        {
+          "name": "Upload File",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "multipart/form-data" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["upload"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

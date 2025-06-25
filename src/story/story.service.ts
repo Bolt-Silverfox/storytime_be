@@ -31,10 +31,16 @@ export class StoryService {
     public readonly uploadService: UploadService,
   ) {}
 
-  async getStories(filter: { theme?: string; category?: string }) {
+  async getStories(filter: {
+    theme?: string;
+    category?: string;
+    recommended?: boolean;
+  }) {
     const where: any = {};
     if (filter.theme) where.theme = filter.theme;
     if (filter.category) where.category = filter.category;
+    if (filter.recommended !== undefined)
+      where.recommended = filter.recommended;
     return this.prisma.story.findMany({
       where,
       include: { images: true, branches: true },
@@ -44,16 +50,24 @@ export class StoryService {
   async createStory(data: CreateStoryDto) {
     let audioUrl = data.audioUrl;
     if (!audioUrl && data.description) {
-      // Generate audio using Eleven Labs and upload to Cloudinary
       const { buffer, filename } = await this.elevenLabs.generateAudioBuffer(
         data.description,
       );
       audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
     }
+    if (!audioUrl) {
+      throw new Error(
+        'audioUrl or description is required to generate story audio.',
+      );
+    }
     return this.prisma.story.create({
       data: {
         ...data,
         audioUrl,
+        coverImageUrl: data.coverImageUrl ?? '',
+        isInteractive: data.isInteractive ?? false,
+        ageMin: data.ageMin ?? 0,
+        ageMax: data.ageMax ?? 9,
         images: data.images ? { create: data.images } : undefined,
         branches: data.branches ? { create: data.branches } : undefined,
       },
@@ -276,7 +290,7 @@ export class StoryService {
       include: { preferredVoice: true } as Prisma.UserInclude,
     });
     if (!user || !user.preferredVoice) return null;
-    return this.toVoiceResponse(user.preferredVoice as Voice);
+    return this.toVoiceResponse(user.preferredVoice);
   }
 
   private toVoiceResponse(voice: Voice): VoiceResponseDto {
@@ -300,7 +314,7 @@ export class StoryService {
     });
     let voice: string | undefined = undefined;
     if (user && user.preferredVoice) {
-      const prefVoice = user.preferredVoice as Voice;
+      const prefVoice = user.preferredVoice;
       if (prefVoice.type === 'elevenlabs' && prefVoice.elevenLabsVoiceId) {
         voice = prefVoice.elevenLabsVoiceId;
       }
