@@ -31,10 +31,10 @@ export class CreateStoryDto {
   language: string;
 
   @ApiProperty()
-  theme: string;
+  themeNames: string[];
 
   @ApiProperty()
-  category: string;
+  categoryNames: string[];
 
   @ApiProperty({ required: false })
   coverImageUrl?: string;

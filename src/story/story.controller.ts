@@ -75,6 +75,18 @@ export class StoryController {
     });
   }
 
+  @Get('categories')
+  @ApiOperation({ summary: 'Get all categories' })
+  async getCategories() {
+    return this.storyService.getCategories();
+  }
+
+  @Get('themes')
+  @ApiOperation({ summary: 'Get all themes' })
+  async getThemes() {
+    return this.storyService.getThemes();
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a new story' })
   @ApiBody({ type: CreateStoryDto })

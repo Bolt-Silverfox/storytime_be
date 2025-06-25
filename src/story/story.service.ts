@@ -21,7 +21,7 @@ import {
 } from './story.dto';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
-import { Prisma, Voice } from '@prisma/client';
+import { Category, Prisma, Theme, Voice } from '@prisma/client';
 
 @Injectable()
 export class StoryService {
@@ -62,14 +62,18 @@ export class StoryService {
     }
     return this.prisma.story.create({
       data: {
-        ...data,
-        audioUrl,
+        title: data.title,
+        description: data.description,
+        language: data.language,
         coverImageUrl: data.coverImageUrl ?? '',
+        audioUrl,
         isInteractive: data.isInteractive ?? false,
         ageMin: data.ageMin ?? 0,
         ageMax: data.ageMax ?? 9,
         images: data.images ? { create: data.images } : undefined,
         branches: data.branches ? { create: data.branches } : undefined,
+        categories: { connect: data.categoryNames.map((name) => ({ name })) },
+        themes: { connect: data.themeNames.map((name) => ({ name })) },
       },
       include: { images: true, branches: true },
     });
@@ -83,31 +87,25 @@ export class StoryService {
       );
       audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
     }
-    // Only update scalar fields; images/branches should be managed via their own endpoints
-    const {
-      title,
-      description,
-      language,
-      theme,
-      category,
-      coverImageUrl,
-      isInteractive,
-      ageMin,
-      ageMax,
-    } = data;
     return this.prisma.story.update({
       where: { id },
       data: {
-        title,
-        description,
-        language,
-        theme,
-        category,
-        coverImageUrl,
-        isInteractive,
-        ageMin,
-        ageMax,
+        title: data.title,
+        description: data.description,
+        language: data.language,
+        coverImageUrl: data.coverImageUrl,
+        isInteractive: data.isInteractive,
+        ageMin: data.ageMin,
+        ageMax: data.ageMax,
         audioUrl,
+        images: data.images ? { create: data.images } : undefined,
+        branches: data.branches ? { create: data.branches } : undefined,
+        categories: data.categoryNames
+          ? { set: data.categoryNames.map((name) => ({ name })) }
+          : undefined,
+        themes: data.themeNames
+          ? { set: data.themeNames.map((name) => ({ name })) }
+          : undefined,
       },
       include: { images: true, branches: true },
     });
@@ -374,5 +372,13 @@ export class StoryService {
 
   async fetchAvailableVoices(): Promise<any[]> {
     return this.elevenLabs.fetchAvailableVoices();
+  }
+
+  async getCategories(): Promise<Category[]> {
+    return await this.prisma.category.findMany();
+  }
+
+  async getThemes(): Promise<Theme[]> {
+    return await this.prisma.theme.findMany();
   }
 }
