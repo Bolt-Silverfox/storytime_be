@@ -112,8 +112,6 @@ model Story {
   title          String
   description    String
   language       String
-  theme          String
-  category       String
   coverImageUrl  String
   audioUrl       String
   isInteractive  Boolean
@@ -129,7 +127,10 @@ model Story {
   favorites       Favorite[]
   progresses      StoryProgress[]
   dailyChallenges DailyChallenge[]
-  paths StoryPath[]
+  paths           StoryPath[]
+
+  categories  Category[]  @relation("StoryCategories")
+  themes      Theme[]     @relation("StoryThemes")
 
   @@map("stories")
 }
@@ -296,4 +297,16 @@ model StoryPath {
   completedAt DateTime?
 
   @@map("story_paths")
+}
+
+model Category {
+  id      String   @id @default(uuid())
+  name    String   @unique
+  stories Story[]  @relation("StoryCategories")
+}
+
+model Theme {
+  id      String   @id @default(uuid())
+  name    String   @unique
+  stories Story[]  @relation("StoryThemes")
 }
