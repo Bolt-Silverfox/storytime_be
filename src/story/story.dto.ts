@@ -1,4 +1,4 @@
-import { ApiProperty, PartialType } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class StoryImageDto {
   @ApiProperty()
@@ -30,11 +30,11 @@ export class CreateStoryDto {
   @ApiProperty()
   language: string;
 
-  @ApiProperty()
-  themeNames: string[];
+  @ApiProperty({ type: [String] })
+  themeIds: string[];
 
-  @ApiProperty()
-  categoryNames: string[];
+  @ApiProperty({ type: [String] })
+  categoryIds: string[];
 
   @ApiProperty({ required: false })
   coverImageUrl?: string;
@@ -58,7 +58,43 @@ export class CreateStoryDto {
   branches?: StoryBranchDto[];
 }
 
-export class UpdateStoryDto extends PartialType(CreateStoryDto) {}
+export class UpdateStoryDto {
+  @ApiProperty({ required: false })
+  title?: string;
+
+  @ApiProperty({ required: false })
+  description?: string;
+
+  @ApiProperty({ required: false })
+  language?: string;
+
+  @ApiProperty({ type: [String], required: false })
+  themeIds?: string[];
+
+  @ApiProperty({ type: [String], required: false })
+  categoryIds?: string[];
+
+  @ApiProperty({ required: false })
+  coverImageUrl?: string;
+
+  @ApiProperty({ required: false })
+  audioUrl?: string;
+
+  @ApiProperty({ required: false })
+  isInteractive?: boolean;
+
+  @ApiProperty({ required: false })
+  ageMin?: number;
+
+  @ApiProperty({ required: false })
+  ageMax?: number;
+
+  @ApiProperty({ type: [StoryImageDto], required: false })
+  images?: StoryImageDto[];
+
+  @ApiProperty({ type: [StoryBranchDto], required: false })
+  branches?: StoryBranchDto[];
+}
 
 export class FavoriteDto {
   @ApiProperty()
