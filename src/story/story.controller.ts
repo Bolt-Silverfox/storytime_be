@@ -20,6 +20,8 @@ import {
   ApiBody,
   ApiBearerAuth,
   ApiResponse,
+  ApiOkResponse,
+  ApiProperty,
 } from '@nestjs/swagger';
 import { StoryService } from './story.service';
 import {
@@ -43,6 +45,20 @@ import {
 } from './story.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
+
+class CategoryDto {
+  @ApiProperty()
+  id: string;
+  @ApiProperty()
+  name: string;
+}
+
+class ThemeDto {
+  @ApiProperty()
+  id: string;
+  @ApiProperty()
+  name: string;
+}
 
 @ApiTags('stories')
 @Controller('stories')
@@ -77,12 +93,14 @@ export class StoryController {
 
   @Get('categories')
   @ApiOperation({ summary: 'Get all categories' })
+  @ApiOkResponse({ type: CategoryDto, isArray: true })
   async getCategories() {
     return this.storyService.getCategories();
   }
 
   @Get('themes')
   @ApiOperation({ summary: 'Get all themes' })
+  @ApiOkResponse({ type: ThemeDto, isArray: true })
   async getThemes() {
     return this.storyService.getThemes();
   }
