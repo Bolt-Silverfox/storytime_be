@@ -502,6 +502,30 @@
               "path": ["stories", "favorites"]
             }
           }
+        },
+        {
+          "name": "Get All Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stories/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "categories"]
+            }
+          }
+        },
+        {
+          "name": "Get All Themes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stories/themes",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "themes"]
+            }
+          }
         }
       ]
     },

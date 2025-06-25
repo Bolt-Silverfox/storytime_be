@@ -20,6 +20,7 @@ import {
   ApiBody,
   ApiBearerAuth,
   ApiResponse,
+  ApiOkResponse,
 } from '@nestjs/swagger';
 import { StoryService } from './story.service';
 import {
@@ -40,6 +41,8 @@ import {
   StartStoryPathDto,
   UpdateStoryPathDto,
   StoryPathDto,
+  CategoryDto,
+  ThemeDto,
 } from './story.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -73,6 +76,20 @@ export class StoryController {
             ? false
             : undefined,
     });
+  }
+
+  @Get('categories')
+  @ApiOperation({ summary: 'Get all categories' })
+  @ApiOkResponse({ type: CategoryDto, isArray: true })
+  async getCategories() {
+    return this.storyService.getCategories();
+  }
+
+  @Get('themes')
+  @ApiOperation({ summary: 'Get all themes' })
+  @ApiOkResponse({ type: ThemeDto, isArray: true })
+  async getThemes() {
+    return this.storyService.getThemes();
   }
 
   @Post()

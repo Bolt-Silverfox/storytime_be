@@ -31,10 +31,10 @@ export class CreateStoryDto {
   language: string;
 
   @ApiProperty()
-  theme: string;
+  themeNames: string[];
 
   @ApiProperty()
-  category: string;
+  categoryNames: string[];
 
   @ApiProperty({ required: false })
   coverImageUrl?: string;
@@ -176,4 +176,18 @@ export class StoryPathDto {
   startedAt: Date;
   @ApiProperty({ required: false })
   completedAt?: Date;
+}
+
+export class CategoryDto {
+  @ApiProperty()
+  id: string;
+  @ApiProperty()
+  name: string;
+}
+
+export class ThemeDto {
+  @ApiProperty()
+  id: string;
+  @ApiProperty()
+  name: string;
 }
