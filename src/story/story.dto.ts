@@ -177,3 +177,17 @@ export class StoryPathDto {
   @ApiProperty({ required: false })
   completedAt?: Date;
 }
+
+export class CategoryDto {
+  @ApiProperty()
+  id: string;
+  @ApiProperty()
+  name: string;
+}
+
+export class ThemeDto {
+  @ApiProperty()
+  id: string;
+  @ApiProperty()
+  name: string;
+}
