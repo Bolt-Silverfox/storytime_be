@@ -60,6 +60,8 @@ model Kid {
   rewardRedemptions RewardRedemption[]
   activityLogs ActivityLog[]
   storyPaths StoryPath[]
+  favorites Favorite[]
+  progresses StoryProgress[]
 
   @@map("kids")
 }
@@ -164,9 +166,10 @@ model StoryBranch {
 
 model Favorite {
   id        String   @id @default(uuid())
-  userId    String
-  storyId   String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  kidId    String
+  kid      Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  storyId  String
+  story    Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
   @@map("favorites")
@@ -174,14 +177,15 @@ model Favorite {
 
 model StoryProgress {
   id           String   @id @default(uuid())
-  userId       String
+  kidId        String
+  kid          Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
   storyId      String
   story        Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   progress     Float    @default(0)
   completed    Boolean  @default(false)
   lastAccessed DateTime @default(now())
 
-  @@unique([userId, storyId])
+  @@unique([kidId, storyId])
   @@map("story_progress")
 }
 
@@ -302,11 +306,15 @@ model StoryPath {
 model Category {
   id      String   @id @default(uuid())
   name    String   @unique
+  image   String?
+  description String?
   stories Story[]  @relation("StoryCategories")
 }
 
 model Theme {
   id      String   @id @default(uuid())
   name    String   @unique
+  image   String?
+  description String?
   stories Story[]  @relation("StoryThemes")
 }

@@ -98,10 +98,14 @@ export class UpdateStoryDto {
 
 export class FavoriteDto {
   @ApiProperty()
+  kidId: string;
+  @ApiProperty()
   storyId: string;
 }
 
 export class StoryProgressDto {
+  @ApiProperty()
+  kidId: string;
   @ApiProperty()
   storyId: string;
   @ApiProperty()
@@ -219,6 +223,10 @@ export class CategoryDto {
   id: string;
   @ApiProperty()
   name: string;
+  @ApiProperty({ required: false })
+  image?: string;
+  @ApiProperty({ required: false })
+  description?: string;
 }
 
 export class ThemeDto {
@@ -226,4 +234,17 @@ export class ThemeDto {
   id: string;
   @ApiProperty()
   name: string;
+  @ApiProperty({ required: false })
+  image?: string;
+  @ApiProperty({ required: false })
+  description?: string;
+}
+
+export class ErrorResponseDto {
+  @ApiProperty({ example: 'Error message' })
+  message: string;
+  @ApiProperty({ example: 400, required: false })
+  statusCode?: number;
+  @ApiProperty({ required: false, description: 'Additional error details' })
+  details?: any;
 }

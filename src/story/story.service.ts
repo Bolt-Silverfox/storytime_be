@@ -37,12 +37,33 @@ export class StoryService {
     theme?: string;
     category?: string;
     recommended?: boolean;
+    age?: number;
+    kidId?: string;
   }) {
     const where: any = {};
     if (filter.theme) where.themes = { some: { name: filter.theme } };
     if (filter.category) where.categories = { some: { name: filter.category } };
     if (filter.recommended !== undefined)
       where.recommended = filter.recommended;
+    let age: number | undefined = filter.age;
+    if (!age && filter.kidId) {
+      // Look up the kid's age if kidId is provided and age is not
+      const kid: { ageRange?: string | null } | null =
+        await this.prisma.kid.findUnique({
+          where: { id: filter.kidId },
+        });
+      if (kid && kid.ageRange && typeof kid.ageRange === 'string') {
+        // Assume ageRange is a string like '4-7' or '8-10'
+        const match = kid.ageRange.match(/(\d+)/);
+        if (match) {
+          age = parseInt(match[1], 10);
+        }
+      }
+    }
+    if (typeof age === 'number') {
+      where.ageMin = { lte: age };
+      where.ageMax = { gte: age };
+    }
     return this.prisma.story.findMany({
       where,
       include: { images: true, branches: true, categories: true, themes: true },
@@ -132,43 +153,43 @@ export class StoryService {
   }
 
   // --- Favorites ---
-  async addFavorite(userId: string, dto: FavoriteDto) {
+  async addFavorite(dto: FavoriteDto) {
     return this.prisma.favorite.create({
-      data: { userId, storyId: dto.storyId },
+      data: { kidId: dto.kidId, storyId: dto.storyId },
     });
   }
-  async removeFavorite(userId: string, storyId: string) {
+  async removeFavorite(kidId: string, storyId: string) {
     return this.prisma.favorite.deleteMany({
-      where: { userId, storyId },
+      where: { kidId, storyId },
     });
   }
-  async getFavorites(userId: string) {
+  async getFavorites(kidId: string) {
     return this.prisma.favorite.findMany({
-      where: { userId },
+      where: { kidId },
       include: { story: true },
     });
   }
 
   // --- Progress ---
-  async setProgress(userId: string, dto: StoryProgressDto) {
+  async setProgress(dto: StoryProgressDto) {
     return this.prisma.storyProgress.upsert({
-      where: { userId_storyId: { userId, storyId: dto.storyId } },
+      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
       update: {
         progress: dto.progress,
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
       },
       create: {
-        userId,
+        kidId: dto.kidId,
         storyId: dto.storyId,
         progress: dto.progress,
         completed: dto.completed ?? false,
       },
     });
   }
-  async getProgress(userId: string, storyId: string) {
+  async getProgress(kidId: string, storyId: string) {
     return this.prisma.storyProgress.findUnique({
-      where: { userId_storyId: { userId, storyId } },
+      where: { kidId_storyId: { kidId, storyId } },
     });
   }
 
@@ -277,11 +298,17 @@ export class StoryService {
   async setPreferredVoice(
     userId: string,
     dto: SetPreferredVoiceDto,
-  ): Promise<void> {
-    await this.prisma.user.update({
+  ): Promise<any> {
+    const result = await this.prisma.user.update({
       where: { id: userId },
       data: { preferredVoiceId: dto.voiceId },
     });
+    return {
+      id: result.id,
+      email: result.email,
+      name: result.name,
+      preferredVoice: result.preferredVoiceId,
+    };
   }
 
   async getPreferredVoice(userId: string): Promise<VoiceResponseDto | null> {
@@ -289,7 +316,14 @@ export class StoryService {
       where: { id: userId },
       include: { preferredVoice: true } as Prisma.UserInclude,
     });
-    if (!user || !user.preferredVoice) return null;
+    if (!user || !user.preferredVoice)
+      return {
+        id: '',
+        name: '',
+        type: '',
+        url: undefined,
+        elevenLabsVoiceId: undefined,
+      };
     return this.toVoiceResponse(user.preferredVoice);
   }
 
@@ -377,10 +411,20 @@ export class StoryService {
   }
 
   async getCategories(): Promise<CategoryDto[]> {
-    return await this.prisma.category.findMany();
+    const categories = await this.prisma.category.findMany();
+    return categories.map((c) => ({
+      ...c,
+      image: c.image ?? undefined,
+      description: c.description ?? undefined,
+    }));
   }
 
   async getThemes(): Promise<ThemeDto[]> {
-    return await this.prisma.theme.findMany();
+    const themes = await this.prisma.theme.findMany();
+    return themes.map((t) => ({
+      ...t,
+      image: t.image ?? undefined,
+      description: t.description ?? undefined,
+    }));
   }
 }
