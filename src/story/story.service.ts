@@ -1,4 +1,3 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import PrismaService from '../prisma/prisma.service';
 import {
   CreateStoryDto,
@@ -20,11 +19,14 @@ import {
   StoryPathDto,
   CategoryDto,
   ThemeDto,
+  VoiceType,
 } from './story.dto';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { Prisma, Voice } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { TextToSpeechService } from './text-to-speech.service';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 
 @Injectable()
 export class StoryService {
@@ -33,6 +35,7 @@ export class StoryService {
     private readonly prisma: PrismaService,
     private readonly elevenLabs: ElevenLabsService,
     public readonly uploadService: UploadService,
+    private readonly textToSpeechService: TextToSpeechService,
   ) {}
 
   async getStories(filter: {
@@ -137,36 +140,36 @@ export class StoryService {
   }
 
   async deleteStory(id: string) {
-    return this.prisma.story.delete({ where: { id } });
+    return await this.prisma.story.delete({ where: { id } });
   }
 
   // --- Images ---
   async addImage(storyId: string, image: StoryImageDto) {
-    return this.prisma.storyImage.create({
+    return await this.prisma.storyImage.create({
       data: { ...image, storyId },
     });
   }
 
   // --- Branches ---
   async addBranch(storyId: string, branch: StoryBranchDto) {
-    return this.prisma.storyBranch.create({
+    return await this.prisma.storyBranch.create({
       data: { ...branch, storyId },
     });
   }
 
   // --- Favorites ---
   async addFavorite(dto: FavoriteDto) {
-    return this.prisma.favorite.create({
+    return await this.prisma.favorite.create({
       data: { kidId: dto.kidId, storyId: dto.storyId },
     });
   }
   async removeFavorite(kidId: string, storyId: string) {
-    return this.prisma.favorite.deleteMany({
+    return await this.prisma.favorite.deleteMany({
       where: { kidId, storyId },
     });
   }
   async getFavorites(kidId: string) {
-    return this.prisma.favorite.findMany({
+    return await this.prisma.favorite.findMany({
       where: { kidId },
       include: { story: true },
     });
@@ -174,7 +177,7 @@ export class StoryService {
 
   // --- Progress ---
   async setProgress(dto: StoryProgressDto) {
-    return this.prisma.storyProgress.upsert({
+    return await this.prisma.storyProgress.upsert({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
       update: {
         progress: dto.progress,
@@ -190,17 +193,17 @@ export class StoryService {
     });
   }
   async getProgress(kidId: string, storyId: string) {
-    return this.prisma.storyProgress.findUnique({
+    return await this.prisma.storyProgress.findUnique({
       where: { kidId_storyId: { kidId, storyId } },
     });
   }
 
   // --- Daily Challenge ---
   async setDailyChallenge(dto: DailyChallengeDto) {
-    return this.prisma.dailyChallenge.create({ data: dto });
+    return await this.prisma.dailyChallenge.create({ data: dto });
   }
   async getDailyChallenge(date: string) {
-    return this.prisma.dailyChallenge.findMany({
+    return await this.prisma.dailyChallenge.findMany({
       where: { challengeDate: new Date(date) },
       include: { story: true },
     });
@@ -547,5 +550,45 @@ export class StoryService {
       );
     }
     return assignment;
+  }
+
+  async getStoryAudioUrl(
+    storyId: string,
+    voiceType: VoiceType,
+  ): Promise<string> {
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId },
+      select: { textContent: true },
+    });
+    if (!story) {
+      throw new NotFoundException(`Story with ID ${storyId} not found`);
+    }
+
+    // check StoryAudioCache model for storyId and voiceType
+    const cachedAudio = await this.prisma.storyAudioCache.findFirst({
+      where: { storyId, voiceType },
+    });
+    if (cachedAudio) {
+      return cachedAudio.audioUrl;
+    }
+
+    // If not cached, generate audio using text-to-speech service
+    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
+      storyId,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      story?.textContent ?? '',
+      voiceType,
+    );
+
+    // Cache the generated audio URL
+    await this.prisma.storyAudioCache.create({
+      data: {
+        storyId,
+        voiceType,
+        audioUrl,
+      },
+    });
+
+    return audioUrl;
   }
 }

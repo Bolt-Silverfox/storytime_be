@@ -6,10 +6,17 @@ import PrismaService from '../prisma/prisma.service';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { ScheduleModule } from '@nestjs/schedule';
+import { TextToSpeechService } from './text-to-speech.service';
 
 @Module({
   imports: [HttpModule, ScheduleModule.forRoot()],
   controllers: [StoryController],
-  providers: [StoryService, PrismaService, ElevenLabsService, UploadService],
+  providers: [
+    StoryService,
+    PrismaService,
+    ElevenLabsService,
+    UploadService,
+    TextToSpeechService,
+  ],
 })
 export class StoryModule {}

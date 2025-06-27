@@ -248,3 +248,29 @@ export class ErrorResponseDto {
   @ApiProperty({ required: false, description: 'Additional error details' })
   details?: any;
 }
+
+export const VOICEID = {
+  MILO: 'pNInz6obpgDQGcFmaJgB',
+  BELLA: 'EXAVITQu4vr4xnSDxMaL',
+  COSMO: 'TxGEqnHWrfWFTfGW9XjX',
+  NIMBUS: '21m00Tcm4TlvDq8ikWAM',
+  GRANDPA_JO: 'pqHfZKP75CvOlQylNhV4',
+  CHIP: 'AZnzlk1XvdvUeBnXmlld',
+};
+
+export enum VoiceType {
+  MILO = 'MILO',
+  BELLA = 'BELLA',
+  COSMO = 'COSMO',
+  NIMBUS = 'NIMBUS',
+  GRANDPA_JO = 'GRANDPA_JO',
+  CHIP = 'CHIP',
+}
+
+export class StoryContentAudioDto {
+  @ApiProperty()
+  content: string;
+
+  @ApiProperty({ required: false })
+  voiceType?: VoiceType;
+}
