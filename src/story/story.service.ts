@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import PrismaService from '../prisma/prisma.service';
 import {
   CreateStoryDto,
@@ -24,9 +24,11 @@ import {
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { Prisma, Voice } from '@prisma/client';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class StoryService {
+  private readonly logger = new Logger(StoryService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly elevenLabs: ElevenLabsService,
@@ -426,5 +428,124 @@ export class StoryService {
       image: t.image ?? undefined,
       description: t.description ?? undefined,
     }));
+  }
+
+  // --- Daily Challenge Automation ---
+  async assignDailyChallengeToAllKids() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize to midnight
+
+    const kids = await this.prisma.kid.findMany();
+    let totalAssigned = 0;
+    for (const kid of kids) {
+      // Parse kid's age from ageRange (e.g., '6-8' -> 6)
+      let kidAge = 0;
+      if (kid.ageRange) {
+        const match = kid.ageRange.match(/(\d+)/);
+        if (match) kidAge = parseInt(match[1], 10);
+      }
+      // Get all age-appropriate stories
+      const stories = await this.prisma.story.findMany({
+        where: {
+          ageMin: { lte: kidAge },
+          ageMax: { gte: kidAge },
+        },
+      });
+      if (stories.length === 0) continue;
+
+      // Get all challenges assigned to this kid in the past
+      const pastAssignments =
+        await this.prisma.dailyChallengeAssignment.findMany({
+          where: { kidId: kid.id },
+          include: { challenge: true },
+        });
+      const usedStoryIds = new Set(
+        pastAssignments.map((a) => a.challenge.storyId),
+      );
+      // Filter out stories already assigned
+      const availableStories = stories.filter((s) => !usedStoryIds.has(s.id));
+      // If all stories have been used, reset (allow repeats)
+      const storyPool =
+        availableStories.length > 0 ? availableStories : stories;
+      const story = storyPool[Math.floor(Math.random() * storyPool.length)];
+
+      // Use story title as wordOfTheDay, first sentence of description as meaning
+      const wordOfTheDay = story.title;
+      const meaning =
+        story.description.split('. ')[0] +
+        (story.description.includes('.') ? '.' : '');
+
+      // Create or find today's challenge for this story
+      let challenge = await this.prisma.dailyChallenge.findFirst({
+        where: {
+          storyId: story.id,
+          challengeDate: today,
+        },
+      });
+      if (!challenge) {
+        challenge = await this.prisma.dailyChallenge.create({
+          data: {
+            storyId: story.id,
+            challengeDate: today,
+            wordOfTheDay,
+            meaning,
+          },
+        });
+      }
+
+      // Assign to kid if not already assigned
+      const existingAssignment =
+        await this.prisma.dailyChallengeAssignment.findFirst({
+          where: {
+            kidId: kid.id,
+            challengeId: challenge.id,
+          },
+        });
+      if (!existingAssignment) {
+        await this.prisma.dailyChallengeAssignment.create({
+          data: {
+            kidId: kid.id,
+            challengeId: challenge.id,
+          },
+        });
+        this.logger.log(
+          `Assigned story '${story.title}' to kid '${kid.name ?? kid.id}' for daily challenge.`,
+        );
+        totalAssigned++;
+      }
+    }
+    this.logger.log(
+      `Daily challenge assignment complete. Total assignments: ${totalAssigned}`,
+    );
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async handleDailyChallengeAssignment() {
+    await this.assignDailyChallengeToAllKids();
+    this.logger.log('Daily challenges assigned to all kids at midnight');
+  }
+
+  async getTodaysDailyChallengeAssignment(kidId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const assignment = await this.prisma.dailyChallengeAssignment.findFirst({
+      where: {
+        kidId,
+        challenge: { challengeDate: today },
+      },
+      include: {
+        challenge: {
+          include: {
+            story: true,
+          },
+        },
+      },
+    });
+    if (!assignment) {
+      throw new NotFoundException(
+        'No daily challenge assignment found for today',
+      );
+    }
+    return assignment;
   }
 }
