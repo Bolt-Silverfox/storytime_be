@@ -44,14 +44,21 @@ import {
   CategoryDto,
   ThemeDto,
   ErrorResponseDto,
+  VoiceType,
+  StoryContentAudioDto,
 } from './story.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { TextToSpeechService } from './text-to-speech.service';
+import { randomUUID } from 'crypto';
 
 @ApiTags('stories')
 @Controller('stories')
 export class StoryController {
-  constructor(private readonly storyService: StoryService) {}
+  constructor(
+    private readonly storyService: StoryService,
+    private readonly textToSpeechService: TextToSpeechService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -593,5 +600,47 @@ export class StoryController {
   @ApiResponse({ status: 200, type: StoryPathDto })
   async getStoryPathById(@Param('id') id: string) {
     return this.storyService.getStoryPathById(id);
+  }
+
+  @Get('story/audio/:id')
+  @ApiOperation({ summary: 'Get audio for a story path by id' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiQuery({ name: 'voiceType', required: false, enum: VoiceType })
+  @ApiResponse({ status: 200, type: StoryPathDto })
+  async getStoryPathAudioById(
+    @Param('id') id: string,
+    @Query('voiceType') voiceType?: VoiceType,
+  ) {
+    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
+      id,
+      'Sample text for audio generation',
+      voiceType,
+    );
+
+    return {
+      message: 'Audio generated successfully',
+      audioUrl,
+      voiceType: voiceType || VoiceType.MILO,
+      statusCode: 200,
+    };
+  }
+
+  @Post('story/audio')
+  @ApiOperation({ summary: 'Get audio for a content' })
+  @ApiResponse({ status: 200, type: StoryPathDto })
+  @ApiBody({ type: StoryContentAudioDto })
+  async getContentAudio(@Body() dto: StoryContentAudioDto) {
+    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
+      randomUUID().toString(),
+      dto.content,
+      dto.voiceType,
+    );
+
+    return {
+      message: 'Audio generated successfully',
+      audioUrl,
+      voiceType: dto.voiceType || VoiceType.MILO,
+      statusCode: 200,
+    };
   }
 }
