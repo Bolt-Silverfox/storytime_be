@@ -21,9 +21,14 @@ export class UploadService {
   async uploadAudioBuffer(buffer: Buffer, filename: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        { folder: 'storytime/audio', resource_type: 'video', public_id: filename },
+        {
+          folder: 'storytime/audio',
+          resource_type: 'video',
+          public_id: filename,
+        },
         (error, result) => {
-          if (error) return reject(new InternalServerErrorException(error.message));
+          if (error)
+            return reject(new InternalServerErrorException(error.message));
           resolve((result as UploadApiResponse).secure_url);
         },
       );
