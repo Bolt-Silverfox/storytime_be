@@ -463,6 +463,32 @@ export class StoryController {
     return this.storyService.getAssignmentById(id);
   }
 
+  @Post('daily-challenge/assign-all')
+  @ApiOperation({
+    summary: 'Assign daily challenge to all kids (admin/manual trigger)',
+  })
+  @ApiOkResponse({ description: 'Daily challenges assigned to all kids.' })
+  async assignDailyChallengeToAllKids() {
+    await this.storyService.assignDailyChallengeToAllKids();
+    return { message: 'Daily challenges assigned to all kids.' };
+  }
+
+  @Get('daily-challenge/assignment/today')
+  @ApiOperation({ summary: "Get today's daily challenge assignment for a kid" })
+  @ApiQuery({ name: 'kidId', required: true, type: String })
+  @ApiOkResponse({
+    description: "Today's daily challenge assignment",
+    type: DailyChallengeAssignmentDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No daily challenge assignment found',
+    type: ErrorResponseDto,
+  })
+  async getTodaysDailyChallengeAssignment(@Query('kidId') kidId: string) {
+    return await this.storyService.getTodaysDailyChallengeAssignment(kidId);
+  }
+
   // --- Voices ---
   @Post('voices/upload')
   @UseGuards(AuthSessionGuard)
