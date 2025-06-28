@@ -33,12 +33,18 @@ export class UserService {
   }
 
   async updateUser(id: string, body: any): Promise<any> {
-    // Example: update name and avatarUrl
     return await prisma.user.update({
       where: { id },
       data: {
         name: body.name,
         avatarUrl: body.avatarUrl,
+        title: body.title,
+        profile: {
+          update: {
+            language: body.language,
+            country: body.country,
+          },
+        },
       },
     });
   }
