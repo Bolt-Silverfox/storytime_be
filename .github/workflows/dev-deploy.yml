@@ -79,7 +79,4 @@ jobs:
         script: |
           cd /home/ubuntu/storytime/storytime-api
           pnpm install --frozen-lockfile
-          pnpm make-migration
-          pnpm generate
-          pnpm build
-          pm2 restart storytime-api || pm2 start dist/main.js --name storytime-api 
+          pnpm deploy:dev
