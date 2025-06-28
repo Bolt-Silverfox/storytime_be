@@ -3,17 +3,8 @@
     "title": "The Brave Little Fox",
     "description": "A story about a timid fox named Felix who discovers his own bravery and helps his friends in the forest.",
     "language": "English",
-    "theme": [
-      "Adventure",
-      "Courage / Bravery",
-      "Fantasy",
-      "Friendship & Belonging"
-    ],
-    "category": [
-      "Animal Stories",
-      "Bedtime Stories",
-      "Nature"
-    ],
+    "theme": ["Adventure", "Courage / Bravery"],
+    "category": ["Animal Stories", "Bedtime Stories"],
     "content": "Once upon a time in the heart of the Mistywood Forest, there lived a small fox named Felix. Felix was clever but very timid. He loved watching the other animals play, but he always stayed at the edge, afraid to join in the fun. His best friend, a cheerful rabbit named Ruby, often called to him, \"Come play with us, Felix!\" But Felix just shook his head and watched from behind a bush.\n\nOne sunny morning, news spread that a big storm was coming. All the animals hurried to prepare, but a frightened baby squirrel named Pip was missing! The animals searched everywhere, but no one could find Pip. Felix saw Ruby looking worried and decided he had to help.\n\nEven though his heart thumped loudly, Felix sniffed for clues. He followed tiny footprints that led deeper and deeper into the dark woods. The trees whispered and the wind howled, but Felix bravely pressed on. Soon, he found Pip shivering beneath a log.\n\n\"Don’t worry,\" Felix said gently. \"I’ll get you home.\" Pip nodded, and together they faced the dark woods. Felix led the way, telling stories to keep Pip calm. When they finally reached the safety of the clearing, all the animals cheered! Pip jumped into his mother’s arms, and Ruby hugged Felix tight.\n\n\"You were so brave, Felix!\" cheered Ruby. From that day, Felix joined in every game and adventure—not because he was never afraid, but because he knew he could be brave whenever his friends needed him. And so, Felix became the bravest little fox in all of Mistywood Forest.",
     "questions": [
       {
@@ -58,12 +49,7 @@
       },
       {
         "question": "How did Felix feel after helping Pip?",
-        "options": [
-          "Sad",
-          "Embarrassed",
-          "Brave and happy",
-          "Angry"
-        ],
+        "options": ["Sad", "Embarrassed", "Brave and happy", "Angry"],
         "answer": 2
       },
       {
@@ -86,16 +72,8 @@
     "title": "Luna and the Mountain Adventure",
     "description": "A story about a shy wolf pup who learns courage when her friends are in trouble.",
     "language": "English",
-    "theme": [
-      "Adventure",
-      "Courage / Bravery",
-      "Friendship & Belonging"
-    ],
-    "category": [
-      "Animal Stories",
-      "Bedtime Stories",
-      "Nature"
-    ],
+    "theme": ["Adventure", "Courage / Bravery"],
+    "category": ["Animal Stories", "Bedtime Stories"],
     "content": "In the snowy peaks beyond Mistywood, lived a young wolf pup named Luna. Luna had a soft gray coat and gentle blue eyes. She loved listening to tales of bravery told by the elder wolves, but when it came to exploring, Luna always stayed close to her den. She worried about slipping on ice or getting lost in the fog.\n\nOne chilly morning, Luna’s friends, a lively fox named Oliver and a silly raccoon named Pippa, invited her to hike up Little Pine Mountain to pick wild berries. At first, Luna hesitated, but Oliver gave her a warm nudge, and Pippa promised to stay beside her. So, Luna gathered her courage and joined the group.\n\nAs they climbed, a cold wind blew, causing Pippa to lose her footing and tumble behind a snowdrift. The snow drifted high, and Pippa started to cry. Oliver called for help, but the older wolves were too far away. Luna took a deep, brave breath and remembered the elders' lessons. She pressed her paws into the snow, inching carefully toward Pippa. Luna stretched herself across the snow, grabbed Pippa’s paw, and pulled with all her might.\n\nFinally, Pippa was free! The friends hugged, and even Oliver cheered. On the way down, Luna felt the sun warm her fur. She realized she hadn’t slipped or gotten lost. Instead, she had been the bravest of all.\n\nFrom that day, Luna told her own stories, and the elder wolves listened with pride. Luna understood that being brave means helping your friends, even if you feel a little scared. And the mountain no longer seemed quite so tall.",
     "questions": [
       {
@@ -168,15 +146,8 @@
     "title": "Tara and the City Map",
     "description": "A story about a city mouse who bravely leads her friends through the busy city to find their way home.",
     "language": "English",
-    "theme": [
-      "Adventure",
-      "Courage / Bravery",
-      "Friendship & Belonging"
-    ],
-    "category": [
-      "Animal Stories",
-      "Bedtime Stories"
-    ],
+    "theme": ["Adventure", "Courage / Bravery"],
+    "category": ["Animal Stories", "Bedtime Stories"],
     "content": "Tara was a little gray mouse who lived with her family in a big old building in the city. Tara loved watching the people outside from her windowsill, but she had never explored the streets herself. She was worried about the traffic, the noise, and getting lost among the towering buildings. Her friends Milo, the sparrow, and Pip, the young pigeon, loved telling stories about their flights around the city. One sunny afternoon, while chasing Milo and Pip on the rooftop, Tara spotted the most beautiful park she'd ever seen, full of purple flowers and fluttering butterflies. 'Let’s visit the park!' Milo chirped. Tara’s heart thumped nervously, but she didn't want to be left behind. She agreed to go, tucking Papa Mouse's old city map into her backpack.\n\nWhen the friends reached the street, the city bustled with cars and people. Tara clung tightly to her map. They darted between flowerpots and scampered along fences. Suddenly, a garbage truck rumbled by, scaring the trio into an alley. By the time it passed, the park had disappeared behind the buildings, and Tara felt her whiskers droop.\n\n'Are we lost?' Pip whispered, his wings trembling. Tara remembered the map. She took a deep breath, opened it up, and read the confusing lines and signs. After a moment, she spotted a landmark: a fountain shaped like a fish. 'This way!' she squeaked with determination. With Tara leading and her friends following, they found the fish fountain and, soon after, the flowery park. The butterflies danced around them, and Milo cheered, 'You’re the bravest city mouse, Tara!'\n\nTara smiled, proud and happy. She had faced her fears and led her friends on an adventure. After that day, she wasn’t afraid of the city anymore. She knew that with a little bravery and a trusty map, she could go anywhere.",
     "questions": [
       {
@@ -191,22 +162,12 @@
       },
       {
         "question": "What did Tara tuck into her backpack before the adventure?",
-        "options": [
-          "Snacks",
-          "A flower",
-          "A city map",
-          "A toy"
-        ],
+        "options": ["Snacks", "A flower", "A city map", "A toy"],
         "answer": 2
       },
       {
         "question": "What frightened the friends and made them lose sight of the park?",
-        "options": [
-          "A dog",
-          "A garbage truck",
-          "A thunderstorm",
-          "A cat"
-        ],
+        "options": ["A dog", "A garbage truck", "A thunderstorm", "A cat"],
         "answer": 1
       },
       {
@@ -249,14 +210,8 @@
     "title": "Ollie Otter’s Riverside Rescue",
     "description": "A young otter discovers his courage when he saves a friend during a riverside adventure.",
     "language": "English",
-    "theme": [
-      "Adventure",
-      "Courage / Bravery"
-    ],
-    "category": [
-      "Animal Stories",
-      "Bedtime Stories"
-    ],
+    "theme": ["Adventure", "Courage / Bravery"],
+    "category": ["Animal Stories", "Bedtime Stories"],
     "content": "Ollie the otter lived in a winding river that twisted through the green valley. He loved playing with his river friends, especially Maya, a speedy fish, and Toby, a shy turtle. Ollie was curious but had never left his favorite bend in the river. The rest of the river seemed distant and mysterious, filled with rocks, waterfalls, and tall reeds.\n\nOne morning, Maya challenged Ollie and Toby to explore downstream past the willow trees. Ollie hesitated—what if they got stuck in the rocks, or met something scary? But with Maya’s encouragement and Toby’s hopeful eyes, Ollie agreed. The trio set off, swirling gently with the current, giggling as they passed over smooth pebbles and under arching branches.\n\nSuddenly, the stream quickened. Maya darted ahead, and Toby got caught between two slippery stones. He couldn’t wiggle free, and the water splashed higher. Ollie’s heart hammered, but he remembered how his mother had taught him to use strong paws and how to push off river rocks. He took a deep breath, dove down, and nudged Toby from below. With a little push, Toby slid free, and Ollie steadied him as they floated back to calmer water, where Maya was waiting, relieved.\n\nToby thanked Ollie for his bravery. When the friends reached their home bend, they shared the whole story with their families, and everyone celebrated Ollie’s courage. From that day, Ollie knew the river wasn’t so scary, and that real adventure meant helping friends when it mattered most.",
     "questions": [
       {
@@ -329,14 +284,8 @@
     "title": "Sammy and the Sky Lantern",
     "description": "A cautious young squirrel learns to be adventurous and brave during a festival in the forest.",
     "language": "English",
-    "theme": [
-      "Adventure",
-      "Courage / Bravery"
-    ],
-    "category": [
-      "Animal Stories",
-      "Bedtime Stories"
-    ],
+    "theme": ["Adventure", "Courage / Bravery"],
+    "category": ["Animal Stories", "Bedtime Stories"],
     "content": "Every spring, the animals of Evergreen Woods came together for the Festival of Lights, a celebration filled with food, music, and sparkling lanterns that floated up into the night sky. Sammy, a young squirrel with a bushy tail and bright eyes, loved watching the lanterns, but he was always too scared to join the games and flights on festival night. He worried about floating too far from home or tripping in front of his friends.\n\nThis year, Sammy’s best friend, Willow the chipmunk, made a beautiful paper lantern just for him. “Let’s send it up together!” Willow said, her eyes shining. Sammy hesitated. His family and friends cheered him on, but his paws felt shaky. Willow took his hand, and together, they ran to the tall oak tree where the older animals were lighting lanterns.\n\nSuddenly, a strong wind swept in and blew a bundle of lanterns into the branches. The animals gasped—one of the lanterns belonged to Mr. Owl, and he was very sad. Sammy glanced at Willow and, feeling her encouragement, scampered up the tree faster than ever. High among the leaves, Sammy reached the tangled lanterns, carefully freeing Mr. Owl’s first. The crowd cheered from below. Sammy gently sent each lantern into the sky, ending with his own.\n\nWhen Sammy climbed down, everyone was smiling. “I’ve never seen such a brave climb!” Mr. Owl hooted. Sammy grinned, no longer afraid. He sent his lantern up with Willow, and together they watched its golden light sparkle on the wind, proud of their courage and the adventure that made it all possible.",
     "questions": [
       {
@@ -409,10 +358,8 @@
     "title": "Carlos and the Secret Island",
     "description": "A cautious young crab discovers adventure and bravery when he helps a new friend on a mysterious island.",
     "language": "English",
-    "theme": [
-      "Adventure"
-    ],
-    "category": [],
+    "theme": "Adventure",
+    "category": "Animals",
     "content": "Carlos was a little crab who lived with his large family on a sandy beach. He loved watching the ocean waves and collecting shiny shells, but he always stayed close to the shore because the open sea felt too big and unknown. One day, after a storm, Carlos spotted a small raft bobbing near the rocks. On it sat Bella, a lost baby seabird, looking hungry and afraid.\n\nCarlos wanted to help, but the raft floated out toward an island he had never visited before. Taking a deep breath, Carlos scuttled onto a floating piece of driftwood and set off across the sparkling blue water. The waves seemed enormous. Carlos worried about tipping over, but he kept his eyes on Bella.\n\nWhen he reached the island, Bella chirped with relief. The island was wild and new. Carlos saw flowers he’d never seen before and towering palm trees. He found berries for Bella and showed her how to dig for clams. Exploring together, Carlos forgot his fear.\n\nWhen the tide returned, Carlos led Bella safely back home on the driftwood. Their families cheered, and Carlos’s brothers and sisters listened wide-eyed to his tale. That night, Carlos realized he was braver than he’d ever imagined, all because he took a chance to help a friend.",
     "questions": [
       {
@@ -485,10 +432,8 @@
     "title": "Penny Penguin’s Glacier Quest",
     "description": "A young penguin shows courage and adventure when searching for her missing little brother across the icy wilderness.",
     "language": "English",
-    "theme": [
-      "Adventure"
-    ],
-    "category": [],
+    "theme": "Adventure",
+    "category": "Animals",
     "content": "In the heart of the frosty Antarctic, Penny Penguin lived with her family in a bustling colony on a wide, snowy plain. Penny loved listening to stories of her parents’ epic journeys across frozen rivers and towering ice cliffs, but she always stayed close to home, scared of slipping into hidden cracks or losing her way in the blinding white wilderness.\n\nOne morning, while the grown-ups gathered fish and the chicks played in a circle, Penny’s little brother, Pip, wandered off chasing a butterfly-shaped snowflake. When Penny noticed Pip was gone, she felt her tummy twist with worry. The other penguins searched, but no one could find him in the maze of icy hills.\n\nWith her heart pounding, Penny remembered what her parents had taught her about keeping calm and following footprints in the snow. She spotted Pip’s tiny webbed tracks leading toward a distant blue glacier. Penny waddled as fast as she could, crossing wind-swept plains, sliding down slippery slopes, and squeezing through frosty tunnels.\n\nAt last, she found Pip stuck behind a block of ice, too small to climb out. Penny called encouragement, then used her strong beak to chip away at the frozen barrier. Pip squeezed out, shivering and grateful. Penny hugged him tight and led him safely back to the colony, following their footprints all the way home.\n\nThe whole colony cheered for Penny’s courage. She finally understood that being brave didn’t mean not feeling afraid. It meant loving someone enough to step into adventure, no matter how cold and wide the world may be.",
     "questions": [
       {
@@ -561,10 +506,8 @@
     "title": "Mira the Mountain Goat’s Daring Day",
     "description": "A young goat overcomes her fears during an exciting mountain climb to rescue a friend.",
     "language": "English",
-    "theme": [
-      "Adventure"
-    ],
-    "category": [],
+    "theme": "Adventure",
+    "category": "Animals",
     "content": "High above the valley, where the clouds met the snowy peaks, lived a nimble young mountain goat named Mira. Although she had big, strong hooves perfect for climbing, Mira always felt nervous about the highest ledges and the sharp winds that howled across the cliffs. She often watched her brothers leap fearlessly from crag to crag, wishing she could be as brave as they were.\n\nOne bright morning, as the sun glistened on the rocky mountainside, Mira joined her friends for a climb to find a patch of sweet mountain flowers. Her best friend, Timo, bounded ahead, excited to show everyone a secret place he’d found. But as Timo jumped to the next ledge, a gust of wind knocked him off balance. He slipped, landing on a narrow outcropping far below. The others called for help, but the older goats were across the ridge and couldn’t hear.\n\nMira’s heart pounded. She looked down at the dizzying drop, remembering her fears, but then she saw Timo looking up, scared and alone. Mira took a deep breath, focused on her hooves like her mother taught her, and carefully picked her way down the steep, rocky path. Tiny rocks slid beneath her, and the wind tugged her fur, but she kept going, inch by inch.\n\nFinally, Mira reached Timo. With calm words and gentle nudges, she helped him regain his footing and guided him up the slope. When they reached the others, everyone cheered! Timo hugged Mira, thanking her for her courage. Mira realized she was shaking, but she smiled and felt warmth in her heart. That day, Mira learned that adventure is sometimes scary—and bravery is having the courage to help a friend, no matter how high the mountain.",
     "questions": [
       {
@@ -637,10 +580,8 @@
     "title": "Tiko Turtle's Hidden Lagoon",
     "description": "A shy young turtle discovers adventure and bravery while searching for a lost necklace in a secret lagoon.",
     "language": "English",
-    "theme": [
-      "Adventure"
-    ],
-    "category": [],
+    "theme": "Adventure",
+    "category": "Animals",
     "content": "Tiko was a gentle young turtle who loved finding smooth stones and colorful shells near his sandy riverbank. But he never went far, afraid he might wander off and not find his way home. Tiko watched the older turtles tell stories about a magical hidden lagoon, but he believed it was much too far and mysterious for him.\n\nOne morning, Tiko’s best friend, Layla the frog, hopped to him in tears. She had lost her glittery necklace—the one her grandmother gave her—while leaping through water lilies. Tiko wanted to help, even though it meant leaving his safe riverbank. Remembering the stories about the secret lagoon, he wondered if the necklace had floated there. \"Let’s try to find it!\" he said, his voice trembling but determined.\n\nTiko and Layla swam slowly along the winding river, past tangles of roots and bright fish darting by. The water got deeper and sparkled in the sunlight. Soon, they reached the lagoon, where tall trees shaded the water and rare blue flowers grew at the edge. Searching among the lilies, Tiko spotted something shiny tangled around a reed. He pushed past his worries and dove down, using his strong turtle shell to unhook the necklace.\n\nLayla squealed with joy as Tiko lifted the necklace above the water. On the way home, Tiko felt taller and stronger than ever. By helping a friend, he had discovered that even the shyest turtle can be brave and adventurous when it matters most.",
     "questions": [
       {
@@ -713,10 +654,8 @@
     "title": "Nia’s Nighttime Adventure",
     "description": "A curious young firefly learns about courage as she explores the forest at night to help her friends.",
     "language": "English",
-    "theme": [
-      "Adventure"
-    ],
-    "category": [],
+    "theme": "Adventure",
+    "category": "Animals",
     "content": "Nia was a young firefly who lived with her big family under the leaves of a tall oak tree. While her brothers and sisters loved to fly through the forest in the dark, Nia was always nervous when the sun went down. She worried about getting lost or bumping into sleepy owls. Most nights, she stayed close to home, making little glows with her gentle light.\n\nOne warm summer evening, a family of beetles arrived, looking sad and worried. They had gotten separated from their youngest brother, Benny, and couldn't find their way back to their log. The forest at night seemed too big and confusing. Nia wanted to help but felt a flutter in her tummy. Still, something inside her said she had to try.\n\nTaking a deep breath, Nia gathered all her courage and lit up her brightest glow. She invited the beetles to follow her as she floated into the dark, leafy forest. Together, they searched through mossy roots and over mushrooms, calling Benny’s name. At last, Nia heard a faint reply. Benny was hiding beneath a curled fern, scared to move.\n\nNia gently hovered down next to Benny. “You’re safe now,” she whispered. With Benny and his family close behind, Nia led the way back, her glowing light shining through the darkness. When they came home, everyone cheered for Nia’s bravery. Nia realized that courage can be gentle and bright, just like a firefly’s glow, and she was no longer afraid of nighttime adventures.",
     "questions": [
       {
@@ -789,8 +728,8 @@
     "title": "Leo and the Little Library",
     "description": "A kind lion cub learns the joy of sharing and community by starting a Little Library for all his animal friends.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Kindness and Sharing",
+    "category": "Animals",
     "content": "In the heart of the golden savanna, a young lion cub named Leo loved books more than anything else. His cozy den was filled with stories about brave explorers, magical rainforests, and distant lands. But when Leo finished a book, he often felt a little lonely—he had no one to share the stories with.\n\nOne sunny morning, Leo noticed Sadie the squirrel looking bored under an acacia tree. Leo padded over and offered Sadie a book about a superhero squirrel. Her eyes sparkled! It gave Leo an idea. What if everyone could share books and stories?\n\nWith help from Sadie, Leo built a small wooden box just outside his den and filled it with his favorite books. He called it “The Little Library.” Soon, word spread across the savanna. Zara the zebra left her storybook about stripes, while Tamu the tiny bird donated a picture book she loved as a chick. Every day, new friends came to borrow or leave a book.\n\nOne afternoon, Leo noticed the Little Library empty—every book had been borrowed! He felt a bit worried until a troop of animals arrived, each bringing a well-loved story to restock the library. Leo’s heart swelled with happiness as he realized that by sharing his books, he’d created a place where everyone could share, learn, and make new friends.\n\nFrom then on, Leo and the animals gathered by the Little Library, reading together under the bright savanna sun. Leo learned that sharing not only gives joy to others—it brings friends together and fills every story with laughter and kindness.",
     "questions": [
       {
@@ -863,8 +802,8 @@
     "title": "Pip’s Painted Paws",
     "description": "A playful puppy discovers the joy of kindness by making colorful art for his friends in the neighborhood.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Kindness and Sharing",
+    "category": "Animals",
     "content": "Pip was a wiggly puppy who loved getting messy. One sunny afternoon, his owner gave him finger paints to play with in the backyard. Pip splashed red, blue, and yellow paint everywhere, leaving little paw prints all over the stone path. When Pip noticed the mail carrier smiling at the rainbow paw prints, he felt warm and proud inside.\n\nThe next day, Pip noticed his neighbor cat, Tilly, sitting sadly by her gate. Pip sprinted over and asked, \"Want to see something fun?\" He dipped his paws in blue paint and stamped a heart on the sidewalk in front of Tilly. Tilly’s whiskers twitched, and she gave a shy smile. Soon, other animals in the neighborhood came to watch. Pip painted cheerful shapes for the rabbits and a big yellow sun for Mrs. Chickadee. Whenever he finished, he wagged his tail and invited everyone to add their paw, feather, or claw print.\n\nThe path became a patchwork of colors, and animals who rarely played together spent hours admiring it. Pip’s own heart felt so full that he didn’t mind the rainbow paint in his fur. Every day, old and new friends stopped by to see or add to the painted path. Pip realized that sharing his art and kindness made everyone happier—even on days when the sky was gray.\n\nSince then, Pip’s backyard has always been full of paws, laughter, and color. And whenever someone is lonely or sad, Pip knows a little shared kindness can paint their world bright again.",
     "questions": [
       {
@@ -909,12 +848,7 @@
       },
       {
         "question": "How did Pip feel when people liked his painted paw prints?",
-        "options": [
-          "Worried",
-          "Proud and happy",
-          "Hungry",
-          "Sleepy"
-        ],
+        "options": ["Worried", "Proud and happy", "Hungry", "Sleepy"],
         "answer": 1
       },
       {
@@ -937,8 +871,8 @@
     "title": "Mina's Magical Muffins",
     "description": "A young mouse discovers the joy of kindness and sharing by baking treats for her neighbors in need.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Kindness and Sharing",
+    "category": "Animals",
     "content": "Mina was a little mouse who loved baking with her grandmother. One chilly morning, Mina woke up to see snow swirling outside her burrow. She remembered how kind her grandmother always was, baking extra treats to share with neighbors during winter.\n\nMina decided to surprise her friends. She mixed flour, berries, and honey, making her favorite muffins. While her muffins baked, the cozy smell drifted through the tunnels, making every mouse’s nose twitch. Mina packed her basket and set off into the snowy tunnels, squeaking, \"Kindness muffins! Warm and sweet!\"\n\nFirst, Mina visited old Mr. Mole, who had a cold. She left a muffin at his door. Next, she saw little Pip shivering in his nest and gave him two muffins to share with his sister. At each house, Mina offered a smile and a muffin. The neighbors couldn’t believe how delicious they were.\n\nThat night, Mina’s own door was filled with thank-you notes and jokes from her friends. The mice sang snowy songs together, their hearts and bellies warm.\n\nMina felt happier than ever. By sharing something she loved, she had brought everyone together, proving that even small acts of kindness can light up the coldest of days.",
     "questions": [
       {
@@ -1011,8 +945,8 @@
     "title": "Gus the Gentle Giraffe",
     "description": "A tall giraffe learns how small acts of kindness can make a big difference in his savanna community.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Kindness and Sharing",
+    "category": "Animals",
     "content": "Gus was the tallest giraffe in the savanna, but he was also the gentlest. He loved munching leaves from the tippy-top of the trees and watching out for his smaller friends. Sometimes, Gus wished he could help his friends more, but he wasn’t sure how.\n\nOne breezy afternoon, a tiny bird named Wren flew by, struggling to carry a twig back to her nest. Gus bent his long neck and asked, “Can I help you?” With one gentle nudge of his nose, he lifted Wren and her twig up to the highest branch. Wren chirped happily and began building her nest, safe from any hungry cats below.\n\nWord spread quickly about Gus’s helpfulness. When the monkeys lost their ball in a thorny bush, Gus reached in with his long tongue and pulled it out, saving the day. When young elephant twins needed shade, Gus stood still, letting them nap in his cool shadow.\n\nEvery time Gus performed a simple act of kindness, he saw bright smiles and happy dances from his friends. He realized it didn’t take big gestures to make others feel special—sometimes, the smallest act could make a world of difference.\n\nThat evening, all the animals gathered for a thank-you parade. Wren perched on Gus’s head and sang a song just for him. Gus felt tall with pride and joy, knowing that kindness truly reached the highest branches of happiness.",
     "questions": [
       {
@@ -1085,8 +1019,8 @@
     "title": "Ravi and the Rainy Day Umbrella",
     "description": "A thoughtful raccoon learns kindness by sharing his umbrella with his friends on a stormy day.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Kindness and Sharing",
+    "category": "Animals",
     "content": "Ravi the raccoon loved collecting interesting things, but his favorite was a big, colorful umbrella he’d found near the creek one spring. Ravi imagined that one day he’d need it during a rainstorm, but most of the time it stayed safely tucked away in his burrow.\n\nOne gloomy afternoon, gray clouds filled the sky and rain began to pour. Ravi peeked outside and saw his friend Bella the bunny huddling under a leaf, shivering and getting wet. Without thinking twice, Ravi grabbed his special umbrella and hurried outside.\n\n“Come under here, Bella!” he called, holding the umbrella wide. Gratefully, Bella bounced under the bright red cover, and soon other animals joined in—Ollie the mouse, Suri the squirrel, and even two bluebirds.\n\nTogether, they marched through the puddles, giggling and sharing stories while staying dry. Ravi felt warm inside as he realized how something simple could bring everyone together. When the sun finally peeked through the clouds, all the animals thanked Ravi for his generosity.\n\nThat night, as Ravi hung his umbrella on its hook, he smiled. He knew the best treasures are those we share with friends, and even a rainy day could turn bright with a little bit of kindness.",
     "questions": [
       {
@@ -1121,12 +1055,7 @@
       },
       {
         "question": "How did Ravi feel when he shared his umbrella?",
-        "options": [
-          "Warm and happy",
-          "Jealous",
-          "Angry",
-          "Tired"
-        ],
+        "options": ["Warm and happy", "Jealous", "Angry", "Tired"],
         "answer": 0
       },
       {
@@ -1159,8 +1088,8 @@
     "title": "Cleo and the Midnight Feast",
     "description": "A clever owl learns about kindness and sharing while making friends over a nighttime picnic.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Kindness and Sharing",
+    "category": "Animals",
     "content": "Cleo was a young owl who loved to collect tasty treats during her nighttime flights. Her favorite snacks were juicy berries, crunchy seeds, and the tiniest wild honey drops. Each night, Cleo gathered a little more than she needed, stashing her snacks in a hidden tree hollow to enjoy alone. Sometimes, though, Cleo felt lonely under the starry sky as she munched on her midnight meals.\n\nOne evening, Cleo spotted Luna the field mouse, peering longingly at a blackberry bush. Luna’s tummy rumbled; she hadn't found any food that day. Cleo remembered her own hollow stuffed with goodies. Hesitantly, she flew down to invite Luna to share her feast. Luna’s eyes sparkled with surprise.\n\nTogether, they picnicked in the moonlight. Soon, other hungry nighttime animals followed the sweet scent—Theo the hedgehog, Saffi the bat, and even Benny the shy rabbit. Cleo passed out crunchy seeds and sweet berries, watching her new friends chatter, giggle, and share their stories.\n\nCleo was amazed at how full her heart felt. The forest seemed less lonely and much brighter with friends around. From that night on, Cleo always invited others to her midnight feasts, discovering that sharing made every bite tastier and every night warmer.",
     "questions": [
       {
@@ -1215,12 +1144,7 @@
       },
       {
         "question": "How did Cleo feel after sharing her midnight meals?",
-        "options": [
-          "Lonely",
-          "Sleepy",
-          "Happy and warm",
-          "Hungry"
-        ],
+        "options": ["Lonely", "Sleepy", "Happy and warm", "Hungry"],
         "answer": 2
       }
     ],
@@ -1233,8 +1157,8 @@
     "title": "Ava and the Garden of Surprises",
     "description": "A gentle hedgehog learns how kindness and sharing brighten the garden and her friendships.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Kindness and Sharing",
+    "category": "Animals",
     "content": "Ava was a quiet hedgehog who lived near a colorful garden bursting with flowers, lettuce, and juicy red strawberries. She loved wandering among the leaves, finding sweet fruit to nibble and soft petals to smell. Ava was a little shy and always collected her treats alone, hiding them in her cozy burrow.\n\nOne sunny afternoon, Ava heard soft sniffles behind the garden bench. It was Daisy the little rabbit, her basket empty and her tummy growling. Ava hesitated, then shyly rolled over with a plump strawberry and a crisp leaf of lettuce for Daisy. Daisy’s eyes brightened, and she gave Ava a big hug—her very first rabbit hug!\n\nWord of Ava’s kindness buzzed through the garden. Soon, hedgehogs, rabbits, and birds began bringing their own snacks. They gathered under the biggest sunflower, sharing berries, seeds, and even tiny cakes baked by Benny the bluebird. The garden became filled with giggles, songs, and happy new friends.\n\nAva realized she didn’t have to hide her favorite things—sharing made them even sweeter. Her heart felt warm every day she saw friends enjoying each other and the garden they loved.\n\nFrom then on, Ava’s burrow was always open, and her heart was always full—because kindness and sharing grow the brightest gardens of all.",
     "questions": [
       {
@@ -1269,22 +1193,12 @@
       },
       {
         "question": "Who baked tiny cakes for the group?",
-        "options": [
-          "Ava",
-          "Benny the bluebird",
-          "Daisy",
-          "The wind"
-        ],
+        "options": ["Ava", "Benny the bluebird", "Daisy", "The wind"],
         "answer": 1
       },
       {
         "question": "How did Ava feel after making new friends by sharing?",
-        "options": [
-          "Lonely",
-          "Shy and sad",
-          "Warm and happy",
-          "Worried"
-        ],
+        "options": ["Lonely", "Shy and sad", "Warm and happy", "Worried"],
         "answer": 2
       },
       {
@@ -1307,8 +1221,8 @@
     "title": "Lulu's Lost Crayon",
     "description": "A playful lemur discovers the happiness of sharing when she helps a friend and the whole class create a beautiful mural.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Kindness and Sharing",
+    "category": "Animals",
     "content": "Lulu was a little lemur who loved to draw. Every morning at her jungle school, she opened her tin full of colorful crayons and filled her drawings with sunshine-yellow suns, bright-green leaves, and purple mountains. She always looked forward to Art Time.\n\nOne rainy day, Lulu’s friend Mo the monkey looked sad. He had lost his only blue crayon, the one he needed to finish his sky. Lulu remembered how excited she always felt when she had new crayons, and she wanted Mo to feel that way, too. Smiling, Lulu split her own blue crayon in half and handed a piece to Mo.\n\nMo’s eyes sparkled with joy! Soon, other classmates noticed and began sharing colors as well. Before long, the whole class was swapping crayons and ideas, laughing as they colored together. Their teacher Mrs. Toucan suggested they make a mural for the school wall. Everyone added something special, using the shared crayons to make bright rainbows, happy animals, and giant trees.\n\nAt the end, Lulu stood back and admired the mural, her heart warm with pride. The artwork was beautiful, but the best part was how everyone’s kindness had painted so many smiles in their classroom.\n\nFrom that day on, Lulu and her friends always shared their crayons, discovering that a picture made together was always much brighter.",
     "questions": [
       {
@@ -1381,8 +1295,8 @@
     "title": "Sam and the Sandwich Picnic",
     "description": "A young squirrel learns about kindness and sharing by inviting new friends for a sandwich picnic in the park.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Kindness and Sharing",
+    "category": "Animals",
     "content": "Sam the little squirrel loved making sandwiches. Every Saturday, he packed his favorite peanut butter, acorn butter, and even a sweet honey sandwich for himself before heading to the little park at the edge of the woods. Sam usually ate alone under his favorite old oak tree, eager to keep his sandwiches all to himself.\n\nOne breezy afternoon, Sam noticed a shy mole peeking out from the tall grass. The mole’s tummy rumbled, and Sam remembered what it felt like to be hungry with no one to share a meal. Sam bravely waved the mole over, dividing his peanut butter sandwich in half. They smiled shyly as they ate together.\n\nSoon, a blue jay landed on a low branch and asked about the acorn butter sandwiches. Sam offered a piece, and the bird’s song filled the whole park. More animals gathered, bringing berries and seeds to share. The little picnic blanket quickly filled with treats from everyone’s homes.\n\nIn the laughter and sunshine, Sam felt happier than he ever had eating alone. He realized that sharing his food also helped new friends blossom all around him.\n\nFrom that day, Sam never wondered who to picnic with—the answer was everyone! Kindness, he learned, is tastiest when shared.",
     "questions": [
       {
@@ -1397,12 +1311,7 @@
       },
       {
         "question": "Who did Sam first share his sandwich with?",
-        "options": [
-          "A blue jay",
-          "Another squirrel",
-          "A shy mole",
-          "A rabbit"
-        ],
+        "options": ["A blue jay", "Another squirrel", "A shy mole", "A rabbit"],
         "answer": 2
       },
       {
@@ -1455,8 +1364,8 @@
     "title": "Emmy and the Secret Seeds",
     "description": "A curious rabbit learns the importance of patience by growing her own vegetable garden.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Patience and Growth",
+    "category": "Animals",
     "content": "Emmy the rabbit loved carrots and lettuce more than anything. One spring morning, her mother gave her a little packet of secret vegetable seeds. \"If you care for them patiently, you'll have your own delicious garden,\" said Mama Rabbit with a wink.\n\nEmmy was excited. She dug little holes in the soft earth, put in her tiny seeds, and gently patted the dirt. Every day, Emmy ran to the garden, expecting to see sprouts. But day after day, there was only brown soil. Emmy grew frustrated. She wanted to dig up the seeds to check on them, but Mama reminded her, \"Seeds need time, sunshine, and water. Let’s wait and see.\"\n\nSo Emmy watered her seeds, sang to them in the morning, and told them stories at night. One afternoon, after a long rain and a nap, Emmy hopped outside and saw something amazing—tiny green shoots poking through the ground! Her patience paid off. She laughed and danced around her garden. Week after week, Emmy watched her sprouts grow into strong carrot tops and crunchy lettuces.\n\nWhen it was time to harvest, Emmy proudly shared her vegetables with her family and friends. She told them, \"It took a long time, but waiting makes the reward even sweeter!\" Emmy learned that patience helped her garden, and herself, grow strong and happy.",
     "questions": [
       {
@@ -1471,12 +1380,7 @@
       },
       {
         "question": "How did Emmy feel when she didn’t see plants right away?",
-        "options": [
-          "Excited",
-          "Frustrated and impatient",
-          "Sleepy",
-          "Hungry"
-        ],
+        "options": ["Excited", "Frustrated and impatient", "Sleepy", "Hungry"],
         "answer": 1
       },
       {
@@ -1529,8 +1433,8 @@
     "title": "Theo and the Slowest Race",
     "description": "A young tortoise learns the true meaning of patience by staying calm and steady during the Big Meadow Race.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Patience and Growth",
+    "category": "Animals",
     "content": "Theo was a gentle tortoise who lived at the edge of Sunny Meadow. Every spring, the animals gathered for the Big Meadow Race—a wild dash through flowers and grass. Theo loved watching the fun, but he was never fast enough to win prizes like the hares and squirrels.\n\nThis year, Theo’s friends encouraged him. 'Races aren’t just for the speedy!' chirped Penny the sparrow. So Theo signed up, feeling both excited and nervous. On race day, the whistle blew, and the meadow shook as animals zoomed past. Theo tucked his head, breathed deep, and started walking slow and steady.\n\nThe butterflies flitted over him. The mice sprinted ahead. Some animals rushed so quickly they tripped and tumbled into a clover patch. Theo kept his eyes on the sun and his feet on the path, step by patient step.\n\nWhen he reached the halfway mark, Theo saw Daisy Deer helping some tired racers back onto the path. Theo paused to share a cool leaf with a mouse who needed a rest. Instead of giving up, he encouraged his friends to keep going.\n\nBy the end of the day, only a few racers finished. Theo reached the finish line last—but all the animals cheered! He had finished what he started and helped friends along the way. Theo’s slow, patient journey became the heart of the race, showing everyone that growing takes time, and kindness is its own reward.",
     "questions": [
       {
@@ -1545,12 +1449,7 @@
       },
       {
         "question": "How did Theo feel before the race?",
-        "options": [
-          "Nervous but hopeful",
-          "Angry",
-          "Sleepy",
-          "Not interested"
-        ],
+        "options": ["Nervous but hopeful", "Angry", "Sleepy", "Not interested"],
         "answer": 0
       },
       {
@@ -1603,28 +1502,18 @@
     "title": "Fiona and the Waiting Well",
     "description": "A young fox learns that patience brings the sweetest rewards while waiting for a rainstorm to fill the old forest well.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Patience and Growth",
+    "category": "Animals",
     "content": "Fiona was a clever fox who lived in a quiet forest clearing. In the middle of the clearing stood an old stone well, dry and mossy at the bottom. The animals said that with enough patience, the rains would come and fill the well with the freshest, sweetest water in the whole wood.\n\nOne hot summer, the river ran low and the leaves wilted. Fiona checked the well every day, hoping to see a sparkle of water below. She grew tired of waiting, and several times she thought about running off to search for water elsewhere, but her wise friend, Otis the owl, told her, \"Good things come to those who patiently care for what matters.\"\n\nSo, Fiona swept fallen leaves from around the well, cleared twigs out of the stones, and encouraged other animals to hope and help. Whenever a cloud gathered, she danced in the clearing, cheering the sky to burst. She found ways to share her berries and cheered up thirsty friends with stories and games.\n\nDays turned to weeks, but Fiona didn’t give up. One morning, after a gentle night rain, Fiona peered over the edge—and saw the well gleaming with cool, clear water. The animals rushed to drink, splashing and laughing, and everyone thanked Fiona for waiting and caring. Fiona realized that true patience isn’t just about waiting, but about growing stronger and kinder as you do.\n\nFrom then on, the well was never empty for long, and Fiona remembered her lesson: Patience can fill your world with wonderful things when you least expect it.",
     "questions": [
       {
         "question": "What did Fiona hope would fill the well?",
-        "options": [
-          "Gold coins",
-          "Rainwater",
-          "Falling leaves",
-          "Berry juice"
-        ],
+        "options": ["Gold coins", "Rainwater", "Falling leaves", "Berry juice"],
         "answer": 1
       },
       {
         "question": "Who encouraged Fiona to be patient?",
-        "options": [
-          "Her parents",
-          "A bear",
-          "Otis the wise owl",
-          "The river"
-        ],
+        "options": ["Her parents", "A bear", "Otis the wise owl", "The river"],
         "answer": 2
       },
       {
@@ -1639,12 +1528,7 @@
       },
       {
         "question": "How did Fiona feel when she finally saw water in the well?",
-        "options": [
-          "Angry",
-          "Bored",
-          "Excited and proud",
-          "Scared"
-        ],
+        "options": ["Angry", "Bored", "Excited and proud", "Scared"],
         "answer": 2
       },
       {
@@ -1677,18 +1561,13 @@
     "title": "Pip and the Pinecone Plan",
     "description": "A restless chipmunk discovers how patience helps his tiny pine tree grow tall and strong.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Patience and Growth",
+    "category": "Animals",
     "content": "Pip was a lively little chipmunk with stripey fur and endless energy. One crisp autumn day, he found a perfect pinecone and dreamed of growing his very own tree. He imagined its branches full of cones and its needles shimmering with frost in winter. Excited, Pip dug a careful hole by his burrow and planted his pinecone, covering it gently with soft earth.\n\nFor days, Pip watered the spot, checking every morning for a green sprout. But nothing happened, and Pip grew impatient. \"Maybe I did something wrong!\" he fretted. He even thought about digging up the pinecone to see if it needed help. But his friend Greta the turtle reminded him, \"Trees take time. You have to be steady and patient, Pip.\"\n\nSo Pip played with his friends, cleaned up fallen leaves, and made sure the soil stayed moist and cozy. He waited through chilly winds and gentle rains. Pip hummed to the earth and watched the stars, hoping his pinecone would soon wake up.\n\nOne morning in spring, Pip spotted a tiny green tip peeking through the dirt! He squeaked with joy and called Greta to see. As the seasons passed, Pip cared for the growing seedling, understanding that true growth needed time, love, and plenty of patience.\n\nYears later, Pip's pine tree was taller than his burrow—home to singing birds and fluttering butterflies. Pip smiled up at its sturdy branches, proud not just of his tree, but of the patience he’d learned.",
     "questions": [
       {
         "question": "What did Pip plant by his burrow?",
-        "options": [
-          "A carrot",
-          "A pinecone",
-          "A berry bush",
-          "A mushroom"
-        ],
+        "options": ["A carrot", "A pinecone", "A berry bush", "A mushroom"],
         "answer": 1
       },
       {
@@ -1703,12 +1582,7 @@
       },
       {
         "question": "Who gave Pip advice about patience?",
-        "options": [
-          "His mother",
-          "Greta the turtle",
-          "A squirrel",
-          "A bird"
-        ],
+        "options": ["His mother", "Greta the turtle", "A squirrel", "A bird"],
         "answer": 1
       },
       {
@@ -1751,8 +1625,8 @@
     "title": "Willa Waits for Wings",
     "description": "A young caterpillar learns that patience is needed for wonderful changes, and discovers the joy of becoming a butterfly.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Patience and Growth",
+    "category": "Animals",
     "content": "Willa was a tiny green caterpillar who loved to dream big dreams. Most days she wriggled through the tall grass, watching bees zip by and birds soar high, wishing she could fly too. She wanted wings more than anything.\n\nOne morning, wise Old Moth visited Willa. 'One day, you will have wings too,' she promised, 'but it takes patience and time.' Willa was excited! She spent days munching juicy leaves and gazing at the sky, hoping for her wings to grow quickly.\n\nWeeks passed, and Willa began to feel sleepy and slow. She made a cozy chrysalis on a sturdy leaf. 'Will this really work?' she wondered, as the world outside grew quiet. Inside her cocoon, Willa waited and waited. Sometimes she was bored and sometimes she was anxious, but she remembered Old Moth’s words: 'Wonderful things need time.'\n\nFinally, one sunny morning, Willa felt a tickle on her back and wiggled free from her chrysalis. Bright wings—striped with orange and blue—unfurled in the sunlight! Willa fluttered her wings, then soared above the grass, feeling joy and pride at what patience had brought her.\n\nWilla soon zipped past bees and birds, realizing that the waiting had made her flight even more special. She knew all great changes happen slowly, and they are always worth the wait.",
     "questions": [
       {
@@ -1807,12 +1681,7 @@
       },
       {
         "question": "How did Willa feel when she could finally fly?",
-        "options": [
-          "Hungry",
-          "Lonely",
-          "Joyful and proud",
-          "Sleepy"
-        ],
+        "options": ["Hungry", "Lonely", "Joyful and proud", "Sleepy"],
         "answer": 2
       }
     ],
@@ -1825,18 +1694,13 @@
     "title": "Jasper and the Towering Sunflower",
     "description": "A determined young mouse patiently cares for his sunflower until it grows taller than anything in the garden.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Patience and Growth",
+    "category": "Animals",
     "content": "Jasper the mouse lived in a tiny hole at the edge of Mrs. Maple’s bustling vegetable garden. One windy morning, he found a leftover sunflower seed and decided to plant it right outside his door. Jasper dreamed of a giant flower with golden petals shining high over the beans and carrots—one so big that all his friends would see it from far away.\n\nEach day, Jasper watered his seed, pulled tiny weeds, chased away curious beetles, and whispered cheerful songs. The seed took a long time to sprout, and Jasper sometimes wished it would hurry. His friend Penny the mole giggled and said, “Big things need big patience!”\n\nEven when other plants seemed to grow faster, Jasper kept caring for his little sprout. Over weeks, the stalk stretched higher, growing leaves as wide as Jasper’s ears. When the first yellow petals appeared, all the garden creatures stopped to admire it.\n\nBy late summer, Jasper’s sunflower towered over the garden. Birds built nests on its stem, bees buzzed around the nectar, and Jasper invited everyone for a sunflower-viewing picnic. He was proud—not just of the flower, but of the patience and care he gave it every single day.\n\nJasper learned that waiting made the reward sweeter, and with patience, even the smallest mouse could help the tallest flower grow.",
     "questions": [
       {
         "question": "What did Jasper plant outside his home?",
-        "options": [
-          "A carrot",
-          "A daisy",
-          "A sunflower seed",
-          "A bean"
-        ],
+        "options": ["A carrot", "A daisy", "A sunflower seed", "A bean"],
         "answer": 2
       },
       {
@@ -1899,18 +1763,13 @@
     "title": "Nate and the Dandelion Parade",
     "description": "A young rabbit discovers that waiting patiently makes the dandelion field even more magical.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Patience and Growth",
+    "category": "Animals",
     "content": "Nate was a little gray rabbit with long ears who loved dandelions more than anything. Every spring, Nate waited eagerly for the first sunny days to dash into the meadow and see the bright yellow dandelions. He dreamed of dancing through the flowers and blowing fluffy seeds into the sky like tiny fireworks.\n\nThis spring, the weather was cold and rainy for many days, and the meadow stayed green and bare. Nate grew restless, asking his mother every morning, “Are the dandelions ready yet?” She would smile and say, “Soon, but the best things in nature come to those who wait.”\n\nWhile Nate waited, he helped his friends sharpen sticks for stick races, played hide and seek under the willow trees, and watched the clouds dance by. Day after day, he peeked at the meadow, hoping for a golden surprise. Then one bright morning, he leaped from his burrow to find the field covered in shimmering yellow dandelions.\n\nNate gathered all his friends for a dandelion parade. They twirled and hopped between the flowers, laughing and making patterns in the soft petals. When the time was right, Nate and his friends gently blew the fluffy seeds, sending them dancing through the air.\n\nNate discovered that waiting had made the moment even more special, and he felt thankful for the magic of patience, friendship, and the promise of each new spring.",
     "questions": [
       {
         "question": "What flower did Nate love the most?",
-        "options": [
-          "Roses",
-          "Sunflowers",
-          "Dandelions",
-          "Lilies"
-        ],
+        "options": ["Roses", "Sunflowers", "Dandelions", "Lilies"],
         "answer": 2
       },
       {
@@ -1973,8 +1832,8 @@
     "title": "Layla and the Slow-Growing Shell",
     "description": "A young snail learns the value of patience and growth while waiting for her beautiful new shell to form.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Patience and Growth",
+    "category": "Animals",
     "content": "Layla was a little snail who loved shiny things. All her life, she admired her mother’s big, swirly shell and dreamed of having one just as beautiful. Each day, Layla noticed her own shell was still small and pale. She often wished it would grow faster so the butterflies and beetles would notice her bright new home.\n\nLayla tried eating extra lettuce and basking in the sun, hoping her shell would get bigger overnight. But day after day, it seemed to stay the same. Layla sometimes felt sad and a little jealous when she saw the grown-up snails’ colorful, sturdy shells.\n\nHer wise grandmother told her, “Every shell has its own time to grow. Don’t rush, and take good care of it—shine will come with care and patience.” So Layla kept her shell clean, ate her favorite leafy treats, and spent her days exploring slowly beneath the daisies and clover.\n\nOne morning, after a gentle spring rain, Layla awoke to find her shell had grown curvier and shone with soft creamy colors. She felt a warm, proud feeling inside. The beetles admired her shell’s lovely swirl, and the butterflies asked her to join their dance. Layla realized that true beauty takes time, and that patience helped her grow every bit as much as her shell did.\n\nFrom then on, whenever she saw a younger snail feeling impatient, Layla would say, “The best shells—and the best things—need time, care, and lots of little adventures along the way.”",
     "questions": [
       {
@@ -2019,12 +1878,7 @@
       },
       {
         "question": "How did Layla feel when her shell finally grew bigger and shinier?",
-        "options": [
-          "Angry",
-          "Proud and happy",
-          "Still jealous",
-          "Bored"
-        ],
+        "options": ["Angry", "Proud and happy", "Still jealous", "Bored"],
         "answer": 1
       },
       {
@@ -2047,8 +1901,8 @@
     "title": "Max’s Mountain Climb",
     "description": "A determined young goat learns that patience and steady effort can help him reach even the highest peaks.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Patience and Growth",
+    "category": "Animals",
     "content": "Max was a spirited young mountain goat who dreamed of standing on the highest peak above his herd’s rocky valley. He watched the elder goats leap up cliffs with their sure hooves and long beards, and he wanted nothing more than to reach those snowy heights himself.\n\nOn the first day of summer, Max decided to try the climb. He hopped from rock to rock, but the path was steep and slippery. After a few falls, Max grew impatient and wanted to run straight up, but slipped again and tumbled back to the starting ledge.\n\nHis wise mother met him there. She nuzzled his ear and said, “The best climbers are patient. Take it one careful step at a time, and don’t worry if you rest along the way.” Max listened. Each morning, he practiced climbing a little higher. Some days he slipped, but he always tried again, learning from every rocky step.\n\nAfter many days, Max finally stood at the top, clouds swirling around his horns. Below, the whole valley sparkled, and the wind sang in his fur. Max felt stronger than ever—not because he reached the peak fast, but because he grew wiser and steadier with every climb. Patience had shown him the way to the sky.",
     "questions": [
       {
@@ -2121,8 +1975,8 @@
     "title": "Rumi Waits for Rainbows",
     "description": "A little red panda learns patience as he eagerly awaits the perfect moment to see a rainbow for the first time.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Patience and Growth",
+    "category": "Animals",
     "content": "Rumi the red panda lived high in the misty mountains where clouds drifted low over the treetops. He loved looking at the sky, hoping to see the magical rainbows the elders always spoke of, but he had never seen one himself. Every time a rainstorm passed, Rumi would scamper up the tallest branch and search and search, but all he found were wet leaves and gray clouds.\n\nOne day, after yet another rain had ended, Rumi stomped his paws impatiently. He pouted, \"Will I ever see a rainbow?\" His grandmother wrapped her striped tail around him and said, \"Rainbows come to those who wait. Watch for the sunlight and keep hope in your heart.\"\n\nRumi decided to do just that. Before each storm, he picked a quiet spot and watched the sky, listening to the soft drizzle, even if there was no rainbow yet. He cheered up his friends, played in puddles, and made up songs while he waited, learning to enjoy the moments between rains.\n\nOne magical afternoon, the clouds parted right after the rain, and a band of colors arched across the sky. Rumi’s eyes grew wide with wonder as he saw his first rainbow! He barked with delight, sharing the view with friends and knowing deep down that waiting had made the moment even brighter.\n\nAfter that, Rumi told everyone, \"Rainbows are worth the wait,\" and he smiled whenever he saw clouds, knowing something beautiful might soon appear.",
     "questions": [
       {
@@ -2195,8 +2049,8 @@
     "title": "Ellie and the Echoing Cavern",
     "description": "A brave young bat discovers the importance of listening and understanding others in a world full of echoes.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Listening and Understanding",
+    "category": "Animals",
     "content": "Ellie was a small bat with big, fuzzy ears who lived in the twisting tunnels of Echo Cavern. The cavern was always filled with bouncing sounds—dripping water, fluttering wings, and most of all, lots of bats chirping their stories.\n\nEveryone loved to talk, but sometimes, their voices mixed together, making it hard for anyone to hear or feel truly heard. Ellie noticed how her friend Leo, a gentle moth, never got a chance to share his adventures. Ellie remembered how lonely she felt whenever no one understood her dreams of exploring the sky.\n\nOne evening, while the other bats chattered, Ellie landed quietly beside Leo. She wrapped her wings around herself and listened closely as Leo talked about moonlit flowers and the silent beauty of the outside world. She didn’t interrupt or hurry him—she just listened. Leo’s voice grew stronger, and his eyes sparkled.\n\nThe next night, Ellie asked the bats in the cavern to listen to Leo’s story too. She explained, “Echoes are special when we send them out, but listening brings them home.” The bats tried their best, waiting quietly as Leo spoke, and they discovered his stories were enchanting.\n\nFrom then on, Echo Cavern became a calmer, kinder place. The bats took turns, sharing tales and learning new things about their world. Ellie learned that listening helped everyone feel valued—and that understanding is the best echo of all.",
     "questions": [
       {
@@ -2269,8 +2123,8 @@
     "title": "Milo and the Whispering Meadow",
     "description": "A lively mouse learns about listening and understanding when the meadow friends face a big misunderstanding.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Listening and Understanding",
+    "category": "Animals",
     "content": "Milo was a cheerful little mouse who loved to chatter. He lived on the edge of a wide, whispering meadow, where the grass tickled his whiskers and the breeze carried all sorts of secrets. Milo loved telling stories and sharing ideas, sometimes so much that he forgot to listen to his friends.\n\nOne windy morning, the birds gathered nervously—Rose the robin was upset because she thought Benny the beetle was stealing her seeds. Benny tried to explain, but Milo spoke over him with his own ideas. The other animals also began to argue, and soon everyone was talking at once, making things more confusing.\n\nThat evening, wise Tessa Tortoise invited them to a listening circle beneath the willow tree. She gently asked everyone to let Benny speak. Milo stayed quiet and listened carefully for the first time, and he learned that Benny had only been gathering dropped seeds to clean up for Rose.\n\nThe meadow was quiet as the friends realized their mistake. Milo apologized to Benny and Rose for not listening. At that moment, the meadow breeze seemed to sigh in relief.\n\nFrom that day, Milo practiced listening as much as he talked. The meadow friends grew closer, sharing more laughs with fewer problems, and Milo discovered that every story is better when we truly listen to each other.",
     "questions": [
       {
@@ -2343,8 +2197,8 @@
     "title": "Tina Turtle’s Listening Lantern",
     "description": "A thoughtful young turtle discovers how truly listening to friends can brighten everyone’s day at the pond.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Listening and Understanding",
+    "category": "Animals",
     "content": "Tina Turtle lived by the calm blue pond, where dragonflies zipped and frogs sang gentle songs. Tina was slow and steady, and loved spending quiet time with her pond friends. But sometimes, when all the animals gathered after sunset to share stories, no one seemed to truly listen—everyone wanted to talk at once!\n\nOne twilight, Tina noticed her friend Felix the firefly glowed only dimly and stayed quiet. She asked softly, “Would you like to share, Felix?” As Felix told his story about his first big flight, Tina listened closely, never interrupting. Felix’s light grew brighter with every word.\n\nThe other animals watched, amazed at how happy Felix became. Inspired, Tina made a special Listening Lantern out of a lily pad and a pebble. She explained, “Whoever has the lantern gets to talk, and the rest of us will listen until they’re done.” Frog, heron, and even the shy snails loved the idea.\n\nNight after night, the pond friends shared their stories with the Listening Lantern. Each animal felt heard, and their friendships sparkled brighter than ever. Tina realized that listening wasn’t just about being quiet, but about caring—and it made the pond a warmer, happier place for everyone.",
     "questions": [
       {
@@ -2417,8 +2271,8 @@
     "title": "Ollie Owl and the Wise Woods",
     "description": "A young owl learns the value of listening to advice and understanding others to solve a mysterious problem in the forest.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Listening and Understanding",
+    "category": "Animals",
     "content": "Ollie was a curious young owl living in the tallest pine of Wise Woods. Each evening, he loved swooping silently through the trees and chatting to his neighbors. But Ollie always believed he knew best and rarely stopped to listen when others tried to share their thoughts.\n\nOne dusk, a strange problem arrived: the big forest clock, which helped all the animals know when to gather, had stopped ticking. Every creature was puzzled and meetings soon grew confusing. Squirrel said the bell needed polishing. Beaver thought the gears must be fixed. Bat whispered about a missing key.\n\nOllie was eager to solve the problem himself, but as he fiddled with the clock, nothing worked. At last, old Mrs. Fox gently suggested, “Why not hear everyone’s ideas before we try?” Ollie reluctantly agreed and gathered the animals together to listen.\n\nWhen each animal finished sharing, Ollie realized that everyone’s clues fit together. The bell was dull, a gear was loose, and the key had rolled behind a root. Working as a team, Ollie polished the bell, Beaver fixed the gear, and Bat found the key. When they finished, the clock ticked proudly once more—and everyone cheered!\n\nOllie learned that truly listening to others brought more wisdom than working alone could ever provide. From then on, he listened first and spoke second, making Wise Woods a friendlier and more understanding place.",
     "questions": [
       {
@@ -2491,8 +2345,8 @@
     "title": "Gracie Goat Learns to Listen",
     "description": "A lively goat discovers how listening and understanding make for stronger friendships and a happier meadow.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Listening and Understanding",
+    "category": "Animals",
     "content": "Gracie the goat loved to jump, race, and bleat the loudest in Green Valley Meadow. She had lots of energy and was always eager to tell everyone about her adventures. But Gracie was so busy talking and bouncing that she sometimes didn’t notice when her friends tried to share their own stories or feelings.\n\nOne sunny day, Gracie wanted help building a wildflower fort. She dashed up to Finn the fox and Bella the bunny, telling them her whole plan without stopping to hear what they wanted to do. Finn fetched sticks a different way, and Bella gathered flowers quietly. Soon, the fort didn’t look like what Gracie imagined, and her friends seemed frustrated.\n\nThat afternoon, wise Grandpa Ram called Gracie over and asked, “Did you listen to your friends today?” Gracie thought hard. Maybe she hadn’t. The next morning, Gracie found Finn and Bella under the old elm tree. She sat beside them and asked, “What do you want our fort to be like?” Finn shared his stick design, and Bella described a tunnel of daffodils.\n\nBy listening carefully, Gracie understood their ideas and helped make a new fort even better than she’d dreamed. When it was finished, the three friends celebrated together. From then on, Gracie remembered that listening helps everyone feel included, and it brings friends closer—just like flowers growing side by side in a meadow.",
     "questions": [
       {
@@ -2565,8 +2419,8 @@
     "title": "Percy Penguin and the Polar Tune",
     "description": "A curious young penguin learns to listen carefully to understand his friends and make music together on the ice.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Listening and Understanding",
+    "category": "Animals",
     "content": "Percy Penguin waddled through the snowy Antarctic, humming his favorite melody. He dreamed of making music with his friends, but he often played his drum or sang too loudly without paying attention to what the others did. Sometimes, his songs sounded messy, and his friends grew frustrated.\n\nOne chilly morning, Percy asked his friend Lila Seal to join his band. Lila clapped along, but Percy was too busy beating his drum to notice her gentle rhythm. Toby the tern tried to whistle a tune, but Percy’s singing drowned him out. Soon, everyone gave up and walked away, leaving Percy alone with his noisy drum.\n\nPercy felt sad. Imagine making music, but no one wanting to play! He found his wise teacher, Old Walrus, and told him what happened. The walrus smiled and said, “Great music comes when we listen to each other. Try following your friends’ sounds, not just your own.”\n\nThe next day, Percy gathered his band again but stayed quiet for a moment, listening to Lila’s claps, Toby’s whistle, and even the wind. He tapped his drum softly to match, letting everyone join in. Suddenly, a beautiful new tune rose into the polar sky, sweeter than anything Percy had played before.\n\nFrom then on, Percy always remembered: good things happen when we listen to others, whether making music or making friends.",
     "questions": [
       {
@@ -2639,8 +2493,8 @@
     "title": "Nora and the Listening Leaves",
     "description": "A shy squirrel learns to listen carefully and discovers new friends and magical secrets in the autumn forest.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Listening and Understanding",
+    "category": "Animals",
     "content": "Nora was a quiet squirrel with soft brown fur who loved climbing her favorite old oak. Autumn was her favorite season, when golden leaves rustled and whispered stories in the wind. But Nora was too shy to talk much with the other forest animals, worried they wouldn’t hear her small voice.\n\nOne blustery day, while gathering acorns, Nora heard gentle giggles in the wind and stopped to listen. She discovered Hedgie the hedgehog and Willa Wren telling stories under a pile of leaves. Nora sat quietly nearby, listening to every word. When she picked up her courage to ask a question, both friends looked delighted that she’d listened so closely.\n\nHedgie shared tips on finding cozy hiding places, and Willa revealed how to spot fairy mushrooms beneath fallen logs. Nora realized she learned more by listening than by trying to talk over the wind. Soon, the animals invited her to their autumn games, and Nora taught them how to read the faintest paw-prints on leafy ground.\n\nFrom that day, Nora never felt lonely. She and her friends listened and learned from each other, discovering the forest’s wonders as the leaves whispered their secrets all around.",
     "questions": [
       {
@@ -2713,8 +2567,8 @@
     "title": "Benny Beaver and the Babbling Brook",
     "description": "A young beaver learns how listening helps him solve problems and make friends by the side of a busy stream.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Listening and Understanding",
+    "category": "Animals",
     "content": "Benny was a busy young beaver who loved building dams and lodges along the babbling brook that wove through Willow Woods. He always had ideas about where to place sticks and rocks and loved telling everyone what to do. But sometimes, Benny was so eager to direct things that he forgot to listen to his friends’ suggestions.\n\nOne afternoon, Benny tried to build a new dam in the fastest part of the brook. He hurriedly stacked logs without hearing what the others had to say. Molly Muskrat noticed the current was too strong, and Freddie Frog pointed out that their favorite swimming spot was getting blocked. But Benny didn’t stop to listen.\n\nSoon, the water splashed over the unfinished dam, logs tumbled away, and the friends got splashed! Benny felt frustrated and wondered why it hadn’t worked. Mrs. Duck waddled over and gently explained, “Sometimes listening gives you the best building plans.”\n\nSo Benny gathered his friends and asked for their ideas. Molly suggested a quieter bend in the brook, Freddie knew where the water was shallow, and Mrs. Duck offered reeds for weaving tighter walls. Benny listened carefully this time, and together they built the strongest dam ever.\n\nFrom then on, Benny always listened first before sharing his own ideas. The brook was calmer, swimming was better, and Benny’s friendships grew just as strong as his dams.",
     "questions": [
       {
@@ -2739,12 +2593,7 @@
       },
       {
         "question": "Who helped Benny see the value of listening?",
-        "options": [
-          "Mrs. Duck",
-          "His brother",
-          "A butterfly",
-          "Freddie Frog"
-        ],
+        "options": ["Mrs. Duck", "His brother", "A butterfly", "Freddie Frog"],
         "answer": 0
       },
       {
@@ -2787,8 +2636,8 @@
     "title": "Maisie Mouse and the Secret Signal",
     "description": "A young mouse learns how listening helps her understand her friends and brings everyone together in a noisy farmyard.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Listening and Understanding",
+    "category": "Animals",
     "content": "Maisie Mouse lived in a cozy nest under the old red barn. She was quick and clever, always darting between shadows to watch everything happening in the bustling farmyard. But Maisie loved to chatter so much that she sometimes missed what her friends were trying to tell her.\n\nOne noisy morning, the animals were excited but confused. Something special was supposed to happen, but no one was sure when or where. Rooster crowed loudly, Duck quacked directions, and Sheep bleated ideas, but everyone was talking at once!\n\nMaisie scurried from one group to the next, getting more mixed up every minute. Then, wise Owl fluttered down and blinked at Maisie. \"Before we act, we must listen. Everyone has something important to say.\"\n\nTaking a deep breath, Maisie gathered her friends and asked them to speak one at a time. She twitched her ears and really listened. When Sheep explained that Collie Dog would bark three times as a secret signal, everyone finally understood the plan.\n\nLater that day, when Collie barked three times, the farmyard animals gathered under the apple tree for a surprise picnic. Maisie was the first to cheer, grateful for the fun and for the lesson that listening can turn confusion into a day full of laughter and friendship.",
     "questions": [
       {
@@ -2813,22 +2662,12 @@
       },
       {
         "question": "Who helped Maisie learn to listen?",
-        "options": [
-          "Owl",
-          "Pig",
-          "Rooster",
-          "Collie Dog"
-        ],
+        "options": ["Owl", "Pig", "Rooster", "Collie Dog"],
         "answer": 0
       },
       {
         "question": "What was Collie Dog’s secret signal?",
-        "options": [
-          "Two barks",
-          "Three barks",
-          "A whistle",
-          "A loud howl"
-        ],
+        "options": ["Two barks", "Three barks", "A whistle", "A loud howl"],
         "answer": 1
       },
       {
@@ -2861,8 +2700,8 @@
     "title": "Leo the Lion Listens",
     "description": "A young lion learns the value of listening and understanding his friends during an important decision on the savanna.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Listening and Understanding",
+    "category": "Animals",
     "content": "Leo was a lively lion cub who loved being the leader during playtime under the bright savanna sun. His mane was beginning to grow, and he often roared his ideas for games, races, or exploring the riverbank. Sometimes, though, Leo wanted things done his way and forgot to listen to his friends’ thoughts.\n\nOne day, the lion cubs couldn’t agree on a new game to play. Cora wanted hide-and-seek among the tall grass. Max wanted a running race, while Zuri suggested a splashing contest at the watering hole. Everyone started talking at once, and Leo couldn’t decide what to do. \n\nJust then, wise Auntie Nia, the oldest lioness, padded over. She gently said, “Leo, a good leader listens first and decides with everyone in mind.” Leo sat down with his friends, asking each to share their idea, one by one. As he listened, Leo realized every game sounded fun in a different way.\n\nHe suggested they try each friend’s idea together. The cubs cheered, amazed at how much more fun they had when everyone’s voice was heard. That afternoon, they played every game, laughed twice as much, and ended the day as closer friends.\n\nLeo learned that listening didn’t mean giving up his turn. It made him a kinder leader—and also the friendliest lion on the savanna.",
     "questions": [
       {
@@ -2887,12 +2726,7 @@
       },
       {
         "question": "Who gave Leo advice about listening?",
-        "options": [
-          "Max",
-          "Cora",
-          "Auntie Nia the lioness",
-          "Zuri"
-        ],
+        "options": ["Max", "Cora", "Auntie Nia the lioness", "Zuri"],
         "answer": 2
       },
       {
@@ -2935,8 +2769,8 @@
     "title": "Tara's Tulip Surprise",
     "description": "A clever rabbit discovers the joy of problem-solving as she figures out how to help her garden grow.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Problem-Solving",
+    "category": "Animals",
     "content": "Tara was a bright-eyed rabbit who loved her little patch of tulips behind the big oak tree. Each morning, she watered them with her tiny blue watering can and sang to them as the sun came up. One spring, Tara noticed that her tulips were no longer opening. The leaves drooped, and no matter how much water she gave them, the flowers stayed closed.\n\nWorried, Tara sat among the blooms and tried to figure out what was wrong. She talked to her friend Hugo the hedgehog, who suggested more sunshine. Tara moved her garden to a sunnier spot, but still, the tulips did not open. Next, she asked Penny the pigeon, who said maybe the tulips needed special food. Tara gathered compost and sprinkled it carefully. Still, the tulips were sad and closed.\n\nFinally, Tara noticed tiny bugs crawling at the base of the stems—aphids! Remembering a story her grandmother told her, Tara made a gentle spray from water and lavender leaves to wash the bugs away. She even invited friendly ladybugs to help, knowing they liked to eat aphids.\n\nWithin days, her tulips perked up and bloomed in a riot of colors. Tara danced with delight and shared her story with her friends, glad that by thinking, asking for advice, and trying new ideas, even a tough problem could become a bright surprise.",
     "questions": [
       {
@@ -3009,8 +2843,8 @@
     "title": "Felix and the River Riddle",
     "description": "A curious young otter solves a tricky problem to help his friends cross the river safely.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Problem-Solving",
+    "category": "Animals",
     "content": "Felix was a playful otter who loved swimming in the sparkling river near Willow Bend. One day, after a big rainfall, the river rushed faster and wider than ever, so the beavers’ wooden bridge was washed away. On the far side, Felix saw his friends—a family of hedgehogs, a rabbit, and a shy duck—waiting to get home.\n\nThe animals gathered together, worried and afraid to cross the swirling water. Felix paddled close to the shore, thinking hard. He watched how the river flowed and remembered how sticks collected in the quiet water near the bend. Felix asked his friends to help gather long branches, leafy vines, and even empty nutshells.\n\nFirst, he wove the vines and branches into a sturdy raft, tying it tight with extra grass. The duck tested the raft and quacked excitedly when it floated. But the water was fast in the middle! Felix rolled big stones into the stream to slow the current, then guided the raft, pulling gently with the help of the duck.\n\nIn a few trips, all the animals crossed the river safely. Everyone cheered and hugged Felix for his clever ideas. From then on, whenever a tough problem popped up, the animals always turned to Felix—knowing that thinking, planning, and teaming up could turn a riddle into a happy ending.",
     "questions": [
       {
@@ -3083,8 +2917,8 @@
     "title": "Maya and the Mysterious Map",
     "description": "A clever young fox uses teamwork and problem-solving skills to unravel a treasure map and help her friends find hidden treats.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Problem-Solving",
+    "category": "Animals",
     "content": "Maya was a curious fox with a nose for adventure. One crisp morning, while exploring the woods, she stumbled upon an old, rolled-up map tied with a ribbon. The map was filled with puzzling symbols, zig-zag lines, and pictures of acorns, berries, and a big red X.\n\nExcited, Maya gathered her friends—Ollie Owl, Benny Badger, and Frida Squirrel—to join the hunt. They spread the map on a sunny rock and tried to figure it out. The map was tricky! Some lines led to the old hollow tree, others pointed to the bubbling creek, and one symbol showed a pile of pinecones.\n\nMaya suggested they visit each spot together. At the tree, Frida found acorns hidden in a knotty hole. By the creek, Benny sniffed out berries among the moss. At first, Ollie thought the pinecone sign meant the tall pine, but Maya realized it pointed to the biggest shadow nearby—just as the sun moved! There, under a leafy bush, they discovered a basket of snacks and a sparkling feather—the treasure!\n\nLaughing and sharing the treats, Maya thanked her friends for their help. They learned that working together, listening to every idea, and taking time to look carefully meant no puzzle was too hard. Their friendship was the best treasure of all.",
     "questions": [
       {
@@ -3109,12 +2943,7 @@
       },
       {
         "question": "What did the friends find inside the hollow tree?",
-        "options": [
-          "Gold coins",
-          "Acorns",
-          "A secret door",
-          "A hat"
-        ],
+        "options": ["Gold coins", "Acorns", "A secret door", "A hat"],
         "answer": 1
       },
       {
@@ -3157,8 +2986,8 @@
     "title": "Zara Zebra Fixes the Fence",
     "description": "A young zebra finds creative ways to solve a problem and help the whole savanna stay safe.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Problem-Solving",
+    "category": "Animals",
     "content": "Zara was a curious young zebra who loved racing with her friends near the edge of the savanna. One afternoon, after a playful run, she noticed a big gap in the wooden fence that protected the animals’ waterhole. If the gap wasn't fixed, wandering calves or even little zebra foals could get lost or thirsty.\n\nZara ran to tell the elder zebras, but they were busy gathering food for the herd. So, Zara decided to try fixing it herself. She found sturdy sticks and tangled roots for tying, but the sticks slipped through the gap. Zara thought and thought. That’s when she saw some thorny branches by the acacia tree. Carefully, she wove the thorns together with the roots to make a tight, scratchy patch.\n\nThe younger animals helped carry stones to hold the new patch in place, and Zara tested it with a gentle push. It held strong! When the elders returned, they praised Zara’s clever thinking and teamwork. Zara realized that even though she was young, a new idea and a little teamwork could solve a big problem.\n\nFrom then on, whenever there was trouble on the savanna, everyone looked to Zara for her problem-solving skills and courage.",
     "questions": [
       {
@@ -3231,8 +3060,8 @@
     "title": "Penny and the Puzzle of the Pond",
     "description": "A bright young duckling discovers how asking questions and working together with friends can solve any mystery.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Problem-Solving",
+    "category": "Animals",
     "content": "Penny was a cheerful duckling who loved swimming in the sparkling pond every morning. One day, she noticed something strange—the water level was lower than usual, and her favorite lily pads were stuck in the muddy bank. The frogs and fish looked worried, too, as the pond seemed to shrink a little more each day.\n\nPenny waddled over to her friends, Tommy Turtle and Sally Snail, and said, \"Let’s figure out why the pond is shrinking.\" They split up to look for clues. Sally crept along the water’s edge and found a muddy trail leading into the tall grass. Tommy dove deep and saw a line of bubbles where the water trickled away.\n\nPenny and her friends followed the muddy trail and found a little channel where water escaped farther into the meadow. Penny quacked, \"Maybe a branch got moved during the last storm!\" Working together, the friends gently built a dam with sticks and pebbles, blocking the leaking channel.\n\nSoon, the pond began filling again, and the lily pads floated back to their spots. All the animals cheered! Penny smiled, knowing thoughtful questions, teamwork, and careful looking helped solve the puzzle—and made the pond safe for everyone to enjoy.",
     "questions": [
       {
@@ -3277,12 +3106,7 @@
       },
       {
         "question": "How did the animals feel when the pond filled again?",
-        "options": [
-          "Cheered and happy",
-          "Disappointed",
-          "Tired",
-          "Worried"
-        ],
+        "options": ["Cheered and happy", "Disappointed", "Tired", "Worried"],
         "answer": 0
       },
       {
@@ -3305,8 +3129,8 @@
     "title": "Simon Snake Saves the Day",
     "description": "A thoughtful young snake learns creative problem-solving to help his friends rescue a stuck football from a high tree branch.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Problem-Solving",
+    "category": "Animals",
     "content": "Simon was a shy, smart snake who liked to watch his friends play football in the sunny clearing. One afternoon, during a lively match, the ball soared high and landed on a branch no one could reach. All the animals tried their best: Rabbit jumped, Squirrel climbed, and Bear stood tall, but the branch was just too high. The friends began to feel discouraged.\n\nSimon hid behind the grass, thinking. He wished he could help but worried he wasn’t strong or fast enough. Then he noticed the branch was smooth, with a curve leading right to the ball. Simon slithered bravely over and shared his idea, and the other animals cheered him on.\n\nCarefully, Simon made his way up the tree, wrapping gently around the trunk and sliding along the branch. When he reached the ball, he pushed it with his nose until it rolled down and bounced safely onto the ground.\n\nEveryone cheered, and Simon blushed with happiness! The animals realized that everyone’s unique skills could solve problems in different ways. From that day, Simon was proud to join the team—because thinking differently could save the day.",
     "questions": [
       {
@@ -3341,12 +3165,7 @@
       },
       {
         "question": "What did Simon use to help the ball fall?",
-        "options": [
-          "His tail",
-          "His nose",
-          "His tongue",
-          "A stick"
-        ],
+        "options": ["His tail", "His nose", "His tongue", "A stick"],
         "answer": 1
       },
       {
@@ -3379,8 +3198,8 @@
     "title": "Lila Ladybug and the Stuck Petal",
     "description": "A determined ladybug uses teamwork and clever thinking to help a bee friend trapped by a flower petal.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Problem-Solving",
+    "category": "Animals",
     "content": "Lila was a cheerful ladybug who loved crawling up flowers in the garden, her shiny red shell gleaming in the sun. One morning, while exploring a golden dandelion, she heard a faint buzz for help. Buzz the bee was stuck under a big, heavy petal that had folded over him during a gusty wind! He wiggled and tugged, but couldn’t get free.\n\nLila wanted to help. She pushed the edge of the petal, but it was too heavy for her alone. She quickly called her ant and butterfly friends. The ants formed a parade line, lifting the petal with their strong legs, while the butterfly used her wings to keep the petal from falling down again.\n\nWorking together, the team freed Buzz, who zoomed into the sky with a grateful twirl. They all danced in the flower’s pollen, celebrating not just Buzz’s rescue, but also the power of thinking together and teamwork.\n\nFrom then on, whenever a bug friend had a garden problem, everyone helped, knowing that many small helpers can fix even the biggest problem.",
     "questions": [
       {
@@ -3453,8 +3272,8 @@
     "title": "Ollie Owl and the Midnight Maze",
     "description": "A wise young owl helps his woodland friends find their way home by using clever clues and problem-solving skills in the dark.",
     "language": "English",
-    "theme": [],
-    "category": [],
+    "theme": "Problem-Solving",
+    "category": "Animals",
     "content": "Ollie was a young owl who loved soaring above Pinewood Forest beneath the stars. One night after a forest festival, a group of his friends—including Margo Mouse, Felix Fox, and Greta Goat—realized they had lost track of the winding path home. The moon was hidden behind clouds, and every tree looked the same in the deep darkness.\n\nThe friends started to worry, but Ollie blinked his big eyes and said, “Let’s solve this together!” Carefully, he listened for the sound of the river that flowed near their homes. Margo suggested they look for the sweet smell of wild honeysuckle, which always grew near the old bridge. Felix kept an eye out for familiar rocks and fallen logs. Greta Goat tapped the ground for the gravel path with her hooves.\n\nBit by bit, following each clue and sharing ideas, the friends spotted the sparkling river, smelled the honeysuckle, and finally felt the crunch of gravel beneath their feet. With a cheerful hoot, Ollie led everyone safely across the bridge and back to their cozy beds.\n\nEveryone cheered for Ollie’s calm thinking and for all the helpful ideas that solved their midnight maze. From then on, the woodland friends knew that tricky problems could turn into grand adventures—when everyone worked together and used their unique strengths.",
     "questions": [
       {
@@ -3527,10 +3346,8 @@
     "title": "Ravi's Rainy Day Blues",
     "description": "A thoughtful rabbit learns to manage his feelings during a gloomy day and discovers strategies for feeling better.",
     "language": "English",
-    "theme": [
-      "Emotional"
-    ],
-    "category": [],
+    "theme": "Emotional Intelligence and Managing Feelings",
+    "category": "Animals",
     "content": "Ravi was a cheerful rabbit who loved hopping through the meadow when the sun was bright and the sky was blue. But one week, it rained every day, and Ravi stared out at the gray clouds, feeling sad and lonely. He missed his friends and the warm sunlight.\n\nAt first, Ravi tried to pretend he wasn't upset, but the gloomy weather made him grumpy with his family. His big sister, Mira, noticed and asked if he'd like to talk. Ravi sighed, \"I just feel so bored and blue.\"\n\nMira nodded and said, \"It's okay to feel sad sometimes. Want to try something that helps me on rainy days?\" She showed Ravi how to draw pictures of sunny adventures, sing their favorite silly songs, and build a cozy fort with blankets. Even their parents joined in to play hide-and-seek indoors. Soon, Ravi found himself giggling and forgot about the rain for a while.\n\nBy evening, Ravi understood that feeling sad didn't last forever, and sharing his feelings made them lighter. The next rainy day, Ravi invited his friends to a fort-building contest. They all laughed, played games, and made the grayest day feel bright.\n\nRavi learned that it's okay to have tough feelings, but with kindness, creativity, and sharing, he could always find ways to feel better.",
     "questions": [
       {
@@ -3603,10 +3420,8 @@
     "title": "Clara Cat and the Storm of Feelings",
     "description": "A sensitive kitten learns to name and handle her many big feelings when a thunderstorm disrupts her routine.",
     "language": "English",
-    "theme": [
-      "Emotional"
-    ],
-    "category": [],
+    "theme": "Emotional Intelligence and Managing Feelings",
+    "category": "Animals",
     "content": "Clara was a gentle gray kitten who adored sunny naps, chasing butterflies, and curling up by the window. But one afternoon, a loud thunderstorm boomed through the valley. The sky flashed and rumbled, and rain splattered the glass. Clara's heart raced, her fur bristled, and she darted under the bed, feeling scared and very small.\n\nHer papa sat nearby and spoke softly, \"It's okay to feel scared, Clara. Storms can be loud, but your feelings are safe with me.\" Clara peeked out. \"I'm also sad,\" she admitted quietly, \"because I wanted to play outside. And I think...I might even be a little mad, too.\"\n\nPapa nodded, \"Sometimes, storms bring many different feelings at once. When I feel that way, I take slow breaths and count to ten. Would you like to try with me?\" Clara came out and they breathed together. Papa gave her a soft scarf to knead and suggested drawing a picture of a sunny day. Slowly, Clara's heart felt steadier.\n\nWhen the storm passed, Clara was proud she had shared her feelings and found helpful ways to calm herself. The next thunderstorm, she bravely sat by the window, hugging her scarf and remembering her papa’s comforting words: \"Every feeling has a name, and it's okay to talk about them.\"",
     "questions": [
       {
@@ -3679,10 +3494,8 @@
     "title": "Gus Gecko Gets the Giggles",
     "description": "A lively gecko learns to understand his excitement and find balance when his energy overflows.",
     "language": "English",
-    "theme": [
-      "Emotional"
-    ],
-    "category": [],
+    "theme": "Emotional Intelligence and Managing Feelings",
+    "category": "Animals",
     "content": "Gus was a small, bright-green gecko who just couldn’t sit still. He loved to climb, wiggle, and most of all, laugh! But sometimes, his giggles and bouncing energy made it hard for him to listen to the teacher in class or let his friends talk at playtime.\n\nOne busy morning in Leafy Lane School, Gus felt extra wiggly. During storytime, he couldn’t stop wriggling. When the teacher told a funny joke, Gus burst out giggling, and all the other geckos giggled too! Soon, the class was a jumble of laughter, and the teacher had to pause the story.\n\nGus’s cheeks warmed. He liked to laugh, but he also wanted everyone to enjoy the story. His friend Lila whispered, “Let’s try the slow-breath game.” Gus closed his eyes, counted to five, and took deep breaths just like Lila. It helped his silly feelings settle a little bit.\n\nAfter class, the teacher praised Gus for calming down and joining in again. Gus realized it was okay to feel full of energy, but there were good ways to manage his feelings and be a kind friend. From then on, when Gus got the giggles, he practiced breathing, counting, or squeezing his tail until he was ready to share his fun at just the right time.",
     "questions": [
       {
@@ -3707,12 +3520,7 @@
       },
       {
         "question": "Who helped Gus learn to calm down?",
-        "options": [
-          "His mom",
-          "The teacher",
-          "His friend Lila",
-          "A bluebird"
-        ],
+        "options": ["His mom", "The teacher", "His friend Lila", "A bluebird"],
         "answer": 2
       },
       {
@@ -3755,10 +3563,8 @@
     "title": "Pippa Porcupine Finds Her Calm",
     "description": "A cautious young porcupine learns to handle her worries and practice self-soothing skills during a big change.",
     "language": "English",
-    "theme": [
-      "Emotional"
-    ],
-    "category": [],
+    "theme": "Emotional Intelligence and Managing Feelings",
+    "category": "Animals",
     "content": "Pippa Porcupine always felt safest when everything stayed the same. She liked her burrow just the way it was, with her favorite pinecone pillow and the view of the gentle stream. One spring, Pippa’s family decided to move to a new burrow on the other side of the woods. Suddenly, everything felt strange and scary for Pippa!\n\nHer tummy fluttered, her quills prickled with uncertainty, and she worried she’d never like the new place. Pippa stayed quiet and watched her family dig, not wanting to talk or play. Her little brother tried to cheer her up, but she just turned away.\n\nSeeing her worry, Pippa’s mom offered a gentle hug (carefully, of course!). She said, “It’s okay to feel nervous. Sometimes when I’m worried, taking slow breaths or squeezing my favorite pebble helps me feel better. Want to try?” Pippa nodded and tried taking long, deep breaths and kept her pebble in her paw.\n\nAs days passed, Pippa noticed the sunlight shining through the new burrow’s entrance and the sound of frogs singing nearby. She slowly started to explore, feeling a bit braver each day. Soon she found a new favorite pinecone and invited her brother to play.\n\nPippa realized it was normal to feel big feelings about change—and that with practice and kindness toward herself, she could find calm and enjoy new adventures.",
     "questions": [
       {
@@ -3831,10 +3637,8 @@
     "title": "Milo Mole and the Bubble of Worry",
     "description": "A thoughtful young mole learns how to recognize his anxious feelings and use mindfulness to feel calm and confident.",
     "language": "English",
-    "theme": [
-      "Emotional"
-    ],
-    "category": [],
+    "theme": "Emotional Intelligence and Managing Feelings",
+    "category": "Animals",
     "content": "Milo Mole loved digging tunnels with his friends and sniffing out juicy roots. But when the School Talent Show was announced, Milo’s tummy began to flutter with nerves. He worried about making a mistake in front of everyone and wanted to hide away in his tunnel.\n\nHis best friend, Anya Ant, noticed Milo was quiet and asked, \"What’s wrong?\" Milo whispered, \"I have a worry bubble inside, and it just keeps growing! What if I mess up?\" Anya listened kindly and invited Milo to try something new. \"Let’s breathe deep together and picture your worry bubble gently floating away.\"\n\nThey sat side by side, taking slow breaths and imagining Milo’s worries floating up, up, and popping in the sky. Milo felt lighter, and the flutter in his tummy softened. He practiced his song for the talent show, reminding himself to breathe when he felt anxious.\n\nThe big day arrived, and Milo sang his song beautifully. Even when his voice shook, he remembered Anya’s advice, felt his feet on the ground, and smiled bravely at his friends. When the show was over, Milo was so proud of himself—and grateful for kind friends and calming breaths. He learned that worries are normal, but mindful moments and courage help make them smaller.",
     "questions": [
       {
