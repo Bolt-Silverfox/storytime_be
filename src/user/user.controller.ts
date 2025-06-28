@@ -147,7 +147,9 @@ export class UserController {
     type: UserDto,
   })
   async getMe(@Req() req: any) {
-    const user = await this.userService.getUser(req.authUserData.userId as string);
+    const user = await this.userService.getUser(
+      req.authUserData.userId as string,
+    );
     return user ? new UserDto(user) : null;
   }
 
