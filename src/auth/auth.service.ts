@@ -379,6 +379,7 @@ export class AuthService {
       if (update.name !== undefined) updateData.name = update.name;
       if (update.avatarUrl !== undefined)
         updateData.avatarUrl = update.avatarUrl;
+      if (update.ageRange !== undefined) updateData.ageRange = update.ageRange;
 
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       if (Object.keys(updateData).length > 0) {

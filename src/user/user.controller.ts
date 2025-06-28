@@ -72,7 +72,8 @@ export class UserController {
   })
   @ApiResponse({ status: 404, description: 'User not found.' })
   async getUser(@Param('id') id: string) {
-    return await this.userService.getUser(id);
+    const user = await this.userService.getUser(id);
+    return user ? new UserDto(user) : null;
   }
 
   @Put(':id')
@@ -146,7 +147,10 @@ export class UserController {
     type: UserDto,
   })
   async getMe(@Req() req: any) {
-    return await this.userService.getUser(req.authUserData.userId as string);
+    const user = await this.userService.getUser(
+      req.authUserData.userId as string,
+    );
+    return user ? new UserDto(user) : null;
   }
 
   @Delete(':id')

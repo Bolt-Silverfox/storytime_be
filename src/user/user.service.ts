@@ -8,10 +8,16 @@ const prisma = new PrismaClient();
 @Injectable()
 export class UserService {
   async getUser(id: string): Promise<any> {
-    return await prisma.user.findUnique({
+    // Fetch user, profile, and kids count
+    const user = await prisma.user.findUnique({
       where: { id },
-      include: { profile: true },
+      include: { profile: true, kids: true },
     });
+    if (!user) return null;
+    return {
+      ...user,
+      numberOfKids: user.kids ? user.kids.length : 0,
+    };
   }
 
   async getAllUsers(): Promise<any[]> {

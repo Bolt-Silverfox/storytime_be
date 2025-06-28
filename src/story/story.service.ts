@@ -71,7 +71,13 @@ export class StoryService {
     }
     return this.prisma.story.findMany({
       where,
-      include: { images: true, branches: true, categories: true, themes: true },
+      include: {
+        images: true,
+        branches: true,
+        categories: true,
+        themes: true,
+        questions: true,
+      },
     });
   }
 
