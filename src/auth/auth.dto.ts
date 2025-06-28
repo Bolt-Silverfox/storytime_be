@@ -103,17 +103,21 @@ export class UserDto {
   @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   updatedAt: Date;
 
+  @ApiProperty({ example: 'Mr', required: false })
+  @Optional()
+  title?: string | null;
+
   @ApiProperty({ type: ProfileDto })
   profile: ProfileDto | null;
 
-  // constructor(user: Partial<UserDto>) {
-  //   Object.assign(this, user);
-  // }
+  @ApiProperty({ example: 2, required: false })
+  @Optional()
+  numberOfKids?: number;
+
   constructor(user: Partial<UserDto> & { profile?: any }) {
     // Convert raw profile to ProfileDto if it exists
     this.profile = user.profile ? new ProfileDto(user.profile) : null;
     // Assign the rest of the user properties
-    // Object.assign(this, { ...user, profile: undefined }); // avoid overwriting with raw profile
     this.id = user.id as string;
     this.email = user.email as string;
     this.name = user.name as string;
@@ -121,6 +125,8 @@ export class UserDto {
     this.role = user.role as string;
     this.createdAt = user.createdAt as Date;
     this.updatedAt = user.updatedAt as Date;
+    this.numberOfKids = user.numberOfKids ?? undefined;
+    this.title = user.title ?? null;
   }
 }
 
@@ -199,4 +205,8 @@ export class updateKidDto {
   @ApiProperty({ example: 'https://example.com' })
   @Optional()
   avatarUrl?: string;
+
+  @ApiProperty({ example: '1-3', required: false })
+  @Optional()
+  ageRange?: string;
 }

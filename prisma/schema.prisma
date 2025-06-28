@@ -135,6 +135,7 @@ model Story {
   categories       Category[]        @relation("StoryCategories")
   themes           Theme[]           @relation("StoryThemes")
   storyAudioCaches StoryAudioCache[]
+  questions        StoryQuestion[]
 
   @@map("stories")
 }
@@ -333,4 +334,15 @@ model StoryAudioCache {
   @@unique([storyId, audioUrl])
   @@unique([storyId, voiceType])
   @@map("story_audio_cache")
+}
+
+model StoryQuestion {
+  id        String   @id @default(uuid())
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  question  String
+  options   String[]
+  answer    Int
+
+  @@map("story_questions")
 }
