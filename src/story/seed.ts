@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const prisma = new PrismaClient();
 
@@ -208,98 +210,9 @@ async function main() {
     },
   ];
 
-  const stories = [
-    {
-      title: 'The Midnight Rescue',
-      description:
-        'When a kitten is trapped in a tree, a group of animal friends bands together for a daring midnight rescue.',
-      language: 'English',
-      coverImageUrl:
-        'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
-      audioUrl: 'https://cdn.pixabay.com/audio/2022/10/16/audio_12b5b6b6c7.mp3',
-      isInteractive: false,
-      ageMin: 4,
-      ageMax: 8,
-      categories: ['Animal Stories', 'Adventure & Action', 'Bedtime Stories'],
-      themes: ['Courage / Bravery', 'Friendship & Belonging', 'Good vs. Evil'],
-    },
-    {
-      title: 'The Lantern Festival',
-      description:
-        'Mei and her grandmother share stories of their ancestors during the magical Lantern Festival in their village.',
-      language: 'English',
-      coverImageUrl:
-        'https://images.unsplash.com/photo-1464983953574-0892a716854b',
-      audioUrl: 'https://cdn.pixabay.com/audio/2022/10/16/audio_12b5b6b6c8.mp3',
-      isInteractive: false,
-      ageMin: 6,
-      ageMax: 12,
-      categories: [
-        'Cultural & Folklore Stories',
-        'Holiday / Seasonal Stories',
-        'Drama & Family Stories',
-      ],
-      themes: [
-        'Love & Family',
-        'Hope & Perseverance',
-        'Identity & Self-Discovery',
-      ],
-    },
-    {
-      title: 'The Secret of the Old Library',
-      description:
-        "Three friends discover a hidden room in their town's library, leading to a mystery only they can solve.",
-      language: 'English',
-      coverImageUrl:
-        'https://images.unsplash.com/photo-1465101178521-c1a9136a3b99',
-      audioUrl: 'https://cdn.pixabay.com/audio/2022/10/16/audio_12b5b6b6c9.mp3',
-      isInteractive: true,
-      ageMin: 7,
-      ageMax: 13,
-      categories: [
-        'Mystery & Detective Stories',
-        'Educational & Learning Stories',
-        'Historical Fiction',
-      ],
-      themes: [
-        'Change & Transformation',
-        'Honesty & Integrity',
-        'Friendship & Belonging',
-      ],
-    },
-    {
-      title: "The Ocean's Promise",
-      description:
-        'A young dolphin must journey across the ocean to save her pod, learning about courage and trust along the way.',
-      language: 'English',
-      coverImageUrl:
-        'https://images.unsplash.com/photo-1507525428034-b723cf961d3e',
-      audioUrl: 'https://cdn.pixabay.com/audio/2022/10/16/audio_12b5b6b6d0.mp3',
-      isInteractive: false,
-      ageMin: 5,
-      ageMax: 10,
-      categories: ['Ocean', 'Animal Stories', 'Adventure & Action'],
-      themes: ['Courage / Bravery', 'Trust & Loyalty', 'Hope & Perseverance'],
-    },
-    {
-      title: "The Robot's First Dream",
-      description:
-        'In a futuristic city, a robot discovers what it means to dream, and to care for others.',
-      language: 'English',
-      coverImageUrl:
-        'https://images.unsplash.com/photo-1517694712202-14dd9538aa97',
-      audioUrl: 'https://cdn.pixabay.com/audio/2022/10/16/audio_12b5b6b6d1.mp3',
-      isInteractive: true,
-      ageMin: 8,
-      ageMax: 14,
-      categories: ['Robots', 'Science Fiction & Space', 'Fantasy & Magic'],
-      themes: [
-        'Emotional',
-        'Identity & Self-Discovery',
-        'Healing & Forgiveness',
-      ],
-    },
-  ];
+  // Load stories from stories.json
+  const storiesPath = path.resolve('src/story/stories.json');
+  const stories = JSON.parse(fs.readFileSync(storiesPath, 'utf-8'));
 
   await prisma.category.createMany({
     data: categories,
@@ -311,19 +224,45 @@ async function main() {
     skipDuplicates: true,
   });
 
+  // Before the loop, keep your master arrays:
+  const categoriesArray = categories; // your master categories array
+  const themesArray = themes; // your master themes array
+
   for (const story of stories) {
+    // Support both single and array for category/theme
+    const categories = Array.isArray(story.category)
+      ? story.category
+      : [story.category];
+    const themes = Array.isArray(story.theme) ? story.theme : [story.theme];
+    const validCategories = categories.filter((name: string) =>
+      categoriesArray.some((cat) => cat.name === name),
+    );
+    const validThemes = themes.filter((name: string) =>
+      themesArray.some((theme) => theme.name === name),
+    );
     await prisma.story.create({
       data: {
         title: story.title,
         description: story.description,
         language: story.language,
         coverImageUrl: story.coverImageUrl,
-        audioUrl: story.audioUrl,
-        isInteractive: story.isInteractive,
-        ageMin: story.ageMin,
-        ageMax: story.ageMax,
-        categories: { connect: story.categories.map((name) => ({ name })) },
-        themes: { connect: story.themes.map((name) => ({ name })) },
+        audioUrl: story.audioUrl ?? '',
+        isInteractive: story.isInteractive ?? false,
+        ageMin: story.ageMin ?? 0,
+        ageMax: story.ageMax ?? 9,
+        categories: {
+          connect: validCategories.map((name: string) => ({ name })),
+        },
+        themes: { connect: validThemes.map((name: string) => ({ name })) },
+        textContent: story.content,
+        questions: {
+          create: story.questions.map((question: any) => ({
+            question: question.question,
+            options: question.options,
+            answer: question.answer,
+          })),
+        },
+        recommended: story.recommended ?? false,
       },
     });
   }
