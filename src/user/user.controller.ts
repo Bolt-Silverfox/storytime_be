@@ -25,7 +25,7 @@ import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { UserDto } from '../auth/auth.dto';
 import { SetKidPreferredVoiceDto, KidVoiceDto } from './user.dto';
-import { SetPreferredVoiceDto, VOICEID, VoiceType } from '@/story/story.dto';
+import { VOICEID, VoiceType } from '@/story/story.dto';
 
 export enum UserRole {
   ADMIN = 'admin',
