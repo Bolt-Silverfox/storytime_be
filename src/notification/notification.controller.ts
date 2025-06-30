@@ -19,11 +19,11 @@ export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a notification preference' })
-  @ApiBody({ type: CreateNotificationPreferenceDto })
-  @ApiResponse({ status: 201, type: NotificationPreferenceDto })
-  async create(@Body() dto: CreateNotificationPreferenceDto) {
-    return this.notificationService.create(dto);
+  @ApiOperation({ summary: 'Create notification preferences (bulk)' })
+  @ApiBody({ type: [CreateNotificationPreferenceDto] })
+  @ApiResponse({ status: 201, type: [NotificationPreferenceDto] })
+  async create(@Body() dtos: CreateNotificationPreferenceDto[]) {
+    return Promise.all(dtos.map((dto) => this.notificationService.create(dto)));
   }
 
   @Patch(':id')
