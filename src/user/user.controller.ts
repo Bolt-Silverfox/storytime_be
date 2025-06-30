@@ -23,6 +23,7 @@ import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { UserDto } from '../auth/auth.dto';
 import { SetKidPreferredVoiceDto, KidVoiceDto } from './user.dto';
+import { VOICEID, VoiceType } from '@/story/story.dto';
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -259,10 +260,12 @@ export class UserController {
     @Param('kidId') kidId: string,
     @Body() body: SetKidPreferredVoiceDto,
   ) {
-    return this.userService.setKidPreferredVoice({
-      kidId,
-      voiceId: body.voiceId,
-    });
+    const voiceKey = body.voiceType.toUpperCase() as keyof typeof VOICEID;
+    const voiceId = VOICEID[voiceKey];
+    if (!voiceId) {
+      throw new ForbiddenException('Invalid voice type');
+    }
+    return this.userService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
   }
 
   @Get('kids/:kidId/voice')
@@ -270,6 +273,6 @@ export class UserController {
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: KidVoiceDto })
   async getKidPreferredVoice(@Param('kidId') kidId: string) {
-    return this.userService.getKidPreferredVoice(kidId);
+    return await this.userService.getKidPreferredVoice(kidId);
   }
 }
