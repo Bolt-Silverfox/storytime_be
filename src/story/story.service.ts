@@ -46,8 +46,8 @@ export class StoryService {
     kidId?: string;
   }) {
     const where: any = {};
-    if (filter.theme) where.themes = { some: { name: filter.theme } };
-    if (filter.category) where.categories = { some: { name: filter.category } };
+    if (filter.theme) where.themes = { some: { id: filter.theme } };
+    if (filter.category) where.categories = { some: { id: filter.category } };
     if (filter.recommended !== undefined)
       where.recommended = filter.recommended;
     let age: number | undefined = filter.age;
