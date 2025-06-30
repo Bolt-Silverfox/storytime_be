@@ -11,6 +11,7 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -55,6 +56,7 @@ import { randomUUID } from 'crypto';
 @ApiTags('stories')
 @Controller('stories')
 export class StoryController {
+  private readonly logger = new Logger(StoryController.name);
   constructor(
     private readonly storyService: StoryService,
     private readonly textToSpeechService: TextToSpeechService,
@@ -480,7 +482,7 @@ export class StoryController {
     return { message: 'Daily challenges assigned to all kids.' };
   }
 
-  @Get('daily-challenge/assignment/today')
+  @Get('daily-challenge/today')
   @ApiOperation({ summary: "Get today's daily challenge assignment for a kid" })
   @ApiQuery({ name: 'kidId', required: true, type: String })
   @ApiOkResponse({
@@ -493,7 +495,50 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async getTodaysDailyChallengeAssignment(@Query('kidId') kidId: string) {
+    this.logger.log(
+      `Getting today's daily challenge assignment for kid ${kidId}`,
+    );
     return await this.storyService.getTodaysDailyChallengeAssignment(kidId);
+  }
+
+  @Get('daily-challenge/kid/:kidId/week')
+  @ApiOperation({
+    summary:
+      'Get daily challenge assignments for a kid for a week (Sunday to Saturday)',
+  })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({
+    name: 'weekStart',
+    required: true,
+    type: String,
+    description: 'Start of the week (YYYY-MM-DD, must be a Sunday)',
+  })
+  @ApiResponse({ status: 200, type: [DailyChallengeAssignmentDto] })
+  @ApiResponse({
+    status: 404,
+    description: 'No daily challenge assignments found',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Internal Server Error',
+    type: ErrorResponseDto,
+  })
+  async getWeeklyAssignmentsForKid(
+    @Param('kidId') kidId: string,
+    @Query('weekStart') weekStart: string,
+  ) {
+    const weekStartDate = new Date(weekStart);
+    weekStartDate.setHours(0, 0, 0, 0);
+    return this.storyService.getWeeklyDailyChallengeAssignments(
+      kidId,
+      weekStartDate,
+    );
   }
 
   // --- Voices ---
