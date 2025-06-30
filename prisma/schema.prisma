@@ -13,6 +13,12 @@ enum Role {
   kid
 }
 
+enum NotificationType {
+  email
+  push
+  // add more as needed
+}
+
 model User {
   id                      String                   @id @default(uuid())
   email                   String                   @unique
@@ -255,15 +261,15 @@ model DailyChallengeAssignment {
 }
 
 model NotificationPreference {
-  id        String   @id @default(uuid())
+  id        String           @id @default(uuid())
+  type      NotificationType
+  enabled   Boolean
   userId    String?
-  user      User?    @relation(fields: [userId], references: [id])
   kidId     String?
-  kid       Kid?     @relation(fields: [kidId], references: [id])
-  type      String // e.g. 'email', 'push', etc.
-  enabled   Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  user      User?            @relation(fields: [userId], references: [id])
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  Kid       Kid?             @relation(fields: [kidId], references: [id])
 
   @@map("notification_preferences")
 }
@@ -337,12 +343,12 @@ model StoryAudioCache {
 }
 
 model StoryQuestion {
-  id        String   @id @default(uuid())
-  storyId   String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  question  String
-  options   String[]
-  answer    Int
+  id       String   @id @default(uuid())
+  storyId  String
+  story    Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  question String
+  options  String[]
+  answer   Int
 
   @@map("story_questions")
 }

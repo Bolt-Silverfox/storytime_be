@@ -208,6 +208,7 @@ export class StoryService {
   async setDailyChallenge(dto: DailyChallengeDto) {
     return await this.prisma.dailyChallenge.create({ data: dto });
   }
+
   async getDailyChallenge(date: string) {
     return await this.prisma.dailyChallenge.findMany({
       where: { challengeDate: new Date(date) },
@@ -537,10 +538,17 @@ export class StoryService {
   async getTodaysDailyChallengeAssignment(kidId: string) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
     const assignment = await this.prisma.dailyChallengeAssignment.findFirst({
       where: {
         kidId,
-        challenge: { challengeDate: today },
+        challenge: {
+          challengeDate: {
+            gte: today,
+            lt: tomorrow,
+          },
+        },
       },
       include: {
         challenge: {
@@ -596,5 +604,31 @@ export class StoryService {
     });
 
     return audioUrl;
+  }
+
+  async getWeeklyDailyChallengeAssignments(kidId: string, weekStart: Date) {
+    // weekStart should be a Sunday at 00:00:00
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7); // Next Sunday (exclusive)
+    const assignments = await this.prisma.dailyChallengeAssignment.findMany({
+      where: {
+        kidId,
+        challenge: {
+          challengeDate: {
+            gte: weekStart,
+            lt: weekEnd,
+          },
+        },
+      },
+      include: {
+        challenge: {
+          include: {
+            story: true,
+          },
+        },
+      },
+      orderBy: { assignedAt: 'asc' },
+    });
+    return assignments;
   }
 }
