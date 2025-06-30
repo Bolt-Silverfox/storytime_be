@@ -656,10 +656,9 @@ export class StoryController {
     @Param('id') id: string,
     @Query('voiceType') voiceType?: VoiceType,
   ) {
-    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
+    const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
-      'Sample text for audio generation',
-      voiceType,
+      voiceType ?? VoiceType.MILO,
     );
 
     return {
