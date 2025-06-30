@@ -272,14 +272,25 @@ async function main() {
 
   console.log('seeding voices');
   for (const [key, voice] of Object.entries(VOICEID)) {
+    // check for existing voice by elevenLabsVoiceId = voice and create if not exists
+    console.log(`Seeding voice: ${key} with ID: ${voice}`);
+
+    const existingVoice = await prisma.voice.findFirst({
+      where: { elevenLabsVoiceId: voice },
+    });
+    if (existingVoice) {
+      console.log(`Voice ${key} already exists, skipping.`);
+      continue;
+    }
     await prisma.voice.create({
       data: {
-        id: voice,
+        elevenLabsVoiceId: voice,
         name: key,
-        type: 'elevenlabs', // Replace 'default' with the appropriate type value
+        type: 'elevenlabs',
       },
     });
   }
+  console.log('Seeded voices!');
 }
 
 void main()
