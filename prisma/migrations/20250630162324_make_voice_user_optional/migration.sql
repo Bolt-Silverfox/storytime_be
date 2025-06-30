@@ -5,7 +5,12 @@
 
 */
 -- CreateEnum
-CREATE TYPE "NotificationType" AS ENUM ('email', 'push');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'NotificationType') THEN
+        CREATE TYPE "NotificationType" AS ENUM ('email', 'push');
+    END IF;
+END$$;
 
 -- DropForeignKey
 ALTER TABLE "voices" DROP CONSTRAINT "voices_userId_fkey";
