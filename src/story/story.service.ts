@@ -631,4 +631,21 @@ export class StoryService {
     });
     return assignments;
   }
+
+  async getStoryById(id: string) {
+    const story = await this.prisma.story.findUnique({
+      where: { id },
+      include: {
+        images: true,
+        branches: true,
+        categories: true,
+        themes: true,
+        questions: true,
+      },
+    });
+    if (!story) {
+      throw new NotFoundException(`Story with id ${id} not found`);
+    }
+    return story;
+  }
 }
