@@ -9,6 +9,8 @@ import {
   Delete,
   ForbiddenException,
   Patch,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,7 +25,7 @@ import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { UserDto } from '../auth/auth.dto';
 import { SetKidPreferredVoiceDto, KidVoiceDto } from './user.dto';
-import { VOICEID, VoiceType } from '@/story/story.dto';
+import { SetPreferredVoiceDto, VOICEID, VoiceType } from '@/story/story.dto';
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -58,6 +60,7 @@ class UpdateUserRoleDto {
 @ApiTags('user')
 @Controller('user')
 export class UserController {
+  private readonly logger = new Logger(UserController.name);
   constructor(private readonly userService: UserService) {}
 
   @Get(':id')
@@ -180,6 +183,29 @@ export class UserController {
     return user ? new UserDto(user) : null;
   }
 
+  @Patch('kids/:kidId/voice')
+  @ApiOperation({ summary: 'Set preferred voice for a kid' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiBody({ type: SetKidPreferredVoiceDto })
+  @ApiResponse({ status: 200, type: KidVoiceDto })
+  async setKidPreferredVoice(
+    @Param('kidId') kidId: string,
+    @Body() body: SetKidPreferredVoiceDto,
+  ) {
+    this.logger.log(
+      `Setting preferred voice for kid ${kidId} to ${JSON.stringify(body)}`,
+    );
+    if (!body.voiceType) {
+      throw new BadRequestException('Voice type is required');
+    }
+    const voiceKey = body.voiceType.toUpperCase() as keyof typeof VOICEID;
+    const voiceId = VOICEID[voiceKey];
+    if (!voiceId) {
+      throw new ForbiddenException('Invalid voice type');
+    }
+    return this.userService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
+  }
+
   @Delete(':id')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
@@ -249,23 +275,6 @@ export class UserController {
       throw new ForbiddenException('Invalid role');
     }
     return await this.userService.updateUserRole(id, role);
-  }
-
-  @Patch('kids/:kidId/voice')
-  @ApiOperation({ summary: 'Set preferred voice for a kid' })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiBody({ type: SetKidPreferredVoiceDto })
-  @ApiResponse({ status: 200, type: KidVoiceDto })
-  async setKidPreferredVoice(
-    @Param('kidId') kidId: string,
-    @Body() body: SetKidPreferredVoiceDto,
-  ) {
-    const voiceKey = body.voiceType.toUpperCase() as keyof typeof VOICEID;
-    const voiceId = VOICEID[voiceKey];
-    if (!voiceId) {
-      throw new ForbiddenException('Invalid voice type');
-    }
-    return this.userService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
   }
 
   @Get('kids/:kidId/voice')
