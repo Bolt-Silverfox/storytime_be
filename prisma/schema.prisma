@@ -212,8 +212,8 @@ model DailyChallenge {
 
 model Voice {
   id                String   @id @default(uuid())
-  userId            String
-  user              User     @relation(fields: [userId], references: [id])
+  userId            String?
+  user              User?    @relation(fields: [userId], references: [id])
   name              String
   type              String // 'uploaded' or 'elevenlabs'
   url               String? // For uploaded audio
@@ -224,6 +224,8 @@ model Voice {
   usersPreferring User[] @relation("PreferredVoice")
   kidsPreferring  Kid[]  @relation("KidPreferredVoice")
 
+  @@index([name])
+  @@index([elevenLabsVoiceId])
   @@map("voices")
 }
 

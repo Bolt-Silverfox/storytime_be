@@ -1,10 +1,9 @@
+import { VoiceType } from '@/story/story.dto';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SetKidPreferredVoiceDto {
-  @ApiProperty({ description: 'Kid ID' })
-  kidId: string;
-  @ApiProperty({ description: 'Voice ID to set as preferred' })
-  voiceId: string;
+  @ApiProperty({ description: 'Voice ID to set as preferred', example: 'MILO' })
+  voiceType: string;
 }
 
 export class KidVoiceDto {
@@ -12,4 +11,6 @@ export class KidVoiceDto {
   kidId: string;
   @ApiProperty()
   preferredVoiceId: string;
+  @ApiProperty()
+  voiceType: VoiceType;
 }
