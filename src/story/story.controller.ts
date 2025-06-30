@@ -687,4 +687,27 @@ export class StoryController {
       statusCode: 200,
     };
   }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a story by id' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ description: 'Story', type: CreateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getStoryById(@Param('id') id: string) {
+    return await this.storyService.getStoryById(id);
+  }
 }
