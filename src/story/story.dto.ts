@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsString } from 'class-validator';
 
 export class StoryImageDto {
   @ApiProperty()
@@ -142,6 +143,7 @@ export class SetPreferredVoiceDto {
     description: 'Voice ID to set as preferred',
     example: 'uuid-voice-id',
   })
+  @IsString()
   voiceId: string;
 }
 
