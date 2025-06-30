@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
+import { VOICEID } from './story.dto';
 
 const prisma = new PrismaClient();
 
@@ -268,6 +269,17 @@ async function main() {
   }
 
   console.log('Seeded stories!');
+
+  console.log('seeding voices');
+  for (const [key, voice] of Object.entries(VOICEID)) {
+    await prisma.voice.create({
+      data: {
+        id: voice,
+        name: key,
+        type: 'elevenlabs', // Replace 'default' with the appropriate type value
+      },
+    });
+  }
 }
 
 void main()
