@@ -7,6 +7,7 @@ import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TextToSpeechService } from './text-to-speech.service';
+import { GeminiService } from './gemini.service';
 
 @Module({
   imports: [HttpModule, ScheduleModule.forRoot()],
@@ -17,6 +18,7 @@ import { TextToSpeechService } from './text-to-speech.service';
     ElevenLabsService,
     UploadService,
     TextToSpeechService,
+    GeminiService,
   ],
 })
 export class StoryModule {}

@@ -27,6 +27,7 @@
     "deploy:dev": "pnpm make-migration && pnpm generate && pnpm run build && pnpm start:pm2"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@nestjs/axios": "^4.0.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
