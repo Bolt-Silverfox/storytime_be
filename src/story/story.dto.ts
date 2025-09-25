@@ -251,6 +251,32 @@ export class ErrorResponseDto {
   details?: any;
 }
 
+export class GenerateStoryDto {
+  @ApiProperty({ type: [String], required: false })
+  themes?: string[];
+
+  @ApiProperty({ type: [String], required: false })
+  categories?: string[];
+
+  @ApiProperty({ required: false })
+  kidId?: string;
+
+  @ApiProperty({ required: false })
+  kidName?: string;
+
+  @ApiProperty({ required: false })
+  ageMin?: number;
+
+  @ApiProperty({ required: false })
+  ageMax?: number;
+
+  @ApiProperty({ required: false })
+  language?: string;
+
+  @ApiProperty({ required: false })
+  additionalContext?: string;
+}
+
 export const VOICEID = {
   MILO: 'pNInz6obpgDQGcFmaJgB',
   BELLA: 'EXAVITQu4vr4xnSDxMaL',
