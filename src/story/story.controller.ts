@@ -47,6 +47,7 @@ import {
   ErrorResponseDto,
   VoiceType,
   StoryContentAudioDto,
+  GenerateStoryDto,
 } from './story.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -686,6 +687,81 @@ export class StoryController {
       voiceType: dto.voiceType || VoiceType.MILO,
       statusCode: 200,
     };
+  }
+
+  @Post('generate')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate a story using AI' })
+  @ApiBody({ type: GenerateStoryDto })
+  @ApiOkResponse({ description: 'Generated story', type: CreateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  async generateStory(@Body() body: GenerateStoryDto) {
+    // If kidId is provided, use the specialized method
+    if (body.kidId) {
+      return this.storyService.generateStoryForKid(
+        body.kidId,
+        body.themes,
+        body.categories,
+      );
+    }
+
+    // Otherwise, generate with provided options
+    const options = {
+      theme: body.themes || ['Adventure'],
+      category: body.categories || ['Bedtime Stories'],
+      ageMin: body.ageMin || 4,
+      ageMax: body.ageMax || 8,
+      language: body.language || 'English',
+      kidName: body.kidName,
+      additionalContext: body.additionalContext,
+    };
+
+    return this.storyService.generateStoryWithAI(options);
+  }
+
+  @Post('generate/kid/:kidId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Generate a personalized story for a specific kid',
+  })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({ name: 'theme', required: false, type: String })
+  @ApiQuery({ name: 'category', required: false, type: String })
+  @ApiOkResponse({ description: 'Generated story', type: CreateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async generateStoryForKid(
+    @Param('kidId') kidId: string,
+    @Query('theme') theme?: string,
+    @Query('category') category?: string,
+  ) {
+    const themes = theme ? [theme] : undefined;
+    const categories = category ? [category] : undefined;
+    return this.storyService.generateStoryForKid(kidId, themes, categories);
   }
 
   @Get(':id')

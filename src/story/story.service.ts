@@ -27,6 +27,7 @@ import { Prisma, Voice } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TextToSpeechService } from './text-to-speech.service';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { GeminiService, GenerateStoryOptions } from './gemini.service';
 
 @Injectable()
 export class StoryService {
@@ -36,6 +37,7 @@ export class StoryService {
     private readonly elevenLabs: ElevenLabsService,
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
+    private readonly geminiService: GeminiService,
   ) {}
 
   async getStories(filter: {
@@ -647,5 +649,123 @@ export class StoryService {
       throw new NotFoundException(`Story with id ${id} not found`);
     }
     return story;
+  }
+
+  async generateStoryWithAI(options: GenerateStoryOptions) {
+    try {
+      // Generate the story using Gemini
+      const generatedStory = await this.geminiService.generateStory(options);
+
+      // Generate audio for the story
+      let audioUrl = '';
+      if (generatedStory.content) {
+        const { buffer, filename } = await this.elevenLabs.generateAudioBuffer(
+          generatedStory.content,
+        );
+        audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
+      }
+
+      // Generate or get a cover image
+      const coverImageUrl = await this.geminiService.generateStoryImage(
+        generatedStory.title,
+        generatedStory.description,
+      );
+
+      // Get theme and category IDs from names
+      const themes = await this.prisma.theme.findMany({
+        where: { name: { in: generatedStory.theme } },
+      });
+      const categories = await this.prisma.category.findMany({
+        where: { name: { in: generatedStory.category } },
+      });
+
+      // Save the story to the database
+      const story = await this.prisma.story.create({
+        data: {
+          title: generatedStory.title,
+          description: generatedStory.description,
+          textContent: generatedStory.content,
+          language: generatedStory.language,
+          coverImageUrl,
+          audioUrl,
+          isInteractive: true,
+          ageMin: generatedStory.ageMin,
+          ageMax: generatedStory.ageMax,
+          themes: {
+            connect: themes.map((t) => ({ id: t.id })),
+          },
+          categories: {
+            connect: categories.map((c) => ({ id: c.id })),
+          },
+          questions: {
+            create: generatedStory.questions.map((q) => ({
+              question: q.question,
+              options: q.options,
+              answer: q.answer,
+            })),
+          },
+          aiGenerated: true,
+        },
+        include: {
+          themes: true,
+          categories: true,
+          questions: true,
+        },
+      });
+
+      return story;
+    } catch (error) {
+      this.logger.error('Failed to generate story with AI:', error);
+      throw error;
+    }
+  }
+
+  async generateStoryForKid(kidId: string, themeNames?: string[], categoryNames?: string[]) {
+    // Get kid's information
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId },
+    });
+
+    if (!kid) {
+      throw new NotFoundException(`Kid with id ${kidId} not found`);
+    }
+
+    // Extract age from age range
+    let ageMin = 4;
+    let ageMax = 8;
+    if (kid.ageRange && typeof kid.ageRange === 'string') {
+      const match = kid.ageRange.match(/(\d+)-?(\d+)?/);
+      if (match) {
+        ageMin = parseInt(match[1], 10);
+        ageMax = match[2] ? parseInt(match[2], 10) : ageMin + 2;
+      }
+    }
+
+    // Use provided themes/categories or get random ones
+    let themes = themeNames || [];
+    let categories = categoryNames || [];
+
+    if (themes.length === 0) {
+      const availableThemes = await this.prisma.theme.findMany();
+      const randomTheme = availableThemes[Math.floor(Math.random() * availableThemes.length)];
+      themes = [randomTheme.name];
+    }
+
+    if (categories.length === 0) {
+      const availableCategories = await this.prisma.category.findMany();
+      const randomCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
+      categories = [randomCategory.name];
+    }
+
+    const options: GenerateStoryOptions = {
+      theme: themes,
+      category: categories,
+      ageMin,
+      ageMax,
+      kidName: kid.name || undefined,
+      language: 'English',
+    };
+
+    return this.generateStoryWithAI(options);
   }
 }
