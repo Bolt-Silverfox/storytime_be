@@ -63,13 +63,15 @@ jobs:
       run: |
         echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
         chmod 600 /tmp/ssh_key
+
     - name: Rsync files to EC2
       if: startsWith(github.ref, 'refs/heads/develop-v')
       run: |
-        rsync -avz --exclude='dist' --exclude='.git' --exclude='node_modules' --exclude='.github' --exclude='.env' \
+        rsync -avz --exclude='.git' --exclude='.github' --exclude='.env' \
           -e "ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no" \
           ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/storytime-api/
-    - name: Install and restart on EC2
+
+    - name: restart app
       if: startsWith(github.ref, 'refs/heads/develop-v')
       uses: appleboy/ssh-action@master
       with:
@@ -78,5 +80,4 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd /home/ubuntu/storytime/storytime-api
-          pnpm install --frozen-lockfile
-          pnpm deploy:dev
+          pm2 restart storytime-api
