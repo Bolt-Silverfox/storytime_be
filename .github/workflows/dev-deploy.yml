@@ -58,6 +58,7 @@ jobs:
         script: |
           mkdir -p /home/ubuntu/storytime/storytime-api
           exit 0
+
     - name: Write SSH key to file
       if: startsWith(github.ref, 'refs/heads/develop-v')
       run: |
@@ -80,4 +81,5 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd /home/ubuntu/storytime/storytime-api
-          pm2 restart storytime-api
+          pnpm install --frozen-lockfile
+          pnpm deploy:dev
