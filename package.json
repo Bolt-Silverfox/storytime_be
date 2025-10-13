@@ -24,7 +24,7 @@
     "make-migration": "npx prisma migrate dev",
     "db:reset": "npx prisma migrate reset",
     "db:seed": "ts-node src/story/seed.ts",
-    "deploy:dev": "pnpm make-migration && pnpm generate && pnpm run build && pnpm start:pm2"
+    "deploy:dev": "pnpm make-migration && pnpm generate && pnpm start:pm2"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
