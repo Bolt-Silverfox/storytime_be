@@ -81,5 +81,5 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd /home/ubuntu/storytime/storytime-api
-          pnpm install --frozen-lockfile
-          pnpm deploy:dev
+          /home/ubuntu/.local/share/pnpm/pnpm install --frozen-lockfile
+          /home/ubuntu/.local/share/pnpm/pnpm deploy:dev
