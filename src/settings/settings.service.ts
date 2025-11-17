@@ -16,7 +16,14 @@ export class SettingsService {
   async updateSettings(userId: string, body: any): Promise<any> {
     let profile = await prisma.profile.findUnique({ where: { userId } });
     if (!profile) {
-      profile = await prisma.profile.create({ data: { userId } });
+      profile = await prisma.profile.create({
+        data: {
+          userId,
+          maxScreenTimeMins: 60, // default value
+          language: 'en', // default value
+          country: 'US', // default value
+        },
+      });
     }
     // Validation
     const updateData: any = {};

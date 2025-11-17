@@ -2,10 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import {
   CreateRewardDto,
-  UpdateRewardDto,
   RedeemRewardDto,
-  UpdateRewardRedemptionStatusDto,
   RewardRedemptionDto,
+  UpdateRewardDto,
+  UpdateRewardRedemptionStatusDto,
 } from './reward.dto';
 
 const prisma = new PrismaClient();
@@ -16,27 +16,33 @@ export class RewardService {
     return await prisma.reward.create({
       data: {
         name: dto.name,
-        description: dto.description,
+        description: dto.description ?? '', // fallback in case undefined
         points: dto.points,
-        imageUrl: dto.imageUrl,
+        imageUrl: dto.imageUrl ?? '',
         kidId: dto.kidId,
+        isActive: true,
       },
     });
   }
+
   async findAll() {
     return await prisma.reward.findMany();
   }
+
   async findOne(id: string) {
     const reward = await prisma.reward.findUnique({ where: { id } });
     if (!reward) throw new NotFoundException('Reward not found');
     return reward;
   }
+
   async update(id: string, dto: UpdateRewardDto) {
     return await prisma.reward.update({ where: { id }, data: dto });
   }
+
   async delete(id: string) {
     return await prisma.reward.delete({ where: { id } });
   }
+
   async findByKid(kidId: string) {
     return await prisma.reward.findMany({ where: { kidId } });
   }
@@ -47,6 +53,7 @@ export class RewardService {
       rewardId: redemption.rewardId,
       kidId: redemption.kidId,
       redeemedAt: redemption.redeemedAt,
+      pointsRedeemed: redemption.pointsRedeemed,
       status: redemption.status,
     };
   }
@@ -57,6 +64,8 @@ export class RewardService {
         rewardId: dto.rewardId,
         kidId: dto.kidId,
         status: 'pending',
+        redeemedAt: new Date(), // required field
+        pointsRedeemed: 0, // required field
       },
     });
     return this.toRewardRedemptionDto(redemption);

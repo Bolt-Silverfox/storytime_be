@@ -1,9 +1,10 @@
+// prisma.service.ts
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import IHealth, { HealthResponse } from 'src/health/Ihealth.interfaces';
 
 @Injectable()
-class PrismaService
+export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy, IHealth
 {
@@ -11,7 +12,7 @@ class PrismaService
     await this.$connect();
   }
 
-  async onModuleDestroy() {
+  async onModuleDestroy(): Promise<void> {
     await this.$disconnect();
   }
 
@@ -19,22 +20,19 @@ class PrismaService
     const start = Date.now();
     try {
       await this.$queryRaw`SELECT 1;`;
-
       return {
         service: 'prisma',
         status: 'up',
         message: 'Prisma is up and running',
         duration: Date.now() - start,
       };
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (error) {
+    } catch {
       return {
         service: 'prisma',
         status: 'down',
         message: 'Prisma is down',
-        duration: Date.now(),
+        duration: Date.now() - start,
       };
     }
   }
 }
-export default PrismaService;

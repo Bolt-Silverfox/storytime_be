@@ -1,12 +1,12 @@
 import { Optional } from '@nestjs/common';
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsEmail,
   IsNotEmpty,
   IsStrongPassword,
   Matches,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
 
 export enum TokenType {
   VERIFICATION = 'verification',

@@ -1,27 +1,27 @@
 import { Injectable } from '@nestjs/common';
-import PrismaService from '../prisma/prisma.service';
+import { Prisma, Voice } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { UploadService } from '../upload/upload.service';
+import { ElevenLabsService } from './elevenlabs.service';
 import {
-  CreateStoryDto,
-  UpdateStoryDto,
-  StoryImageDto,
-  StoryBranchDto,
-  FavoriteDto,
-  StoryProgressDto,
-  DailyChallengeDto,
-  UploadVoiceDto,
-  CreateElevenLabsVoiceDto,
-  SetPreferredVoiceDto,
-  VoiceResponseDto,
   AssignDailyChallengeDto,
   CompleteDailyChallengeDto,
+  CreateElevenLabsVoiceDto,
+  CreateStoryDto,
   DailyChallengeAssignmentDto,
+  DailyChallengeDto,
+  FavoriteDto,
+  SetPreferredVoiceDto,
   StartStoryPathDto,
-  UpdateStoryPathDto,
+  StoryBranchDto,
+  StoryImageDto,
   StoryPathDto,
+  StoryProgressDto,
+  UpdateStoryDto,
+  UpdateStoryPathDto,
+  UploadVoiceDto,
+  VoiceResponseDto,
 } from './story.dto';
-import { ElevenLabsService } from './elevenlabs.service';
-import { UploadService } from '../upload/upload.service';
-import { Prisma, Voice } from '@prisma/client';
 
 @Injectable()
 export class StoryService {
@@ -31,33 +31,47 @@ export class StoryService {
     public readonly uploadService: UploadService,
   ) {}
 
+  // --- Stories ---
   async getStories(filter: { theme?: string; category?: string }) {
     const where: any = {};
-    if (filter.theme) where.theme = filter.theme;
-    if (filter.category) where.category = filter.category;
+    if (filter.theme) where.themes = { some: { id: filter.theme } };
+    if (filter.category) where.categories = { some: { id: filter.category } };
+
     return this.prisma.story.findMany({
       where,
-      include: { images: true, branches: true },
+      include: { storyImages: true, storyBranches: true },
     });
   }
 
   async createStory(data: CreateStoryDto) {
     let audioUrl = data.audioUrl;
     if (!audioUrl && data.description) {
-      // Generate audio using Eleven Labs and upload to Cloudinary
       const { buffer, filename } = await this.elevenLabs.generateAudioBuffer(
         data.description,
       );
       audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
     }
+
     return this.prisma.story.create({
       data: {
-        ...data,
+        title: data.title,
+        description: data.description,
+        language: data.language,
+        coverImageUrl: data.coverImageUrl,
         audioUrl,
-        images: data.images ? { create: data.images } : undefined,
-        branches: data.branches ? { create: data.branches } : undefined,
+        isInteractive: data.isInteractive ?? false,
+        ageMin: data.ageMin ?? 0,
+        ageMax: data.ageMax ?? 99,
+        storyImages: data.images ? { create: data.images } : undefined,
+        storyBranches: data.branches ? { create: data.branches } : undefined,
+        themes: data.themes
+          ? { connect: data.themes.map((id) => ({ id })) }
+          : undefined,
+        categories: data.categories
+          ? { connect: data.categories.map((id) => ({ id })) }
+          : undefined,
       },
-      include: { images: true, branches: true },
+      include: { storyImages: true, storyBranches: true },
     });
   }
 
@@ -69,33 +83,38 @@ export class StoryService {
       );
       audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
     }
-    // Only update scalar fields; images/branches should be managed via their own endpoints
+
     const {
       title,
       description,
       language,
-      theme,
-      category,
       coverImageUrl,
       isInteractive,
       ageMin,
       ageMax,
+      themes,
+      categories,
     } = data;
+
     return this.prisma.story.update({
       where: { id },
       data: {
         title,
         description,
         language,
-        theme,
-        category,
         coverImageUrl,
         isInteractive,
         ageMin,
         ageMax,
         audioUrl,
+        themes: themes
+          ? { set: [], connect: themes.map((id) => ({ id })) }
+          : undefined,
+        categories: categories
+          ? { set: [], connect: categories.map((id) => ({ id })) }
+          : undefined,
       },
-      include: { images: true, branches: true },
+      include: { storyImages: true, storyBranches: true },
     });
   }
 
@@ -105,32 +124,30 @@ export class StoryService {
 
   // --- Images ---
   async addImage(storyId: string, image: StoryImageDto) {
-    return this.prisma.storyImage.create({
-      data: { ...image, storyId },
-    });
+    return this.prisma.storyImage.create({ data: { ...image, storyId } });
   }
 
   // --- Branches ---
   async addBranch(storyId: string, branch: StoryBranchDto) {
-    return this.prisma.storyBranch.create({
-      data: { ...branch, storyId },
-    });
+    return this.prisma.storyBranch.create({ data: { ...branch, storyId } });
   }
 
   // --- Favorites ---
   async addFavorite(userId: string, dto: FavoriteDto) {
     return this.prisma.favorite.create({
-      data: { userId, storyId: dto.storyId },
+      data: { kidId: userId, storyId: dto.storyId },
     });
   }
+
   async removeFavorite(userId: string, storyId: string) {
     return this.prisma.favorite.deleteMany({
-      where: { userId, storyId },
+      where: { kidId: userId, storyId },
     });
   }
+
   async getFavorites(userId: string) {
     return this.prisma.favorite.findMany({
-      where: { userId },
+      where: { kidId: userId },
       include: { story: true },
     });
   }
@@ -138,30 +155,32 @@ export class StoryService {
   // --- Progress ---
   async setProgress(userId: string, dto: StoryProgressDto) {
     return this.prisma.storyProgress.upsert({
-      where: { userId_storyId: { userId, storyId: dto.storyId } },
+      where: { kidId_storyId: { kidId: userId, storyId: dto.storyId } },
       update: {
         progress: dto.progress,
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
       },
       create: {
-        userId,
+        kidId: userId,
         storyId: dto.storyId,
         progress: dto.progress,
         completed: dto.completed ?? false,
       },
     });
   }
+
   async getProgress(userId: string, storyId: string) {
     return this.prisma.storyProgress.findUnique({
-      where: { userId_storyId: { userId, storyId } },
+      where: { kidId_storyId: { kidId: userId, storyId } },
     });
   }
 
-  // --- Daily Challenge ---
+  // --- Daily Challenges ---
   async setDailyChallenge(dto: DailyChallengeDto) {
     return this.prisma.dailyChallenge.create({ data: dto });
   }
+
   async getDailyChallenge(date: string) {
     return this.prisma.dailyChallenge.findMany({
       where: { challengeDate: new Date(date) },
@@ -169,7 +188,7 @@ export class StoryService {
     });
   }
 
-  // --- Daily Challenge Assignment ---
+  // --- Daily Challenge Assignments ---
   private toDailyChallengeAssignmentDto(
     assignment: any,
   ): DailyChallengeAssignmentDto {
@@ -177,9 +196,9 @@ export class StoryService {
       id: assignment.id,
       kidId: assignment.kidId,
       challengeId: assignment.challengeId,
-      completed: assignment.completed,
+      completed: assignment.completed ?? false,
       completedAt: assignment.completedAt ?? undefined,
-      assignedAt: assignment.assignedAt,
+      assignedAt: assignment.assignedAt ?? new Date(),
     };
   }
 
@@ -187,10 +206,7 @@ export class StoryService {
     dto: AssignDailyChallengeDto,
   ): Promise<DailyChallengeAssignmentDto> {
     const assignment = await this.prisma.dailyChallengeAssignment.create({
-      data: {
-        kidId: dto.kidId,
-        challengeId: dto.challengeId,
-      },
+      data: { kidId: dto.kidId, challengeId: dto.challengeId },
     });
     return this.toDailyChallengeAssignmentDto(assignment);
   }
@@ -211,7 +227,7 @@ export class StoryService {
     const assignments = await this.prisma.dailyChallengeAssignment.findMany({
       where: { kidId },
     });
-    return assignments.map((a) => this.toDailyChallengeAssignmentDto(a));
+    return assignments.map(this.toDailyChallengeAssignmentDto);
   }
 
   async getAssignmentById(
@@ -230,12 +246,7 @@ export class StoryService {
     dto: UploadVoiceDto,
   ): Promise<VoiceResponseDto> {
     const voice = await this.prisma.voice.create({
-      data: {
-        userId,
-        name: dto.name,
-        type: 'uploaded',
-        url: fileUrl,
-      },
+      data: { userId, name: dto.name, type: 'uploaded', url: fileUrl },
     });
     return this.toVoiceResponse(voice);
   }
@@ -257,7 +268,7 @@ export class StoryService {
 
   async listVoices(userId: string): Promise<VoiceResponseDto[]> {
     const voices = await this.prisma.voice.findMany({ where: { userId } });
-    return voices.map((v) => this.toVoiceResponse(v));
+    return voices.map(this.toVoiceResponse);
   }
 
   async setPreferredVoice(
@@ -276,7 +287,7 @@ export class StoryService {
       include: { preferredVoice: true } as Prisma.UserInclude,
     });
     if (!user || !user.preferredVoice) return null;
-    return this.toVoiceResponse(user.preferredVoice as Voice);
+    return this.toVoiceResponse(user.preferredVoice);
   }
 
   private toVoiceResponse(voice: Voice): VoiceResponseDto {
@@ -289,7 +300,6 @@ export class StoryService {
     };
   }
 
-  // Update audio generation to use preferred voice
   async generateStoryAudio(
     userId: string,
     text: string,
@@ -298,23 +308,16 @@ export class StoryService {
       where: { id: userId },
       include: { preferredVoice: true } as Prisma.UserInclude,
     });
+
     let voice: string | undefined = undefined;
-    if (user && user.preferredVoice) {
-      const prefVoice = user.preferredVoice as Voice;
-      if (prefVoice.type === 'elevenlabs' && prefVoice.elevenLabsVoiceId) {
-        voice = prefVoice.elevenLabsVoiceId;
-      }
-      // For uploaded voices, you may want to return the uploaded file directly or handle differently
+    if (user?.preferredVoice?.type === 'elevenlabs') {
+      voice = user.preferredVoice.elevenLabsVoiceId ?? undefined;
     }
+
     return this.elevenLabs.generateAudioBuffer(text, voice);
   }
 
-  // Stub for Eleven Labs integration
-  // async generateAudio(text: string): Promise<string> {
-  //   // Call Eleven Labs API and return audio URL
-  //   return 'https://elevenlabs.example/audio.mp3';
-  // }
-
+  // --- Story Paths ---
   private toStoryPathDto(path: any): StoryPathDto {
     return {
       id: path.id,
@@ -328,11 +331,7 @@ export class StoryService {
 
   async startStoryPath(dto: StartStoryPathDto): Promise<StoryPathDto> {
     const storyPath = await this.prisma.storyPath.create({
-      data: {
-        kidId: dto.kidId,
-        storyId: dto.storyId,
-        path: '',
-      },
+      data: { kidId: dto.kidId, storyId: dto.storyId, path: '' },
     });
     return this.toStoryPathDto(storyPath);
   }
@@ -340,17 +339,14 @@ export class StoryService {
   async updateStoryPath(dto: UpdateStoryPathDto): Promise<StoryPathDto> {
     const storyPath = await this.prisma.storyPath.update({
       where: { id: dto.pathId },
-      data: {
-        path: dto.path,
-        completedAt: dto.completedAt,
-      },
+      data: { path: dto.path, completedAt: dto.completedAt },
     });
     return this.toStoryPathDto(storyPath);
   }
 
   async getStoryPathsForKid(kidId: string): Promise<StoryPathDto[]> {
     const paths = await this.prisma.storyPath.findMany({ where: { kidId } });
-    return paths.map((p) => this.toStoryPathDto(p));
+    return paths.map(this.toStoryPathDto);
   }
 
   async getStoryPathById(id: string): Promise<StoryPathDto | null> {
