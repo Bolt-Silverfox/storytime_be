@@ -21,17 +21,16 @@ import {
 import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { UserDto } from '../auth/auth.dto';
-import { SetKidPreferredVoiceDto, KidVoiceDto } from './user.dto';
+import {
+  SetKidPreferredVoiceDto,
+  KidVoiceDto,
+  UpdateUserDto,
+} from './user.dto';
 
 export enum UserRole {
   ADMIN = 'admin',
   PARENT = 'parent',
   KID = 'kid',
-}
-
-class UpdateUserDto {
-  name?: string;
-  avatarUrl?: string;
 }
 
 class UpdateUserRoleDto {
@@ -85,7 +84,11 @@ export class UserController {
     type: UpdateUserDto,
     examples: {
       example1: {
-        value: { name: 'Jane Doe', avatarUrl: 'https://avatar.com/jane' },
+        value: {
+          title: 'Mr',
+          name: 'Jane Doe',
+          avatarUrl: 'https://avatar.com/jane',
+        },
       },
     },
   })
@@ -95,6 +98,7 @@ export class UserController {
     schema: {
       example: {
         id: 'abc123',
+        title: 'Mr',
         name: 'Jane Doe',
         avatarUrl: 'https://avatar.com/jane',
       },
