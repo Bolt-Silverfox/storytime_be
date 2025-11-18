@@ -15,9 +15,21 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
   app.use(helmet());
-  app.enableCors({
-    origin: ['http://localhost:3000', /storytime/],
+   app.enableCors({
+    origin: [
+      'http://localhost:3000', 
+      'http://localhost:5173', 
+      'http://localhost:3001', 
+      'http://localhost:4200', 
+      'http://localhost:8080', 
+      'http://127.0.0.1:3000', 
+      'http://127.0.0.1:5173',
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
     credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204
   });
 
   // Enable validation pipes
