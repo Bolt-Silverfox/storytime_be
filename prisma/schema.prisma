@@ -26,7 +26,7 @@ model User {
   updatedAt        DateTime  @updatedAt
   profile          Profile?
   auth             Session[]
-  Token            Token[]
+  verificationTokens Token[]
   kids             Kid[]
   voices           Voice[]
   preferredVoiceId String? // FK to Voice
@@ -77,18 +77,24 @@ model Session {
 }
 
 // this can be verification token, password reset token, otp, etc
+enum TokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  REFRESH_TOKEN
+}
+
 model Token {
-  id        String   @id @default(uuid())
-  userId    String
-  token     String   @unique
-  type      String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hashedToken String    @unique
+  type        TokenType
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([userId])
   @@index([userId, type])
-  @@index([userId, token])
   @@map("tokens")
 }
 

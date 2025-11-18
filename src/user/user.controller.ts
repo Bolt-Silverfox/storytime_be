@@ -19,8 +19,8 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
-import { AuthSessionGuard } from '../auth/auth.guard';
-import { UserDto } from '../auth/auth.dto';
+import { AuthSessionGuard } from '../auth/guards/auth.guard';
+import { UserDto } from '@/auth/modules/UserModule/dto/user.dto';
 import { SetKidPreferredVoiceDto, KidVoiceDto } from './user.dto';
 
 export enum UserRole {

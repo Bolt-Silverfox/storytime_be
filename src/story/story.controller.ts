@@ -41,7 +41,10 @@ import {
   UpdateStoryPathDto,
   StoryPathDto,
 } from './story.dto';
-import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '../auth/guards/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 @ApiTags('stories')
