@@ -19,6 +19,9 @@ import {
   RegisterDto,
   updateKidDto,
   updateProfileDto,
+  ValidateResetTokenDto,
+  RequestResetDto,
+  ResetPasswordDto,
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -186,28 +189,25 @@ export class AuthController {
   async deleteKids(@Req() req: AuthenticatedRequest, @Body() data: string[]) {
     return this.authService.deleteKids(req.authUserData['userId'], data);
   }
-
   @Post('request-password-reset')
   @ApiOperation({
     summary: 'Request password reset',
     description: 'Send a password reset email.',
   })
+  @ApiBody({ type: RequestResetDto })
   @ApiResponse({ status: 200, description: 'Password reset email sent.' })
-  async requestPasswordReset(@Query('email') email: string) {
-    return this.authService.requestPasswordReset(email);
+  async requestPasswordReset(@Body() body: RequestResetDto) {
+    return this.authService.requestPasswordReset(body.email);
   }
-
-  @Get('validate-reset-token')
+  @Post('validate-reset-token')
   @ApiOperation({
     summary: 'Validate password reset token',
     description: 'Validate a password reset token.',
   })
+  @ApiBody({ type: ValidateResetTokenDto })
   @ApiResponse({ status: 200, description: 'Token is valid.' })
-  async validateResetToken(
-    @Query('token') token: string,
-    @Query('email') email: string,
-  ) {
-    return this.authService.validateResetToken(token, email);
+  async validateResetToken(@Body() body: ValidateResetTokenDto) {
+    return this.authService.validateResetToken(body.token, body.email);
   }
 
   @Post('reset-password')
@@ -215,11 +215,9 @@ export class AuthController {
     summary: 'Reset password with token',
     description: 'Reset password using a valid token.',
   })
+  @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
-  async resetPassword(
-    @Query('token') token: string,
-    @Query('newPassword') password: string,
-  ) {
-    return this.authService.resetPassword(token, password);
+  async resetPassword(@Body() body: ResetPasswordDto) {
+    return this.authService.resetPassword(body.token, body.newPassword);
   }
 }
