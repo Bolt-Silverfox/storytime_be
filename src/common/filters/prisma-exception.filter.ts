@@ -29,7 +29,7 @@ export class PrismaExceptionFilter extends BaseExceptionFilter implements Except
             }
             // P2002: Unique constraint failed
             case 'P2002': {
-                // @ts-expect-error
+                // ts-expect-error
                 const fields = exception.meta?.target || 'unknown fields';
                 statusCode = HttpStatus.CONFLICT;
                 message = `A record with this identifier already exists: ${Array.isArray(fields) ? fields.join(', ') : fields}.`;
