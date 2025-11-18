@@ -19,7 +19,10 @@ export class NotificationService {
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    const brevoApiKey = this.configService.get<string>('BREVO_API_KEY');
+    this.logger.log(`Brevo API Key from constructor: ${brevoApiKey}`);
+  }
 
   async sendNotification(
     type: Notifications,
@@ -80,7 +83,6 @@ export class NotificationService {
         subject: subject,
         htmlContent: htmlContent,
       };
-
       const response = await firstValueFrom(
         this.httpService.post<{ messageId?: string }>(
           this.configService.get<string>('BREVO_API_URL') ?? '',
