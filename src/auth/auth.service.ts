@@ -211,7 +211,6 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     await this.prisma.token.deleteMany({
       where: {
         userId: user.id,
@@ -248,7 +247,6 @@ export class AuthService {
   async verifyEmail(token: string) {
     const hashedToken = this.hashToken(token);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const verificationToken = await this.prisma.token.findUnique({
       where: { token: hashedToken, type: TokenType.VERIFICATION },
       include: { user: true },
@@ -287,22 +285,20 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    // Create the profile if it doesn't exist
-    if (!user.profile) {
-      await this.prisma.profile.create({
-        data: { userId },
-      });
-    }
-
     // Build update payload dynamically
-    const updateData: any = {};
+    const updateData: Partial<{
+      country: string;
+      language: string;
+      explicitContent: boolean;
+      maxScreenTimeMins: number;
+    }> = {};
 
     if (data.country !== undefined) {
-      updateData.country = data.country.toLowerCase();
+      updateData.country = data.country;
     }
 
     if (data.language !== undefined) {
-      updateData.language = data.language.toLowerCase();
+      updateData.language = data.language;
     }
 
     if (data.explicitContent !== undefined) {
@@ -313,16 +309,23 @@ export class AuthService {
       updateData.maxScreenTimeMins = data.maxScreenTimeMins;
     }
 
-    // If no fields to update, return early
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    // If no fields to update, return existing profile or create empty one
     if (Object.keys(updateData).length === 0) {
-      return this.prisma.profile.findUnique({ where: { userId } });
+      if (!user.profile) {
+        return this.prisma.profile.create({
+          data: { userId },
+        });
+      }
+      return user.profile;
     }
 
-    // Update and return updated profile
-    return this.prisma.profile.update({
+    return this.prisma.profile.upsert({
       where: { userId },
-      data: updateData,
+      update: updateData,
+      create: {
+        userId,
+        ...updateData,
+      },
     });
   }
 
@@ -384,10 +387,9 @@ export class AuthService {
           where: { id: update.id },
           data: updateData,
         });
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+
         results.push(updated);
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
         results.push(kid); // No change, return original
       }
     }
@@ -414,7 +416,7 @@ export class AuthService {
       }
 
       const removed = await this.prisma.kid.delete({ where: { id } });
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+
       deleted.push(removed);
     }
 
@@ -429,7 +431,6 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     await this.prisma.token.deleteMany({
       where: {
         userId: user.id,

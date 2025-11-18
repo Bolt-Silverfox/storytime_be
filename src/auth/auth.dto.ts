@@ -3,6 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsStrongPassword,
   Matches,
 } from 'class-validator';
@@ -145,25 +146,25 @@ export class RefreshResponseDto {
 
 export class updateProfileDto {
   @ApiProperty({ example: true })
-  @Optional()
+  @IsOptional()
   explicitContent?: boolean;
 
   @ApiProperty({ example: 50 })
-  @Optional()
+  @IsOptional()
   maxScreenTimeMins?: number;
 
   @ApiProperty({ example: 'english' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.toLowerCase() : value,
   )
-  @Optional()
+  @IsOptional()
   language?: string;
 
   @ApiProperty({ example: 'nigeria' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.toLowerCase() : value,
   )
-  @Optional()
+  @IsOptional()
   country?: string;
 }
 
