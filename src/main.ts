@@ -15,7 +15,10 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
   app.use(helmet());
-  app.enableCors();
+  app.enableCors({
+    origin: ['http://localhost:3000', /storytime/],
+    credentials: true,
+  });
 
   // Enable validation pipes
   app.useGlobalPipes(
