@@ -11,6 +11,7 @@ import { UploadModule } from './upload/upload.module';
 import { StoryModule } from './story/story.module';
 import { RewardModule } from './reward/reward.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
@@ -18,6 +19,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
       isGlobal: true,
       validate: validateEnv,
     }),
+    // Add CommonModule to the imports array
+    CommonModule,
     AuthModule,
     UserModule,
     SettingsModule,
@@ -30,4 +33,4 @@ import { AnalyticsModule } from './analytics/analytics.module';
   ],
   providers: [PrismaService],
 })
-export class AppModule {}
+export class AppModule { }
