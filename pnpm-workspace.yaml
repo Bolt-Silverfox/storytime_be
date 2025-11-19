@@ -1,0 +1,12 @@
+ignoredBuiltDependencies:
+  - '@scarf/scarf'
+  - puppeteer
+
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@prisma/client'
+  - '@prisma/engines'
+  - '@scarf/scarf'
+  - '@swc/core'
+  - prisma
+  - puppeteer
