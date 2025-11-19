@@ -43,7 +43,7 @@ jobs:
       run: pnpm install --frozen-lockfile
     
     - name: Build
-      run: pnpm make-migration && pnpm generate && pnpm build
+      run: pnpm generate && pnpm build && npx prisma migrate deploy
     
     # - name: Run tests
     #   run: pnpm test

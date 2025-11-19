@@ -19,7 +19,7 @@ export class NotificationService {
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
-  ) { }
+  ) {}
 
   async sendNotification(
     type: Notifications,
@@ -117,7 +117,9 @@ export class NotificationService {
     }
   }
 
-  private toNotificationPreferenceDto(pref: NotificationPreference): NotificationPreferenceDto {
+  private toNotificationPreferenceDto(
+    pref: NotificationPreference,
+  ): NotificationPreferenceDto {
     return {
       id: pref.id,
       type: pref.type,

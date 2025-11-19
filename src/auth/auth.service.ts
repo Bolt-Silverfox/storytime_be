@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import {
@@ -36,7 +37,7 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private notificationService: NotificationService,
-  ) {}
+  ) { }
 
   // ==================== AUTH ====================
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
@@ -118,7 +119,6 @@ export class AuthService {
           expiry: expiryTimestamp,
           authSessionId: sessionId,
         },
-        { secret: process.env.SECRET, expiresIn: JWT_EXPIRES_IN },
       );
     } catch (error: unknown) {
       if (error instanceof Error) throw new Error(`Error signing token: ${error.message}`);
@@ -157,6 +157,10 @@ export class AuthService {
 
     const resp = await this.notificationService.sendNotification('EmailVerification', { email: user.email, token });
     this.logger.log(`Email verification requested for ${email}: response ${JSON.stringify(resp)}`);
+
+    if (!resp.success) {
+      throw new ServiceUnavailableException('Failed to send verification email');
+    }
 
     return { message: 'Verification email sent' };
   }
