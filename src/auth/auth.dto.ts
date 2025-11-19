@@ -114,7 +114,7 @@ export class UserDto {
 
   @ApiProperty({ example: 'https://avatar.com', required: false })
   @Optional()
-  avatarUrl?: string | null; // Make it optional for backward compatibility
+  avatarUrl?: string | null;
 
   @ApiProperty({ type: AvatarDto, required: false })
   @Optional()
@@ -141,10 +141,8 @@ export class UserDto {
   numberOfKids?: number;
 
   constructor(user: Partial<UserDto> & { profile?: any; avatar?: any; kids?: any[] }) {
-    // Convert raw profile to ProfileDto if it exists
     this.profile = user.profile ? new ProfileDto(user.profile) : null;
     
-    // Convert raw avatar to AvatarDto if it exists
     this.avatar = user.avatar ? {
       id: user.avatar.id,
       name: user.avatar.name,
@@ -154,11 +152,10 @@ export class UserDto {
       createdAt: user.avatar.createdAt,
     } : null;
 
-    // Assign the rest of the user properties
     this.id = user.id as string;
     this.email = user.email as string;
     this.name = user.name as string;
-    this.avatarUrl = user.avatar?.url || null; // Set avatarUrl from avatar relation for backward compatibility
+    this.avatarUrl = user.avatar?.url || null;
     this.role = user.role as string;
     this.createdAt = user.createdAt as Date;
     this.updatedAt = user.updatedAt as Date;
@@ -246,4 +243,44 @@ export class updateKidDto {
   @ApiProperty({ example: '1-3', required: false })
   @IsOptional()
   ageRange?: string;
+}
+
+// ===== Password Reset DTOs =====
+export class RequestResetDto {
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+}
+
+export class ValidateResetTokenDto {
+  @ApiProperty({ example: 'reset-token-from-email' })
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @ApiProperty({ example: 'reset-token-from-email' })
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @ApiProperty({ example: 'NewStrongPassword1#' })
+  @IsStrongPassword({
+    minLength: 8,
+    minLowercase: 1,
+    minUppercase: 1,
+    minNumbers: 1,
+    minSymbols: 1,
+  })
+  newPassword: string;
 }
