@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, ActivityLog } from '@prisma/client';
 import { CreateActivityLogDto, ActivityLogDto } from './analytics.dto';
 
 const prisma = new PrismaClient();
 
 @Injectable()
 export class AnalyticsService {
-  private toActivityLogDto(log: any): ActivityLogDto {
+  private toActivityLogDto(log: ActivityLog): ActivityLogDto {
     return {
       id: log.id,
       userId: log.userId ?? undefined,
@@ -31,12 +31,12 @@ export class AnalyticsService {
 
   async getForUser(userId: string): Promise<ActivityLogDto[]> {
     const logs = await prisma.activityLog.findMany({ where: { userId } });
-    return logs.map((l) => this.toActivityLogDto(l));
+    return logs.map((l: any) => this.toActivityLogDto(l));
   }
 
   async getForKid(kidId: string): Promise<ActivityLogDto[]> {
     const logs = await prisma.activityLog.findMany({ where: { kidId } });
-    return logs.map((l) => this.toActivityLogDto(l));
+    return logs.map((l: any) => this.toActivityLogDto(l));
   }
 
   async getById(id: string): Promise<ActivityLogDto | null> {
