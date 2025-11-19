@@ -14,53 +14,66 @@ export class AvatarSeederService implements OnModuleInit {
   private async seedSystemAvatars() {
     const systemAvatars = [
       {
-        name: 'Avatar 1 - Lion',
+        name: 'lion', // Standard name for upsert
+        displayName: 'Lion', // User-friendly display name
         url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/lion',
         isSystemAvatar: true,
       },
       {
-        name: 'Avatar 2 - Elephant',
+        name: 'elephant',
+        displayName: 'Elephant',
         url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/elephant',
         isSystemAvatar: true,
       },
       {
-        name: 'Avatar 3 - Monkey',
+        name: 'monkey',
+        displayName: 'Monkey',
         url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/monkey',
         isSystemAvatar: true,
       },
       {
-        name: 'Avatar 4 - Giraffe',
+        name: 'giraffe',
+        displayName: 'Giraffe',
         url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/giraffe',
         isSystemAvatar: true,
       },
       {
-        name: 'Avatar 5 - Penguin',
+        name: 'penguin',
+        displayName: 'Penguin',
         url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/penguin',
         isSystemAvatar: true,
       },
       {
-        name: 'Avatar 6 - Owl',
+        name: 'owl',
+        displayName: 'Owl',
         url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/owl',
         isSystemAvatar: true,
       },
     ];
 
     try {
-      this.logger.log('Checking for system avatars...');
+      this.logger.log('Seeding system avatars...');
 
       for (const avatarData of systemAvatars) {
-        const existingAvatar = await this.prisma.avatar.findFirst({
-          where: { url: avatarData.url },
+        // Use upsert with name as the unique identifier
+        await this.prisma.avatar.upsert({
+          where: { 
+            name: avatarData.name // Use standard name for upsert
+          },
+          update: {
+            displayName: avatarData.displayName,
+            url: avatarData.url, // Update URL if it changed
+            isSystemAvatar: true, // Ensure it stays as system avatar
+          },
+          create: {
+            name: avatarData.name,
+            displayName: avatarData.displayName,
+            url: avatarData.url,
+            isSystemAvatar: true,
+          },
         });
-
-        if (!existingAvatar) {
-          await this.prisma.avatar.create({
-            data: avatarData,
-          });
-          this.logger.log(`Created system avatar: ${avatarData.name}`);
-        } else {
-          this.logger.log(`System avatar already exists: ${avatarData.name}`);
-        }
+        
+        this.logger.log(`Upserted system avatar: ${avatarData.displayName}`);
       }
 
       this.logger.log('System avatar seeding completed!');
