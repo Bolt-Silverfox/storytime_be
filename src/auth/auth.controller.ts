@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Param,
   Post,
   Put,
   Query,
@@ -81,6 +82,12 @@ export class AuthController {
       throw new UnauthorizedException('invalid token');
     }
     return this.authService.logout(sessionId);
+  }
+  @Delete(':id')
+  @ApiResponse({ status: 204, description: 'user deleted successfully' })
+  async deleteUser(@Param('id') id: string) {
+    await this.authService.deleteUser(id);
+    return;
   }
 
   @Post('logout-all')

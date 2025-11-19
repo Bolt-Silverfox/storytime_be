@@ -57,6 +57,17 @@ export class AuthService {
       refreshToken: tokenData.refreshToken,
     };
   }
+  async deleteUser(userId: string) {
+    const user = this.prisma.user.findFirst({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException('User with this id not found');
+    }
+    await this.prisma.user.delete({
+      where: { id: userId },
+    });
+  }
 
   async refresh(refreshToken: string): Promise<RefreshResponseDto | null> {
     const session = await this.prisma.session.findUnique({
