@@ -1,3 +1,4 @@
+
 import { Optional } from '@nestjs/common';
 import { ApiProperty } from '@nestjs/swagger';
 import {
@@ -13,7 +14,6 @@ export enum TokenType {
   VERIFICATION = 'verification',
   PASSWORD_RESET = 'password_reset',
 }
-
 export class RegisterDto {
   @ApiProperty({ example: 'test@gmail.com' })
   @IsEmail()
@@ -116,9 +116,7 @@ export class UserDto {
   numberOfKids?: number;
 
   constructor(user: Partial<UserDto> & { profile?: any }) {
-    // Convert raw profile to ProfileDto if it exists
     this.profile = user.profile ? new ProfileDto(user.profile) : null;
-    // Assign the rest of the user properties
     this.id = user.id as string;
     this.email = user.email as string;
     this.name = user.name as string;
@@ -210,4 +208,44 @@ export class updateKidDto {
   @ApiProperty({ example: '1-3', required: false })
   @Optional()
   ageRange?: string;
+}
+
+// ===== Password Reset DTOs =====
+export class RequestResetDto {
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+}
+
+export class ValidateResetTokenDto {
+  @ApiProperty({ example: 'reset-token-from-email' })
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @ApiProperty({ example: 'reset-token-from-email' })
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @ApiProperty({ example: 'NewStrongPassword1#' })
+  @IsStrongPassword({
+    minLength: 8,
+    minLowercase: 1,
+    minUppercase: 1,
+    minNumbers: 1,
+    minSymbols: 1,
+  })
+  newPassword: string;
 }
