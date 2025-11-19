@@ -24,6 +24,11 @@ import {
 import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { UserDto } from '../auth/auth.dto';
+import {
+  SetKidPreferredVoiceDto,
+  KidVoiceDto,
+  UpdateUserDto,
+} from './user.dto';
 import { SetKidPreferredVoiceDto, KidVoiceDto } from './user.dto';
 import { VOICEID, VoiceType } from '@/story/story.dto';
 
@@ -107,6 +112,9 @@ export class UserController {
     examples: {
       example1: {
         value: {
+          title: 'Mr',
+          name: 'Jane Doe',
+          avatarUrl: 'https://avatar.com/jane',
           name: 'Jane Doe',
           avatarUrl: 'https://avatar.com/jane',
           language: 'en',
@@ -122,6 +130,7 @@ export class UserController {
     schema: {
       example: {
         id: 'abc123',
+        title: 'Mr',
         name: 'Jane Doe',
         avatarUrl: 'https://avatar.com/jane',
         language: 'en',

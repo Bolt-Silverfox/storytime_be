@@ -1,6 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { UserRole } from './user.controller';
+import {
+  SetKidPreferredVoiceDto,
+  KidVoiceDto,
+  UpdateUserDto,
+} from './user.dto';
 import { KidVoiceDto } from './user.dto';
 import { VoiceType } from '@/story/story.dto';
 
@@ -33,6 +38,39 @@ export class UserService {
     });
   }
 
+  async updateUser(id: string, data: UpdateUserDto): Promise<any> {
+    // Check if user exists
+    const user = await prisma.user.findUnique({ where: { id } });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Build update payload dynamically - only include fields that are provided
+    const updateData: Partial<{
+      title: string;
+      name: string;
+      avatarUrl: string;
+    }> = {};
+
+    if (data.name !== undefined) {
+      updateData.name = data.name;
+    }
+
+    if (data.avatarUrl !== undefined) {
+      updateData.avatarUrl = data.avatarUrl;
+    }
+
+    // If no fields to update, return existing user
+    if (Object.keys(updateData).length === 0) {
+      return user;
+    }
+
+    // Update user with only provided fields
+    return await prisma.user.update({
+      where: { id },
+      data: updateData,
+      // include: { profile: true },
   async updateUser(id: string, body: any): Promise<any> {
     return await prisma.user.update({
       where: { id },
