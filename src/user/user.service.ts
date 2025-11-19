@@ -37,6 +37,11 @@ export class UserService {
     });
   }
 
+  async deleteUserAccount(id: string): Promise<any> {
+    return await prisma.user.delete({
+      where: { id },
+    });
+  }
   async updateUser(id: string, data: UpdateUserDto): Promise<any> {
     // Check if user exists
     const user = await prisma.user.findUnique({ where: { id } });
