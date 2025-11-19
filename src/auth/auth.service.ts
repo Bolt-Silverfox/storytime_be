@@ -17,7 +17,7 @@ import {
   updateProfileDto,
   UserDto,
 } from './auth.dto';
-import PrismaService from 'src/prisma/prisma.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { generateToken } from 'src/utils/generete-token';
 import * as crypto from 'crypto';
@@ -34,7 +34,7 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private notificationService: NotificationService,
-  ) { }
+  ) {}
 
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
     const user = await this.prisma.user.findUnique({
@@ -51,7 +51,9 @@ export class AuthService {
     }
 
     if (!user.isEmailVerified) {
-      throw new BadRequestException('Email not verified. Please check your inbox.');
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
     }
 
     const tokenData = await this.createToken(user);
@@ -137,16 +139,14 @@ export class AuthService {
     const issuedAt = Math.floor(Date.now() / 1000);
     const expiryTimestamp = issuedAt + expiresIn;
     try {
-      return this.jwtService.sign(
-        {
-          id: user.id,
-          userId: user.id,
-          email: user.email,
-          userRole: user.role,
-          expiry: expiryTimestamp,
-          authSessionId: sessionId,
-        },
-      );
+      return this.jwtService.sign({
+        id: user.id,
+        userId: user.id,
+        email: user.email,
+        userRole: user.role,
+        expiry: expiryTimestamp,
+        authSessionId: sessionId,
+      });
     } catch (error: unknown) {
       if (error instanceof Error) {
         throw new Error(`Error signing token: ${error.message}`);
@@ -247,7 +247,9 @@ export class AuthService {
     );
 
     if (!resp.success) {
-      throw new ServiceUnavailableException('Failed to send verification email');
+      throw new ServiceUnavailableException(
+        'Failed to send verification email',
+      );
     }
 
     return { message: 'Verification email sent' };
@@ -473,7 +475,9 @@ export class AuthService {
     );
 
     if (!resp.success) {
-      throw new ServiceUnavailableException('Failed to send password reset email');
+      throw new ServiceUnavailableException(
+        'Failed to send password reset email',
+      );
     }
 
     return { message: 'Password reset token sent' };
