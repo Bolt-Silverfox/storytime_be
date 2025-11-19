@@ -196,39 +196,3 @@ export class updateKidDto {
   @Optional()
   avatarUrl?: string;
 }
-export class RequestResetDto {
-  @ApiProperty({ example: 'user@example.com' })
-  @IsEmail()
-  @IsNotEmpty()
-  email: string;
-}
-export class ValidateResetTokenDto {
-  @ApiProperty({ example: 'reset-token-from-email' })
-  @IsNotEmpty()
-  token: string;
-
-  @ApiProperty({ example: 'user@example.com' })
-  @IsEmail()
-  @IsNotEmpty()
-  email: string;
-}
-export class ResetPasswordDto {
-  @ApiProperty({ example: 'reset-token-from-email' })
-  @IsNotEmpty()
-  token: string;
-
-  @ApiProperty({ example: 'user@example.com' })
-  @IsEmail()
-  @IsNotEmpty()
-  email: string;
-
-  @ApiProperty({ example: 'NewStrongPassword1#' })
-  @IsStrongPassword({
-    minLength: 8,
-    minLowercase: 1,
-    minUppercase: 1,
-    minNumbers: 1,
-    minSymbols: 1,
-  })
-  newPassword: string;
-}
