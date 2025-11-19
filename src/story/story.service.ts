@@ -23,7 +23,7 @@ import {
 } from './story.dto';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
-import { Prisma, Voice } from '@prisma/client';
+import { StoryPath, Voice, DailyChallengeAssignment, Category, Theme, DailyChallenge } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TextToSpeechService } from './text-to-speech.service';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
@@ -38,7 +38,7 @@ export class StoryService {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
-  ) {}
+  ) { }
 
   async getStories(filter: {
     theme?: string;
@@ -260,7 +260,7 @@ export class StoryService {
     const assignments = await this.prisma.dailyChallengeAssignment.findMany({
       where: { kidId },
     });
-    return assignments.map((a) => this.toDailyChallengeAssignmentDto(a));
+    return assignments.map((a: DailyChallengeAssignment) => this.toDailyChallengeAssignmentDto(a));
   }
 
   async getAssignmentById(
@@ -306,7 +306,7 @@ export class StoryService {
 
   async listVoices(userId: string): Promise<VoiceResponseDto[]> {
     const voices = await this.prisma.voice.findMany({ where: { userId } });
-    return voices.map((v) => this.toVoiceResponse(v));
+    return voices.map((v: Voice) => this.toVoiceResponse(v));
   }
 
   async setPreferredVoice(
@@ -328,7 +328,7 @@ export class StoryService {
   async getPreferredVoice(userId: string): Promise<VoiceResponseDto | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { preferredVoice: true } as Prisma.UserInclude,
+      include: { preferredVoice: true },
     });
     if (!user || !user.preferredVoice)
       return {
@@ -341,7 +341,7 @@ export class StoryService {
     return this.toVoiceResponse(user.preferredVoice);
   }
 
-  private toVoiceResponse(voice: Voice): VoiceResponseDto {
+  private toVoiceResponse(voice: any): VoiceResponseDto {
     return {
       id: voice.id,
       name: voice.name,
@@ -358,7 +358,7 @@ export class StoryService {
   ): Promise<{ buffer: Buffer; filename: string }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { preferredVoice: true } as Prisma.UserInclude,
+      include: { preferredVoice: true },
     });
     let voice: string | undefined = undefined;
     if (user && user.preferredVoice) {
@@ -377,7 +377,7 @@ export class StoryService {
   //   return 'https://elevenlabs.example/audio.mp3';
   // }
 
-  private toStoryPathDto(path: any): StoryPathDto {
+  private toStoryPathDto(path: StoryPath): StoryPathDto {
     return {
       id: path.id,
       kidId: path.kidId,
@@ -412,7 +412,7 @@ export class StoryService {
 
   async getStoryPathsForKid(kidId: string): Promise<StoryPathDto[]> {
     const paths = await this.prisma.storyPath.findMany({ where: { kidId } });
-    return paths.map((p) => this.toStoryPathDto(p));
+    return paths.map((p: StoryPath) => this.toStoryPathDto(p));
   }
 
   async getStoryPathById(id: string): Promise<StoryPathDto | null> {
@@ -426,7 +426,7 @@ export class StoryService {
 
   async getCategories(): Promise<CategoryDto[]> {
     const categories = await this.prisma.category.findMany();
-    return categories.map((c) => ({
+    return categories.map((c: Category) => ({
       ...c,
       image: c.image ?? undefined,
       description: c.description ?? undefined,
@@ -435,7 +435,7 @@ export class StoryService {
 
   async getThemes(): Promise<ThemeDto[]> {
     const themes = await this.prisma.theme.findMany();
-    return themes.map((t) => ({
+    return themes.map((t: Theme) => ({
       ...t,
       image: t.image ?? undefined,
       description: t.description ?? undefined,
@@ -472,10 +472,10 @@ export class StoryService {
           include: { challenge: true },
         });
       const usedStoryIds = new Set(
-        pastAssignments.map((a) => a.challenge.storyId),
+        pastAssignments.map((a: DailyChallengeAssignment & { challenge: DailyChallenge }) => a.challenge.storyId),
       );
       // Filter out stories already assigned
-      const availableStories = stories.filter((s) => !usedStoryIds.has(s.id));
+      const availableStories = stories.filter((s: any) => !usedStoryIds.has(s.id));
       // If all stories have been used, reset (allow repeats)
       const storyPool =
         availableStories.length > 0 ? availableStories : stories;
@@ -692,10 +692,10 @@ export class StoryService {
           ageMin: generatedStory.ageMin,
           ageMax: generatedStory.ageMax,
           themes: {
-            connect: themes.map((t) => ({ id: t.id })),
+            connect: themes.map((t: Theme) => ({ id: t.id })),
           },
           categories: {
-            connect: categories.map((c) => ({ id: c.id })),
+            connect: categories.map((c: Category) => ({ id: c.id })),
           },
           questions: {
             create: generatedStory.questions.map((q) => ({

@@ -17,8 +17,17 @@ export class UpdateUserDto {
   @IsOptional()
   @IsUrl()
   avatarUrl?: string;
+
+  @ApiProperty({ example: 'en', required: false })
+  @IsOptional()
+  @IsString()
+  language?: string;
+
+  @ApiProperty({ example: 'Nigeria', required: false })
+  @IsOptional()
+  @IsString()
+  country?: string;
 }
-import { IsString } from 'class-validator';
 
 export class SetKidPreferredVoiceDto {
   @ApiProperty({ description: 'Voice ID to set as preferred', example: 'MILO' })
