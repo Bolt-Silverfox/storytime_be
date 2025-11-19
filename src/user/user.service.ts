@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { UserRole } from './user.controller';
 import {
+  // SetKidPreferredVoiceDto,
   KidVoiceDto,
   UpdateUserDto,
 } from './user.dto';
@@ -50,6 +51,10 @@ export class UserService {
       name: string;
       avatarUrl: string;
     }> = {};
+
+    if (data.title !== undefined) {
+      updateData.title = data.title;
+    }
 
     if (data.name !== undefined) {
       updateData.name = data.name as string;
