@@ -49,6 +49,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.isEmailVerified) {
+      throw new UnauthorizedException('Email not verified. Please check your inbox.');
+    }
+
     const tokenData = await this.createToken(user);
 
     return {
@@ -141,7 +145,6 @@ export class AuthService {
           expiry: expiryTimestamp,
           authSessionId: sessionId,
         },
-        { secret: process.env.SECRET, expiresIn: JWT_EXPIRES_IN },
       );
     } catch (error: unknown) {
       if (error instanceof Error) {
