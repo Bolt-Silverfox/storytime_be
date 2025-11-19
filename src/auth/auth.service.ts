@@ -39,7 +39,7 @@ export class AuthService {
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
-      include: { profile: true },
+      include: { profile: true, avatar: true, },
     });
 
     if (!user) {
@@ -190,6 +190,7 @@ export class AuthService {
       },
       include: {
         profile: true,
+        avatar: true,
       },
     });
 
@@ -351,9 +352,12 @@ export class AuthService {
         this.prisma.kid.create({
           data: {
             name: kid.name,
-            avatarUrl: kid.avatarUrl,
+            avatarId: kid.avatarId,
             parentId: userId,
             ageRange: kid.ageRange,
+          },
+          include: {
+            avatar: true, 
           },
         }),
       ),
@@ -364,6 +368,9 @@ export class AuthService {
   async getKids(userId: string) {
     return await this.prisma.kid.findMany({
       where: { parentId: userId },
+      include: {
+        avatar: true, 
+      },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -388,8 +395,7 @@ export class AuthService {
 
       const updateData: any = {};
       if (update.name !== undefined) updateData.name = update.name;
-      if (update.avatarUrl !== undefined)
-        updateData.avatarUrl = update.avatarUrl;
+      if (update.avatarId !== undefined) updateData.avatarId = update.avatarId;
       if (update.ageRange !== undefined) updateData.ageRange = update.ageRange;
 
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
@@ -397,6 +403,9 @@ export class AuthService {
         const updated = await this.prisma.kid.update({
           where: { id: update.id },
           data: updateData,
+          include: {
+            avatar: true, 
+          },
         });
 
         results.push(updated);
