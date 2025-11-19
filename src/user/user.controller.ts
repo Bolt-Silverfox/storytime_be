@@ -19,12 +19,15 @@ import {
   ApiParam,
   ApiBody,
   ApiBearerAuth,
-  ApiProperty,
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { UserDto } from '../auth/auth.dto';
-import { SetKidPreferredVoiceDto, KidVoiceDto } from './user.dto';
+import {
+  SetKidPreferredVoiceDto,
+  KidVoiceDto,
+  UpdateUserDto,
+} from './user.dto';
 import { VOICEID, VoiceType } from '@/story/story.dto';
 
 export enum UserRole {
@@ -33,25 +36,25 @@ export enum UserRole {
   KID = 'kid',
 }
 
-class UpdateUserDto {
-  @ApiProperty({ example: 'John Doe' })
-  name?: string;
+// class UpdateUserDto {
+//   @ApiProperty({ example: 'John Doe' })
+//   name?: string;
 
-  @ApiProperty({ example: 'https://avatar.com' })
-  avatarUrl?: string;
+//   @ApiProperty({ example: 'https://avatar.com' })
+//   avatarUrl?: string;
 
-  @ApiProperty({ example: 'en' })
-  language?: string;
+//   @ApiProperty({ example: 'en' })
+//   language?: string;
 
-  @ApiProperty({ example: 'Nigeria' })
-  country?: string;
+//   @ApiProperty({ example: 'Nigeria' })
+//   country?: string;
 
-  @ApiProperty({ example: 'Mr' })
-  title?: string;
+//   @ApiProperty({ example: 'Mr' })
+//   title?: string;
 
-  @ApiProperty({ example: 1 })
-  numberOfKids?: number;
-}
+//   @ApiProperty({ example: 1 })
+//   numberOfKids?: number;
+// }
 
 class UpdateUserRoleDto {
   role: UserRole;
@@ -61,7 +64,7 @@ class UpdateUserRoleDto {
 @Controller('user')
 export class UserController {
   private readonly logger = new Logger(UserController.name);
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService) { }
 
   @Get(':id')
   @ApiOperation({
@@ -107,11 +110,11 @@ export class UserController {
     examples: {
       example1: {
         value: {
+          title: 'Mr',
           name: 'Jane Doe',
           avatarUrl: 'https://avatar.com/jane',
           language: 'en',
           country: 'nigeria',
-          title: 'Mr',
         },
       },
     },
@@ -122,11 +125,11 @@ export class UserController {
     schema: {
       example: {
         id: 'abc123',
+        title: 'Mr',
         name: 'Jane Doe',
         avatarUrl: 'https://avatar.com/jane',
         language: 'en',
         country: 'nigeria',
-        title: 'Mr',
         numberOfKids: 1,
       },
     },
