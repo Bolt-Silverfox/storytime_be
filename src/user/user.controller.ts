@@ -19,7 +19,6 @@ import {
   ApiParam,
   ApiBody,
   ApiBearerAuth,
-  ApiProperty,
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
@@ -36,6 +35,26 @@ export enum UserRole {
   PARENT = 'parent',
   KID = 'kid',
 }
+
+// class UpdateUserDto {
+//   @ApiProperty({ example: 'John Doe' })
+//   name?: string;
+
+//   @ApiProperty({ example: 'https://avatar.com' })
+//   avatarUrl?: string;
+
+//   @ApiProperty({ example: 'en' })
+//   language?: string;
+
+//   @ApiProperty({ example: 'Nigeria' })
+//   country?: string;
+
+//   @ApiProperty({ example: 'Mr' })
+//   title?: string;
+
+//   @ApiProperty({ example: 1 })
+//   numberOfKids?: number;
+// }
 
 class UpdateUserRoleDto {
   role: UserRole;

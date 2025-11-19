@@ -13,6 +13,21 @@ export class UpdateUserDto {
   @IsString()
   name?: string;
 
+  @ApiProperty({ example: 'en', required: false })
+  @IsOptional()
+  @IsString()
+  language?: string;
+
+  @ApiProperty({ example: 'Nigeria', required: false })
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @ApiProperty({ example: 1, required: false })
+  @IsOptional()
+  @IsString()
+  numberOfKids?: number;
+
   @ApiProperty({ example: 'https://example.com/avatar.jpg', required: false })
   @IsOptional()
   @IsUrl()
