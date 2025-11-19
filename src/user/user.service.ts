@@ -72,22 +72,17 @@ export class UserService {
     // Update user with only provided fields
     return await prisma.user.update({
       where: { id },
-      data: updateData,
-      // include: { profile: true },
-      // async updateUser(id: string, body: any): Promise<any> {
-      //   return await prisma.user.update({
-      //     where: { id },
-      //     data: {
-      //       name: body.name,
-      //       avatarUrl: body.avatarUrl,
-      //       title: body.title,
-      //       profile: {
-      //         update: {
-      //           language: body.language,
-      //           country: body.country,
-      //         },
-      //       },
-      //     },
+      data: {
+        name: data.name,
+        avatarUrl: data.avatarUrl,
+        title: data.title,
+        profile: {
+          update: {
+            language: data?.language,
+            country: data?.country,
+          },
+        },
+      },
     });
   }
 

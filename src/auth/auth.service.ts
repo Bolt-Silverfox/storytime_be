@@ -456,7 +456,7 @@ export class AuthService {
       'PasswordReset',
       {
         email: user.email,
-        resetLink: `${process.env.WEB_APP_BASE_URL}/reset-password?tk=${token}`,
+        resetToken: token,
       },
     );
 
@@ -464,7 +464,7 @@ export class AuthService {
       `Password reset requested for ${email}: response ${JSON.stringify(resp)}`,
     );
 
-    return { message: 'Password Reset email sent' };
+    return { message: 'Password reset token sent' };
   }
 
   async validateResetToken(token: string, email: string) {
