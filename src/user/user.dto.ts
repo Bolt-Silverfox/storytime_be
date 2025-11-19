@@ -32,16 +32,6 @@ export class UpdateUserDto {
   @IsOptional()
   @IsUrl()
   avatarUrl?: string;
-
-  @ApiProperty({ example: 'en', required: false })
-  @IsOptional()
-  @IsString()
-  language?: string;
-
-  @ApiProperty({ example: 'Nigeria', required: false })
-  @IsOptional()
-  @IsString()
-  country?: string;
 }
 
 export class SetKidPreferredVoiceDto {
