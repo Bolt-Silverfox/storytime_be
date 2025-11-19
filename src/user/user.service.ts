@@ -57,11 +57,11 @@ export class UserService {
     }
 
     if (data.name !== undefined) {
-      updateData.name = data.name;
+      updateData.name = data.name as string;
     }
 
     if (data.avatarUrl !== undefined) {
-      updateData.avatarUrl = data.avatarUrl;
+      updateData.avatarUrl = data.avatarUrl as string;
     }
 
     // If no fields to update, return existing user
