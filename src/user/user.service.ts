@@ -53,6 +53,10 @@ export class UserService {
       avatarUrl: string;
     }> = {};
 
+    if (data.title !== undefined) {
+      updateData.title = data.title;
+    }
+
     if (data.name !== undefined) {
       updateData.name = data.name;
     }
