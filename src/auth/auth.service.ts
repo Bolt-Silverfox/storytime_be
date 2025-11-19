@@ -50,9 +50,9 @@ export class AuthService {
       throw new BadRequestException('Invalid credentials');
     }
 
-    if (!user.isEmailVerified) {
-      throw new BadRequestException('Email not verified. Please check your inbox.');
-    }
+    // if (!user.isEmailVerified) {
+    //   throw new BadRequestException('Email not verified. Please check your inbox.');
+    // }
 
     const tokenData = await this.createToken(user);
 
