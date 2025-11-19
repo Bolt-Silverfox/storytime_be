@@ -2,11 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { UserRole } from './user.controller';
 import {
-  SetKidPreferredVoiceDto,
+  // SetKidPreferredVoiceDto,
   KidVoiceDto,
   UpdateUserDto,
 } from './user.dto';
-import { KidVoiceDto } from './user.dto';
 import { VoiceType } from '@/story/story.dto';
 
 const prisma = new PrismaClient();
@@ -75,20 +74,20 @@ export class UserService {
       where: { id },
       data: updateData,
       // include: { profile: true },
-  async updateUser(id: string, body: any): Promise<any> {
-    return await prisma.user.update({
-      where: { id },
-      data: {
-        name: body.name,
-        avatarUrl: body.avatarUrl,
-        title: body.title,
-        profile: {
-          update: {
-            language: body.language,
-            country: body.country,
-          },
-        },
-      },
+      // async updateUser(id: string, body: any): Promise<any> {
+      //   return await prisma.user.update({
+      //     where: { id },
+      //     data: {
+      //       name: body.name,
+      //       avatarUrl: body.avatarUrl,
+      //       title: body.title,
+      //       profile: {
+      //         update: {
+      //           language: body.language,
+      //           country: body.country,
+      //         },
+      //       },
+      //     },
     });
   }
 
