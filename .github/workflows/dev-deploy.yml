@@ -43,7 +43,7 @@ jobs:
       run: pnpm install --frozen-lockfile
     
     - name: Build
-      run: pnpm make-migration && pnpm prisma:generate && pnpm build
+      run: pnpm generate && pnpm build && npx prisma migrate deploy
     
     # - name: Run tests
     #   run: pnpm test
@@ -56,15 +56,23 @@ jobs:
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
-          mkdir -p /home/ec2-user/deploy/documents-service
+          mkdir -p /home/ubuntu/storytime/storytime-api
           exit 0
+
+    - name: Write SSH key to file
+      if: startsWith(github.ref, 'refs/heads/develop-v')
+      run: |
+        echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
+        chmod 600 /tmp/ssh_key
+
     - name: Rsync files to EC2
       if: startsWith(github.ref, 'refs/heads/develop-v')
       run: |
-        rsync -avz --delete --exclude='.git' --exclude='node_modules' --exclude='.github' --exclude='.env' \
-          -e "ssh -i ${{ secrets.EC2_SSH_KEY }} -o StrictHostKeyChecking=no" \
-          ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ec2-user/deploy/documents-service/
-    - name: Install and restart on EC2
+        rsync -avz --exclude='.git' --exclude='.github' --exclude='.env' \
+          -e "ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no" \
+          ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/storytime-api/
+
+    - name: restart app
       if: startsWith(github.ref, 'refs/heads/develop-v')
       uses: appleboy/ssh-action@master
       with:
@@ -72,9 +80,6 @@ jobs:
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
-          cd /home/ec2-user/deploy/documents-service
-          pnpm install --frozen-lockfile
-          pnpm prisma:pull
-          pnpm prisma:generate
-          pnpm build
-          pm2 restart documents-service || pm2 start dist/main.js --name documents-service 
+          cd /home/ubuntu/storytime/storytime-api
+          /home/ubuntu/.local/share/pnpm/pnpm install --frozen-lockfile
+          /home/ubuntu/.local/share/pnpm/pnpm deploy:dev

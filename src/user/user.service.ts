@@ -1,17 +1,28 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { UserRole } from './user.controller';
-import { SetKidPreferredVoiceDto, KidVoiceDto } from './user.dto';
+import {
+  // SetKidPreferredVoiceDto,
+  KidVoiceDto,
+  UpdateUserDto,
+} from './user.dto';
+import { VoiceType } from '@/story/story.dto';
 
 const prisma = new PrismaClient();
 
 @Injectable()
 export class UserService {
   async getUser(id: string): Promise<any> {
-    return await prisma.user.findUnique({
+    // Fetch user, profile, and kids count
+    const user = await prisma.user.findUnique({
       where: { id },
-      include: { profile: true },
+      include: { profile: true, kids: true },
     });
+    if (!user) return null;
+    return {
+      ...user,
+      numberOfKids: user.kids ? user.kids.length : 0,
+    };
   }
 
   async getAllUsers(): Promise<any[]> {
@@ -26,13 +37,51 @@ export class UserService {
     });
   }
 
-  async updateUser(id: string, body: any): Promise<any> {
-    // Example: update name and avatarUrl
+  async updateUser(id: string, data: UpdateUserDto): Promise<any> {
+    // Check if user exists
+    const user = await prisma.user.findUnique({ where: { id } });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Build update payload dynamically - only include fields that are provided
+    const updateData: Partial<{
+      title: string;
+      name: string;
+      avatarUrl: string;
+    }> = {};
+
+    if (data.title !== undefined) {
+      updateData.title = data.title;
+    }
+
+    if (data.name !== undefined) {
+      updateData.name = data.name;
+    }
+
+    if (data.avatarUrl !== undefined) {
+      updateData.avatarUrl = data.avatarUrl;
+    }
+
+    // If no fields to update, return existing user
+    if (Object.keys(updateData).length === 0) {
+      return user;
+    }
+
+    // Update user with only provided fields
     return await prisma.user.update({
       where: { id },
       data: {
-        name: body.name,
-        avatarUrl: body.avatarUrl,
+        name: data.name,
+        avatarUrl: data.avatarUrl,
+        title: data.title,
+        profile: {
+          update: {
+            language: data?.language,
+            country: data?.country,
+          },
+        },
       },
     });
   }
@@ -54,18 +103,39 @@ export class UserService {
   }
 
   async setKidPreferredVoice(
-    dto: SetKidPreferredVoiceDto,
+    kidId: string,
+    voiceType: VoiceType,
   ): Promise<KidVoiceDto> {
-    const kid = await prisma.kid.update({
-      where: { id: dto.kidId },
-      data: { preferredVoiceId: dto.voiceId },
+    const voice = await prisma.voice.findFirst({
+      where: { name: voiceType },
     });
-    return { kidId: kid.id, preferredVoiceId: kid.preferredVoiceId! };
+    if (!voice) {
+      throw new Error(`Voice type ${voiceType} not found`);
+    }
+
+    const kid = await prisma.kid.update({
+      where: { id: kidId },
+      data: { preferredVoiceId: voice.id },
+    });
+    return {
+      kidId: kid.id,
+      voiceType,
+      preferredVoiceId: kid.preferredVoiceId!,
+    };
   }
 
   async getKidPreferredVoice(kidId: string): Promise<KidVoiceDto | null> {
     const kid = await prisma.kid.findUnique({ where: { id: kidId } });
-    if (!kid || !kid.preferredVoiceId) return null;
-    return { kidId: kid.id, preferredVoiceId: kid.preferredVoiceId };
+    if (!kid || !kid.preferredVoiceId)
+      return { kidId, voiceType: VoiceType.MILO, preferredVoiceId: '' };
+
+    const voice = await prisma.voice.findUnique({
+      where: { id: kid.preferredVoiceId },
+    });
+    return {
+      kidId: kid.id,
+      voiceType: (voice?.name?.toUpperCase() as VoiceType) || VoiceType.MILO,
+      preferredVoiceId: kid.preferredVoiceId,
+    };
   }
 }

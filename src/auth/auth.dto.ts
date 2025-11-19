@@ -3,6 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsStrongPassword,
   Matches,
 } from 'class-validator';
@@ -103,17 +104,21 @@ export class UserDto {
   @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   updatedAt: Date;
 
+  @ApiProperty({ example: 'Mr', required: false })
+  @Optional()
+  title?: string | null;
+
   @ApiProperty({ type: ProfileDto })
   profile: ProfileDto | null;
 
-  // constructor(user: Partial<UserDto>) {
-  //   Object.assign(this, user);
-  // }
+  @ApiProperty({ example: 2, required: false })
+  @Optional()
+  numberOfKids?: number;
+
   constructor(user: Partial<UserDto> & { profile?: any }) {
     // Convert raw profile to ProfileDto if it exists
     this.profile = user.profile ? new ProfileDto(user.profile) : null;
     // Assign the rest of the user properties
-    // Object.assign(this, { ...user, profile: undefined }); // avoid overwriting with raw profile
     this.id = user.id as string;
     this.email = user.email as string;
     this.name = user.name as string;
@@ -121,6 +126,8 @@ export class UserDto {
     this.role = user.role as string;
     this.createdAt = user.createdAt as Date;
     this.updatedAt = user.updatedAt as Date;
+    this.numberOfKids = user.numberOfKids ?? undefined;
+    this.title = user.title ?? null;
   }
 }
 
@@ -145,25 +152,25 @@ export class RefreshResponseDto {
 
 export class updateProfileDto {
   @ApiProperty({ example: true })
-  @Optional()
+  @IsOptional()
   explicitContent?: boolean;
 
   @ApiProperty({ example: 50 })
-  @Optional()
+  @IsOptional()
   maxScreenTimeMins?: number;
 
   @ApiProperty({ example: 'english' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.toLowerCase() : value,
   )
-  @Optional()
+  @IsOptional()
   language?: string;
 
   @ApiProperty({ example: 'nigeria' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.toLowerCase() : value,
   )
-  @Optional()
+  @IsOptional()
   country?: string;
 }
 
@@ -178,6 +185,10 @@ export class kidDto {
   @ApiProperty({ example: 'https://example.com' })
   @Optional()
   avatarUrl?: string;
+
+  @ApiProperty({ example: '1-3' })
+  @Optional()
+  ageRange?: string;
 }
 
 export class updateKidDto {
@@ -195,4 +206,8 @@ export class updateKidDto {
   @ApiProperty({ example: 'https://example.com' })
   @Optional()
   avatarUrl?: string;
+
+  @ApiProperty({ example: '1-3', required: false })
+  @Optional()
+  ageRange?: string;
 }

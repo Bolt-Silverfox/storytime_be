@@ -3,7 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { NotificationRegistry, Notifications } from './notification.registry';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, NotificationPreference } from '@prisma/client';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
@@ -117,7 +117,9 @@ export class NotificationService {
     }
   }
 
-  private toNotificationPreferenceDto(pref: any): NotificationPreferenceDto {
+  private toNotificationPreferenceDto(
+    pref: NotificationPreference,
+  ): NotificationPreferenceDto {
     return {
       id: pref.id,
       type: pref.type,
@@ -158,14 +160,14 @@ export class NotificationService {
     const prefs = await prisma.notificationPreference.findMany({
       where: { userId },
     });
-    return prefs.map((p) => this.toNotificationPreferenceDto(p));
+    return prefs.map((p: any) => this.toNotificationPreferenceDto(p));
   }
 
   async getForKid(kidId: string): Promise<NotificationPreferenceDto[]> {
     const prefs = await prisma.notificationPreference.findMany({
       where: { kidId },
     });
-    return prefs.map((p) => this.toNotificationPreferenceDto(p));
+    return prefs.map((p: any) => this.toNotificationPreferenceDto(p));
   }
 
   async getById(id: string): Promise<NotificationPreferenceDto> {
