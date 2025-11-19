@@ -29,33 +29,12 @@ import {
   KidVoiceDto,
   UpdateUserDto,
 } from './user.dto';
-import { SetKidPreferredVoiceDto, KidVoiceDto } from './user.dto';
 import { VOICEID, VoiceType } from '@/story/story.dto';
 
 export enum UserRole {
   ADMIN = 'admin',
   PARENT = 'parent',
   KID = 'kid',
-}
-
-class UpdateUserDto {
-  @ApiProperty({ example: 'John Doe' })
-  name?: string;
-
-  @ApiProperty({ example: 'https://avatar.com' })
-  avatarUrl?: string;
-
-  @ApiProperty({ example: 'en' })
-  language?: string;
-
-  @ApiProperty({ example: 'Nigeria' })
-  country?: string;
-
-  @ApiProperty({ example: 'Mr' })
-  title?: string;
-
-  @ApiProperty({ example: 1 })
-  numberOfKids?: number;
 }
 
 class UpdateUserRoleDto {
@@ -66,7 +45,7 @@ class UpdateUserRoleDto {
 @Controller('user')
 export class UserController {
   private readonly logger = new Logger(UserController.name);
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService) { }
 
   @Get(':id')
   @ApiOperation({
@@ -115,11 +94,8 @@ export class UserController {
           title: 'Mr',
           name: 'Jane Doe',
           avatarUrl: 'https://avatar.com/jane',
-          name: 'Jane Doe',
-          avatarUrl: 'https://avatar.com/jane',
           language: 'en',
           country: 'nigeria',
-          title: 'Mr',
         },
       },
     },
@@ -135,7 +111,6 @@ export class UserController {
         avatarUrl: 'https://avatar.com/jane',
         language: 'en',
         country: 'nigeria',
-        title: 'Mr',
         numberOfKids: 1,
       },
     },
