@@ -16,6 +16,7 @@ import { AuthSessionGuard } from './auth.guard';
         secret: configService.get<string>('JWT_SECRET') || 'default_secret',
         signOptions: { expiresIn: '1h' },
       }),
+      global: true,
     }),
     NotificationModule,
   ],
