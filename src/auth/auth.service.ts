@@ -1,7 +1,9 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import {
@@ -32,7 +34,7 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private notificationService: NotificationService,
-  ) {}
+  ) { }
 
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
     const user = await this.prisma.user.findUnique({
@@ -41,11 +43,15 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new BadRequestException('Invalid credentials');
     }
 
     if (!(await bcrypt.compare(data.password, user.passwordHash))) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new BadRequestException('Invalid credentials');
+    }
+
+    if (!user.isEmailVerified) {
+      throw new BadRequestException('Email not verified. Please check your inbox.');
     }
 
     const tokenData = await this.createToken(user);
@@ -140,7 +146,6 @@ export class AuthService {
           expiry: expiryTimestamp,
           authSessionId: sessionId,
         },
-        { secret: process.env.SECRET, expiresIn: JWT_EXPIRES_IN },
       );
     } catch (error: unknown) {
       if (error instanceof Error) {
@@ -170,7 +175,7 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new UnauthorizedException('Email already exists');
+      throw new BadRequestException('Email already exists');
     }
 
     const user = await this.prisma.user.create({
@@ -211,7 +216,6 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     await this.prisma.token.deleteMany({
       where: {
         userId: user.id,
@@ -242,13 +246,16 @@ export class AuthService {
       `Email verification requested for ${email}: response ${JSON.stringify(resp)}`,
     );
 
+    if (!resp.success) {
+      throw new ServiceUnavailableException('Failed to send verification email');
+    }
+
     return { message: 'Verification email sent' };
   }
 
   async verifyEmail(token: string) {
     const hashedToken = this.hashToken(token);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const verificationToken = await this.prisma.token.findUnique({
       where: { token: hashedToken, type: TokenType.VERIFICATION },
       include: { user: true },
@@ -287,22 +294,20 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    // Create the profile if it doesn't exist
-    if (!user.profile) {
-      await this.prisma.profile.create({
-        data: { userId },
-      });
-    }
-
     // Build update payload dynamically
-    const updateData: any = {};
+    const updateData: Partial<{
+      country: string;
+      language: string;
+      explicitContent: boolean;
+      maxScreenTimeMins: number;
+    }> = {};
 
     if (data.country !== undefined) {
-      updateData.country = data.country.toLowerCase();
+      updateData.country = data.country;
     }
 
     if (data.language !== undefined) {
-      updateData.language = data.language.toLowerCase();
+      updateData.language = data.language;
     }
 
     if (data.explicitContent !== undefined) {
@@ -313,16 +318,23 @@ export class AuthService {
       updateData.maxScreenTimeMins = data.maxScreenTimeMins;
     }
 
-    // If no fields to update, return early
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    // If no fields to update, return existing profile or create empty one
     if (Object.keys(updateData).length === 0) {
-      return this.prisma.profile.findUnique({ where: { userId } });
+      if (!user.profile) {
+        return this.prisma.profile.create({
+          data: { userId },
+        });
+      }
+      return user.profile;
     }
 
-    // Update and return updated profile
-    return this.prisma.profile.update({
+    return this.prisma.profile.upsert({
       where: { userId },
-      data: updateData,
+      update: updateData,
+      create: {
+        userId,
+        ...updateData,
+      },
     });
   }
 
@@ -341,6 +353,7 @@ export class AuthService {
             name: kid.name,
             avatarUrl: kid.avatarUrl,
             parentId: userId,
+            ageRange: kid.ageRange,
           },
         }),
       ),
@@ -377,6 +390,7 @@ export class AuthService {
       if (update.name !== undefined) updateData.name = update.name;
       if (update.avatarUrl !== undefined)
         updateData.avatarUrl = update.avatarUrl;
+      if (update.ageRange !== undefined) updateData.ageRange = update.ageRange;
 
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       if (Object.keys(updateData).length > 0) {
@@ -384,10 +398,9 @@ export class AuthService {
           where: { id: update.id },
           data: updateData,
         });
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+
         results.push(updated);
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
         results.push(kid); // No change, return original
       }
     }
@@ -414,7 +427,7 @@ export class AuthService {
       }
 
       const removed = await this.prisma.kid.delete({ where: { id } });
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+
       deleted.push(removed);
     }
 
@@ -429,7 +442,6 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     await this.prisma.token.deleteMany({
       where: {
         userId: user.id,
@@ -452,7 +464,7 @@ export class AuthService {
       'PasswordReset',
       {
         email: user.email,
-        resetLink: `${process.env.WEB_APP_BASE_URL}/reset-password?tk=${token}`,
+        resetToken: token,
       },
     );
 
@@ -460,7 +472,11 @@ export class AuthService {
       `Password reset requested for ${email}: response ${JSON.stringify(resp)}`,
     );
 
-    return { message: 'Password Reset email sent' };
+    if (!resp.success) {
+      throw new ServiceUnavailableException('Failed to send password reset email');
+    }
+
+    return { message: 'Password reset token sent' };
   }
 
   async validateResetToken(token: string, email: string) {

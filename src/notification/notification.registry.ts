@@ -41,7 +41,7 @@ export const NotificationRegistry: Record<
     subject: 'Password Reset',
     validate: (data) => {
       if (!data.email) return 'Email is required';
-      if (!data.resetLink) return 'Reset link is required';
+      if (!data.resetToken) return 'Reset token is required';
       return null;
     },
     getTemplate: async (data) => {
@@ -53,7 +53,7 @@ export const NotificationRegistry: Record<
       const template = await fs.readFile(templatePath, 'utf-8');
       // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       return ejs.render(template, {
-        resetLink: data?.resetLink as string,
+        resetToken: data.resetToken as string,
         email: data?.email as string,
       });
     },
