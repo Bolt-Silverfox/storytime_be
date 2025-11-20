@@ -216,10 +216,8 @@ export class AuthController {
     description: 'Reset password using a valid token.',
   })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
-  async resetPassword(
-    @Query('token') token: string,
-    @Query('newPassword') password: string,
-  ) {
-    return this.authService.resetPassword(token, password);
+  async resetPassword(@Body() body: { token: string; newPassword: string }) {
+    const { token, newPassword } = body;
+    return this.authService.resetPassword(token, newPassword);
   }
 }
