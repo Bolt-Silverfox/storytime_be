@@ -1,11 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { UserRole } from './user.controller';
-import {
-  // SetKidPreferredVoiceDto,
-  KidVoiceDto,
-  UpdateUserDto,
-} from './user.dto';
+import { KidVoiceDto, UpdateUserDto } from './user.dto';
 import { VoiceType } from '@/story/story.dto';
 
 const prisma = new PrismaClient();
@@ -16,7 +12,11 @@ export class UserService {
     // Fetch user, profile, and kids count
     const user = await prisma.user.findUnique({
       where: { id },
-      include: { profile: true, kids: true },
+      include: { 
+        profile: true, 
+        kids: true, 
+        avatar: true,
+      },
     });
     if (!user) return null;
     return {
@@ -27,7 +27,10 @@ export class UserService {
 
   async getAllUsers(): Promise<any[]> {
     return await prisma.user.findMany({
-      include: { profile: true },
+      include: { 
+        profile: true,  
+        avatar: true,
+      },
     });
   }
 
@@ -51,11 +54,7 @@ export class UserService {
     }
 
     // Build update payload dynamically - only include fields that are provided
-    const updateData: Partial<{
-      title: string;
-      name: string;
-      avatarUrl: string;
-    }> = {};
+    const updateData: any = {};
 
     if (data.title !== undefined) {
       updateData.title = data.title;
@@ -65,30 +64,52 @@ export class UserService {
       updateData.name = data.name;
     }
 
-    if (data.avatarUrl !== undefined) {
-      updateData.avatarUrl = data.avatarUrl;
+    // Use avatarId if provided, otherwise fall back to avatarUrl for backward compatibility
+    if (data.avatarId !== undefined) {
+      updateData.avatarId = data.avatarId;
+    } else if (data.avatarUrl !== undefined) {
+      updateData.avatarId = data.avatarUrl;
+    }
+
+    // Build profile update data
+    const profileUpdateData: any = {};
+    if (data.language !== undefined) {
+      profileUpdateData.language = data.language;
+    }
+    if (data.country !== undefined) {
+      profileUpdateData.country = data.country;
     }
 
     // If no fields to update, return existing user
-    if (Object.keys(updateData).length === 0) {
-      return user;
+    if (Object.keys(updateData).length === 0 && Object.keys(profileUpdateData).length === 0) {
+      return this.getUser(id);
     }
 
     // Update user with only provided fields
-    return await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id },
       data: {
-        name: data.name,
-        avatarUrl: data.avatarUrl,
-        title: data.title,
-        profile: {
-          update: {
-            language: data?.language,
-            country: data?.country,
+        ...updateData,
+        ...(Object.keys(profileUpdateData).length > 0 && {
+          profile: {
+            upsert: {
+              create: profileUpdateData,
+              update: profileUpdateData,
+            },
           },
-        },
+        }),
+      },
+      include: {
+        profile: true,
+        avatar: true,
+        kids: true,
       },
     });
+
+    return {
+      ...updatedUser,
+      numberOfKids: updatedUser.kids ? updatedUser.kids.length : 0,
+    };
   }
 
   async getUserRole(id: string): Promise<any> {
@@ -103,6 +124,9 @@ export class UserService {
     const user = await prisma.user.update({
       where: { id },
       data: { role },
+      include: {
+        avatar: true,
+      },
     });
     return { id: user.id, role: user.role };
   }
@@ -130,7 +154,12 @@ export class UserService {
   }
 
   async getKidPreferredVoice(kidId: string): Promise<KidVoiceDto | null> {
-    const kid = await prisma.kid.findUnique({ where: { id: kidId } });
+    const kid = await prisma.kid.findUnique({ 
+      where: { id: kidId },
+      include: {
+        avatar: true,
+      },
+    });
     if (!kid || !kid.preferredVoiceId)
       return { kidId, voiceType: VoiceType.MILO, preferredVoiceId: '' };
 

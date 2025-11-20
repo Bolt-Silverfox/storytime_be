@@ -15,6 +15,9 @@ model User {
   passwordHash            String
   title                   String?
   name                    String?
+  // avatarUrl            String?
+  avatarId                String?
+  avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
   isEmailVerified         Boolean                  @default(false)
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
@@ -36,17 +39,24 @@ model User {
 }
 
 model Kid {
-  id                      String                     @id @default(uuid())
-  name                    String?
-  parentId                String
-  createdAt               DateTime                   @default(now())
-  updatedAt               DateTime                   @updatedAt
-  preferredVoiceId        String?
-  ageRange                String?
-  avatarType              String                     @default("system")
-  systemAvatarId          String?
-  avatarId                String?
-  activityLogs            ActivityLog[]
+  id        String  @id @default(uuid())
+  name      String?
+  // avatarUrl String?
+  avatarId  String?
+  avatar    Avatar? @relation(fields: [avatarId], references: [id])
+  ageRange  String?
+
+  parentId  String
+  parent    User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rewards Reward[]
+
+  preferredVoiceId String?
+  preferredVoice   Voice?  @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
+
+  // New relations
   dailyChallenges         DailyChallengeAssignment[]
   favorites               Favorite[]
   avatars                 avatars?                   @relation(fields: [avatarId], references: [id])
@@ -338,46 +348,21 @@ model StoryQuestion {
   @@map("story_questions")
 }
 
-model StoryThemes {
-  A       String
-  B       String
-  stories Story  @relation(fields: [A], references: [id], onDelete: Cascade)
-  Theme   Theme  @relation(fields: [B], references: [id], onDelete: Cascade)
-
-  @@unique([A, B], map: "_StoryThemes_AB_unique")
-  @@index([B], map: "_StoryThemes_B_index")
-  @@map("_StoryThemes")
-}
-
-model avatars {
-  id             String   @id
-  name           String?  @unique
-  displayName    String?
+model Avatar {
+  id             String   @id @default(cuid())
+  name           String?  // Standard name for upsert (unique identifier)
+  displayName    String?  // User-friendly display name
   url            String
   isSystemAvatar Boolean  @default(false)
   publicId       String?
   createdAt      DateTime @default(now())
-  kids           Kid[]
-  users          User[]
 
-  @@index([isSystemAvatar])
-  @@index([name])
-}
+  // Relations
+  users User[]
+  kids  Kid[]
 
-model system_avatars {
-  id       String  @id
-  name     String?
-  imageUrl String
-  kids     Kid[]
-}
-
-enum Role {
-  admin
-  parent
-  kid
-}
-
-enum NotificationType {
-  email
-  push
+  @@map("avatars")
+  @@index([name])           // Index for upsert operations
+  @@index([isSystemAvatar]) // Index for filtering system avatars
+  @@unique([name])          // Ensure name is unique for upsert
 }
