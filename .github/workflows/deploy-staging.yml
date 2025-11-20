@@ -1,4 +1,55 @@
+name: Deploy Backend (Staging)
+
 on:
   push:
     branches:
-      - dev
+      - develop-v0.0.1
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout Repo
+      uses: actions/checkout@v3
+
+    - name: Set up SSH key
+      run: |
+        echo "${{ secrets.SERVER_SSH_KEY }}" > id_ed25519
+        chmod 600 id_ed25519
+
+    - name: Deploy to Staging Server
+      run: |
+        ssh -i id_ed25519 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+
+          set -e
+          echo "🚀 Starting STAGING deployment..."
+
+          BACKEND_PATH=${{ secrets.SERVER_BACKEND_STAGING_PATH }}
+
+          echo "📌 Cleaning previous deployment..."
+          sudo rm -rf $BACKEND_PATH
+          sudo mkdir -p $BACKEND_PATH
+
+          echo "📥 Pulling new backend files..."
+          git clone -b develop-v0.0.1 https://github.com/Bolt-Silverfox/storytime_be.git $BACKEND_PATH
+
+          cd $BACKEND_PATH
+
+          echo "📦 Installing dependencies..."
+          npm install --legacy-peer-deps
+
+          echo "🛠 Running Prisma migrations..."
+          npx prisma migrate deploy
+
+          echo "🔨 Building backend..."
+          npm run build
+
+          echo "🔥 Restarting PM2 (staging)..."
+          pm2 delete storytime-staging-backend || true
+          PORT=3501 pm2 start dist/main.js --name storytime-staging-backend --env staging
+
+          pm2 save
+
+          echo "✅ Staging deployment COMPLETE!"
+        EOF
