@@ -26,7 +26,6 @@ class PrismaService
         message: 'Prisma is up and running',
         duration: Date.now() - start,
       };
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       return {
         service: 'prisma',

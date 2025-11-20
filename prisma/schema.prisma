@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   engineType    = "binary"
   binaryTargets = ["native"]
 }
@@ -22,24 +22,30 @@ enum NotificationType {
 }
 
 model User {
-  id                      String                   @id @default(uuid())
-  email                   String                   @unique
-  passwordHash            String
-  title                   String?
-  name                    String?
-  avatarUrl               String?
-  isEmailVerified         Boolean                  @default(false)
-  role                    Role                     @default(parent)
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  profile                 Profile?
-  auth                    Session[]
-  Token                   Token[]
-  kids                    Kid[]
-  voices                  Voice[]
-  preferredVoiceId        String? // FK to Voice
+  id           String  @id @default(uuid())
+  email        String  @unique
+  passwordHash String
+  title        String?
+  name         String?
+
+  systemAvatarId String?
+  systemAvatar   SystemAvatar? @relation(fields: [systemAvatarId], references: [id])
+
+  isEmailVerified Boolean  @default(false)
+  role            Role     @default(parent)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  profile Profile?
+  kids    Kid[]
+
+  // Opposite relation fields (added)
+  sessions                Session[]
+  tokens                  Token[]
+  voices                  Voice[] // voices owned/uploaded by user
+  preferredVoiceId        String?
   preferredVoice          Voice?                   @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
-  Reward                  Reward[]
+  rewards                 Reward[]
   notificationPreferences NotificationPreference[]
   activityLogs            ActivityLog[]
 
@@ -47,38 +53,35 @@ model User {
 }
 
 model Kid {
-  id        String  @id @default(uuid())
-  name      String?
-  avatarUrl String?
-  ageRange  String?
+  id   String  @id @default(uuid())
+  name String?
 
-  parentId  String
-  parent    User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  systemAvatarId String?
+  systemAvatar   SystemAvatar? @relation(fields: [systemAvatarId], references: [id])
+
+  ageRange String?
+
+  parentId String
+  parent   User   @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  rewards Reward[]
+  // Opposite relations — required
+  favorites               Favorite[]
+  progresses              StoryProgress[]
+  dailyAssignments        DailyChallengeAssignment[]
+  rewardRedemptions       RewardRedemption[]
+  rewards                 Reward[] // <-- FIXED
+  notificationPreferences NotificationPreference[] // <-- FIXED
+  activityLogs            ActivityLog[]
+  storyPaths              StoryPath[]
 
   preferredVoiceId String?
   preferredVoice   Voice?  @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
 
-  // AVATAR FIELDS
-  avatarType      String   @default("system")
-  systemAvatarId  String?
-  systemAvatar    SystemAvatar? @relation("KidSystemAvatar", fields: [systemAvatarId], references: [id])
-
-  // relations
-  dailyChallenges         DailyChallengeAssignment[]
-  notificationPreferences NotificationPreference[]
-  rewardRedemptions       RewardRedemption[]
-  activityLogs            ActivityLog[]
-  storyPaths              StoryPath[]
-  favorites               Favorite[]
-  progresses              StoryProgress[]
-
   @@map("kids")
 }
-
 
 model Session {
   id        String   @id @default(uuid())
@@ -120,21 +123,8 @@ model Profile {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-
   @@map("profiles")
 }
-
-
-model SystemAvatar {
-  id       String  @id @default(uuid())
-  name     String?
-  imageUrl String
-
-  kids     Kid[]   @relation("KidSystemAvatar")
-  
-  @@map("system_avatars")
-}
-
 
 model Story {
   id            String   @id @default(uuid())
@@ -291,9 +281,9 @@ model NotificationPreference {
   userId    String?
   kidId     String?
   user      User?            @relation(fields: [userId], references: [id])
+  kid       Kid?             @relation(fields: [kidId], references: [id])
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
-  Kid       Kid?             @relation(fields: [kidId], references: [id])
 
   @@map("notification_preferences")
 }
@@ -375,4 +365,19 @@ model StoryQuestion {
   answer   Int
 
   @@map("story_questions")
+}
+
+model SystemAvatar {
+  id             String   @id @default(cuid())
+  name           String?  @unique
+  displayName    String?
+  url            String
+  isSystemAvatar Boolean  @default(true)
+  publicId       String?
+  createdAt      DateTime @default(now())
+
+  users User[]
+  kids  Kid[]
+
+  @@map("system_avatars")
 }

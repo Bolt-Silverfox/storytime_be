@@ -1,13 +1,20 @@
-import { NestFactory } from '@nestjs/core';
-import { AvatarModule } from './avatar.module';
+import PrismaService from '../prisma/prisma.service';
 import { AvatarSeederService } from './avatar.seeder.service';
 
-async function bootstrap() {
-  const app = await NestFactory.createApplicationContext(AvatarModule);
+async function run() {
+  const prisma = new PrismaService();
+  const seeder = new AvatarSeederService(prisma);
 
-  const seeder = app.get(AvatarSeederService);
-  await seeder.seedAvatars();
+  console.log('Seeding system avatars...');
 
-  await app.close();
+  await seeder.seedSystemAvatars();
+
+  console.log('System avatars seeding complete.');
+
+  await prisma.$disconnect();
 }
-bootstrap();
+
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
