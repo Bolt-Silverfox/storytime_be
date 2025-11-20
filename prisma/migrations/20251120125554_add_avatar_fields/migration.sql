@@ -6,11 +6,11 @@
 
 */
 -- AlterTable
-ALTER TABLE "kids" DROP COLUMN "avatarUrl",
+-- ALTER TABLE "kids" DROP COLUMN "avatarUrl",
 ADD COLUMN     "avatarId" TEXT;
 
 -- AlterTable
-ALTER TABLE "users" DROP COLUMN "avatarUrl",
+-- ALTER TABLE "kids" DROP COLUMN "avatarUrl",
 ADD COLUMN     "avatarId" TEXT;
 
 -- CreateTable
