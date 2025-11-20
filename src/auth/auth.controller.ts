@@ -52,7 +52,10 @@ export class AuthController {
   }
 
   @Post('register')
-  @ApiOperation({ summary: 'Register new user', description: 'Default role: parent.' })
+  @ApiOperation({
+    summary: 'Register new user',
+    description: 'Default role: parent.',
+  })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
   async register(@Body() body: RegisterDto) {
@@ -135,7 +138,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Update kids information' })
   @ApiBody({ type: [updateKidDto] })
   @ApiResponse({ status: 200, description: 'Kids updated.' })
-  async updateKids(@Req() req: AuthenticatedRequest, @Body() data: updateKidDto[]) {
+  async updateKids(
+    @Req() req: AuthenticatedRequest,
+    @Body() data: updateKidDto[],
+  ) {
     return this.authService.updateKids(req.authUserData['userId'], data);
   }
 
@@ -154,23 +160,28 @@ export class AuthController {
   @ApiOperation({ summary: 'Request password reset' })
   @ApiBody({ type: RequestResetDto })
   @ApiResponse({ status: 200, description: 'Password reset email sent.' })
+  @ApiResponse({ status: 400, description: 'Invalid email format' })
   async requestPasswordReset(@Body() body: RequestResetDto) {
     return this.authService.requestPasswordReset(body);
   }
-
   @Post('validate-reset-token')
   @ApiOperation({ summary: 'Validate password reset token' })
   @ApiBody({ type: ValidateResetTokenDto })
   @ApiResponse({ status: 200, description: 'Token is valid.' })
-async validateResetToken(@Body() body: ValidateResetTokenDto) {
-  return this.authService.validateResetToken(body.token, body.email, body);
-}
+  async validateResetToken(@Body() body: ValidateResetTokenDto) {
+    return this.authService.validateResetToken(body.token, body.email, body);
+  }
 
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password with token' })
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
   async resetPassword(@Body() body: ResetPasswordDto) {
-    return this.authService.resetPassword(body.token, body.email, body.newPassword,body);
+    return this.authService.resetPassword(
+      body.token,
+      body.email,
+      body.newPassword,
+      body,
+    );
   }
 }
