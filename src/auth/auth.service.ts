@@ -26,6 +26,7 @@ import { generateToken } from 'src/utils/generete-token';
 import * as crypto from 'crypto';
 import { NotificationService } from 'src/notification/notification.service';
 import { JwtService } from '@nestjs/jwt';
+import validator from 'validator';
 
 const JWT_EXPIRES_IN = '1h';
 const REFRESH_TOKEN_EXPIRES_IN = 7;
@@ -428,37 +429,58 @@ export class AuthService {
       throw new UnauthorizedException('Invalid reset token');
     return { message: 'Valid reset token' };
   }
-
-  async resetPassword(
-    token: string,
-    email: string,
-    newPassword: string,
-    data: ResetPasswordDto,
-  ) {
-    const hashedToken = this.hashToken(token);
-    const resetToken = await this.prisma.token.findUnique({
-      where: { token: hashedToken, type: TokenType.PASSWORD_RESET },
-      include: { user: true },
-    });
-    if (!resetToken) throw new NotFoundException('Invalid reset token');
-    if (resetToken.expiresAt < new Date()) {
-      await this.prisma.token.delete({ where: { id: resetToken.id } });
-      throw new UnauthorizedException('Reset token has expired');
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await this.prisma.user.update({
-      where: { id: resetToken.userId },
-      data: { passwordHash: hashedPassword },
-    });
-    await this.prisma.token.delete({ where: { id: resetToken.id } });
-    await this.prisma.session.deleteMany({
-      where: { userId: resetToken.userId },
-    });
-
-    return { message: 'Password has been reset successfully' };
+async resetPassword(
+  token: string,
+  email: string,
+  newPassword: string,
+  data: ResetPasswordDto,
+) {
+  // Strong password check
+  if (!validator.isStrongPassword(newPassword, { 
+    minLength: 8,
+    minLowercase: 1,
+    minUppercase: 1,
+    minNumbers: 1,
+    minSymbols: 1
+  })) {
+    throw new BadRequestException(
+      'Weak password. Password must include uppercase, number, lowercase, and special characters'
+    );
   }
 
+  const hashedToken = this.hashToken(token);
+  const resetToken = await this.prisma.token.findUnique({
+    where: { token: hashedToken, type: TokenType.PASSWORD_RESET },
+    include: { user: true },
+  });
+
+  if (!resetToken) throw new NotFoundException('Invalid reset token');
+  if (resetToken.expiresAt < new Date()) {
+    await this.prisma.token.delete({ where: { id: resetToken.id } });
+    throw new UnauthorizedException('Reset token has expired');
+  }
+
+  // Optional: cross-check email from DTO matches token user
+  if (resetToken.user.email !== email) {
+    throw new BadRequestException('Email does not match token user');
+  }
+
+  // Use `data` if needed (for logging or other fields)
+  console.log('Reset request data:', data);
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await this.prisma.user.update({
+    where: { id: resetToken.userId },
+    data: { passwordHash: hashedPassword },
+  });
+
+  await this.prisma.token.delete({ where: { id: resetToken.id } });
+  await this.prisma.session.deleteMany({
+    where: { userId: resetToken.userId },
+  });
+
+  return { message: 'Password has been reset successfully' };
+}
   generateRefreshToken(): string {
     return crypto.randomBytes(64).toString('hex');
   }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import IHealth, { HealthResponse } from './Ihealth.interfaces';
-
+//
 @Injectable()
 class HealthCheck {
   static HealthServices: IHealth[] = [];
