@@ -1,3 +1,4 @@
+
 import { Optional } from '@nestjs/common';
 import { ApiProperty } from '@nestjs/swagger';
 import {
@@ -13,7 +14,6 @@ export enum TokenType {
   VERIFICATION = 'verification',
   PASSWORD_RESET = 'password_reset',
 }
-
 export class RegisterDto {
   @ApiProperty({ example: 'test@gmail.com' })
   @IsEmail()
