@@ -504,6 +504,16 @@ export class AuthService {
       });
       throw new UnauthorizedException('Reset token has expired');
     }
+
+    // Validate password strength
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      throw new BadRequestException(
+        'Weak password. Password must include uppercase, number, lowercase, and special characters',
+      );
+    }
+
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({
       where: { id: resetToken.userId },
