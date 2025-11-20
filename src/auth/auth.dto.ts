@@ -217,3 +217,29 @@ export class RequestResetDto {
   @IsEmail({}, { message: 'Invalid email format' })
   email: string;
 }
+export class ValidateResetTokenDto {
+  @ApiProperty({ example: 'token' })
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @ApiProperty({ example: 'token' })
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: 'NewStrongPassword1#' })
+  @IsNotEmpty()
+  @IsStrongPassword({
+    minLength: 8,
+    minLowercase: 1,
+    minUppercase: 1,
+    minNumbers: 1,
+    minSymbols: 1,
+  })
+  newPassword: string;
+}
