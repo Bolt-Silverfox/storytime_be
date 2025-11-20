@@ -109,7 +109,7 @@ model Profile {
   country           String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id])
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("profiles")
 }
@@ -218,7 +218,7 @@ model Voice {
   updatedAt         DateTime @updatedAt
   kidsPreferring    Kid[]    @relation("KidPreferredVoice")
   usersPreferring   User[]   @relation("PreferredVoice")
-  user              User?    @relation(fields: [userId], references: [id])
+  user              User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([name])
   @@index([elevenLabsVoiceId])
@@ -237,7 +237,7 @@ model Reward {
   kidId       String?
   redemptions RewardRedemption[]
   kid         Kid?               @relation(fields: [kidId], references: [id])
-  user        User?              @relation(fields: [userId], references: [id])
+  user        User?              @relation(fields: [userId], references: [id],onDelete: Cascade)
 
   @@map("rewards")
 }
@@ -264,7 +264,7 @@ model NotificationPreference {
   updatedAt DateTime         @updatedAt
   type      NotificationType
   Kid       Kid?             @relation(fields: [kidId], references: [id])
-  user      User?            @relation(fields: [userId], references: [id])
+  user      User?            @relation(fields: [userId], references: [id],onDelete: Cascade)
 
   @@map("notification_preferences")
 }
@@ -289,7 +289,7 @@ model ActivityLog {
   details   String?
   createdAt DateTime @default(now())
   kid       Kid?     @relation(fields: [kidId], references: [id])
-  user      User?    @relation(fields: [userId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id],onDelete: Cascade)
 
   @@map("activity_logs")
 }
