@@ -53,7 +53,7 @@ export class AuthService {
     // Check if email is verified
     if (!user.isEmailVerified) {
       throw new UnauthorizedException(
-        'Please verify your email before logging in',
+        'Email verification failed. Please verify your email before logging in',
       );
     }
     const tokenData = await this.createToken(user);
