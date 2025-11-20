@@ -406,7 +406,7 @@ export class AuthService {
     this.logger.log(
       `Password reset requested for ${email}: response ${JSON.stringify(resp)}`,
     );
-    return { message: 'Password Reset email sent' };
+    return { message: 'Reset email sent confirmation' };
   }
 
   async validateResetToken(

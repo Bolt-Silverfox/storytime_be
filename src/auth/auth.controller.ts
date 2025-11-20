@@ -161,7 +161,7 @@ export class AuthController {
   @HttpCode(200)
   @ApiOperation({ summary: 'Request password reset' })
   @ApiBody({ type: RequestResetDto })
-  @ApiResponse({ status: 200, description: 'Password reset email sent.' })
+  @ApiResponse({ status: 200, description: 'Reset Email sent Confirmation' })
   async requestPasswordReset(@Body() body: RequestResetDto) {
     return this.authService.requestPasswordReset(body);
   }
