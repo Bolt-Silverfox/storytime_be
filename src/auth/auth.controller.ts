@@ -19,6 +19,7 @@ import {
   RegisterDto,
   updateKidDto,
   updateProfileDto,
+  RequestResetDto,
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -187,15 +188,16 @@ export class AuthController {
     return this.authService.deleteKids(req.authUserData['userId'], data);
   }
 
-  @Post('request-password-reset')
-  @ApiOperation({
-    summary: 'Request password reset',
-    description: 'Send a password reset email.',
-  })
-  @ApiResponse({ status: 200, description: 'Password reset email sent.' })
-  async requestPasswordReset(@Query('email') email: string) {
-    return this.authService.requestPasswordReset(email);
-  }
+@Post('request-password-reset')
+@ApiOperation({
+  summary: 'Request password reset',
+  description: 'Send a password reset email.',
+})
+@ApiResponse({ status: 200, description: 'Password reset email sent.' })
+async requestPasswordReset(@Body() body: RequestResetDto) {
+  return this.authService.requestPasswordReset(body.email);
+}
+
 
   @Get('validate-reset-token')
   @ApiOperation({

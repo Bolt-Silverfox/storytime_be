@@ -210,4 +210,10 @@ export class updateKidDto {
   @ApiProperty({ example: '1-3', required: false })
   @Optional()
   ageRange?: string;
+
+}
+export class RequestResetDto {
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail({}, { message: 'Invalid email format' })
+  email: string;
 }
