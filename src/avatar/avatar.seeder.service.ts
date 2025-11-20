@@ -14,39 +14,36 @@ export class AvatarSeederService implements OnModuleInit {
   private async seedSystemAvatars() {
     const systemAvatars = [
       {
-        name: 'lion', // Standard name for upsert
-        displayName: 'Lion', // User-friendly display name
-        url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/lion',
+        name: 'Jacob',
+        displayName: 'Jacob',
+        url: 'https://res.cloudinary.com/dblrgpsxr/image/upload/v1763649806/Jacob_Avatars_y88xeg.png',
+      },
+      {
+        name: 'Jane',
+        displayName: 'Jane',
+        url: 'https://res.cloudinary.com/dblrgpsxr/image/upload/v1763649883/Jane_ryb2k4.png',
+      },
+      {
+        name: 'Tim',
+        displayName: 'Tim',
+        url: 'https://res.cloudinary.com/dblrgpsxr/image/upload/v1763649853/John_v3x1mz.png',
+      },
+      {
+        name: 'Rachael',
+        displayName: 'Rachael',
+        url: 'https://res.cloudinary.com/dblrgpsxr/image/upload/v1763649907/Rachael_Avatars_tgyqwv.png',
         isSystemAvatar: true,
       },
       {
-        name: 'elephant',
-        displayName: 'Elephant',
-        url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/elephant',
+        name: 'Ella',
+        displayName: 'Ella',
+        url: 'https://res.cloudinary.com/dblrgpsxr/image/upload/v1763649943/Ella_Avatars_mhltie.png',
         isSystemAvatar: true,
       },
       {
-        name: 'monkey',
-        displayName: 'Monkey',
-        url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/monkey',
-        isSystemAvatar: true,
-      },
-      {
-        name: 'giraffe',
-        displayName: 'Giraffe',
-        url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/giraffe',
-        isSystemAvatar: true,
-      },
-      {
-        name: 'penguin',
-        displayName: 'Penguin',
-        url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/penguin',
-        isSystemAvatar: true,
-      },
-      {
-        name: 'owl',
-        displayName: 'Owl',
-        url: 'https://res.cloudinary.com/your-cloud-name/image/upload/v1/avatars/owl',
+        name: 'Angie',
+        displayName: 'Angie',
+        url: 'https://res.cloudinary.com/dblrgpsxr/image/upload/v1763650003/Ella_Avatars_bznuwv.png',
         isSystemAvatar: true,
       },
     ];
