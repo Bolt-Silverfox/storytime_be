@@ -43,13 +43,19 @@ export class AuthService {
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
-      include: { profile: true, avatar: true, },
+      include: { profile: true, avatar: true },
     });
 
     if (!user) throw new UnauthorizedException('Invalid credentials');
     if (!(await bcrypt.compare(data.password, user.passwordHash)))
       throw new UnauthorizedException('Invalid credentials');
 
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+      throw new UnauthorizedException(
+        'Please verify your email before logging in',
+      );
+    }
     const tokenData = await this.createToken(user);
     const numberOfKids = await this.prisma?.kid.count({
       where: { parentId: user.id },
@@ -309,7 +315,7 @@ export class AuthService {
             ageRange: kid.ageRange,
           },
           include: {
-            avatar: true, 
+            avatar: true,
           },
         }),
       ),
@@ -320,7 +326,7 @@ export class AuthService {
     return await this.prisma.kid.findMany({
       where: { parentId: userId },
       include: {
-        avatar: true, 
+        avatar: true,
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -348,7 +354,7 @@ export class AuthService {
           where: { id: update.id },
           data: updateData,
           include: {
-            avatar: true, 
+            avatar: true,
           },
         });
 
