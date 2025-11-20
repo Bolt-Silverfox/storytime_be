@@ -13,11 +13,6 @@ export class UpdateUserDto {
   @IsString()
   name?: string;
 
-  @ApiProperty({ example: 'https://example.com/avatar.jpg', required: false })
-  @IsOptional()
-  @IsUrl()
-  avatarUrl?: string;
-
   @ApiProperty({ example: 'en', required: false })
   @IsOptional()
   @IsString()
@@ -27,6 +22,21 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   country?: string;
+
+  @ApiProperty({ example: 1, required: false })
+  @IsOptional()
+  @IsString()
+  numberOfKids?: number;
+
+  @ApiProperty({ example: 'https://example.com/avatar.jpg', required: false })
+  @IsOptional()
+  @IsUrl()
+  avatarUrl?: string;
+
+  @ApiProperty({ example: 'avatar-id', required: false })
+  @IsOptional()
+  @IsString()
+  avatarId?: string;
 }
 
 export class SetKidPreferredVoiceDto {
@@ -38,8 +48,10 @@ export class SetKidPreferredVoiceDto {
 export class KidVoiceDto {
   @ApiProperty()
   kidId: string;
+
   @ApiProperty()
   preferredVoiceId: string;
+
   @ApiProperty()
   voiceType: VoiceType;
 }

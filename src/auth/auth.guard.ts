@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Request } from 'express';
-import * as jwt from 'jsonwebtoken';
+import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
 export interface JwtPayload {
@@ -21,33 +21,12 @@ export interface AuthenticatedRequest extends Request {
   authUserData: JwtPayload;
 }
 
-/**
- * Verifies and decodes a JWT token
- * @param token The JWT token to verify
- * @param configService The ConfigService instance
- * @returns The decoded token payload or null if invalid
- */
-export function checkJwtToken(
-  token: string,
-  configService: ConfigService,
-): JwtPayload | null {
-  const jwtSecret = configService.get<string>('SECRET') || 'your-secret-key';
-  const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
-
-  if (!decoded.authSessionId) {
-    throw new Error('Invalid token');
-  }
-
-  const currentTimestamp = Math.floor(Date.now() / 1000);
-  if (decoded?.exp && decoded?.exp < currentTimestamp) {
-    throw new Error('Invalid or expired token');
-  }
-  return decoded;
-}
-
 @Injectable()
 export class AuthSessionGuard implements CanActivate {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly jwtService: JwtService
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
@@ -65,13 +44,16 @@ export class AuthSessionGuard implements CanActivate {
 
     const token = authHeader.split(' ')[1];
     try {
-      const payload = checkJwtToken(token, this.configService);
-      if (!payload) {
+      const payload = this.jwtService.verify<JwtPayload>(token);
+      if (!payload.authSessionId) {
         throw new UnauthorizedException('Invalid or expired token');
       }
       (request as AuthenticatedRequest).authUserData = payload;
       return true;
     } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+}
       throw new UnauthorizedException(error.message);
     }
   }
