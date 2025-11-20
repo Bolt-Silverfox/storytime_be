@@ -24,6 +24,7 @@
     "make-migration": "npx prisma migrate dev",
     "db:reset": "npx prisma migrate reset",
     "db:seed": "ts-node src/story/seed.ts",
+    "seed:avatars": "ts-node src/avatar/run-avatar-seeder.ts",
     "deploy:dev": "/home/ubuntu/.local/share/pnpm/pnpm make-migration && /home/ubuntu/.local/share/pnpm/pnpm generate && /home/ubuntu/.local/share/pnpm/pnpm start:pm2"
   },
   "dependencies": {
@@ -82,6 +83,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },

@@ -27,9 +27,7 @@ model User {
   passwordHash            String
   title                   String?
   name                    String?
-  // avatarUrl            String?
-  avatarId                String?
-  avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
+  avatarUrl               String?
   isEmailVerified         Boolean                  @default(false)
   role                    Role                     @default(parent)
   createdAt               DateTime                 @default(now())
@@ -51,9 +49,7 @@ model User {
 model Kid {
   id        String  @id @default(uuid())
   name      String?
-  // avatarUrl String?
-  avatarId  String?
-  avatar    Avatar? @relation(fields: [avatarId], references: [id])
+  avatarUrl String?
   ageRange  String?
 
   parentId  String
@@ -66,7 +62,12 @@ model Kid {
   preferredVoiceId String?
   preferredVoice   Voice?  @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
 
-  // New relations
+  // AVATAR FIELDS
+  avatarType      String   @default("system")
+  systemAvatarId  String?
+  systemAvatar    SystemAvatar? @relation("KidSystemAvatar", fields: [systemAvatarId], references: [id])
+
+  // relations
   dailyChallenges         DailyChallengeAssignment[]
   notificationPreferences NotificationPreference[]
   rewardRedemptions       RewardRedemption[]
@@ -77,6 +78,7 @@ model Kid {
 
   @@map("kids")
 }
+
 
 model Session {
   id        String   @id @default(uuid())
@@ -118,8 +120,21 @@ model Profile {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+
   @@map("profiles")
 }
+
+
+model SystemAvatar {
+  id       String  @id @default(uuid())
+  name     String?
+  imageUrl String
+
+  kids     Kid[]   @relation("KidSystemAvatar")
+  
+  @@map("system_avatars")
+}
+
 
 model Story {
   id            String   @id @default(uuid())
@@ -360,23 +375,4 @@ model StoryQuestion {
   answer   Int
 
   @@map("story_questions")
-}
-
-model Avatar {
-  id             String   @id @default(cuid())
-  name           String?  // Standard name for upsert (unique identifier)
-  displayName    String?  // User-friendly display name
-  url            String
-  isSystemAvatar Boolean  @default(false)
-  publicId       String?
-  createdAt      DateTime @default(now())
-
-  // Relations
-  users User[]
-  kids  Kid[]
-
-  @@map("avatars")
-  @@index([name])           // Index for upsert operations
-  @@index([isSystemAvatar]) // Index for filtering system avatars
-  @@unique([name])          // Ensure name is unique for upsert
 }
