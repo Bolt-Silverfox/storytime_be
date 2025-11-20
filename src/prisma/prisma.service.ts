@@ -7,10 +7,17 @@ class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy, IHealth
 {
+  constructor() {
+    super({
+      adapter: {
+        type: 'postgresql',
+        url: process.env.DATABASE_URL,
+      },
+    });
+  }
   async onModuleInit(): Promise<void> {
     await this.$connect();
   }
-
   async onModuleDestroy() {
     await this.$disconnect();
   }
