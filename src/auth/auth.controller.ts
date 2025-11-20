@@ -8,6 +8,7 @@ import {
   Req,
   UseGuards,
   UnauthorizedException,
+  HttpCode
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
@@ -37,6 +38,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @HttpCode(200)
   @ApiOperation({ summary: 'User login', description: 'Login for all roles.' })
   @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
