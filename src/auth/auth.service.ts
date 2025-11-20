@@ -47,9 +47,16 @@ export class AuthService {
     });
 
     if (!user) throw new UnauthorizedException('Invalid credentials');
+    
     if (!(await bcrypt.compare(data.password, user.passwordHash)))
       throw new UnauthorizedException('Invalid credentials');
 
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
+    
     const tokenData = await this.createToken(user);
     const numberOfKids = await this.prisma?.kid.count({
       where: { parentId: user.id },
