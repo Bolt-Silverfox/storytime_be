@@ -18,6 +18,7 @@ import { AvatarModule } from './avatar/avatar.module'; // Add this import
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: '.env',
       validate: validateEnv,
     }),
     CommonModule,
