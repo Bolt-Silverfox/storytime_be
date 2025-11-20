@@ -79,6 +79,7 @@ export class AuthController {
   @Post('logout-all')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
+  @HttpCode(200)
   @ApiOperation({ summary: 'Logout from all devices' })
   @ApiResponse({ status: 200, description: 'Logged out from all devices.' })
   async logoutAll(@Req() req: AuthenticatedRequest) {
