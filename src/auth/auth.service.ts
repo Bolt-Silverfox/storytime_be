@@ -43,7 +43,7 @@ export class AuthService {
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
-      include: { profile: true },
+      include: { profile: true, avatar: true, },
     });
 
     if (!user) throw new UnauthorizedException('Invalid credentials');
@@ -133,7 +133,25 @@ export class AuthService {
     if (existingUser) throw new BadRequestException('Email already exists');
 
     const user = await this.prisma.user.create({
-      data: { name: data.fullName, email: data.email, passwordHash: hashedPassword, title: data.title, profile: { create: {} } },
+      data: {
+        name: data.fullName,
+        email: data.email,
+        passwordHash: hashedPassword,
+        title: data.title,
+        profile: {
+          create: {},
+        },
+      },
+      include: {
+        profile: true,
+        avatar: true,
+      },
+    });
+
+    await this.sendEmailVerification(user?.email);
+
+    const userFull = await this.prisma.user.findUnique({
+      where: { id: user.id },
       include: { profile: true },
     });
 
@@ -212,12 +230,30 @@ export class AuthService {
     if (!user) throw new NotFoundException('User not found');
 
     return this.prisma.$transaction(
-      kids.map(kid => this.prisma.kid.create({ data: { ...kid, parentId: userId } }))
+      kids.map((kid) =>
+        this.prisma.kid.create({
+          data: {
+            name: kid.name,
+            avatarId: kid.avatarId,
+            parentId: userId,
+            ageRange: kid.ageRange,
+          },
+          include: {
+            avatar: true, 
+          },
+        }),
+      ),
     );
   }
 
   async getKids(userId: string) {
-    return this.prisma.kid.findMany({ where: { parentId: userId }, orderBy: { createdAt: 'asc' } });
+    return await this.prisma.kid.findMany({
+      where: { parentId: userId },
+      include: {
+        avatar: true, 
+      },
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   async updateKids(userId: string, updates: updateKidDto[]) {
@@ -228,10 +264,23 @@ export class AuthService {
 
       const updateData: any = {};
       if (update.name !== undefined) updateData.name = update.name;
-      if (update.avatarUrl !== undefined) updateData.avatarUrl = update.avatarUrl;
+      if (update.avatarId !== undefined) updateData.avatarId = update.avatarId;
       if (update.ageRange !== undefined) updateData.ageRange = update.ageRange;
 
-      results.push(Object.keys(updateData).length ? await this.prisma.kid.update({ where: { id: update.id }, data: updateData }) : kid);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      if (Object.keys(updateData).length > 0) {
+        const updated = await this.prisma.kid.update({
+          where: { id: update.id },
+          data: updateData,
+          include: {
+            avatar: true, 
+          },
+        });
+
+        results.push(updated);
+      } else {
+        results.push(kid); // No change, return original
+      }
     }
     return results;
   }
