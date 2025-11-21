@@ -43,7 +43,7 @@ export class AuthService {
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
-      include: { profile: true, avatar: true, },
+      include: { profile: true, avatar: true },
     });
 
     if (!user) throw new UnauthorizedException('Invalid credentials');

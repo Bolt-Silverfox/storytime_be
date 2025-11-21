@@ -66,6 +66,7 @@ export class AuthController {
   @Post('logout')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
+  @HttpCode(200)
   @ApiOperation({ summary: 'Logout from current session' })
   @ApiResponse({ status: 200, description: 'Logged out successfully.' })
   async logout(@Req() req: AuthenticatedRequest) {
