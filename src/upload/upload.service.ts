@@ -1,6 +1,14 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
-import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from 'cloudinary';
-import * as toStream from 'buffer-to-stream';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
+import {
+  v2 as cloudinary,
+  UploadApiResponse,
+  UploadApiErrorResponse,
+} from 'cloudinary';
+import toStream from 'buffer-to-stream';
 
 @Injectable()
 export class UploadService {
@@ -8,14 +16,18 @@ export class UploadService {
   async uploadFile(file: Express.Multer.File): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        { 
+        {
           folder: 'storytime',
-          resource_type: 'auto'
+          resource_type: 'auto',
         },
         (error: UploadApiErrorResponse, result: UploadApiResponse) => {
           if (error) {
             this.logger.error('Cloudinary upload error:', error);
-            return reject(new InternalServerErrorException(`Upload failed: ${error.message}`));
+            return reject(
+              new InternalServerErrorException(
+                `Upload failed: ${error.message}`,
+              ),
+            );
           }
           resolve(result);
         },
@@ -24,10 +36,13 @@ export class UploadService {
     });
   }
 
-  async uploadImage(file: Express.Multer.File, folder: string): Promise<UploadApiResponse> {
+  async uploadImage(
+    file: Express.Multer.File,
+    folder: string,
+  ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        { 
+        {
           folder: `storytime/${folder}`,
           resource_type: 'image',
           transformation: [
@@ -39,7 +54,11 @@ export class UploadService {
         (error: UploadApiErrorResponse, result: UploadApiResponse) => {
           if (error) {
             this.logger.error('Cloudinary image upload error:', error);
-            return reject(new InternalServerErrorException(`Image upload failed: ${error.message}`));
+            return reject(
+              new InternalServerErrorException(
+                `Image upload failed: ${error.message}`,
+              ),
+            );
           }
           resolve(result);
         },
@@ -50,17 +69,28 @@ export class UploadService {
 
   async deleteImage(publicId: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      cloudinary.uploader.destroy(publicId, (error: UploadApiErrorResponse, result: any) => {
-        if (error) {
-          this.logger.error('Cloudinary delete error:', error);
-          return reject(new InternalServerErrorException(`Delete failed: ${error.message}`));
-        }
-        if (result.result !== 'ok') {
-          this.logger.error('Cloudinary delete failed:', result);
-          return reject(new InternalServerErrorException(`Delete failed: ${result.result}`));
-        }
-        resolve();
-      });
+      cloudinary.uploader.destroy(
+        publicId,
+        (error: UploadApiErrorResponse, result: any) => {
+          if (error) {
+            this.logger.error('Cloudinary delete error:', error);
+            return reject(
+              new InternalServerErrorException(
+                `Delete failed: ${error.message}`,
+              ),
+            );
+          }
+          if (result.result !== 'ok') {
+            this.logger.error('Cloudinary delete failed:', result);
+            return reject(
+              new InternalServerErrorException(
+                `Delete failed: ${result.result}`,
+              ),
+            );
+          }
+          resolve();
+        },
+      );
     });
   }
 
@@ -75,7 +105,11 @@ export class UploadService {
         (error: UploadApiErrorResponse, result: UploadApiResponse) => {
           if (error) {
             this.logger.error('Cloudinary audio upload error:', error);
-            return reject(new InternalServerErrorException(`Audio upload failed: ${error.message}`));
+            return reject(
+              new InternalServerErrorException(
+                `Audio upload failed: ${error.message}`,
+              ),
+            );
           }
           resolve(result.secure_url);
         },
