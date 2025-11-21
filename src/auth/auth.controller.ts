@@ -93,6 +93,7 @@ export class AuthController {
   }
 
   @Post('send-verification')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend email verification token' })
   @ApiResponse({ status: 200, description: 'Verification email sent.' })
   async sendVerification(@Body('email') email: string) {
