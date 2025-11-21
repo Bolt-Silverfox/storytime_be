@@ -7,11 +7,14 @@ import {
   UpdateRewardRedemptionStatusDto,
   RewardRedemptionDto,
 } from './reward.dto';
+import { SoftDeleteService } from '../common/soft-delete.service';
 
 const prisma = new PrismaClient();
 
 @Injectable()
 export class RewardService {
+  constructor(private softDeleteService: SoftDeleteService) {}
+
   async create(dto: CreateRewardDto) {
     return await prisma.reward.create({
       data: {
@@ -23,22 +26,55 @@ export class RewardService {
       },
     });
   }
+
   async findAll() {
-    return await prisma.reward.findMany();
+    return await prisma.reward.findMany({
+      where: {
+        deletedAt: null
+      }
+    });
   }
+
   async findOne(id: string) {
-    const reward = await prisma.reward.findUnique({ where: { id } });
+    const reward = await prisma.reward.findUnique({ 
+      where: { 
+        id,
+        deletedAt: null 
+      } 
+    });
     if (!reward) throw new NotFoundException('Reward not found');
     return reward;
   }
+
   async update(id: string, dto: UpdateRewardDto) {
-    return await prisma.reward.update({ where: { id }, data: dto });
+    return await prisma.reward.update({ 
+      where: { 
+        id,
+        deletedAt: null 
+      }, 
+      data: dto 
+    });
   }
-  async delete(id: string) {
-    return await prisma.reward.delete({ where: { id } });
+
+  async softDeleteReward(id: string) {
+    return await this.softDeleteService.softDelete('reward', id);
   }
+
+  async undoDeleteReward(id: string): Promise<boolean> {
+    return await this.softDeleteService.undoSoftDelete('reward', id);
+  }
+
+  async permanentDeleteReward(id: string) {
+    return await this.softDeleteService.permanentDelete('reward', id);
+  }
+
   async findByKid(kidId: string) {
-    return await prisma.reward.findMany({ where: { kidId } });
+    return await prisma.reward.findMany({ 
+      where: { 
+        kidId,
+        deletedAt: null 
+      } 
+    });
   }
 
   private toRewardRedemptionDto(redemption: RewardRedemptionDto): RewardRedemptionDto {

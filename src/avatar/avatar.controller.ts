@@ -138,10 +138,30 @@ export class AvatarController {
     return new SuccessResponse(200, avatar, 'Avatar updated successfully');
   }
 
+  // SOFT DELETE
   @Delete(':id')
   @UseGuards(AdminGuard) 
   async deleteAvatar(@Param('id') id: string) {
-    await this.avatarService.deleteAvatar(id);
-    return new SuccessResponse(200, null, 'Avatar deleted successfully');
+    await this.avatarService.softDeleteAvatar(id);
+    return new SuccessResponse(200, null, 'Avatar soft deleted successfully');
+  }
+
+  // UNDO DELETE
+  @Post(':id/undo-delete')
+  @UseGuards(AdminGuard)
+  async undoDeleteAvatar(@Param('id') id: string) {
+    const result = await this.avatarService.undoDeleteAvatar(id);
+    if (!result) {
+      throw new BadRequestException('Cannot undo deletion. Either avatar not found or undo window (30s) has expired.');
+    }
+    return new SuccessResponse(200, null, 'Avatar deletion undone successfully');
+  }
+
+  // PERMANENT DELETE
+  @Delete(':id/permanent')
+  @UseGuards(AdminGuard)
+  async permanentDeleteAvatar(@Param('id') id: string) {
+    await this.avatarService.permanentDeleteAvatar(id);
+    return new SuccessResponse(200, null, 'Avatar permanently deleted successfully');
   }
 }

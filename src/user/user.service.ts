@@ -3,18 +3,27 @@ import { PrismaClient } from '@prisma/client';
 import { UserRole } from './user.controller';
 import { KidVoiceDto, UpdateUserDto } from './user.dto';
 import { VoiceType } from '@/story/story.dto';
+import { SoftDeleteService } from '../common/soft-delete.service';
 
 const prisma = new PrismaClient();
 
 @Injectable()
 export class UserService {
+  constructor(private softDeleteService: SoftDeleteService) {}
+
   async getUser(id: string): Promise<any> {
-    // Fetch user, profile, and kids count
     const user = await prisma.user.findUnique({
-      where: { id },
+      where: { 
+        id,
+        deletedAt: null 
+      },
       include: { 
         profile: true, 
-        kids: true, 
+        kids: {
+          where: {
+            deletedAt: null
+          }
+        }, 
         avatar: true,
       },
     });
@@ -27,6 +36,9 @@ export class UserService {
 
   async getAllUsers(): Promise<any[]> {
     return await prisma.user.findMany({
+      where: {
+        deletedAt: null
+      },
       include: { 
         profile: true,  
         avatar: true,
@@ -34,21 +46,30 @@ export class UserService {
     });
   }
 
-  async deleteUser(id: string): Promise<any> {
-    return await prisma.user.delete({
-      where: { id },
-    });
+  async softDeleteUser(id: string): Promise<any> {
+    return await this.softDeleteService.softDelete('user', id);
+  }
+
+  async undoDeleteUser(id: string): Promise<boolean> {
+    return await this.softDeleteService.undoSoftDelete('user', id);
+  }
+
+  async permanentDeleteUser(id: string): Promise<any> {
+    return await this.softDeleteService.permanentDelete('user', id);
   }
 
   async updateUser(id: string, data: UpdateUserDto): Promise<any> {
-    // Check if user exists
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findUnique({ 
+      where: { 
+        id,
+        deletedAt: null 
+      } 
+    });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    // Build update payload dynamically - only include fields that are provided
     const updateData: any = {};
 
     if (data.title !== undefined) {
@@ -59,14 +80,12 @@ export class UserService {
       updateData.name = data.name;
     }
 
-    // Use avatarId if provided, otherwise fall back to avatarUrl for backward compatibility
     if (data.avatarId !== undefined) {
       updateData.avatarId = data.avatarId;
     } else if (data.avatarUrl !== undefined) {
       updateData.avatarId = data.avatarUrl;
     }
 
-    // Build profile update data
     const profileUpdateData: any = {};
     if (data.language !== undefined) {
       profileUpdateData.language = data.language;
@@ -75,12 +94,10 @@ export class UserService {
       profileUpdateData.country = data.country;
     }
 
-    // If no fields to update, return existing user
     if (Object.keys(updateData).length === 0 && Object.keys(profileUpdateData).length === 0) {
       return this.getUser(id);
     }
 
-    // Update user with only provided fields
     const updatedUser = await prisma.user.update({
       where: { id },
       data: {
@@ -97,7 +114,11 @@ export class UserService {
       include: {
         profile: true,
         avatar: true,
-        kids: true,
+        kids: {
+          where: {
+            deletedAt: null
+          }
+        },
       },
     });
 
@@ -108,7 +129,12 @@ export class UserService {
   }
 
   async getUserRole(id: string): Promise<any> {
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findUnique({ 
+      where: { 
+        id,
+        deletedAt: null 
+      } 
+    });
     return { id: user?.id, role: user?.role };
   }
 
@@ -150,7 +176,10 @@ export class UserService {
 
   async getKidPreferredVoice(kidId: string): Promise<KidVoiceDto | null> {
     const kid = await prisma.kid.findUnique({ 
-      where: { id: kidId },
+      where: { 
+        id: kidId,
+        deletedAt: null 
+      },
       include: {
         avatar: true,
       },

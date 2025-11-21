@@ -12,7 +12,7 @@ import { StoryModule } from './story/story.module';
 import { RewardModule } from './reward/reward.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CommonModule } from './common/common.module';
-import { AvatarModule } from './avatar/avatar.module'; // Add this import
+import { AvatarModule } from './avatar/avatar.module';
 
 @Module({
   imports: [
@@ -34,5 +34,6 @@ import { AvatarModule } from './avatar/avatar.module'; // Add this import
     AvatarModule, 
   ],
   providers: [PrismaService],
+  exports: [PrismaService], 
 })
 export class AppModule { }

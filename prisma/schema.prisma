@@ -44,6 +44,7 @@ model User {
   Reward                  Reward[]
   notificationPreferences NotificationPreference[]
   activityLogs            ActivityLog[]
+  deletedAt               DateTime?
 
   @@map("users")
 }
@@ -74,6 +75,7 @@ model Kid {
   storyPaths              StoryPath[]
   favorites               Favorite[]
   progresses              StoryProgress[]
+  deletedAt               DateTime?
 
   @@map("kids")
 }
@@ -149,6 +151,7 @@ model Story {
   themes           Theme[]           @relation("StoryThemes")
   storyAudioCaches StoryAudioCache[]
   questions        StoryQuestion[]
+  deletedAt        DateTime?
 
   @@map("stories")
 }
@@ -187,6 +190,7 @@ model Favorite {
   storyId   String
   story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+  deletedAt DateTime?
 
   @@map("favorites")
 }
@@ -252,6 +256,7 @@ model Reward {
   kid   Kid?    @relation(fields: [kidId], references: [id])
 
   redemptions RewardRedemption[]
+  deletedAt   DateTime?
 
   @@map("rewards")
 }
@@ -374,6 +379,8 @@ model Avatar {
   // Relations
   users User[]
   kids  Kid[]
+
+  deletedAt      DateTime?
 
   @@map("avatars")
   @@index([name])           // Index for upsert operations

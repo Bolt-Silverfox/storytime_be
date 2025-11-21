@@ -3,9 +3,10 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import PrismaService from 'src/prisma/prisma.service';
+import PrismaService from 'src/prisma/prisma.service'; // Already imported
 import { NotificationModule } from 'src/notification/notification.module';
 import { AuthSessionGuard } from './auth.guard';
+import { SoftDeleteService } from '../common/soft-delete.service';
 
 @Module({
   imports: [
@@ -21,6 +22,6 @@ import { AuthSessionGuard } from './auth.guard';
     NotificationModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, PrismaService, AuthSessionGuard],
+  providers: [AuthService, PrismaService, AuthSessionGuard, SoftDeleteService],
 })
 export class AuthModule {}

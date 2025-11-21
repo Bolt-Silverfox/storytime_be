@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Delete,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -69,12 +70,35 @@ export class RewardController {
     return this.rewardService.update(id, dto);
   }
 
+  // SOFT DELETE REWARD
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete reward' })
+  @ApiOperation({ summary: 'Soft delete reward' })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200 })
   async delete(@Param('id') id: string) {
-    return this.rewardService.delete(id);
+    return this.rewardService.softDeleteReward(id);
+  }
+
+  // UNDO DELETE REWARD
+  @Post(':id/undo-delete')
+  @ApiOperation({ summary: 'Undo reward deletion (within 30 seconds)' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200 })
+  async undoDeleteReward(@Param('id') id: string) {
+    const result = await this.rewardService.undoDeleteReward(id);
+    if (!result) {
+      throw new BadRequestException('Cannot undo deletion. Either reward not found or undo window (30s) has expired.');
+    }
+    return { message: 'Reward deletion undone successfully' };
+  }
+
+  // PERMANENT DELETE REWARD
+  @Delete(':id/permanent')
+  @ApiOperation({ summary: 'Permanently delete reward' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200 })
+  async permanentDeleteReward(@Param('id') id: string) {
+    return this.rewardService.permanentDeleteReward(id);
   }
 
   // --- Reward Redemption ---

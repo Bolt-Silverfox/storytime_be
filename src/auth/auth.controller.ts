@@ -8,6 +8,8 @@ import {
   Req,
   UseGuards,
   UnauthorizedException,
+  BadRequestException,
+  Param,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
@@ -28,6 +30,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiTags,
+  ApiParam,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
 
@@ -139,14 +142,41 @@ export class AuthController {
     return this.authService.updateKids(req.authUserData['userId'], data);
   }
 
+  // SOFT DELETE KIDS (updated existing endpoint)
   @Delete('kids')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete kids from user account' })
-  @ApiBody({ type: [String], description: 'Array of kid IDs to delete.' })
-  @ApiResponse({ status: 200, description: 'Kids deleted.' })
+  @ApiOperation({ summary: 'Soft delete kids from user account' })
+  @ApiBody({ type: [String], description: 'Array of kid IDs to soft delete.' })
+  @ApiResponse({ status: 200, description: 'Kids soft deleted.' })
   async deleteKids(@Req() req: AuthenticatedRequest, @Body() data: string[]) {
-    return this.authService.deleteKids(req.authUserData['userId'], data);
+    return this.authService.softDeleteKids(req.authUserData['userId'], data);
+  }
+
+  // UNDO DELETE KID
+  @Post('kids/:id/undo-delete')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Undo kid deletion (within 30 seconds)' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200, description: 'Kid deletion undone.' })
+  async undoDeleteKid(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    const result = await this.authService.undoDeleteKid(req.authUserData['userId'], id);
+    if (!result) {
+      throw new BadRequestException('Cannot undo deletion. Either kid not found or undo window (30s) has expired.');
+    }
+    return { message: 'Kid deletion undone successfully' };
+  }
+
+  // PERMANENT DELETE KID
+  @Delete('kids/:id/permanent')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Permanently delete a kid' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200, description: 'Kid permanently deleted.' })
+  async permanentDeleteKid(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.authService.permanentDeleteKid(req.authUserData['userId'], id);
   }
 
   // ===== PASSWORD RESET =====
@@ -162,15 +192,15 @@ export class AuthController {
   @ApiOperation({ summary: 'Validate password reset token' })
   @ApiBody({ type: ValidateResetTokenDto })
   @ApiResponse({ status: 200, description: 'Token is valid.' })
-async validateResetToken(@Body() body: ValidateResetTokenDto) {
-  return this.authService.validateResetToken(body.token, body.email, body);
-}
+  async validateResetToken(@Body() body: ValidateResetTokenDto) {
+    return this.authService.validateResetToken(body.token, body.email, body);
+  }
 
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password with token' })
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
   async resetPassword(@Body() body: ResetPasswordDto) {
-    return this.authService.resetPassword(body.token, body.email, body.newPassword,body);
+    return this.authService.resetPassword(body.token, body.email, body.newPassword, body);
   }
 }

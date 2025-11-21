@@ -26,6 +26,7 @@ import { generateToken } from 'src/utils/generete-token';
 import * as crypto from 'crypto';
 import { NotificationService } from 'src/notification/notification.service';
 import { JwtService } from '@nestjs/jwt';
+import { SoftDeleteService } from '../common/soft-delete.service';
 
 const JWT_EXPIRES_IN = '1h';
 const REFRESH_TOKEN_EXPIRES_IN = 7;
@@ -37,12 +38,16 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private notificationService: NotificationService,
+    private softDeleteService: SoftDeleteService,
   ) {}
 
   // ==================== AUTH ====================
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
     const user = await this.prisma.user.findUnique({
-      where: { email: data.email },
+      where: { 
+        email: data.email,
+        deletedAt: null 
+      },
       include: { profile: true, avatar: true, },
     });
 
@@ -50,9 +55,19 @@ export class AuthService {
     if (!(await bcrypt.compare(data.password, user.passwordHash)))
       throw new UnauthorizedException('Invalid credentials');
 
+    // Add email verification check
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
+
     const tokenData = await this.createToken(user);
     const numberOfKids = await this.prisma?.kid.count({
-      where: { parentId: user.id },
+      where: { 
+        parentId: user.id,
+        deletedAt: null 
+      },
     });
 
     return {
@@ -60,27 +75,51 @@ export class AuthService {
       jwt: tokenData.jwt,
       refreshToken: tokenData.refreshToken,
     };
-    // return {
-    //   user: new UserDto(user),
-    //   jwt: tokenData.jwt,
-    //   refreshToken: tokenData.refreshToken,
-    // };
   }
 
   async refresh(refreshToken: string): Promise<RefreshResponseDto | null> {
     const session = await this.prisma.session.findUnique({
       where: { token: this.hashToken(refreshToken) },
-      include: { user: true },
+      include: { 
+        user: {
+          include: {
+            profile: true,
+            avatar: true,
+          }
+        } 
+      },
     });
 
-    if (!session) throw new UnauthorizedException('Invalid token');
+    if (!session || !session.user) throw new UnauthorizedException('Invalid token');
+    
+    // Check if user is soft deleted
+    if (session.user.deletedAt) {
+      throw new UnauthorizedException('User account has been deleted');
+    }
+
+    // Check if email is verified
+    if (!session.user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
+
     const jwt = this.generateJwt(new UserDto(session.user), session.id);
 
-    // return { user: new UserDto(session.user), jwt };
     const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: session.user.id },
+      where: { 
+        parentId: session.user.id,
+        deletedAt: null 
+      },
     });
-    return { user: new UserDto({ ...session.user, numberOfKids }), jwt };
+    
+    return { 
+      user: new UserDto({ 
+        ...session.user, 
+        numberOfKids 
+      }), 
+      jwt 
+    };
   }
 
   async logout(sessionId: string): Promise<boolean> {
@@ -145,8 +184,13 @@ export class AuthService {
 
   async register(data: RegisterDto): Promise<LoginResponseDto | null> {
     const hashedPassword = await bcrypt.hash(data.password, 10);
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: data.email },
+    
+    // Check for existing users (including soft-deleted ones)
+    const existingUser = await this.prisma.user.findFirst({
+      where: { 
+        email: data.email,
+        deletedAt: null // Only check non-deleted users
+      },
     });
     if (existingUser) throw new BadRequestException('Email already exists');
 
@@ -168,20 +212,7 @@ export class AuthService {
 
     await this.sendEmailVerification(user?.email);
 
-    const userFull = await this.prisma.user.findUnique({
-      where: { id: user.id },
-      include: { profile: true },
-    });
-
-    await this.sendEmailVerification(user.email);
-
     const tokenData = await this.createToken(user);
-    // return {
-    //   user: new UserDto(user),
-    //   jwt: tokenData.jwt,
-    //   refreshToken: tokenData.refreshToken,
-    // };
-    // New users will have 0 kids by default
     const numberOfKids = 0;
 
     return {
@@ -192,7 +223,12 @@ export class AuthService {
   }
 
   async sendEmailVerification(email: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findFirst({ 
+      where: { 
+        email,
+        deletedAt: null 
+      } 
+    });
     if (!user) throw new NotFoundException('User not found');
 
     await this.prisma.token.deleteMany({
@@ -252,7 +288,10 @@ export class AuthService {
 
   async updateProfile(userId: string, data: updateProfileDto) {
     const user = await this.prisma.user.findFirst({
-      where: { id: userId },
+      where: { 
+        id: userId,
+        deletedAt: null 
+      },
       include: { profile: true },
     });
     if (!user) throw new NotFoundException('User not found');
@@ -284,7 +323,10 @@ export class AuthService {
     if (!userWithKids) throw new NotFoundException('User not found');
 
     const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: userId },
+      where: { 
+        parentId: userId,
+        deletedAt: null 
+      },
     });
 
     return new UserDto({
@@ -296,7 +338,12 @@ export class AuthService {
 
   // ==================== KIDS ====================
   async addKids(userId: string, kids: kidDto[]) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({ 
+      where: { 
+        id: userId,
+        deletedAt: null 
+      } 
+    });
     if (!user) throw new NotFoundException('User not found');
 
     return this.prisma.$transaction(
@@ -318,7 +365,10 @@ export class AuthService {
 
   async getKids(userId: string) {
     return await this.prisma.kid.findMany({
-      where: { parentId: userId },
+      where: { 
+        parentId: userId,
+        deletedAt: null 
+      },
       include: {
         avatar: true, 
       },
@@ -330,7 +380,11 @@ export class AuthService {
     const results = [];
     for (const update of updates) {
       const kid = await this.prisma.kid.findFirst({
-        where: { id: update.id, parentId: userId },
+        where: { 
+          id: update.id, 
+          parentId: userId,
+          deletedAt: null 
+        },
       });
       if (!kid)
         throw new NotFoundException(
@@ -342,7 +396,6 @@ export class AuthService {
       if (update.avatarId !== undefined) updateData.avatarId = update.avatarId;
       if (update.ageRange !== undefined) updateData.ageRange = update.ageRange;
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       if (Object.keys(updateData).length > 0) {
         const updated = await this.prisma.kid.update({
           where: { id: update.id },
@@ -354,31 +407,76 @@ export class AuthService {
 
         results.push(updated);
       } else {
-        results.push(kid); // No change, return original
+        results.push(kid);
       }
     }
     return results;
   }
 
-  async deleteKids(userId: string, kidIds: string[]) {
+  async softDeleteKids(userId: string, kidIds: string[]) {
     const deleted = [];
     for (const id of kidIds) {
       const kid = await this.prisma.kid.findFirst({
-        where: { id, parentId: userId },
+        where: { 
+          id, 
+          parentId: userId,
+          deletedAt: null 
+        },
       });
-      if (!kid)
+      if (!kid) {
         throw new NotFoundException(
           `Kid with ID ${id} not found or does not belong to user`,
         );
-      deleted.push(await this.prisma.kid.delete({ where: { id } }));
+      }
+      
+      await this.softDeleteService.softDelete('kid', id);
+      deleted.push(kid);
     }
     return deleted;
+  }
+
+  async undoDeleteKid(userId: string, kidId: string): Promise<boolean> {
+    const kid = await this.prisma.kid.findFirst({
+      where: { 
+        id: kidId, 
+        parentId: userId 
+      },
+    });
+    
+    if (!kid) {
+      return false;
+    }
+
+    return await this.softDeleteService.undoSoftDelete('kid', kidId);
+  }
+
+  async permanentDeleteKid(userId: string, kidId: string) {
+    const kid = await this.prisma.kid.findFirst({
+      where: { 
+        id: kidId, 
+        parentId: userId 
+      },
+    });
+    
+    if (!kid) {
+      throw new NotFoundException(
+        `Kid with ID ${kidId} not found or does not belong to user`,
+      );
+    }
+
+    await this.softDeleteService.permanentDelete('kid', kidId);
+    return kid;
   }
 
   // ==================== PASSWORD RESET ====================
   async requestPasswordReset(data: RequestResetDto) {
     const { email } = data;
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findFirst({ 
+      where: { 
+        email,
+        deletedAt: null 
+      } 
+    });
     if (!user) throw new NotFoundException('User not found');
 
     await this.prisma.token.deleteMany({

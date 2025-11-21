@@ -5,6 +5,7 @@ import { AvatarSeederService } from './avatar.seeder.service';
 import PrismaService from '../prisma/prisma.service';
 import { CloudinaryModule } from '../upload/cloudinary.module';
 import { UploadService } from '../upload/upload.service';
+import { SoftDeleteService } from '../common/soft-delete.service';
 
 @Module({
   imports: [CloudinaryModule],
@@ -12,8 +13,9 @@ import { UploadService } from '../upload/upload.service';
   providers: [
     AvatarService,
     AvatarSeederService,
-    PrismaService,
-    UploadService
+    PrismaService, 
+    UploadService,
+    SoftDeleteService
   ],
   exports: [AvatarService, AvatarSeederService],
 })

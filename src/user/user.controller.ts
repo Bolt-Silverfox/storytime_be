@@ -11,6 +11,7 @@ import {
   Patch,
   BadRequestException,
   Logger,
+  Post,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -209,24 +210,67 @@ export class UserController {
     return this.userService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
   }
 
+  // SOFT DELETE USER
   @Delete(':id')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Delete user (admin only)',
+    summary: 'Soft delete user (admin only)',
     description: 'Requires admin role and authentication.',
   })
   @ApiParam({ name: 'id', type: String, description: 'The user ID' })
   @ApiResponse({
     status: 200,
-    description: 'User deleted.',
+    description: 'User soft deleted.',
     schema: { example: { id: 'abc123', deleted: true } },
   })
   async deleteUser(@Param('id') id: string, @Req() req: any) {
     if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
     }
-    return await this.userService.deleteUser(id);
+    return await this.userService.softDeleteUser(id);
+  }
+
+  // UNDO DELETE USER
+  @Post(':id/undo-delete')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Undo user deletion (within 30 seconds, admin only)',
+    description: 'Requires admin role and authentication.',
+  })
+  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
+  @ApiResponse({ status: 200, description: 'User deletion undone.' })
+  async undoDeleteUser(@Param('id') id: string, @Req() req: any) {
+    if (req.authUserData.userRole !== 'admin') {
+      throw new ForbiddenException('Admins only');
+    }
+    const result = await this.userService.undoDeleteUser(id);
+    if (!result) {
+      throw new BadRequestException('Cannot undo deletion. Either user not found or undo window (30s) has expired.');
+    }
+    return { message: 'User deletion undone successfully' };
+  }
+
+  // PERMANENT DELETE USER
+  @Delete(':id/permanent')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Permanently delete user (admin only)',
+    description: 'Requires admin role and authentication.',
+  })
+  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'User permanently deleted.',
+    schema: { example: { id: 'abc123', deleted: true } },
+  })
+  async permanentDeleteUser(@Param('id') id: string, @Req() req: any) {
+    if (req.authUserData.userRole !== 'admin') {
+      throw new ForbiddenException('Admins only');
+    }
+    return await this.userService.permanentDeleteUser(id);
   }
 
   @Get(':id/role')
