@@ -12,14 +12,16 @@ import { RewardModule } from './reward/reward.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CommonModule } from './common/common.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { AvatarModule } from './avatar/avatar.module';
+
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: '.env',
       validate: validateEnv,
     }),
-    // Add CommonModule to the imports array
     CommonModule,
     AuthModule,
     UserModule,
@@ -31,6 +33,7 @@ import { PrismaModule } from './prisma/prisma.module';
     RewardModule,
     AnalyticsModule,
     PrismaModule,
+    AvatarModule, 
   ],
 })
 export class AppModule {}
