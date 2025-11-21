@@ -1,8 +1,10 @@
+
 import { Optional } from '@nestjs/common';
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsStrongPassword,
   Matches,
 } from 'class-validator';
@@ -12,7 +14,6 @@ export enum TokenType {
   VERIFICATION = 'verification',
   PASSWORD_RESET = 'password_reset',
 }
-
 export class RegisterDto {
   @ApiProperty({ example: 'test@gmail.com' })
   @IsEmail()
@@ -80,6 +81,26 @@ export class ProfileDto {
   }
 }
 
+export class AvatarDto {
+  @ApiProperty({ example: 'id' })
+  id: string;
+
+  @ApiProperty({ example: 'Avatar Name' })
+  name: string | null;
+
+  @ApiProperty({ example: 'https://avatar.com' })
+  url: string;
+
+  @ApiProperty({ example: true })
+  isSystemAvatar: boolean;
+
+  @ApiProperty({ example: 'public_id' })
+  publicId: string | null;
+
+  @ApiProperty({ example: '2023-10-01T12:00:00Z' })
+  createdAt: Date;
+}
+
 export class UserDto {
   @ApiProperty({ example: 'id' })
   id: string;
@@ -91,8 +112,13 @@ export class UserDto {
   @Optional()
   name: string | null;
 
-  @ApiProperty({ example: 'https://avatar.com' })
-  avatarUrl: string | null;
+  @ApiProperty({ example: 'https://avatar.com', required: false })
+  @Optional()
+  avatarUrl?: string | null;
+
+  @ApiProperty({ type: AvatarDto, required: false })
+  @Optional()
+  avatar?: AvatarDto | null;
 
   @ApiProperty({ example: 'user' })
   role: string;
@@ -103,24 +129,38 @@ export class UserDto {
   @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   updatedAt: Date;
 
+  @ApiProperty({ example: 'Mr', required: false })
+  @Optional()
+  title?: string | null;
+
   @ApiProperty({ type: ProfileDto })
   profile: ProfileDto | null;
 
-  // constructor(user: Partial<UserDto>) {
-  //   Object.assign(this, user);
-  // }
-  constructor(user: Partial<UserDto> & { profile?: any }) {
-    // Convert raw profile to ProfileDto if it exists
+  @ApiProperty({ example: 2, required: false })
+  @Optional()
+  numberOfKids?: number;
+
+  constructor(user: Partial<UserDto> & { profile?: any; avatar?: any; kids?: any[] }) {
     this.profile = user.profile ? new ProfileDto(user.profile) : null;
-    // Assign the rest of the user properties
-    // Object.assign(this, { ...user, profile: undefined }); // avoid overwriting with raw profile
+    
+    this.avatar = user.avatar ? {
+      id: user.avatar.id,
+      name: user.avatar.name,
+      url: user.avatar.url,
+      isSystemAvatar: user.avatar.isSystemAvatar,
+      publicId: user.avatar.publicId,
+      createdAt: user.avatar.createdAt,
+    } : null;
+
     this.id = user.id as string;
     this.email = user.email as string;
     this.name = user.name as string;
-    this.avatarUrl = user.avatarUrl as string;
+    this.avatarUrl = user.avatar?.url || null;
     this.role = user.role as string;
     this.createdAt = user.createdAt as Date;
     this.updatedAt = user.updatedAt as Date;
+    this.numberOfKids = user.kids?.length || user.numberOfKids || 0;
+    this.title = user.title ?? null;
   }
 }
 
@@ -145,25 +185,25 @@ export class RefreshResponseDto {
 
 export class updateProfileDto {
   @ApiProperty({ example: true })
-  @Optional()
+  @IsOptional()
   explicitContent?: boolean;
 
   @ApiProperty({ example: 50 })
-  @Optional()
+  @IsOptional()
   maxScreenTimeMins?: number;
 
   @ApiProperty({ example: 'english' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.toLowerCase() : value,
   )
-  @Optional()
+  @IsOptional()
   language?: string;
 
   @ApiProperty({ example: 'nigeria' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.toLowerCase() : value,
   )
-  @Optional()
+  @IsOptional()
   country?: string;
 }
 
@@ -175,24 +215,72 @@ export class kidDto {
   @Optional()
   name: string;
 
-  @ApiProperty({ example: 'https://example.com' })
-  @Optional()
-  avatarUrl?: string;
+  @ApiProperty({ example: 'avatar-id' })
+  @IsOptional()
+  avatarId?: string;
+
+  @ApiProperty({ example: '1-3' })
+  @IsOptional()
+  ageRange?: string;
 }
 
 export class updateKidDto {
   @ApiProperty({ example: 'eqiv989bqem' })
-  @Optional()
+  @IsOptional()
   id: string;
 
   @ApiProperty({ example: 'firstname lastname' })
   @Matches(/^[a-zA-Z]+(?:\s+[a-zA-Z]+)+$/, {
     message: 'Full name must contain at least two names',
   })
-  @Optional()
+  @IsOptional()
   name: string;
 
-  @ApiProperty({ example: 'https://example.com' })
-  @Optional()
-  avatarUrl?: string;
+  @ApiProperty({ example: 'avatar-id' })
+  @IsOptional()
+  avatarId?: string;
+
+  @ApiProperty({ example: '1-3', required: false })
+  @IsOptional()
+  ageRange?: string;
+}
+
+// ===== Password Reset DTOs =====
+export class RequestResetDto {
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+}
+
+export class ValidateResetTokenDto {
+  @ApiProperty({ example: 'reset-token-from-email' })
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @ApiProperty({ example: 'reset-token-from-email' })
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @ApiProperty({ example: 'NewStrongPassword1#' })
+  @IsStrongPassword({
+    minLength: 8,
+    minLowercase: 1,
+    minUppercase: 1,
+    minNumbers: 1,
+    minSymbols: 1,
+  })
+  newPassword: string;
 }
