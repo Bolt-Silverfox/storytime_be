@@ -20,7 +20,7 @@ import {
   ValidateResetTokenDto,
   ResetPasswordDto,
 } from './auth.dto';
-import PrismaService from 'src/prisma/prisma.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { generateToken } from 'src/utils/generete-token';
 import * as crypto from 'crypto';
@@ -46,9 +46,19 @@ export class AuthService {
       include: { profile: true, avatar: true, },
     });
 
-    if (!user) throw new UnauthorizedException('Invalid credentials');
-    if (!(await bcrypt.compare(data.password, user.passwordHash)))
-      throw new UnauthorizedException('Invalid credentials');
+    if (!user) {
+      throw new BadRequestException('Invalid credentials');
+    }
+
+    if (!(await bcrypt.compare(data.password, user.passwordHash))) {
+      throw new BadRequestException('Invalid credentials');
+    }
+
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
 
     const tokenData = await this.createToken(user);
     const numberOfKids = await this.prisma?.kid.count({
@@ -409,7 +419,14 @@ export class AuthService {
     this.logger.log(
       `Password reset requested for ${email}: response ${JSON.stringify(resp)}`,
     );
-    return { message: 'Password Reset email sent' };
+
+    if (!resp.success) {
+      throw new ServiceUnavailableException(
+        'Failed to send password reset email',
+      );
+    }
+
+    return { message: 'Password reset token sent' };
   }
 
   async validateResetToken(
