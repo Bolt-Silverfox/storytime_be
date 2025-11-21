@@ -151,7 +151,7 @@ export class UserService {
     };
   }
 
-  //get kid by id
+  //get kid by kidID
   async getKidById(kidId: string) {
     try {
       const kid = await prisma.kid.findUnique({
