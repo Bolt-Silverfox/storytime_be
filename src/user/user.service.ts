@@ -12,9 +12,9 @@ export class UserService {
     // Fetch user, profile, and kids count
     const user = await prisma.user.findUnique({
       where: { id },
-      include: { 
-        profile: true, 
-        kids: true, 
+      include: {
+        profile: true,
+        kids: true,
         avatar: true,
       },
     });
@@ -27,8 +27,8 @@ export class UserService {
 
   async getAllUsers(): Promise<any[]> {
     return await prisma.user.findMany({
-      include: { 
-        profile: true,  
+      include: {
+        profile: true,
         avatar: true,
       },
     });
@@ -76,7 +76,10 @@ export class UserService {
     }
 
     // If no fields to update, return existing user
-    if (Object.keys(updateData).length === 0 && Object.keys(profileUpdateData).length === 0) {
+    if (
+      Object.keys(updateData).length === 0 &&
+      Object.keys(profileUpdateData).length === 0
+    ) {
       return this.getUser(id);
     }
 
@@ -148,8 +151,35 @@ export class UserService {
     };
   }
 
+  //get kid by id
+  async getKidById(kidId: string) {
+    try {
+      const kid = await prisma.kid.findUnique({
+        where: { id: kidId },
+        include: {
+          avatar: true,
+          parent: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      if (!kid) {
+        throw new NotFoundException('Kid not found');
+      }
+
+      return kid;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async getKidPreferredVoice(kidId: string): Promise<KidVoiceDto | null> {
-    const kid = await prisma.kid.findUnique({ 
+    const kid = await prisma.kid.findUnique({
       where: { id: kidId },
       include: {
         avatar: true,
