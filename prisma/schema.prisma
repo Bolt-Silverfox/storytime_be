@@ -379,4 +379,17 @@ model Avatar {
   @@index([name])           // Index for upsert operations
   @@index([isSystemAvatar]) // Index for filtering system avatars
   @@unique([name])          // Ensure name is unique for upsert
+}ing
+  isSystemAvatar Boolean  @default(false)
+  publicId       String?
+  createdAt      DateTime @default(now())
+
+  // Relations
+  users User[]
+  kids  Kid[]
+
+  @@map("avatars")
+  @@index([name])           // Index for upsert operations
+  @@index([isSystemAvatar]) // Index for filtering system avatars
+  @@unique([name])          // Ensure name is unique for upsert
 }
