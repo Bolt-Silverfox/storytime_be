@@ -20,7 +20,7 @@ import {
   ValidateResetTokenDto,
   ResetPasswordDto,
 } from './auth.dto';
-import PrismaService from 'src/prisma/prisma.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { generateToken } from 'src/utils/generete-token';
 import * as crypto from 'crypto';
@@ -46,10 +46,19 @@ export class AuthService {
       include: { profile: true, avatar: true },
     });
 
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) {
+      throw new BadRequestException('Invalid credentials');
+    }
 
-    if (!(await bcrypt.compare(data.password, user.passwordHash)))
-      throw new UnauthorizedException('Invalid credentials');
+    if (!(await bcrypt.compare(data.password, user.passwordHash))) {
+      throw new BadRequestException('Invalid credentials');
+    }
+
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
 
     if (!user.isEmailVerified) {
       throw new BadRequestException(
@@ -241,8 +250,10 @@ export class AuthService {
       include: { user: true },
     });
 
-    if (!verificationToken)
-      throw new NotFoundException('Invalid verification token');
+    if (!verificationToken) {
+      throw new BadRequestException('Invalid verification token');
+    }
+
     if (verificationToken.expiresAt < new Date()) {
       await this.prisma.token.delete({ where: { id: verificationToken.id } });
       throw new UnauthorizedException('Verification token has expired');
