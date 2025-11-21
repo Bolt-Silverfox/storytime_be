@@ -37,7 +37,7 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private notificationService: NotificationService,
-  ) {}
+  ) { }
 
   // ==================== AUTH ====================
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
@@ -234,8 +234,10 @@ export class AuthService {
       include: { user: true },
     });
 
-    if (!verificationToken)
-      throw new NotFoundException('Invalid verification token');
+    if (!verificationToken) {
+      throw new BadRequestException('Invalid verification token');
+    }
+
     if (verificationToken.expiresAt < new Date()) {
       await this.prisma.token.delete({ where: { id: verificationToken.id } });
       throw new UnauthorizedException('Verification token has expired');
@@ -249,6 +251,7 @@ export class AuthService {
 
     return { message: 'Email verified successfully' };
   }
+
 
   async updateProfile(userId: string, data: updateProfileDto) {
     const user = await this.prisma.user.findFirst({
@@ -309,7 +312,7 @@ export class AuthService {
             ageRange: kid.ageRange,
           },
           include: {
-            avatar: true, 
+            avatar: true,
           },
         }),
       ),
@@ -320,7 +323,7 @@ export class AuthService {
     return await this.prisma.kid.findMany({
       where: { parentId: userId },
       include: {
-        avatar: true, 
+        avatar: true,
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -348,7 +351,7 @@ export class AuthService {
           where: { id: update.id },
           data: updateData,
           include: {
-            avatar: true, 
+            avatar: true,
           },
         });
 
