@@ -1,4 +1,3 @@
-
 import { Optional } from '@nestjs/common';
 import { ApiProperty } from '@nestjs/swagger';
 import {
@@ -7,6 +6,7 @@ import {
   IsOptional,
   IsStrongPassword,
   Matches,
+  IsString, // Add this import
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -212,15 +212,17 @@ export class kidDto {
   @Matches(/^[a-zA-Z]+(?:\s+[a-zA-Z]+)+$/, {
     message: 'Full name must contain at least two names',
   })
-  @Optional()
+  @IsNotEmpty({ message: 'Kid name is required' })
   name: string;
 
-  @ApiProperty({ example: 'avatar-id' })
+  @ApiProperty({ example: 'avatar-id', required: false })
   @IsOptional()
+  @IsString()
   avatarId?: string;
 
-  @ApiProperty({ example: '1-3' })
+  @ApiProperty({ example: '1-3', required: false })
   @IsOptional()
+  @IsString()
   ageRange?: string;
 }
 

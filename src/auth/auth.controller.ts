@@ -114,10 +114,15 @@ export class AuthController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add kids to user account' })
-  @ApiBody({ type: [kidDto] })
+  @ApiBody({ 
+    type: [kidDto],
+    description: 'Array of kid objects or a single kid object'
+  })
   @ApiResponse({ status: 200, description: 'Kids added.' })
-  async addKids(@Req() req: AuthenticatedRequest, @Body() data: kidDto[]) {
-    return this.authService.addKids(req.authUserData['userId'], data);
+  async addKids(@Req() req: AuthenticatedRequest, @Body() data: kidDto[] | kidDto) {
+    // Normalize data to always be an array
+    const kidsArray = Array.isArray(data) ? data : [data];
+    return this.authService.addKids(req.authUserData['userId'], kidsArray);
   }
 
   @Get('kids')
@@ -165,7 +170,6 @@ export class AuthController {
 async validateResetToken(@Body() body: ValidateResetTokenDto) {
   return this.authService.validateResetToken(body.token, body.email, body);
 }
-
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password with token' })
   @ApiBody({ type: ResetPasswordDto })

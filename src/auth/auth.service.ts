@@ -50,6 +50,12 @@ export class AuthService {
     if (!(await bcrypt.compare(data.password, user.passwordHash)))
       throw new UnauthorizedException('Invalid credentials');
 
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
+
     const tokenData = await this.createToken(user);
     const numberOfKids = await this.prisma?.kid.count({
       where: { parentId: user.id },
@@ -298,6 +304,23 @@ export class AuthService {
   async addKids(userId: string, kids: kidDto[]) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
+
+    // Add validation to ensure kids is an array
+    if (!Array.isArray(kids)) {
+      throw new BadRequestException('Kids data must be an array');
+    }
+
+    // Validate that the array is not empty
+    if (kids.length === 0) {
+      throw new BadRequestException('Kids array cannot be empty');
+    }
+
+    // Validate each kid object
+    for (const kid of kids) {
+      if (!kid.name) {
+        throw new BadRequestException('Kid name is required');
+      }
+    }
 
     return this.prisma.$transaction(
       kids.map((kid) =>
