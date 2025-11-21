@@ -30,13 +30,15 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
+import { HttpCode, HttpStatus } from '@nestjs/common';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('login')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'User login', description: 'Login for all roles.' })
   @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
@@ -162,15 +164,15 @@ export class AuthController {
   @ApiOperation({ summary: 'Validate password reset token' })
   @ApiBody({ type: ValidateResetTokenDto })
   @ApiResponse({ status: 200, description: 'Token is valid.' })
-async validateResetToken(@Body() body: ValidateResetTokenDto) {
-  return this.authService.validateResetToken(body.token, body.email, body);
-}
+  async validateResetToken(@Body() body: ValidateResetTokenDto) {
+    return this.authService.validateResetToken(body.token, body.email, body);
+  }
 
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password with token' })
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
   async resetPassword(@Body() body: ResetPasswordDto) {
-    return this.authService.resetPassword(body.token, body.email, body.newPassword,body);
+    return this.authService.resetPassword(body.token, body.email, body.newPassword, body);
   }
 }
