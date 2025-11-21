@@ -32,6 +32,11 @@ export class UpdateUserDto {
   @IsOptional()
   @IsUrl()
   avatarUrl?: string;
+
+  @ApiProperty({ example: 'avatar-id', required: false })
+  @IsOptional()
+  @IsString()
+  avatarId?: string;
 }
 
 export class SetKidPreferredVoiceDto {
@@ -43,8 +48,10 @@ export class SetKidPreferredVoiceDto {
 export class KidVoiceDto {
   @ApiProperty()
   kidId: string;
+
   @ApiProperty()
   preferredVoiceId: string;
+
   @ApiProperty()
   voiceType: VoiceType;
 }
