@@ -13,7 +13,6 @@ export enum TokenType {
   VERIFICATION = 'verification',
   PASSWORD_RESET = 'password_reset',
 }
-
 export class RegisterDto {
   @ApiProperty({ example: 'test@gmail.com' })
   @IsEmail()
@@ -81,6 +80,26 @@ export class ProfileDto {
   }
 }
 
+export class AvatarDto {
+  @ApiProperty({ example: 'id' })
+  id: string;
+
+  @ApiProperty({ example: 'Avatar Name' })
+  name: string | null;
+
+  @ApiProperty({ example: 'https://avatar.com' })
+  url: string;
+
+  @ApiProperty({ example: true })
+  isSystemAvatar: boolean;
+
+  @ApiProperty({ example: 'public_id' })
+  publicId: string | null;
+
+  @ApiProperty({ example: '2023-10-01T12:00:00Z' })
+  createdAt: Date;
+}
+
 export class UserDto {
   @ApiProperty({ example: 'id' })
   id: string;
@@ -92,8 +111,13 @@ export class UserDto {
   @Optional()
   name: string | null;
 
-  @ApiProperty({ example: 'https://avatar.com' })
-  avatarUrl: string | null;
+  @ApiProperty({ example: 'https://avatar.com', required: false })
+  @Optional()
+  avatarUrl?: string | null;
+
+  @ApiProperty({ type: AvatarDto, required: false })
+  @Optional()
+  avatar?: AvatarDto | null;
 
   @ApiProperty({ example: 'user' })
   role: string;
@@ -115,18 +139,30 @@ export class UserDto {
   @Optional()
   numberOfKids?: number;
 
-  constructor(user: Partial<UserDto> & { profile?: any }) {
-    // Convert raw profile to ProfileDto if it exists
+  constructor(
+    user: Partial<UserDto> & { profile?: any; avatar?: any; kids?: any[] },
+  ) {
     this.profile = user.profile ? new ProfileDto(user.profile) : null;
-    // Assign the rest of the user properties
+
+    this.avatar = user.avatar
+      ? {
+          id: user.avatar.id,
+          name: user.avatar.name,
+          url: user.avatar.url,
+          isSystemAvatar: user.avatar.isSystemAvatar,
+          publicId: user.avatar.publicId,
+          createdAt: user.avatar.createdAt,
+        }
+      : null;
+
     this.id = user.id as string;
     this.email = user.email as string;
     this.name = user.name as string;
-    this.avatarUrl = user.avatarUrl as string;
+    this.avatarUrl = user.avatar?.url || null;
     this.role = user.role as string;
     this.createdAt = user.createdAt as Date;
     this.updatedAt = user.updatedAt as Date;
-    this.numberOfKids = user.numberOfKids ?? undefined;
+    this.numberOfKids = user.kids?.length || user.numberOfKids || 0;
     this.title = user.title ?? null;
   }
 }
@@ -182,32 +218,72 @@ export class kidDto {
   @Optional()
   name: string;
 
-  @ApiProperty({ example: 'https://example.com' })
-  @Optional()
-  avatarUrl?: string;
+  @ApiProperty({ example: 'avatar-id' })
+  @IsOptional()
+  avatarId?: string;
 
   @ApiProperty({ example: '1-3' })
-  @Optional()
+  @IsOptional()
   ageRange?: string;
 }
 
 export class updateKidDto {
   @ApiProperty({ example: 'eqiv989bqem' })
-  @Optional()
+  @IsOptional()
   id: string;
 
   @ApiProperty({ example: 'firstname lastname' })
   @Matches(/^[a-zA-Z]+(?:\s+[a-zA-Z]+)+$/, {
     message: 'Full name must contain at least two names',
   })
-  @Optional()
+  @IsOptional()
   name: string;
 
-  @ApiProperty({ example: 'https://example.com' })
-  @Optional()
-  avatarUrl?: string;
+  @ApiProperty({ example: 'avatar-id' })
+  @IsOptional()
+  avatarId?: string;
 
   @ApiProperty({ example: '1-3', required: false })
-  @Optional()
+  @IsOptional()
   ageRange?: string;
+}
+
+// ===== Password Reset DTOs =====
+export class RequestResetDto {
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+}
+
+export class ValidateResetTokenDto {
+  @ApiProperty({ example: 'reset-token-from-email' })
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @ApiProperty({ example: 'reset-token-from-email' })
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @ApiProperty({ example: 'NewStrongPassword1#' })
+  @IsStrongPassword({
+    minLength: 8,
+    minLowercase: 1,
+    minUppercase: 1,
+    minNumbers: 1,
+    minSymbols: 1,
+  })
+  newPassword: string;
 }
