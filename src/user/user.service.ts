@@ -150,8 +150,8 @@ export class UserService {
       preferredVoiceId: kid.preferredVoiceId!,
     };
   }
-  //get kid by id
 
+  //get kid by id
   async getKidById(kidId: string) {
     try {
       const kid = await prisma.kid.findUnique({
