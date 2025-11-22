@@ -117,7 +117,7 @@ export class UserController {
         },
       },
     },
-  })//
+  })
   @ApiResponse({
     status: 200,
     description: 'User profile updated.',

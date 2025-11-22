@@ -31,6 +31,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
+import { HttpCode, HttpStatus } from '@nestjs/common';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -38,6 +39,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'User login', description: 'Login for all roles.' })
   @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
@@ -88,6 +90,7 @@ export class AuthController {
   }
 
   @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify email with token' })
   @ApiResponse({ status: 200, description: 'Email verified.' })
   async verifyEmail(@Body('token') token: string) {
@@ -95,6 +98,7 @@ export class AuthController {
   }
 
   @Post('send-verification')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend email verification token' })
   @ApiResponse({ status: 200, description: 'Verification email sent.' })
   async sendVerification(@Body('email') email: string) {

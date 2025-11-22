@@ -55,7 +55,9 @@ model Kid {
   avatarId  String?
   avatar    Avatar? @relation(fields: [avatarId], references: [id])
   ageRange  String?
-
+  dailyScreenTimeLimitMins Int?     // Daily limit in minutes, null = no limit
+  screenTimeSessions       ScreenTimeSession[]
+  questionAnswers          QuestionAnswer[]
   parentId  String
   parent    User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -352,15 +354,17 @@ model StoryAudioCache {
 }
 
 model StoryQuestion {
-  id       String   @id @default(uuid())
-  storyId  String
-  story    Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  question String
-  options  String[]
-  answer   Int
+  id            String           @id @default(uuid())
+  storyId       String
+  story         Story            @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  question      String
+  options       String[]
+  correctOption Int
+  answers       QuestionAnswer[]
 
   @@map("story_questions")
 }
+
 
 model Avatar {
   id             String   @id @default(cuid())
@@ -379,4 +383,34 @@ model Avatar {
   @@index([name])           // Index for upsert operations
   @@index([isSystemAvatar]) // Index for filtering system avatars
   @@unique([name])          // Ensure name is unique for upsert
+}
+
+model ScreenTimeSession {
+  id        String    @id @default(uuid())
+  kidId     String
+  kid       Kid       @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  startTime DateTime  @default(now())
+  endTime   DateTime?
+  duration  Int?
+  date      DateTime  @default(now())
+
+  @@index([kidId, date])
+  @@map("screen_time_sessions")
+}
+
+// Track quiz/question answers
+model QuestionAnswer {
+  id         String        @id @default(uuid())
+  kidId      String
+  kid        Kid           @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  questionId String
+  question   StoryQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  storyId    String
+  selectedOption Int
+  isCorrect  Boolean
+  answeredAt DateTime      @default(now())
+
+  @@index([kidId])
+  @@index([kidId, answeredAt])
+  @@map("question_answers")
 }
