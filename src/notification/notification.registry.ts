@@ -1,10 +1,8 @@
-import * as ejs from 'ejs';
-import * as path from 'path';
-import * as fs from 'fs/promises';
-
+import { render } from '@react-email/render';
+import { EmailVerificationTemplate } from './templates/email-verification';
+import { PasswordResetTemplate } from './templates/password-reset';
 export type Notifications = 'EmailVerification' | 'PasswordReset';
 export type Medium = 'email' | 'sms';
-
 export const NotificationRegistry: Record<
   Notifications,
   {
@@ -23,17 +21,13 @@ export const NotificationRegistry: Record<
       return null;
     },
     getTemplate: async (data) => {
-      const templatePath = path.join(
-        __dirname,
-        'templates',
-        'email-verification.ejs',
+      const emailHtml = render(
+        EmailVerificationTemplate({
+          token: data.token as string,
+          email: data.email as string,
+        }),
       );
-      const template = await fs.readFile(templatePath, 'utf-8');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-      return ejs.render(template, {
-        token: data.token as string,
-        email: data?.email as string,
-      });
+      return emailHtml;
     },
   },
   PasswordReset: {
@@ -45,17 +39,13 @@ export const NotificationRegistry: Record<
       return null;
     },
     getTemplate: async (data) => {
-      const templatePath = path.join(
-        __dirname,
-        'templates',
-        'password-reset.ejs',
+      const emailHtml = render(
+        PasswordResetTemplate({
+          resetToken: data.resetToken as string,
+          email: data.email as string,
+        }),
       );
-      const template = await fs.readFile(templatePath, 'utf-8');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-      return ejs.render(template, {
-        resetToken: data.resetToken as string,
-        email: data?.email as string,
-      });
+      return emailHtml;
     },
   },
 };

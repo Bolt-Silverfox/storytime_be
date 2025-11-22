@@ -20,7 +20,7 @@ import {
   ValidateResetTokenDto,
   ResetPasswordDto,
 } from './auth.dto';
-import PrismaService from 'src/prisma/prisma.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { generateToken } from 'src/utils/generete-token';
 import * as crypto from 'crypto';
@@ -37,7 +37,7 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private notificationService: NotificationService,
-  ) {}
+  ) { }
 
   // ==================== AUTH ====================
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
@@ -46,9 +46,19 @@ export class AuthService {
       include: { profile: true, avatar: true, },
     });
 
-    if (!user) throw new UnauthorizedException('Invalid credentials');
-    if (!(await bcrypt.compare(data.password, user.passwordHash)))
-      throw new UnauthorizedException('Invalid credentials');
+    if (!user) {
+      throw new BadRequestException('Invalid credentials');
+    }
+
+    if (!(await bcrypt.compare(data.password, user.passwordHash))) {
+      throw new BadRequestException('Invalid credentials');
+    }
+
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
 
     const tokenData = await this.createToken(user);
     const numberOfKids = await this.prisma?.kid.count({
@@ -234,8 +244,10 @@ export class AuthService {
       include: { user: true },
     });
 
-    if (!verificationToken)
-      throw new NotFoundException('Invalid verification token');
+    if (!verificationToken) {
+      throw new BadRequestException('Invalid verification token');
+    }
+
     if (verificationToken.expiresAt < new Date()) {
       await this.prisma.token.delete({ where: { id: verificationToken.id } });
       throw new UnauthorizedException('Verification token has expired');
@@ -249,6 +261,7 @@ export class AuthService {
 
     return { message: 'Email verified successfully' };
   }
+
 
   async updateProfile(userId: string, data: updateProfileDto) {
     const user = await this.prisma.user.findFirst({
@@ -309,7 +322,7 @@ export class AuthService {
             ageRange: kid.ageRange,
           },
           include: {
-            avatar: true, 
+            avatar: true,
           },
         }),
       ),
@@ -320,7 +333,7 @@ export class AuthService {
     return await this.prisma.kid.findMany({
       where: { parentId: userId },
       include: {
-        avatar: true, 
+        avatar: true,
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -348,7 +361,7 @@ export class AuthService {
           where: { id: update.id },
           data: updateData,
           include: {
-            avatar: true, 
+            avatar: true,
           },
         });
 
@@ -406,7 +419,14 @@ export class AuthService {
     this.logger.log(
       `Password reset requested for ${email}: response ${JSON.stringify(resp)}`,
     );
-    return { message: 'Password Reset email sent' };
+
+    if (!resp.success) {
+      throw new ServiceUnavailableException(
+        'Failed to send password reset email',
+      );
+    }
+
+    return { message: 'Password reset token sent' };
   }
 
   async validateResetToken(
