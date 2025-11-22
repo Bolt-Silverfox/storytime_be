@@ -13,7 +13,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { CommonModule } from './common/common.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AvatarModule } from './avatar/avatar.module';
-
+import { AgeModule } from './age/age.module';
 
 @Module({
   imports: [
@@ -33,7 +33,8 @@ import { AvatarModule } from './avatar/avatar.module';
     RewardModule,
     AnalyticsModule,
     PrismaModule,
-    AvatarModule, 
+    AvatarModule,
+    AgeModule,
   ],
 })
 export class AppModule {}
