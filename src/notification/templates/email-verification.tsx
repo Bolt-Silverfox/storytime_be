@@ -5,6 +5,9 @@ import {
   Container,
   Text,
   Heading,
+  Section,
+  Link,
+  Hr,
 } from '@react-email/components';
 import { Tailwind } from '@react-email/tailwind';
 import React from 'react';
@@ -22,25 +25,39 @@ export const EmailVerificationTemplate = ({
     <Tailwind>
       <Html>
         <Head>
-          <title>Email Verification</title>
+          <title>Verify Your Email - StoryTime</title>
         </Head>
-        <Body className="bg-gray-50 font-sans">
-          <Container className="mx-auto max-w-md bg-white p-8 rounded-lg shadow-md">
-            <Heading className="text-2xl font-bold text-gray-800 mb-4">
-              Verify Your Email
-            </Heading>
-            <Text className="text-gray-600 mb-4">Hello,</Text>
-            <Text className="text-gray-600 mb-6">
-              Below is your Verification Token:
-            </Text>
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
-              <Text className="text-xl font-mono font-bold text-blue-800 text-center">
-                {token}
+
+        <Body className="bg-slate-50 font-sans px-2">
+          <Container className="border border-solid border-[#eaeaea] rounded my-[40px] mx-auto p-[20px] max-w-[465px] bg-white shadow-sm">
+            <Section className="mt-[32px]">
+              <Heading className="text-black text-[24px] font-normal text-left p-0 my-[30px] mx-0">
+                Verify your <strong>StoryTime</strong> account
+              </Heading>
+
+              <Text className="text-black text-[14px] leading-[24px]">
+                Hello,
               </Text>
-            </div>
-            <Text className="text-sm text-gray-500">
-              If you didn't request this, please ignore this email.
-            </Text>
+              <Text className="text-black text-[14px] leading-[24px]">
+                You requested a verification code for <strong>{email}</strong>.
+              </Text>
+
+              <Section className="mt-[32px] mb-[32px]">
+                <div className="bg-gray-50 rounded border border-gray-200 p-6 w-full">
+                  <Text className="m-0 text-left text-3xl font-bold tracking-[0.25em] text-blue-600 font-mono">
+                    {token}
+                  </Text>
+                </div>
+              </Section>
+
+              <Text className="text-black text-[14px] leading-[24px]">
+                If you didn't request this, you can safely ignore this email.
+              </Text>
+              <Hr className="border border-solid border-[#eaeaea] my-[26px] mx-0 w-full" />
+              <Text className="text-[#666666] text-[12px] leading-[24px]">
+                This message was intended for {email}.
+              </Text>
+            </Section>
           </Container>
         </Body>
       </Html>

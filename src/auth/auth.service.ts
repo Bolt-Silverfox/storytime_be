@@ -37,13 +37,13 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private notificationService: NotificationService,
-  ) { }
+  ) {}
 
   // ==================== AUTH ====================
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
-      include: { profile: true, avatar: true, },
+      include: { profile: true, avatar: true },
     });
 
     if (!user) {
@@ -70,11 +70,6 @@ export class AuthService {
       jwt: tokenData.jwt,
       refreshToken: tokenData.refreshToken,
     };
-    // return {
-    //   user: new UserDto(user),
-    //   jwt: tokenData.jwt,
-    //   refreshToken: tokenData.refreshToken,
-    // };
   }
 
   async refresh(refreshToken: string): Promise<RefreshResponseDto | null> {
@@ -86,7 +81,6 @@ export class AuthService {
     if (!session) throw new UnauthorizedException('Invalid token');
     const jwt = this.generateJwt(new UserDto(session.user), session.id);
 
-    // return { user: new UserDto(session.user), jwt };
     const numberOfKids = await this.prisma.kid.count({
       where: { parentId: session.user.id },
     });
@@ -176,20 +170,10 @@ export class AuthService {
       },
     });
 
-    const userFull = await this.prisma.user.findUnique({
-      where: { id: user.id },
-      include: { profile: true },
-    });
-
+    // FIXED: Only sending one email now
     await this.sendEmailVerification(user.email);
 
     const tokenData = await this.createToken(user);
-    // return {
-    //   user: new UserDto(user),
-    //   jwt: tokenData.jwt,
-    //   refreshToken: tokenData.refreshToken,
-    // };
-    // New users will have 0 kids by default
     const numberOfKids = 0;
 
     return {
@@ -227,8 +211,9 @@ export class AuthService {
     );
 
     if (!resp.success) {
+      // FIXED: Passing the actual error message back to the controller
       throw new ServiceUnavailableException(
-        'Failed to send verification email',
+        resp.error || 'Failed to send verification email',
       );
     }
 
@@ -259,7 +244,6 @@ export class AuthService {
 
     return { message: 'Email verified successfully' };
   }
-
 
   async updateProfile(userId: string, data: updateProfileDto) {
     const user = await this.prisma.user.findFirst({
@@ -353,7 +337,6 @@ export class AuthService {
       if (update.avatarId !== undefined) updateData.avatarId = update.avatarId;
       if (update.ageRange !== undefined) updateData.ageRange = update.ageRange;
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       if (Object.keys(updateData).length > 0) {
         const updated = await this.prisma.kid.update({
           where: { id: update.id },
@@ -362,10 +345,9 @@ export class AuthService {
             avatar: true,
           },
         });
-
         results.push(updated);
       } else {
-        results.push(kid); // No change, return original
+        results.push(kid);
       }
     }
     return results;
@@ -410,7 +392,8 @@ export class AuthService {
       'PasswordReset',
       {
         email: user.email,
-        resetLink: `${process.env.WEB_APP_BASE_URL}/reset-password?tk=${token}`,
+        // FIXED: Using resetToken to match Registry validation
+        resetToken: token,
       },
     );
 
@@ -419,8 +402,9 @@ export class AuthService {
     );
 
     if (!resp.success) {
+      // FIXED: Error logging
       throw new ServiceUnavailableException(
-        'Failed to send password reset email',
+        resp.error || 'Failed to send password reset email',
       );
     }
 
