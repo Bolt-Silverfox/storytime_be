@@ -52,18 +52,27 @@ export class AvatarSeederService implements OnModuleInit {
     ];
 
     try {
-      this.logger.log('Seeding system avatars...');
+      const existingCount = await this.prisma.avatar.count({
+        where: { isSystemAvatar: true },
+      });
+
+      if (existingCount > 0) {
+        this.logger.log(`Skipping system avatar seeding: ${existingCount} already exist.`);
+        return; 
+      }
+
+      this.logger.log('No system avatars found. Starting seeding...');
 
       for (const avatarData of systemAvatars) {
         // Use upsert with name as the unique identifier
         await this.prisma.avatar.upsert({
           where: {
-            name: avatarData.name, // Use standard name for upsert
+            name: avatarData.name,
           },
           update: {
             displayName: avatarData.displayName,
-            url: avatarData.url, // Update URL if it changed
-            isSystemAvatar: true, // Ensure it stays as system avatar
+            url: avatarData.url,
+            isSystemAvatar: true,
           },
           create: {
             name: avatarData.name,
@@ -73,7 +82,7 @@ export class AvatarSeederService implements OnModuleInit {
           },
         });
 
-        this.logger.log(`Upserted system avatar: ${avatarData.displayName}`);
+        this.logger.log(`Created system avatar: ${avatarData.displayName}`);
       }
 
       this.logger.log('System avatar seeding completed!');

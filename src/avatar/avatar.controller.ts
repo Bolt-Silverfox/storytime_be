@@ -26,7 +26,6 @@ import { AdminGuard } from '../auth/admin.guard';
 import { SuccessResponse } from '../common/dtos/api-response.dto';
 
 @Controller('avatars')
-@UseGuards(AuthSessionGuard) 
 export class AvatarController {
   constructor(private readonly avatarService: AvatarService) {}
   
