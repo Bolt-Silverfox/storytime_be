@@ -45,6 +45,11 @@ model User {
   notificationPreferences NotificationPreference[]
   activityLogs            ActivityLog[]
 
+  googleId        String?   @unique
+  googlePicture   String?
+  googleVerified  Boolean?
+
+
   @@map("users")
 }
 
