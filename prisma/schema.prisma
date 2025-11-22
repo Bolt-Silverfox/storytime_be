@@ -394,7 +394,8 @@ model AgeGroup {
   updatedAt DateTime @updatedAt
 
   @@unique([name])
-  @@map("age_groups")
+  @@map("age_groups")}
+  
 model ScreenTimeSession {
   id        String    @id @default(uuid())
   kidId     String
