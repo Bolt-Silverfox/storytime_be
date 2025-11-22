@@ -6,17 +6,27 @@ import {
   IsOptional,
   IsStrongPassword,
   Matches,
+  IsString,
+  MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+
+// Helper function to sanitize email inputs (DRY principle)
+const SanitizeEmail = () =>
+  Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  );
 
 export enum TokenType {
   VERIFICATION = 'verification',
   PASSWORD_RESET = 'password_reset',
 }
+
 export class RegisterDto {
   @ApiProperty({ example: 'test@gmail.com' })
   @IsEmail()
   @IsNotEmpty()
+  @SanitizeEmail() // Auto-trim and lowercase
   email: string;
 
   @IsNotEmpty()
@@ -28,6 +38,7 @@ export class RegisterDto {
     minNumbers: 1,
     minSymbols: 1,
   })
+  @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   password: string;
 
   @ApiProperty({ example: 'Mr' })
@@ -46,6 +57,7 @@ export class LoginDto {
   @ApiProperty({ example: 'test@gmail.com' })
   @IsEmail()
   @IsNotEmpty()
+  @SanitizeEmail()
   email: string;
 
   @ApiProperty({ example: 'testPassword1#' })
@@ -253,6 +265,7 @@ export class RequestResetDto {
   @ApiProperty({ example: 'user@example.com' })
   @IsEmail()
   @IsNotEmpty()
+  @SanitizeEmail()
   email: string;
 }
 
@@ -264,6 +277,7 @@ export class ValidateResetTokenDto {
   @ApiProperty({ example: 'user@example.com' })
   @IsEmail()
   @IsNotEmpty()
+  @SanitizeEmail()
   email: string;
 }
 
@@ -275,6 +289,7 @@ export class ResetPasswordDto {
   @ApiProperty({ example: 'user@example.com' })
   @IsEmail()
   @IsNotEmpty()
+  @SanitizeEmail()
   email: string;
 
   @ApiProperty({ example: 'NewStrongPassword1#' })
@@ -285,5 +300,26 @@ export class ResetPasswordDto {
     minNumbers: 1,
     minSymbols: 1,
   })
+  @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   newPassword: string;
+}
+export class SendEmailVerificationDto {
+  @ApiProperty({
+    example: 'test@gmail.com',
+    description: 'The email address to send the verification link to',
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  @SanitizeEmail()
+  email: string;
+}
+
+export class VerifyEmailDto {
+  @ApiProperty({
+    example: 'abc-123-verification-token',
+    description: 'The verification token received via email',
+  })
+  @IsString()
+  @IsNotEmpty()
+  token: string;
 }
