@@ -40,8 +40,14 @@ jobs:
           echo "📦 Installing dependencies"
           sudo npm install --legacy-peer-deps --silent
 
-          echo "🗄 Copying .env from previous release"
-          sudo cp $CURRENT/.env $NEW_RELEASE/.env
+          echo "🗄 Copying .env file..."
+          if [ -f $CURRENT/.env ]; then
+            sudo cp $CURRENT/.env $NEW_RELEASE/.env
+            echo ".env copied from current release."
+          else
+            sudo cp /home/storytime/storytime_be/.env $NEW_RELEASE/.env
+            echo ".env copied from source directory."
+          fi
 
           echo "🛠 Running Prisma migrations"
           sudo npx prisma migrate deploy
