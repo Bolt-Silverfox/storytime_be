@@ -1,26 +1,32 @@
-import { Injectable } from '@nestjs/common';
-import { CreateAgeDto } from './dto/create-age.dto';
-import { UpdateAgeDto } from './dto/update-age.dto';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateAgeDto, UpdateAgeDto } from './age.dto';
 
 @Injectable()
 export class AgeService {
-  create(createAgeDto: CreateAgeDto) {
-    return 'This action adds a new age';
+  constructor(private prisma: PrismaService) {}
+
+  async findAll() {
+    return this.prisma.ageGroup.findMany();
   }
 
-  findAll() {
-    return `This action returns all age`;
+  async create(data: CreateAgeDto) {
+    return this.prisma.ageGroup.create({ data });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} age`;
+  async update(id: string, data: UpdateAgeDto) {
+    const exists = await this.prisma.ageGroup.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException('Age group not found');
+    return this.prisma.ageGroup.update({
+      where: { id },
+      data,
+    });
   }
 
-  update(id: number, updateAgeDto: UpdateAgeDto) {
-    return `This action updates a #${id} age`;
-  }
+  async delete(id: string) {
+    const exists = await this.prisma.ageGroup.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException('Age group not found');
 
-  remove(id: number) {
-    return `This action removes a #${id} age`;
+    return this.prisma.ageGroup.delete({ where: { id } });
   }
 }
