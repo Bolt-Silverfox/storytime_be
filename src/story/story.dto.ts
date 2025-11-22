@@ -302,3 +302,17 @@ export class StoryContentAudioDto {
   @ApiProperty({ required: false })
   voiceType?: VoiceType;
 }
+
+export class QuestionAnswerDto {
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  questionId: string;
+
+  @ApiProperty()
+  storyId: string;
+
+  @ApiProperty()
+  selectedOption: number;
+}
