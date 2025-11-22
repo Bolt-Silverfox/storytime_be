@@ -4,7 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import PrismaService from '../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
 import { CreateAvatarDto, UpdateAvatarDto } from './avatar.dto';
 
@@ -30,7 +30,10 @@ export class AvatarService {
     });
   }
 
-  async createAvatar(createAvatarDto: CreateAvatarDto, file: Express.Multer.File) {
+  async createAvatar(
+    createAvatarDto: CreateAvatarDto,
+    file: Express.Multer.File,
+  ) {
     let uploadResult: any;
 
     if (file) {
@@ -54,7 +57,11 @@ export class AvatarService {
     });
   }
 
-  async updateAvatar(id: string, updateAvatarDto: UpdateAvatarDto, file?: Express.Multer.File) {
+  async updateAvatar(
+    id: string,
+    updateAvatarDto: UpdateAvatarDto,
+    file?: Express.Multer.File,
+  ) {
     const avatar = await this.prisma.avatar.findUnique({ where: { id } });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
@@ -69,7 +76,10 @@ export class AvatarService {
         try {
           await this.uploadService.deleteImage(avatar.publicId);
         } catch (error) {
-          this.logger.warn('Failed to delete old image from Cloudinary:', error);
+          this.logger.warn(
+            'Failed to delete old image from Cloudinary:',
+            error,
+          );
         }
       }
 
@@ -96,11 +106,15 @@ export class AvatarService {
     }
 
     // Check if avatar is being used
-    const usersUsing = await this.prisma.user.count({ where: { avatarId: id } });
+    const usersUsing = await this.prisma.user.count({
+      where: { avatarId: id },
+    });
     const kidsUsing = await this.prisma.kid.count({ where: { avatarId: id } });
 
     if (usersUsing > 0 || kidsUsing > 0) {
-      throw new BadRequestException('Cannot delete avatar that is currently in use');
+      throw new BadRequestException(
+        'Cannot delete avatar that is currently in use',
+      );
     }
 
     // Delete from Cloudinary if it exists
@@ -121,7 +135,9 @@ export class AvatarService {
       throw new NotFoundException('User not found');
     }
 
-    const avatar = await this.prisma.avatar.findUnique({ where: { id: avatarId } });
+    const avatar = await this.prisma.avatar.findUnique({
+      where: { id: avatarId },
+    });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
     }
@@ -139,7 +155,9 @@ export class AvatarService {
       throw new NotFoundException('Kid not found');
     }
 
-    const avatar = await this.prisma.avatar.findUnique({ where: { id: avatarId } });
+    const avatar = await this.prisma.avatar.findUnique({
+      where: { id: avatarId },
+    });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
     }
@@ -152,11 +170,11 @@ export class AvatarService {
   }
 
   async uploadAndAssignUserAvatar(userId: string, file: Express.Multer.File) {
-    const user = await this.prisma.user.findUnique({ 
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { avatar: true }
+      include: { avatar: true },
     });
-    
+
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -167,10 +185,10 @@ export class AvatarService {
     }
 
     const avatar = await this.handleCustomAvatarUpload(
-      userId, 
-      'user', 
-      file, 
-      user.name || user.email || 'Unknown User'
+      userId,
+      'user',
+      file,
+      user.name || user.email || 'Unknown User',
     );
 
     return this.prisma.user.update({
@@ -181,11 +199,11 @@ export class AvatarService {
   }
 
   async uploadAndAssignKidAvatar(kidId: string, file: Express.Multer.File) {
-    const kid = await this.prisma.kid.findUnique({ 
+    const kid = await this.prisma.kid.findUnique({
       where: { id: kidId },
-      include: { avatar: true }
+      include: { avatar: true },
     });
-    
+
     if (!kid) {
       throw new NotFoundException('Kid not found');
     }
@@ -196,10 +214,10 @@ export class AvatarService {
     }
 
     const avatar = await this.handleCustomAvatarUpload(
-      kidId, 
-      'kid', 
-      file, 
-      kid.name || 'Unknown Kid'
+      kidId,
+      'kid',
+      file,
+      kid.name || 'Unknown Kid',
     );
 
     return this.prisma.kid.update({
@@ -211,25 +229,28 @@ export class AvatarService {
 
   // Helper Methods
   private async handleCustomAvatarUpload(
-    entityId: string, 
-    entityType: 'user' | 'kid', 
+    entityId: string,
+    entityType: 'user' | 'kid',
     file: Express.Multer.File,
-    entityName: string
+    entityName: string,
   ) {
     let uploadResult;
     try {
       uploadResult = await this.uploadService.uploadImage(file, 'avatars');
     } catch (error) {
-      this.logger.error(`Failed to upload ${entityType} avatar to Cloudinary:`, error);
+      this.logger.error(
+        `Failed to upload ${entityType} avatar to Cloudinary:`,
+        error,
+      );
       throw new BadRequestException('Failed to upload avatar image');
     }
 
     const avatarName = `${entityType}-avatar-${entityId}`;
     const descriptiveName = `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} Avatar - ${entityName}`;
-    
+
     return this.prisma.avatar.upsert({
       where: {
-        name: avatarName
+        name: avatarName,
       },
       update: {
         name: descriptiveName, // Update the name with descriptive text
@@ -256,11 +277,13 @@ export class AvatarService {
     if (oldAvatar && oldAvatar.publicId && !oldAvatar.isSystemAvatar) {
       try {
         await this.uploadService.deleteImage(oldAvatar.publicId);
-        
+
         // Only delete if no one else is using this avatar
-        const usersUsing = await this.prisma.user.count({ where: { avatarId } });
+        const usersUsing = await this.prisma.user.count({
+          where: { avatarId },
+        });
         const kidsUsing = await this.prisma.kid.count({ where: { avatarId } });
-        
+
         if (usersUsing === 0 && kidsUsing === 0) {
           await this.prisma.avatar.delete({ where: { id: avatarId } });
         }
