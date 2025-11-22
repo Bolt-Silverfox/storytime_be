@@ -417,7 +417,7 @@ export class AuthService {
       'PasswordReset',
       {
         email: user.email,
-        resetLink: `${process.env.WEB_APP_BASE_URL}/reset-password?tk=${token}`,
+        resetToken: token,
       },
     );
 

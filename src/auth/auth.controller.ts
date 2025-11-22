@@ -21,6 +21,7 @@ import {
   RequestResetDto,
   ValidateResetTokenDto,
   ResetPasswordDto,
+  VerifyEmailDto,
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -87,12 +88,29 @@ export class AuthController {
     return this.authService.logoutAllDevices(userId);
   }
 
+  // @Post('verify-email')
+  // @HttpCode(HttpStatus.OK)
+  // @ApiOperation({ summary: 'Verify email with token' })
+  // @ApiResponse({ status: 200, description: 'Email verified.' })
+  // async verifyEmail(@Body('token') token: string) {
+  //   return this.authService.verifyEmail(token);
+  // }
+
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify email with token' })
-  @ApiResponse({ status: 200, description: 'Email verified.' })
-  async verifyEmail(@Body('token') token: string) {
-    return this.authService.verifyEmail(token);
+  @ApiBody({ type: VerifyEmailDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Email verified successfully',
+    schema: {
+      example: { message: 'Email verified successfully' },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Invalid verification token' })
+  @ApiResponse({ status: 401, description: 'Verification token has expired' })
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto.token);
   }
 
   @Post('send-verification')

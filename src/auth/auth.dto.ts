@@ -4,6 +4,7 @@ import {
   IsEmail,
   IsNotEmpty,
   IsOptional,
+  IsString,
   IsStrongPassword,
   Matches,
 } from 'class-validator';
@@ -286,4 +287,13 @@ export class ResetPasswordDto {
     minSymbols: 1,
   })
   newPassword: string;
+}
+
+export class VerifyEmailDto {
+  @ApiProperty({
+    description: 'Verification token sent to user email',
+    example: 'abc123xyz',
+  })
+  @IsString()
+  token: string;
 }
