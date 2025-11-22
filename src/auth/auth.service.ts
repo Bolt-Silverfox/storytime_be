@@ -37,13 +37,13 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private notificationService: NotificationService,
-  ) { }
+  ) {}
 
   // ==================== AUTH ====================
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
-      include: { profile: true, avatar: true, },
+      include: { profile: true, avatar: true },
     });
 
     if (!user) {
@@ -52,6 +52,12 @@ export class AuthService {
 
     if (!(await bcrypt.compare(data.password, user.passwordHash))) {
       throw new BadRequestException('Invalid credentials');
+    }
+
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
     }
 
     if (!user.isEmailVerified) {
@@ -259,7 +265,6 @@ export class AuthService {
 
     return { message: 'Email verified successfully' };
   }
-
 
   async updateProfile(userId: string, data: updateProfileDto) {
     const user = await this.prisma.user.findFirst({
