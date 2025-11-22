@@ -23,7 +23,9 @@ jobs:
           ssh -i id_ed25519 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           
           set -e
-
+          
+          trap 'echo "Cleanup: removing incomplete release $NEW_RELEASE"; sudo rm -rf "$NEW_RELEASE"' ERR
+          
           APP_PATH="/var/www/storytime/prod/backend"
           RELEASES="$APP_PATH/releases"
           CURRENT="$APP_PATH/current"
