@@ -13,10 +13,11 @@ export class AgeGroupSeederService implements OnModuleInit {
 
   private async seedAgeGroups() {
     const defaultAgeGroups = [
-      { name: 'Toddler', min: 1, max: 3 },
-      { name: 'Preschool', min: 3, max: 5 },
-      { name: 'Early School', min: 6, max: 8 },
-      { name: 'Preteen', min: 9, max: 12 },
+      { name: 'Early Toddler', min: 2, max: 3 },
+      { name: 'Toddler', min: 4, max: 5 },
+      { name: 'Early Reader', min: 6, max: 7 },
+      { name: 'Young Explorer', min: 8, max: 9 },
+      { name: 'Preteen', min: 10, max: 12 },
     ];
 
     try {
@@ -24,7 +25,7 @@ export class AgeGroupSeederService implements OnModuleInit {
 
       for (const group of defaultAgeGroups) {
         await this.prisma.ageGroup.upsert({
-          where: { name: group.name }, // UNIQUE FIELD
+          where: { name: group.name },
           update: {
             min: group.min,
             max: group.max,

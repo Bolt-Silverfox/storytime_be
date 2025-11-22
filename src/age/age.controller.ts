@@ -6,9 +6,10 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { AgeService } from './age.service';
 import { CreateAgeDto, UpdateAgeDto } from './age.dto';
 import { AdminGuard } from '../auth/admin.guard';
@@ -18,40 +19,47 @@ import { AdminGuard } from '../auth/admin.guard';
 export class AgeController {
   constructor(private readonly ageService: AgeService) {}
 
-  // Public route: Get all age groups
   @Get()
   @ApiOperation({ summary: 'Get all age groups' })
   findAll() {
     return this.ageService.findAll();
   }
 
-  // Public route: Get single age group by ID
+  @ApiQuery({
+    name: 'age',
+    required: false,
+    description: 'Find which age group this age belongs to',
+    example: 7,
+  })
+  @Get('lookup/by-age')
+  @ApiOperation({ summary: 'Find age group by child age' })
+  findGroupForAge(@Query('age') age: string) {
+    return this.ageService.findGroupForAge(Number(age));
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get age group by ID' })
   findOne(@Param('id') id: string) {
     return this.ageService.findOne(id);
   }
 
-  // Admin protected: Create new age group
   @UseGuards(AdminGuard)
   @Post()
-  @ApiOperation({ summary: 'Create a new age group' })
+  @ApiOperation({ summary: 'Create a new age group (Admin only)' })
   create(@Body() dto: CreateAgeDto) {
     return this.ageService.create(dto);
   }
 
-  // Admin protected: Update an age group
   @UseGuards(AdminGuard)
   @Patch(':id')
-  @ApiOperation({ summary: 'Update an age group' })
+  @ApiOperation({ summary: 'Update an age group (Admin only)' })
   update(@Param('id') id: string, @Body() dto: UpdateAgeDto) {
     return this.ageService.update(id, dto);
   }
 
-  // Admin protected: Delete an age group
   @UseGuards(AdminGuard)
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete an age group' })
+  @ApiOperation({ summary: 'Delete an age group (Admin only)' })
   remove(@Param('id') id: string) {
     return this.ageService.delete(id);
   }
