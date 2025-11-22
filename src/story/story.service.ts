@@ -715,7 +715,7 @@ export class StoryService {
             create: generatedStory.questions.map((q) => ({
               question: q.question,
               options: q.options,
-              answer: q.answer,
+              correctOption: q.answer,
             })),
           },
           aiGenerated: true,
