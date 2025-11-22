@@ -182,8 +182,6 @@ export class AuthService {
       },
     });
 
-    await this.sendEmailVerification(user?.email);
-
     const userFull = await this.prisma.user.findUnique({
       where: { id: user.id },
       include: { profile: true },
