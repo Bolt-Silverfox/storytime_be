@@ -389,5 +389,6 @@ model AgeGroup {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([name])
   @@map("age_groups")
 }
