@@ -9,3 +9,6 @@ CREATE TABLE "age_groups" (
 
     CONSTRAINT "age_groups_pkey" PRIMARY KEY ("id")
 );
+
+-- CreateIndex
+CREATE UNIQUE INDEX "age_groups_name_key" ON "age_groups"("name");
