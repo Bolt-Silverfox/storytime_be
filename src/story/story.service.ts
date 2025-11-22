@@ -1,4 +1,4 @@
-import PrismaService from '../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateStoryDto,
   UpdateStoryDto,
@@ -23,7 +23,14 @@ import {
 } from './story.dto';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
-import { StoryPath, Voice, DailyChallengeAssignment, Category, Theme, DailyChallenge } from '@prisma/client';
+import {
+  StoryPath,
+  Voice,
+  DailyChallengeAssignment,
+  Category,
+  Theme,
+  DailyChallenge,
+} from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TextToSpeechService } from './text-to-speech.service';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
@@ -38,7 +45,7 @@ export class StoryService {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
-  ) { }
+  ) {}
 
   async getStories(filter: {
     theme?: string;
@@ -260,7 +267,9 @@ export class StoryService {
     const assignments = await this.prisma.dailyChallengeAssignment.findMany({
       where: { kidId },
     });
-    return assignments.map((a: DailyChallengeAssignment) => this.toDailyChallengeAssignmentDto(a));
+    return assignments.map((a: DailyChallengeAssignment) =>
+      this.toDailyChallengeAssignmentDto(a),
+    );
   }
 
   async getAssignmentById(
@@ -472,10 +481,15 @@ export class StoryService {
           include: { challenge: true },
         });
       const usedStoryIds = new Set(
-        pastAssignments.map((a: DailyChallengeAssignment & { challenge: DailyChallenge }) => a.challenge.storyId),
+        pastAssignments.map(
+          (a: DailyChallengeAssignment & { challenge: DailyChallenge }) =>
+            a.challenge.storyId,
+        ),
       );
       // Filter out stories already assigned
-      const availableStories = stories.filter((s: any) => !usedStoryIds.has(s.id));
+      const availableStories = stories.filter(
+        (s: any) => !usedStoryIds.has(s.id),
+      );
       // If all stories have been used, reset (allow repeats)
       const storyPool =
         availableStories.length > 0 ? availableStories : stories;
@@ -701,7 +715,7 @@ export class StoryService {
             create: generatedStory.questions.map((q) => ({
               question: q.question,
               options: q.options,
-              answer: q.answer,
+              correctOption: q.answer,
             })),
           },
           aiGenerated: true,
@@ -720,7 +734,11 @@ export class StoryService {
     }
   }
 
-  async generateStoryForKid(kidId: string, themeNames?: string[], categoryNames?: string[]) {
+  async generateStoryForKid(
+    kidId: string,
+    themeNames?: string[],
+    categoryNames?: string[],
+  ) {
     // Get kid's information
     const kid = await this.prisma.kid.findUnique({
       where: { id: kidId },
@@ -747,13 +765,17 @@ export class StoryService {
 
     if (themes.length === 0) {
       const availableThemes = await this.prisma.theme.findMany();
-      const randomTheme = availableThemes[Math.floor(Math.random() * availableThemes.length)];
+      const randomTheme =
+        availableThemes[Math.floor(Math.random() * availableThemes.length)];
       themes = [randomTheme.name];
     }
 
     if (categories.length === 0) {
       const availableCategories = await this.prisma.category.findMany();
-      const randomCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
+      const randomCategory =
+        availableCategories[
+          Math.floor(Math.random() * availableCategories.length)
+        ];
       categories = [randomCategory.name];
     }
 
