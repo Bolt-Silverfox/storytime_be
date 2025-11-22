@@ -1,24 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
-  engineType    = "binary"
+  provider      = "prisma-client-js"
   binaryTargets = ["native"]
+  engineType    = "binary"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-}
-
-enum Role {
-  admin
-  parent
-  kid
-}
-
-enum NotificationType {
-  email
-  push
-  // add more as needed
 }
 
 model User {
@@ -27,52 +15,43 @@ model User {
   passwordHash            String
   title                   String?
   name                    String?
-  // avatarUrl            String?
-  avatarId                String?
-  avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
+  avatarUrl               String?
   isEmailVerified         Boolean                  @default(false)
-  role                    Role                     @default(parent)
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
+  role                    Role                     @default(parent)
+  preferredVoiceId        String?
+  activityLogs            ActivityLog[]
+  kids                    Kid[]
+  notificationPreferences NotificationPreference[]
   profile                 Profile?
+  Reward                  Reward[]
   auth                    Session[]
   Token                   Token[]
-  kids                    Kid[]
-  voices                  Voice[]
-  preferredVoiceId        String? // FK to Voice
   preferredVoice          Voice?                   @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
-  Reward                  Reward[]
-  notificationPreferences NotificationPreference[]
-  activityLogs            ActivityLog[]
+  voices                  Voice[]
 
   @@map("users")
 }
 
 model Kid {
-  id        String  @id @default(uuid())
-  name      String?
-  // avatarUrl String?
-  avatarId  String?
-  avatar    Avatar? @relation(fields: [avatarId], references: [id])
-  ageRange  String?
-
-  parentId  String
-  parent    User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  rewards Reward[]
-
-  preferredVoiceId String?
-  preferredVoice   Voice?  @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
-
-  // New relations
+  id                      String                     @id @default(uuid())
+  name                    String?
+  avatarUrl               String?
+  parentId                String
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+  preferredVoiceId        String?
+  ageRange                String?
+  activityLogs            ActivityLog[]
   dailyChallenges         DailyChallengeAssignment[]
+  favorites               Favorite[]
+  parent                  User                       @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  preferredVoice          Voice?                     @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
   notificationPreferences NotificationPreference[]
   rewardRedemptions       RewardRedemption[]
-  activityLogs            ActivityLog[]
+  rewards                 Reward[]
   storyPaths              StoryPath[]
-  favorites               Favorite[]
   progresses              StoryProgress[]
 
   @@map("kids")
@@ -91,7 +70,6 @@ model Session {
   @@map("sessions")
 }
 
-// this can be verification token, password reset token, otp, etc
 model Token {
   id        String   @id @default(uuid())
   userId    String
@@ -109,46 +87,43 @@ model Token {
 
 model Profile {
   id                String   @id @default(uuid())
-  user              User     @relation(fields: [userId], references: [id],onDelete: Cascade)
   userId            String   @unique
   explicitContent   Boolean  @default(true)
   maxScreenTimeMins Int?
-  language          String? // Preferred language
-  country           String? // Preferred language
+  language          String?
+  country           String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id])
 
   @@map("profiles")
 }
 
 model Story {
-  id            String   @id @default(uuid())
-  title         String
-  description   String
-  language      String
-  coverImageUrl String
-  audioUrl      String
-  textContent   String?
-  isInteractive Boolean
-  ageMin        Int
-  ageMax        Int
-  recommended   Boolean  @default(false)
-  aiGenerated   Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  images   StoryImage[]
-  branches StoryBranch[]
-
-  favorites       Favorite[]
-  progresses      StoryProgress[]
-  dailyChallenges DailyChallenge[]
-  paths           StoryPath[]
-
-  categories       Category[]        @relation("StoryCategories")
-  themes           Theme[]           @relation("StoryThemes")
+  id               String            @id @default(uuid())
+  title            String
+  description      String
+  language         String
+  coverImageUrl    String
+  audioUrl         String
+  isInteractive    Boolean
+  ageMin           Int
+  ageMax           Int
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  recommended      Boolean           @default(false)
+  textContent      String?
+  aiGenerated      Boolean           @default(false)
+  StoryThemes      StoryThemes[]
+  dailyChallenges  DailyChallenge[]
+  favorites        Favorite[]
   storyAudioCaches StoryAudioCache[]
+  branches         StoryBranch[]
+  images           StoryImage[]
+  paths            StoryPath[]
+  progresses       StoryProgress[]
   questions        StoryQuestion[]
+  categories       Category[]        @relation("StoryCategories")
 
   @@map("stories")
 }
@@ -158,9 +133,9 @@ model StoryImage {
   url       String
   caption   String?
   storyId   String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
   @@map("story_images")
 }
@@ -168,38 +143,38 @@ model StoryImage {
 model StoryBranch {
   id        String   @id @default(uuid())
   storyId   String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   prompt    String
   optionA   String
   optionB   String
-  nextA     String? // id of next branch or null if end
+  nextA     String?
   nextB     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
   @@map("story_branches")
 }
 
 model Favorite {
   id        String   @id @default(uuid())
+  storyId   String
+  createdAt DateTime @default(now())
   kidId     String
   kid       Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
-  storyId   String
   story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
 
   @@map("favorites")
 }
 
 model StoryProgress {
   id           String   @id @default(uuid())
-  kidId        String
-  kid          Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
   storyId      String
-  story        Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   progress     Float    @default(0)
   completed    Boolean  @default(false)
   lastAccessed DateTime @default(now())
+  kidId        String
+  kid          Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  story        Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
   @@unique([kidId, storyId])
   @@map("story_progress")
@@ -208,11 +183,11 @@ model StoryProgress {
 model DailyChallenge {
   id            String                     @id @default(uuid())
   storyId       String
-  story         Story                      @relation(fields: [storyId], references: [id], onDelete: Cascade)
   challengeDate DateTime
   wordOfTheDay  String
   meaning       String
   assignments   DailyChallengeAssignment[]
+  story         Story                      @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
   @@map("daily_challenges")
 }
@@ -220,16 +195,15 @@ model DailyChallenge {
 model Voice {
   id                String   @id @default(uuid())
   userId            String?
-  user              User?    @relation(fields: [userId], references: [id],onDelete: Cascade)
   name              String
-  type              String // 'uploaded' or 'elevenlabs'
-  url               String? // For uploaded audio
-  elevenLabsVoiceId String? // For ElevenLabs custom voices
+  type              String
+  url               String?
+  elevenLabsVoiceId String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-
-  usersPreferring User[] @relation("PreferredVoice")
-  kidsPreferring  Kid[]  @relation("KidPreferredVoice")
+  kidsPreferring    Kid[]    @relation("KidPreferredVoice")
+  usersPreferring   User[]   @relation("PreferredVoice")
+  user              User?    @relation(fields: [userId], references: [id])
 
   @@index([name])
   @@index([elevenLabsVoiceId])
@@ -237,21 +211,18 @@ model Voice {
 }
 
 model Reward {
-  id          String   @id @default(uuid())
+  id          String             @id @default(uuid())
   name        String
   description String?
   points      Int
   imageUrl    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id],onDelete: Cascade)
-
-  kidId String?
-  kid   Kid?    @relation(fields: [kidId], references: [id])
-
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  userId      String?
+  kidId       String?
   redemptions RewardRedemption[]
+  kid         Kid?               @relation(fields: [kidId], references: [id])
+  user        User?              @relation(fields: [userId], references: [id])
 
   @@map("rewards")
 }
@@ -259,26 +230,26 @@ model Reward {
 model DailyChallengeAssignment {
   id          String         @id @default(uuid())
   kidId       String
-  kid         Kid            @relation(fields: [kidId], references: [id])
   challengeId String
-  challenge   DailyChallenge @relation(fields: [challengeId], references: [id])
   completed   Boolean        @default(false)
   completedAt DateTime?
   assignedAt  DateTime       @default(now())
+  challenge   DailyChallenge @relation(fields: [challengeId], references: [id])
+  kid         Kid            @relation(fields: [kidId], references: [id])
 
   @@map("daily_challenge_assignments")
 }
 
 model NotificationPreference {
   id        String           @id @default(uuid())
-  type      NotificationType
-  enabled   Boolean
   userId    String?
   kidId     String?
-  user      User?            @relation(fields: [userId], references: [id],onDelete: Cascade)
+  enabled   Boolean
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
+  type      NotificationType
   Kid       Kid?             @relation(fields: [kidId], references: [id])
+  user      User?            @relation(fields: [userId], references: [id])
 
   @@map("notification_preferences")
 }
@@ -286,11 +257,11 @@ model NotificationPreference {
 model RewardRedemption {
   id         String   @id @default(uuid())
   rewardId   String
-  reward     Reward   @relation(fields: [rewardId], references: [id])
   kidId      String
-  kid        Kid      @relation(fields: [kidId], references: [id])
   redeemedAt DateTime @default(now())
-  status     String // e.g. 'pending', 'approved', 'rejected', 'completed'
+  status     String
+  kid        Kid      @relation(fields: [kidId], references: [id])
+  reward     Reward   @relation(fields: [rewardId], references: [id])
 
   @@map("reward_redemptions")
 }
@@ -298,12 +269,12 @@ model RewardRedemption {
 model ActivityLog {
   id        String   @id @default(uuid())
   userId    String?
-  user      User?    @relation(fields: [userId], references: [id],onDelete: Cascade)
   kidId     String?
-  kid       Kid?     @relation(fields: [kidId], references: [id])
-  action    String // e.g. 'story_read', 'reward_redeemed', etc.
+  action    String
   details   String?
   createdAt DateTime @default(now())
+  kid       Kid?     @relation(fields: [kidId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
 
   @@map("activity_logs")
 }
@@ -311,12 +282,12 @@ model ActivityLog {
 model StoryPath {
   id          String    @id @default(uuid())
   kidId       String
-  kid         Kid       @relation(fields: [kidId], references: [id])
   storyId     String
-  story       Story     @relation(fields: [storyId], references: [id])
-  path        String // JSON or delimited string of choices
+  path        String
   startedAt   DateTime  @default(now())
   completedAt DateTime?
+  kid         Kid       @relation(fields: [kidId], references: [id])
+  story       Story     @relation(fields: [storyId], references: [id])
 
   @@map("story_paths")
 }
@@ -324,27 +295,27 @@ model StoryPath {
 model Category {
   id          String  @id @default(uuid())
   name        String  @unique
-  image       String?
   description String?
+  image       String?
   stories     Story[] @relation("StoryCategories")
 }
 
 model Theme {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  image       String?
+  id          String        @id @default(uuid())
+  name        String        @unique
   description String?
-  stories     Story[] @relation("StoryThemes")
+  image       String?
+  StoryThemes StoryThemes[]
 }
 
 model StoryAudioCache {
   id        String   @id @default(uuid())
   storyId   String
   voiceType String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   audioUrl  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
   @@unique([storyId, audioUrl])
   @@unique([storyId, voiceType])
@@ -354,29 +325,32 @@ model StoryAudioCache {
 model StoryQuestion {
   id       String   @id @default(uuid())
   storyId  String
-  story    Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   question String
   options  String[]
   answer   Int
+  story    Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
   @@map("story_questions")
 }
 
-model Avatar {
-  id             String   @id @default(cuid())
-  name           String?  // Standard name for upsert (unique identifier)
-  displayName    String?  // User-friendly display name
-  url            String
-  isSystemAvatar Boolean  @default(false)
-  publicId       String?
-  createdAt      DateTime @default(now())
+model StoryThemes {
+  A       String
+  B       String
+  stories Story  @relation(fields: [A], references: [id], onDelete: Cascade)
+  Theme   Theme  @relation(fields: [B], references: [id], onDelete: Cascade)
 
-  // Relations
-  users User[]
-  kids  Kid[]
+  @@unique([A, B], map: "_StoryThemes_AB_unique")
+  @@index([B], map: "_StoryThemes_B_index")
+  @@map("_StoryThemes")
+}
 
-  @@map("avatars")
-  @@index([name])           // Index for upsert operations
-  @@index([isSystemAvatar]) // Index for filtering system avatars
-  @@unique([name])          // Ensure name is unique for upsert
+enum Role {
+  admin
+  parent
+  kid
+}
+
+enum NotificationType {
+  email
+  push
 }
