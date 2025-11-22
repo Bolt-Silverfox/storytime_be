@@ -21,21 +21,26 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
   app.use(helmet());
-   app.enableCors({
+  app.enableCors({
     origin: [
-      'http://localhost:3000', 
-      'http://localhost:5173', 
-      'http://localhost:3001', 
-      'http://localhost:4200', 
-      'http://localhost:8080', 
-      'http://127.0.0.1:3000', 
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:3001',
+      'http://localhost:4200',
+      'http://localhost:8080',
+      'http://127.0.0.1:3000',
       'http://127.0.0.1:5173',
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'X-Requested-With',
+    ],
     credentials: true,
     preflightContinue: false,
-    optionsSuccessStatus: 204
+    optionsSuccessStatus: 204,
   });
 
   // Enable global DTO/Payload validation
@@ -50,7 +55,6 @@ async function bootstrap() {
   // Apply the SuccessResponseInterceptor globally for standardized output wrapping
   app.useGlobalInterceptors(new SuccessResponseInterceptor());
 
-
   // Get the HttpAdapterHost for registering global filters that require DI context
   const { httpAdapter } = app.get(HttpAdapterHost);
 
@@ -59,7 +63,6 @@ async function bootstrap() {
 
   // Catch Prisma-specific exceptions and map them to appropriate HTTP responses
   app.useGlobalFilters(new PrismaExceptionFilter(httpAdapter));
-
 
   // ==========================================================
   // 5. SWAGGER DOCUMENTATION
