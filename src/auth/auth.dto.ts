@@ -1,4 +1,3 @@
-
 import { Optional } from '@nestjs/common';
 import { ApiProperty } from '@nestjs/swagger';
 import {
@@ -140,17 +139,21 @@ export class UserDto {
   @Optional()
   numberOfKids?: number;
 
-  constructor(user: Partial<UserDto> & { profile?: any; avatar?: any; kids?: any[] }) {
+  constructor(
+    user: Partial<UserDto> & { profile?: any; avatar?: any; kids?: any[] },
+  ) {
     this.profile = user.profile ? new ProfileDto(user.profile) : null;
-    
-    this.avatar = user.avatar ? {
-      id: user.avatar.id,
-      name: user.avatar.name,
-      url: user.avatar.url,
-      isSystemAvatar: user.avatar.isSystemAvatar,
-      publicId: user.avatar.publicId,
-      createdAt: user.avatar.createdAt,
-    } : null;
+
+    this.avatar = user.avatar
+      ? {
+          id: user.avatar.id,
+          name: user.avatar.name,
+          url: user.avatar.url,
+          isSystemAvatar: user.avatar.isSystemAvatar,
+          publicId: user.avatar.publicId,
+          createdAt: user.avatar.createdAt,
+        }
+      : null;
 
     this.id = user.id as string;
     this.email = user.email as string;

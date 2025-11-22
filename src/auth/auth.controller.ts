@@ -35,7 +35,7 @@ import { HttpCode, HttpStatus } from '@nestjs/common';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -54,7 +54,10 @@ export class AuthController {
   }
 
   @Post('register')
-  @ApiOperation({ summary: 'Register new user', description: 'Default role: parent.' })
+  @ApiOperation({
+    summary: 'Register new user',
+    description: 'Default role: parent.',
+  })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
   async register(@Body() body: RegisterDto) {
@@ -139,7 +142,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Update kids information' })
   @ApiBody({ type: [updateKidDto] })
   @ApiResponse({ status: 200, description: 'Kids updated.' })
-  async updateKids(@Req() req: AuthenticatedRequest, @Body() data: updateKidDto[]) {
+  async updateKids(
+    @Req() req: AuthenticatedRequest,
+    @Body() data: updateKidDto[],
+  ) {
     return this.authService.updateKids(req.authUserData['userId'], data);
   }
 
@@ -175,6 +181,11 @@ export class AuthController {
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
   async resetPassword(@Body() body: ResetPasswordDto) {
-    return this.authService.resetPassword(body.token, body.email, body.newPassword, body);
+    return this.authService.resetPassword(
+      body.token,
+      body.email,
+      body.newPassword,
+      body,
+    );
   }
 }
