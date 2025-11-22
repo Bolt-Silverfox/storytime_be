@@ -1,0 +1,62 @@
+name: Deploy Backend (Production/develop-v0.0.1)
+
+on:
+  push:
+    branches:
+      - develop-v0.0.1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Write SSH Key
+        run: |
+          echo "${{ secrets.SERVER_SSH_KEY }}" > id_ed25519
+          chmod 600 id_ed25519
+
+      - name: Deploy to Production Server
+        run: |
+          ssh -i id_ed25519 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          
+          set -e
+
+          APP_PATH="/var/www/storytime/prod/backend"
+          RELEASES="$APP_PATH/releases"
+          CURRENT="$APP_PATH/current"
+          NEW_RELEASE="$RELEASES/$(date +%Y-%m-%d-%H-%M-%S)"
+
+          echo "📁 Creating release folder: $NEW_RELEASE"
+          sudo mkdir -p $NEW_RELEASE
+
+          echo "📥 Pulling backend code..."
+          sudo git clone https://github.com/Bolt-Silverfox/storytime_be.git $NEW_RELEASE
+
+          cd $NEW_RELEASE
+
+          echo "📦 Installing dependencies"
+          sudo npm install --legacy-peer-deps --silent
+
+          echo "🗄 Copying .env from previous release"
+          sudo cp $CURRENT/.env $NEW_RELEASE/.env
+
+          echo "🛠 Running Prisma migrations"
+          sudo npx prisma migrate deploy
+
+          echo "🔨 Building project"
+          sudo npm run build
+
+          echo "🔄 Switching symlink"
+          sudo ln -sfn $NEW_RELEASE $CURRENT
+
+          echo "🔥 Restarting PM2"
+          sudo pm2 delete storytime-prod-backend || true
+          sudo PORT=3502 pm2 start dist/main.js --name storytime-prod-backend
+
+          sudo pm2 save
+
+          echo "🎉 PRODUCTION DEPLOYMENT COMPLETE (ZERO DOWNTIME)"
+          EOF
