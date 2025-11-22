@@ -1,34 +1,45 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import { AgeService } from './age.service';
-import { CreateAgeDto } from './dto/create-age.dto';
-import { UpdateAgeDto } from './dto/update-age.dto';
+import { CreateAgeDto, UpdateAgeDto } from './age.dto';
+import { AdminGuard } from '../auth/admin.guard';
 
-@Controller('age')
+@Controller('age-group')
 export class AgeController {
   constructor(private readonly ageService: AgeService) {}
 
-  @Post()
-  create(@Body() createAgeDto: CreateAgeDto) {
-    return this.ageService.create(createAgeDto);
-  }
-
+  // Public route
   @Get()
   findAll() {
     return this.ageService.findAll();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.ageService.findOne(+id);
+  //  Admin protected
+  @UseGuards(AdminGuard)
+  @Post()
+  create(@Body() dto: CreateAgeDto) {
+    return this.ageService.create(dto);
   }
 
+  //  Admin protected
+  @UseGuards(AdminGuard)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateAgeDto: UpdateAgeDto) {
-    return this.ageService.update(+id, updateAgeDto);
+  update(@Param('id') id: string, @Body() dto: UpdateAgeDto) {
+    return this.ageService.update(id, dto);
   }
 
+  //  Admin protected
+  @UseGuards(AdminGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.ageService.remove(+id);
+    return this.ageService.delete(id);
   }
 }
