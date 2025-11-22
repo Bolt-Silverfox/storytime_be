@@ -1,19 +1,20 @@
 import { PartialType, ApiProperty } from '@nestjs/swagger';
-import { IsString, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsInt, Min, Max, IsNotEmpty } from 'class-validator';
 
 export class CreateAgeDto {
-  @ApiProperty({ description: 'Name of the age group' })
+  @ApiProperty({ example: 'Toddler', description: 'Name of the age group' })
   @IsString()
+  @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ description: 'Minimum age' })
+  @ApiProperty({ example: 1, description: 'Minimum age' })
   @IsInt()
   @Min(0)
   min: number;
 
-  @ApiProperty({ description: 'Maximum age' })
+  @ApiProperty({ example: 3, description: 'Maximum age' })
   @IsInt()
-  @Min(0)
+  @Min(1)
   max: number;
 }
 
