@@ -1,3 +1,4 @@
+// src/auth/auth.service.ts
 import {
   BadRequestException,
   Injectable,
@@ -26,6 +27,7 @@ import { generateToken } from 'src/utils/generete-token';
 import * as crypto from 'crypto';
 import { NotificationService } from 'src/notification/notification.service';
 import { JwtService } from '@nestjs/jwt';
+import { OAuth2Client, TokenPayload } from 'google-auth-library';
 
 const JWT_EXPIRES_IN = '1h';
 const REFRESH_TOKEN_EXPIRES_IN = 7;
@@ -33,11 +35,18 @@ const REFRESH_TOKEN_EXPIRES_IN = 7;
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private googleClient: OAuth2Client;
+
   constructor(
     private jwtService: JwtService,
     private prisma: PrismaService,
     private notificationService: NotificationService,
-  ) {}
+  ) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (clientId) {
+      this.googleClient = new OAuth2Client(clientId);
+    }
+  }
 
   // ==================== AUTH ====================
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
@@ -176,8 +185,12 @@ export class AuthService {
       },
     });
 
+<<<<<<< Updated upstream
     // FIXED: Only sending one email now
     await this.sendEmailVerification(user.email);
+=======
+    await this.sendEmailVerification(user?.email);
+>>>>>>> Stashed changes
 
     const tokenData = await this.createToken(user);
     const numberOfKids = 0;
@@ -473,5 +486,136 @@ export class AuthService {
 
   hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  // ===============================
+  // GOOGLE AUTH (mobile id_token & web oauth)
+  // ===============================
+
+  /**
+   * For mobile/web id_token flow:
+   * - Accepts idToken string (JWT from Google Identity)
+   * - Verifies it with Google API
+   * - Upserts user in DB (if necessary)
+   * - Returns { user, jwt, refreshToken }
+   */
+  async loginWithGoogleIdToken(idToken: string) {
+    if (!idToken) throw new UnauthorizedException('Missing id_token');
+
+    if (!this.googleClient) {
+      throw new ServiceUnavailableException('Google client not configured');
+    }
+
+    let ticket;
+    try {
+      ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+    } catch (err) {
+      this.logger.error('Google id_token verification failed', err);
+      throw new UnauthorizedException('Invalid Google id_token');
+    }
+
+    const payload = ticket.getPayload() as TokenPayload | undefined;
+    if (!payload || !payload.email) {
+      throw new UnauthorizedException('Invalid Google token payload');
+    }
+
+    // Compose a consistent payload for local processing
+    const googlePayload = {
+      googleId: payload.sub,
+      googleEmail: payload.email,
+      googleAvatar: payload.picture || null,
+      name: `${payload.given_name || ''} ${payload.family_name || ''}`.trim() || payload.name || null,
+      emailVerified: payload.email_verified || false,
+    };
+
+    return this._upsertOrReturnUserFromGooglePayload(googlePayload);
+  }
+
+  /**
+   * For web OAuth callback flow — payload comes from passport-google-oauth20 strategy
+   */
+  async handleGoogleOAuthPayload(payload: any) {
+    return this._upsertOrReturnUserFromGooglePayload(payload);
+  }
+
+  /**
+   * Small internal helper: find existing user by googleId or email, update/link, or create new user.
+   * Returns { user: UserDto, jwt, refreshToken }
+   */
+  private async _upsertOrReturnUserFromGooglePayload(payload: {
+    googleId?: string;
+    googleEmail?: string | null;
+    googleAvatar?: string | null;
+    name?: string | null;
+    emailVerified?: boolean;
+  }) {
+    const { googleId, googleEmail, googleAvatar, name } = payload;
+
+    // 1) Try to find by googleId
+    let user = null;
+    if (googleId) {
+      user = await this.prisma.user.findUnique({
+        where: { googleId },
+        include: { profile: true, avatar: true },
+      });
+    }
+
+    // 2) Fallback: find by email and link Google fields if found
+    if (!user && googleEmail) {
+      const existing = await this.prisma.user.findUnique({
+        where: { email: googleEmail },
+      });
+      if (existing) {
+        user = await this.prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            googleId: googleId || existing.googleId,
+            googleEmail: googleEmail,
+            googleAvatar: googleAvatar || existing.googleAvatar,
+            isEmailVerified: true,
+          },
+          include: { profile: true, avatar: true },
+        });
+      }
+    }
+
+    // 3) If still not found — create new user
+    if (!user) {
+      // Prisma User model requires passwordHash, so create a random password hash for oauth-only accounts
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+      user = await this.prisma.user.create({
+        data: {
+          name: name || googleEmail || 'Google User',
+          email: googleEmail || `${googleId}@google.com`,
+          passwordHash: hashedPassword,
+          googleId: googleId || null,
+          googleEmail: googleEmail || null,
+          googleAvatar: googleAvatar || null,
+          isEmailVerified: true,
+          role: 'parent',
+          profile: { create: {} },
+        },
+        include: { profile: true, avatar: true },
+      });
+    }
+
+    const numberOfKids = await this.prisma.kid.count({
+      where: { parentId: user.id },
+    });
+
+    const userDto = new UserDto({ ...user, numberOfKids });
+
+    const tokenData = await this.createToken(userDto);
+
+    return {
+      user: userDto,
+      jwt: tokenData.jwt,
+      refreshToken: tokenData.refreshToken,
+    };
   }
 }
