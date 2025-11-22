@@ -44,11 +44,12 @@ model User {
   Reward                  Reward[]
   notificationPreferences NotificationPreference[]
   activityLogs            ActivityLog[]
-
+  // google auth fields
+    
   googleId        String?   @unique
-  googlePicture   String?
-  googleVerified  Boolean?
-
+  googleEmail     String?   @unique
+  googleAvatar    String?
+  googleVerified  Boolean?  @default(false)
 
   @@map("users")
 }

@@ -185,12 +185,9 @@ export class AuthService {
       },
     });
 
-<<<<<<< Updated upstream
+
     // FIXED: Only sending one email now
     await this.sendEmailVerification(user.email);
-=======
-    await this.sendEmailVerification(user?.email);
->>>>>>> Stashed changes
 
     const tokenData = await this.createToken(user);
     const numberOfKids = 0;
