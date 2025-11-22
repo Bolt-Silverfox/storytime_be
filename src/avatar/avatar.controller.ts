@@ -21,15 +21,17 @@ import {
   UpdateAvatarDto,
   AssignAvatarDto,
 } from './avatar.dto';
-import { AuthSessionGuard } from '../auth/auth.guard';
+import { AuthSessionGuard, Public } from '../auth/auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { SuccessResponse } from '../common/dtos/api-response.dto';
 
 @Controller('avatars')
+@UseGuards(AuthSessionGuard) // Apply AuthSessionGuard to all endpoints by default
 export class AvatarController {
   constructor(private readonly avatarService: AvatarService) {}
   
   @Get('system')
+  @Public() // This endpoint will skip the AuthSessionGuard
   async getSystemAvatars() {
     const avatars = await this.avatarService.getSystemAvatars();
     return new SuccessResponse(200, avatars, 'System avatars retrieved successfully');
@@ -101,7 +103,7 @@ export class AvatarController {
 
   @Get()
   @UseGuards(AdminGuard) 
-   async getAllAvatars() {
+  async getAllAvatars() {
     const avatars = await this.avatarService.getAllAvatars();
     return new SuccessResponse(200, avatars, 'Avatars retrieved successfully');
   }
