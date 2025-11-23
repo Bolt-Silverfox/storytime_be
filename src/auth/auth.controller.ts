@@ -195,31 +195,42 @@ export class AuthController {
 
   // ===== GOOGLE AUTH (MOBILE / WEB id_token) =====
   // Mobile or web app can POST an id_token payload { id_token: '...' }
+    // ===== GOOGLE AUTH (MOBILE / WEB id_token) =====
+  // Mobile or web app can POST an id_token payload { id_token: '...' }
   @Post('google')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Google sign-in (id_token) — mobile/web' })
   @ApiBody({ description: 'Google id_token', schema: { example: { id_token: 'eyJhbGci...' } } })
   async googleIdToken(@Body('id_token') idToken: string) {
+    if (!idToken) {
+      throw new UnauthorizedException('id_token is required');
+    }
+    
     return this.authService.loginWithGoogleIdToken(idToken);
   }
 
+
+
   // ===== GOOGLE OAUTH (web redirect flow) =====
-  @Get('google')
+  @Get('google/oauth')
   @UseGuards(GoogleAuthGuard)
   async googleLogin() {
     // Guard will redirect to Google
-    return;
   }
 
-  @Get('google/callback')
+
+
+  // ===== GOOGLE OAUTH CALLBACK =====
+  @Get('google/oauth/callback')
   @UseGuards(GoogleAuthGuard)
   async googleCallback(@Req() req: Request, @Res() res: Response) {
-    // req.user set by GoogleOAuthStrategy.validate
     const payload = (req as any).user;
     const result = await this.authService.handleGoogleOAuthPayload(payload);
-    // redirect back to frontend with tokens
+
     return res.redirect(
-      `${process.env.WEB_APP_BASE_URL}/oauth-success?jwt=${encodeURIComponent(result.jwt)}&refresh=${encodeURIComponent(result.refreshToken)}`,
+      `${process.env.WEB_APP_BASE_URL}/oauth-success?jwt=${encodeURIComponent(
+        result.jwt,
+      )}&refresh=${encodeURIComponent(result.refreshToken)}`
     );
   }
 }
