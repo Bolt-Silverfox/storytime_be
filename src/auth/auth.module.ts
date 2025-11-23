@@ -9,6 +9,7 @@ import { AuthSessionGuard } from './auth.guard';
 import { PassportModule } from '@nestjs/passport';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { GoogleOAuthStrategy } from './strategies/google-oauth.strategy';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { GoogleAuthGuard } from './guards/google-auth.guard';
     AuthSessionGuard,
     GoogleStrategy,
     GoogleAuthGuard,
+    GoogleOAuthStrategy,
   ],
 
   exports: [
