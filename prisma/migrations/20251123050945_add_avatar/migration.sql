@@ -1,0 +1,2 @@
+-- NO-OP migration recreated to allow resolve/marking
+-- This file intentionally left empty
