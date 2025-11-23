@@ -27,7 +27,7 @@ model User {
   passwordHash            String
   title                   String?
   name                    String?
-  // avatarUrl            String?
+  avatarUrl            String?
   avatarId                String?
   avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
   isEmailVerified         Boolean                  @default(false)
@@ -57,7 +57,7 @@ model User {
 model Kid {
   id        String  @id @default(uuid())
   name      String?
-  // avatarUrl String?
+  avatarUrl String?
   avatarId  String?
   avatar    Avatar? @relation(fields: [avatarId], references: [id])
   ageRange  String?
@@ -228,7 +228,7 @@ model DailyChallenge {
 model Voice {
   id                String   @id @default(uuid())
   userId            String?
-  user              User?    @relation(fields: [userId], references: [id])
+  user              User?    @relation(fields: [userId], references: [id],onDelete: Cascade)
   name              String
   type              String // 'uploaded' or 'elevenlabs'
   url               String? // For uploaded audio
@@ -254,7 +254,7 @@ model Reward {
   updatedAt   DateTime @updatedAt
 
   userId String?
-  user   User?   @relation(fields: [userId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id],onDelete: Cascade)
 
   kidId String?
   kid   Kid?    @relation(fields: [kidId], references: [id])
@@ -283,7 +283,7 @@ model NotificationPreference {
   enabled   Boolean
   userId    String?
   kidId     String?
-  user      User?            @relation(fields: [userId], references: [id])
+  user      User?            @relation(fields: [userId], references: [id],onDelete: Cascade)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   Kid       Kid?             @relation(fields: [kidId], references: [id])
@@ -306,7 +306,7 @@ model RewardRedemption {
 model ActivityLog {
   id        String   @id @default(uuid())
   userId    String?
-  user      User?    @relation(fields: [userId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id],onDelete: Cascade)
   kidId     String?
   kid       Kid?     @relation(fields: [kidId], references: [id])
   action    String // e.g. 'story_read', 'reward_redeemed', etc.
