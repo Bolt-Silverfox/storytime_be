@@ -385,6 +385,18 @@ model Avatar {
   @@unique([name])          // Ensure name is unique for upsert
 }
 
+model AgeGroup {
+  id        String   @id @default(uuid())
+  name      String
+  min       Int
+  max       Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name])
+  @@map("age_groups")
+  }
+  
 model ScreenTimeSession {
   id        String    @id @default(uuid())
   kidId     String
