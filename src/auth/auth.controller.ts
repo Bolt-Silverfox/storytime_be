@@ -10,6 +10,7 @@ import {
   Req,
   UseGuards,
   UnauthorizedException,
+  BadRequestException,
   Res,
   HttpCode,
   HttpStatus,
@@ -194,16 +195,14 @@ export class AuthController {
   }
 
   // ===== GOOGLE AUTH (MOBILE / WEB id_token) =====
-  // Mobile or web app can POST an id_token payload { id_token: '...' }
-    // ===== GOOGLE AUTH (MOBILE / WEB id_token) =====
-  // Mobile or web app can POST an id_token payload { id_token: '...' }
+ // Mobile or web app can POST an id_token payload { id_token: '...' }
   @Post('google')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Google sign-in (id_token) — mobile/web' })
   @ApiBody({ description: 'Google id_token', schema: { example: { id_token: 'eyJhbGci...' } } })
   async googleIdToken(@Body('id_token') idToken: string) {
     if (!idToken) {
-      throw new UnauthorizedException('id_token is required');
+      throw new BadRequestException('id_token is required');
     }
     
     return this.authService.loginWithGoogleIdToken(idToken);

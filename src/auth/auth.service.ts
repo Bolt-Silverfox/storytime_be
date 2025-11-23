@@ -1,4 +1,3 @@
-// src/auth/auth.service.ts
 import {
   BadRequestException,
   Injectable,
@@ -61,12 +60,6 @@ export class AuthService {
 
     if (!(await bcrypt.compare(data.password, user.passwordHash))) {
       throw new BadRequestException('Invalid credentials');
-    }
-
-    if (!user.isEmailVerified) {
-      throw new BadRequestException(
-        'Email not verified. Please check your inbox.',
-      );
     }
 
     if (!user.isEmailVerified) {
@@ -185,8 +178,6 @@ export class AuthService {
       },
     });
 
-
-    // FIXED: Only sending one email now
     await this.sendEmailVerification(user.email);
 
     const tokenData = await this.createToken(user);
@@ -222,12 +213,8 @@ export class AuthService {
       'EmailVerification',
       { email: user.email, token },
     );
-    this.logger.log(
-      `Email verification requested for ${email}: response ${JSON.stringify(resp)}`,
-    );
 
     if (!resp.success) {
-      // FIXED: Passing the actual error message back to the controller
       throw new ServiceUnavailableException(
         resp.error || 'Failed to send verification email',
       );
@@ -408,17 +395,11 @@ export class AuthService {
       'PasswordReset',
       {
         email: user.email,
-        // FIXED: Using resetToken to match Registry validation
         resetToken: token,
       },
     );
 
-    this.logger.log(
-      `Password reset requested for ${email}: response ${JSON.stringify(resp)}`,
-    );
-
     if (!resp.success) {
-      // FIXED: Error logging
       throw new ServiceUnavailableException(
         resp.error || 'Failed to send password reset email',
       );
@@ -486,18 +467,13 @@ export class AuthService {
   }
 
   // ===============================
-  // GOOGLE AUTH (mobile id_token & web oauth)
+  // GOOGLE AUTH 
   // ===============================
 
-  /**
-   * For mobile/web id_token flow:
-   * - Accepts idToken string (JWT from Google Identity)
-   * - Verifies it with Google API
-   * - Upserts user in DB (if necessary)
-   * - Returns { user, jwt, refreshToken }
-   */
   async loginWithGoogleIdToken(idToken: string) {
-    if (!idToken) throw new UnauthorizedException('Missing id_token');
+    if (!idToken) {
+      throw new BadRequestException('id_token is required');
+    }
 
     if (!this.googleClient) {
       throw new ServiceUnavailableException('Google client not configured');
@@ -519,40 +495,36 @@ export class AuthService {
       throw new UnauthorizedException('Invalid Google token payload');
     }
 
-    // Compose a consistent payload for local processing
     const googlePayload = {
       googleId: payload.sub,
-      googleEmail: payload.email,
-      googleAvatar: payload.picture || null,
-      name: `${payload.given_name || ''} ${payload.family_name || ''}`.trim() || payload.name || null,
+      email: payload.email,
+      picture: payload.picture || null,
+      name:
+        `${payload.given_name || ''} ${payload.family_name || ''}`.trim() ||
+        payload.name ||
+        null,
       emailVerified: payload.email_verified || false,
     };
 
     return this._upsertOrReturnUserFromGooglePayload(googlePayload);
   }
 
-  /**
-   * For web OAuth callback flow — payload comes from passport-google-oauth20 strategy
-   */
   async handleGoogleOAuthPayload(payload: any) {
     return this._upsertOrReturnUserFromGooglePayload(payload);
   }
 
-  /**
-   * Small internal helper: find existing user by googleId or email, update/link, or create new user.
-   * Returns { user: UserDto, jwt, refreshToken }
-   */
   private async _upsertOrReturnUserFromGooglePayload(payload: {
     googleId?: string;
-    googleEmail?: string | null;
-    googleAvatar?: string | null;
+    email: string;
+    picture?: string | null;
     name?: string | null;
     emailVerified?: boolean;
   }) {
-    const { googleId, googleEmail, googleAvatar, name } = payload;
+    const { googleId, email, picture, name } = payload;
+
+    let user = null;
 
     // 1) Try to find by googleId
-    let user = null;
     if (googleId) {
       user = await this.prisma.user.findUnique({
         where: { googleId },
@@ -560,18 +532,16 @@ export class AuthService {
       });
     }
 
-    // 2) Fallback: find by email and link Google fields if found
-    if (!user && googleEmail) {
+    // 2) Fallback: find by email and link Google ID
+    if (!user && email) {
       const existing = await this.prisma.user.findUnique({
-        where: { email: googleEmail },
+        where: { email },
       });
       if (existing) {
         user = await this.prisma.user.update({
           where: { id: existing.id },
           data: {
             googleId: googleId || existing.googleId,
-            googleEmail: googleEmail,
-            googleAvatar: googleAvatar || existing.googleAvatar,
             isEmailVerified: true,
           },
           include: { profile: true, avatar: true },
@@ -579,24 +549,38 @@ export class AuthService {
       }
     }
 
-    // 3) If still not found — create new user
+    // 3) If still not found, create new user
     if (!user) {
-      // Prisma User model requires passwordHash, so create a random password hash for oauth-only accounts
       const randomPassword = crypto.randomBytes(16).toString('hex');
       const hashedPassword = await bcrypt.hash(randomPassword, 10);
 
       user = await this.prisma.user.create({
         data: {
-          name: name || googleEmail || 'Google User',
-          email: googleEmail || `${googleId}@google.com`,
+          name: name || email || 'Google User',
+          email,
           passwordHash: hashedPassword,
           googleId: googleId || null,
-          googleEmail: googleEmail || null,
-          googleAvatar: googleAvatar || null,
           isEmailVerified: true,
           role: 'parent',
           profile: { create: {} },
         },
+        include: { profile: true, avatar: true },
+      });
+    }
+
+    // 4) Create Avatar instance from Google picture
+    if (picture) {
+      const avatar = await this.prisma.avatar.create({
+        data: {
+          url: picture,
+          name: `google_${user.id}`,
+          isSystemAvatar: false,
+        },
+      });
+
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { avatarId: avatar.id },
         include: { profile: true, avatar: true },
       });
     }
