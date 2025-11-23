@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import PrismaService from '../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AvatarSeederService implements OnModuleInit {
@@ -57,8 +57,8 @@ export class AvatarSeederService implements OnModuleInit {
       for (const avatarData of systemAvatars) {
         // Use upsert with name as the unique identifier
         await this.prisma.avatar.upsert({
-          where: { 
-            name: avatarData.name // Use standard name for upsert
+          where: {
+            name: avatarData.name, // Use standard name for upsert
           },
           update: {
             displayName: avatarData.displayName,
@@ -72,7 +72,7 @@ export class AvatarSeederService implements OnModuleInit {
             isSystemAvatar: true,
           },
         });
-        
+
         this.logger.log(`Upserted system avatar: ${avatarData.displayName}`);
       }
 

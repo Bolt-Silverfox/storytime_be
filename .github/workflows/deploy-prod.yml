@@ -1,0 +1,89 @@
+name: Deploy Backend (Production/develop-v0.0.1)
+
+on:
+  push:
+    branches:
+      - develop-v0.0.1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Write SSH Key
+        run: |
+          echo "${{ secrets.SERVER_SSH_KEY }}" > id_ed25519
+          chmod 600 id_ed25519
+
+      - name: Deploy to Production Server
+        run: |
+          ssh -i id_ed25519 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          
+          set -e
+          
+          trap 'echo "Cleanup: removing incomplete release $NEW_RELEASE"; sudo rm -rf "$NEW_RELEASE"' ERR
+          
+          APP_PATH="/var/www/storytime/prod/backend"
+          RELEASES="$APP_PATH/releases"
+          CURRENT="$APP_PATH/current"
+          NEW_RELEASE="$RELEASES/$(date +%Y-%m-%d-%H-%M-%S)"
+
+          echo "📁 Creating release folder: $NEW_RELEASE"
+          sudo mkdir -p $NEW_RELEASE
+
+          echo "📥 Pulling backend code..."
+          sudo git clone https://github.com/Bolt-Silverfox/storytime_be.git $NEW_RELEASE
+
+          cd $NEW_RELEASE
+
+          echo "📦 Installing dependencies"
+          sudo npm install --legacy-peer-deps --silent
+
+          echo "🗄 Copying .env file..."
+          if [ -f $CURRENT/.env ]; then
+            sudo cp $CURRENT/.env $NEW_RELEASE/.env
+            echo ".env copied from current release."
+          else
+            sudo cp /home/storytime/storytime_be/.env $NEW_RELEASE/.env
+            echo ".env copied from source directory."
+          fi
+
+          echo "🛠 Running Prisma migrations"
+          sudo npx prisma migrate deploy
+
+          echo "🔨 Building project"
+          sudo npm run build
+
+
+          # Save the path of the previous release before switching symlink
+          if [ -L "$CURRENT" ]; then
+            PREV_RELEASE=$(readlink -f "$CURRENT")
+          else
+            PREV_RELEASE=""
+          fi
+          
+          echo "🔄 Switching symlink"
+          sudo ln -sfn $NEW_RELEASE $CURRENT
+          
+          echo "🔥 Restarting PM2"
+          sudo pm2 delete storytime-prod-backend || true
+          sudo PORT=3502 pm2 start dist/main.js --name storytime-prod-backend
+          
+          sudo pm2 save
+          
+          echo "🎉 PRODUCTION DEPLOYMENT COMPLETE (ZERO DOWNTIME)"
+          
+          # --- BEGIN: Clean up previous release ---
+          if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$NEW_RELEASE" ]; then
+            echo "🧹 Cleaning up previous release: $PREV_RELEASE"
+            sudo rm -rf "$PREV_RELEASE"
+          else
+            echo "No previous release to clean up (or previous == new)."
+          fi
+          # --- END: Clean up previous release ---
+          
+          EOF
+          
