@@ -98,7 +98,6 @@ export class UserController {
     const user = await this.userService.getUser(id);
     return user ? new UserDto(user) : null;
   }
-
   @Put(':id')
   @ApiOperation({
     summary: 'Update user profile',
@@ -166,7 +165,14 @@ export class UserController {
     }
     return await this.userService.getAllUsers();
   }
-
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'delete user account',
+    description: 'delete my account as a user',
+  })
+  async deleteUserAccount(id: string) {
+    return this.userService.deleteUserAccount(id);
+  }
   @Get('me')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
@@ -209,7 +215,7 @@ export class UserController {
     return this.userService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
   }
 
-  @Delete(':id')
+  @Delete('account/:id')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
