@@ -27,32 +27,29 @@ model User {
   passwordHash            String
   title                   String?
   name                    String?
-  avatarUrl            String?
+  avatarUrl               String?
   avatarId                String?
   avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
   isEmailVerified         Boolean                  @default(false)
   role                    Role                     @default(parent)
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
+
   profile                 Profile?
   auth                    Session[]
   Token                   Token[]
   kids                    Kid[]
   voices                  Voice[]
-  preferredVoiceId        String? // FK to Voice
+  preferredVoiceId        String?
   preferredVoice          Voice?                   @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
   Reward                  Reward[]
   notificationPreferences NotificationPreference[]
   activityLogs            ActivityLog[]
-  // google auth fields
-    
-  googleId        String?   @unique
-  googleEmail     String?   @unique
-  googleAvatar    String?
-  googleVerified  Boolean?  @default(false)
 
-  @@map("users")
+  // Google OAuth fields
+  googleId                String? @unique
 }
+
 
 model Kid {
   id        String  @id @default(uuid())
