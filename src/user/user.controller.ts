@@ -64,7 +64,7 @@ class UpdateUserRoleDto {
 @Controller('user')
 export class UserController {
   private readonly logger = new Logger(UserController.name);
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService) { }
 
   @Get('kids/:kidId')
   @ApiOperation({
@@ -248,7 +248,7 @@ export class UserController {
     return user ? new UserDto(user) : null;
   }
 
-  
+
 
   @Delete('account/:id')
   @UseGuards(AuthSessionGuard)
