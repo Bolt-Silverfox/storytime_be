@@ -83,8 +83,7 @@ jobs:
           sudo ln -sfn $NEW_RELEASE $CURRENT
 
           echo "🔥 Restarting PM2"
-          sudo pm2 delete storytime-prod-backend || true
-          sudo pm2 start ecosystem.config.js
+          pm2 restart storytime-prod-backend
 
           sudo pm2 save
 
