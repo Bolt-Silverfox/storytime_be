@@ -22,12 +22,6 @@ ALTER TABLE "_StoryThemes" ADD CONSTRAINT "_StoryThemes_AB_pkey" PRIMARY KEY ("A
 -- DropIndex
 DROP INDEX "_StoryThemes_AB_unique";
 
--- AlterTable
-ALTER TABLE "kids" ADD COLUMN     "avatarUrl" TEXT;
-
--- AlterTable
-ALTER TABLE "users" ADD COLUMN     "avatarUrl" TEXT;
-
 -- AddForeignKey
 ALTER TABLE "voices" ADD CONSTRAINT "voices_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
