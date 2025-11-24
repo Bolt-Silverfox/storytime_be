@@ -59,39 +59,42 @@ export class StoryService {
     if (filter.category) where.categories = { some: { id: filter.category } };
     if (filter.recommended !== undefined)
       where.recommended = filter.recommended;
-    let age: number | undefined = filter.age;
-    if (!age && filter.kidId) {
-      // Look up the kid's age if kidId is provided and age is not
-      const kid: { ageRange?: string | null } | null =
-        await this.prisma.kid.findUnique({
-          where: { id: filter.kidId },
-        });
-      if (kid && kid.ageRange && typeof kid.ageRange === 'string') {
-        // Assume ageRange is a string like '4-7' or '8-10'
-        const match = kid.ageRange.match(/(\d+)/);
-        if (match) {
-          age = parseInt(match[1], 10);
-        }
-      }
-    }
+
+    let targetLevel: number | undefined;
+
     if (filter.kidId) {
       const kid = await this.prisma.kid.findUnique({
         where: { id: filter.kidId },
       });
 
-      if (kid && kid.currentReadingLevel) {
-        // Fetch stories that are within +/- 1 level of the kid's current level
-        // makes it not too hard, not too easy
-        where.difficultyLevel = {
-          gte: Math.max(1, kid.currentReadingLevel - 1),
-          lte: kid.currentReadingLevel + 1,
-        };
+      if (kid) {
+        // Prioritize Reading Level if available
+        if (kid.currentReadingLevel > 0) {
+          targetLevel = kid.currentReadingLevel;
+          //let learning be around +/- 1 level
+          where.difficultyLevel = {
+            gte: Math.max(1, targetLevel - 1),
+            lte: targetLevel + 1,
+          };
+        }
+        // Fallback to Age Range
+        else if (kid.ageRange) {
+          const match = kid.ageRange.match(/(\d+)/);
+          if (match) {
+            const age = parseInt(match[1], 10);
+            where.ageMin = { lte: age };
+            where.ageMax = { gte: age };
+          }
+        }
       }
     }
-    if (typeof age === 'number') {
-      where.ageMin = { lte: age };
-      where.ageMax = { gte: age };
+
+    // Only use manual age filter if we haven't already filtered by difficulty/kid
+    if (filter.age && !targetLevel && !where.ageMin) {
+      where.ageMin = { lte: filter.age };
+      where.ageMax = { gte: filter.age };
     }
+
     return this.prisma.story.findMany({
       where,
       include: {
@@ -205,16 +208,15 @@ export class StoryService {
   }
 
   // --- Progress ---
-  // In src/story/story.service.ts inside setProgress
 
   async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
-    // Get current progress to add to total time
-    const currentProgress = await this.prisma.storyProgress.findUnique({
+    // Get existing progress to calculate total time
+    const existing = await this.prisma.storyProgress.findUnique({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
     });
 
-    const newTotalTime =
-      (currentProgress?.totalTimeSpent || 0) + (dto.sessionTime || 0);
+    const sessionTime = dto.sessionTime || 0;
+    const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
 
     const result = await this.prisma.storyProgress.upsert({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
@@ -222,20 +224,23 @@ export class StoryService {
         progress: dto.progress,
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
-        totalTimeSpent: newTotalTime, // Update time
+        totalTimeSpent: newTotalTime,
       },
       create: {
         kidId: dto.kidId,
         storyId: dto.storyId,
         progress: dto.progress,
         completed: dto.completed ?? false,
-        totalTimeSpent: dto.sessionTime || 0,
+        totalTimeSpent: sessionTime,
       },
     });
 
-    // If story is completed, trigger the adjustment check
-    if (dto.completed) {
-      await this.adjustReadingLevel(dto.kidId, dto.storyId, newTotalTime);
+    // Trigger auto-adjustment if story just completed
+    if (dto.completed && (!existing || !existing.completed)) {
+      // Fire and forget (don't await) to keep API fast
+      this.adjustReadingLevel(dto.kidId, dto.storyId, newTotalTime).catch((e) =>
+        this.logger.error(`Failed to adjust reading level: ${e.message}`),
+      );
     }
 
     return result;
