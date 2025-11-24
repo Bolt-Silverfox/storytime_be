@@ -27,7 +27,6 @@ model User {
   passwordHash            String
   title                   String?
   name                    String?
-  avatarUrl               String?
   avatarId                String?
   avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
   isEmailVerified         Boolean                  @default(false)

@@ -503,7 +503,7 @@ export class AuthService {
         `${payload.given_name || ''} ${payload.family_name || ''}`.trim() ||
         payload.name ||
         null,
-      emailVerified: payload.email_verified || false,
+      emailVerified: payload.email_verified === true,
     };
 
     return this._upsertOrReturnUserFromGooglePayload(googlePayload);
@@ -513,6 +513,10 @@ export class AuthService {
     return this._upsertOrReturnUserFromGooglePayload(payload);
   }
 
+
+  // ====================================================
+  // INTERNAL: Unified Google upsert logic
+  // ====================================================
   private async _upsertOrReturnUserFromGooglePayload(payload: {
     googleId?: string;
     email: string;
@@ -520,11 +524,11 @@ export class AuthService {
     name?: string | null;
     emailVerified?: boolean;
   }) {
-    const { googleId, email, picture, name } = payload;
+    const { googleId, email, picture, name, emailVerified } = payload;
 
     let user = null;
 
-    // 1) Try to find by googleId
+    // Lookup by googleId first
     if (googleId) {
       user = await this.prisma.user.findUnique({
         where: { googleId },
@@ -532,24 +536,26 @@ export class AuthService {
       });
     }
 
-    // 2) Fallback: find by email and link Google ID
-    if (!user && email) {
-      const existing = await this.prisma.user.findUnique({
-        where: { email },
-      });
+    // Lookup by email
+    if (!user) {
+      const existing = await this.prisma.user.findUnique({ where: { email } });
+
       if (existing) {
         user = await this.prisma.user.update({
           where: { id: existing.id },
           data: {
             googleId: googleId || existing.googleId,
-            isEmailVerified: true,
+            isEmailVerified:
+              emailVerified
+                ? true   
+                : existing.isEmailVerified,
           },
           include: { profile: true, avatar: true },
         });
       }
     }
 
-    // 3) If still not found, create new user
+    // Create brand new user
     if (!user) {
       const randomPassword = crypto.randomBytes(16).toString('hex');
       const hashedPassword = await bcrypt.hash(randomPassword, 10);
@@ -559,8 +565,10 @@ export class AuthService {
           name: name || email || 'Google User',
           email,
           passwordHash: hashedPassword,
-          googleId: googleId || null,
-          isEmailVerified: true,
+
+          googleId,
+          isEmailVerified: emailVerified === true, 
+
           role: 'parent',
           profile: { create: {} },
         },
@@ -568,29 +576,41 @@ export class AuthService {
       });
     }
 
-    // 4) Create Avatar instance from Google picture
+    // Avatar model handling (only if picture URL provided)
     if (picture) {
-      const avatar = await this.prisma.avatar.create({
-        data: {
-          url: picture,
-          name: `google_${user.id}`,
-          isSystemAvatar: false,
-        },
+      // Find existing avatar with same URL
+      let avatar = await this.prisma.avatar.findFirst({
+        where: { url: picture },
       });
 
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: { avatarId: avatar.id },
-        include: { profile: true, avatar: true },
-      });
+      // Otherwise create new one
+      if (!avatar) {
+        avatar = await this.prisma.avatar.create({
+          data: {
+            url: picture,
+            name: `google_${googleId || user.id}`,
+            displayName: name || email,
+            isSystemAvatar: false,
+          },
+        });
+      }
+
+      // Attach avatar to user if not already set
+      if (user.avatarId !== avatar.id) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { avatarId: avatar.id },
+          include: { profile: true, avatar: true },
+        });
+      }
     }
 
+  
     const numberOfKids = await this.prisma.kid.count({
       where: { parentId: user.id },
     });
 
     const userDto = new UserDto({ ...user, numberOfKids });
-
     const tokenData = await this.createToken(userDto);
 
     return {
