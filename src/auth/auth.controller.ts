@@ -164,10 +164,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Request password reset' })
   @ApiBody({ type: RequestResetDto })
   @ApiResponse({ status: 200, description: 'Password reset email sent.' })
+  @ApiResponse({ status: 400, description: 'Invalid email format' })
   async requestPasswordReset(@Body() body: RequestResetDto) {
     return this.authService.requestPasswordReset(body);
   }
-
   @Post('validate-reset-token')
   @ApiOperation({ summary: 'Validate password reset token' })
   @ApiBody({ type: ValidateResetTokenDto })
