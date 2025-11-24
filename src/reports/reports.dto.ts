@@ -130,3 +130,72 @@ export class SetDailyLimitDto {
   })
   limitMins?: number;
 }
+
+// ============== WEEKLY AI SUMMARY ==============
+
+export class KidWeeklySummaryDataDto {
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  kidName: string;
+
+  @ApiProperty({ required: false })
+  ageRange?: string;
+
+  @ApiProperty()
+  storiesCompleted: number;
+
+  @ApiProperty()
+  storiesInProgress: number;
+
+  @ApiProperty()
+  screenTimeMins: number;
+
+  @ApiProperty({ nullable: true })
+  screenTimeLimitMins: number | null;
+
+  @ApiProperty()
+  quizAccuracyPercentage: number;
+
+  @ApiProperty()
+  totalQuizAnswers: number;
+
+  @ApiProperty()
+  dailyChallengesCompleted: number;
+
+  @ApiProperty()
+  favoritesAdded: number;
+
+  @ApiProperty()
+  starsEarned: number;
+
+  @ApiProperty()
+  badgesEarned: number;
+}
+
+export class WeeklySummaryDto {
+  @ApiProperty()
+  parentId: string;
+
+  @ApiProperty()
+  weekStartDate: Date;
+
+  @ApiProperty()
+  weekEndDate: Date;
+
+  @ApiProperty({ type: [KidWeeklySummaryDataDto] })
+  kidsData: KidWeeklySummaryDataDto[];
+
+  @ApiProperty({ description: 'AI-generated natural language summary' })
+  summary: string;
+
+  @ApiProperty()
+  generatedAt: Date;
+
+  @ApiProperty()
+  totalStoriesCompleted: number;
+
+  @ApiProperty()
+  totalScreenTimeMins: number;
+}
