@@ -610,6 +610,12 @@ export class AuthService {
       where: { parentId: user.id },
     });
 
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
+
     const userDto = new UserDto({ ...user, numberOfKids });
     const tokenData = await this.createToken(userDto);
 
