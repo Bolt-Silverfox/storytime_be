@@ -9,7 +9,7 @@ import {
   UseGuards,
   UnauthorizedException,
   HttpCode,
-  HttpStatus
+  HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
@@ -34,6 +34,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
+import { Request } from 'express';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -48,7 +49,7 @@ export class AuthController {
   async login(@Body() body: LoginDto) {
     return this.authService.login(body);
   }
-//
+  //
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
@@ -172,9 +173,15 @@ export class AuthController {
   @ApiBody({ type: RequestResetDto })
   @ApiResponse({ status: 200, description: 'Password reset email sent.' })
   @ApiResponse({ status: 400, description: 'Invalid email format' })
-  async requestPasswordReset(@Body() body: RequestResetDto) {
-    return this.authService.requestPasswordReset(body);
+  async requestPasswordReset(@Body() body: RequestResetDto, @Req() req: Request) {
+    // Extract IP and user agent for security checking
+    const ip =
+      req.ip ||
+      req.headers['x-forwarded-for']?.toString().split(',')[0].trim();
+    const userAgent = req.headers['user-agent'];
+    return this.authService.requestPasswordReset(body, ip, userAgent);
   }
+
   @Post('validate-reset-token')
   @ApiOperation({ summary: 'Validate password reset token' })
   @ApiBody({ type: ValidateResetTokenDto })
