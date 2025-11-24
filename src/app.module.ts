@@ -13,7 +13,6 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { CommonModule } from './common/common.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AvatarModule } from './avatar/avatar.module';
-import { AgeModule } from './age/age.module';
 import { ReportsModule } from './reports/reports.module';
 
 @Module({
@@ -35,7 +34,6 @@ import { ReportsModule } from './reports/reports.module';
     AnalyticsModule,
     PrismaModule,
     AvatarModule,
-    AgeModule,
     ReportsModule,
   ],
 })
