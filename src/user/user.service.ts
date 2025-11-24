@@ -156,6 +156,33 @@ export class UserService {
     };
   }
 
+  //get kid by kidID
+  async getKidById(kidId: string) {
+    try {
+      const kid = await prisma.kid.findUnique({
+        where: { id: kidId },
+        include: {
+          avatar: true,
+          parent: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      if (!kid) {
+        throw new NotFoundException('Kid not found');
+      }
+
+      return kid;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async getKidPreferredVoice(kidId: string): Promise<KidVoiceDto | null> {
     const kid = await prisma.kid.findUnique({
       where: { id: kidId },

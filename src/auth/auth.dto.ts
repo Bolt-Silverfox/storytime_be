@@ -158,13 +158,13 @@ export class UserDto {
 
     this.avatar = user.avatar
       ? {
-          id: user.avatar.id,
-          name: user.avatar.name,
-          url: user.avatar.url,
-          isSystemAvatar: user.avatar.isSystemAvatar,
-          publicId: user.avatar.publicId,
-          createdAt: user.avatar.createdAt,
-        }
+        id: user.avatar.id,
+        name: user.avatar.name,
+        url: user.avatar.url,
+        isSystemAvatar: user.avatar.isSystemAvatar,
+        publicId: user.avatar.publicId,
+        createdAt: user.avatar.createdAt,
+      }
       : null;
 
     this.id = user.id as string;
