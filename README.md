@@ -159,7 +159,6 @@ Launch the visual database browser:
 ```bash
 pnpx prisma studio
 ```
-
 ## License
 
 UNLICENSED - Private project
