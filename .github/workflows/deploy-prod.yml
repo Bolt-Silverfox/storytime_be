@@ -42,6 +42,14 @@ jobs:
           echo "📦 Installing dependencies"
           sudo npm install --legacy-peer-deps --silent
 
+          # Copy ecosystem.config.js from current release to new release, if it exists
+          if [ -f $CURRENT/ecosystem.config.js ]; then
+            sudo cp $CURRENT/ecosystem.config.js $NEW_RELEASE/ecosystem.config.js
+            echo "ecosystem.config.js copied from current release."
+          else
+            echo "ecosystem.config.js not found in current release, please add it manually if required."
+          fi
+
           echo "🗄 Copying .env file..."
           if [ -f $CURRENT/.env ]; then
             sudo cp $CURRENT/.env $NEW_RELEASE/.env
@@ -70,7 +78,7 @@ jobs:
           
           echo "🔥 Restarting PM2"
           sudo pm2 delete storytime-prod-backend || true
-          sudo PORT=3502 pm2 start dist/main.js --name storytime-prod-backend
+          sudo pm2 start ecosystem.config.js
           
           sudo pm2 save
           
