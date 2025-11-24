@@ -44,6 +44,9 @@ model User {
   notificationPreferences NotificationPreference[]
   activityLogs            ActivityLog[]
 
+  //google auth
+  googleId                String?                  @unique
+
   @@map("users")
 }
 
