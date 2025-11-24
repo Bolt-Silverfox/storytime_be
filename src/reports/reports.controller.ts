@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
 import {
@@ -13,6 +14,7 @@ import {
   ScreenTimeSessionDto,
   EndScreenTimeSessionDto,
   DailyLimitDto,
+  WeeklySummaryDto,
 } from './reports.dto';
 import { QuestionAnswerDto } from '../story/story.dto';
 
@@ -71,5 +73,36 @@ export class ReportsController {
   @ApiResponse({ status: 201, description: 'Returns if answer is correct' })
   async recordAnswer(@Body() dto: QuestionAnswerDto) {
     return this.reportsService.recordAnswer(dto);
+  }
+
+  // ============== WEEKLY AI SUMMARY ==============
+  @Get('weekly-summary/:parentId')
+  @ApiOperation({
+    summary: 'Get AI-generated weekly summary for parent dashboard',
+  })
+  @ApiParam({ name: 'parentId', type: String })
+  @ApiQuery({
+    name: 'weekStart',
+    required: false,
+    type: String,
+    description: 'ISO date string for week start (defaults to current week)',
+  })
+  @ApiResponse({ status: 200, type: WeeklySummaryDto })
+  async getWeeklySummary(
+    @Param('parentId') parentId: string,
+    @Query('weekStart') weekStart?: string,
+  ) {
+    const weekStartDate = weekStart ? new Date(weekStart) : undefined;
+    return this.reportsService.getWeeklySummary(parentId, weekStartDate);
+  }
+
+  @Post('weekly-summary/generate/:parentId')
+  @ApiOperation({
+    summary: 'Manually trigger weekly summary generation for a parent',
+  })
+  @ApiParam({ name: 'parentId', type: String })
+  @ApiResponse({ status: 201, type: WeeklySummaryDto })
+  async generateWeeklySummary(@Param('parentId') parentId: string) {
+    return this.reportsService.generateWeeklySummary(parentId);
   }
 }
