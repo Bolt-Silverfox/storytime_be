@@ -1,0 +1,4 @@
+-- EMPTY MIGRATION
+-- This file intentionally left blank because the original migration
+-- was removed, and the database already considers it applied.
+-- This NO-OP migration allows migration history to stay consistent.
