@@ -4,7 +4,6 @@ A NestJS-based backend API for the Storytime application, providing interactive 
 
 ## Features
 
-
 - **Authentication & Authorization**: JWT-based authentication with user registration and login
 - **User Management**: User profiles, settings, and preferences
 - **Story Module**: AI-powered story generation using Google Generative AI
