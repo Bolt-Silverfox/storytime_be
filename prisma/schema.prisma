@@ -27,7 +27,6 @@ model User {
   passwordHash            String
   title                   String?
   name                    String?
-  avatarUrl            String?
   avatarId                String?
   avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
   isEmailVerified         Boolean                  @default(false)
@@ -51,7 +50,6 @@ model User {
 model Kid {
   id        String  @id @default(uuid())
   name      String?
-  avatarUrl String?
   avatarId  String?
   avatar    Avatar? @relation(fields: [avatarId], references: [id])
   ageRange  String?
