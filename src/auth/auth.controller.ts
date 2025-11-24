@@ -27,6 +27,8 @@ import {
   RequestResetDto,
   ValidateResetTokenDto,
   ResetPasswordDto,
+  VerifyEmailDto,
+  SendEmailVerificationDto,
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -40,17 +42,17 @@ import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('login')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(200)
   @ApiOperation({ summary: 'User login', description: 'Login for all roles.' })
   @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
   async login(@Body() body: LoginDto) {
     return this.authService.login(body);
   }
-
+//
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
@@ -94,18 +96,22 @@ export class AuthController {
 
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verify email with token' })
-  @ApiResponse({ status: 200, description: 'Email verified.' })
-  async verifyEmail(@Body('token') token: string) {
-    return this.authService.verifyEmail(token);
+  @ApiOperation({ summary: 'Verify email using token' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid token.' })
+  @ApiResponse({ status: 500, description: 'Internal server error.' })
+  @ApiBody({ type: VerifyEmailDto })
+  async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyEmail(verifyEmailDto.token);
   }
 
   @Post('send-verification')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend email verification token' })
   @ApiResponse({ status: 200, description: 'Verification email sent.' })
-  async sendVerification(@Body('email') email: string) {
-    return this.authService.sendEmailVerification(email);
+  @ApiBody({ type: SendEmailVerificationDto })
+  async sendVerification(@Body() dto: SendEmailVerificationDto) {
+    return this.authService.sendEmailVerification(dto.email);
   }
 
   @Put('profile')
