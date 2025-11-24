@@ -23,9 +23,10 @@ jobs:
           ssh -i id_ed25519 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           
           set -e
-          
+
+          # Cleanup trap for incomplete releases
           trap 'echo "Cleanup: removing incomplete release $NEW_RELEASE"; sudo rm -rf "$NEW_RELEASE"' ERR
-          
+
           APP_PATH="/var/www/storytime/prod/backend"
           RELEASES="$APP_PATH/releases"
           CURRENT="$APP_PATH/current"
@@ -34,7 +35,7 @@ jobs:
           echo "📁 Creating release folder: $NEW_RELEASE"
           sudo mkdir -p $NEW_RELEASE
 
-          echo "📥 Pulling backend code..."
+          echo "📥 Cloning backend code..."
           sudo git clone https://github.com/Bolt-Silverfox/storytime_be.git $NEW_RELEASE
 
           cd $NEW_RELEASE
@@ -42,7 +43,7 @@ jobs:
           echo "📦 Installing dependencies"
           sudo npm install --legacy-peer-deps --silent
 
-          # Copy ecosystem.config.js from current release to new release, if it exists
+          # Copy ecosystem.config.js from previous release
           if [ -f $CURRENT/ecosystem.config.js ]; then
             sudo cp $CURRENT/ecosystem.config.js $NEW_RELEASE/ecosystem.config.js
             echo "ecosystem.config.js copied from current release."
@@ -65,6 +66,11 @@ jobs:
           echo "🔨 Building project"
           sudo npm run build
 
+          # Check build output
+          if [ ! -f $NEW_RELEASE/dist/main.js ]; then
+            echo "ERROR: Build failed, dist/main.js not found. Triggering cleanup."
+            exit 1
+          fi
 
           # Save the path of the previous release before switching symlink
           if [ -L "$CURRENT" ]; then
@@ -72,18 +78,18 @@ jobs:
           else
             PREV_RELEASE=""
           fi
-          
-          echo "🔄 Switching symlink"
+
+          echo "🔄 Switching symlink to successful release"
           sudo ln -sfn $NEW_RELEASE $CURRENT
-          
+
           echo "🔥 Restarting PM2"
           sudo pm2 delete storytime-prod-backend || true
           sudo pm2 start ecosystem.config.js
-          
+
           sudo pm2 save
-          
+
           echo "🎉 PRODUCTION DEPLOYMENT COMPLETE (ZERO DOWNTIME)"
-          
+
           # --- BEGIN: Clean up previous release ---
           if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$NEW_RELEASE" ]; then
             echo "🧹 Cleaning up previous release: $PREV_RELEASE"
@@ -92,6 +98,7 @@ jobs:
             echo "No previous release to clean up (or previous == new)."
           fi
           # --- END: Clean up previous release ---
-          
+
           EOF
+
           
