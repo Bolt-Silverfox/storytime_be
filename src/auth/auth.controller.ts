@@ -58,6 +58,7 @@ export class AuthController {
   }
 
   @Post('register')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',
     description: 'Default role: parent.',
@@ -169,6 +170,7 @@ export class AuthController {
 
   // ===== PASSWORD RESET =====
   @Post('request-password-reset')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset' })
   @ApiBody({ type: RequestResetDto })
   @ApiResponse({ status: 200, description: 'Password reset email sent.' })
@@ -191,6 +193,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password with token' })
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
