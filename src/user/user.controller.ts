@@ -66,6 +66,8 @@ export class UserController {
   private readonly logger = new Logger(UserController.name);
   constructor(private readonly userService: UserService) {}
 
+  // ==================== KID ENDPOINTS ====================
+
   @Get('kids/:kidId')
   @ApiOperation({
     summary: 'Get kid by ID',
@@ -122,6 +124,37 @@ export class UserController {
     return this.userService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
   }
 
+  @Get('kids/:kidId/voice')
+  @ApiOperation({ summary: 'Get preferred voice for a kid' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: KidVoiceDto })
+  async getKidPreferredVoice(@Param('kidId') kidId: string) {
+    return await this.userService.getKidPreferredVoice(kidId);
+  }
+
+  // ==================== CURRENT USER ENDPOINTS ====================
+
+  @Get('me')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get current user profile',
+    description: 'Requires authentication.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Current user profile returned.',
+    type: UserDto,
+  })
+  async getMe(@Req() req: any) {
+    const user = await this.userService.getUser(
+      req.authUserData.userId as string,
+    );
+    return user ? new UserDto(user) : null;
+  }
+
+  // ==================== USER CRUD ENDPOINTS ====================
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get user profile',
@@ -154,6 +187,7 @@ export class UserController {
     const user = await this.userService.getUser(id);
     return user ? new UserDto(user) : null;
   }
+
   @Put(':id')
   @ApiOperation({
     summary: 'Update user profile',
@@ -173,7 +207,6 @@ export class UserController {
         },
       },
     },
-  }) //
   })
   @ApiResponse({
     status: 200,
@@ -194,6 +227,23 @@ export class UserController {
   async updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
     return await this.userService.updateUser(id, body);
   }
+
+  @Delete('account/:id')
+  @ApiOperation({
+    summary: 'Delete user account',
+    description: 'Delete my account as a user',
+  })
+  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'User account deleted.',
+    schema: { example: { id: 'abc123', deleted: true } },
+  })
+  async deleteUserAccount(@Param('id') id: string) {
+    return this.userService.deleteUserAccount(id);
+  }
+
+  // ==================== ADMIN ENDPOINTS ====================
 
   @Get()
   @UseGuards(AuthSessionGuard)
@@ -222,58 +272,8 @@ export class UserController {
     }
     return await this.userService.getAllUsers();
   }
-  @Delete(':id')
-  @ApiOperation({
-    summary: 'delete user account',
-    description: 'delete my account as a user',
-  })
-  async deleteUserAccount(id: string) {
-    return this.userService.deleteUserAccount(id);
-  }
-  @Get('me')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get current user profile',
-    description: 'Requires authentication.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Current user profile returned.',
-    type: UserDto,
-  })
-  async getMe(@Req() req: any) {
-    const user = await this.userService.getUser(
-      req.authUserData.userId as string,
-    );
-    return user ? new UserDto(user) : null;
-  }
 
   @Delete(':id')
-  @Patch('kids/:kidId/voice')
-  @ApiOperation({ summary: 'Set preferred voice for a kid' })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiBody({ type: SetKidPreferredVoiceDto })
-  @ApiResponse({ status: 200, type: KidVoiceDto })
-  async setKidPreferredVoice(
-    @Param('kidId') kidId: string,
-    @Body() body: SetKidPreferredVoiceDto,
-  ) {
-    this.logger.log(
-      `Setting preferred voice for kid ${kidId} to ${JSON.stringify(body)}`,
-    );
-    if (!body.voiceType) {
-      throw new BadRequestException('Voice type is required');
-    }
-    const voiceKey = body.voiceType.toUpperCase() as keyof typeof VOICEID;
-    const voiceId = VOICEID[voiceKey];
-    if (!voiceId) {
-      throw new ForbiddenException('Invalid voice type');
-    }
-    return this.userService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
-  }
-
-  @Delete('account/:id')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
@@ -342,13 +342,5 @@ export class UserController {
       throw new ForbiddenException('Invalid role');
     }
     return await this.userService.updateUserRole(id, role);
-  }
-
-  @Get('kids/:kidId/voice')
-  @ApiOperation({ summary: 'Get preferred voice for a kid' })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({ status: 200, type: KidVoiceDto })
-  async getKidPreferredVoice(@Param('kidId') kidId: string) {
-    return await this.userService.getKidPreferredVoice(kidId);
   }
 }

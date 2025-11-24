@@ -51,3 +51,16 @@ export class AssignAvatarDto {
   @IsOptional()
   kidId?: string;
 }
+
+// UPDATED: Removed parentId - will come from authenticated user
+export class CreateKidWithAvatarDto {
+  @ApiProperty({ example: 'firstname lastname' })
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty({ example: '5-7', required: false })
+  @IsString()
+  @IsOptional()
+  ageRange?: string;
+}
