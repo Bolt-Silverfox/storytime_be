@@ -75,7 +75,7 @@ export class ReportsController {
     return this.reportsService.recordAnswer(dto);
   }
 
-  // ============== WEEKLY AI SUMMARY ==============
+  // ============= WEEKLY AI SUMMARY =============
   @Get('weekly-summary/:parentId')
   @ApiOperation({
     summary: 'Get AI-generated weekly summary for parent dashboard',
