@@ -22,6 +22,7 @@ import {
   ValidateResetTokenDto,
   ResetPasswordDto,
   VerifyEmailDto,
+  SendEmailVerificationDto,
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -103,8 +104,9 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend email verification token' })
   @ApiResponse({ status: 200, description: 'Verification email sent.' })
-  async sendVerification(@Body('email') email: string) {
-    return this.authService.sendEmailVerification(email);
+  @ApiBody({ type: SendEmailVerificationDto })
+  async sendVerification(@Body() dto: SendEmailVerificationDto) {
+    return this.authService.sendEmailVerification(dto.email);
   }
 
   @Put('profile')
