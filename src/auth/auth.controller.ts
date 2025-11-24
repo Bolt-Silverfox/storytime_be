@@ -8,6 +8,8 @@ import {
   Req,
   UseGuards,
   UnauthorizedException,
+  HttpCode,
+  HttpStatus
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
@@ -30,7 +32,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
-import { HttpCode, HttpStatus } from '@nestjs/common';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -38,14 +39,14 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(200)
   @ApiOperation({ summary: 'User login', description: 'Login for all roles.' })
   @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
   async login(@Body() body: LoginDto) {
     return this.authService.login(body);
   }
-
+//
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
