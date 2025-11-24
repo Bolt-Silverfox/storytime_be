@@ -369,7 +369,7 @@ model StoryQuestion {
 model Avatar {
   id             String   @id @default(cuid())
   name           String?  // Standard name for upsert (unique identifier)
-  displayName    String?  // User-friendly display name
+ // displayName    String?  // User-friendly display name
   url            String
   isSystemAvatar Boolean  @default(false)
   publicId       String?
