@@ -173,7 +173,6 @@ export class UserController {
         },
       },
     },
-  }) //
   })
   @ApiResponse({
     status: 200,
@@ -249,29 +248,7 @@ export class UserController {
     return user ? new UserDto(user) : null;
   }
 
-  @Delete(':id')
-  @Patch('kids/:kidId/voice')
-  @ApiOperation({ summary: 'Set preferred voice for a kid' })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiBody({ type: SetKidPreferredVoiceDto })
-  @ApiResponse({ status: 200, type: KidVoiceDto })
-  async setKidPreferredVoice(
-    @Param('kidId') kidId: string,
-    @Body() body: SetKidPreferredVoiceDto,
-  ) {
-    this.logger.log(
-      `Setting preferred voice for kid ${kidId} to ${JSON.stringify(body)}`,
-    );
-    if (!body.voiceType) {
-      throw new BadRequestException('Voice type is required');
-    }
-    const voiceKey = body.voiceType.toUpperCase() as keyof typeof VOICEID;
-    const voiceId = VOICEID[voiceKey];
-    if (!voiceId) {
-      throw new ForbiddenException('Invalid voice type');
-    }
-    return this.userService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
-  }
+  
 
   @Delete('account/:id')
   @UseGuards(AuthSessionGuard)

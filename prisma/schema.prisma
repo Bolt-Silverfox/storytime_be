@@ -43,23 +43,24 @@ model User {
   Reward                  Reward[]
   notificationPreferences NotificationPreference[]
   activityLogs            ActivityLog[]
+  userIps                 UserIP[]
 
   @@map("users")
 }
 
 model Kid {
-  id        String  @id @default(uuid())
-  name      String?
-  avatarId  String?
-  avatar    Avatar? @relation(fields: [avatarId], references: [id])
-  ageRange  String?
-  dailyScreenTimeLimitMins Int?     // Daily limit in minutes, null = no limit
+  id                       String              @id @default(uuid())
+  name                     String?
+  avatarId                 String?
+  avatar                   Avatar?             @relation(fields: [avatarId], references: [id])
+  ageRange                 String?
+  dailyScreenTimeLimitMins Int? // Daily limit in minutes, null = no limit
   screenTimeSessions       ScreenTimeSession[]
   questionAnswers          QuestionAnswer[]
-  parentId  String
-  parent    User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  parentId                 String
+  parent                   User                @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
 
   rewards Reward[]
 
@@ -220,7 +221,7 @@ model DailyChallenge {
 model Voice {
   id                String   @id @default(uuid())
   userId            String?
-  user              User?    @relation(fields: [userId], references: [id],onDelete: Cascade)
+  user              User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   name              String
   type              String // 'uploaded' or 'elevenlabs'
   url               String? // For uploaded audio
@@ -246,7 +247,7 @@ model Reward {
   updatedAt   DateTime @updatedAt
 
   userId String?
-  user   User?   @relation(fields: [userId], references: [id],onDelete: Cascade)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   kidId String?
   kid   Kid?    @relation(fields: [kidId], references: [id])
@@ -275,7 +276,7 @@ model NotificationPreference {
   enabled   Boolean
   userId    String?
   kidId     String?
-  user      User?            @relation(fields: [userId], references: [id],onDelete: Cascade)
+  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   Kid       Kid?             @relation(fields: [kidId], references: [id])
@@ -298,7 +299,7 @@ model RewardRedemption {
 model ActivityLog {
   id        String   @id @default(uuid())
   userId    String?
-  user      User?    @relation(fields: [userId], references: [id],onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   kidId     String?
   kid       Kid?     @relation(fields: [kidId], references: [id])
   action    String // e.g. 'story_read', 'reward_redeemed', etc.
@@ -363,11 +364,10 @@ model StoryQuestion {
   @@map("story_questions")
 }
 
-
 model Avatar {
   id             String   @id @default(cuid())
-  name           String?  // Standard name for upsert (unique identifier)
-  displayName    String?  // User-friendly display name
+  name           String? // Standard name for upsert (unique identifier)
+  displayName    String? // User-friendly display name
   url            String
   isSystemAvatar Boolean  @default(false)
   publicId       String?
@@ -377,10 +377,10 @@ model Avatar {
   users User[]
   kids  Kid[]
 
-  @@map("avatars")
-  @@index([name])           // Index for upsert operations
+  @@unique([name]) // Ensure name is unique for upsert
+  @@index([name]) // Index for upsert operations
   @@index([isSystemAvatar]) // Index for filtering system avatars
-  @@unique([name])          // Ensure name is unique for upsert
+  @@map("avatars")
 }
 
 model AgeGroup {
@@ -393,8 +393,8 @@ model AgeGroup {
 
   @@unique([name])
   @@map("age_groups")
-  }
-  
+}
+
 model ScreenTimeSession {
   id        String    @id @default(uuid())
   kidId     String
@@ -410,17 +410,31 @@ model ScreenTimeSession {
 
 // Track quiz/question answers
 model QuestionAnswer {
-  id         String        @id @default(uuid())
-  kidId      String
-  kid        Kid           @relation(fields: [kidId], references: [id], onDelete: Cascade)
-  questionId String
-  question   StoryQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  storyId    String
+  id             String        @id @default(uuid())
+  kidId          String
+  kid            Kid           @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       StoryQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  storyId        String
   selectedOption Int
-  isCorrect  Boolean
-  answeredAt DateTime      @default(now())
+  isCorrect      Boolean
+  answeredAt     DateTime      @default(now())
 
   @@index([kidId])
   @@index([kidId, answeredAt])
   @@map("question_answers")
+}
+
+model UserIP {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress String
+  userAgent String?
+  firstUsed DateTime @default(now())
+  lastUsed  DateTime @updatedAt
+
+  @@unique([userId, ipAddress])
+  @@index([ipAddress])
+  @@map("user_ips")
 }
