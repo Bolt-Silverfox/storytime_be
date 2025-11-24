@@ -248,8 +248,6 @@ export class UserController {
     return user ? new UserDto(user) : null;
   }
 
-
-
   @Delete('account/:id')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
