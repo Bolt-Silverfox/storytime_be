@@ -23,13 +23,15 @@ import {
 } from './avatar.dto';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
+import { Public } from '../auth/public.decorator';
 import { SuccessResponse } from '../common/dtos/api-response.dto';
 
 @Controller('avatars')
-@UseGuards(AuthSessionGuard) 
+@UseGuards(AuthSessionGuard)
 export class AvatarController {
   constructor(private readonly avatarService: AvatarService) {}
   
+  @Public()
   @Get('system')
   async getSystemAvatars() {
     const avatars = await this.avatarService.getSystemAvatars();
@@ -101,8 +103,8 @@ export class AvatarController {
   // ADMIN ONLY ENDPOINTS
 
   @Get()
-  @UseGuards(AdminGuard) 
-   async getAllAvatars() {
+  @UseGuards(AdminGuard)
+  async getAllAvatars() {
     const avatars = await this.avatarService.getAllAvatars();
     return new SuccessResponse(200, avatars, 'Avatars retrieved successfully');
   }
@@ -139,7 +141,7 @@ export class AvatarController {
   }
 
   @Delete(':id')
-  @UseGuards(AdminGuard) 
+  @UseGuards(AdminGuard)
   async deleteAvatar(@Param('id') id: string) {
     await this.avatarService.deleteAvatar(id);
     return new SuccessResponse(200, null, 'Avatar deleted successfully');
