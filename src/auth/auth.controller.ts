@@ -21,6 +21,7 @@ import {
   RequestResetDto,
   ValidateResetTokenDto,
   ResetPasswordDto,
+  VerifyEmailDto,
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -35,7 +36,7 @@ import { HttpCode, HttpStatus } from '@nestjs/common';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -89,10 +90,13 @@ export class AuthController {
 
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verify email with token' })
-  @ApiResponse({ status: 200, description: 'Email verified.' })
-  async verifyEmail(@Body('token') token: string) {
-    return this.authService.verifyEmail(token);
+  @ApiOperation({ summary: 'Verify email using token' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid token.' })
+  @ApiResponse({ status: 500, description: 'Internal server error.' })
+  @ApiBody({ type: VerifyEmailDto })
+  async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyEmail(verifyEmailDto.token);
   }
 
   @Post('send-verification')
