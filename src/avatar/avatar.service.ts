@@ -35,7 +35,6 @@ export class AvatarService {
       throw new BadRequestException('Failed to upload avatar image');
     }
 
-    // Use entityType and entityId to create a unique avatar name
     const avatarName = `${entityType}-avatar-${entityId}`;
 
     return this.prisma.avatar.upsert({
@@ -65,7 +64,6 @@ export class AvatarService {
       try {
         await this.uploadService.deleteImage(oldAvatar.publicId);
 
-        // Only delete if no one else is using this avatar
         const usersUsing = await this.prisma.user.count({
           where: { avatarId },
         });
@@ -134,7 +132,6 @@ export class AvatarService {
     let data: any = { ...updateAvatarDto };
 
     if (file) {
-      // Delete old image from Cloudinary if it exists
       if (avatar.publicId) {
         try {
           await this.uploadService.deleteImage(avatar.publicId);
@@ -165,7 +162,6 @@ export class AvatarService {
       throw new NotFoundException('Avatar not found');
     }
 
-    // Check if avatar is being used
     const usersUsing = await this.prisma.user.count({
       where: { avatarId: id },
     });
@@ -177,7 +173,6 @@ export class AvatarService {
       );
     }
 
-    // Delete from Cloudinary if it exists
     if (avatar.publicId) {
       try {
         await this.uploadService.deleteImage(avatar.publicId);
@@ -283,5 +278,54 @@ export class AvatarService {
       data: { avatarId: avatar.id },
       include: { avatar: true },
     });
+  }
+
+  // NEW: Create kid with avatar upload in one transaction
+  async createKidWithAvatar(
+    parentId: string,
+    name: string,
+    ageRange: string | undefined,
+    file: Express.Multer.File,
+  ) {
+    // Verify parent exists
+    const parent = await this.prisma.user.findUnique({
+      where: { id: parentId },
+    });
+
+    if (!parent) {
+      throw new NotFoundException('Parent user not found');
+    }
+
+    // First create the kid without avatar
+    const kid = await this.prisma.kid.create({
+      data: {
+        name,
+        ageRange,
+        parentId,
+      },
+    });
+
+    try {
+      // Upload and assign avatar
+      const avatar = await this.handleCustomAvatarUpload(
+        kid.id,
+        'kid',
+        file,
+        name,
+      );
+
+      // Update kid with avatar
+      const updatedKid = await this.prisma.kid.update({
+        where: { id: kid.id },
+        data: { avatarId: avatar.id },
+        include: { avatar: true },
+      });
+
+      return updatedKid;
+    } catch (error) {
+      // If avatar upload fails, delete the kid to maintain data integrity
+      await this.prisma.kid.delete({ where: { id: kid.id } });
+      throw error;
+    }
   }
 }
