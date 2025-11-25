@@ -38,7 +38,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
-import { Request } from 'express';
+// import { Request } from 'express';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -211,7 +211,7 @@ export class AuthController {
   }
 
   // ===== GOOGLE AUTH (MOBILE / WEB id_token) =====
- // Mobile or web app can POST an id_token payload { id_token: '...' }
+  // Mobile or web app can POST an id_token payload { id_token: '...' }
   @Post('google')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Google sign-in (id_token) — mobile/web' })
@@ -220,7 +220,7 @@ export class AuthController {
     if (!idToken) {
       throw new BadRequestException('id_token is required');
     }
-    
+
     return this.authService.loginWithGoogleIdToken(idToken);
   }
 
