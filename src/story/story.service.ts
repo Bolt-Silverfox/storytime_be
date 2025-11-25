@@ -54,6 +54,8 @@ export class StoryService {
     recommended?: boolean;
     age?: number;
     kidId?: string;
+    userId?: string;
+    user?: any;
   }) {
     const where: any = {};
     if (filter.theme) where.themes = { some: { id: filter.theme } };
@@ -79,7 +81,7 @@ export class StoryService {
       where.ageMin = { lte: age };
       where.ageMax = { gte: age };
     }
-    return this.prisma.story.findMany({
+    const stories = await this.prisma.story.findMany({
       where,
       include: {
         images: true,
@@ -89,10 +91,13 @@ export class StoryService {
         questions: true,
       },
     });
+
+    return stories.map((story) => this.enrichStoryWithEntitlement(story, filter.user));
   }
 
   async findByCategory(
     categoryId: string,
+    user?: any,
     age?: number,
   ): Promise<StoriesByCategoryResponseDto> {
     // Check if category exists
@@ -132,7 +137,9 @@ export class StoryService {
     });
 
     return {
-      stories: stories as any,
+      stories: stories.map((story) =>
+        this.enrichStoryWithEntitlement(story, user),
+      ) as any,
       message: stories.length === 0 ? 'No stories yet' : undefined,
       category: {
         ...category,
@@ -169,6 +176,7 @@ export class StoryService {
         branches: data.branches ? { create: data.branches } : undefined,
         categories: { connect: data.categoryIds.map((id) => ({ id })) },
         themes: { connect: data.themeIds.map((id) => ({ id })) },
+        isPremium: data.isPremium ?? false,
       },
       include: { images: true, branches: true },
     });
@@ -201,6 +209,7 @@ export class StoryService {
         themes: data.themeIds
           ? { set: data.themeIds.map((id) => ({ id })) }
           : undefined,
+        isPremium: data.isPremium,
       },
       include: { images: true, branches: true },
     });
@@ -800,6 +809,7 @@ export class StoryService {
       throw new NotFoundException(`Kid with id ${kidId} not found`);
     }
 
+
     // Extract age from age range
     let ageMin = 4;
     let ageMax = 8;
@@ -841,5 +851,29 @@ export class StoryService {
     };
 
     return this.generateStoryWithAI(options);
+  }
+
+  private enrichStoryWithEntitlement(story: any, user?: any) {
+    // If subscription system is unavailable (user is undefined), assume locked for premium stories
+    // If user has active subscription, locked=false for all
+    // If no subscription, locked=true for isPremium=true
+
+    let locked = true; // Default to locked for safety
+
+    if (user && user.isSubscribed) {
+      locked = false;
+    } else {
+      // Not subscribed or user unknown
+      if (story.isPremium) {
+        locked = true;
+      } else {
+        locked = false;
+      }
+    }
+
+    return {
+      ...story,
+      locked,
+    };
   }
 }

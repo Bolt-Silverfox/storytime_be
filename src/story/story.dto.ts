@@ -57,6 +57,9 @@ export class CreateStoryDto {
 
   @ApiProperty({ type: [StoryBranchDto], required: false })
   branches?: StoryBranchDto[];
+
+  @ApiProperty({ required: false })
+  isPremium?: boolean;
 }
 
 export class UpdateStoryDto {
@@ -95,6 +98,9 @@ export class UpdateStoryDto {
 
   @ApiProperty({ type: [StoryBranchDto], required: false })
   branches?: StoryBranchDto[];
+
+  @ApiProperty({ required: false })
+  isPremium?: boolean;
 }
 
 export class FavoriteDto {
@@ -332,6 +338,9 @@ export class StoryResponseDto extends CreateStoryDto {
 
   @ApiProperty({ type: [ThemeDto], required: false })
   themes?: ThemeDto[];
+
+  @ApiProperty()
+  locked: boolean;
 }
 
 export class StoriesByCategoryResponseDto {

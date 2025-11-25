@@ -33,6 +33,7 @@ model User {
   role                    Role                     @default(parent)
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
+  isSubscribed            Boolean                  @default(false)
   profile                 Profile?
   auth                    Session[]
   Token                   Token[]
@@ -139,6 +140,7 @@ model Story {
   aiGenerated   Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  isPremium     Boolean  @default(false)
 
   images   StoryImage[]
   branches StoryBranch[]

@@ -101,6 +101,7 @@ export class StoryController {
     @Query('recommended') recommended?: string,
     @Query('kidId') kidId?: string,
     @Query('age') age?: string,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.storyService.getStories({
       theme,
@@ -113,6 +114,7 @@ export class StoryController {
             : undefined,
       kidId,
       age: age ? parseInt(age) : undefined,
+      user: req.user,
     });
   }
 
@@ -174,7 +176,7 @@ export class StoryController {
       }
     }
 
-    return this.storyService.findByCategory(categoryId, age);
+    return this.storyService.findByCategory(categoryId, req.user, age);
   }
 
   @Get('categories')
