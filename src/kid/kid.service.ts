@@ -6,23 +6,25 @@ import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 export class KidService {
     constructor(private prisma: PrismaService) { }
 
-    // Migrated from AuthService (Single creation is cleaner, but loop is fine for bulk)
     async createKid(userId: string, dto: CreateKidDto) {
-        const { preferredCategoryIds, ...data } = dto;
+        const { preferredCategoryIds, avatarId, ...data } = dto;
 
         return this.prisma.kid.create({
             data: {
                 ...data,
                 parentId: userId,
+                avatarId: avatarId,
                 preferredCategories: preferredCategoryIds
                     ? { connect: preferredCategoryIds.map((id) => ({ id })) }
                     : undefined,
             },
-            include: { avatar: true, preferredCategories: true },
+            include: {
+                avatar: true,
+                preferredCategories: true,
+            },
         });
     }
 
-    // Migrated from AuthService
     async findAllByUser(userId: string) {
         return this.prisma.kid.findMany({
             where: { parentId: userId },
@@ -30,11 +32,10 @@ export class KidService {
                 avatar: true,
                 preferredCategories: true,
             },
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: 'desc' },
         });
     }
 
-    // NEW: Get Single Kid
     async findOne(kidId: string, userId: string) {
         const kid = await this.prisma.kid.findUnique({
             where: { id: kidId },
@@ -42,7 +43,7 @@ export class KidService {
                 avatar: true,
                 preferredCategories: true,
                 notificationPreferences: true,
-                activityLogs: { take: 5, orderBy: { createdAt: 'desc' } },
+                activityLogs: { take: 10, orderBy: { createdAt: 'desc' } },
             },
         });
 
@@ -52,31 +53,52 @@ export class KidService {
         return kid;
     }
 
-    // Enhanced Update (Handles Bedtime & Categories)
     async updateKid(kidId: string, userId: string, dto: UpdateKidDto) {
+        // 1. Verify ownership
         const kid = await this.prisma.kid.findUnique({ where: { id: kidId } });
-        if (!kid || kid.parentId !== userId) throw new NotFoundException('Kid not found');
+        if (!kid || kid.parentId !== userId) {
+            throw new NotFoundException('Kid not found or access denied');
+        }
 
-        const { preferredCategoryIds, ...rest } = dto;
+        // 2. Destructure ALL relation IDs to avoid "XOR" type conflicts
+        const { preferredCategoryIds, preferredVoiceId, avatarId, ...rest } = dto;
 
         return this.prisma.kid.update({
             where: { id: kidId },
             data: {
-                ...rest,
-                // Update Many-to-Many relation
+                ...rest, // Only simple fields (name, ageRange, bedtime, etc.)
+
+                // Handle Avatar as a relation (Fixes Type Error)
+                avatar: avatarId
+                    ? { connect: { id: avatarId } }
+                    : undefined,
+
+                // Handle Categories
                 preferredCategories: preferredCategoryIds
-                    ? { set: preferredCategoryIds.map((id) => ({ id })) } // 'set' replaces existing list
+                    ? { set: preferredCategoryIds.map((id) => ({ id })) }
+                    : undefined,
+
+                // Handle Voice (Fixes "Cannot find name" error)
+                preferredVoice: preferredVoiceId
+                    ? { connect: { id: preferredVoiceId } }
                     : undefined,
             },
-            include: { avatar: true, preferredCategories: true },
+            include: {
+                avatar: true,
+                preferredCategories: true,
+                preferredVoice: true,
+            },
         });
     }
 
-    // Migrated from AuthService
     async deleteKid(kidId: string, userId: string) {
         const kid = await this.prisma.kid.findUnique({ where: { id: kidId } });
-        if (!kid || kid.parentId !== userId) throw new NotFoundException('Kid not found');
+        if (!kid || kid.parentId !== userId) {
+            throw new NotFoundException('Kid not found or access denied');
+        }
 
-        return this.prisma.kid.delete({ where: { id: kidId } });
+        return this.prisma.kid.delete({
+            where: { id: kidId },
+        });
     }
 }
