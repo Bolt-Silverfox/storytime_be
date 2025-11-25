@@ -66,39 +66,6 @@ export class UserController {
   private readonly logger = new Logger(UserController.name);
   constructor(private readonly userService: UserService) {}
 
-  @Get('kids/:kidId')
-  @ApiOperation({
-    summary: 'Get kid by ID',
-    description: 'Retrieve a kid profile by kidId.',
-  })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({
-    status: 200,
-    description: 'Kid data returned.',
-    schema: {
-      example: {
-        id: 'kid123',
-        name: 'Tom',
-        age: 6,
-        avatar: { url: 'https://...' },
-        preferredVoiceId: 'voice-abc',
-        parent: {
-          id: 'user123',
-          name: 'Parent Name',
-        },
-      },
-    },
-  })
-  @ApiResponse({ status: 404, description: 'Kid not found' })
-  async getKidById(@Param('kidId') kidId: string) {
-    try {
-      return await this.userService.getKidById(kidId);
-    } catch (error) {
-      this.logger.error(`Error fetching kid ${kidId}: ${error.message}`);
-      throw error;
-    }
-  }
-
   @Patch('kids/:kidId/voice')
   @ApiOperation({ summary: 'Set preferred voice for a kid' })
   @ApiParam({ name: 'kidId', type: String })
