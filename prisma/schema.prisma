@@ -70,6 +70,16 @@ model Kid {
   preferredVoiceId String?
   preferredVoice   Voice?  @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
 
+  //Preferences
+  preferredCategories Category[] @relation("KidPreferredCategories")
+  excludedTags        String[]   @default([]) // e.g. ["ghosts", "spiders"]
+
+  //Bedtime Settings
+  isBedtimeEnabled Boolean @default(false)
+  bedtimeStart     String? // Format: "HH:mm" e.g., "20:00"
+  bedtimeEnd       String? // Format: "HH:mm" e.g., "07:00"
+  bedtimeDays      Int[]   @default([]) // 0=Sunday, 1=Monday, etc.
+
   // New relations
   dailyChallenges         DailyChallengeAssignment[]
   notificationPreferences NotificationPreference[]
@@ -334,6 +344,7 @@ model Category {
   image       String?
   description String?
   stories     Story[] @relation("StoryCategories")
+  preferredByKids Kid[] @relation("KidPreferredCategories")
 }
 
 model Theme {
