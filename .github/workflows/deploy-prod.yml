@@ -41,7 +41,8 @@ jobs:
           cd $NEW_RELEASE
       
           echo "Installing dependencies (no dev)..."
-          sudo npm ci --omit=dev
+          # sudo npm ci --omit=dev
+          sudo npm install
       
           echo "Copy environment file..."
           sudo cp $CURRENT/.env .env 2>/dev/null || sudo cp /home/storytime/storytime_be/.env .env
