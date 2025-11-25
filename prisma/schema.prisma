@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = "postgresql://postgres:112233@localhost:5432/rexQlink?schema=public"
 }
 
 enum Role {
@@ -325,11 +325,16 @@ model StoryPath {
 }
 
 model Category {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  image       String?
+  id          String              @id @default(uuid())
+  name        String              @unique
+  slug        String              @unique
+  image    String?
   description String?
-  stories     Story[] @relation("StoryCategories")
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  stories     Story[]             @relation("StoryCategories")
+  ageGroups   CategoryAgeGroup[]
+  @@map("categories")
 }
 
 model Theme {
@@ -391,13 +396,26 @@ model AgeGroup {
   name      String
   min       Int
   max       Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  categories  CategoryAgeGroup[]
   @@unique([name])
   @@map("age_groups")
   }
   
+model CategoryAgeGroup {
+  id         String   @id @default(uuid())
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  ageGroupId String
+  ageGroup   AgeGroup @relation(fields: [ageGroupId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([categoryId, ageGroupId])
+  @@map("category_age_groups")
+}
+  
+
 model ScreenTimeSession {
   id        String    @id @default(uuid())
   kidId     String

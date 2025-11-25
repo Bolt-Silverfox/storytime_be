@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AgeGroup } from '@prisma/client';
+
 
 @Injectable()
 export class CategorySeederService implements OnModuleInit {
