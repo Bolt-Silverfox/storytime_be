@@ -15,7 +15,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AvatarModule } from './avatar/avatar.module';
 import { AgeModule } from './age/age.module';
 import { ReportsModule } from './reports/reports.module';
-
+import { KidModule } from './kid/kid.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -26,6 +26,7 @@ import { ReportsModule } from './reports/reports.module';
     CommonModule,
     AuthModule,
     UserModule,
+    KidModule,
     SettingsModule,
     NotificationModule,
     CloudinaryModule,
