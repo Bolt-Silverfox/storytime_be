@@ -1,3 +1,5 @@
+import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { Response, Request } from 'express';
 import {
   Body,
   Controller,
@@ -8,8 +10,10 @@ import {
   Req,
   UseGuards,
   UnauthorizedException,
+  BadRequestException,
+  Res,
   HttpCode,
-  HttpStatus
+  HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
@@ -193,6 +197,45 @@ export class AuthController {
       body.email,
       body.newPassword,
       body,
+    );
+  }
+
+  // ===== GOOGLE AUTH (MOBILE / WEB id_token) =====
+ // Mobile or web app can POST an id_token payload { id_token: '...' }
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Google sign-in (id_token) — mobile/web' })
+  @ApiBody({ description: 'Google id_token', schema: { example: { id_token: 'eyJhbGci...' } } })
+  async googleIdToken(@Body('id_token') idToken: string) {
+    if (!idToken) {
+      throw new BadRequestException('id_token is required');
+    }
+    
+    return this.authService.loginWithGoogleIdToken(idToken);
+  }
+
+
+
+  // ===== GOOGLE OAUTH (web redirect flow) =====
+  @Get('google/oauth')
+  @UseGuards(GoogleAuthGuard)
+  async googleLogin() {
+    // Guard will redirect to Google
+  }
+
+
+
+  // ===== GOOGLE OAUTH CALLBACK =====
+  @Get('google/oauth/callback')
+  @UseGuards(GoogleAuthGuard)
+  async googleCallback(@Req() req: Request, @Res() res: Response) {
+    const payload = (req as any).user;
+    const result = await this.authService.handleGoogleOAuthPayload(payload);
+
+    return res.redirect(
+      `${process.env.WEB_APP_BASE_URL}/oauth-success?jwt=${encodeURIComponent(
+        result.jwt,
+      )}&refresh=${encodeURIComponent(result.refreshToken)}`
     );
   }
 }
