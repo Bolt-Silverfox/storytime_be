@@ -810,7 +810,7 @@ export class StoryService {
     });
     return scene;
   }
-
+//update scene 
   async updateScene(id: string, dto: UpdateSceneDto) {
     const { choices, ...sceneData } = dto;
     const data: any = { ...sceneData };
