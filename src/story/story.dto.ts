@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { IsString , IsOptional, IsArray, } from 'class-validator';
+
 
 export class StoryImageDto {
   @ApiProperty()
@@ -315,4 +316,65 @@ export class QuestionAnswerDto {
 
   @ApiProperty()
   selectedOption: number;
+}
+
+
+export class CreateSceneDto {
+  @IsString()
+  storyId: string;
+
+  @IsString()
+  sceneText: string;
+
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
+
+  @IsOptional()
+  @IsArray()
+  choices?: { choiceText: string; nextSceneId?: string }[];
+}
+
+export class CreateChoiceDto {
+  @IsString()
+  sceneId: string;
+
+  @IsString()
+  choiceText: string;
+
+  @IsString()
+  @IsOptional()
+  nextSceneId?: string;
+}
+
+export class UpdateSceneDto {
+  @IsString()
+  @IsOptional()
+  sceneText?: string;
+
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
+
+  @IsOptional()
+  @IsArray()
+  choices?: { id?: string; choiceText: string; nextSceneId?: string }[];
+}
+export class SceneResponseDto {
+  scene_id: string;
+  scene_text: string;
+  image_url?: string;
+  choices: ChoiceResponseDto[];
+}
+export class ChoiceResponseDto {
+  id: string;
+  choice_text: string;
+  next_scene_id?: string;
+}
+
+export class SceneWithChoicesDto {
+  scene_text: string;
+  image_url?: string;
+  page_number: number;
+  choices: ChoiceResponseDto[];
 }

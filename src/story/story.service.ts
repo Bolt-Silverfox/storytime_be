@@ -20,6 +20,9 @@ import {
   CategoryDto,
   ThemeDto,
   VoiceType,
+  CreateSceneDto,
+  CreateChoiceDto,
+  UpdateSceneDto,
 } from './story.dto';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
@@ -789,5 +792,118 @@ export class StoryService {
     };
 
     return this.generateStoryWithAI(options);
+  }
+
+  //STORY SCENES
+
+  async createScene(dto: CreateSceneDto) {
+    const scene = await this.prisma.scene.create({
+      data: {
+        storyId: dto.storyId,
+        sceneText: dto.sceneText,
+        imageUrl: dto.imageUrl,
+        choices: {
+          create: dto.choices || [],
+        },
+      },
+      include: { choices: true },
+    });
+    return scene;
+  }
+
+  async updateScene(id: string, dto: UpdateSceneDto) {
+    const { choices, ...sceneData } = dto;
+    const data: any = { ...sceneData };
+
+    if (choices) {
+      data.choices = {
+        deleteMany: {
+          id: { notIn: choices.filter((c) => c.id).map((c) => c.id) },
+        },
+
+        update: choices
+          .filter((c) => c.id)
+          .map((c) => ({
+            where: { id: c.id },
+            data: {
+              choiceText: c.choiceText,
+              nextSceneId: c.nextSceneId,
+            },
+          })),
+        create: choices
+          .filter((c) => !c.id)
+          .map((c) => ({
+            choiceText: c.choiceText,
+            nextSceneId: c.nextSceneId,
+          })),
+      };
+    }
+
+    return this.prisma.scene.update({
+      where: { id },
+      data,
+      include: { choices: true },
+    });
+  }
+
+  async getSceneWithChoices(storyId: string, sceneId: string) {
+    const scene = await this.prisma.scene.findUnique({
+      where: { id: sceneId },
+      include: { choices: true },
+    });
+
+    if (!scene || scene.storyId !== storyId) {
+      return null; // Controller will throw 404
+    }
+
+    return {
+      scene_text: scene.sceneText,
+      image_url: scene.imageUrl,
+      choices: scene.choices.map((c) => ({
+        id: c.id,
+        choice_text: c.choiceText,
+        next_scene_id: c.nextSceneId,
+      })),
+      page_number: scene.pageNumber ?? 1,
+    };
+  }
+  async getSceneById(id: string) {
+    const scene = await this.prisma.scene.findUnique({
+      where: { id },
+      include: { choices: true },
+    });
+
+    if (!scene) throw new NotFoundException('Scene not found');
+
+    return {
+      scene_id: scene.id,
+      scene_text: scene.sceneText,
+      image_url: scene.imageUrl,
+      choices: scene.choices.map((c) => ({
+        id: c.id,
+        choice_text: c.choiceText,
+        next_scene_id: c.nextSceneId,
+      })),
+    };
+  }
+
+  async getScenesByStory(storyId: string) {
+    return this.prisma.scene.findMany({
+      where: { storyId },
+      include: { choices: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async deleteScene(id: string) {
+    return this.prisma.scene.delete({ where: { id } });
+  }
+
+  //STORY CHOICES
+
+  async createChoice(dto: CreateChoiceDto) {
+    return this.prisma.choice.create({
+      data: dto,
+    });
   }
 }

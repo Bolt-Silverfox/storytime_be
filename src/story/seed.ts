@@ -241,7 +241,7 @@ async function main() {
     const validThemes = themes.filter((name: string) =>
       themesArray.some((theme) => theme.name === name),
     );
-    await prisma.story.create({
+    const createdStory = await prisma.story.create({
       data: {
         title: story.title,
         description: story.description,
@@ -260,12 +260,53 @@ async function main() {
           create: story.questions.map((question: any) => ({
             question: question.question,
             options: question.options,
-            answer: question.answer,
+            correctOption: question.answer,
           })),
         },
         recommended: story.recommended ?? false,
       },
     });
+
+    // Optional: Create scenes and choices if they exist
+    // Seed scenes and choices correctly
+    if (story.scenes && story.scenes.length > 0) {
+      const sceneMap = new Map();
+
+      // FIRST: create all scenes
+      for (const scene of story.scenes) {
+        const createdScene = await prisma.scene.create({
+          data: {
+            storyId: createdStory.id,
+            sceneText: scene.sceneText,
+            imageUrl: scene.imageUrl ?? null,
+            pageNumber: scene.pageNumber ?? 1,
+          },
+        });
+
+        sceneMap.set(scene.tempId, createdScene.id); 
+      }
+
+      // insert choices with correct nextSceneId
+      for (const scene of story.scenes) {
+        const createdSceneId = sceneMap.get(scene.tempId);
+
+        if (scene.choices && scene.choices.length > 0) {
+          for (const choice of scene.choices) {
+            const nextSceneRealId = choice.nextSceneTempId
+              ? sceneMap.get(choice.nextSceneTempId)
+              : null;
+
+            await prisma.choice.create({
+              data: {
+                sceneId: createdSceneId,
+                choiceText: choice.choiceText,
+                nextSceneId: nextSceneRealId,
+              },
+            });
+          }
+        }
+      }
+    }
   }
 
   console.log('Seeded stories!');

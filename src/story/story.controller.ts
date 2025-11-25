@@ -12,6 +12,7 @@ import {
   UseInterceptors,
   UploadedFile,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -48,6 +49,12 @@ import {
   VoiceType,
   StoryContentAudioDto,
   GenerateStoryDto,
+  CreateSceneDto,
+  CreateChoiceDto,
+  UpdateSceneDto,
+  ChoiceResponseDto,
+  SceneResponseDto,
+  SceneWithChoicesDto,
 } from './story.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -785,5 +792,108 @@ export class StoryController {
   })
   async getStoryById(@Param('id') id: string) {
     return await this.storyService.getStoryById(id);
+  }
+
+  // --- Scenes ---
+
+  @Get('scenes/:id')
+  @ApiOperation({ summary: 'Get a scene by ID' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ description: 'Scene', type: SceneResponseDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getSceneById(@Param('id') id: string) {
+    return await this.storyService.getSceneById(id);
+  }
+
+  @Get(':storyId/scenes/:sceneId')
+  @ApiOperation({
+    summary: 'Get a specific scene with its choices for a story',
+  })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiParam({ name: 'sceneId', type: String })
+  @ApiOkResponse({
+    description: 'Scene with choices',
+    type: SceneWithChoicesDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getSceneWithChoices(
+    @Param('storyId') storyId: string,
+    @Param('sceneId') sceneId: string,
+  ) {
+    const scene = await this.storyService.getSceneWithChoices(storyId, sceneId);
+    if (!scene) throw new NotFoundException('Scene not found');
+    return scene;
+  }
+
+  @Get(':storyId/scenes')
+  @ApiOperation({ summary: 'Get all scenes for a story including choices' })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiOkResponse({ description: 'Scenes', type: [SceneWithChoicesDto] })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getScenesByStory(@Param('storyId') storyId: string) {
+    return await this.storyService.getScenesByStory(storyId);
+  }
+
+  @Post('scenes')
+  @ApiOperation({ summary: 'Create a new scene' })
+  @ApiBody({ type: CreateSceneDto })
+  @ApiOkResponse({ description: 'Created scene', type: SceneWithChoicesDto })
+  async createScene(@Body() dto: CreateSceneDto) {
+    return await this.storyService.createScene(dto);
+  }
+
+  @Patch('scenes/:id')
+  @ApiOperation({ summary: 'Update a scene' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiBody({ type: UpdateSceneDto })
+  @ApiOkResponse({ description: 'Updated scene', type: SceneWithChoicesDto })
+  async updateScene(@Param('id') id: string, @Body() dto: UpdateSceneDto) {
+    return await this.storyService.updateScene(id, dto);
+  }
+  @Delete('scenes/:id')
+  @ApiOperation({ summary: 'Delete a scene' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ description: 'Scene deleted' })
+  async deleteScene(@Param('id') id: string) {
+    return await this.storyService.deleteScene(id);
+  }
+  @Post('choices')
+  @ApiOperation({ summary: 'Create a choice for a scene' })
+  @ApiBody({ type: CreateChoiceDto })
+  @ApiOkResponse({ description: 'Created choice', type: ChoiceResponseDto })
+  async createChoice(@Body() dto: CreateChoiceDto) {
+    return await this.storyService.createChoice(dto);
   }
 }

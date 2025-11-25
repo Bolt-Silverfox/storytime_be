@@ -149,8 +149,38 @@ model Story {
   themes           Theme[]           @relation("StoryThemes")
   storyAudioCaches StoryAudioCache[]
   questions        StoryQuestion[]
+  scenes Scene[]
 
   @@map("stories")
+}
+
+model Scene {
+  id         String   @id @default(uuid())
+  storyId    String
+  story      Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  sceneText  String
+  imageUrl   String?
+  pageNumber Int?
+
+  choices    Choice[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("scenes")
+}
+
+model Choice {
+  id          String   @id @default(uuid())
+  sceneId     String
+  scene       Scene    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  choiceText  String
+  nextSceneId String?   // points to the scene that follows, nullable if it's an ending
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("choices")
 }
 
 model StoryImage {
