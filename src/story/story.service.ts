@@ -20,6 +20,7 @@ import {
   CategoryDto,
   ThemeDto,
   VoiceType,
+  StoriesByCategoryResponseDto,
 } from './story.dto';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
@@ -88,6 +89,57 @@ export class StoryService {
         questions: true,
       },
     });
+  }
+
+  async findByCategory(
+    categoryId: string,
+    age?: number,
+  ): Promise<StoriesByCategoryResponseDto> {
+    // Check if category exists
+    const category = await this.prisma.category.findUnique({
+      where: { id: categoryId },
+    });
+
+    if (!category) {
+      throw new NotFoundException(`Category with ID ${categoryId} not found`);
+    }
+
+    const where: any = {
+      categories: {
+        some: {
+          id: categoryId,
+        },
+      },
+    };
+
+    if (age !== undefined) {
+      where.ageMin = { lte: age };
+      where.ageMax = { gte: age };
+    }
+
+    const stories = await this.prisma.story.findMany({
+      where,
+      orderBy: {
+        createdAt: 'desc',
+      },
+      include: {
+        images: true,
+        branches: true,
+        categories: true,
+        themes: true,
+        questions: true,
+      },
+    });
+
+    return {
+      stories: stories as any,
+      message: stories.length === 0 ? 'No stories yet' : undefined,
+      category: {
+        ...category,
+        image: category.image || undefined,
+        description: category.description || undefined,
+      },
+    };
   }
 
   async createStory(data: CreateStoryDto) {
