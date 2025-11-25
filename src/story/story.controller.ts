@@ -12,6 +12,7 @@ import {
   UseInterceptors,
   UploadedFile,
   Logger,
+  BadRequestException
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -160,10 +161,13 @@ export class StoryController {
       // If req.user.activeKidProfile is missing, we might be in parent mode.
       // Let's check if we can get age from query or just pass undefined.
       // For now, let's try to get age from activeKidProfile.
+      throw new BadRequestException(
+        'No active kid profile found. Please select a kid profile.',
+      );
     }
 
     let age: number | undefined;
-    if (activeKidProfile && activeKidProfile.ageRange) {
+    if (activeKidProfile.ageRange) {
       const matches = activeKidProfile.ageRange.match(/\d+/g);
       if (matches && matches.length > 0) {
         age = parseInt(matches[0], 10);
