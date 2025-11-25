@@ -24,11 +24,8 @@ import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { UserDto } from '../auth/auth.dto';
 import {
-  SetKidPreferredVoiceDto,
-  KidVoiceDto,
   UpdateUserDto,
 } from './user.dto';
-import { VOICEID, VoiceType } from '@/story/story.dto';
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -64,30 +61,9 @@ class UpdateUserRoleDto {
 @Controller('user')
 export class UserController {
   private readonly logger = new Logger(UserController.name);
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService) { }
 
-  @Patch('kids/:kidId/voice')
-  @ApiOperation({ summary: 'Set preferred voice for a kid' })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiBody({ type: SetKidPreferredVoiceDto })
-  @ApiResponse({ status: 200, type: KidVoiceDto })
-  async setKidPreferredVoice(
-    @Param('kidId') kidId: string,
-    @Body() body: SetKidPreferredVoiceDto,
-  ) {
-    this.logger.log(
-      `Setting preferred voice for kid ${kidId} to ${JSON.stringify(body)}`,
-    );
-    if (!body.voiceType) {
-      throw new BadRequestException('Voice type is required');
-    }
-    const voiceKey = body.voiceType.toUpperCase() as keyof typeof VOICEID;
-    const voiceId = VOICEID[voiceKey];
-    if (!voiceId) {
-      throw new ForbiddenException('Invalid voice type');
-    }
-    return this.userService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
-  }
+
 
   @Get(':id')
   @ApiOperation({
@@ -286,11 +262,5 @@ export class UserController {
     return await this.userService.updateUserRole(id, role);
   }
 
-  @Get('kids/:kidId/voice')
-  @ApiOperation({ summary: 'Get preferred voice for a kid' })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({ status: 200, type: KidVoiceDto })
-  async getKidPreferredVoice(@Param('kidId') kidId: string) {
-    return await this.userService.getKidPreferredVoice(kidId);
-  }
+
 }

@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsOptional, IsBoolean, IsArray, IsInt, Matches, Min, Max } from 'class-validator';
+import { VoiceType } from '@/story/story.dto';
 
 // 1. Create Kid DTO
 export class CreateKidDto {
@@ -82,4 +83,21 @@ export class UpdateKidDto {
     @IsOptional()
     @IsString()
     preferredVoiceId?: string;
+}
+
+export class SetKidPreferredVoiceDto {
+    @ApiProperty({ description: 'Voice ID to set as preferred', example: 'MILO' })
+    @IsString()
+    voiceType: string;
+}
+
+export class KidVoiceDto {
+    @ApiProperty()
+    kidId: string;
+
+    @ApiProperty()
+    preferredVoiceId: string;
+
+    @ApiProperty()
+    voiceType: VoiceType;
 }
