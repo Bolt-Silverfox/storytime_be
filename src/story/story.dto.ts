@@ -326,6 +326,12 @@ export class StoryResponseDto extends CreateStoryDto {
 
   @ApiProperty()
   updatedAt: Date;
+
+  @ApiProperty({ type: [CategoryDto], required: false })
+  categories?: CategoryDto[];
+
+  @ApiProperty({ type: [ThemeDto], required: false })
+  themes?: ThemeDto[];
 }
 
 export class StoriesByCategoryResponseDto {
