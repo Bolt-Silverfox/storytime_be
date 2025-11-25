@@ -13,14 +13,14 @@ export class KidController {
     constructor(private readonly kidService: KidService) { }
 
     // 1. GET /auth/kids (Get all kids)
-    @Get('auth/kids')
+    @Get('kids')
     @ApiOperation({ summary: 'Get all kids for the logged-in user' })
     async getMyKids(@Request() req: AuthenticatedRequest) {
         return this.kidService.findAllByUser(req.authUserData.userId);
     }
 
     // 2. POST /auth/kids (Add a kid)
-    @Post('auth/kids')
+    @Post('kids')
     @ApiOperation({ summary: 'Add a new kid' })
     async createKid(@Request() req: AuthenticatedRequest, @Body() dto: CreateKidDto) {
         return this.kidService.createKid(req.authUserData.userId, dto);
@@ -34,21 +34,21 @@ export class KidController {
     }
 
     // 4. PUT /auth/kids/:kidId (Update profile)
-    @Put('auth/kids/:kidId')
+    @Put('kids/:kidId')
     @ApiOperation({ summary: 'Update kid profile, preferences, and bedtime' })
     async updateKid(@Request() req: AuthenticatedRequest, @Param('kidId') kidId: string, @Body() dto: UpdateKidDto) {
         return this.kidService.updateKid(kidId, req.authUserData.userId, dto);
     }
 
     // 5. DELETE /auth/kids/:kidId (Delete profile)
-    @Delete('auth/kids/:kidId')
+    @Delete('kids/:kidId')
     @ApiOperation({ summary: 'Delete a kid profile' })
     async deleteKid(@Request() req: AuthenticatedRequest, @Param('kidId') kidId: string) {
         return this.kidService.deleteKid(kidId, req.authUserData.userId);
     }
 
     // 6. PATCH /user/kids/:kidId/voice (Set preferred voice)
-    @Patch('user/kids/:kidId/voice')
+    @Patch('kids/:kidId/voice')
     @ApiOperation({ summary: 'Set preferred voice for a kid' })
     @ApiBody({ type: SetKidPreferredVoiceDto })
     @ApiResponse({ status: 200, type: KidVoiceDto })
@@ -68,13 +68,13 @@ export class KidController {
     }
 
     // 7. GET /user/kids/:kidId/voice (Get preferred voice)
-    @Get('user/kids/:kidId/voice')
+    @Get('kids/:kidId/voice')
     @ApiOperation({ summary: 'Get preferred voice for a kid' })
     @ApiResponse({ status: 200, type: KidVoiceDto })
     async getKidPreferredVoice(@Param('kidId') kidId: string) {
         return await this.kidService.getKidPreferredVoice(kidId);
     }
-    @Post('auth/kids/bulk')
+    @Post('kids/bulk')
     @ApiOperation({ summary: 'Add multiple kids at once' })
     @ApiBody({ type: [CreateKidDto] })
     async createKids(
