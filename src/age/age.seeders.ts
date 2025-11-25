@@ -1,17 +1,13 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
-export class AgeGroupSeederService implements OnModuleInit {
+export class AgeGroupSeederService {
   private readonly logger = new Logger(AgeGroupSeederService.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async onModuleInit() {
-    await this.seedAgeGroups();
-  }
-
-  private async seedAgeGroups() {
+  async seedAgeGroups() {
     const defaultAgeGroups = [
       { name: 'Age 1 - 4', min: 1, max: 4 },
       { name: 'Age 5 - 8', min: 5, max: 8 },
