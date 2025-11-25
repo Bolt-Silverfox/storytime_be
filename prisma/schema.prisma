@@ -433,13 +433,8 @@ model StoryQuestion {
 
 model Avatar {
   id             String   @id @default(cuid())
-<<<<<<< HEAD
-  name           String?  // Standard name for upsert (unique identifier)
- // displayName    String?  // User-friendly display name
-=======
   name           String? // Standard name for upsert (unique identifier)
   displayName    String? // User-friendly display name
->>>>>>> 6bd2da9 (Feat:Implement parent profile)
   url            String
   isSystemAvatar Boolean  @default(false)
   publicId       String?
