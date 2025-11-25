@@ -80,4 +80,4 @@ jobs:
             echo "No previous release to clean up (or previous == new)."
           fi
           # --- END: Clean up previous release ---
-        EOF
+          EOF
