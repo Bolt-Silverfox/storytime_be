@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Patch, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse } from '@nestjs/swagger';
 import { KidService } from './kid.service';
-import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
+import { CreateKidDto, UpdateKidDto, SetKidPreferredVoiceDto, KidVoiceDto } from './dto/kid.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { VoiceType, VOICEID } from '@/story/story.dto';
 
 @ApiTags('Kids Management')
 @ApiBearerAuth()
@@ -44,5 +45,33 @@ export class KidController {
     @ApiOperation({ summary: 'Delete a kid profile' })
     async deleteKid(@Request() req: AuthenticatedRequest, @Param('kidId') kidId: string) {
         return this.kidService.deleteKid(kidId, req.authUserData.userId);
+    }
+
+    // 6. PATCH /user/kids/:kidId/voice (Set preferred voice)
+    @Patch('user/kids/:kidId/voice')
+    @ApiOperation({ summary: 'Set preferred voice for a kid' })
+    @ApiBody({ type: SetKidPreferredVoiceDto })
+    @ApiResponse({ status: 200, type: KidVoiceDto })
+    async setKidPreferredVoice(
+        @Param('kidId') kidId: string,
+        @Body() body: SetKidPreferredVoiceDto,
+    ) {
+        if (!body.voiceType) {
+            throw new BadRequestException('Voice type is required');
+        }
+        const voiceKey = body.voiceType.toUpperCase() as keyof typeof VOICEID;
+        const voiceId = VOICEID[voiceKey];
+        if (!voiceId) {
+            throw new ForbiddenException('Invalid voice type');
+        }
+        return this.kidService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
+    }
+
+    // 7. GET /user/kids/:kidId/voice (Get preferred voice)
+    @Get('user/kids/:kidId/voice')
+    @ApiOperation({ summary: 'Get preferred voice for a kid' })
+    @ApiResponse({ status: 200, type: KidVoiceDto })
+    async getKidPreferredVoice(@Param('kidId') kidId: string) {
+        return await this.kidService.getKidPreferredVoice(kidId);
     }
 }
