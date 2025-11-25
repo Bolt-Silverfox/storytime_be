@@ -74,6 +74,8 @@ export class KidController {
     async getKidPreferredVoice(@Param('kidId') kidId: string) {
         return await this.kidService.getKidPreferredVoice(kidId);
     }
+
+    // 8. POST /user/kids/bulk (Add multiple kids at once)
     @Post('kids/bulk')
     @ApiOperation({ summary: 'Add multiple kids at once' })
     @ApiBody({ type: [CreateKidDto] })
