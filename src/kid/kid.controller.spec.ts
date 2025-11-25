@@ -8,7 +8,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 const mockKidService = {
     findAllByUser: jest.fn(),
-    createKid: jest.fn(),
+    createKids: jest.fn(),
     findOne: jest.fn(),
     updateKid: jest.fn(),
     deleteKid: jest.fn(),
@@ -55,15 +55,15 @@ describe('KidController', () => {
         });
     });
 
-    describe('createKid', () => {
-        it('should create a kid', async () => {
-            const dto: CreateKidDto = { name: 'Alex', ageRange: '5-8' };
-            const expectedResult = { id: 'kid-1', ...dto };
-            service.createKid.mockResolvedValue(expectedResult);
+    describe('createKids', () => {
+        it('should create kids', async () => {
+            const dtos: CreateKidDto[] = [{ name: 'Alex', ageRange: '5-8' }];
+            const expectedResult = [{ id: 'kid-1', ...dtos[0] }];
+            service.createKids.mockResolvedValue(expectedResult);
 
-            const result = await controller.createKid(mockRequest, dto);
+            const result = await controller.createKids(mockRequest, dtos);
             expect(result).toEqual(expectedResult);
-            expect(service.createKid).toHaveBeenCalledWith('user-1', dto);
+            expect(service.createKids).toHaveBeenCalledWith('user-1', dtos);
         });
     });
 
