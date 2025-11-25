@@ -12,10 +12,6 @@ export class CreateAvatarDto {
   @IsOptional()
   url?: string;
 
-  @ApiProperty({ example: true, required: false })
-  @IsBoolean()
-  @IsOptional()
-  isSystemAvatar?: boolean;
 }
 
 export class UpdateAvatarDto {
@@ -28,13 +24,7 @@ export class UpdateAvatarDto {
   @IsString()
   @IsOptional()
   url?: string;
-
-  @ApiProperty({ example: true, required: false })
-  @IsBoolean()
-  @IsOptional()
-  isSystemAvatar?: boolean;
 }
-
 export class AssignAvatarDto {
   @ApiProperty({ example: 'avatar-id' })
   @IsString()

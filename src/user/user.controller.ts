@@ -97,6 +97,7 @@ export class UserController {
     const user = await this.userService.getUser(id);
     return user ? new UserDto(user) : null;
   }
+
   @Put(':id')
   @ApiOperation({
     summary: 'Update user profile',
@@ -137,6 +138,23 @@ export class UserController {
     return await this.userService.updateUser(id, body);
   }
 
+  @Delete('account/:id')
+  @ApiOperation({
+    summary: 'Delete user account',
+    description: 'Delete my account as a user',
+  })
+  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'User account deleted.',
+    schema: { example: { id: 'abc123', deleted: true } },
+  })
+  async deleteUserAccount(@Param('id') id: string) {
+    return this.userService.deleteUserAccount(id);
+  }
+
+  // ==================== ADMIN ENDPOINTS ====================
+
   @Get()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
@@ -164,34 +182,8 @@ export class UserController {
     }
     return await this.userService.getAllUsers();
   }
-  @Delete(':id')
-  @ApiOperation({
-    summary: 'delete user account',
-    description: 'delete my account as a user',
-  })
-  async deleteUserAccount(id: string) {
-    return this.userService.deleteUserAccount(id);
-  }
-  @Get('me')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get current user profile',
-    description: 'Requires authentication.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Current user profile returned.',
-    type: UserDto,
-  })
-  async getMe(@Req() req: any) {
-    const user = await this.userService.getUser(
-      req.authUserData.userId as string,
-    );
-    return user ? new UserDto(user) : null;
-  }
 
-  @Delete('account/:id')
+  @Delete(':id')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({

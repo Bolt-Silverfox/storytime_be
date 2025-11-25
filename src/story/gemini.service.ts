@@ -26,6 +26,8 @@ export interface GeneratedStory {
   ageMin: number;
   ageMax: number;
   language: string;
+  difficultyLevel: number;
+  estimatedWordCount: number;
 }
 
 @Injectable()
@@ -36,7 +38,9 @@ export class GeminiService {
   constructor(private configService: ConfigService) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
-      this.logger.warn('GEMINI_API_KEY not configured. Story generation will not be available.');
+      this.logger.warn(
+        'GEMINI_API_KEY not configured. Story generation will not be available.',
+      );
       return;
     }
     this.genAI = new GoogleGenerativeAI(apiKey);
@@ -44,7 +48,9 @@ export class GeminiService {
 
   async generateStory(options: GenerateStoryOptions): Promise<GeneratedStory> {
     if (!this.genAI) {
-      throw new Error('Gemini API is not configured. Please set GEMINI_API_KEY environment variable.');
+      throw new Error(
+        'Gemini API is not configured. Please set GEMINI_API_KEY environment variable.',
+      );
     }
 
     const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
@@ -70,7 +76,7 @@ export class GeminiService {
         category: options.category,
         ageMin: options.ageMin,
         ageMax: options.ageMax,
-        language: options.language || 'English'
+        language: options.language || 'English',
       };
     } catch (error) {
       this.logger.error('Failed to generate story with Gemini:', error);
@@ -79,8 +85,12 @@ export class GeminiService {
   }
 
   private buildPrompt(options: GenerateStoryOptions): string {
-    const kidNamePart = options.kidName ? `The main character should be named ${options.kidName}.` : '';
-    const contextPart = options.additionalContext ? `Additional context: ${options.additionalContext}` : '';
+    const kidNamePart = options.kidName
+      ? `The main character should be named ${options.kidName}.`
+      : '';
+    const contextPart = options.additionalContext
+      ? `Additional context: ${options.additionalContext}`
+      : '';
 
     return `Generate a children's story with the following requirements:
 
@@ -91,27 +101,31 @@ Language: ${options.language || 'English'}
 ${kidNamePart}
 ${contextPart}
 
-The story should be:
+The story requirements should be:
 - Age-appropriate with vocabulary and concepts suitable for ${options.ageMin}-${options.ageMax} year olds
 - Engaging and educational
 - Between 300-500 words
 - Have a clear beginning, middle, and end
 - Include a positive message or lesson
 - Use vivid descriptions and imagery
+- Calculate a difficulty level (1-10) based on vocabulary complexity
+- ESTIMATE the word count of the story
 
-Generate the response as a valid JSON object with this exact structure:
-{
-  "title": "Story title",
-  "description": "A brief 1-2 sentence description of the story",
-  "content": "The full story text with paragraphs separated by \\n\\n",
-  "questions": [
+Return ONLY valid JSON (no markdown):
     {
-      "question": "A comprehension question about the story",
-      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-      "answer": 0
+      "title": "Story Title",
+      "description": "Brief description",
+      "difficultyLevel": 1, 
+      "estimatedWordCount": 300,
+      "content": "Opening paragraph...",
+      "questions": [
+        {
+          "question": "A comprehension question about the story",
+          "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+          "answer": 0
+        }
+      ]
     }
-  ]
-}
 
 Include exactly 5 comprehension questions that test understanding of the story. The answer field should be the index (0-3) of the correct option.
 
@@ -126,13 +140,18 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
       if (!story[field]) return false;
     }
 
-    if (!Array.isArray(story.questions) || story.questions.length < 1) return false;
+    if (!Array.isArray(story.questions) || story.questions.length < 1)
+      return false;
 
     for (const question of story.questions) {
-      if (!question.question || !Array.isArray(question.options) ||
-          question.options.length !== 4 ||
-          typeof question.answer !== 'number' ||
-          question.answer < 0 || question.answer > 3) {
+      if (
+        !question.question ||
+        !Array.isArray(question.options) ||
+        question.options.length !== 4 ||
+        typeof question.answer !== 'number' ||
+        question.answer < 0 ||
+        question.answer > 3
+      ) {
         return false;
       }
     }
@@ -140,7 +159,10 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     return true;
   }
 
-  async generateStoryImage(title: string, description: string): Promise<string> {
+  async generateStoryImage(
+    title: string,
+    description: string,
+  ): Promise<string> {
     // For now, return a placeholder image URL
     // In production, you might integrate with an image generation service
     return 'https://res.cloudinary.com/billmal/image/upload/v1750973099/storytime/generated_story.webp';
