@@ -113,6 +113,11 @@ export class StoryProgressDto {
   progress: number;
   @ApiProperty({ required: false })
   completed?: boolean;
+  @ApiProperty({
+    required: false,
+    description: 'Time spent in this specific session in seconds',
+  })
+  sessionTime?: number;
 }
 
 export class DailyChallengeDto {

@@ -59,25 +59,42 @@ export class StoryService {
     if (filter.category) where.categories = { some: { id: filter.category } };
     if (filter.recommended !== undefined)
       where.recommended = filter.recommended;
-    let age: number | undefined = filter.age;
-    if (!age && filter.kidId) {
-      // Look up the kid's age if kidId is provided and age is not
-      const kid: { ageRange?: string | null } | null =
-        await this.prisma.kid.findUnique({
-          where: { id: filter.kidId },
-        });
-      if (kid && kid.ageRange && typeof kid.ageRange === 'string') {
-        // Assume ageRange is a string like '4-7' or '8-10'
-        const match = kid.ageRange.match(/(\d+)/);
-        if (match) {
-          age = parseInt(match[1], 10);
+
+    let targetLevel: number | undefined;
+
+    if (filter.kidId) {
+      const kid = await this.prisma.kid.findUnique({
+        where: { id: filter.kidId },
+      });
+
+      if (kid) {
+        // Prioritize Reading Level if available
+        if (kid.currentReadingLevel > 0) {
+          targetLevel = kid.currentReadingLevel;
+          //let learning be around +/- 1 level
+          where.difficultyLevel = {
+            gte: Math.max(1, targetLevel - 1),
+            lte: targetLevel + 1,
+          };
+        }
+        // Fallback to Age Range
+        else if (kid.ageRange) {
+          const match = kid.ageRange.match(/(\d+)/);
+          if (match) {
+            const age = parseInt(match[1], 10);
+            where.ageMin = { lte: age };
+            where.ageMax = { gte: age };
+          }
         }
       }
     }
-    if (typeof age === 'number') {
-      where.ageMin = { lte: age };
-      where.ageMax = { gte: age };
+
+    // Only use manual age filter if we haven't already filtered by difficulty/kid
+    if (filter.age && !targetLevel && !where.ageMin) {
+      where.ageMin = { lte: filter.age };
+      where.ageMax = { gte: filter.age };
     }
+
     return this.prisma.story.findMany({
       where,
       include: {
@@ -191,21 +208,42 @@ export class StoryService {
   }
 
   // --- Progress ---
-  async setProgress(dto: StoryProgressDto) {
-    return await this.prisma.storyProgress.upsert({
+
+  async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
+    // Get existing progress to calculate total time
+    const existing = await this.prisma.storyProgress.findUnique({
+      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
+    });
+
+    const sessionTime = dto.sessionTime || 0;
+    const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
+
+    const result = await this.prisma.storyProgress.upsert({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
       update: {
         progress: dto.progress,
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
+        totalTimeSpent: newTotalTime,
       },
       create: {
         kidId: dto.kidId,
         storyId: dto.storyId,
         progress: dto.progress,
         completed: dto.completed ?? false,
+        totalTimeSpent: sessionTime,
       },
     });
+
+    // Trigger auto-adjustment if story just completed
+    if (dto.completed && (!existing || !existing.completed)) {
+      // Fire and forget (don't await) to keep API fast
+      this.adjustReadingLevel(dto.kidId, dto.storyId, newTotalTime).catch((e) =>
+        this.logger.error(`Failed to adjust reading level: ${e.message}`),
+      );
+    }
+
+    return result;
   }
   async getProgress(kidId: string, storyId: string) {
     return await this.prisma.storyProgress.findUnique({
@@ -718,6 +756,8 @@ export class StoryService {
               correctOption: q.answer,
             })),
           },
+          difficultyLevel: generatedStory.difficultyLevel || 1,
+          wordCount: generatedStory.estimatedWordCount || 0,
           aiGenerated: true,
         },
         include: {
@@ -789,5 +829,43 @@ export class StoryService {
     };
 
     return this.generateStoryWithAI(options);
+  }
+  private async adjustReadingLevel(
+    kidId: string,
+    storyId: string,
+    totalTimeSeconds: number,
+  ) {
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId },
+    });
+    const kid = await this.prisma.kid.findUnique({ where: { id: kidId } });
+
+    if (!story || !kid || story.wordCount === 0) return;
+
+    // 1. Calculate Words Per Minute (WPM)
+    const minutes = totalTimeSeconds / 60;
+    const wpm = minutes > 0 ? story.wordCount / minutes : 0;
+
+    // 2. Define Example logic - you can tweak these numbers
+    // Age 6-8 avg WPM is ~50-90. Age 9-12 is ~100-140.
+
+    let newLevel = kid.currentReadingLevel;
+
+    // If they read very fast (>120 WPM) and the story was at their level
+    if (wpm > 120 && story.difficultyLevel >= kid.currentReadingLevel) {
+      newLevel = Math.min(10, kid.currentReadingLevel + 1); // Level Up!
+    }
+    // If they read very slowly (<40 WPM) and struggled
+    else if (wpm < 40 && story.difficultyLevel >= kid.currentReadingLevel) {
+      newLevel = Math.max(1, kid.currentReadingLevel - 1); // Level Down
+    }
+
+    if (newLevel !== kid.currentReadingLevel) {
+      await this.prisma.kid.update({
+        where: { id: kidId },
+        data: { currentReadingLevel: newLevel },
+      });
+      this.logger.log(`Adjusted Kid ${kidId} reading level to ${newLevel}`);
+    }
   }
 }
