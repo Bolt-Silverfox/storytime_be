@@ -63,6 +63,13 @@ jobs:
           else
             PREV_RELEASE=""
           fi
+
+          if [ -f $CURRENT/ecosystem.config.js ]; then
+            sudo cp $CURRENT/ecosystem.config.js $NEW_RELEASE/ecosystem.config.js
+            echo "ecosystem.config.js copied from current release."
+          else
+            echo "ecosystem.config.js not found in current release, please add it manually if required."
+          fi
           
           echo "Switching symlink..."
           sudo ln -sfn $NEW_RELEASE $CURRENT
