@@ -96,12 +96,12 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async getStories(
+    @Req() req: AuthenticatedRequest,
     @Query('theme') theme?: string,
     @Query('category') category?: string,
     @Query('recommended') recommended?: string,
     @Query('kidId') kidId?: string,
     @Query('age') age?: string,
-    @Req() req: AuthenticatedRequest,
   ) {
     return this.storyService.getStories({
       theme,
