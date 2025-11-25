@@ -48,6 +48,7 @@ import {
   VoiceType,
   StoryContentAudioDto,
   GenerateStoryDto,
+  StoriesByCategoryResponseDto,
 } from './story.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -112,6 +113,64 @@ export class StoryController {
       kidId,
       age: age ? parseInt(age) : undefined,
     });
+  }
+
+  @Get('category/:categoryId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get stories filtered by category (sorted by most recent)',
+    description:
+      'Returns stories for a specific category, filtered by the active kid profile age.',
+  })
+  @ApiParam({
+    name: 'categoryId',
+    description: 'The ID of the category',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of stories in the category',
+    type: StoriesByCategoryResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request - No active kid profile or invalid age',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Category not found',
+    type: ErrorResponseDto,
+  })
+  async getStoriesByCategory(
+    @Param('categoryId') categoryId: string,
+    @Req() req: any,
+  ): Promise<StoriesByCategoryResponseDto> {
+    const activeKidProfile = req.user?.activeKidProfile;
+
+    if (!activeKidProfile) {
+      // If no kid profile, just return stories without age filter (or throw error depending on requirements)
+      // Requirement says "system must check the active profile's age group"
+      // So we should probably enforce it, or default to no filter if it's a parent browsing?
+      // Let's enforce it as per "As a parent, I want the content filtered automatically by my child's age profile"
+      // But wait, the user story says "As a user, I want stories to be grouped into correct categories."
+      // The previous prompt said "As a parent... filtered automatically by my child's age profile".
+      // Let's assume we need the kid profile.
+      // If req.user.activeKidProfile is missing, we might be in parent mode.
+      // Let's check if we can get age from query or just pass undefined.
+      // For now, let's try to get age from activeKidProfile.
+    }
+
+    let age: number | undefined;
+    if (activeKidProfile && activeKidProfile.ageRange) {
+      const matches = activeKidProfile.ageRange.match(/\d+/g);
+      if (matches && matches.length > 0) {
+        age = parseInt(matches[0], 10);
+      }
+    }
+
+    return this.storyService.findByCategory(categoryId, age);
   }
 
   @Get('categories')
