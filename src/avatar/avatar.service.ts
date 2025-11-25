@@ -45,12 +45,16 @@ export class AvatarService {
         url: uploadResult.secure_url,
         publicId: uploadResult.public_id,
         isSystemAvatar: false, // Custom avatars are always non-system
+        isDeleted: false, // Ensure it's not marked as deleted
+        deletedAt: null,
       },
       create: {
         name: avatarName,
         url: uploadResult.secure_url,
         publicId: uploadResult.public_id,
         isSystemAvatar: false, // Custom avatars are always non-system
+        isDeleted: false,
+        deletedAt: null,
       },
     });
   }
@@ -78,15 +82,21 @@ export class AvatarService {
     }
   }
 
-  async getAllAvatars() {
+  async getAllAvatars(includeDeleted: boolean = false) {
+    const where = includeDeleted ? {} : { isDeleted: false };
+    
     return await this.prisma.avatar.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async getSystemAvatars() {
     return await this.prisma.avatar.findMany({
-      where: { isSystemAvatar: true },
+      where: { 
+        isSystemAvatar: true,
+        isDeleted: false 
+      },
       orderBy: { name: 'asc' },
     });
   }
@@ -94,7 +104,7 @@ export class AvatarService {
   async createAvatar(
     createAvatarDto: CreateAvatarDto,
     file: Express.Multer.File,
-    isSystemAvatar: boolean = false, // Default to false for safety
+    isSystemAvatar: boolean = false,
   ) {
     let uploadResult: any;
 
@@ -114,7 +124,9 @@ export class AvatarService {
         name: createAvatarDto.name,
         url: uploadResult?.secure_url || createAvatarDto.url,
         publicId: uploadResult?.public_id || null,
-        isSystemAvatar: isSystemAvatar, // Use the parameter passed from controller
+        isSystemAvatar: isSystemAvatar,
+        isDeleted: false,
+        deletedAt: null,
       },
     });
   }
@@ -124,7 +136,12 @@ export class AvatarService {
     updateAvatarDto: UpdateAvatarDto,
     file?: Express.Multer.File,
   ) {
-    const avatar = await this.prisma.avatar.findUnique({ where: { id } });
+    const avatar = await this.prisma.avatar.findUnique({ 
+      where: { 
+        id,
+        isDeleted: false 
+      } 
+    });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
     }
@@ -162,7 +179,12 @@ export class AvatarService {
     updateAvatarDto: UpdateAvatarDto,
     file?: Express.Multer.File,
   ) {
-    const avatar = await this.prisma.avatar.findUnique({ where: { id } });
+    const avatar = await this.prisma.avatar.findUnique({ 
+      where: { 
+        id,
+        isDeleted: false 
+      } 
+    });
     if (!avatar) {
       throw new NotFoundException('System avatar not found');
     }
@@ -174,7 +196,38 @@ export class AvatarService {
     return this.updateAvatar(id, updateAvatarDto, file);
   }
 
-  async deleteAvatar(id: string) {
+  async softDeleteAvatar(id: string) {
+    const avatar = await this.prisma.avatar.findUnique({ 
+      where: { 
+        id,
+        isDeleted: false 
+      } 
+    });
+    if (!avatar) {
+      throw new NotFoundException('Avatar not found');
+    }
+
+    const usersUsing = await this.prisma.user.count({
+      where: { avatarId: id },
+    });
+    const kidsUsing = await this.prisma.kid.count({ where: { avatarId: id } });
+
+    if (usersUsing > 0 || kidsUsing > 0) {
+      throw new BadRequestException(
+        'Cannot delete avatar that is currently in use',
+      );
+    }
+
+    return await this.prisma.avatar.update({
+      where: { id },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+    });
+  }
+
+  async permanentDeleteAvatar(id: string) {
     const avatar = await this.prisma.avatar.findUnique({ where: { id } });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
@@ -199,20 +252,29 @@ export class AvatarService {
       }
     }
 
-    return this.prisma.avatar.delete({ where: { id } });
+    return await this.prisma.avatar.delete({ where: { id } });
   }
 
-  async deleteSystemAvatar(id: string) {
-    const avatar = await this.prisma.avatar.findUnique({ where: { id } });
+  async restoreAvatar(id: string) {
+    const avatar = await this.prisma.avatar.findUnique({ 
+      where: { id } 
+    });
+    
     if (!avatar) {
-      throw new NotFoundException('System avatar not found');
+      throw new NotFoundException('Avatar not found');
     }
 
-    if (!avatar.isSystemAvatar) {
-      throw new BadRequestException('Cannot delete non-system avatar');
+    if (!avatar.isDeleted) {
+      return avatar; // Already not deleted
     }
 
-    return this.deleteAvatar(id);
+    return await this.prisma.avatar.update({
+      where: { id },
+      data: {
+        isDeleted: false,
+        deletedAt: null,
+      },
+    });
   }
 
   async assignAvatarToUser(userId: string, avatarId: string) {
@@ -222,7 +284,10 @@ export class AvatarService {
     }
 
     const avatar = await this.prisma.avatar.findUnique({
-      where: { id: avatarId },
+      where: { 
+        id: avatarId,
+        isDeleted: false 
+      },
     });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
@@ -242,7 +307,10 @@ export class AvatarService {
     }
 
     const avatar = await this.prisma.avatar.findUnique({
-      where: { id: avatarId },
+      where: { 
+        id: avatarId,
+        isDeleted: false 
+      },
     });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
