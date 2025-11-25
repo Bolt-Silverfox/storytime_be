@@ -12,10 +12,6 @@ export class CreateAvatarDto {
   @IsOptional()
   url?: string;
 
-  @ApiProperty({ example: true, required: false })
-  @IsBoolean()
-  @IsOptional()
-  isSystemAvatar?: boolean;
 }
 
 export class UpdateAvatarDto {
@@ -28,13 +24,7 @@ export class UpdateAvatarDto {
   @IsString()
   @IsOptional()
   url?: string;
-
-  @ApiProperty({ example: true, required: false })
-  @IsBoolean()
-  @IsOptional()
-  isSystemAvatar?: boolean;
 }
-
 export class AssignAvatarDto {
   @ApiProperty({ example: 'avatar-id' })
   @IsString()
@@ -50,17 +40,4 @@ export class AssignAvatarDto {
   @IsString()
   @IsOptional()
   kidId?: string;
-}
-
-// UPDATED: Removed parentId - will come from authenticated user
-export class CreateKidWithAvatarDto {
-  @ApiProperty({ example: 'firstname lastname' })
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-
-  @ApiProperty({ example: '5-7', required: false })
-  @IsString()
-  @IsOptional()
-  ageRange?: string;
 }
