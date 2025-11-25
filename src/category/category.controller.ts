@@ -12,9 +12,20 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiBody,
+} from '@nestjs/swagger';
 import { CategoryService } from './category.service';
-import { CreateCategoryDto, UpdateCategoryDto, CategoryResponseDto } from './category.dto';
+import {
+  CreateCategoryDto,
+  UpdateCategoryDto,
+  CategoryResponseDto,
+} from './category.dto';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 
@@ -23,12 +34,16 @@ import { AdminGuard } from '../auth/admin.guard';
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
+  /**
+   * Get categories filtered by active kid profile age
+   */
   @Get()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get categories filtered by active kid profile age',
-    description: 'Returns categories suitable for the active kid profile\'s age. Requires authentication.',
+    summary: 'Get categories suitable for active kid profile age',
+    description:
+      'Returns categories filtered by the age of the active kid profile. Authentication required.',
   })
   @ApiResponse({
     status: 200,
@@ -44,17 +59,15 @@ export class CategoryController {
     description: 'Unauthorized',
   })
   async findAllByAge(@Req() req: any): Promise<CategoryResponseDto[]> {
-    // Extract active kid profile from request
-    // Assuming the request contains activeKidProfile or similar
     const activeKidProfile = req.user?.activeKidProfile;
 
     if (!activeKidProfile) {
-      throw new BadRequestException('No active kid profile found. Please select a kid profile.');
+      throw new BadRequestException(
+        'No active kid profile found. Please select a kid profile.',
+      );
     }
 
-    // Parse age from ageRange (e.g., "Age 5 - 8" -> use midpoint or min)
     const age = this.parseAgeFromRange(activeKidProfile.ageRange);
-
     if (!age) {
       throw new BadRequestException('Invalid age range in kid profile');
     }
@@ -62,12 +75,16 @@ export class CategoryController {
     return this.categoryService.findAllByAge(age);
   }
 
+  /**
+   * Get all categories (Admin only)
+   */
   @Get('all')
   @UseGuards(AuthSessionGuard, AdminGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get all categories (Admin only)',
-    description: 'Returns all categories without age filtering. Admin access required.',
+    summary: 'Get all categories (Admin access only)',
+    description:
+      'Returns all categories without age filtering. Admin access is required.',
   })
   @ApiResponse({
     status: 200,
@@ -86,6 +103,9 @@ export class CategoryController {
     return this.categoryService.findAll();
   }
 
+  /**
+   * Get a single category by ID
+   */
   @Get(':id')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
@@ -95,7 +115,7 @@ export class CategoryController {
   })
   @ApiParam({
     name: 'id',
-    description: 'Category ID',
+    description: 'The ID of the category',
     type: String,
   })
   @ApiResponse({
@@ -111,12 +131,31 @@ export class CategoryController {
     return this.categoryService.findOne(id);
   }
 
+  /**
+   * Create a new category
+   */
   @Post()
   @UseGuards(AuthSessionGuard, AdminGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Create a new category (Admin only)',
-    description: 'Creates a new category with age group associations',
+    description: 'Creates a new category along with age group associations',
+  })
+  @ApiBody({
+    description: 'Category creation payload',
+    type: CreateCategoryDto,
+    examples: {
+      example1: {
+        summary: 'Sample category creation',
+        value: {
+          name: 'Adventure',
+          slug: 'adventure',
+          description: 'Exciting adventure stories for kids',
+          image: 'https://via.placeholder.com/400x300',
+          ageGroupIds: ['uuid-of-agegroup-1', 'uuid-of-agegroup-2'],
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 201,
@@ -135,10 +174,15 @@ export class CategoryController {
     status: 403,
     description: 'Forbidden - Admin access required',
   })
-  async create(@Body() createCategoryDto: CreateCategoryDto): Promise<CategoryResponseDto> {
+  async create(
+    @Body() createCategoryDto: CreateCategoryDto,
+  ): Promise<CategoryResponseDto> {
     return this.categoryService.create(createCategoryDto);
   }
 
+  /**
+   * Update a category
+   */
   @Patch(':id')
   @UseGuards(AuthSessionGuard, AdminGuard)
   @ApiBearerAuth()
@@ -148,8 +192,23 @@ export class CategoryController {
   })
   @ApiParam({
     name: 'id',
-    description: 'Category ID',
+    description: 'The ID of the category to update',
     type: String,
+  })
+  @ApiBody({
+    description: 'Category update payload',
+    type: UpdateCategoryDto,
+    examples: {
+      example1: {
+        summary: 'Sample update',
+        value: {
+          name: 'Updated Adventure',
+          description: 'Updated description',
+          image: 'https://via.placeholder.com/400x300',
+          ageGroupIds: ['uuid-of-agegroup-1'],
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 200,
@@ -171,17 +230,20 @@ export class CategoryController {
     return this.categoryService.update(id, updateCategoryDto);
   }
 
+  /**
+   * Delete a category
+   */
   @Delete(':id')
   @UseGuards(AuthSessionGuard, AdminGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Delete a category (Admin only)',
-    description: 'Deletes a category',
+    description: 'Deletes a category by ID',
   })
   @ApiParam({
     name: 'id',
-    description: 'Category ID',
+    description: 'The ID of the category to delete',
     type: String,
   })
   @ApiResponse({
@@ -197,18 +259,14 @@ export class CategoryController {
   }
 
   /**
-   * Parse age from ageRange string
-   * @param ageRange - Age range string (e.g., "Age 5 - 8")
-   * @returns Parsed age (minimum value from range)
+   * Helper function to parse age from ageRange string
+   * @param ageRange - e.g., "Age 5 - 8"
+   * @returns minimum age number
    */
   private parseAgeFromRange(ageRange: string): number | null {
     if (!ageRange) return null;
-
-    // Extract numbers from the age range string
     const matches = ageRange.match(/\d+/g);
     if (!matches || matches.length === 0) return null;
-
-    // Return the first (minimum) age from the range
     return parseInt(matches[0], 10);
   }
 }
