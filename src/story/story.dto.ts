@@ -316,3 +316,25 @@ export class QuestionAnswerDto {
   @ApiProperty()
   selectedOption: number;
 }
+
+export class StoryResponseDto extends CreateStoryDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiProperty()
+  updatedAt: Date;
+}
+
+export class StoriesByCategoryResponseDto {
+  @ApiProperty({ type: [StoryResponseDto] })
+  stories: StoryResponseDto[];
+
+  @ApiProperty({ required: false })
+  message?: string;
+
+  @ApiProperty({ type: CategoryDto, required: false })
+  category?: CategoryDto;
+}
