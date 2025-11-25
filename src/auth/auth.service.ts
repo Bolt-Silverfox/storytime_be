@@ -513,7 +513,6 @@ export class AuthService {
     return this._upsertOrReturnUserFromGooglePayload(payload);
   }
 
-
   // ====================================================
   // INTERNAL: Unified Google upsert logic
   // ====================================================
@@ -589,7 +588,6 @@ export class AuthService {
           data: {
             url: picture,
             name: `google_${googleId || user.id}`,
-            displayName: name || email,
             isSystemAvatar: false,
           },
         });
@@ -605,7 +603,6 @@ export class AuthService {
       }
     }
 
-  
     const numberOfKids = await this.prisma.kid.count({
       where: { parentId: user.id },
     });
