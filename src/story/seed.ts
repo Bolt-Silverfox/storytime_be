@@ -215,10 +215,16 @@ async function main() {
   const storiesPath = path.resolve('src/story/stories.json');
   const stories = JSON.parse(fs.readFileSync(storiesPath, 'utf-8'));
 
-  await prisma.category.createMany({
-    data: categories,
-    skipDuplicates: true,
-  });
+  //temporary slug generation
+  const categoriesWithSlug = categories.map((cat) => ({
+    ...cat,
+    slug: cat.name.toLowerCase().replace(/\s+/g, '-'),
+  }));
+  await prisma.category.createMany({ data: categoriesWithSlug });
+  // await prisma.category.createMany({
+  //   data: categories,
+  //   skipDuplicates: true,
+  // });
 
   await prisma.theme.createMany({
     data: themes,
