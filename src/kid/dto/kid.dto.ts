@@ -77,4 +77,9 @@ export class UpdateKidDto {
     @Min(0, { each: true })
     @Max(6, { each: true })
     bedtimeDays?: number[];
+
+    @ApiProperty({ required: false, example: 'voice-uuid-123' })
+    @IsOptional()
+    @IsString()
+    preferredVoiceId?: string;
 }
