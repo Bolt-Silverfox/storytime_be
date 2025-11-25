@@ -25,6 +25,9 @@ export const envSchema = z.object({
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   SECRET: z.string().min(1, 'SECRET is required'),
   WEB_APP_BASE_URL: z.string().url('WEB_APP_BASE_URL must be a valid URL'),
+  GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
+  GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET is required'),
+  BACKEND_BASE_URL: z.string().url('BACKEND_BASE_URL must be a valid URL'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
