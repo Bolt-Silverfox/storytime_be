@@ -65,7 +65,6 @@ pnpm migrate
 ```bash
 pnpm generate
 ```
-
 5. (Optional) Seed the database with initial stories:
 ```bash
 pnpm db:seed
