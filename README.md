@@ -44,7 +44,6 @@ A NestJS-based backend API for the Storytime application, providing interactive 
 ```bash
 pnpm install
 ```
-
 2. Set up environment variables:
 Create a `.env` file in the project root with the following:
 ```env
