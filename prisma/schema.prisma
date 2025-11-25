@@ -45,6 +45,9 @@ model User {
   activityLogs            ActivityLog[]
   userIps                 UserIP[]
 
+  //google auth
+  googleId                String?                  @unique
+
   @@map("users")
 }
 
