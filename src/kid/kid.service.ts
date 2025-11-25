@@ -14,9 +14,7 @@ export class KidService {
             data: {
                 ...data,
                 parentId: userId,
-                // Handle Avatar Relation
                 avatarId: avatarId,
-                // Handle Categories Relation
                 preferredCategories: preferredCategoryIds
                     ? { connect: preferredCategoryIds.map((id) => ({ id })) }
                     : undefined,
@@ -145,5 +143,31 @@ export class KidService {
             voiceType: (voice?.name?.toUpperCase() as VoiceType) || VoiceType.MILO,
             preferredVoiceId: kid.preferredVoiceId,
         };
+    }
+
+    async createKids(userId: string, dtos: CreateKidDto[]) {
+        // We map the DTOs into Prisma operations
+        const operations = dtos.map((dto) => {
+            const { preferredCategoryIds, avatarId, ...data } = dto;
+
+            return this.prisma.kid.create({
+                data: {
+                    ...data,
+                    parentId: userId,
+                    avatarId: avatarId,
+                    // Connect Categories if provided
+                    preferredCategories: preferredCategoryIds
+                        ? { connect: preferredCategoryIds.map((id) => ({ id })) }
+                        : undefined,
+                },
+                include: {
+                    avatar: true,
+                    preferredCategories: true,
+                },
+            });
+        });
+
+        // Execute all operations in a single transaction
+        return this.prisma.$transaction(operations);
     }
 }

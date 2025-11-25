@@ -63,6 +63,28 @@ export class UserController {
   private readonly logger = new Logger(UserController.name);
   constructor(private readonly userService: UserService) { }
 
+  // ==================== CURRENT USER ENDPOINTS ====================
+
+  @Get('me')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get current user profile',
+    description: 'Requires authentication.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Current user profile returned.',
+    type: UserDto,
+  })
+  async getMe(@Req() req: any) {
+    const user = await this.userService.getUser(
+      req.authUserData.userId as string,
+    );
+    return user ? new UserDto(user) : null;
+  }
+
+  // ==================== USER CRUD ENDPOINTS ====================
 
 
   @Get(':id')

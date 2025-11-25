@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Patch, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Patch, BadRequestException, ForbiddenException, ParseArrayPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse } from '@nestjs/swagger';
 import { KidService } from './kid.service';
 import { CreateKidDto, UpdateKidDto, SetKidPreferredVoiceDto, KidVoiceDto } from './dto/kid.dto';
@@ -73,5 +73,14 @@ export class KidController {
     @ApiResponse({ status: 200, type: KidVoiceDto })
     async getKidPreferredVoice(@Param('kidId') kidId: string) {
         return await this.kidService.getKidPreferredVoice(kidId);
+    }
+    @Post('auth/kids/bulk')
+    @ApiOperation({ summary: 'Add multiple kids at once' })
+    @ApiBody({ type: [CreateKidDto] })
+    async createKids(
+        @Request() req: AuthenticatedRequest,
+        @Body(new ParseArrayPipe({ items: CreateKidDto })) dtos: CreateKidDto[],
+    ) {
+        return this.kidService.createKids(req.authUserData.userId, dtos);
     }
 }
