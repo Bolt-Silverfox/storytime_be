@@ -146,6 +146,8 @@ export class KidService {
     }
 
     async createKids(userId: string, dtos: CreateKidDto[]) {
+        const parent = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!parent) throw new NotFoundException('Parent User not found');
         // We map the DTOs into Prisma operations
         const operations = dtos.map((dto) => {
             const { preferredCategoryIds, avatarId, ...data } = dto;

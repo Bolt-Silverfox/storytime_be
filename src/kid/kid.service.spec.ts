@@ -16,6 +16,9 @@ const mockPrismaService = {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
     },
+    user: {
+        findUnique: jest.fn(),
+    },
 };
 
 describe('KidService', () => {
@@ -196,20 +199,16 @@ describe('KidService', () => {
                 { name: 'Kid 2', ageRange: '9-12', avatarId: 'avatar-2' },
             ];
             const expectedResult = [
-                { id: 'kid-1', ...dtos[0], parentId: userId },
                 { id: 'kid-2', ...dtos[1], parentId: userId },
             ];
 
             // Mock prisma.$transaction
             (prisma as any).$transaction = jest.fn().mockResolvedValue(expectedResult);
 
-            // We don't need to mock prisma.kid.create here because createKids calls it inside the map,
-            // but the actual execution happens via $transaction. 
-            // However, since we are mocking the service's prisma instance, we should ensure
-            // the create calls return something that looks like a Prisma Promise if we were to inspect them,
-            // but for this test, we mainly care that $transaction is called with the right operations.
-            // Since prisma.kid.create returns a Prisma Promise, we can just mock it to return a dummy object
-            // that represents the operation.
+            // Mock parent user check
+            prisma.user.findUnique.mockResolvedValue({ id: userId } as any);
+
+            // Mock kid.create
             prisma.kid.create.mockReturnValue('mock-prisma-promise' as any);
 
             const result = await service.createKids(userId, dtos);
