@@ -15,6 +15,7 @@ import { StoryModule } from './story/story.module';
 import { CloudinaryModule } from './upload/cloudinary.module';
 import { UploadModule } from './upload/upload.module';
 import { UserModule } from './user/user.module';
+import { KidModule } from './kid/kid.module';
 import { VoiceModule } from './voice/voice.module';
 
 @Module({
@@ -27,6 +28,8 @@ import { VoiceModule } from './voice/voice.module';
     CommonModule,
     AuthModule,
     UserModule,
+    KidModule,
+    VoiceModule,
     SettingsModule,
     NotificationModule,
     CloudinaryModule,
@@ -41,4 +44,4 @@ import { VoiceModule } from './voice/voice.module';
     VoiceModule,
   ],
 })
-export class AppModule {}
+export class AppModule { }

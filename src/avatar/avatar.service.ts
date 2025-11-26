@@ -36,46 +36,38 @@ export class AvatarService {
     }
 
     const avatarName = `${entityType}-avatar-${entityId}`;
-    const descriptiveName = `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} Avatar - ${entityName}`;
 
     return this.prisma.avatar.upsert({
       where: {
         name: avatarName,
       },
       update: {
-        name: descriptiveName, // Update the name with descriptive text
         url: uploadResult.secure_url,
         publicId: uploadResult.public_id,
-        isSystemAvatar: false,
+        isSystemAvatar: false, // Custom avatars are always non-system
+        isDeleted: false, // Ensure it's not marked as deleted
+        deletedAt: null,
       },
       create: {
-        name: descriptiveName,
+        name: avatarName,
         url: uploadResult.secure_url,
         publicId: uploadResult.public_id,
-        isSystemAvatar: false,
+        isSystemAvatar: false, // Custom avatars are always non-system
+        isDeleted: false,
+        deletedAt: null,
       },
     });
   }
 
   private async cleanupOldCustomAvatar(avatarId: string) {
-    // avatarId is guaranteed to be string here since we check before calling
-
     const oldAvatar = await this.prisma.avatar.findUnique({
       where: { id: avatarId },
     });
 
     if (oldAvatar && oldAvatar.publicId && !oldAvatar.isSystemAvatar) {
-      if (
-        oldAvatar == null ||
-        oldAvatar.publicId == null ||
-        oldAvatar.isSystemAvatar == null
-      ) {
-        return new NotFoundException('old avatar does not exist');
-      }
       try {
         await this.uploadService.deleteImage(oldAvatar.publicId);
 
-        // Only delete if no one else is using this avatar
         const usersUsing = await this.prisma.user.count({
           where: { avatarId },
         });
@@ -90,22 +82,39 @@ export class AvatarService {
     }
   }
 
-  async getAllAvatars() {
+  async getAllSystemAvatars() {
     return await this.prisma.avatar.findMany({
+      where: { 
+        isSystemAvatar: true 
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async getSystemAvatars() {
     return await this.prisma.avatar.findMany({
-      where: { isSystemAvatar: true },
-      orderBy: { name: 'asc' }, // Order by standard name
+      where: { 
+        isSystemAvatar: true,
+        isDeleted: false 
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async getAllAvatars(includeDeleted: boolean = false) {
+    const where = includeDeleted ? {} : { isDeleted: false };
+    
+    return await this.prisma.avatar.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
     });
   }
 
   async createAvatar(
     createAvatarDto: CreateAvatarDto,
     file: Express.Multer.File,
+    isSystemAvatar: boolean = false,
+    createdByUserId?: string,
   ) {
     let uploadResult: any;
 
@@ -116,16 +125,28 @@ export class AvatarService {
         this.logger.error('Failed to upload image to Cloudinary:', error);
         throw new BadRequestException('Failed to upload image');
       }
-    } else if (!createAvatarDto.url) {
-      throw new BadRequestException('Either image file or URL is required');
+    } else if (!createAvatarDto.url && isSystemAvatar) {
+      // For system avatars, either file or URL is required
+      throw new BadRequestException('Either image file or URL is required for system avatars');
+    } else if (!file && !isSystemAvatar) {
+      // For custom avatars, file is required
+      throw new BadRequestException('Image file is required for custom avatars');
     }
+
+    // Generate avatar name
+    const avatarName = createAvatarDto.name || 
+      (isSystemAvatar ? 'System Avatar' : `Custom Avatar - ${new Date().toISOString()}`);
 
     return this.prisma.avatar.create({
       data: {
-        name: createAvatarDto.name,
+        name: avatarName,
         url: uploadResult?.secure_url || createAvatarDto.url,
         publicId: uploadResult?.public_id || null,
-        isSystemAvatar: createAvatarDto.isSystemAvatar || false,
+        isSystemAvatar: isSystemAvatar,
+        isDeleted: false,
+        deletedAt: null,
+        // Track who created the avatar
+        ...(createdByUserId && { createdBy: createdByUserId }),
       },
     });
   }
@@ -135,7 +156,12 @@ export class AvatarService {
     updateAvatarDto: UpdateAvatarDto,
     file?: Express.Multer.File,
   ) {
-    const avatar = await this.prisma.avatar.findUnique({ where: { id } });
+    const avatar = await this.prisma.avatar.findUnique({ 
+      where: { 
+        id,
+        isDeleted: false 
+      } 
+    });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
     }
@@ -144,28 +170,22 @@ export class AvatarService {
     let data: any = { ...updateAvatarDto };
 
     if (file) {
-      // Delete old image from Cloudinary if it exists
-
-      if (avatar.publicId == null) {
-        return new NotFoundException('avatar id does not exist');
+      if (avatar.publicId) {
+        try {
+          await this.uploadService.deleteImage(avatar.publicId);
+        } catch (error) {
+          this.logger.warn('Failed to delete old image from Cloudinary:', error);
+        }
       }
+
       try {
-        await this.uploadService.deleteImage(avatar?.publicId);
+        uploadResult = await this.uploadService.uploadImage(file, 'avatars');
+        data.url = uploadResult.secure_url;
+        data.publicId = uploadResult.public_id;
       } catch (error) {
-        this.logger.warn('Failed to delete old image from Cloudinary:', error);
+        this.logger.error('Failed to upload new image to Cloudinary:', error);
+        throw new BadRequestException('Failed to upload new image');
       }
-    }
-
-    try {
-      if (file == null) {
-        return new NotFoundException('FIle could not be found');
-      }
-      uploadResult = await this.uploadService.uploadImage(file, 'avatars');
-      data.url = uploadResult.secure_url;
-      data.publicId = uploadResult.public_id;
-    } catch (error) {
-      this.logger.error('Failed to upload new image to Cloudinary:', error);
-      throw new BadRequestException('Failed to upload new image');
     }
 
     return await this.prisma.avatar.update({
@@ -174,25 +194,82 @@ export class AvatarService {
     });
   }
 
-  async deleteAvatar(id: string) {
+  async updateSystemAvatar(
+    id: string,
+    updateAvatarDto: UpdateAvatarDto,
+    file?: Express.Multer.File,
+  ) {
+    const avatar = await this.prisma.avatar.findUnique({ 
+      where: { 
+        id,
+        isDeleted: false 
+      } 
+    });
+    if (!avatar) {
+      throw new NotFoundException('System avatar not found');
+    }
+
+    if (!avatar.isSystemAvatar) {
+      throw new BadRequestException('Cannot update non-system avatar');
+    }
+
+    return this.updateAvatar(id, updateAvatarDto, file);
+  }
+
+  async softDeleteAvatar(id: string) {
+    const avatar = await this.prisma.avatar.findUnique({ 
+      where: { 
+        id,
+        isDeleted: false 
+      } 
+    });
+    if (!avatar) {
+      throw new NotFoundException('Avatar not found');
+    }
+
+    // For system avatars, check if they're in use
+    if (avatar.isSystemAvatar) {
+      const usersUsing = await this.prisma.user.count({
+        where: { avatarId: id },
+      });
+      const kidsUsing = await this.prisma.kid.count({ where: { avatarId: id } });
+
+      if (usersUsing > 0 || kidsUsing > 0) {
+        throw new BadRequestException(
+          'Cannot delete avatar that is currently in use',
+        );
+      }
+    }
+
+    return await this.prisma.avatar.update({
+      where: { id },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+    });
+  }
+
+  async permanentDeleteAvatar(id: string) {
     const avatar = await this.prisma.avatar.findUnique({ where: { id } });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
     }
 
-    // Check if avatar is being used
-    const usersUsing = await this.prisma.user.count({
-      where: { avatarId: id },
-    });
-    const kidsUsing = await this.prisma.kid.count({ where: { avatarId: id } });
+    // For system avatars, check if they're in use
+    if (avatar.isSystemAvatar) {
+      const usersUsing = await this.prisma.user.count({
+        where: { avatarId: id },
+      });
+      const kidsUsing = await this.prisma.kid.count({ where: { avatarId: id } });
 
-    if (usersUsing > 0 || kidsUsing > 0) {
-      throw new BadRequestException(
-        'Cannot delete avatar that is currently in use',
-      );
+      if (usersUsing > 0 || kidsUsing > 0) {
+        throw new BadRequestException(
+          'Cannot delete avatar that is currently in use',
+        );
+      }
     }
 
-    // Delete from Cloudinary if it exists
     if (avatar.publicId) {
       try {
         await this.uploadService.deleteImage(avatar.publicId);
@@ -201,7 +278,29 @@ export class AvatarService {
       }
     }
 
-    return this.prisma.avatar.delete({ where: { id } });
+    return await this.prisma.avatar.delete({ where: { id } });
+  }
+
+  async restoreAvatar(id: string) {
+    const avatar = await this.prisma.avatar.findUnique({ 
+      where: { id } 
+    });
+    
+    if (!avatar) {
+      throw new NotFoundException('Avatar not found');
+    }
+
+    if (!avatar.isDeleted) {
+      return avatar; // Already not deleted
+    }
+
+    return await this.prisma.avatar.update({
+      where: { id },
+      data: {
+        isDeleted: false,
+        deletedAt: null,
+      },
+    });
   }
 
   async assignAvatarToUser(userId: string, avatarId: string) {
@@ -211,7 +310,10 @@ export class AvatarService {
     }
 
     const avatar = await this.prisma.avatar.findUnique({
-      where: { id: avatarId },
+      where: { 
+        id: avatarId,
+        isDeleted: false 
+      },
     });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
@@ -231,7 +333,10 @@ export class AvatarService {
     }
 
     const avatar = await this.prisma.avatar.findUnique({
-      where: { id: avatarId },
+      where: { 
+        id: avatarId,
+        isDeleted: false 
+      },
     });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
@@ -254,9 +359,8 @@ export class AvatarService {
       throw new NotFoundException('User not found');
     }
 
-    // Only cleanup if avatarId exists
     if (user.avatarId) {
-      await this.cleanupOldCustomAvatar(user?.avatarId);
+      await this.cleanupOldCustomAvatar(user.avatarId);
     }
 
     const avatar = await this.handleCustomAvatarUpload(
@@ -283,9 +387,8 @@ export class AvatarService {
       throw new NotFoundException('Kid not found');
     }
 
-    // Only cleanup if avatarId exists
     if (kid.avatarId) {
-      await this.cleanupOldCustomAvatar(kid?.avatarId);
+      await this.cleanupOldCustomAvatar(kid.avatarId);
     }
 
     const avatar = await this.handleCustomAvatarUpload(
