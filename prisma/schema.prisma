@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   engineType    = "binary"
   binaryTargets = ["native"]
 }
@@ -46,7 +46,7 @@ model User {
   userIps                 UserIP[]
 
   //google auth
-  googleId                String?                  @unique
+  googleId String? @unique
 
   @@map("users")
 }
@@ -60,11 +60,11 @@ model Kid {
   dailyScreenTimeLimitMins Int? // Daily limit in minutes, null = no limit
   screenTimeSessions       ScreenTimeSession[]
   questionAnswers          QuestionAnswer[]
-  parentId  String
-  currentReadingLevel Int @default(1)
-  parent    User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  parentId                 String
+  currentReadingLevel      Int                 @default(1)
+  parent                   User                @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
 
   rewards Reward[]
 
@@ -137,22 +137,22 @@ model Profile {
 }
 
 model Story {
-  id            String   @id @default(uuid())
-  title         String
-  description   String
-  language      String
-  coverImageUrl String
-  audioUrl      String
-  textContent   String?
-  isInteractive Boolean
-  ageMin        Int
-  ageMax        Int
-  recommended   Boolean  @default(false)
-  aiGenerated   Boolean  @default(false)
-  difficultyLevel Int @default(1)
-  wordCount       Int @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              String   @id @default(uuid())
+  title           String
+  description     String
+  language        String
+  coverImageUrl   String
+  audioUrl        String
+  textContent     String?
+  isInteractive   Boolean
+  ageMin          Int
+  ageMax          Int
+  recommended     Boolean  @default(false)
+  aiGenerated     Boolean  @default(false)
+  difficultyLevel Int      @default(1)
+  wordCount       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   images   StoryImage[]
   branches StoryBranch[]
@@ -209,15 +209,15 @@ model Favorite {
 }
 
 model StoryProgress {
-  id           String   @id @default(uuid())
-  kidId        String
-  kid          Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
-  storyId      String
-  story        Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  progress     Float    @default(0)
-  completed    Boolean  @default(false)
-  lastAccessed DateTime @default(now())
-  totalTimeSpent  Int @default(0) // In seconds
+  id             String   @id @default(uuid())
+  kidId          String
+  kid            Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  storyId        String
+  story          Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  progress       Float    @default(0)
+  completed      Boolean  @default(false)
+  lastAccessed   DateTime @default(now())
+  totalTimeSpent Int      @default(0) // In seconds
 
   @@unique([kidId, storyId])
   @@map("story_progress")
@@ -340,12 +340,12 @@ model StoryPath {
 }
 
 model Category {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  image       String?
-  description String?
-  stories     Story[] @relation("StoryCategories")
-  preferredByKids Kid[] @relation("KidPreferredCategories")
+  id              String  @id @default(uuid())
+  name            String  @unique
+  image           String?
+  description     String?
+  stories         Story[] @relation("StoryCategories")
+  preferredByKids Kid[]   @relation("KidPreferredCategories")
 }
 
 model Theme {
@@ -383,15 +383,15 @@ model StoryQuestion {
 }
 
 model Avatar {
-  id             String   @id @default(cuid())
-  name           String?  // Standard name for upsert (unique identifier)
- // displayName    String?  // User-friendly display name
+  id             String    @id @default(cuid())
+  name           String? // Standard name for upsert (unique identifier)
+  // displayName    String?  // User-friendly display name
   url            String
-  isSystemAvatar Boolean  @default(false)
-  isDeleted     Boolean  @default(false)
-  deletedAt     DateTime?
+  isSystemAvatar Boolean   @default(false)
+  isDeleted      Boolean   @default(false)
+  deletedAt      DateTime?
   publicId       String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   // Relations
   users User[]
