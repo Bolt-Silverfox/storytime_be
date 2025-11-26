@@ -24,12 +24,9 @@ import {
 import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { UserDto } from '../auth/auth.dto';
-import {
-  SetKidPreferredVoiceDto,
-  KidVoiceDto,
-  UpdateUserDto,
-} from './dto/user.dto';
+import { UpdateUserDto } from './dto/user.dto';
 import { VOICEID, VoiceType } from '@/story/story.dto';
+
 import { UpdateParentProfileDto } from './dto/update-parent-profile.dto';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
 import { EnableBiometricsDto } from './dto/enable-biometrics.dto';
@@ -57,34 +54,16 @@ class UpdateUserRoleDto {
 @Controller('user')
 export class UserController {
   private readonly logger = new Logger(UserController.name);
+
   constructor(private readonly userService: UserService) {}
 
-  
-  // ==================== KID ENDPOINTS ====================
+  // ============================================================
+  //                     KID ENDPOINTS
+  // ============================================================
   @Get('kids/:kidId')
-  @ApiOperation({
-    summary: 'Get kid by ID',
-    description: 'Retrieve a kid profile by kidId.',
-  })
+  @ApiOperation({ summary: 'Get kid by ID' })
   @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({
-    status: 200,
-    description: 'Kid data returned.',
-    schema: {
-      example: {
-        id: 'kid123',
-        name: 'Tom',
-        age: 6,
-        avatar: { url: 'https://...' },
-        preferredVoiceId: 'voice-abc',
-        parent: {
-          id: 'user123',
-          name: 'Parent Name',
-        },
-      },
-    },
-  })
-  @ApiResponse({ status: 404, description: 'Kid not found' })
+  @ApiResponse({ status: 200 })
   async getKidById(@Param('kidId') kidId: string) {
     try {
       return await this.userService.getKidById(kidId);
@@ -97,15 +76,11 @@ export class UserController {
   @Patch('kids/:kidId/voice')
   @ApiOperation({ summary: 'Set preferred voice for a kid' })
   @ApiParam({ name: 'kidId', type: String })
-  @ApiBody({ type: SetKidPreferredVoiceDto })
-  @ApiResponse({ status: 200, type: KidVoiceDto })
+  @ApiBody({})
   async setKidPreferredVoice(
     @Param('kidId') kidId: string,
-    @Body() body: SetKidPreferredVoiceDto,
+    @Body() body: any,
   ) {
-    this.logger.log(
-      `Setting preferred voice for kid ${kidId} to ${JSON.stringify(body)}`,
-    );
     if (!body.voiceType) {
       throw new BadRequestException('Voice type is required');
     }
@@ -120,126 +95,29 @@ export class UserController {
   @Get('kids/:kidId/voice')
   @ApiOperation({ summary: 'Get preferred voice for a kid' })
   @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({ status: 200, type: KidVoiceDto })
   async getKidPreferredVoice(@Param('kidId') kidId: string) {
     return await this.userService.getKidPreferredVoice(kidId);
-<<<<<<< HEAD
   }
 
-  // ==================== CURRENT USER ENDPOINTS ====================
+  // ============================================================
+  //                 SELF / PARENT PROFILE ENDPOINTS
+  // ============================================================
 
   @Get('me')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get current user profile',
-    description: 'Requires authentication.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Current user profile returned.',
-    type: UserDto,
-  })
+  @ApiOperation({ summary: 'Get current user profile' })
+  @ApiResponse({ status: 200, type: ParentProfileResponseDto })
   async getMe(@Req() req: any) {
-    const user = await this.userService.getUser(
-      req.authUserData.userId as string,
-    );
-    return user ? new UserDto(user) : null;
-  }
-
-  // ==================== USER CRUD ENDPOINTS ====================
-
-  @Get(':id')
-  @ApiOperation({
-    summary: 'Get user profile',
-    description: 'Retrieve a user profile by ID.',
-  })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'User profile returned.',
-    schema: {
-      example: {
-        id: 'abc123',
-        email: 'user@example.com',
-        name: 'John Doe',
-        avatarUrl: 'https://avatar.com',
-        role: 'user',
-        createdAt: '2023-10-01T12:00:00Z',
-        updatedAt: '2023-10-01T12:00:00Z',
-        profile: {
-          explicitContent: true,
-          maxScreenTimeMins: 60,
-          language: 'en',
-          country: 'nigeria',
-        },
-      },
-    },
-  })
-  @ApiResponse({ status: 404, description: 'User not found.' })
-  async getUser(@Param('id') id: string) {
-    const user = await this.userService.getUser(id);
-    return user ? new UserDto(user) : null;
-  }
-
-  @Put(':id')
-=======
-  }
-
-  // =========================================
-  // SELF / PARENT PROFILE ENDPOINTS 
-  // =========================================
-
-  @Get('me')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
->>>>>>> 6bd2da9 (Feat:Implement parent profile)
-  @ApiOperation({
-    summary: 'Get current user profile',
-    description: 'Requires authentication.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Current user profile returned.',
-    type: ParentProfileResponseDto,
-  })
-  async getMe(@Req() req: any) {
-    const raw = await this.userService.getUser(
-      req.authUserData.userId as string,
-    );
+    const raw = await this.userService.getUser(req.authUserData.userId);
     return mapParentProfile(raw);
   }
-
-<<<<<<< HEAD
-  @Delete('account/:id')
-  @ApiOperation({
-    summary: 'Delete user account',
-    description: 'Delete my account as a user',
-  })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'User account deleted.',
-    schema: { example: { id: 'abc123', deleted: true } },
-  })
-  async deleteUserAccount(@Param('id') id: string) {
-    return this.userService.deleteUserAccount(id);
-  }
-
-  // ==================== ADMIN ENDPOINTS ====================
-=======
-  // ------------------------------------------------------
-  //  PARENT PROFILE ENDPOINTS
-  // ------------------------------------------------------
 
   @Patch('me')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update parent profile' })
-  async updateMyProfile(
-    @Req() req: any,
-    @Body() body: UpdateParentProfileDto,
-  ) {
+  async updateMyProfile(@Req() req: any, @Body() body: UpdateParentProfileDto) {
     return this.userService.updateParentProfile(req.authUserData.userId, body);
   }
 
@@ -247,38 +125,23 @@ export class UserController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update parent avatar' })
-  async updateAvatar(
-    @Req() req: any,
-    @Body() body: UpdateAvatarDto,
-  ) {
-    return this.userService.updateAvatarForParent(
-      req.authUserData.userId,
-      body,
-    );
+  async updateAvatar(@Req() req: any, @Body() body: UpdateAvatarDto) {
+    return this.userService.updateAvatarForParent(req.authUserData.userId, body);
   }
 
   @Post('me/biometrics')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Enable or disable biometrics' })
-  async setBiometrics(
-    @Req() req: any,
-    @Body() body: EnableBiometricsDto,
-  ) {
-    return this.userService.setBiometrics(
-      req.authUserData.userId,
-      body.enable,
-    );
+  async setBiometrics(@Req() req: any, @Body() body: EnableBiometricsDto) {
+    return this.userService.setBiometrics(req.authUserData.userId, body.enable);
   }
 
   @Post('me/pin')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Set or update PIN' })
-  async setPin(
-    @Req() req: any,
-    @Body() body: SetPinDto,
-  ) {
+  async setPin(@Req() req: any, @Body() body: SetPinDto) {
     return this.userService.setPin(req.authUserData.userId, body.pin);
   }
 
@@ -286,17 +149,14 @@ export class UserController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Verify PIN' })
-  async verifyPin(
-    @Req() req: any,
-    @Body() body: SetPinDto,
-  ) {
+  async verifyPin(@Req() req: any, @Body() body: SetPinDto) {
     return this.userService.verifyPin(req.authUserData.userId, body.pin);
   }
 
   @Post('me/pin/reset')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Reset existing PIN (requires old PIN)' })
+  @ApiOperation({ summary: 'Reset existing PIN' })
   async resetPin(@Req() req: any, @Body() body: ResetPinDto) {
     if (body.newPin !== body.confirmNewPin) {
       throw new BadRequestException('New PIN and confirmation do not match');
@@ -316,170 +176,62 @@ export class UserController {
     return this.userService.deleteUserAccount(req.authUserData.userId);
   }
 
-  // ------------------------------------------------------
-   
   @Post('me/delete')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Request account deletion (verify password + provide reasons)' })
-  async deleteAccountWithConfirmation(@Req() req: any, @Body() body: DeleteAccountDto) {
-    return this.userService.deleteAccountWithConfirmation(req.authUserData.userId, body.password, body.reasons, body.notes);
+  @ApiOperation({ summary: 'Request account deletion (verify password + reasons)' })
+  async deleteAccountWithConfirmation(
+    @Req() req: any,
+    @Body() body: DeleteAccountDto,
+  ) {
+    return this.userService.deleteAccountWithConfirmation(
+      req.authUserData.userId,
+      body.password,
+      body.reasons,
+      body.notes,
+    );
   }
 
->>>>>>> 6bd2da9 (Feat:Implement parent profile)
+  // ============================================================
+  //                       ADMIN + GENERIC ROUTES
+  // ============================================================
 
   @Get()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'List all users (admin only)',
-    description: 'Requires admin role and authentication.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'List of users returned.',
-    schema: {
-      example: [
-        {
-          id: 'abc123',
-          email: 'user@example.com',
-          name: 'John Doe',
-          role: 'user',
-        },
-      ],
-    },
-  })
+  @ApiOperation({ summary: 'List all users (admin only)' })
   async getAllUsers(@Req() req: any) {
     if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
     }
     return await this.userService.getAllUsers();
   }
-<<<<<<< HEAD
-=======
-
-  // ========================================================
-  //  GENERIC USER ROUTES (id-based) 
-  // ========================================================
 
   @Get(':id')
-  @ApiOperation({
-    summary: 'Get user profile',
-    description: 'Retrieve a user profile by ID.',
-  })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'User profile returned.',
-    schema: {
-      example: {
-        id: 'abc123',
-        email: 'user@example.com',
-        name: 'Joseph',
-        avatarUrl: 'https://res.cloudinary.com/dblrgpsxr/image/upload/v1764085773/Joseph_avatar_jxeeja.png',
-        role: 'user',
-        createdAt: '2023-10-01T12:00:00Z',
-        updatedAt: '2023-10-01T12:00:00Z',
-        profile: {
-          explicitContent: true,
-          maxScreenTimeMins: 60,
-          language: 'en',
-          country: 'nigeria',
-        },
-      },
-    },
-  })
-  @ApiResponse({ status: 404, description: 'User not found.' })
+  @ApiOperation({ summary: 'Get user profile' })
+  @ApiParam({ name: 'id', type: String })
   async getUser(@Param('id') id: string) {
     const user = await this.userService.getUser(id);
     return user ? new UserDto(user) : null;
   }
 
   @Put(':id')
-  @ApiOperation({
-    summary: 'Update user profile',
-    description: 'Update a user profile by ID.',
-  })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
-  @ApiBody({
-    type: UpdateUserDto,
-    examples: {
-      example1: {
-        value: {
-          title: 'Ms',
-          name: 'Judas',
-          avatarUrl: 'https://res.cloudinary.com/dblrgpsxr/image/upload/v1764085758/Judas_avatar_t5l8oh.png',
-          language: 'en',
-          country: 'nigeria',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'User profile updated.',
-    schema: {
-      example: {
-        id: 'abc123',
-        title: 'Ms',
-        name: 'Jamina',
-        avatarUrl: 'https://res.cloudinary.com/dblrgpsxr/image/upload/v1764085740/Jamina_avatar_go3yd9.png',
-        language: 'en',
-        country: 'nigeria',
-        numberOfKids: 1,
-      },
-    },
-  })
-  @ApiResponse({ status: 404, description: 'User not found.' })
+  @ApiOperation({ summary: 'Update user profile' })
+  @ApiParam({ name: 'id', type: String })
   async updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
     return await this.userService.updateUser(id, body);
   }
 
   @Delete(':id')
-  @ApiOperation({
-    summary: 'delete user account',
-    description: 'delete my account as a user',
-  })
+  @ApiOperation({ summary: 'Delete user account' })
   async deleteUserAccount(@Param('id') id: string) {
-    return this.userService.deleteUserAccount(id);
-  }
-
-  // ------------------------------------------------------
->>>>>>> 6bd2da9 (Feat:Implement parent profile)
-
-  @Delete(':id')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Delete user (admin only)',
-    description: 'Requires admin role and authentication.',
-  })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'User deleted.',
-    schema: { example: { id: 'abc123', deleted: true } },
-  })
-  async deleteUser(@Param('id') id: string, @Req() req: any) {
-    if (req.authUserData.userRole !== 'admin') {
-      throw new ForbiddenException('Admins only');
-    }
-    return await this.userService.deleteUser(id);
+    return await this.userService.deleteUserAccount(id);
   }
 
   @Get(':id/role')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get user role (admin only)',
-    description: 'Requires admin role and authentication.',
-  })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'User role returned.',
-    schema: { example: { id: 'abc123', role: 'admin' } },
-  })
+  @ApiOperation({ summary: 'Get user role (admin only)' })
   async getUserRole(@Param('id') id: string, @Req() req: any) {
     if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
@@ -490,20 +242,9 @@ export class UserController {
   @Patch(':id/role')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Update user role (admin only)',
-    description: 'Requires admin role and authentication.',
-  })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
-  @ApiBody({
-    type: UpdateUserRoleDto,
-    examples: { example1: { value: { role: 'admin' } } },
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'User role updated.',
-    schema: { example: { id: 'abc123', role: 'admin' } },
-  })
+  @ApiOperation({ summary: 'Update user role (admin only)' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiBody({ type: UpdateUserRoleDto })
   async updateUserRole(
     @Param('id') id: string,
     @Body('role') role: UserRole,
@@ -517,8 +258,4 @@ export class UserController {
     }
     return await this.userService.updateUserRole(id, role);
   }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 6bd2da9 (Feat:Implement parent profile)
