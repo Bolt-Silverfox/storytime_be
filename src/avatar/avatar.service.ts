@@ -82,11 +82,11 @@ export class AvatarService {
     }
   }
 
-  async getAllAvatars(includeDeleted: boolean = false) {
-    const where = includeDeleted ? {} : { isDeleted: false };
-    
+  async getAllSystemAvatars() {
     return await this.prisma.avatar.findMany({
-      where,
+      where: { 
+        isSystemAvatar: true 
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -101,10 +101,20 @@ export class AvatarService {
     });
   }
 
+  async getAllAvatars(includeDeleted: boolean = false) {
+    const where = includeDeleted ? {} : { isDeleted: false };
+    
+    return await this.prisma.avatar.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async createAvatar(
     createAvatarDto: CreateAvatarDto,
     file: Express.Multer.File,
     isSystemAvatar: boolean = false,
+    createdByUserId?: string,
   ) {
     let uploadResult: any;
 
@@ -115,18 +125,28 @@ export class AvatarService {
         this.logger.error('Failed to upload image to Cloudinary:', error);
         throw new BadRequestException('Failed to upload image');
       }
-    } else if (!createAvatarDto.url) {
-      throw new BadRequestException('Either image file or URL is required');
+    } else if (!createAvatarDto.url && isSystemAvatar) {
+      // For system avatars, either file or URL is required
+      throw new BadRequestException('Either image file or URL is required for system avatars');
+    } else if (!file && !isSystemAvatar) {
+      // For custom avatars, file is required
+      throw new BadRequestException('Image file is required for custom avatars');
     }
+
+    // Generate avatar name
+    const avatarName = createAvatarDto.name || 
+      (isSystemAvatar ? 'System Avatar' : `Custom Avatar - ${new Date().toISOString()}`);
 
     return this.prisma.avatar.create({
       data: {
-        name: createAvatarDto.name,
+        name: avatarName,
         url: uploadResult?.secure_url || createAvatarDto.url,
         publicId: uploadResult?.public_id || null,
         isSystemAvatar: isSystemAvatar,
         isDeleted: false,
         deletedAt: null,
+        // Track who created the avatar
+        ...(createdByUserId && { createdBy: createdByUserId }),
       },
     });
   }
@@ -207,15 +227,18 @@ export class AvatarService {
       throw new NotFoundException('Avatar not found');
     }
 
-    const usersUsing = await this.prisma.user.count({
-      where: { avatarId: id },
-    });
-    const kidsUsing = await this.prisma.kid.count({ where: { avatarId: id } });
+    // For system avatars, check if they're in use
+    if (avatar.isSystemAvatar) {
+      const usersUsing = await this.prisma.user.count({
+        where: { avatarId: id },
+      });
+      const kidsUsing = await this.prisma.kid.count({ where: { avatarId: id } });
 
-    if (usersUsing > 0 || kidsUsing > 0) {
-      throw new BadRequestException(
-        'Cannot delete avatar that is currently in use',
-      );
+      if (usersUsing > 0 || kidsUsing > 0) {
+        throw new BadRequestException(
+          'Cannot delete avatar that is currently in use',
+        );
+      }
     }
 
     return await this.prisma.avatar.update({
@@ -233,15 +256,18 @@ export class AvatarService {
       throw new NotFoundException('Avatar not found');
     }
 
-    const usersUsing = await this.prisma.user.count({
-      where: { avatarId: id },
-    });
-    const kidsUsing = await this.prisma.kid.count({ where: { avatarId: id } });
+    // For system avatars, check if they're in use
+    if (avatar.isSystemAvatar) {
+      const usersUsing = await this.prisma.user.count({
+        where: { avatarId: id },
+      });
+      const kidsUsing = await this.prisma.kid.count({ where: { avatarId: id } });
 
-    if (usersUsing > 0 || kidsUsing > 0) {
-      throw new BadRequestException(
-        'Cannot delete avatar that is currently in use',
-      );
+      if (usersUsing > 0 || kidsUsing > 0) {
+        throw new BadRequestException(
+          'Cannot delete avatar that is currently in use',
+        );
+      }
     }
 
     if (avatar.publicId) {

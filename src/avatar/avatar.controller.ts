@@ -38,8 +38,8 @@ export class AvatarController {
   @Public()
   @Get('system')
   @ApiOperation({
-    summary: 'Get system avatars',
-    description: 'Retrieve all system avatars available for selection. Does not require authentication.',
+    summary: 'Get available system avatars',
+    description: 'Retrieve all system avatars that are available (not deleted). Does not require authentication.',
   })
   @ApiResponse({ 
     status: 200, 
@@ -499,70 +499,7 @@ export class AvatarController {
     return new SuccessResponse(200, { kid }, 'Kid avatar uploaded successfully');
   }
 
-  // ADMIN ONLY ENDPOINTS - Only for system avatars
-
-  @Get()
-  @UseGuards(AdminGuard)
-  @ApiOperation({
-    summary: 'List all avatars',
-    description: 'Retrieve all avatars including soft deleted ones. Admin access required.',
-  })
-  @ApiQuery({
-    name: 'includeDeleted',
-    required: false,
-    type: Boolean,
-    description: 'Include soft deleted avatars in the response',
-  })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Avatars retrieved successfully',
-    schema: {
-      example: {
-        statusCode: 200,
-        message: 'Avatars retrieved successfully',
-        data: [
-          {
-            id: 'avatar-123',
-            name: 'System Avatar 1',
-            url: 'https://example.com/avatar1.png',
-            isSystemAvatar: true,
-            publicId: 'public_id_123',
-            isDeleted: false,
-            deletedAt: null,
-            createdAt: '2023-10-01T12:00:00Z',
-            updatedAt: '2023-10-01T12:00:00Z'
-          }
-        ]
-      }
-    }
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-    schema: {
-      example: {
-        message: 'Unauthorized',
-        statusCode: 401,
-        details: {}
-      }
-    }
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden',
-    schema: {
-      example: {
-        message: 'Forbidden resource',
-        statusCode: 403,
-        details: {}
-      }
-    }
-  })
-  async getAllAvatars(@Query('includeDeleted') includeDeleted?: boolean) {
-    const avatars = await this.avatarService.getAllAvatars(includeDeleted);
-    return new SuccessResponse(200, avatars, 'Avatars retrieved successfully');
-  }
-
+  // UNIVERSAL AVATAR CREATION ENDPOINT
   @Post()
   @UseInterceptors(FileInterceptor('image'))
   @ApiOperation({
@@ -665,6 +602,75 @@ export class AvatarController {
       : 'Avatar created successfully';
     
     return new SuccessResponse(201, avatar, message);
+  }
+
+  // ADMIN ONLY ENDPOINTS
+
+  @Get()
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: 'List all system avatars',
+    description: 'Retrieve all system avatars including deleted ones. Admin access required.',
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'System avatars retrieved successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'System avatars retrieved successfully',
+        data: [
+          {
+            id: 'avatar-123',
+            name: 'System Avatar 1',
+            url: 'https://example.com/avatar1.png',
+            isSystemAvatar: true,
+            publicId: 'public_id_123',
+            isDeleted: false,
+            deletedAt: null,
+            createdAt: '2023-10-01T12:00:00Z',
+            updatedAt: '2023-10-01T12:00:00Z'
+          },
+          {
+            id: 'avatar-456',
+            name: 'Deleted Avatar',
+            url: 'https://example.com/deleted-avatar.png',
+            isSystemAvatar: true,
+            publicId: 'public_id_456',
+            isDeleted: true,
+            deletedAt: '2023-10-02T10:30:00Z',
+            createdAt: '2023-10-01T12:00:00Z',
+            updatedAt: '2023-10-02T10:30:00Z'
+          }
+        ]
+      }
+    }
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    schema: {
+      example: {
+        message: 'Unauthorized',
+        statusCode: 401,
+        details: {}
+      }
+    }
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+    schema: {
+      example: {
+        message: 'Forbidden resource',
+        statusCode: 403,
+        details: {}
+      }
+    }
+  })
+  async getAllSystemAvatars() {
+    const avatars = await this.avatarService.getAllSystemAvatars();
+    return new SuccessResponse(200, avatars, 'System avatars retrieved successfully');
   }
 
   @Put(':id')
@@ -774,16 +780,22 @@ export class AvatarController {
   @Delete(':id')
   @UseGuards(AdminGuard)
   @ApiOperation({
-    summary: 'Soft delete avatar',
-    description: 'Soft delete an avatar (mark as deleted). Admin access required.',
+    summary: 'Delete system avatar',
+    description: 'Delete a system avatar. Use permanent=true query parameter for permanent deletion. Default is soft delete. Admin access required.',
+  })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the avatar (default: false - soft delete)',
   })
   @ApiResponse({ 
     status: 200, 
-    description: 'Avatar soft deleted successfully',
+    description: 'System avatar soft deleted successfully',
     schema: {
       example: {
         statusCode: 200,
-        message: 'Avatar soft deleted successfully',
+        message: 'System avatar soft deleted successfully',
         data: {
           id: 'avatar-123',
           name: 'Deleted Avatar',
@@ -798,68 +810,13 @@ export class AvatarController {
       }
     }
   })
-  @ApiResponse({
-    status: 400,
-    description: 'Bad Request',
-    schema: {
-      example: {
-        message: 'Cannot delete avatar that is currently in use',
-        statusCode: 400,
-        details: {}
-      }
-    }
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-    schema: {
-      example: {
-        message: 'Unauthorized',
-        statusCode: 401,
-        details: {}
-      }
-    }
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden',
-    schema: {
-      example: {
-        message: 'Forbidden resource',
-        statusCode: 403,
-        details: {}
-      }
-    }
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Not Found',
-    schema: {
-      example: {
-        message: 'Avatar not found',
-        statusCode: 404,
-        details: {}
-      }
-    }
-  })
-  async softDeleteAvatar(@Param('id') id: string) {
-    const avatar = await this.avatarService.softDeleteAvatar(id);
-    return new SuccessResponse(200, avatar, 'Avatar soft deleted successfully');
-  }
-
-  @Delete(':id/permanent')
-  @UseGuards(AdminGuard)
-  @ApiOperation({
-    summary: 'Permanently delete avatar',
-    description: 'Permanently delete an avatar from the database. This action cannot be undone. Admin access required.',
-  })
   @ApiResponse({ 
     status: 200, 
-    description: 'Avatar permanently deleted successfully',
+    description: 'System avatar permanently deleted successfully',
     schema: {
       example: {
         statusCode: 200,
-        message: 'Avatar permanently deleted successfully',
+        message: 'System avatar permanently deleted successfully',
         data: null
       }
     }
@@ -902,30 +859,38 @@ export class AvatarController {
     description: 'Not Found',
     schema: {
       example: {
-        message: 'Avatar not found',
+        message: 'System avatar not found',
         statusCode: 404,
         details: {}
       }
     }
   })
-  async permanentDeleteAvatar(@Param('id') id: string) {
-    await this.avatarService.permanentDeleteAvatar(id);
-    return new SuccessResponse(200, null, 'Avatar permanently deleted successfully');
+  async deleteAvatar(
+    @Param('id') id: string,
+    @Query('permanent') permanent?: boolean,
+  ) {
+    if (permanent === true) {
+      await this.avatarService.permanentDeleteAvatar(id);
+      return new SuccessResponse(200, null, 'System avatar permanently deleted successfully');
+    } else {
+      const avatar = await this.avatarService.softDeleteAvatar(id);
+      return new SuccessResponse(200, avatar, 'System avatar soft deleted successfully');
+    }
   }
 
   @Post(':id/undo-delete')
   @UseGuards(AdminGuard)
   @ApiOperation({
-    summary: 'Restore soft deleted avatar',
-    description: 'Restore a soft deleted avatar. Admin access required.',
+    summary: 'Restore soft deleted system avatar',
+    description: 'Restore a soft deleted system avatar. Admin access required.',
   })
   @ApiResponse({ 
     status: 200, 
-    description: 'Avatar restored successfully',
+    description: 'System avatar restored successfully',
     schema: {
       example: {
         statusCode: 200,
-        message: 'Avatar restored successfully',
+        message: 'System avatar restored successfully',
         data: {
           id: 'avatar-123',
           name: 'Restored Avatar',
@@ -967,14 +932,14 @@ export class AvatarController {
     description: 'Not Found',
     schema: {
       example: {
-        message: 'Avatar not found',
+        message: 'System avatar not found',
         statusCode: 404,
         details: {}
       }
     }
   })
-  async restoreAvatar(@Param('id') id: string) {
+  async undoDeleteAvatar(@Param('id') id: string) {
     const avatar = await this.avatarService.restoreAvatar(id);
-    return new SuccessResponse(200, avatar, 'Avatar restored successfully');
+    return new SuccessResponse(200, avatar, 'System avatar restored successfully');
   }
 }
