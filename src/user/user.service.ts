@@ -138,16 +138,7 @@ export class UserService {
     return { id: user.id, role: user.role };
   }
 
-  async setKidPreferredVoice(
-    kidId: string,
-    voiceType: VoiceType,
-  ): Promise<KidVoiceDto> {
-    const voice = await prisma.voice.findFirst({
-      where: { name: voiceType },
-    });
-    if (!voice) {
-      throw new Error(`Voice type ${voiceType} not found`);
-    }
+
 
     const kid = await prisma.kid.update({
       where: { id: kidId },
@@ -385,4 +376,4 @@ export class UserService {
     return { success: true, message: 'Account deleted successfully' };
   }
 
-}
+

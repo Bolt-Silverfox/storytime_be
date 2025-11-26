@@ -127,49 +127,6 @@ export class AuthController {
     return this.authService.updateProfile(req.authUserData['userId'], data);
   }
 
-  // ===== KIDS MANAGEMENT =====
-  @Post('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Add kids to user account' })
-  @ApiBody({ type: [kidDto] })
-  @ApiResponse({ status: 200, description: 'Kids added.' })
-  async addKids(@Req() req: AuthenticatedRequest, @Body() data: kidDto[]) {
-    return this.authService.addKids(req.authUserData['userId'], data);
-  }
-
-  @Get('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all kids for user' })
-  @ApiResponse({ status: 200, description: 'List of kids.' })
-  async getKids(@Req() req: AuthenticatedRequest) {
-    return this.authService.getKids(req.authUserData['userId']);
-  }
-
-  @Put('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update kids information' })
-  @ApiBody({ type: [updateKidDto] })
-  @ApiResponse({ status: 200, description: 'Kids updated.' })
-  async updateKids(
-    @Req() req: AuthenticatedRequest,
-    @Body() data: updateKidDto[],
-  ) {
-    return this.authService.updateKids(req.authUserData['userId'], data);
-  }
-
-  @Delete('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete kids from user account' })
-  @ApiBody({ type: [String], description: 'Array of kid IDs to delete.' })
-  @ApiResponse({ status: 200, description: 'Kids deleted.' })
-  async deleteKids(@Req() req: AuthenticatedRequest, @Body() data: string[]) {
-    return this.authService.deleteKids(req.authUserData['userId'], data);
-  }
-
   // ===== PASSWORD RESET =====
   @Post('request-password-reset')
   @ApiOperation({ summary: 'Request password reset' })
