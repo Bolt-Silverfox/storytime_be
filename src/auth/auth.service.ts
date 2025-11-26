@@ -664,10 +664,6 @@ export class AuthService {
     }
   }
 
-    const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: user.id },
-    });
-
     if (!user.isEmailVerified) {
       throw new BadRequestException(
         'Email not verified. Please check your inbox.',
@@ -694,4 +690,4 @@ export class AuthService {
   };
 }
 }
-}
+
