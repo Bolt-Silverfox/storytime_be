@@ -43,13 +43,12 @@ model User {
   Reward                  Reward[]
   notificationPreferences NotificationPreference[]
   activityLogs            ActivityLog[]
-  googleId                String?                  @unique //google auth
-  enableBiometrics        Boolean                  @default(false)
-  pinHash                 String?
-  subscriptions           Subscription[]
-  supportTickets          SupportTicket[]
-  paymentMethods          PaymentMethod[]
-  paymentTransactions     PaymentTransaction[]
+
+  userIps                 UserIP[]
+
+  //google auth
+  googleId                String?                  @unique
+
 
   @@map("users")
 }
@@ -448,6 +447,8 @@ model Avatar {
   displayName    String? // User-friendly display name
   url            String
   isSystemAvatar Boolean  @default(false)
+  isDeleted     Boolean  @default(false)
+  deletedAt     DateTime?
   publicId       String?
   createdAt      DateTime @default(now())
 
@@ -501,4 +502,18 @@ model QuestionAnswer {
   @@index([kidId])
   @@index([kidId, answeredAt])
   @@map("question_answers")
+}
+
+model UserIP {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress String
+  userAgent String?
+  firstUsed DateTime @default(now())
+  lastUsed  DateTime @updatedAt
+
+  @@unique([userId, ipAddress])
+  @@index([ipAddress])
+  @@map("user_ips")
 }

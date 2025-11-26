@@ -112,6 +112,8 @@ export class AvatarSeederService implements OnModuleInit {
             name: avatarData.name,
             url: avatarData.url,
             isSystemAvatar: true,
+            isDeleted: false,        // Explicitly set to false
+            deletedAt: null,         // Explicitly set to null
           },
         });
 
