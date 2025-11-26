@@ -1,39 +1,104 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { VOICEID, VoiceResponseDto } from '../story/story.dto'; // Importing existing constants
+import {
+  CreateElevenLabsVoiceDto,
+  SetPreferredVoiceDto,
+  UploadVoiceDto,
+  VoiceResponseDto,
+} from './voice.dto';
 
 @Injectable()
 export class VoiceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async getAllAvailableVoices(userId: string): Promise<VoiceResponseDto[]> {
-    // 1. Define System Voices (Hardcoded based on your existing VOICIED constant)
-    // These are available to everyone.
-    const systemVoices: VoiceResponseDto[] = [
-      { id: VOICEID.MILO, name: 'Milo', type: 'system', elevenLabsVoiceId: VOICEID.MILO },
-      { id: VOICEID.BELLA, name: 'Bella', type: 'system', elevenLabsVoiceId: VOICEID.BELLA },
-      { id: VOICEID.COSMO, name: 'Cosmo', type: 'system', elevenLabsVoiceId: VOICEID.COSMO },
-      { id: VOICEID.NIMBUS, name: 'Nimbus', type: 'system', elevenLabsVoiceId: VOICEID.NIMBUS },
-      { id: VOICEID.GRANDPA_JO, name: 'Grandpa Jo', type: 'system', elevenLabsVoiceId: VOICEID.GRANDPA_JO },
-      { id: VOICEID.CHIP, name: 'Chip', type: 'system', elevenLabsVoiceId: VOICEID.CHIP },
-    ];
+  // --- Upload a new voice file ---
+  async uploadVoice(
+    userId: string,
+    fileUrl: string,
+    dto: UploadVoiceDto,
+  ): Promise<VoiceResponseDto> {
+    const voice = await this.prisma.voice.create({
+      data: {
+        userId,
+        name: dto.name,
+        type: 'uploaded',
+        url: fileUrl,
+      },
+    });
+    return this.toVoiceResponse(voice);
+  }
 
-    // 2. Fetch User-Specific Voices from DB (Cloned/Uploaded voices)
-    const userVoices = await this.prisma.voice.findMany({
-      where: { userId: userId },
-      orderBy: { createdAt: 'desc' },
+  // --- Create a voice using ElevenLabs ID ---
+  async createElevenLabsVoice(
+    userId: string,
+    dto: CreateElevenLabsVoiceDto,
+  ): Promise<VoiceResponseDto> {
+    const voice = await this.prisma.voice.create({
+      data: {
+        userId,
+        name: dto.name,
+        type: 'elevenlabs',
+        // elevenLabsVoiceId: dto.elevenLabsVoiceId,
+      },
+    });
+    return this.toVoiceResponse(voice);
+  }
+
+  // --- List all voices for a user ---
+  async listVoices(userId: string): Promise<VoiceResponseDto[]> {
+    const voices = await this.prisma.voice.findMany({ where: { userId } });
+    return voices.map((v) => this.toVoiceResponse(v));
+  }
+
+  // --- Set preferred voice for a user ---
+  async setPreferredVoice(
+    userId: string,
+    dto: SetPreferredVoiceDto,
+  ): Promise<{
+    id: string;
+    email: string;
+    name: string;
+    preferredVoice: string | null;
+  }> {
+    const result = await this.prisma.user.update({
+      where: { id: userId },
+      data: { preferredVoiceId: dto.voiceId },
+    });
+    return {
+      id: result.id,
+      email: result.email,
+      name: result.name ?? '',
+      preferredVoice: result.preferredVoiceId,
+    };
+  }
+
+  // --- Get the preferred voice for a user ---
+  async getPreferredVoice(userId: string): Promise<VoiceResponseDto | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { preferredVoice: true },
     });
 
-    // 3. Map DB voices to DTO
-    const mappedUserVoices: VoiceResponseDto[] = userVoices.map((v) => ({
-      id: v.id,
-      name: v.name,
-      type: v.type, // 'uploaded' or 'elevenlabs'
-      url: v.url ?? undefined,
-      elevenLabsVoiceId: v.elevenLabsVoiceId ?? undefined,
-    }));
+    if (!user || !user.preferredVoice)
+      return {
+        id: '',
+        name: '',
+        type: '',
+        url: undefined,
+        elevenLabsVoiceId: undefined,
+      };
 
-    // 4. Combine and return
-    return [...systemVoices, ...mappedUserVoices];
+    return this.toVoiceResponse(user.preferredVoice);
+  }
+
+  // --- Helper to map Prisma Voice to VoiceResponseDto ---
+  private toVoiceResponse(voice: any): VoiceResponseDto {
+    return {
+      id: voice.id,
+      name: voice.name,
+      type: voice.type,
+      url: voice.url ?? undefined,
+      elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
+    };
   }
 }
