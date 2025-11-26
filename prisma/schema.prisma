@@ -313,17 +313,27 @@ model RewardRedemption {
 }
 
 model ActivityLog {
-  id        String   @id @default(uuid())
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id],onDelete: Cascade)
-  kidId     String?
-  kid       Kid?     @relation(fields: [kidId], references: [id])
-  action    String // e.g. 'story_read', 'reward_redeemed', etc.
-  details   String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  kidId       String?
+  kid         Kid?     @relation(fields: [kidId], references: [id])
+  
+  action      String   // e.g. 'story_read', 'reward_redeemed', etc.
+  status      String   // NEW: 'SUCCESS', 'FAILED', etc.
+  deviceName  String?  // NEW: e.g. 'iPhone 13'
+  deviceModel String?  // NEW: e.g. 'A2482'
+  os          String?  // NEW: e.g. 'iOS 17'
+  ipAddress   String?  // NEW: e.g. '102.89.33.110'
+  
+  details     String?
+  createdAt   DateTime @default(now())
 
   @@map("activity_logs")
 }
+
 
 model StoryPath {
   id          String    @id @default(uuid())
