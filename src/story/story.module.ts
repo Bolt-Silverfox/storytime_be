@@ -10,7 +10,6 @@ import { TextToSpeechService } from './text-to-speech.service';
 import { GeminiService } from './gemini.service';
 import { AuthModule } from 'src/auth/auth.module';
 
-
 @Module({
   imports: [HttpModule, ScheduleModule.forRoot(), AuthModule],
   controllers: [StoryController],

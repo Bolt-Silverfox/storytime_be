@@ -43,7 +43,7 @@ import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Post('login')
   @HttpCode(200)
@@ -172,7 +172,10 @@ export class AuthController {
   @Post('google')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Google sign-in (id_token) — mobile/web' })
-  @ApiBody({ description: 'Google id_token', schema: { example: { id_token: 'eyJhbGci...' } } })
+  @ApiBody({
+    description: 'Google id_token',
+    schema: { example: { id_token: 'eyJhbGci...' } },
+  })
   async googleIdToken(@Body('id_token') idToken: string) {
     if (!idToken) {
       throw new BadRequestException('id_token is required');
@@ -181,16 +184,12 @@ export class AuthController {
     return this.authService.loginWithGoogleIdToken(idToken);
   }
 
-
-
   // ===== GOOGLE OAUTH (web redirect flow) =====
   @Get('google/oauth')
   @UseGuards(GoogleAuthGuard)
   async googleLogin() {
     // Guard will redirect to Google
   }
-
-
 
   // ===== GOOGLE OAUTH CALLBACK =====
   @Get('google/oauth/callback')
@@ -202,7 +201,7 @@ export class AuthController {
     return res.redirect(
       `${process.env.WEB_APP_BASE_URL}/oauth-success?jwt=${encodeURIComponent(
         result.jwt,
-      )}&refresh=${encodeURIComponent(result.refreshToken)}`
+      )}&refresh=${encodeURIComponent(result.refreshToken)}`,
     );
   }
 }

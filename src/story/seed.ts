@@ -260,7 +260,7 @@ async function main() {
           create: story.questions.map((question: any) => ({
             question: question.question,
             options: question.options,
-            answer: question.answer,
+            correctOption: question.answer,
           })),
         },
         recommended: story.recommended ?? false,

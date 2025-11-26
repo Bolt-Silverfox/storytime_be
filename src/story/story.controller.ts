@@ -12,6 +12,8 @@ import {
   UseInterceptors,
   UploadedFile,
   Logger,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -48,11 +50,13 @@ import {
   VoiceType,
   StoryContentAudioDto,
   GenerateStoryDto,
+  PaginatedStoriesDto,
 } from './story.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TextToSpeechService } from './text-to-speech.service';
 import { randomUUID } from 'crypto';
+import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -64,6 +68,9 @@ export class StoryController {
   ) {}
 
   @Get()
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey('categories:all')
+  @CacheTTL(4 * 60 * 60 * 1000)
   @ApiOperation({
     summary:
       'Get stories (optionally filtered by theme, category, recommended, kidId, and age)',
@@ -99,7 +106,12 @@ export class StoryController {
     @Query('recommended') recommended?: string,
     @Query('kidId') kidId?: string,
     @Query('age') age?: string,
-  ) {
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number = 12,
+  ): Promise<PaginatedStoriesDto> {
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.max(1, Math.min(100, limit));
+
     return this.storyService.getStories({
       theme,
       category,
@@ -111,10 +123,15 @@ export class StoryController {
             : undefined,
       kidId,
       age: age ? parseInt(age) : undefined,
+      page: safePage,
+      limit: safeLimit,
     });
   }
 
   @Get('categories')
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey('categories:all')
+  @CacheTTL(4 * 60 * 60 * 1000)
   @ApiOperation({ summary: 'Get all categories' })
   @ApiOkResponse({
     description: 'List of categories',

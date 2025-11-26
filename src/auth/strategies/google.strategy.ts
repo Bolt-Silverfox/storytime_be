@@ -5,13 +5,16 @@ import { Strategy } from 'passport-custom';
 import { OAuth2Client } from 'google-auth-library';
 
 @Injectable()
-export class GoogleStrategy extends PassportStrategy(Strategy, 'google-id-token') {
+export class GoogleStrategy extends PassportStrategy(
+  Strategy,
+  'google-id-token',
+) {
   private googleClient: OAuth2Client;
 
   constructor(private configService: ConfigService) {
     super();
     this.googleClient = new OAuth2Client(
-      this.configService.get<string>('GOOGLE_CLIENT_ID')
+      this.configService.get<string>('GOOGLE_CLIENT_ID'),
     );
   }
 

@@ -1,5 +1,18 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class StoryImageDto {
   @ApiProperty()
@@ -22,78 +35,172 @@ export class StoryBranchDto {
 }
 
 export class CreateStoryDto {
-  @ApiProperty()
+  @ApiProperty({ example: 'The Adventure of Little Bear' })
+  @IsString()
+  @IsNotEmpty({ message: 'Title is required' })
+  @MinLength(3, { message: 'Title must be at least 3 characters' })
+  @MaxLength(200, { message: 'Title must not exceed 200 characters' })
   title: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: 'A heartwarming tale about a brave little bear...' })
+  @IsString()
+  @IsNotEmpty({ message: 'Description is required' })
   description: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: 'English' })
+  @IsString()
+  @IsNotEmpty({ message: 'Language is required' })
   language: string;
 
-  @ApiProperty({ type: [String] })
-  themeIds: string[];
-
-  @ApiProperty({ type: [String] })
-  categoryIds: string[];
-
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ example: 'https://example.com/cover.jpg' })
+  @IsString()
+  @IsOptional()
   coverImageUrl?: string;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ example: 'https://example.com/thumbnail.jpg' })
+  @IsString()
+  @IsOptional()
+  thumbnailUrl?: string;
+
+  @ApiPropertyOptional({ example: 'https://example.com/audio.mp3' })
+  @IsString()
+  @IsOptional()
   audioUrl?: string;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ example: 15 })
+  @IsInt({ message: 'Reading length must be an integer' })
+  @Min(1, { message: 'Reading length must be at least 1 minute' })
+  @Max(120, { message: 'Reading length must not exceed 120 minutes' })
+  @IsOptional()
+  readingLength?: number;
+
+  @ApiPropertyOptional({ example: false })
+  @IsBoolean()
+  @IsOptional()
+  isPremium?: boolean;
+
+  @ApiPropertyOptional({ example: true })
+  @IsBoolean()
+  @IsOptional()
   isInteractive?: boolean;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ example: 4 })
+  @IsInt()
+  @Min(0)
+  @Max(18)
+  @IsOptional()
   ageMin?: number;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ example: 8 })
+  @IsInt()
+  @Min(0)
+  @Max(18)
+  @IsOptional()
   ageMax?: number;
 
-  @ApiProperty({ type: [StoryImageDto], required: false })
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsUUID('4', { each: true, message: 'Each category ID must be a valid UUID' })
+  @IsNotEmpty({ message: 'At least one category is required' })
+  categoryIds: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsArray()
+  @IsUUID('4', { each: true, message: 'Each theme ID must be a valid UUID' })
+  @IsOptional()
+  themeIds: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
   images?: StoryImageDto[];
 
-  @ApiProperty({ type: [StoryBranchDto], required: false })
+  @ApiPropertyOptional()
+  @IsOptional()
   branches?: StoryBranchDto[];
 }
 
 export class UpdateStoryDto {
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  @MinLength(3, { message: 'Title must be at least 3 characters' })
+  @MaxLength(200, { message: 'Title must not exceed 200 characters' })
   title?: string;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
   description?: string;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
   language?: string;
 
-  @ApiProperty({ type: [String], required: false })
-  themeIds?: string[];
-
-  @ApiProperty({ type: [String], required: false })
-  categoryIds?: string[];
-
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
   coverImageUrl?: string;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  thumbnailUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
   audioUrl?: string;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional()
+  @IsInt({ message: 'Reading length must be an integer' })
+  @Min(1, { message: 'Reading length must be at least 1 minute' })
+  @Max(120, { message: 'Reading length must not exceed 120 minutes' })
+  @IsOptional()
+  readingLength?: number;
+
+  @ApiPropertyOptional()
+  @IsBoolean()
+  @IsOptional()
+  isPremium?: boolean;
+
+  @ApiPropertyOptional()
+  @IsBoolean()
+  @IsOptional()
   isInteractive?: boolean;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional()
+  @IsInt()
+  @Min(0)
+  @Max(18)
+  @IsOptional()
   ageMin?: number;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional()
+  @IsInt()
+  @Min(0)
+  @Max(18)
+  @IsOptional()
   ageMax?: number;
 
-  @ApiProperty({ type: [StoryImageDto], required: false })
+  @ApiPropertyOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @IsOptional()
+  categoryIds?: string[];
+
+  @ApiPropertyOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @IsOptional()
+  themeIds?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
   images?: StoryImageDto[];
 
-  @ApiProperty({ type: [StoryBranchDto], required: false })
+  @ApiPropertyOptional()
+  @IsOptional()
   branches?: StoryBranchDto[];
 }
 
@@ -228,12 +335,50 @@ export class StoryPathDto {
 export class CategoryDto {
   @ApiProperty()
   id: string;
+
   @ApiProperty()
   name: string;
-  @ApiProperty({ required: false })
+
+  @ApiPropertyOptional()
   image?: string;
-  @ApiProperty({ required: false })
+
+  @ApiPropertyOptional()
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Number of stories in this category' })
+  storyCount?: number;
+}
+
+export class CreateCategoryDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  slug: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  image?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  iconUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsInt()
+  @IsOptional()
+  sortOrder?: number;
 }
 
 export class ThemeDto {
@@ -320,4 +465,38 @@ export class QuestionAnswerDto {
 
   @ApiProperty()
   selectedOption: number;
+}
+
+export class PaginationMetaDto {
+  @ApiProperty({ description: 'Current page number', example: 1 })
+  @IsNumber()
+  currentPage: number;
+
+  @ApiProperty({ description: 'Total number of pages', example: 5 })
+  @IsNumber()
+  totalPages: number;
+
+  @ApiProperty({ description: 'Number of items per page', example: 12 })
+  @IsNumber()
+  pageSize: number;
+
+  @ApiProperty({ description: 'Total number of items', example: 50 })
+  @IsNumber()
+  totalCount: number;
+}
+
+export class PaginatedStoriesDto {
+  @ApiProperty({
+    description: 'Array of stories',
+    type: 'array',
+    isArray: true,
+  })
+  @IsArray()
+  data: any[];
+
+  @ApiProperty({
+    description: 'Pagination metadata',
+    type: PaginationMetaDto,
+  })
+  pagination: PaginationMetaDto;
 }
