@@ -1,58 +1,58 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
   Body,
+  Controller,
+  Delete,
+  Get,
+  Logger,
   Param,
+  Patch,
+  Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
   UseInterceptors,
-  UploadedFile,
-  Logger,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiQuery,
-  ApiParam,
-  ApiBody,
-  ApiBearerAuth,
-  ApiResponse,
-  ApiOkResponse,
-} from '@nestjs/swagger';
-import { StoryService } from './story.service';
-import {
-  CreateStoryDto,
-  UpdateStoryDto,
-  StoryImageDto,
-  StoryBranchDto,
-  FavoriteDto,
-  StoryProgressDto,
-  DailyChallengeDto,
-  UploadVoiceDto,
-  CreateElevenLabsVoiceDto,
-  SetPreferredVoiceDto,
-  VoiceResponseDto,
-  AssignDailyChallengeDto,
-  CompleteDailyChallengeDto,
-  DailyChallengeAssignmentDto,
-  StartStoryPathDto,
-  UpdateStoryPathDto,
-  StoryPathDto,
-  CategoryDto,
-  ThemeDto,
-  ErrorResponseDto,
-  VoiceType,
-  StoryContentAudioDto,
-  GenerateStoryDto,
-} from './story.dto';
-import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { TextToSpeechService } from './text-to-speech.service';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { randomUUID } from 'crypto';
+import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { StoryContentAudioDto } from '../voice/voice.dto';
+import {
+  AssignDailyChallengeDto,
+  CategoryDto,
+  CompleteDailyChallengeDto,
+  CreateElevenLabsVoiceDto,
+  CreateStoryDto,
+  DailyChallengeAssignmentDto,
+  DailyChallengeDto,
+  ErrorResponseDto,
+  FavoriteDto,
+  GenerateStoryDto,
+  SetPreferredVoiceDto,
+  StartStoryPathDto,
+  StoryBranchDto,
+  StoryImageDto,
+  StoryPathDto,
+  StoryProgressDto,
+  ThemeDto,
+  UpdateStoryDto,
+  UpdateStoryPathDto,
+  UploadVoiceDto,
+  VoiceResponseDto,
+  VoiceType,
+} from './story.dto';
+import { StoryService } from './story.service';
+import { TextToSpeechService } from './text-to-speech.service';
 
 @ApiTags('stories')
 @Controller('stories')
