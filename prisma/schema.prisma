@@ -60,15 +60,26 @@ model Kid {
   dailyScreenTimeLimitMins Int? // Daily limit in minutes, null = no limit
   screenTimeSessions       ScreenTimeSession[]
   questionAnswers          QuestionAnswer[]
-  parentId                 String
-  parent                   User                @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  createdAt                DateTime            @default(now())
-  updatedAt                DateTime            @updatedAt
+  parentId  String
+  currentReadingLevel Int @default(1)
+  parent    User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   rewards Reward[]
 
   preferredVoiceId String?
   preferredVoice   Voice?  @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
+
+  //Preferences
+  preferredCategories Category[] @relation("KidPreferredCategories")
+  excludedTags        String[]   @default([]) // e.g. ["ghosts", "spiders"]
+
+  //Bedtime Settings
+  isBedtimeEnabled Boolean @default(false)
+  bedtimeStart     String? // Format: "HH:mm" e.g., "20:00"
+  bedtimeEnd       String? // Format: "HH:mm" e.g., "07:00"
+  bedtimeDays      Int[]   @default([]) // 0=Sunday, 1=Monday, etc.
 
   // New relations
   dailyChallenges         DailyChallengeAssignment[]
@@ -138,6 +149,8 @@ model Story {
   ageMax        Int
   recommended   Boolean  @default(false)
   aiGenerated   Boolean  @default(false)
+  difficultyLevel Int @default(1)
+  wordCount       Int @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -204,6 +217,7 @@ model StoryProgress {
   progress     Float    @default(0)
   completed    Boolean  @default(false)
   lastAccessed DateTime @default(now())
+  totalTimeSpent  Int @default(0) // In seconds
 
   @@unique([kidId, storyId])
   @@map("story_progress")
@@ -331,6 +345,7 @@ model Category {
   image       String?
   description String?
   stories     Story[] @relation("StoryCategories")
+  preferredByKids Kid[] @relation("KidPreferredCategories")
 }
 
 model Theme {
@@ -369,8 +384,8 @@ model StoryQuestion {
 
 model Avatar {
   id             String   @id @default(cuid())
-  name           String? // Standard name for upsert (unique identifier)
-  displayName    String? // User-friendly display name
+  name           String?  // Standard name for upsert (unique identifier)
+ // displayName    String?  // User-friendly display name
   url            String
   isSystemAvatar Boolean  @default(false)
   publicId       String?

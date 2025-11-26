@@ -560,7 +560,6 @@ export class AuthService {
   return this._upsertOrReturnUserFromGooglePayload(payload);
 }
 
-
   // ====================================================
   // INTERNAL: Unified Google upsert logic
   // ====================================================
@@ -642,9 +641,38 @@ export class AuthService {
         data: { avatarId: avatar.id },
         include: { profile: true, avatar: true },
       });
+
+      // Otherwise create new one
+      if (!avatar) {
+        avatar = await this.prisma.avatar.create({
+          data: {
+            url: picture,
+            name: `google_${googleId || user.id}`,
+            isSystemAvatar: false,
+          },
+        });
+      }
+
+      // Attach avatar to user if not already set
+      if (user.avatarId !== avatar.id) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { avatarId: avatar.id },
+          include: { profile: true, avatar: true },
+        });
+      }
     }
   }
 
+    const numberOfKids = await this.prisma.kid.count({
+      where: { parentId: user.id },
+    });
+
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
 
   const numberOfKids = await this.prisma.kid.count({
     where: { parentId: user.id },
@@ -664,5 +692,6 @@ export class AuthService {
     jwt: tokenData.jwt,
     refreshToken: tokenData.refreshToken,
   };
+}
 }
 }

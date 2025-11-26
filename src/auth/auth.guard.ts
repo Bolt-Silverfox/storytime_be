@@ -4,9 +4,11 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { IS_PUBLIC_KEY } from './public.decorator';
 
 export interface JwtPayload {
   userId: string;
@@ -25,10 +27,21 @@ export interface AuthenticatedRequest extends Request {
 export class AuthSessionGuard implements CanActivate {
   constructor(
     private readonly configService: ConfigService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly reflector: Reflector, 
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
+    // Check if route is marked as public
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      return true; // Skip authentication for public routes
+    }
+
     const request = context.switchToHttp().getRequest<Request>();
     return this.validateRequest(request);
   }
@@ -53,7 +66,7 @@ export class AuthSessionGuard implements CanActivate {
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;
-}
+      }
       throw new UnauthorizedException(error.message);
     }
   }
