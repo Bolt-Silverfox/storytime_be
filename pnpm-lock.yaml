@@ -56,6 +56,9 @@ importers:
       '@types/nodemailer':
         specifier: ^7.0.4
         version: 7.0.4
+      '@types/passport-google-oauth20':
+        specifier: ^2.0.17
+        version: 2.0.17
       '@types/react':
         specifier: ^19.2.6
         version: 19.2.6
@@ -174,9 +177,6 @@ importers:
       '@types/node':
         specifier: ^22.10.7
         version: 22.19.1
-      '@types/passport-google-oauth20':
-        specifier: ^2.0.17
-        version: 2.0.17
       '@types/supertest':
         specifier: ^6.0.2
         version: 6.0.3
