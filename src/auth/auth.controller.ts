@@ -38,6 +38,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
+// import { Request } from 'express';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -52,7 +53,7 @@ export class AuthController {
   async login(@Body() body: LoginDto) {
     return this.authService.login(body);
   }
-//
+  //
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
@@ -61,6 +62,7 @@ export class AuthController {
   }
 
   @Post('register')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',
     description: 'Default role: parent.',
@@ -127,58 +129,22 @@ export class AuthController {
     return this.authService.updateProfile(req.authUserData['userId'], data);
   }
 
-  // ===== KIDS MANAGEMENT =====
-  @Post('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Add kids to user account' })
-  @ApiBody({ type: [kidDto] })
-  @ApiResponse({ status: 200, description: 'Kids added.' })
-  async addKids(@Req() req: AuthenticatedRequest, @Body() data: kidDto[]) {
-    return this.authService.addKids(req.authUserData['userId'], data);
-  }
-
-  @Get('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all kids for user' })
-  @ApiResponse({ status: 200, description: 'List of kids.' })
-  async getKids(@Req() req: AuthenticatedRequest) {
-    return this.authService.getKids(req.authUserData['userId']);
-  }
-
-  @Put('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update kids information' })
-  @ApiBody({ type: [updateKidDto] })
-  @ApiResponse({ status: 200, description: 'Kids updated.' })
-  async updateKids(
-    @Req() req: AuthenticatedRequest,
-    @Body() data: updateKidDto[],
-  ) {
-    return this.authService.updateKids(req.authUserData['userId'], data);
-  }
-
-  @Delete('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete kids from user account' })
-  @ApiBody({ type: [String], description: 'Array of kid IDs to delete.' })
-  @ApiResponse({ status: 200, description: 'Kids deleted.' })
-  async deleteKids(@Req() req: AuthenticatedRequest, @Body() data: string[]) {
-    return this.authService.deleteKids(req.authUserData['userId'], data);
-  }
-
   // ===== PASSWORD RESET =====
   @Post('request-password-reset')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset' })
   @ApiBody({ type: RequestResetDto })
   @ApiResponse({ status: 200, description: 'Password reset email sent.' })
   @ApiResponse({ status: 400, description: 'Invalid email format' })
-  async requestPasswordReset(@Body() body: RequestResetDto) {
-    return this.authService.requestPasswordReset(body);
+  async requestPasswordReset(@Body() body: RequestResetDto, @Req() req: Request) {
+    // Extract IP and user agent for security checking
+    const ip =
+      req.ip ||
+      req.headers['x-forwarded-for']?.toString().split(',')[0].trim();
+    const userAgent = req.headers['user-agent'];
+    return this.authService.requestPasswordReset(body, ip, userAgent);
   }
+
   @Post('validate-reset-token')
   @ApiOperation({ summary: 'Validate password reset token' })
   @ApiBody({ type: ValidateResetTokenDto })
@@ -188,6 +154,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password with token' })
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
@@ -201,7 +168,7 @@ export class AuthController {
   }
 
   // ===== GOOGLE AUTH (MOBILE / WEB id_token) =====
- // Mobile or web app can POST an id_token payload { id_token: '...' }
+  // Mobile or web app can POST an id_token payload { id_token: '...' }
   @Post('google')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Google sign-in (id_token) — mobile/web' })
@@ -210,7 +177,7 @@ export class AuthController {
     if (!idToken) {
       throw new BadRequestException('id_token is required');
     }
-    
+
     return this.authService.loginWithGoogleIdToken(idToken);
   }
 

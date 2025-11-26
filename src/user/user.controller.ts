@@ -24,11 +24,8 @@ import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { UserDto } from '../auth/auth.dto';
 import {
-  SetKidPreferredVoiceDto,
-  KidVoiceDto,
   UpdateUserDto,
 } from './user.dto';
-import { VOICEID, VoiceType } from '@/story/story.dto';
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -64,63 +61,31 @@ class UpdateUserRoleDto {
 @Controller('user')
 export class UserController {
   private readonly logger = new Logger(UserController.name);
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService) { }
 
-  @Get('kids/:kidId')
+  // ==================== CURRENT USER ENDPOINTS ====================
+
+  @Get('me')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get kid by ID',
-    description: 'Retrieve a kid profile by kidId.',
+    summary: 'Get current user profile',
+    description: 'Requires authentication.',
   })
-  @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({
     status: 200,
-    description: 'Kid data returned.',
-    schema: {
-      example: {
-        id: 'kid123',
-        name: 'Tom',
-        age: 6,
-        avatar: { url: 'https://...' },
-        preferredVoiceId: 'voice-abc',
-        parent: {
-          id: 'user123',
-          name: 'Parent Name',
-        },
-      },
-    },
+    description: 'Current user profile returned.',
+    type: UserDto,
   })
-  @ApiResponse({ status: 404, description: 'Kid not found' })
-  async getKidById(@Param('kidId') kidId: string) {
-    try {
-      return await this.userService.getKidById(kidId);
-    } catch (error) {
-      this.logger.error(`Error fetching kid ${kidId}: ${error.message}`);
-      throw error;
-    }
+  async getMe(@Req() req: any) {
+    const user = await this.userService.getUser(
+      req.authUserData.userId as string,
+    );
+    return user ? new UserDto(user) : null;
   }
 
-  @Patch('kids/:kidId/voice')
-  @ApiOperation({ summary: 'Set preferred voice for a kid' })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiBody({ type: SetKidPreferredVoiceDto })
-  @ApiResponse({ status: 200, type: KidVoiceDto })
-  async setKidPreferredVoice(
-    @Param('kidId') kidId: string,
-    @Body() body: SetKidPreferredVoiceDto,
-  ) {
-    this.logger.log(
-      `Setting preferred voice for kid ${kidId} to ${JSON.stringify(body)}`,
-    );
-    if (!body.voiceType) {
-      throw new BadRequestException('Voice type is required');
-    }
-    const voiceKey = body.voiceType.toUpperCase() as keyof typeof VOICEID;
-    const voiceId = VOICEID[voiceKey];
-    if (!voiceId) {
-      throw new ForbiddenException('Invalid voice type');
-    }
-    return this.userService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
-  }
+  // ==================== USER CRUD ENDPOINTS ====================
+
 
   @Get(':id')
   @ApiOperation({
@@ -154,6 +119,7 @@ export class UserController {
     const user = await this.userService.getUser(id);
     return user ? new UserDto(user) : null;
   }
+
   @Put(':id')
   @ApiOperation({
     summary: 'Update user profile',
@@ -194,6 +160,23 @@ export class UserController {
     return await this.userService.updateUser(id, body);
   }
 
+  @Delete('account/:id')
+  @ApiOperation({
+    summary: 'Delete user account',
+    description: 'Delete my account as a user',
+  })
+  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'User account deleted.',
+    schema: { example: { id: 'abc123', deleted: true } },
+  })
+  async deleteUserAccount(@Param('id') id: string) {
+    return this.userService.deleteUserAccount(id);
+  }
+
+  // ==================== ADMIN ENDPOINTS ====================
+
   @Get()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
@@ -221,34 +204,8 @@ export class UserController {
     }
     return await this.userService.getAllUsers();
   }
-  @Delete(':id')
-  @ApiOperation({
-    summary: 'delete user account',
-    description: 'delete my account as a user',
-  })
-  async deleteUserAccount(id: string) {
-    return this.userService.deleteUserAccount(id);
-  }
-  @Get('me')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get current user profile',
-    description: 'Requires authentication.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Current user profile returned.',
-    type: UserDto,
-  })
-  async getMe(@Req() req: any) {
-    const user = await this.userService.getUser(
-      req.authUserData.userId as string,
-    );
-    return user ? new UserDto(user) : null;
-  }
 
-  @Delete('account/:id')
+  @Delete(':id')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
@@ -319,11 +276,5 @@ export class UserController {
     return await this.userService.updateUserRole(id, role);
   }
 
-  @Get('kids/:kidId/voice')
-  @ApiOperation({ summary: 'Get preferred voice for a kid' })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({ status: 200, type: KidVoiceDto })
-  async getKidPreferredVoice(@Param('kidId') kidId: string) {
-    return await this.userService.getKidPreferredVoice(kidId);
-  }
+
 }

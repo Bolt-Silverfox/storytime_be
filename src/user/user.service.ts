@@ -1,8 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { UserRole } from './user.controller';
-import { KidVoiceDto, UpdateUserDto } from './user.dto';
-import { VoiceType } from '@/story/story.dto';
+import { UpdateUserDto } from './user.dto';
 
 const prisma = new PrismaClient();
 
@@ -134,72 +133,5 @@ export class UserService {
     return { id: user.id, role: user.role };
   }
 
-  async setKidPreferredVoice(
-    kidId: string,
-    voiceType: VoiceType,
-  ): Promise<KidVoiceDto> {
-    const voice = await prisma.voice.findFirst({
-      where: { name: voiceType },
-    });
-    if (!voice) {
-      throw new Error(`Voice type ${voiceType} not found`);
-    }
 
-    const kid = await prisma.kid.update({
-      where: { id: kidId },
-      data: { preferredVoiceId: voice.id },
-    });
-    return {
-      kidId: kid.id,
-      voiceType,
-      preferredVoiceId: kid.preferredVoiceId!,
-    };
-  }
-
-  //get kid by kidID
-  async getKidById(kidId: string) {
-    try {
-      const kid = await prisma.kid.findUnique({
-        where: { id: kidId },
-        include: {
-          avatar: true,
-          parent: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-      });
-
-      if (!kid) {
-        throw new NotFoundException('Kid not found');
-      }
-
-      return kid;
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  async getKidPreferredVoice(kidId: string): Promise<KidVoiceDto | null> {
-    const kid = await prisma.kid.findUnique({
-      where: { id: kidId },
-      include: {
-        avatar: true,
-      },
-    });
-    if (!kid || !kid.preferredVoiceId)
-      return { kidId, voiceType: VoiceType.MILO, preferredVoiceId: '' };
-
-    const voice = await prisma.voice.findUnique({
-      where: { id: kid.preferredVoiceId },
-    });
-    return {
-      kidId: kid.id,
-      voiceType: (voice?.name?.toUpperCase() as VoiceType) || VoiceType.MILO,
-      preferredVoiceId: kid.preferredVoiceId,
-    };
-  }
 }
