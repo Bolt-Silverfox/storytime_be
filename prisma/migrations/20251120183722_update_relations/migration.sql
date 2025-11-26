@@ -1,21 +1,6 @@
-/*
-  Warnings:
 
-  - You are about to drop the column `avatarUrl` on the `kids` table. All the data in the column will be lost.
-  - You are about to drop the column `avatarUrl` on the `users` table. All the data in the column will be lost.
-
-*/
--- AlterTable
-/* ALTER TABLE "kids" DROP COLUMN "avatarUrl",
-ADD COLUMN     "avatarId" TEXT;
-*/
 ALTER TABLE "kids" ADD COLUMN "avatarId" TEXT;
 
-/*
--- AlterTable
-ALTER TABLE "users" DROP COLUMN "avatarUrl",
-ADD COLUMN     "avatarId" TEXT;
-*/
 
 ALTER TABLE "users" ADD COLUMN "avatarId" TEXT;
 
