@@ -38,6 +38,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
+// import { Request } from 'express';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -52,7 +53,7 @@ export class AuthController {
   async login(@Body() body: LoginDto) {
     return this.authService.login(body);
   }
-//
+  //
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
@@ -61,6 +62,7 @@ export class AuthController {
   }
 
   @Post('register')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',
     description: 'Default role: parent.',
@@ -129,13 +131,20 @@ export class AuthController {
 
   // ===== PASSWORD RESET =====
   @Post('request-password-reset')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset' })
   @ApiBody({ type: RequestResetDto })
   @ApiResponse({ status: 200, description: 'Password reset email sent.' })
   @ApiResponse({ status: 400, description: 'Invalid email format' })
-  async requestPasswordReset(@Body() body: RequestResetDto) {
-    return this.authService.requestPasswordReset(body);
+  async requestPasswordReset(@Body() body: RequestResetDto, @Req() req: Request) {
+    // Extract IP and user agent for security checking
+    const ip =
+      req.ip ||
+      req.headers['x-forwarded-for']?.toString().split(',')[0].trim();
+    const userAgent = req.headers['user-agent'];
+    return this.authService.requestPasswordReset(body, ip, userAgent);
   }
+
   @Post('validate-reset-token')
   @ApiOperation({ summary: 'Validate password reset token' })
   @ApiBody({ type: ValidateResetTokenDto })
@@ -145,6 +154,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password with token' })
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
@@ -158,7 +168,7 @@ export class AuthController {
   }
 
   // ===== GOOGLE AUTH (MOBILE / WEB id_token) =====
- // Mobile or web app can POST an id_token payload { id_token: '...' }
+  // Mobile or web app can POST an id_token payload { id_token: '...' }
   @Post('google')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Google sign-in (id_token) — mobile/web' })
@@ -167,7 +177,7 @@ export class AuthController {
     if (!idToken) {
       throw new BadRequestException('id_token is required');
     }
-    
+
     return this.authService.loginWithGoogleIdToken(idToken);
   }
 
