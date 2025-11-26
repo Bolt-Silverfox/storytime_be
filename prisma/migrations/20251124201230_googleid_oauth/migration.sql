@@ -5,10 +5,10 @@
 
 */
 -- AlterTable
-ALTER TABLE "_StoryThemes" ADD CONSTRAINT "_StoryThemes_AB_pkey" PRIMARY KEY ("A", "B");
+--ALTER TABLE "_StoryThemes" ADD CONSTRAINT "_StoryThemes_AB_pkey" PRIMARY KEY ("A", "B");
 
 -- DropIndex
-DROP INDEX "_StoryThemes_AB_unique";
+--DROP INDEX "_StoryThemes_AB_unique";
 
 -- AlterTable
 ALTER TABLE "users" ADD COLUMN     "googleId" TEXT;
