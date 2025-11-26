@@ -78,5 +78,9 @@ export class KidController {
     async getKidPreferredVoice(@Param('kidId') kidId: string) {
         return await this.kidService.getKidPreferredVoice(kidId);
     }
-
+    @Get('/user/kids/:kidId/screen-time')
+    @ApiOperation({ summary: 'Get screen time configuration for a kid' })
+    async getScreenTimeStatus(@Request() req: AuthenticatedRequest, @Param('kidId') kidId: string) {
+        return this.kidService.checkScreenTimeStatus(kidId);
+    }
 }

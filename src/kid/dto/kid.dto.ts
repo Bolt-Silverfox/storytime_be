@@ -22,6 +22,12 @@ export class CreateKidDto {
     @IsArray()
     @IsString({ each: true })
     preferredCategoryIds?: string[];
+
+    @ApiProperty({ required: false, example: 60, description: 'Daily screen time limit in minutes' })
+    @IsOptional()
+    @IsInt()
+    @Min(0)
+    maxScreenTimeMins?: number;
 }
 
 // 2. Update Kid DTO (Includes Bedtime & Preferences)
@@ -83,6 +89,12 @@ export class UpdateKidDto {
     @IsOptional()
     @IsString()
     preferredVoiceId?: string;
+
+    @ApiProperty({ required: false, example: 60, description: 'Daily screen time limit in minutes' })
+    @IsOptional()
+    @IsInt()
+    @Min(0)
+    maxScreenTimeMins?: number;
 }
 
 export class SetKidPreferredVoiceDto {

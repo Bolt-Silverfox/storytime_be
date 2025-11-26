@@ -172,4 +172,19 @@ export class KidService {
         // Execute all operations in a single transaction
         return this.prisma.$transaction(operations);
     }
+    async checkScreenTimeStatus(kidId: string) {
+        const kid = await this.prisma.kid.findUnique({
+            where: { id: kidId },
+            select: { maxScreenTimeMins: true, id: true, name: true }
+        });
+
+        if (!kid) throw new NotFoundException('Kid not found');
+
+        // storing limit, frontend would handle the timer at least for now
+        return {
+            kidId: kid.id,
+            limitMins: kid.maxScreenTimeMins,
+            hasLimit: kid.maxScreenTimeMins !== null,
+        };
+    }
 }

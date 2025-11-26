@@ -81,6 +81,9 @@ model Kid {
   bedtimeEnd       String? // Format: "HH:mm" e.g., "07:00"
   bedtimeDays      Int[]   @default([]) // 0=Sunday, 1=Monday, etc.
 
+  // Screen Time Limit (in minutes per day). Null = No limit.
+  maxScreenTimeMins Int?
+
   // New relations
   dailyChallenges         DailyChallengeAssignment[]
   notificationPreferences NotificationPreference[]
@@ -385,7 +388,7 @@ model StoryQuestion {
 model Avatar {
   id             String   @id @default(cuid())
   name           String?  // Standard name for upsert (unique identifier)
- // displayName    String?  // User-friendly display name
+  displayName    String?  // User-friendly display name
   url            String
   isSystemAvatar Boolean  @default(false)
   isDeleted     Boolean  @default(false)
