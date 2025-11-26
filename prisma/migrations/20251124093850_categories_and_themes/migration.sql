@@ -1,4 +1,0 @@
--- No schema changes required.
--- This migration was cleaned because it contained destructive PK drops,
--- invalid index creation, and incorrect merge-conflict operations.
--- Intentionally left blank.
