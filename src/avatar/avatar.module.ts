@@ -2,19 +2,18 @@
 import { Module } from '@nestjs/common';
 import { AvatarController } from './avatar.controller';
 import { AvatarService } from './avatar.service';
-import { AvatarSeederService } from './avatar.seeder.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryModule } from '../upload/cloudinary.module';
 import { UploadService } from '../upload/upload.service';
-import { AuthModule } from '../auth/auth.module'; 
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     CloudinaryModule,
-    AuthModule,   
+    AuthModule,
   ],
   controllers: [AvatarController],
-  providers: [AvatarService, AvatarSeederService, PrismaService, UploadService],
-  exports: [AvatarService, AvatarSeederService],
+  providers: [AvatarService, PrismaService, UploadService],
+  exports: [AvatarService],
 })
-export class AvatarModule {}
+export class AvatarModule { }
