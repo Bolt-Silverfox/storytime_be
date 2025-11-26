@@ -388,6 +388,8 @@ model Avatar {
  // displayName    String?  // User-friendly display name
   url            String
   isSystemAvatar Boolean  @default(false)
+  isDeleted     Boolean  @default(false)
+  deletedAt     DateTime?
   publicId       String?
   createdAt      DateTime @default(now())
 
