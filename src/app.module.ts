@@ -17,6 +17,8 @@ import { AgeModule } from './age/age.module';
 import { ReportsModule } from './reports/reports.module';
 import { KidModule } from './kid/kid.module';
 import { VoiceModule } from './voice/voice.module';
+import { StoryBuddyModule } from './story-buddy/story-buddy.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -40,6 +42,7 @@ import { VoiceModule } from './voice/voice.module';
     AvatarModule,
     AgeModule,
     ReportsModule,
+    StoryBuddyModule,
   ],
 })
 export class AppModule { }
