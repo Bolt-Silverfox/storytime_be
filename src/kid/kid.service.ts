@@ -2,10 +2,11 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateKidDto, UpdateKidDto, KidVoiceDto } from './dto/kid.dto';
 import { VoiceType } from '@/story/story.dto';
+import { VoiceService } from '../voice/voice.service';
 
 @Injectable()
 export class KidService {
-    constructor(private prisma: PrismaService) { }
+    constructor(private prisma: PrismaService, private voiceService: VoiceService) { }
 
     async createKid(userId: string, dto: CreateKidDto) {
         const { preferredCategoryIds, avatarId, ...data } = dto;
@@ -61,27 +62,45 @@ export class KidService {
             throw new NotFoundException('Kid not found or access denied');
         }
 
-        // 2. Destructure ALL relation IDs to avoid "XOR" type conflicts
         const { preferredCategoryIds, preferredVoiceId, avatarId, ...rest } = dto;
 
+        // 2. Resolve Voice ID
+        let finalVoiceId = undefined;
+
+        if (preferredVoiceId) {
+            // Check if it looks like a UUID (YOUR database ID)
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(preferredVoiceId);
+
+            if (isUuid) {
+                // If it is a UUID, verify it exists in your DB
+                const voice = await this.prisma.voice.findUnique({
+                    where: { id: preferredVoiceId },
+                });
+                if (!voice) throw new NotFoundException('Voice not found');
+                finalVoiceId = voice.id;
+            } else {
+                // If NOT a UUID, assume it's an ElevenLabs ID (like "2Eiw...")
+                // and lazy-load it into your DB
+                const voice = await this.voiceService.findOrCreateElevenLabsVoice(preferredVoiceId, userId);
+                finalVoiceId = voice.id;
+            }
+        }
+
+        // 3. Update the Kid
         return this.prisma.kid.update({
             where: { id: kidId },
             data: {
-                ...rest, // Only simple fields (name, ageRange, bedtime, etc.)
-
-                // Handle Avatar as a relation (Fixes Type Error)
+                ...rest,
                 avatar: avatarId
                     ? { connect: { id: avatarId } }
                     : undefined,
-
-                // Handle Categories
                 preferredCategories: preferredCategoryIds
                     ? { set: preferredCategoryIds.map((id) => ({ id })) }
                     : undefined,
 
-                // Handle Voice (Fixes "Cannot find name" error)
-                preferredVoice: preferredVoiceId
-                    ? { connect: { id: preferredVoiceId } }
+                // CONNECT THE RESOLVED LOCAL ID
+                preferredVoice: finalVoiceId
+                    ? { connect: { id: finalVoiceId } }
                     : undefined,
             },
             include: {
@@ -91,7 +110,6 @@ export class KidService {
             },
         });
     }
-
     async deleteKid(kidId: string, userId: string) {
         const kid = await this.prisma.kid.findUnique({ where: { id: kidId } });
         if (!kid || kid.parentId !== userId) {
