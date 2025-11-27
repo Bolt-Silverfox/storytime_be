@@ -1,4 +1,5 @@
-import { ApiProperty, PartialType } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsString } from 'class-validator';
 
 export class StoryImageDto {
   @ApiProperty()
@@ -30,11 +31,11 @@ export class CreateStoryDto {
   @ApiProperty()
   language: string;
 
-  @ApiProperty()
-  theme: string;
+  @ApiProperty({ type: [String] })
+  themeIds: string[];
 
-  @ApiProperty()
-  category: string;
+  @ApiProperty({ type: [String] })
+  categoryIds: string[];
 
   @ApiProperty({ required: false })
   coverImageUrl?: string;
@@ -58,20 +59,65 @@ export class CreateStoryDto {
   branches?: StoryBranchDto[];
 }
 
-export class UpdateStoryDto extends PartialType(CreateStoryDto) {}
+export class UpdateStoryDto {
+  @ApiProperty({ required: false })
+  title?: string;
+
+  @ApiProperty({ required: false })
+  description?: string;
+
+  @ApiProperty({ required: false })
+  language?: string;
+
+  @ApiProperty({ type: [String], required: false })
+  themeIds?: string[];
+
+  @ApiProperty({ type: [String], required: false })
+  categoryIds?: string[];
+
+  @ApiProperty({ required: false })
+  coverImageUrl?: string;
+
+  @ApiProperty({ required: false })
+  audioUrl?: string;
+
+  @ApiProperty({ required: false })
+  isInteractive?: boolean;
+
+  @ApiProperty({ required: false })
+  ageMin?: number;
+
+  @ApiProperty({ required: false })
+  ageMax?: number;
+
+  @ApiProperty({ type: [StoryImageDto], required: false })
+  images?: StoryImageDto[];
+
+  @ApiProperty({ type: [StoryBranchDto], required: false })
+  branches?: StoryBranchDto[];
+}
 
 export class FavoriteDto {
+  @ApiProperty()
+  kidId: string;
   @ApiProperty()
   storyId: string;
 }
 
 export class StoryProgressDto {
   @ApiProperty()
+  kidId: string;
+  @ApiProperty()
   storyId: string;
   @ApiProperty()
   progress: number;
   @ApiProperty({ required: false })
   completed?: boolean;
+  @ApiProperty({
+    required: false,
+    description: 'Time spent in this specific session in seconds',
+  })
+  sessionTime?: number;
 }
 
 export class DailyChallengeDto {
@@ -102,6 +148,7 @@ export class SetPreferredVoiceDto {
     description: 'Voice ID to set as preferred',
     example: 'uuid-voice-id',
   })
+  @IsString()
   voiceId: string;
 }
 
@@ -176,4 +223,101 @@ export class StoryPathDto {
   startedAt: Date;
   @ApiProperty({ required: false })
   completedAt?: Date;
+}
+
+export class CategoryDto {
+  @ApiProperty()
+  id: string;
+  @ApiProperty()
+  name: string;
+  @ApiProperty({ required: false })
+  image?: string;
+  @ApiProperty({ required: false })
+  description?: string;
+}
+
+export class ThemeDto {
+  @ApiProperty()
+  id: string;
+  @ApiProperty()
+  name: string;
+  @ApiProperty({ required: false })
+  image?: string;
+  @ApiProperty({ required: false })
+  description?: string;
+}
+
+export class ErrorResponseDto {
+  @ApiProperty({ example: 'Error message' })
+  message: string;
+  @ApiProperty({ example: 400, required: false })
+  statusCode?: number;
+  @ApiProperty({ required: false, description: 'Additional error details' })
+  details?: any;
+}
+
+export class GenerateStoryDto {
+  @ApiProperty({ type: [String], required: false })
+  themes?: string[];
+
+  @ApiProperty({ type: [String], required: false })
+  categories?: string[];
+
+  @ApiProperty({ required: false })
+  kidId?: string;
+
+  @ApiProperty({ required: false })
+  kidName?: string;
+
+  @ApiProperty({ required: false })
+  ageMin?: number;
+
+  @ApiProperty({ required: false })
+  ageMax?: number;
+
+  @ApiProperty({ required: false })
+  language?: string;
+
+  @ApiProperty({ required: false })
+  additionalContext?: string;
+}
+
+export const VOICEID = {
+  MILO: 'pNInz6obpgDQGcFmaJgB',
+  BELLA: 'EXAVITQu4vr4xnSDxMaL',
+  COSMO: 'TxGEqnHWrfWFTfGW9XjX',
+  NIMBUS: '21m00Tcm4TlvDq8ikWAM',
+  GRANDPA_JO: 'pqHfZKP75CvOlQylNhV4',
+  CHIP: 'AZnzlk1XvdvUeBnXmlld',
+};
+
+export enum VoiceType {
+  MILO = 'MILO',
+  BELLA = 'BELLA',
+  COSMO = 'COSMO',
+  NIMBUS = 'NIMBUS',
+  GRANDPA_JO = 'GRANDPA_JO',
+  CHIP = 'CHIP',
+}
+
+export class StoryContentAudioDto {
+  @ApiProperty()
+  content: string;
+
+  @ApiProperty({ required: false })
+  voiceType?: VoiceType;
+}
+
+export class QuestionAnswerDto {
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  questionId: string;
+
+  @ApiProperty()
+  storyId: string;
+
+  @ApiProperty()
+  selectedOption: number;
 }

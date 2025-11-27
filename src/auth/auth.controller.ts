@@ -1,3 +1,5 @@
+import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { Response, Request } from 'express';
 import {
   Body,
   Controller,
@@ -5,10 +7,13 @@ import {
   Get,
   Post,
   Put,
-  Query,
   Req,
-  UnauthorizedException,
   UseGuards,
+  UnauthorizedException,
+  BadRequestException,
+  Res,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
@@ -19,6 +24,11 @@ import {
   RegisterDto,
   updateKidDto,
   updateProfileDto,
+  RequestResetDto,
+  ValidateResetTokenDto,
+  ResetPasswordDto,
+  VerifyEmailDto,
+  SendEmailVerificationDto,
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -28,38 +38,34 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
+// import { Request } from 'express';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('login')
-  @ApiOperation({
-    summary: 'User login',
-    description: 'Login for all roles (admin, parent, kid).',
-  })
+  @HttpCode(200)
+  @ApiOperation({ summary: 'User login', description: 'Login for all roles.' })
   @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
   async login(@Body() body: LoginDto) {
     return this.authService.login(body);
   }
-
+  //
   @Post('refresh')
-  @ApiOperation({
-    summary: 'Refresh access token',
-    description: 'Refresh JWT using a valid refresh token.',
-  })
+  @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
-  async refresh(@Query('token') token: string) {
+  async refresh(@Body('token') token: string) {
     return this.authService.refresh(token);
   }
 
   @Post('register')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',
-    description:
-      'Register as a parent (default). Only admins can create admin accounts.',
+    description: 'Default role: parent.',
   })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
@@ -70,15 +76,12 @@ export class AuthController {
   @Post('logout')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Logout from current session',
-    description: 'Requires authentication.',
-  })
+  @ApiOperation({ summary: 'Logout from current session' })
   @ApiResponse({ status: 200, description: 'Logged out successfully.' })
   async logout(@Req() req: AuthenticatedRequest) {
     const sessionId = req.authUserData['authSessionId'];
     if (!sessionId) {
-      throw new UnauthorizedException('invalid token');
+      throw new UnauthorizedException('Invalid token');
     }
     return this.authService.logout(sessionId);
   }
@@ -86,10 +89,7 @@ export class AuthController {
   @Post('logout-all')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Logout from all devices',
-    description: 'Requires authentication.',
-  })
+  @ApiOperation({ summary: 'Logout from all devices' })
   @ApiResponse({ status: 200, description: 'Logged out from all devices.' })
   async logoutAll(@Req() req: AuthenticatedRequest) {
     const userId = req.authUserData['userId'];
@@ -97,33 +97,29 @@ export class AuthController {
   }
 
   @Post('verify-email')
-  @ApiOperation({
-    summary: 'Verify email with token',
-    description: 'Verify user email using a verification token.',
-  })
-  @ApiResponse({ status: 200, description: 'Email verified.' })
-  async verifyEmail(@Query('token') token: string) {
-    return this.authService.verifyEmail(token);
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify email using token' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid token.' })
+  @ApiResponse({ status: 500, description: 'Internal server error.' })
+  @ApiBody({ type: VerifyEmailDto })
+  async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyEmail(verifyEmailDto.token);
   }
 
   @Post('send-verification')
-  @ApiOperation({
-    summary: 'Resend email verification token',
-    description: 'Send a new email verification token.',
-  })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend email verification token' })
   @ApiResponse({ status: 200, description: 'Verification email sent.' })
-  async sendVerification(@Query('email') email: string) {
-    return this.authService.sendEmailVerification(email);
+  @ApiBody({ type: SendEmailVerificationDto })
+  async sendVerification(@Body() dto: SendEmailVerificationDto) {
+    return this.authService.sendEmailVerification(dto.email);
   }
 
   @Put('profile')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Update user profile',
-    description:
-      'Requires authentication. Only the authenticated user can update their profile.',
-  })
+  @ApiOperation({ summary: 'Update user profile' })
   @ApiBody({ type: updateProfileDto })
   @ApiResponse({ status: 200, description: 'Profile updated.' })
   async updateProfile(
@@ -133,93 +129,80 @@ export class AuthController {
     return this.authService.updateProfile(req.authUserData['userId'], data);
   }
 
-  @Post('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Add kids to user account',
-    description: 'Requires parent role.',
-  })
-  @ApiBody({ type: [kidDto] })
-  @ApiResponse({ status: 200, description: 'Kids added.' })
-  async addKids(@Req() req: AuthenticatedRequest, @Body() data: kidDto[]) {
-    return this.authService.addKids(req.authUserData['userId'], data);
-  }
-
-  @Get('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get all kids for user',
-    description: 'Requires parent role.',
-  })
-  @ApiResponse({ status: 200, description: 'List of kids.' })
-  async getKids(@Req() req: AuthenticatedRequest) {
-    return this.authService.getKids(req.authUserData['userId']);
-  }
-
-  @Put('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Update kids information',
-    description: 'Requires parent role.',
-  })
-  @ApiBody({ type: [updateKidDto] })
-  @ApiResponse({ status: 200, description: 'Kids updated.' })
-  async updateKids(
-    @Req() req: AuthenticatedRequest,
-    @Body() data: updateKidDto[],
-  ) {
-    return this.authService.updateKids(req.authUserData['userId'], data);
-  }
-
-  @Delete('kids')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Delete kids from user account',
-    description: 'Requires parent role.',
-  })
-  @ApiBody({ type: [String], description: 'Array of kid IDs to delete.' })
-  @ApiResponse({ status: 200, description: 'Kids deleted.' })
-  async deleteKids(@Req() req: AuthenticatedRequest, @Body() data: string[]) {
-    return this.authService.deleteKids(req.authUserData['userId'], data);
-  }
-
+  // ===== PASSWORD RESET =====
   @Post('request-password-reset')
-  @ApiOperation({
-    summary: 'Request password reset',
-    description: 'Send a password reset email.',
-  })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request password reset' })
+  @ApiBody({ type: RequestResetDto })
   @ApiResponse({ status: 200, description: 'Password reset email sent.' })
-  async requestPasswordReset(@Query('email') email: string) {
-    return this.authService.requestPasswordReset(email);
+  @ApiResponse({ status: 400, description: 'Invalid email format' })
+  async requestPasswordReset(@Body() body: RequestResetDto, @Req() req: Request) {
+    // Extract IP and user agent for security checking
+    const ip =
+      req.ip ||
+      req.headers['x-forwarded-for']?.toString().split(',')[0].trim();
+    const userAgent = req.headers['user-agent'];
+    return this.authService.requestPasswordReset(body, ip, userAgent);
   }
 
-  @Get('validate-reset-token')
-  @ApiOperation({
-    summary: 'Validate password reset token',
-    description: 'Validate a password reset token.',
-  })
+  @Post('validate-reset-token')
+  @ApiOperation({ summary: 'Validate password reset token' })
+  @ApiBody({ type: ValidateResetTokenDto })
   @ApiResponse({ status: 200, description: 'Token is valid.' })
-  async validateResetToken(
-    @Query('token') token: string,
-    @Query('email') email: string,
-  ) {
-    return this.authService.validateResetToken(token, email);
+  async validateResetToken(@Body() body: ValidateResetTokenDto) {
+    return this.authService.validateResetToken(body.token, body.email, body);
   }
 
   @Post('reset-password')
-  @ApiOperation({
-    summary: 'Reset password with token',
-    description: 'Reset password using a valid token.',
-  })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password with token' })
+  @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
-  async resetPassword(
-    @Query('token') token: string,
-    @Query('newPassword') password: string,
-  ) {
-    return this.authService.resetPassword(token, password);
+  async resetPassword(@Body() body: ResetPasswordDto) {
+    return this.authService.resetPassword(
+      body.token,
+      body.email,
+      body.newPassword,
+      body,
+    );
+  }
+
+  // ===== GOOGLE AUTH (MOBILE / WEB id_token) =====
+  // Mobile or web app can POST an id_token payload { id_token: '...' }
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Google sign-in (id_token) — mobile/web' })
+  @ApiBody({ description: 'Google id_token', schema: { example: { id_token: 'eyJhbGci...' } } })
+  async googleIdToken(@Body('id_token') idToken: string) {
+    if (!idToken) {
+      throw new BadRequestException('id_token is required');
+    }
+
+    return this.authService.loginWithGoogleIdToken(idToken);
+  }
+
+
+
+  // ===== GOOGLE OAUTH (web redirect flow) =====
+  @Get('google/oauth')
+  @UseGuards(GoogleAuthGuard)
+  async googleLogin() {
+    // Guard will redirect to Google
+  }
+
+
+
+  // ===== GOOGLE OAUTH CALLBACK =====
+  @Get('google/oauth/callback')
+  @UseGuards(GoogleAuthGuard)
+  async googleCallback(@Req() req: Request, @Res() res: Response) {
+    const payload = (req as any).user;
+    const result = await this.authService.handleGoogleOAuthPayload(payload);
+
+    return res.redirect(
+      `${process.env.WEB_APP_BASE_URL}/oauth-success?jwt=${encodeURIComponent(
+        result.jwt,
+      )}&refresh=${encodeURIComponent(result.refreshToken)}`
+    );
   }
 }

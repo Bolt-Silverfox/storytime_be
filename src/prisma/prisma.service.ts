@@ -3,14 +3,13 @@ import { PrismaClient } from '@prisma/client';
 import IHealth, { HealthResponse } from 'src/health/Ihealth.interfaces';
 
 @Injectable()
-class PrismaService
+export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy, IHealth
 {
   async onModuleInit(): Promise<void> {
     await this.$connect();
   }
-
   async onModuleDestroy() {
     await this.$disconnect();
   }
@@ -26,7 +25,6 @@ class PrismaService
         message: 'Prisma is up and running',
         duration: Date.now() - start,
       };
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       return {
         service: 'prisma',
@@ -37,4 +35,3 @@ class PrismaService
     }
   }
 }
-export default PrismaService;

@@ -1,0 +1,91 @@
+name: Deploy Backend (Production/develop-v0.0.1)
+
+on:
+  push:
+    branches:
+      - develop-v0.0.1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Write SSH Key
+        run: |
+          echo "${{ secrets.SERVER_SSH_KEY }}" > id_ed25519
+          chmod 600 id_ed25519
+
+      - name: Deploy to Production Server
+        run: |
+          ssh -i id_ed25519 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+      
+          set -e
+          
+          # Cleanup trap for incomplete releases
+          trap 'echo "Cleanup: removing incomplete release $NEW_RELEASE"; sudo rm -rf "$NEW_RELEASE"' ERR
+          
+          APP_PATH="/var/www/storytime/prod/backend"
+          RELEASES="$APP_PATH/releases"
+          CURRENT="$APP_PATH/current"
+          NEW_RELEASE="$RELEASES/$(date +%Y-%m-%d-%H-%M-%S)"
+      
+          echo "Creating release: $NEW_RELEASE"
+          sudo mkdir -p $NEW_RELEASE
+      
+          echo "Cloning repo..."
+          sudo git clone --depth=1 https://github.com/Bolt-Silverfox/storytime_be.git $NEW_RELEASE
+      
+          cd $NEW_RELEASE
+      
+          echo "Installing dependencies (no dev)..."
+          # sudo npm ci --omit=dev
+          sudo npm install
+      
+          echo "Copy environment file..."
+          sudo cp $CURRENT/.env .env 2>/dev/null || sudo cp /home/storytime/storytime_be/.env .env
+      
+          echo "Running migrations..."
+          sudo npx prisma migrate deploy
+      
+          echo "Building project..."
+          sudo npm run build
+      
+          if [ ! -f dist/main.js ]; then
+            echo "❌ Build failed!"
+            exit 1
+          fi
+          # Save the path of the previous release before switching symlink
+          if [ -L "$CURRENT" ]; then
+            PREV_RELEASE=$(readlink -f "$CURRENT")
+          else
+            PREV_RELEASE=""
+          fi
+
+          if [ -f $CURRENT/ecosystem.config.js ]; then
+            sudo cp $CURRENT/ecosystem.config.js $NEW_RELEASE/ecosystem.config.js
+            echo "ecosystem.config.js copied from current release."
+          else
+            echo "ecosystem.config.js not found in current release, please add it manually if required."
+          fi
+          
+          echo "Switching symlink..."
+          sudo ln -sfn $NEW_RELEASE $CURRENT
+      
+          echo "Restarting PM2 safely..."
+          pm2 startOrRestart $CURRENT/ecosystem.config.js --env production
+          pm2 save
+      
+          echo "Deployment complete!"
+
+           # --- BEGIN: Clean up previous release ---
+          if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$NEW_RELEASE" ]; then
+            echo "🧹 Cleaning up previous release: $PREV_RELEASE"
+            sudo rm -rf "$PREV_RELEASE"
+          else
+            echo "No previous release to clean up (or previous == new)."
+          fi
+          # --- END: Clean up previous release ---
+          EOF
