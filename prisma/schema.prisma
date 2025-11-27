@@ -234,7 +234,7 @@ model Reward {
 model DailyChallengeAssignment {
   id          String   @id @default(uuid())
   kidId       String
-  kid         Kid      @relation(fields: [kidId], references: [id])
+  kid         Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
   challengeId String
   challenge   DailyChallenge @relation(fields: [challengeId], references: [id])
   completed   Boolean  @default(false)
@@ -249,7 +249,7 @@ model NotificationPreference {
   userId    String?
   user      User?    @relation(fields: [userId], references: [id])
   kidId     String?
-  kid       Kid?     @relation(fields: [kidId], references: [id])
+  kid       Kid?     @relation(fields: [kidId], references: [id], onDelete: Cascade)
   type      String   // e.g. 'email', 'push', etc.
   enabled   Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -263,7 +263,7 @@ model RewardRedemption {
   rewardId  String
   reward    Reward   @relation(fields: [rewardId], references: [id])
   kidId     String
-  kid       Kid      @relation(fields: [kidId], references: [id])
+  kid       Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
   redeemedAt DateTime @default(now())
   status    String   // e.g. 'pending', 'approved', 'rejected', 'completed'
 
@@ -273,9 +273,9 @@ model RewardRedemption {
 model ActivityLog {
   id        String   @id @default(uuid())
   userId    String?
-  user      User?    @relation(fields: [userId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   kidId     String?
-  kid       Kid?     @relation(fields: [kidId], references: [id])
+  kid       Kid?     @relation(fields: [kidId], references: [id], onDelete: Cascade)
   action    String   // e.g. 'story_read', 'reward_redeemed', etc.
   details   String?
   createdAt DateTime @default(now())
@@ -286,7 +286,7 @@ model ActivityLog {
 model StoryPath {
   id        String   @id @default(uuid())
   kidId     String
-  kid       Kid      @relation(fields: [kidId], references: [id])
+  kid       Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
   storyId   String
   story     Story    @relation(fields: [storyId], references: [id])
   path      String   // JSON or delimited string of choices
