@@ -564,128 +564,101 @@ export class AuthService {
   // INTERNAL: Unified Google upsert logic
   // ====================================================
   private async _upsertOrReturnUserFromGooglePayload(payload: {
-    googleId?: string;
-    email: string;
-    picture?: string | null;
-    name?: string | null;
-    emailVerified?: boolean;
-  }) {
-    const { googleId, email, picture, name, emailVerified } = payload;
+  googleId?: string;
+  email: string;
+  picture?: string | null;
+  name?: string | null;
+  emailVerified?: boolean;
+}) {
+  const { googleId, email, picture, name, emailVerified } = payload;
 
-    let user = null;
+  let user = null;
 
-    // Lookup by googleId first
-    if (googleId) {
-      user = await this.prisma.user.findFirst({
-        where: { googleId },
-        include: { profile: true, avatar: true },
-      });
-    }
+  // 1. Try find by googleId
+  if (googleId) {
+    user = await this.prisma.user.findFirst({
+      where: { googleId },
+      include: { profile: true, avatar: true },
+    });
+  }
 
-    // Lookup by email
-    if (!user) {
-      const existing = await this.prisma.user.findUnique({ where: { email } });
+  // 2. Try find by email
+  if (!user) {
+    const existing = await this.prisma.user.findUnique({ where: { email } });
 
-      if (existing) {
-        user = await this.prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            isEmailVerified: emailVerified ? true : existing.isEmailVerified,
-          },
-          include: { profile: true, avatar: true },
-        });
-      }
-    }
-
-    // Create brand new user
-    if (!user) {
-      const randomPassword = crypto.randomBytes(16).toString('hex');
-      const hashedPassword = await bcrypt.hash(randomPassword, 10);
-
-      user = await this.prisma.user.create({
+    if (existing) {
+      user = await this.prisma.user.update({
+        where: { id: existing.id },
         data: {
-          name: name || email || 'Google User',
-          email,
-          passwordHash: hashedPassword,
-          isEmailVerified: emailVerified === true,
-          role: 'parent',
-          profile: { create: {} },
+          isEmailVerified: emailVerified ? true : existing.isEmailVerified,
+          googleId: googleId || existing.googleId,
         },
         include: { profile: true, avatar: true },
       });
     }
-
-    // Avatar model handling (only if picture URL provided)
-    if (picture) {
-      // Find existing avatar with same URL
-      let avatar = await this.prisma.avatar.findFirst({
-        where: { url: picture },
-      });
-
-      // Otherwise create new one
-      if (!avatar) {
-        avatar = await this.prisma.avatar.create({
-          data: {
-            url: picture,
-            name: `google_${googleId || user.id}`,
-            isSystemAvatar: false,
-          },
-        });
-      }
-
-      // Attach avatar to user if not already set
-      if (user.avatarId !== avatar.id) {
-        user = await this.prisma.user.update({
-          where: { id: user.id },
-          data: { avatarId: avatar.id },
-          include: { profile: true, avatar: true },
-        });
-
-        // Otherwise create new one
-        if (!avatar) {
-          avatar = await this.prisma.avatar.create({
-            data: {
-              url: picture,
-              name: `google_${googleId || user.id}`,
-              isSystemAvatar: false,
-            },
-          });
-        }
-
-        // Attach avatar to user if not already set
-        if (user.avatarId !== avatar.id) {
-          user = await this.prisma.user.update({
-            where: { id: user.id },
-            data: { avatarId: avatar.id },
-            include: { profile: true, avatar: true },
-          });
-        }
-      }
-    }
-
-    if (!user.isEmailVerified) {
-      throw new BadRequestException(
-        'Email not verified. Please check your inbox.',
-      );
-    }
-
-    const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: user.id },
-    });
-
-    if (!user.isEmailVerified) {
-      throw new BadRequestException(
-        'Email not verified. Please check your inbox.',
-      );
-    }
-
-    const userDto = new UserDto({ ...user, numberOfKids });
-    const tokenData = await this.createToken(userDto);
-
-    return {
-      user: userDto,
-      jwt: tokenData.jwt,
-      refreshToken: tokenData.refreshToken,
-    };
   }
+
+  // 3. Create new user
+  if (!user) {
+    const randomPassword = crypto.randomBytes(16).toString('hex');
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+    user = await this.prisma.user.create({
+      data: {
+        name: name || email || 'Google User',
+        email,
+        passwordHash: hashedPassword,
+        isEmailVerified: emailVerified === true,
+        googleId: googleId || null,
+        role: 'parent',
+        profile: { create: {} },
+      },
+      include: { profile: true, avatar: true },
+    });
+  }
+
+  // 4. Handle avatar from Google picture
+  if (picture) {
+    let avatar = await this.prisma.avatar.findFirst({ where: { url: picture } });
+
+    if (!avatar) {
+      avatar = await this.prisma.avatar.create({
+        data: {
+          url: picture,
+          name: `google_${googleId || user.id}`,
+          isSystemAvatar: false,
+        },
+      });
+    }
+
+    if (user.avatarId !== avatar.id) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { avatarId: avatar.id },
+        include: { profile: true, avatar: true },
+      });
+    }
+  }
+
+  // 5. Must be verified
+  if (!user.isEmailVerified) {
+    throw new BadRequestException(
+      'Email not verified. Please check your inbox.',
+    );
+  }
+
+  // 6. Build response
+  const numberOfKids = await this.prisma.kid.count({
+    where: { parentId: user.id },
+  });
+
+  const userDto = new UserDto({ ...user, numberOfKids });
+  const tokenData = await this.createToken(userDto);
+
+  return {
+    user: userDto,
+    jwt: tokenData.jwt,
+    refreshToken: tokenData.refreshToken,
+  };
+}
 }
