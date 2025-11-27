@@ -282,7 +282,7 @@ model Reward {
 model DailyChallengeAssignment {
   id          String         @id @default(uuid())
   kidId       String
-  kid         Kid            @relation(fields: [kidId], references: [id])
+  kid         Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
   challengeId String
   challenge   DailyChallenge @relation(fields: [challengeId], references: [id])
   completed   Boolean        @default(false)
@@ -298,20 +298,21 @@ model NotificationPreference {
   enabled   Boolean
   userId    String?
   kidId     String?
-  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  Kid       Kid?             @relation(fields: [kidId], references: [id])
+  kid       Kid?     @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  type      String   // e.g. 'email', 'push', etc.
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("notification_preferences")
 }
 
 model RewardRedemption {
-  id         String   @id @default(uuid())
-  rewardId   String
-  reward     Reward   @relation(fields: [rewardId], references: [id])
-  kidId      String
-  kid        Kid      @relation(fields: [kidId], references: [id])
+  id        String   @id @default(uuid())
+  rewardId  String
+  reward    Reward   @relation(fields: [rewardId], references: [id])
+  kidId     String
+  kid       Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
   redeemedAt DateTime @default(now())
   status     String // e.g. 'pending', 'approved', 'rejected', 'completed'
 
@@ -322,9 +323,10 @@ model ActivityLog {
   id        String   @id @default(uuid())
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   kidId     String?
-  kid       Kid?     @relation(fields: [kidId], references: [id])
-  action    String // e.g. 'story_read', 'reward_redeemed', etc.
+  kid       Kid?     @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  action    String   // e.g. 'story_read', 'reward_redeemed', etc.
   details   String?
   createdAt DateTime @default(now())
 
@@ -332,13 +334,13 @@ model ActivityLog {
 }
 
 model StoryPath {
-  id          String    @id @default(uuid())
-  kidId       String
-  kid         Kid       @relation(fields: [kidId], references: [id])
-  storyId     String
-  story       Story     @relation(fields: [storyId], references: [id])
-  path        String // JSON or delimited string of choices
-  startedAt   DateTime  @default(now())
+  id        String   @id @default(uuid())
+  kidId     String
+  kid       Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id])
+  path      String   // JSON or delimited string of choices
+  startedAt DateTime @default(now())
   completedAt DateTime?
 
   @@map("story_paths")
