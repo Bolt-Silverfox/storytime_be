@@ -9,7 +9,7 @@ import {
 
 @Injectable()
 export class VoiceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // --- Upload a new voice file ---
   async uploadVoice(
@@ -101,4 +101,59 @@ export class VoiceService {
       elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
     };
   }
+
+  async findOrCreateElevenLabsVoice(
+    elevenLabsId: string,
+    userId: string,
+  ): Promise<{ id: string }> {
+    // 1. Check if we already have this voice locally for this user
+    const existing = await this.prisma.voice.findFirst({
+      where: {
+        userId: userId,
+        elevenLabsVoiceId: elevenLabsId,
+      },
+    });
+
+    if (existing) {
+      return { id: existing.id };
+    }
+
+    // 2. If not found, fetch details from ElevenLabs API
+    console.log(`Fetching voice ${elevenLabsId} from ElevenLabs...`);
+
+    let voiceName = 'Imported ElevenLabs Voice';
+
+    try {
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/voices/${elevenLabsId}`,
+        {
+          method: 'GET',
+          headers: {
+            'xi-api-key': process.env.XI_API_KEY || '',
+          },
+        },
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        voiceName = data.name; // e.g., "Clyde"
+      }
+    } catch (error) {
+      console.warn('Failed to fetch voice name from ElevenLabs, using default.');
+    }
+
+    // 3. Save to our Database using schema fields
+    const newVoice = await this.prisma.voice.create({
+      data: {
+        userId: userId,
+        name: voiceName,
+        type: 'elevenlabs',
+        elevenLabsVoiceId: elevenLabsId,
+        url: null,
+      },
+    });
+
+    return { id: newVoice.id };
+  }
 }
+

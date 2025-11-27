@@ -119,6 +119,18 @@ describe('KidService', () => {
             prisma.kid.findUnique.mockResolvedValue(null);
             await expect(service.updateKid('kid-1', 'user-1', {})).rejects.toThrow(NotFoundException);
         });
+
+        it('should throw NotFoundException if preferredVoiceId is invalid', async () => {
+            const kidId = 'kid-1';
+            const userId = 'user-1';
+            const dto = { preferredVoiceId: 'invalid-voice-id' };
+            const existingKid = { id: kidId, parentId: userId };
+
+            prisma.kid.findUnique.mockResolvedValue(existingKid);
+            prisma.voice.findUnique.mockResolvedValue(null);
+
+            await expect(service.updateKid(kidId, userId, dto)).rejects.toThrow(NotFoundException);
+        });
     });
 
     describe('deleteKid', () => {
