@@ -81,6 +81,11 @@ model Kid {
   bedtimeEnd       String? // Format: "HH:mm" e.g., "07:00"
   bedtimeDays      Int[]   @default([]) // 0=Sunday, 1=Monday, etc.
 
+  bedtimeLockApp     Boolean @default(false) // "Lock app during bedtime"
+  bedtimeDimScreen   Boolean @default(false) // "Dim screen during bedtime"
+  bedtimeReminder    Boolean @default(false) // "Show bedtime reminder"
+  bedtimeStoriesOnly Boolean @default(false) // "Allow bedtime stories only"
+
   // New relations
   dailyChallenges         DailyChallengeAssignment[]
   notificationPreferences NotificationPreference[]
