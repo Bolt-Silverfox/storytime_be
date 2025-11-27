@@ -27,14 +27,17 @@ export class PaymentService {
       data: {
         userId,
         type: payload.type,
+        details: payload.details,
         provider: payload.provider ?? null,
         last4: payload.last4 ?? null,
         expiry: payload.expiry ?? null,
         meta: payload.meta ?? null,
       },
     });
+
     return pm;
   }
+
 
   async listPaymentMethods(userId: string) {
     return prisma.paymentMethod.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
