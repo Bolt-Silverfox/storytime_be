@@ -518,47 +518,47 @@ export class AuthService {
   // ===============================
 
   async loginWithGoogleIdToken(idToken: string) {
-  if (!idToken) {
-    throw new BadRequestException('id_token is required');
+    if (!idToken) {
+      throw new BadRequestException('id_token is required');
+    }
+
+    if (!this.googleClient) {
+      throw new ServiceUnavailableException('Google client not configured');
+    }
+
+    let ticket;
+    try {
+      ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+    } catch (err) {
+      this.logger.error('Google id_token verification failed', err);
+      throw new UnauthorizedException('Invalid Google id_token');
+    }
+
+    const payload = ticket.getPayload() as TokenPayload | undefined;
+    if (!payload || !payload.email) {
+      throw new UnauthorizedException('Invalid Google token payload');
+    }
+
+    const googlePayload = {
+      googleId: payload.sub,
+      email: payload.email,
+      picture: payload.picture || null,
+      name:
+        `${payload.given_name || ''} ${payload.family_name || ''}`.trim() ||
+        payload.name ||
+        null,
+      emailVerified: payload.email_verified === true,
+    };
+
+    return this._upsertOrReturnUserFromGooglePayload(googlePayload);
   }
-
-  if (!this.googleClient) {
-    throw new ServiceUnavailableException('Google client not configured');
-  }
-
-  let ticket;
-  try {
-    ticket = await this.googleClient.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-  } catch (err) {
-    this.logger.error('Google id_token verification failed', err);
-    throw new UnauthorizedException('Invalid Google id_token');
-  }
-
-  const payload = ticket.getPayload() as TokenPayload | undefined;
-  if (!payload || !payload.email) {
-    throw new UnauthorizedException('Invalid Google token payload');
-  }
-
-  const googlePayload = {
-    googleId: payload.sub,
-    email: payload.email,
-    picture: payload.picture || null,
-    name:
-      `${payload.given_name || ''} ${payload.family_name || ''}`.trim() ||
-      payload.name ||
-      null,
-    emailVerified: payload.email_verified === true,
-  };
-
-  return this._upsertOrReturnUserFromGooglePayload(googlePayload);
-}
 
   async handleGoogleOAuthPayload(payload: any) {
-  return this._upsertOrReturnUserFromGooglePayload(payload);
-}
+    return this._upsertOrReturnUserFromGooglePayload(payload);
+  }
 
   // ====================================================
   // INTERNAL: Unified Google upsert logic
@@ -574,7 +574,7 @@ export class AuthService {
 
   let user = null;
 
-  // Lookup by googleId first
+  // 1. Try find by googleId
   if (googleId) {
     user = await this.prisma.user.findFirst({
       where: { googleId },
@@ -582,7 +582,7 @@ export class AuthService {
     });
   }
 
-  // Lookup by email
+  // 2. Try find by email
   if (!user) {
     const existing = await this.prisma.user.findUnique({ where: { email } });
 
@@ -591,13 +591,14 @@ export class AuthService {
         where: { id: existing.id },
         data: {
           isEmailVerified: emailVerified ? true : existing.isEmailVerified,
+          googleId: googleId || existing.googleId,
         },
         include: { profile: true, avatar: true },
       });
     }
   }
 
-  // Create brand new user
+  // 3. Create new user
   if (!user) {
     const randomPassword = crypto.randomBytes(16).toString('hex');
     const hashedPassword = await bcrypt.hash(randomPassword, 10);
@@ -608,6 +609,7 @@ export class AuthService {
         email,
         passwordHash: hashedPassword,
         isEmailVerified: emailVerified === true,
+        googleId: googleId || null,
         role: 'parent',
         profile: { create: {} },
       },
@@ -615,65 +617,40 @@ export class AuthService {
     });
   }
 
-  // Avatar model handling (only if picture URL provided)
+  // 4. Handle avatar from Google picture
   if (picture) {
-    // Find existing avatar with same URL
-    let avatar = await this.prisma.avatar.findFirst({
-      where: { url: picture },
-    });
+    let avatar = await this.prisma.avatar.findFirst({ where: { url: picture } });
 
-    // Otherwise create new one
     if (!avatar) {
       avatar = await this.prisma.avatar.create({
         data: {
           url: picture,
           name: `google_${googleId || user.id}`,
-          displayName: name || email,
           isSystemAvatar: false,
         },
       });
     }
 
-    // Attach avatar to user if not already set
     if (user.avatarId !== avatar.id) {
       user = await this.prisma.user.update({
         where: { id: user.id },
         data: { avatarId: avatar.id },
         include: { profile: true, avatar: true },
       });
-
-      // Otherwise create new one
-      if (!avatar) {
-        avatar = await this.prisma.avatar.create({
-          data: {
-            url: picture,
-            name: `google_${googleId || user.id}`,
-            isSystemAvatar: false,
-          },
-        });
-      }
-
-      // Attach avatar to user if not already set
-      if (user.avatarId !== avatar.id) {
-        user = await this.prisma.user.update({
-          where: { id: user.id },
-          data: { avatarId: avatar.id },
-          include: { profile: true, avatar: true },
-        });
-      }
     }
   }
 
-    
-  const numberOfKids = await this.prisma.kid.count({
-    where: { parentId: user.id },
-  });
-
+  // 5. Must be verified
   if (!user.isEmailVerified) {
     throw new BadRequestException(
       'Email not verified. Please check your inbox.',
     );
   }
+
+  // 6. Build response
+  const numberOfKids = await this.prisma.kid.count({
+    where: { parentId: user.id },
+  });
 
   const userDto = new UserDto({ ...user, numberOfKids });
   const tokenData = await this.createToken(userDto);
@@ -685,4 +662,3 @@ export class AuthService {
   };
 }
 }
-
