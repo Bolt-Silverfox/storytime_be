@@ -1,9 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+export enum NotificationType {
+  EMAIL = 'email',
+  PUSH = 'push',
+  // add more as needed
+}
+
 export class CreateNotificationPreferenceDto {
-  @ApiProperty({ description: 'Type of notification (e.g. email, push)' })
-  type: string;
-  @ApiProperty({ description: 'Enable or disable this notification type' })
+  @ApiProperty({ enum: NotificationType })
+  type: NotificationType;
+  @ApiProperty()
   enabled: boolean;
   @ApiProperty({
     required: false,

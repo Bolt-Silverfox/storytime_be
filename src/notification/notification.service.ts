@@ -1,25 +1,34 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
+import * as nodemailer from 'nodemailer';
 import { NotificationRegistry, Notifications } from './notification.registry';
-import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { NotificationPreference } from '@prisma/client';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
 } from './notification.dto';
 
-const prisma = new PrismaClient();
-
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
+  private transporter: nodemailer.Transporter;
 
   constructor(
-    private readonly httpService: HttpService,
     private readonly configService: ConfigService,
-  ) {}
+    private readonly prisma: PrismaService,
+  ) {
+    this.transporter = nodemailer.createTransport({
+      host: this.configService.get<string>('SMTP_HOST'),
+      port: this.configService.get<number>('SMTP_PORT') || 587,
+      secure: false,
+      auth: {
+        user: this.configService.get<string>('SMTP_USER'),
+        pass: this.configService.get<string>('SMTP_PASS'),
+      },
+    });
+  }
 
   async sendNotification(
     type: Notifications,
@@ -32,18 +41,18 @@ export class NotificationService {
     try {
       const notification = NotificationRegistry[type];
       if (!notification) {
-        throw new Error(`invalid notification: ${type}`);
+        throw new Error(`Invalid notification type: ${type}`);
       }
 
       const err = notification.validate(data);
       if (err) {
-        throw new Error(`${type} failed: ${err}`);
+        throw new Error(`Validation failed for ${type}: ${err}`);
       }
 
       const template = await notification.getTemplate(data);
 
-      if (notification.medium != 'email') {
-        throw new Error(`medium: ${notification.medium} not implemented`);
+      if (notification.medium !== 'email') {
+        throw new Error(`Medium ${notification.medium} not implemented`);
       }
 
       const resp = await this.sendEmail(
@@ -53,10 +62,13 @@ export class NotificationService {
       );
       return resp;
     } catch (error) {
+      this.logger.error(
+        `Failed to send notification: ${error.message}`,
+        error.stack,
+      );
       return {
         success: false,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        error: error?.message,
+        error: error?.message || 'Unknown error',
       };
     }
   }
@@ -71,45 +83,26 @@ export class NotificationService {
     error?: string;
   }> {
     try {
-      const payload = {
-        sender: {
-          email: this.configService.get<string>('DEFAULT_SENDER_EMAIL'),
-          name: this.configService.get<string>('DEFAULT_SENDER_NAME'),
+      const mailOptions = {
+        from: {
+          name: this.configService.get<string>('DEFAULT_SENDER_NAME')!,
+          address: this.configService.get<string>('DEFAULT_SENDER_EMAIL')!,
         },
-        to: [{ email }],
+        to: email,
         subject: subject,
-        htmlContent: htmlContent,
+        html: htmlContent,
       };
 
-      const response = await firstValueFrom(
-        this.httpService.post<{ messageId?: string }>(
-          this.configService.get<string>('BREVO_API_URL') ?? '',
-          payload,
-          {
-            headers: {
-              'api-key': this.configService.get<string>('BREVO_API_KEY'),
-              'Content-Type': 'application/json',
-              Accept: 'application/json',
-            },
-          },
-        ),
-      );
-
-      const data = response.data;
-      this.logger.log('email sent successfully:', data);
+      const info = await this.transporter.sendMail(mailOptions);
+      this.logger.log(`Email sent successfully to ${email}: ${info.messageId}`);
       return {
         success: true,
-        messageId: data.messageId || 'Message sent',
+        messageId: info.messageId,
       };
     } catch (error: unknown) {
-      let errorMessage = 'Failed to send email';
-      const maybeMessage = (error as any)?.response?.data?.message;
-      if (maybeMessage) {
-        errorMessage = maybeMessage;
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      this.logger.error('Error sending email:', errorMessage);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to send email';
+      this.logger.error(`Error sending email to ${email}:`, errorMessage);
       return {
         success: false,
         error: errorMessage,
@@ -117,7 +110,9 @@ export class NotificationService {
     }
   }
 
-  private toNotificationPreferenceDto(pref: any): NotificationPreferenceDto {
+  private toNotificationPreferenceDto(
+    pref: NotificationPreference,
+  ): NotificationPreferenceDto {
     return {
       id: pref.id,
       type: pref.type,
@@ -132,7 +127,7 @@ export class NotificationService {
   async create(
     dto: CreateNotificationPreferenceDto,
   ): Promise<NotificationPreferenceDto> {
-    const pref = await prisma.notificationPreference.create({
+    const pref = await this.prisma.notificationPreference.create({
       data: {
         type: dto.type,
         enabled: dto.enabled,
@@ -147,7 +142,7 @@ export class NotificationService {
     id: string,
     dto: UpdateNotificationPreferenceDto,
   ): Promise<NotificationPreferenceDto> {
-    const pref = await prisma.notificationPreference.update({
+    const pref = await this.prisma.notificationPreference.update({
       where: { id },
       data: dto,
     });
@@ -155,21 +150,21 @@ export class NotificationService {
   }
 
   async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {
-    const prefs = await prisma.notificationPreference.findMany({
+    const prefs = await this.prisma.notificationPreference.findMany({
       where: { userId },
     });
     return prefs.map((p) => this.toNotificationPreferenceDto(p));
   }
 
   async getForKid(kidId: string): Promise<NotificationPreferenceDto[]> {
-    const prefs = await prisma.notificationPreference.findMany({
+    const prefs = await this.prisma.notificationPreference.findMany({
       where: { kidId },
     });
     return prefs.map((p) => this.toNotificationPreferenceDto(p));
   }
 
   async getById(id: string): Promise<NotificationPreferenceDto> {
-    const pref = await prisma.notificationPreference.findUnique({
+    const pref = await this.prisma.notificationPreference.findUnique({
       where: { id },
     });
     if (!pref) throw new NotFoundException('Notification preference not found');

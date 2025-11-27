@@ -1,72 +1,190 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
   Body,
+  Controller,
+  Delete,
+  Get,
+  Logger,
   Param,
+  Patch,
+  Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
   UseInterceptors,
-  UploadedFile,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiQuery,
-  ApiParam,
-  ApiBody,
-  ApiBearerAuth,
-  ApiResponse,
-} from '@nestjs/swagger';
-import { StoryService } from './story.service';
-import {
-  CreateStoryDto,
-  UpdateStoryDto,
-  StoryImageDto,
-  StoryBranchDto,
-  FavoriteDto,
-  StoryProgressDto,
-  DailyChallengeDto,
-  UploadVoiceDto,
-  CreateElevenLabsVoiceDto,
-  SetPreferredVoiceDto,
-  VoiceResponseDto,
-  AssignDailyChallengeDto,
-  CompleteDailyChallengeDto,
-  DailyChallengeAssignmentDto,
-  StartStoryPathDto,
-  UpdateStoryPathDto,
-  StoryPathDto,
-} from './story.dto';
-import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { randomUUID } from 'crypto';
+import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { StoryContentAudioDto } from '../voice/voice.dto';
+import {
+  AssignDailyChallengeDto,
+  CategoryDto,
+  CompleteDailyChallengeDto,
+  CreateElevenLabsVoiceDto,
+  CreateStoryDto,
+  DailyChallengeAssignmentDto,
+  DailyChallengeDto,
+  ErrorResponseDto,
+  FavoriteDto,
+  GenerateStoryDto,
+  SetPreferredVoiceDto,
+  StartStoryPathDto,
+  StoryBranchDto,
+  StoryImageDto,
+  StoryPathDto,
+  StoryProgressDto,
+  ThemeDto,
+  UpdateStoryDto,
+  UpdateStoryPathDto,
+  UploadVoiceDto,
+  VoiceResponseDto,
+  VoiceType,
+} from './story.dto';
+import { StoryService } from './story.service';
+import { TextToSpeechService } from './text-to-speech.service';
 
 @ApiTags('stories')
 @Controller('stories')
 export class StoryController {
-  constructor(private readonly storyService: StoryService) {}
+  private readonly logger = new Logger(StoryController.name);
+  constructor(
+    private readonly storyService: StoryService,
+    private readonly textToSpeechService: TextToSpeechService,
+  ) {}
 
   @Get()
   @ApiOperation({
-    summary: 'Get all stories',
-    description:
-      'Retrieve all stories, optionally filtered by theme or category.',
+    summary:
+      'Get stories (optionally filtered by theme, category, recommended, kidId, and age)',
   })
   @ApiQuery({ name: 'theme', required: false, type: String })
   @ApiQuery({ name: 'category', required: false, type: String })
+  @ApiQuery({ name: 'recommended', required: false, type: String })
+  @ApiQuery({ name: 'kidId', required: false, type: String })
+  @ApiQuery({ name: 'age', required: false, type: String })
+  @ApiOkResponse({
+    description: 'List of stories',
+    type: CreateStoryDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async getStories(
     @Query('theme') theme?: string,
     @Query('category') category?: string,
+    @Query('recommended') recommended?: string,
+    @Query('kidId') kidId?: string,
+    @Query('age') age?: string,
   ) {
-    return this.storyService.getStories({ theme, category });
+    return this.storyService.getStories({
+      theme,
+      category,
+      recommended:
+        recommended === 'true'
+          ? true
+          : recommended === 'false'
+            ? false
+            : undefined,
+      kidId,
+      age: age ? parseInt(age) : undefined,
+    });
+  }
+
+  @Get('categories')
+  @ApiOperation({ summary: 'Get all categories' })
+  @ApiOkResponse({
+    description: 'List of categories',
+    type: CategoryDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getCategories() {
+    return this.storyService.getCategories();
+  }
+
+  @Get('themes')
+  @ApiOperation({ summary: 'Get all themes' })
+  @ApiOkResponse({
+    description: 'List of themes',
+    type: ThemeDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getThemes() {
+    return this.storyService.getThemes();
   }
 
   @Post()
   @ApiOperation({ summary: 'Create a new story' })
   @ApiBody({ type: CreateStoryDto })
+  @ApiOkResponse({ description: 'Created story', type: CreateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async createStory(@Body() body: CreateStoryDto) {
     return this.storyService.createStory(body);
   }
@@ -75,6 +193,22 @@ export class StoryController {
   @ApiOperation({ summary: 'Update a story' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: UpdateStoryDto })
+  @ApiOkResponse({ description: 'Updated story', type: UpdateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async updateStory(@Param('id') id: string, @Body() body: UpdateStoryDto) {
     return this.storyService.updateStory(id, body);
   }
@@ -82,6 +216,22 @@ export class StoryController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a story' })
   @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ description: 'Deleted story', type: String })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async deleteStory(@Param('id') id: string) {
     return this.storyService.deleteStory(id);
   }
@@ -91,6 +241,22 @@ export class StoryController {
   @ApiOperation({ summary: 'Add an image to a story' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: StoryImageDto })
+  @ApiOkResponse({ description: 'Added image', type: StoryImageDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async addImage(@Param('id') id: string, @Body() body: StoryImageDto) {
     return this.storyService.addImage(id, body);
   }
@@ -100,6 +266,22 @@ export class StoryController {
   @ApiOperation({ summary: 'Add a branch to a story' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: StoryBranchDto })
+  @ApiOkResponse({ description: 'Added branch', type: StoryBranchDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async addBranch(@Param('id') id: string, @Body() body: StoryBranchDto) {
     return this.storyService.addBranch(id, body);
   }
@@ -110,31 +292,82 @@ export class StoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add a story to favorites' })
   @ApiBody({ type: FavoriteDto })
-  async addFavorite(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: FavoriteDto,
-  ) {
-    return this.storyService.addFavorite(req.authUserData.userId, body);
+  @ApiOkResponse({ description: 'Added favorite', type: FavoriteDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async addFavorite(@Body() body: FavoriteDto) {
+    return this.storyService.addFavorite(body);
   }
 
-  @Delete('favorites/:storyId')
+  @Delete('favorites/:kidId/:storyId')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Remove a story from favorites' })
+  @ApiParam({ name: 'kidId', type: String })
   @ApiParam({ name: 'storyId', type: String })
+  @ApiOkResponse({ description: 'Removed favorite', type: String })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async removeFavorite(
-    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyService.removeFavorite(req.authUserData.userId, storyId);
+    return this.storyService.removeFavorite(kidId, storyId);
   }
 
-  @Get('favorites')
+  @Get('favorites/:kidId')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get user favorites' })
-  async getFavorites(@Req() req: AuthenticatedRequest) {
-    return this.storyService.getFavorites(req.authUserData.userId);
+  @ApiOperation({ summary: 'Get kid favorites' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiOkResponse({
+    description: 'List of favorites',
+    type: FavoriteDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getFavorites(@Param('kidId') kidId: string) {
+    return this.storyService.getFavorites(kidId);
   }
 
   // --- Progress ---
@@ -143,23 +376,53 @@ export class StoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Set story progress' })
   @ApiBody({ type: StoryProgressDto })
-  async setProgress(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: StoryProgressDto,
-  ) {
-    return this.storyService.setProgress(req.authUserData.userId, body);
+  @ApiOkResponse({ description: 'Set progress', type: StoryProgressDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async setProgress(@Body() body: StoryProgressDto) {
+    return this.storyService.setProgress(body);
   }
 
-  @Get('progress/:storyId')
+  @Get('progress/:kidId/:storyId')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get story progress' })
+  @ApiParam({ name: 'kidId', type: String })
   @ApiParam({ name: 'storyId', type: String })
+  @ApiOkResponse({ description: 'Progress for story', type: StoryProgressDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async getProgress(
-    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyService.getProgress(req.authUserData.userId, storyId);
+    return this.storyService.getProgress(kidId, storyId);
   }
 
   // --- Daily Challenge ---
@@ -208,6 +471,75 @@ export class StoryController {
   @ApiResponse({ status: 200, type: DailyChallengeAssignmentDto })
   async getAssignmentById(@Param('id') id: string) {
     return this.storyService.getAssignmentById(id);
+  }
+
+  @Post('daily-challenge/assign-all')
+  @ApiOperation({
+    summary: 'Assign daily challenge to all kids (admin/manual trigger)',
+  })
+  @ApiOkResponse({ description: 'Daily challenges assigned to all kids.' })
+  async assignDailyChallengeToAllKids() {
+    await this.storyService.assignDailyChallengeToAllKids();
+    return { message: 'Daily challenges assigned to all kids.' };
+  }
+
+  @Get('daily-challenge/today')
+  @ApiOperation({ summary: "Get today's daily challenge assignment for a kid" })
+  @ApiQuery({ name: 'kidId', required: true, type: String })
+  @ApiOkResponse({
+    description: "Today's daily challenge assignment",
+    type: DailyChallengeAssignmentDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No daily challenge assignment found',
+    type: ErrorResponseDto,
+  })
+  async getTodaysDailyChallengeAssignment(@Query('kidId') kidId: string) {
+    this.logger.log(
+      `Getting today's daily challenge assignment for kid ${kidId}`,
+    );
+    return await this.storyService.getTodaysDailyChallengeAssignment(kidId);
+  }
+
+  @Get('daily-challenge/kid/:kidId/week')
+  @ApiOperation({
+    summary:
+      'Get daily challenge assignments for a kid for a week (Sunday to Saturday)',
+  })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({
+    name: 'weekStart',
+    required: true,
+    type: String,
+    description: 'Start of the week (YYYY-MM-DD, must be a Sunday)',
+  })
+  @ApiResponse({ status: 200, type: [DailyChallengeAssignmentDto] })
+  @ApiResponse({
+    status: 404,
+    description: 'No daily challenge assignments found',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Internal Server Error',
+    type: ErrorResponseDto,
+  })
+  async getWeeklyAssignmentsForKid(
+    @Param('kidId') kidId: string,
+    @Query('weekStart') weekStart: string,
+  ) {
+    const weekStartDate = new Date(weekStart);
+    weekStartDate.setHours(0, 0, 0, 0);
+    return this.storyService.getWeeklyDailyChallengeAssignments(
+      kidId,
+      weekStartDate,
+    );
   }
 
   // --- Voices ---
@@ -314,5 +646,144 @@ export class StoryController {
   @ApiResponse({ status: 200, type: StoryPathDto })
   async getStoryPathById(@Param('id') id: string) {
     return this.storyService.getStoryPathById(id);
+  }
+
+  @Get('story/audio/:id')
+  @ApiOperation({ summary: 'Get audio for a story path by id' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiQuery({ name: 'voiceType', required: false, enum: VoiceType })
+  @ApiResponse({ status: 200, type: StoryPathDto })
+  async getStoryPathAudioById(
+    @Param('id') id: string,
+    @Query('voiceType') voiceType?: VoiceType,
+  ) {
+    const audioUrl = await this.storyService.getStoryAudioUrl(
+      id,
+      voiceType ?? VoiceType.MILO,
+    );
+
+    return {
+      message: 'Audio generated successfully',
+      audioUrl,
+      voiceType: voiceType || VoiceType.MILO,
+      statusCode: 200,
+    };
+  }
+
+  @Post('story/audio')
+  @ApiOperation({ summary: 'Get audio for a content' })
+  @ApiResponse({ status: 200, type: StoryPathDto })
+  @ApiBody({ type: StoryContentAudioDto })
+  async getContentAudio(@Body() dto: StoryContentAudioDto) {
+    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
+      randomUUID().toString(),
+      dto.content,
+      dto.voiceType,
+    );
+
+    return {
+      message: 'Audio generated successfully',
+      audioUrl,
+      voiceType: dto.voiceType || VoiceType.MILO,
+      statusCode: 200,
+    };
+  }
+
+  @Post('generate')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate a story using AI' })
+  @ApiBody({ type: GenerateStoryDto })
+  @ApiOkResponse({ description: 'Generated story', type: CreateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  async generateStory(@Body() body: GenerateStoryDto) {
+    // If kidId is provided, use the specialized method
+    if (body.kidId) {
+      return this.storyService.generateStoryForKid(
+        body.kidId,
+        body.themes,
+        body.categories,
+      );
+    }
+
+    // Otherwise, generate with provided options
+    const options = {
+      theme: body.themes || ['Adventure'],
+      category: body.categories || ['Bedtime Stories'],
+      ageMin: body.ageMin || 4,
+      ageMax: body.ageMax || 8,
+      language: body.language || 'English',
+      kidName: body.kidName,
+      additionalContext: body.additionalContext,
+    };
+
+    return this.storyService.generateStoryWithAI(options);
+  }
+
+  @Post('generate/kid/:kidId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Generate a personalized story for a specific kid',
+  })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({ name: 'theme', required: false, type: String })
+  @ApiQuery({ name: 'category', required: false, type: String })
+  @ApiOkResponse({ description: 'Generated story', type: CreateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async generateStoryForKid(
+    @Param('kidId') kidId: string,
+    @Query('theme') theme?: string,
+    @Query('category') category?: string,
+  ) {
+    const themes = theme ? [theme] : undefined;
+    const categories = category ? [category] : undefined;
+    return this.storyService.generateStoryForKid(kidId, themes, categories);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a story by id' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ description: 'Story', type: CreateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getStoryById(@Param('id') id: string) {
+    return await this.storyService.getStoryById(id);
   }
 }

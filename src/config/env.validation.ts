@@ -15,11 +15,19 @@ export const envSchema = z.object({
     .string()
     .email('DEFAULT_SENDER_EMAIL must be a valid email'),
   DEFAULT_SENDER_NAME: z.string().min(1, 'DEFAULT_SENDER_NAME is required'),
-  BREVO_API_URL: z.string().url('BREVO_API_URL must be a valid URL'),
-  BREVO_API_KEY: z.string().min(1, 'BREVO_API_KEY is required'),
+  // SMTP Configuration (replaces Brevo)
+  SMTP_HOST: z.string().min(1, 'SMTP_HOST is required'),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_USER: z.string().email('SMTP_USER must be a valid email'),
+  SMTP_PASS: z.string().min(1, 'SMTP_PASS is required'),
+  MAIL_ENCRYPTION: z.enum(['TLS', 'SSL']).optional().default('TLS'),
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   SECRET: z.string().min(1, 'SECRET is required'),
   WEB_APP_BASE_URL: z.string().url('WEB_APP_BASE_URL must be a valid URL'),
+  GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
+  GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET is required'),
+  BACKEND_BASE_URL: z.string().url('BACKEND_BASE_URL must be a valid URL'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
