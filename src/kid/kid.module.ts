@@ -1,13 +1,22 @@
 import { Module } from '@nestjs/common';
-import { KidController } from './kid.controller';
-import { KidService } from './kid.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { AuthModule } from '../auth/auth.module';
+import { KidProgressController } from './kid-progress.controller';
+import { KidProgressService } from './kid-progress.service';
+import { AuthModule } from '../../auth/auth.module';
+
+// submodules
+import { KidAchievementsModule } from './achievements/kid-achievements.module';
+import { KidStreakModule } from './streak/kid-streak.module';
+import { KidOverviewModule } from './overview/kid-overview.module';
 
 @Module({
-    imports: [AuthModule],
-    controllers: [KidController],
-    providers: [KidService, PrismaService],
-    exports: [KidService],
+  imports: [
+    AuthModule,          
+    KidAchievementsModule,
+    KidStreakModule,
+    KidOverviewModule,
+  ],
+  controllers: [KidProgressController],
+  providers: [KidProgressService],
+  exports: [KidProgressService],
 })
-export class KidModule { }
+export class KidProgressModule {}
