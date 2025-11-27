@@ -73,6 +73,7 @@ model Kid {
   dailyScreenTimeLimitMins Int?
   screenTimeSessions       ScreenTimeSession[]
   questionAnswers          QuestionAnswer[]
+  theme                    String?
 
   parentId String
   parent   User   @relation(fields: [parentId], references: [id], onDelete: Cascade)
@@ -100,8 +101,22 @@ model Kid {
   storyPaths              StoryPath[]
   favorites               Favorite[]
   progresses              StoryProgress[]
+  kidFavorites            KidFavorite[]
+  kidDownloads            KidDownload[]
 
   @@map("kids")
+}
+
+model KidFavorite {
+  id        String   @id @default(uuid())
+  kidId     String
+  storyId   String
+  createdAt DateTime @default(now())
+
+  kid   Kid   @relation(fields: [kidId], references: [id])
+  story Story @relation(fields: [storyId], references: [id])
+
+  @@unique([kidId, storyId])
 }
 
 // -------------------------
@@ -182,6 +197,8 @@ model Story {
   themes           Theme[]           @relation("StoryThemes")
   storyAudioCaches StoryAudioCache[]
   questions        StoryQuestion[]
+  kidFavorites     KidFavorite[]
+  kidDownloads     KidDownload[]
 
   @@map("stories")
 }
@@ -222,6 +239,18 @@ model Favorite {
   createdAt DateTime @default(now())
 
   @@map("favorites")
+}
+
+model KidDownload {
+  id        String   @id @default(uuid())
+  kidId     String
+  storyId   String
+  createdAt DateTime @default(now())
+
+  kid   Kid   @relation(fields: [kidId], references: [id])
+  story Story @relation(fields: [storyId], references: [id])
+
+  @@unique([kidId, storyId])
 }
 
 model StoryProgress {
