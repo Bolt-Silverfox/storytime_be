@@ -89,10 +89,16 @@ model Kid {
   excludedTags        String[]   @default([])
 
   isBedtimeEnabled Boolean @default(false)
-  bedtimeStart     String?
-  bedtimeEnd       String?
-  bedtimeDays      Int[]   @default([])
+  bedtimeStart     String? // Format: "HH:mm" e.g., "20:00"
+  bedtimeEnd       String? // Format: "HH:mm" e.g., "07:00"
+  bedtimeDays      Int[]   @default([]) // 0=Sunday, 1=Monday, etc.
 
+  bedtimeLockApp     Boolean @default(false) // "Lock app during bedtime"
+  bedtimeDimScreen   Boolean @default(false) // "Dim screen during bedtime"
+  bedtimeReminder    Boolean @default(false) // "Show bedtime reminder"
+  bedtimeStoriesOnly Boolean @default(false) // "Allow bedtime stories only"
+
+  // New relations
   dailyChallenges         DailyChallengeAssignment[]
   notificationPreferences NotificationPreference[]
   rewardRedemptions       RewardRedemption[]
@@ -356,7 +362,7 @@ model Reward {
 model DailyChallengeAssignment {
   id          String         @id @default(uuid())
   kidId       String
-  kid         Kid            @relation(fields: [kidId], references: [id])
+  kid         Kid            @relation(fields: [kidId], references: [id], onDelete: Cascade)
   challengeId String
   challenge   DailyChallenge @relation(fields: [challengeId], references: [id])
   completed   Boolean        @default(false)
@@ -367,15 +373,18 @@ model DailyChallengeAssignment {
 }
 
 model NotificationPreference {
-  id        String           @id @default(uuid())
-  type      NotificationType
-  enabled   Boolean
-  userId    String?
-  kidId     String?
-  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  Kid       Kid?             @relation(fields: [kidId], references: [id])
+  id      String           @id @default(uuid())
+  type    NotificationType
+  enabled Boolean          @default(true)
+
+  userId String?
+  kidId  String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kid  Kid?  @relation(fields: [kidId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("notification_preferences")
 }
@@ -385,7 +394,7 @@ model RewardRedemption {
   rewardId   String
   reward     Reward   @relation(fields: [rewardId], references: [id])
   kidId      String
-  kid        Kid      @relation(fields: [kidId], references: [id])
+  kid        Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
   redeemedAt DateTime @default(now())
   status     String
 
@@ -397,8 +406,8 @@ model ActivityLog {
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   kidId     String?
-  kid       Kid?     @relation(fields: [kidId], references: [id])
-  action    String
+  kid       Kid?     @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  action    String // e.g. 'story_read', 'reward_redeemed', etc.
   details   String?
   createdAt DateTime @default(now())
 
@@ -408,10 +417,10 @@ model ActivityLog {
 model StoryPath {
   id          String    @id @default(uuid())
   kidId       String
-  kid         Kid       @relation(fields: [kidId], references: [id])
+  kid         Kid       @relation(fields: [kidId], references: [id], onDelete: Cascade)
   storyId     String
   story       Story     @relation(fields: [storyId], references: [id])
-  path        String
+  path        String // JSON or delimited string of choices
   startedAt   DateTime  @default(now())
   completedAt DateTime?
 
