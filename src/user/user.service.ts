@@ -63,11 +63,20 @@ export class UserService {
       updateData.name = data.name;
     }
 
-    // Use avatarId if provided, otherwise fall back to avatarUrl for backward compatibility
     if (data.avatarId !== undefined) {
+      // If ID is provided, use it directly
       updateData.avatarId = data.avatarId;
     } else if (data.avatarUrl !== undefined) {
-      updateData.avatarId = data.avatarUrl;
+      // If URL is provided, CREATE the avatar first
+      const newAvatar = await prisma.avatar.create({
+        data: {
+          url: data.avatarUrl,
+          name: `Custom Avatar for ${id}`,
+          isSystemAvatar: false,
+        }
+      });
+      // Assign the NEW UUID, not the URL string
+      updateData.avatarId = newAvatar.id;
     }
 
     // Build profile update data
