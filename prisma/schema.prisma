@@ -18,70 +18,81 @@ enum Role {
 enum NotificationType {
   email
   push
-  // add more as needed
 }
 
 model User {
-  id                      String                   @id @default(uuid())
-  email                   String                   @unique
-  passwordHash            String
-  title                   String?
-  name                    String?
-  avatarId                String?
-  avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
-  isEmailVerified         Boolean                  @default(false)
-  role                    Role                     @default(parent)
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  profile                 Profile?
-  auth                    Session[]
-  Token                   Token[]
-  kids                    Kid[]
-  voices                  Voice[]
-  preferredVoiceId        String? // FK to Voice
-  preferredVoice          Voice?                   @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
+  id              String   @id @default(uuid())
+  email           String   @unique
+  passwordHash    String
+  title           String?
+  name            String?
+  avatarId        String?
+  avatar          Avatar?  @relation(fields: [avatarId], references: [id])
+  isEmailVerified Boolean  @default(false)
+  role            Role     @default(parent)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  pinHash         String?
+
+  enableBiometrics Boolean? @default(false)
+
+  profile Profile?
+  auth    Session[]
+  Token   Token[]
+  kids    Kid[]
+
+  voices           Voice[]
+  preferredVoiceId String?
+  preferredVoice   Voice?  @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
+
   Reward                  Reward[]
   notificationPreferences NotificationPreference[]
   activityLogs            ActivityLog[]
   userIps                 UserIP[]
 
-  //google auth
   googleId String? @unique
+
+  //PAYMENT MODELS RESTORED
+  subscriptions       Subscription[]
+  supportTickets      SupportTicket[]
+  paymentMethods      PaymentMethod[]
+  paymentTransactions PaymentTransaction[]
 
   @@map("users")
 }
 
+// -------------------------
+// KID MODEL
+// -------------------------
 model Kid {
   id                       String              @id @default(uuid())
   name                     String?
   avatarId                 String?
   avatar                   Avatar?             @relation(fields: [avatarId], references: [id])
   ageRange                 String?
-  dailyScreenTimeLimitMins Int? // Daily limit in minutes, null = no limit
+  dailyScreenTimeLimitMins Int?
   screenTimeSessions       ScreenTimeSession[]
   questionAnswers          QuestionAnswer[]
-  parentId                 String
-  currentReadingLevel      Int                 @default(1)
-  parent                   User                @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  createdAt                DateTime            @default(now())
-  updatedAt                DateTime            @updatedAt
 
-  rewards Reward[]
+  parentId String
+  parent   User   @relation(fields: [parentId], references: [id], onDelete: Cascade)
 
+  currentReadingLevel Int      @default(1)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  rewards          Reward[]
   preferredVoiceId String?
-  preferredVoice   Voice?  @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
+  preferredVoice   Voice?   @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
 
-  //Preferences
   preferredCategories Category[] @relation("KidPreferredCategories")
-  excludedTags        String[]   @default([]) // e.g. ["ghosts", "spiders"]
+  excludedTags        String[]   @default([])
 
-  //Bedtime Settings
   isBedtimeEnabled Boolean @default(false)
-  bedtimeStart     String? // Format: "HH:mm" e.g., "20:00"
-  bedtimeEnd       String? // Format: "HH:mm" e.g., "07:00"
-  bedtimeDays      Int[]   @default([]) // 0=Sunday, 1=Monday, etc.
+  bedtimeStart     String?
+  bedtimeEnd       String?
+  bedtimeDays      Int[]   @default([])
 
-  // New relations
   dailyChallenges         DailyChallengeAssignment[]
   notificationPreferences NotificationPreference[]
   rewardRedemptions       RewardRedemption[]
@@ -93,6 +104,9 @@ model Kid {
   @@map("kids")
 }
 
+// -------------------------
+// SESSION / TOKEN / PROFILE
+// -------------------------
 model Session {
   id        String   @id @default(uuid())
   userId    String
@@ -106,7 +120,6 @@ model Session {
   @@map("sessions")
 }
 
-// this can be verification token, password reset token, otp, etc
 model Token {
   id        String   @id @default(uuid())
   userId    String
@@ -128,14 +141,17 @@ model Profile {
   userId            String   @unique
   explicitContent   Boolean  @default(true)
   maxScreenTimeMins Int?
-  language          String? // Preferred language
-  country           String? // Preferred language
+  language          String?
+  country           String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   @@map("profiles")
 }
 
+// -------------------------
+// STORY MODELS
+// -------------------------
 model Story {
   id              String   @id @default(uuid())
   title           String
@@ -189,7 +205,7 @@ model StoryBranch {
   prompt    String
   optionA   String
   optionB   String
-  nextA     String? // id of next branch or null if end
+  nextA     String?
   nextB     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -217,11 +233,75 @@ model StoryProgress {
   progress       Float    @default(0)
   completed      Boolean  @default(false)
   lastAccessed   DateTime @default(now())
-  totalTimeSpent Int      @default(0) // In seconds
+  totalTimeSpent Int      @default(0)
 
   @@unique([kidId, storyId])
   @@map("story_progress")
 }
+
+// -------------------------
+// PAYMENT MODELS (RESTORED)
+// -------------------------
+
+model Subscription {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  plan      String
+  status    String    @default("active")
+  startedAt DateTime  @default(now())
+  endsAt    DateTime?
+
+  @@map("subscriptions")
+}
+
+model SupportTicket {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  subject   String
+  message   String
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+
+  @@map("support_tickets")
+}
+
+model PaymentMethod {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  details   String
+  provider  String?
+  last4     String?
+  expiry    String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  transactions PaymentTransaction[]
+
+  @@map("payment_methods")
+}
+
+model PaymentTransaction {
+  id              String         @id @default(uuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentMethodId String?
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  currency        String?
+  reference       String?
+  amount          Float
+  status          String
+  createdAt       DateTime       @default(now())
+
+  @@map("payment_transactions")
+}
+
+// -------------------------
+// DAILY CHALLENGES, VOICE, REWARD, ETC...
+// -------------------------
 
 model DailyChallenge {
   id            String                     @id @default(uuid())
@@ -240,9 +320,9 @@ model Voice {
   userId            String?
   user              User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   name              String
-  type              String // 'uploaded' or 'elevenlabs'
-  url               String? // For uploaded audio
-  elevenLabsVoiceId String? // For ElevenLabs custom voices
+  type              String
+  url               String?
+  elevenLabsVoiceId String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -250,7 +330,6 @@ model Voice {
   kidsPreferring  Kid[]  @relation("KidPreferredVoice")
 
   @@index([name])
-  @@index([elevenLabsVoiceId])
   @@map("voices")
 }
 
@@ -308,7 +387,7 @@ model RewardRedemption {
   kidId      String
   kid        Kid      @relation(fields: [kidId], references: [id])
   redeemedAt DateTime @default(now())
-  status     String // e.g. 'pending', 'approved', 'rejected', 'completed'
+  status     String
 
   @@map("reward_redemptions")
 }
@@ -319,7 +398,7 @@ model ActivityLog {
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   kidId     String?
   kid       Kid?     @relation(fields: [kidId], references: [id])
-  action    String // e.g. 'story_read', 'reward_redeemed', etc.
+  action    String
   details   String?
   createdAt DateTime @default(now())
 
@@ -332,7 +411,7 @@ model StoryPath {
   kid         Kid       @relation(fields: [kidId], references: [id])
   storyId     String
   story       Story     @relation(fields: [storyId], references: [id])
-  path        String // JSON or delimited string of choices
+  path        String
   startedAt   DateTime  @default(now())
   completedAt DateTime?
 
@@ -384,8 +463,8 @@ model StoryQuestion {
 
 model Avatar {
   id             String    @id @default(cuid())
-  name           String? // Standard name for upsert (unique identifier)
-  // displayName    String?  // User-friendly display name
+  name           String?
+  displayName    String?
   url            String
   isSystemAvatar Boolean   @default(false)
   isDeleted      Boolean   @default(false)
@@ -393,13 +472,12 @@ model Avatar {
   publicId       String?
   createdAt      DateTime  @default(now())
 
-  // Relations
   users User[]
   kids  Kid[]
 
-  @@unique([name]) // Ensure name is unique for upsert
-  @@index([name]) // Index for upsert operations
-  @@index([isSystemAvatar]) // Index for filtering system avatars
+  @@unique([name])
+  @@index([name])
+  @@index([isSystemAvatar])
   @@map("avatars")
 }
 
@@ -428,7 +506,6 @@ model ScreenTimeSession {
   @@map("screen_time_sessions")
 }
 
-// Track quiz/question answers
 model QuestionAnswer {
   id             String        @id @default(uuid())
   kidId          String
