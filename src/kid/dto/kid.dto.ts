@@ -79,6 +79,26 @@ export class UpdateKidDto {
     @Max(6, { each: true })
     bedtimeDays?: number[];
 
+    @IsOptional()
+    @IsBoolean()
+    bedtimeLockApp?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    bedtimeDimScreen?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    bedtimeReminder?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    bedtimeStoriesOnly?: boolean;
+    
+    @IsOptional()
+    @IsInt()
+    dailyScreenTimeLimitMins?: number;
+
     @ApiProperty({ required: false, example: 'voice-uuid-123' })
     @IsOptional()
     @IsString()
@@ -101,3 +121,5 @@ export class KidVoiceDto {
     @ApiProperty()
     voiceType: VoiceType;
 }
+
+
