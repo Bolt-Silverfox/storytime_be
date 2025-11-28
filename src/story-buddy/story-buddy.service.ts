@@ -19,7 +19,7 @@ export class StoryBuddyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploadService: UploadService,
-  ) {}
+  ) { }
 
   /**
    * Get all active story buddies (public access)
@@ -310,6 +310,7 @@ export class StoryBuddyService {
             displayName: true,
             imageUrl: true,
             profileAvatarUrl: true,
+            type: true,
           },
         },
       },
@@ -340,6 +341,7 @@ export class StoryBuddyService {
         imageUrl: buddy.imageUrl,
         profileAvatarUrl: buddy.profileAvatarUrl,
       },
+      message: `Hi ${kid.name}! I'm ${buddy.displayName}. I'm so excited to read stories with you!`,
       imageUrl: buddy.imageUrl,
       profileAvatarUrl: buddy.profileAvatarUrl,
     };
@@ -364,6 +366,7 @@ export class StoryBuddyService {
             displayName: true,
             imageUrl: true,
             profileAvatarUrl: true,
+            type: true,
           },
         },
       },
@@ -403,9 +406,9 @@ export class StoryBuddyService {
             select: { title: true },
           });
           if (story) {
-            contextData = { 
-              storyId: contextId, 
-              storyTitle: story.title 
+            contextData = {
+              storyId: contextId,
+              storyTitle: story.title
             };
           }
           break;
@@ -419,6 +422,28 @@ export class StoryBuddyService {
       interactionType: context,
     });
 
+    // Generate dynamic message if not provided
+    let finalMessage = message || '';
+
+    if (!finalMessage) {
+      switch (context) {
+        case 'greeting':
+          finalMessage = `Hi ${kid.name}! Ready for a story?`;
+          break;
+        case 'challenge':
+          finalMessage = `Hey ${kid.name}! Let's learn a new word today!`;
+          break;
+        case 'story_start':
+          finalMessage = `Enjoy the story, ${kid.name}!`;
+          break;
+        case 'story_complete':
+          finalMessage = `Great reading, ${kid.name}! You did it!`;
+          break;
+        default:
+          finalMessage = `Hello ${kid.name}!`;
+      }
+    }
+
     return {
       buddy: {
         id: buddy.id,
@@ -427,7 +452,7 @@ export class StoryBuddyService {
         imageUrl: buddy.imageUrl,
         profileAvatarUrl: buddy.profileAvatarUrl,
       },
-      message: message || '', // Return empty message or frontend-provided message
+      message: finalMessage, // Return generated or frontend-provided message
       imageUrl: buddy.imageUrl,
       profileAvatarUrl: buddy.profileAvatarUrl,
       context,
