@@ -12,6 +12,11 @@ export class AnalyticsService {
       userId: log.userId ?? undefined,
       kidId: log.kidId ?? undefined,
       action: log.action,
+      status: log.status, 
+      deviceName: log.deviceName ?? undefined,
+      deviceModel: log.deviceModel ?? undefined,
+      os: log.os ?? undefined,
+      ipAddress: log.ipAddress ?? undefined,
       details: log.details ?? undefined,
       createdAt: log.createdAt,
     };
@@ -23,6 +28,11 @@ export class AnalyticsService {
         userId: dto.userId,
         kidId: dto.kidId,
         action: dto.action,
+        status: dto.status,
+        deviceName: dto.deviceName,
+        deviceModel: dto.deviceModel,
+        os: dto.os,
+        ipAddress: dto.ipAddress,
         details: dto.details,
       },
     });
