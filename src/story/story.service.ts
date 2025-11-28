@@ -45,7 +45,7 @@ export class StoryService {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
-  ) {}
+  ) { }
 
   async getStories(filter: {
     theme?: string;
@@ -779,9 +779,10 @@ export class StoryService {
     themeNames?: string[],
     categoryNames?: string[],
   ) {
-    // Get kid's information
+    // 1. Get kid's information AND their preferred categories
     const kid = await this.prisma.kid.findUnique({
       where: { id: kidId },
+      include: { preferredCategories: true },
     });
 
     if (!kid) {
@@ -799,10 +800,8 @@ export class StoryService {
       }
     }
 
-    // Use provided themes/categories or get random ones
+    // 2. Prepare Themes
     let themes = themeNames || [];
-    let categories = categoryNames || [];
-
     if (themes.length === 0) {
       const availableThemes = await this.prisma.theme.findMany();
       const randomTheme =
@@ -810,26 +809,44 @@ export class StoryService {
       themes = [randomTheme.name];
     }
 
+    // 3. Prepare Categories (Merge Input + Preferences)
+    let categories = categoryNames || [];
+
+    // Add kid's preferred categories if they exist
+    if (kid.preferredCategories && kid.preferredCategories.length > 0) {
+      const prefCategoryNames = kid.preferredCategories.map((c) => c.name);
+      // Combine arrays and remove duplicates using Set
+      categories = [...new Set([...categories, ...prefCategoryNames])];
+    }
+
+    // If STILL empty (no input AND no preferences), pick a random one
     if (categories.length === 0) {
       const availableCategories = await this.prisma.category.findMany();
       const randomCategory =
         availableCategories[
-          Math.floor(Math.random() * availableCategories.length)
+        Math.floor(Math.random() * availableCategories.length)
         ];
       categories = [randomCategory.name];
     }
 
+    // 4. Construct Options
     const options: GenerateStoryOptions = {
       theme: themes,
       category: categories,
       ageMin,
       ageMax,
-      kidName: kid.name || undefined,
+      // Priority: DB Name > Input Name (handled by controller passing ID) > 'Hero'
+      kidName: kid.name || 'Hero',
       language: 'English',
     };
 
+    this.logger.log(
+      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}], Categories: [${categories.join(', ')}]`
+    );
+
     return this.generateStoryWithAI(options);
   }
+
   private async adjustReadingLevel(
     kidId: string,
     storyId: string,
