@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { KidController } from './kid.controller';
 import { KidService } from './kid.service';
 import { AuthenticatedRequest, AuthSessionGuard } from '../auth/auth.guard';
-import { CreateKidDto, UpdateKidDto, SetKidPreferredVoiceDto } from './dto/kid.dto';
+import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { VoiceType } from '@/story/story.dto';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
@@ -12,8 +12,6 @@ const mockKidService = {
     findOne: jest.fn(),
     updateKid: jest.fn(),
     deleteKid: jest.fn(),
-    setKidPreferredVoice: jest.fn(),
-    getKidPreferredVoice: jest.fn(),
 };
 
 describe('KidController', () => {
@@ -104,38 +102,5 @@ describe('KidController', () => {
         });
     });
 
-    describe('setKidPreferredVoice', () => {
-        it('should set preferred voice', async () => {
-            const kidId = 'kid-1';
-            const dto: SetKidPreferredVoiceDto = { voiceType: 'MILO' };
-            const expectedResult = { kidId, voiceType: VoiceType.MILO };
-            service.setKidPreferredVoice.mockResolvedValue(expectedResult);
 
-            const result = await controller.setKidPreferredVoice(kidId, dto);
-            expect(result).toEqual(expectedResult);
-            expect(service.setKidPreferredVoice).toHaveBeenCalledWith(kidId, VoiceType.MILO);
-        });
-
-        it('should throw BadRequestException if voiceType is missing', async () => {
-            const dto = {} as SetKidPreferredVoiceDto;
-            await expect(controller.setKidPreferredVoice('kid-1', dto)).rejects.toThrow(BadRequestException);
-        });
-
-        it('should throw ForbiddenException if voiceType is invalid', async () => {
-            const dto = { voiceType: 'INVALID' } as SetKidPreferredVoiceDto;
-            await expect(controller.setKidPreferredVoice('kid-1', dto)).rejects.toThrow(ForbiddenException);
-        });
-    });
-
-    describe('getKidPreferredVoice', () => {
-        it('should return preferred voice', async () => {
-            const kidId = 'kid-1';
-            const expectedResult = { kidId, voiceType: VoiceType.MILO };
-            service.getKidPreferredVoice.mockResolvedValue(expectedResult);
-
-            const result = await controller.getKidPreferredVoice(kidId);
-            expect(result).toEqual(expectedResult);
-            expect(service.getKidPreferredVoice).toHaveBeenCalledWith(kidId);
-        });
-    });
 });
