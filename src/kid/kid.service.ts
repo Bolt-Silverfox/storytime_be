@@ -7,9 +7,29 @@ import { VoiceService } from '../voice/voice.service';
 export class KidService {
     constructor(private prisma: PrismaService, private voiceService: VoiceService) { }
 
+    // --- HELPER: Transforms the DB response for the Frontend ---
+    // This ensures preferredVoiceId is ALWAYS the ElevenLabs ID (if available) (frontend specified smh)
+    private transformKid(kid: any) {
+        if (!kid) return null;
+
+        let finalVoiceId = kid.preferredVoiceId;
+
+        // If we have the relation loaded, use the real ElevenLabs ID instead of our DB UUID
+        if (kid.preferredVoice && kid.preferredVoice.elevenLabsVoiceId) {
+            finalVoiceId = kid.preferredVoice.elevenLabsVoiceId;
+        }
+
+        return {
+            ...kid,
+            preferredVoiceId: finalVoiceId,
+            // We keep the preferredVoice object too, in case they need the name/url
+        };
+    }
+
     async createKid(userId: string, dto: CreateKidDto) {
         const { preferredCategoryIds, avatarId, ...data } = dto;
-        return this.prisma.kid.create({
+
+        const kid = await this.prisma.kid.create({
             data: {
                 ...data,
                 parentId: userId,
@@ -21,21 +41,27 @@ export class KidService {
             include: {
                 avatar: true,
                 preferredCategories: true,
-                preferredVoice: true, // Return voice info immediately
+                preferredVoice: true,
+                parent: { select: { id: true, name: true, email: true } },
             },
         });
+        return this.transformKid(kid);
     }
 
     async findAllByUser(userId: string) {
-        return this.prisma.kid.findMany({
+        const kids = await this.prisma.kid.findMany({
             where: { parentId: userId },
             include: {
                 avatar: true,
                 preferredCategories: true,
-                preferredVoice: true, // Frontend needs this to see elevenLabsVoiceId
+                preferredVoice: true,
+                parent: { select: { id: true, name: true, email: true } },
             },
             orderBy: { createdAt: 'desc' },
         });
+
+        // Map every kid through the transformer
+        return kids.map(k => this.transformKid(k));
     }
 
     async findOne(kidId: string, userId: string) {
@@ -44,19 +70,21 @@ export class KidService {
             include: {
                 avatar: true,
                 preferredCategories: true,
-                preferredVoice: true, // Frontend needs this
+                preferredVoice: true,
                 notificationPreferences: true,
                 activityLogs: { take: 10, orderBy: { createdAt: 'desc' } },
+                parent: { select: { id: true, name: true, email: true } },
             },
         });
 
         if (!kid) throw new NotFoundException('Kid not found');
         if (kid.parentId !== userId) throw new ForbiddenException('Access denied');
 
-        return kid;
+        return this.transformKid(kid);
     }
 
     async updateKid(kidId: string, userId: string, dto: UpdateKidDto) {
+        // 1. Verify ownership
         const kid = await this.prisma.kid.findUnique({ where: { id: kidId } });
         if (!kid || kid.parentId !== userId) {
             throw new NotFoundException('Kid not found or access denied');
@@ -64,29 +92,34 @@ export class KidService {
 
         const { preferredCategoryIds, preferredVoiceId, avatarId, ...rest } = dto;
 
+        // 2. Resolve Voice ID (Supports both UUID and ElevenLabs ID input)
         let finalVoiceId = undefined;
 
         if (preferredVoiceId) {
-            // Regex to check if it's your local DB UUID
+            // Check if input is a UUID (Internal DB ID)
             const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(preferredVoiceId);
 
             if (isUuid) {
-                // It's already in your DB
-                const voice = await this.prisma.voice.findUnique({ where: { id: preferredVoiceId } });
+                const voice = await this.prisma.voice.findUnique({
+                    where: { id: preferredVoiceId },
+                });
                 if (!voice) throw new NotFoundException('Voice not found');
                 finalVoiceId = voice.id;
             } else {
-                // It's an ElevenLabs ID -> Find or Create it
+                // If not UUID, assume it's ElevenLabs ID and find/create it
                 const voice = await this.voiceService.findOrCreateElevenLabsVoice(preferredVoiceId, userId);
                 finalVoiceId = voice.id;
             }
         }
 
-        return this.prisma.kid.update({
+        // 3. Update the Kid
+        const updatedKid = await this.prisma.kid.update({
             where: { id: kidId },
             data: {
                 ...rest,
-                avatar: avatarId ? { connect: { id: avatarId } } : undefined,
+                avatar: avatarId
+                    ? { connect: { id: avatarId } }
+                    : undefined,
                 preferredCategories: preferredCategoryIds
                     ? { set: preferredCategoryIds.map((id) => ({ id })) }
                     : undefined,
@@ -97,32 +130,47 @@ export class KidService {
             include: {
                 avatar: true,
                 preferredCategories: true,
-                preferredVoice: true, // Returns the full object with elevenLabsVoiceId
+                preferredVoice: true,
+                parent: { select: { id: true, name: true, email: true } },
             },
         });
+
+        return this.transformKid(updatedKid);
     }
 
     async deleteKid(kidId: string, userId: string) {
         const kid = await this.prisma.kid.findUnique({ where: { id: kidId } });
-        if (!kid || kid.parentId !== userId) throw new NotFoundException('Kid not found');
-        return this.prisma.kid.delete({ where: { id: kidId } });
+        if (!kid || kid.parentId !== userId) {
+            throw new NotFoundException('Kid not found or access denied');
+        }
+
+        return this.prisma.kid.delete({
+            where: { id: kidId },
+        });
     }
 
     async createKids(userId: string, dtos: CreateKidDto[]) {
-        const operations = dtos.map((dto) => {
-            const { preferredCategoryIds, avatarId, ...data } = dto;
-            return this.prisma.kid.create({
-                data: {
-                    ...data,
-                    parentId: userId,
-                    avatarId: avatarId,
-                    preferredCategories: preferredCategoryIds
-                        ? { connect: preferredCategoryIds.map((id) => ({ id })) }
-                        : undefined,
-                },
-                include: { avatar: true, preferredCategories: true, preferredVoice: true },
-            });
-        });
-        return this.prisma.$transaction(operations);
+        const parent = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!parent) throw new NotFoundException('Parent User not found');
+
+        // Execute creates in transaction
+        await this.prisma.$transaction(
+            dtos.map((dto) => {
+                const { preferredCategoryIds, avatarId, ...data } = dto;
+                return this.prisma.kid.create({
+                    data: {
+                        ...data,
+                        parentId: userId,
+                        avatarId: avatarId,
+                        preferredCategories: preferredCategoryIds
+                            ? { connect: preferredCategoryIds.map((id) => ({ id })) }
+                            : undefined,
+                    },
+                });
+            })
+        );
+
+        // Fetch them back to return full structures
+        return this.findAllByUser(userId);
     }
 }
