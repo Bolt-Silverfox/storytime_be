@@ -55,23 +55,6 @@ export class UserController {
   private readonly logger = new Logger(UserController.name);
 
   constructor(private readonly userService: UserService) {}
-
-  // ============================================================
-  //                     KID ENDPOINTS
-  // ============================================================
-  @Get('kids/:kidId')
-  @ApiOperation({ summary: 'Get kid by ID' })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({ status: 200 })
-  async getKidById(@Param('kidId') kidId: string) {
-    try {
-      return await this.userService.getKidById(kidId);
-    } catch (error) {
-      this.logger.error(`Error fetching kid ${kidId}: ${error.message}`);
-      throw error;
-    }
-  }
-
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
   // ============================================================
