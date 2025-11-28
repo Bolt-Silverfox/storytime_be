@@ -1,145 +1,258 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsBoolean,
+  IsDate,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 
 export class StoryImageDto {
   @ApiProperty()
+  @IsString()
   url: string;
+
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   caption?: string;
 }
 
 export class StoryBranchDto {
   @ApiProperty()
+  @IsString()
   prompt: string;
+
   @ApiProperty()
+  @IsString()
   optionA: string;
+
   @ApiProperty()
+  @IsString()
   optionB: string;
+
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   nextA?: string;
+
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   nextB?: string;
 }
 
 export class CreateStoryDto {
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   title: string;
 
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   description: string;
 
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   language: string;
 
   @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsString({ each: true })
   themeIds: string[];
 
   @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsString({ each: true })
   categoryIds: string[];
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   coverImageUrl?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   audioUrl?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
   isInteractive?: boolean;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
   ageMin?: number;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
   ageMax?: number;
 
   @ApiProperty({ type: [StoryImageDto], required: false })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => StoryImageDto)
   images?: StoryImageDto[];
 
   @ApiProperty({ type: [StoryBranchDto], required: false })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => StoryBranchDto)
   branches?: StoryBranchDto[];
 }
 
 export class UpdateStoryDto {
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   title?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   description?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   language?: string;
 
   @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   themeIds?: string[];
 
   @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   categoryIds?: string[];
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   coverImageUrl?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   audioUrl?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
   isInteractive?: boolean;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
   ageMin?: number;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
   ageMax?: number;
 
   @ApiProperty({ type: [StoryImageDto], required: false })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => StoryImageDto)
   images?: StoryImageDto[];
 
   @ApiProperty({ type: [StoryBranchDto], required: false })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => StoryBranchDto)
   branches?: StoryBranchDto[];
 }
 
 export class FavoriteDto {
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   kidId: string;
+
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   storyId: string;
 }
 
 export class StoryProgressDto {
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   kidId: string;
+
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   storyId: string;
+
   @ApiProperty()
+  @IsNumber()
   progress: number;
+
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
   completed?: boolean;
+
   @ApiProperty({
     required: false,
     description: 'Time spent in this specific session in seconds',
   })
+  @IsOptional()
+  @IsNumber()
   sessionTime?: number;
 }
 
 export class DailyChallengeDto {
   @ApiProperty()
+  @IsString()
   storyId: string;
+
   @ApiProperty()
+  @IsString()
   challengeDate: string;
+
   @ApiProperty()
+  @IsString()
   wordOfTheDay: string;
+
   @ApiProperty()
+  @IsString()
   meaning: string;
 }
 
 export class UploadVoiceDto {
   @ApiProperty({ description: 'Voice name', example: 'Dad Voice' })
+  @IsString()
+  @IsNotEmpty()
   name: string;
 }
 
 export class CreateElevenLabsVoiceDto {
   @ApiProperty({ description: 'Voice name', example: 'Robot Voice' })
+  @IsString()
+  @IsNotEmpty()
   name: string;
+
   @ApiProperty({ description: 'ElevenLabs Voice ID', example: 'abc123xyz' })
+  @IsString()
+  @IsNotEmpty()
   elevenLabsVoiceId: string;
 }
 
@@ -149,6 +262,7 @@ export class SetPreferredVoiceDto {
     example: 'uuid-voice-id',
   })
   @IsString()
+  @IsNotEmpty()
   voiceId: string;
 }
 
@@ -167,13 +281,17 @@ export class VoiceResponseDto {
 
 export class AssignDailyChallengeDto {
   @ApiProperty()
+  @IsString()
   kidId: string;
+
   @ApiProperty()
+  @IsString()
   challengeId: string;
 }
 
 export class CompleteDailyChallengeDto {
   @ApiProperty()
+  @IsString()
   assignmentId: string;
 }
 
@@ -194,19 +312,29 @@ export class DailyChallengeAssignmentDto {
 
 export class StartStoryPathDto {
   @ApiProperty({ description: 'Kid ID' })
+  @IsString()
   kidId: string;
+
   @ApiProperty({ description: 'Story ID' })
+  @IsString()
   storyId: string;
 }
 
 export class UpdateStoryPathDto {
   @ApiProperty({ description: 'StoryPath ID' })
+  @IsString()
   pathId: string;
+
   @ApiProperty({
     description: 'Updated path (JSON or delimited string of choices)',
   })
+  @IsString()
   path: string;
+
   @ApiProperty({ required: false, description: 'Mark as completed' })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
   completedAt?: Date;
 }
 
@@ -256,29 +384,48 @@ export class ErrorResponseDto {
   details?: any;
 }
 
+// --- THIS WAS THE MISSING PART ---
 export class GenerateStoryDto {
   @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   themes?: string[];
 
   @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   categories?: string[];
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   kidId?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   kidName?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsInt()
   ageMin?: number;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsInt()
   ageMax?: number;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   language?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   additionalContext?: string;
 }
 
@@ -302,22 +449,30 @@ export enum VoiceType {
 
 export class StoryContentAudioDto {
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   content: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsEnum(VoiceType)
   voiceType?: VoiceType;
 }
 
 export class QuestionAnswerDto {
   @ApiProperty()
+  @IsString()
   kidId: string;
 
   @ApiProperty()
+  @IsString()
   questionId: string;
 
   @ApiProperty()
+  @IsString()
   storyId: string;
 
   @ApiProperty()
+  @IsInt()
   selectedOption: number;
 }

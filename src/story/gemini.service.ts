@@ -1,4 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable, Logger, ServiceUnavailableException,
+  InternalServerErrorException
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -53,7 +56,8 @@ export class GeminiService {
       );
     }
 
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    // UPDATED: Changed model from 'gemini-1.5-flash' to 'gemini-2.5-flash'
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = this.buildPrompt(options);
 
@@ -63,7 +67,8 @@ export class GeminiService {
       const text = response.text();
 
       // Parse the JSON response
-      const story = JSON.parse(text);
+      const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+      const story = JSON.parse(cleanText);
 
       // Validate the response structure
       if (!this.validateStoryStructure(story)) {
@@ -80,7 +85,25 @@ export class GeminiService {
       };
     } catch (error) {
       this.logger.error('Failed to generate story with Gemini:', error);
-      throw error;
+
+      // 1. Check for Network/Fetch errors
+      if (error.message && (error.message.includes('fetch failed') || error.message.includes('ETIMEDOUT'))) {
+        throw new ServiceUnavailableException(
+          'We are having trouble connecting to the AI service right now. Please check your internet connection or try again in a moment.'
+        );
+      }
+
+      // 2. Check for API Overload/Rate Limits
+      if (error.status === 429 || error.status === 503) {
+        throw new ServiceUnavailableException(
+          'The AI storyteller is a bit busy right now. Please try again in 1 minute.'
+        );
+      }
+
+      // 3. Fallback for other code errors
+      throw new InternalServerErrorException(
+        'Something went wrong generating the story. Please try again.',
+      );
     }
   }
 
@@ -163,8 +186,13 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     title: string,
     description: string,
   ): Promise<string> {
-    // For now, return a placeholder image URL
-    // In production, you might integrate with an image generation service
-    return 'https://res.cloudinary.com/billmal/image/upload/v1750973099/storytime/generated_story.webp';
+    const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
+    const encodedPrompt = encodeURIComponent(imagePrompt);
+    const seed = Math.floor(Math.random() * 100000);
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&seed=${seed}`;
+
+    this.logger.log(`Generated Pollinations Image URL: ${imageUrl}`);
+
+    return imageUrl;
   }
 }
