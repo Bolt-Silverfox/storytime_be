@@ -98,6 +98,11 @@ model Kid {
   bedtimeReminder    Boolean @default(false) // "Show bedtime reminder"
   bedtimeStoriesOnly Boolean @default(false) // "Allow bedtime stories only"
 
+ storyBuddyId             String?
+ buddySelectedAt          DateTime?
+ buddyInteractions        BuddyInteraction[]
+ storyBuddy               StoryBuddy?                @relation(fields: [storyBuddyId], references: [id])
+
   // New relations
   dailyChallenges         DailyChallengeAssignment[]
   notificationPreferences NotificationPreference[]
@@ -543,4 +548,40 @@ model UserIP {
   @@unique([userId, ipAddress])
   @@index([ipAddress])
   @@map("user_ips")
+}
+
+model StoryBuddy {
+  id                String             @id @default(uuid())
+  name              String             @unique
+  displayName       String
+  description       String?
+  type              String
+  imageUrl          String
+  profileAvatarUrl  String?
+  isActive          Boolean            @default(true)
+  themeColor        String?                                
+  ageGroupMin       Int                @default(3)
+  ageGroupMax       Int                @default(12)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  buddyInteractions BuddyInteraction[]
+  kids              Kid[]
+
+  @@map("story_buddies")
+}
+
+model BuddyInteraction {
+  id              String     @id @default(uuid())
+  kidId           String
+  buddyId         String
+  interactionType String
+  context         String?
+  message         String?
+  timestamp       DateTime   @default(now())
+  buddy           StoryBuddy @relation(fields: [buddyId], references: [id])
+  kid             Kid        @relation(fields: [kidId], references: [id], onDelete: Cascade)
+
+  @@index([kidId, timestamp])
+  @@index([buddyId])
+  @@map("buddy_interactions")
 }
