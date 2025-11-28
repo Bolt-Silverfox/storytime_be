@@ -57,6 +57,8 @@ export class StoryService {
     const where: any = {};
     if (filter.theme) where.themes = { some: { id: filter.theme } };
     if (filter.category) where.categories = { some: { id: filter.category } };
+
+    // Filter by the boolean 'recommended' flag on the Story model
     if (filter.recommended !== undefined)
       where.recommended = filter.recommended;
 
@@ -65,9 +67,12 @@ export class StoryService {
     if (filter.kidId) {
       const kid = await this.prisma.kid.findUnique({
         where: { id: filter.kidId },
+        // Include preferred categories
+        include: { preferredCategories: true },
       });
 
       if (kid) {
+        // --- 1. Age / Reading Level Logic (Existing) ---
         // Prioritize Reading Level if available
         if (kid.currentReadingLevel > 0) {
           targetLevel = kid.currentReadingLevel;
@@ -85,6 +90,24 @@ export class StoryService {
             where.ageMin = { lte: age };
             where.ageMax = { gte: age };
           }
+        }
+
+        // --- 2. Recommended Category Logic ---
+        // If we want recommendations AND the kid has preferences
+        if (filter.recommended === true && kid.preferredCategories.length > 0) {
+
+          // Remove the static DB flag check. 
+          // We are switching from "Editor's Choice" to "Personalized For You"...active boys and girls
+          delete where.recommended;
+
+          const categoryIds = kid.preferredCategories.map((c) => c.id);
+
+          // Add to existing where clause (merges with Age/Level logic)
+          where.categories = {
+            some: {
+              id: { in: categoryIds },
+            },
+          };
         }
       }
     }
