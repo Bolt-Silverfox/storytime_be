@@ -115,26 +115,6 @@ export class UserService {
   }
 
   // ----------------------------------------------------------
-  // KID PROFILE
-  // ----------------------------------------------------------
-
-  // Removed: setKidPreferredVoice (handled by KidService.updateKid)
-  // Removed: getKidPreferredVoice (handled by KidService.findOne)
-
-  async getKidById(kidId: string) {
-    const kid = await prisma.kid.findUnique({
-      where: { id: kidId },
-      include: {
-        avatar: true,
-        parent: { select: { id: true, name: true, email: true } },
-      },
-    });
-
-    if (!kid) throw new NotFoundException('Kid not found');
-    return kid;
-  }
-
-  // ----------------------------------------------------------
   // PARENT PROFILE
   // ----------------------------------------------------------
 
