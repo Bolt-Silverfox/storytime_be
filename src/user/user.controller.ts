@@ -25,7 +25,6 @@ import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { UserDto } from '../auth/auth.dto';
 import { UpdateUserDto } from './dto/user.dto';
-import { VOICEID, VoiceType } from '@/story/story.dto';
 
 import { UpdateParentProfileDto } from './dto/update-parent-profile.dto';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
@@ -56,49 +55,6 @@ export class UserController {
   private readonly logger = new Logger(UserController.name);
 
   constructor(private readonly userService: UserService) {}
-
-  // ============================================================
-  //                     KID ENDPOINTS
-  // ============================================================
-  @Get('kids/:kidId')
-  @ApiOperation({ summary: 'Get kid by ID' })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({ status: 200 })
-  async getKidById(@Param('kidId') kidId: string) {
-    try {
-      return await this.userService.getKidById(kidId);
-    } catch (error) {
-      this.logger.error(`Error fetching kid ${kidId}: ${error.message}`);
-      throw error;
-    }
-  }
-
-  @Patch('kids/:kidId/voice')
-  @ApiOperation({ summary: 'Set preferred voice for a kid' })
-  @ApiParam({ name: 'kidId', type: String })
-  @ApiBody({})
-  async setKidPreferredVoice(
-    @Param('kidId') kidId: string,
-    @Body() body: any,
-  ) {
-    if (!body.voiceType) {
-      throw new BadRequestException('Voice type is required');
-    }
-    const voiceKey = body.voiceType.toUpperCase() as keyof typeof VOICEID;
-    const voiceId = VOICEID[voiceKey];
-    if (!voiceId) {
-      throw new ForbiddenException('Invalid voice type');
-    }
-    return this.userService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
-  }
-
-  @Get('kids/:kidId/voice')
-  @ApiOperation({ summary: 'Get preferred voice for a kid' })
-  @ApiParam({ name: 'kidId', type: String })
-  async getKidPreferredVoice(@Param('kidId') kidId: string) {
-    return await this.userService.getKidPreferredVoice(kidId);
-  }
-
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
   // ============================================================

@@ -3,11 +3,9 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaClient, Role } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { UserRole } from './user.controller';
 import { UpdateUserDto } from './dto/user.dto';
-import { KidVoiceDto } from '../kid/dto/kid.dto';
-import { VoiceType } from '@/story/story.dto';
 import { hashPin, verifyPinHash } from './utils/pin.util';
 import * as bcrypt from 'bcrypt';
 
@@ -39,64 +37,63 @@ export class UserService {
   }
 
   async updateUser(id: string, data: UpdateUserDto): Promise<any> {
-  const user = await prisma.user.findUnique({ where: { id } });
-  if (!user) throw new NotFoundException('User not found');
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
 
-  const updateData: any = {};
-  const profileUpdate: any = {};
+    const updateData: any = {};
+    const profileUpdate: any = {};
 
-  // -------- USER FIELDS --------
-  if (data.title !== undefined) updateData.title = data.title;
-  if (data.name !== undefined) updateData.name = data.name;
+    // -------- USER FIELDS --------
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.name !== undefined) updateData.name = data.name;
 
-  // Avatar logic
-  if (data.avatarId !== undefined) {
-    updateData.avatarId = data.avatarId;
-  } else if (data.avatarUrl !== undefined) {
-    const newAvatar = await prisma.avatar.create({
-      data: {
-        url: data.avatarUrl,
-        name: `Custom Avatar for ${id}`,
-        isSystemAvatar: false,
-      }
-    });
-    updateData.avatarId = newAvatar.id;
-  }
-
-  // -------- PROFILE FIELDS --------
-  if (data.language !== undefined) profileUpdate.language = data.language;
-  if (data.country !== undefined) profileUpdate.country = data.country;
-
-  // If nothing to update, return existing
-  if (
-    Object.keys(updateData).length === 0 &&
-    Object.keys(profileUpdate).length === 0
-  ) {
-    return this.getUser(id);
-  }
-
-  const updatedUser = await prisma.user.update({
-    where: { id },
-    data: {
-      ...updateData,
-      ...(Object.keys(profileUpdate).length > 0 && {
-        profile: {
-          upsert: {
-            create: profileUpdate,
-            update: profileUpdate,
-          },
+    // Avatar logic
+    if (data.avatarId !== undefined) {
+      updateData.avatarId = data.avatarId;
+    } else if (data.avatarUrl !== undefined) {
+      const newAvatar = await prisma.avatar.create({
+        data: {
+          url: data.avatarUrl,
+          name: `Custom Avatar for ${id}`,
+          isSystemAvatar: false,
         },
-      }),
-    },
-    include: { profile: true, kids: true, avatar: true },
-  });
+      });
+      updateData.avatarId = newAvatar.id;
+    }
 
-  return {
-    ...updatedUser,
-    numberOfKids: updatedUser.kids.length,
-  };
-}
+    // -------- PROFILE FIELDS --------
+    if (data.language !== undefined) profileUpdate.language = data.language;
+    if (data.country !== undefined) profileUpdate.country = data.country;
 
+    // If nothing to update, return existing
+    if (
+      Object.keys(updateData).length === 0 &&
+      Object.keys(profileUpdate).length === 0
+    ) {
+      return this.getUser(id);
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: {
+        ...updateData,
+        ...(Object.keys(profileUpdate).length > 0 && {
+          profile: {
+            upsert: {
+              create: profileUpdate,
+              update: profileUpdate,
+            },
+          },
+        }),
+      },
+      include: { profile: true, kids: true, avatar: true },
+    });
+
+    return {
+      ...updatedUser,
+      numberOfKids: updatedUser.kids.length,
+    };
+  }
 
   async getUserRole(id: string) {
     const u = await prisma.user.findUnique({ where: { id } });
@@ -115,62 +112,6 @@ export class UserService {
     });
 
     return { id: user.id, role: user.role };
-  }
-
-  // ----------------------------------------------------------
-  // KID PROFILE
-  // ----------------------------------------------------------
-
-  async setKidPreferredVoice(
-    kidId: string,
-    voiceType: VoiceType,
-  ): Promise<KidVoiceDto> {
-    const voice = await prisma.voice.findFirst({
-      where: { name: voiceType.toLowerCase() },
-    });
-
-    if (!voice) throw new NotFoundException('Voice not found');
-
-    const kid = await prisma.kid.update({
-      where: { id: kidId },
-      data: { preferredVoiceId: voice.id },
-    });
-
-    return {
-      kidId: kid.id,
-      voiceType,
-      preferredVoiceId: kid.preferredVoiceId!,
-    };
-  }
-
-  async getKidById(kidId: string) {
-    const kid = await prisma.kid.findUnique({
-      where: { id: kidId },
-      include: {
-        avatar: true,
-        parent: { select: { id: true, name: true, email: true } },
-      },
-    });
-
-    if (!kid) throw new NotFoundException('Kid not found');
-    return kid;
-  }
-
-  async getKidPreferredVoice(kidId: string): Promise<KidVoiceDto | null> {
-    const kid = await prisma.kid.findUnique({ where: { id: kidId } });
-
-    if (!kid || !kid.preferredVoiceId)
-      return { kidId, voiceType: VoiceType.MILO, preferredVoiceId: '' };
-
-    const voice = await prisma.voice.findUnique({
-      where: { id: kid.preferredVoiceId },
-    });
-
-    return {
-      kidId: kid.id,
-      voiceType: (voice?.name?.toUpperCase() as VoiceType) || VoiceType.MILO,
-      preferredVoiceId: kid.preferredVoiceId,
-    };
   }
 
   // ----------------------------------------------------------
@@ -207,8 +148,7 @@ export class UserService {
   }
 
   async updateAvatarForParent(userId: string, body: any) {
-    if (!body.avatarId)
-      throw new BadRequestException('avatarId is required');
+    if (!body.avatarId) throw new BadRequestException('avatarId is required');
 
     return prisma.user.update({
       where: { id: userId },
@@ -249,8 +189,7 @@ export class UserService {
 
   async verifyPin(userId: string, pin: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user?.pinHash)
-      throw new BadRequestException('No PIN is set');
+    if (!user?.pinHash) throw new BadRequestException('No PIN is set');
 
     const match = await verifyPinHash(pin, user.pinHash);
     if (!match) throw new BadRequestException('Incorrect PIN');
@@ -260,8 +199,7 @@ export class UserService {
 
   async resetPin(userId: string, oldPin: string, newPin: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user?.pinHash)
-      throw new BadRequestException('No PIN set');
+    if (!user?.pinHash) throw new BadRequestException('No PIN set');
 
     const ok = await verifyPinHash(oldPin, user.pinHash);
     if (!ok) throw new BadRequestException('Old PIN incorrect');

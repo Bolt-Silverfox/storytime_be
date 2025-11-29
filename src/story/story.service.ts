@@ -45,7 +45,7 @@ export class StoryService {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
-  ) {}
+  ) { }
 
   async getStories(filter: {
     theme?: string;
@@ -57,6 +57,8 @@ export class StoryService {
     const where: any = {};
     if (filter.theme) where.themes = { some: { id: filter.theme } };
     if (filter.category) where.categories = { some: { id: filter.category } };
+
+    // Filter by the boolean 'recommended' flag on the Story model
     if (filter.recommended !== undefined)
       where.recommended = filter.recommended;
 
@@ -65,9 +67,12 @@ export class StoryService {
     if (filter.kidId) {
       const kid = await this.prisma.kid.findUnique({
         where: { id: filter.kidId },
+        // Include preferred categories
+        include: { preferredCategories: true },
       });
 
       if (kid) {
+        // --- 1. Age / Reading Level Logic (Existing) ---
         // Prioritize Reading Level if available
         if (kid.currentReadingLevel > 0) {
           targetLevel = kid.currentReadingLevel;
@@ -85,6 +90,24 @@ export class StoryService {
             where.ageMin = { lte: age };
             where.ageMax = { gte: age };
           }
+        }
+
+        // --- 2. Recommended Category Logic ---
+        // If we want recommendations AND the kid has preferences
+        if (filter.recommended === true && kid.preferredCategories.length > 0) {
+
+          // Remove the static DB flag check. 
+          // We are switching from "Editor's Choice" to "Personalized For You"...active boys and girls
+          delete where.recommended;
+
+          const categoryIds = kid.preferredCategories.map((c) => c.id);
+
+          // Add to existing where clause (merges with Age/Level logic)
+          where.categories = {
+            some: {
+              id: { in: categoryIds },
+            },
+          };
         }
       }
     }
@@ -779,9 +802,10 @@ export class StoryService {
     themeNames?: string[],
     categoryNames?: string[],
   ) {
-    // Get kid's information
+    // 1. Get kid's information, preferred categories, AND excluded tags
     const kid = await this.prisma.kid.findUnique({
       where: { id: kidId },
+      include: { preferredCategories: true },
     });
 
     if (!kid) {
@@ -799,15 +823,21 @@ export class StoryService {
       }
     }
 
-    // Use provided themes/categories or get random ones
+    // 2. Prepare Themes
     let themes = themeNames || [];
-    let categories = categoryNames || [];
-
     if (themes.length === 0) {
       const availableThemes = await this.prisma.theme.findMany();
       const randomTheme =
         availableThemes[Math.floor(Math.random() * availableThemes.length)];
       themes = [randomTheme.name];
+    }
+
+    // 3. Prepare Categories (Merge Input + Preferences)
+    let categories = categoryNames || [];
+
+    if (kid.preferredCategories && kid.preferredCategories.length > 0) {
+      const prefCategoryNames = kid.preferredCategories.map((c) => c.name);
+      categories = [...new Set([...categories, ...prefCategoryNames])];
     }
 
     if (categories.length === 0) {
@@ -819,17 +849,33 @@ export class StoryService {
       categories = [randomCategory.name];
     }
 
+    // 4. Handle Excluded Tags
+    let contextString = '';
+    
+    if (kid.excludedTags && kid.excludedTags.length > 0) {
+      const exclusions = kid.excludedTags.join(', ');
+      // We explicitly instruct the AI to avoid these
+      contextString = `IMPORTANT: The story must strictly AVOID the following topics, themes, creatures, or elements: ${exclusions}. Ensure the content is safe and comfortable for the child regarding these exclusions.`;
+    }
+
+    // 5. Construct Options
     const options: GenerateStoryOptions = {
       theme: themes,
       category: categories,
       ageMin,
       ageMax,
-      kidName: kid.name || undefined,
+      kidName: kid.name || 'Hero',
       language: 'English',
+      additionalContext: contextString, // Pass the exclusion instruction here
     };
+
+    this.logger.log(
+      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}]. Exclusions: [${kid.excludedTags.join(', ')}]`
+    );
 
     return this.generateStoryWithAI(options);
   }
+
   private async adjustReadingLevel(
     kidId: string,
     storyId: string,

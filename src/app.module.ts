@@ -19,6 +19,8 @@ import { KidModule } from './kid/kid.module';
 import { VoiceModule } from './voice/voice.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { PaymentModule } from './payment/payment.module';
+import { StoryBuddyModule } from './story-buddy/story-buddy.module';
+import { AchievementProgressModule } from './achievement-progress/achievement-progress.module';
 
 @Module({
   imports: [
@@ -46,6 +48,8 @@ import { PaymentModule } from './payment/payment.module';
     VoiceModule,
     SubscriptionModule,
     PaymentModule,
+    StoryBuddyModule,
+    AchievementProgressModule,
   ],
 })
 export class AppModule { }
