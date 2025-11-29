@@ -802,7 +802,7 @@ export class StoryService {
     themeNames?: string[],
     categoryNames?: string[],
   ) {
-    // 1. Get kid's information AND their preferred categories
+    // 1. Get kid's information, preferred categories, AND excluded tags
     const kid = await this.prisma.kid.findUnique({
       where: { id: kidId },
       include: { preferredCategories: true },
@@ -835,36 +835,42 @@ export class StoryService {
     // 3. Prepare Categories (Merge Input + Preferences)
     let categories = categoryNames || [];
 
-    // Add kid's preferred categories if they exist
     if (kid.preferredCategories && kid.preferredCategories.length > 0) {
       const prefCategoryNames = kid.preferredCategories.map((c) => c.name);
-      // Combine arrays and remove duplicates using Set
       categories = [...new Set([...categories, ...prefCategoryNames])];
     }
 
-    // If STILL empty (no input AND no preferences), pick a random one
     if (categories.length === 0) {
       const availableCategories = await this.prisma.category.findMany();
       const randomCategory =
         availableCategories[
-        Math.floor(Math.random() * availableCategories.length)
+          Math.floor(Math.random() * availableCategories.length)
         ];
       categories = [randomCategory.name];
     }
 
-    // 4. Construct Options
+    // 4. Handle Excluded Tags
+    let contextString = '';
+    
+    if (kid.excludedTags && kid.excludedTags.length > 0) {
+      const exclusions = kid.excludedTags.join(', ');
+      // We explicitly instruct the AI to avoid these
+      contextString = `IMPORTANT: The story must strictly AVOID the following topics, themes, creatures, or elements: ${exclusions}. Ensure the content is safe and comfortable for the child regarding these exclusions.`;
+    }
+
+    // 5. Construct Options
     const options: GenerateStoryOptions = {
       theme: themes,
       category: categories,
       ageMin,
       ageMax,
-      // Priority: DB Name > Input Name (handled by controller passing ID) > 'Hero'
       kidName: kid.name || 'Hero',
       language: 'English',
+      additionalContext: contextString, // Pass the exclusion instruction here
     };
 
     this.logger.log(
-      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}], Categories: [${categories.join(', ')}]`
+      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}]. Exclusions: [${kid.excludedTags.join(', ')}]`
     );
 
     return this.generateStoryWithAI(options);
