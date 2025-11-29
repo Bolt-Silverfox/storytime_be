@@ -21,17 +21,18 @@ enum NotificationType {
 }
 
 model User {
-  id              String   @id @default(uuid())
-  email           String   @unique
+  id              String      @id @default(uuid())
+  email           String      @unique
   passwordHash    String
   title           String?
   name            String?
   avatarId        String?
-  avatar          Avatar?  @relation(fields: [avatarId], references: [id])
-  isEmailVerified Boolean  @default(false)
-  role            Role     @default(parent)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  avatar          Avatar?     @relation(fields: [avatarId], references: [id])
+  isEmailVerified Boolean     @default(false)
+  role            Role        @default(parent)
+  badges          UserBadge[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
   pinHash         String?
 
   enableBiometrics Boolean? @default(false)
@@ -98,10 +99,10 @@ model Kid {
   bedtimeReminder    Boolean @default(false) // "Show bedtime reminder"
   bedtimeStoriesOnly Boolean @default(false) // "Allow bedtime stories only"
 
- storyBuddyId             String?
- buddySelectedAt          DateTime?
- buddyInteractions        BuddyInteraction[]
- storyBuddy               StoryBuddy?                @relation(fields: [storyBuddyId], references: [id])
+  storyBuddyId      String?
+  buddySelectedAt   DateTime?
+  buddyInteractions BuddyInteraction[]
+  storyBuddy        StoryBuddy?        @relation(fields: [storyBuddyId], references: [id])
 
   // New relations
   dailyChallenges         DailyChallengeAssignment[]
@@ -412,12 +413,12 @@ model ActivityLog {
   user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   kidId       String?
   kid         Kid?     @relation(fields: [kidId], references: [id])
-  action      String   // e.g. 'story_read', 'reward_redeemed', etc.
-  status      String   // NEW: 'SUCCESS', 'FAILED', etc.
-  deviceName  String?  // NEW: e.g. 'iPhone 13'
-  deviceModel String?  // NEW: e.g. 'A2482'
-  os          String?  // NEW: e.g. 'iOS 17'
-  ipAddress   String?  // NEW: e.g. '102.89.33.110'
+  action      String // e.g. 'story_read', 'reward_redeemed', etc.
+  status      String // NEW: 'SUCCESS', 'FAILED', etc.
+  deviceName  String? // NEW: e.g. 'iPhone 13'
+  deviceModel String? // NEW: e.g. 'A2482'
+  os          String? // NEW: e.g. 'iOS 17'
+  ipAddress   String? // NEW: e.g. '102.89.33.110'
   details     String?
   createdAt   DateTime @default(now())
 
@@ -564,7 +565,7 @@ model StoryBuddy {
   imageUrl          String
   profileAvatarUrl  String?
   isActive          Boolean            @default(true)
-  themeColor        String?                                
+  themeColor        String?
   ageGroupMin       Int                @default(3)
   ageGroupMax       Int                @default(12)
   createdAt         DateTime           @default(now())
@@ -589,4 +590,38 @@ model BuddyInteraction {
   @@index([kidId, timestamp])
   @@index([buddyId])
   @@map("buddy_interactions")
+}
+
+model Badge {
+  id              String   @id @default(uuid())
+  title           String
+  description     String?
+  iconUrl         String?
+  unlockCondition String
+  badgeType       String // "count", "streak", "time", "special"
+  requiredAmount  Int      @default(1)
+  priority        Int      @default(0) // Higher = more important for preview
+  metadata        Json? // Flexible storage for badge rules
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  userBadges UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeId    String
+  badge      Badge     @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  count      Int       @default(0) // Current progress count
+  unlocked   Boolean   @default(false)
+  unlockedAt DateTime?
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+  @@index([badgeId])
+  @@map("user_badges")
 }
