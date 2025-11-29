@@ -1,22 +1,30 @@
 import { Module } from '@nestjs/common';
-import { KidProgressController } from './kid-progress.controller';
-import { KidProgressService } from './kid-progress.service';
-import { AuthModule } from '../../auth/auth.module';
-
-// submodules
+import { KidController } from './kid.controller';
+import { KidService } from './kid.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { AuthModule } from '../auth/auth.module';
+import { VoiceModule } from '../voice/voice.module';
+import { KidDownloadsModule } from './downloads/kid-downloads.module';
+import { KidThemeModule } from './theme/kid-theme.module';
+import { KidHistoryModule } from './history/kid-history.module';
+import { KidFavoritesModule } from './favorites/kid-favorites.module';
 import { KidAchievementsModule } from './achievements/kid-achievements.module';
-import { KidStreakModule } from './streak/kid-streak.module';
-import { KidOverviewModule } from './overview/kid-overview.module';
+
 
 @Module({
-  imports: [
-    AuthModule,          
-    KidAchievementsModule,
-    KidStreakModule,
-    KidOverviewModule,
-  ],
-  controllers: [KidProgressController],
-  providers: [KidProgressService],
-  exports: [KidProgressService],
+    imports: [
+      AuthModule, 
+      VoiceModule,
+      KidDownloadsModule,
+      KidThemeModule, 
+      KidFavoritesModule,
+      KidAchievementsModule,
+      KidHistoryModule,
+      VoiceModule
+
+    ],
+    controllers: [KidController],
+    providers: [KidService, PrismaService],
+    exports: [KidService],
 })
-export class KidProgressModule {}
+export class KidModule {}

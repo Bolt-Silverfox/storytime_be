@@ -1,18 +1,18 @@
 import { Controller, Get, Param, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { KidAchievementsService } from './kid-achievements.service';
-import { AuthSessionGuard, AuthenticatedRequest } from '../../auth/auth.guard';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/auth/auth.guard';
 
 @ApiTags('Kid Achievements')
 @ApiBearerAuth()
 @UseGuards(AuthSessionGuard)
-@Controller('api/v1/kids/:kidId/progress')
+@Controller('api/v1/kids/:kidId/achievements')
 export class KidAchievementsController {
   constructor(private readonly svc: KidAchievementsService) {}
 
-  @Get('badges')
-  @ApiOperation({ summary: 'List badges/achievements for a kid (age-aware)' })
+  @Get()
+  @ApiOperation({ summary: 'Get achievements / badges available to a kid (age filtered)' })
   async list(@Param('kidId') kidId: string, @Request() req: AuthenticatedRequest) {
-    return this.svc.listAchievements(kidId, req.authUserData.userId);
+    return this.svc.getKidAchievements(kidId, req.authUserData.userId);
   }
 }

@@ -1,10 +1,9 @@
-import { IsString, IsIn } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsIn } from 'class-validator';
 
 export class UpdateKidThemeDto {
-  @ApiProperty({ example: 'DARK', enum: ['LIGHT', 'DARK', 'FOREST', 'SPACE', 'PINK', 'PURPLE'] })
+  @ApiProperty({ example: 'pink', enum: ['pink', 'blue', 'purple', 'yellow'] })
   @IsString()
-  @IsIn(['LIGHT', 'DARK', 'FOREST', 'SPACE', 'PINK', 'PURPLE'])
+  @IsIn(['pink', 'blue', 'purple', 'yellow'])
   theme: string;
 }
-

@@ -79,4 +79,14 @@ export class KidController {
         return await this.kidService.getKidPreferredVoice(kidId);
     }
 
+    @Put('api/v1/kids/:kidId/profile')
+    @ApiOperation({ summary: 'Update kid base profile' })
+    async updateKidProfile(
+      @Param('kidId') kidId: string,
+      @Body() dto: UpdateKidProfileDto,
+      @Request() req: AuthenticatedRequest,
+    ) {
+      return this.kidService.updateKid(kidId, req.authUserData.userId, dto);
+    }
+
 }

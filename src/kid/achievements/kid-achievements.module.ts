@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { KidAchievementsController } from './kid-achievements.controller';
 import { KidAchievementsService } from './kid-achievements.service';
-import { AuthModule } from '../../auth/auth.module';
+import { PrismaModule } from '@/prisma/prisma.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [PrismaModule],
   controllers: [KidAchievementsController],
   providers: [KidAchievementsService],
   exports: [KidAchievementsService],

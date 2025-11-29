@@ -6,20 +6,30 @@ import { UpdateKidThemeDto } from './dto/update-kid-theme.dto';
 
 @ApiTags('Kid Theme')
 @UseGuards(AuthSessionGuard)
-@Controller('settings/kid')
+@Controller('api/v1/kids')
 export class KidThemeController {
   constructor(private svc: KidThemeService) {}
 
   @Get(':kidId/theme')
   @ApiOperation({ summary: 'Get kid theme' })
-  async get(@Param('kidId') kidId: string, @Request() req: AuthenticatedRequest) {
+  async get(
+    @Param('kidId') kidId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
     return this.svc.getTheme(kidId, req.authUserData.userId);
   }
 
   @Patch(':kidId/theme')
   @ApiOperation({ summary: 'Update kid theme' })
-  async update(@Param('kidId') kidId: string, @Body() body: UpdateKidThemeDto, @Request() req: AuthenticatedRequest) {
-    return this.svc.updateTheme(kidId, body.theme, req.authUserData.userId);
+  async update(
+    @Param('kidId') kidId: string,
+    @Body() body: UpdateKidThemeDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.svc.updateTheme(
+      kidId,
+      req.authUserData.userId,
+      body.theme,              
+    );
   }
 }
-

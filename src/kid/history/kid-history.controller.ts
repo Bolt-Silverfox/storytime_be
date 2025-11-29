@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Request, UseGuards, Delete } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { KidHistoryService } from './kid-history.service';
 import { AuthSessionGuard, AuthenticatedRequest } from '../../auth/auth.guard';
@@ -18,4 +18,28 @@ export class KidHistoryController {
   ) {
     return this.service.getKidHistory(kidId, req.authUserData.userId);
   }
+
+
+  @Delete(':storyId')
+  @ApiOperation({ summary: 'Delete a single history entry for a kid' })
+  @HttpCode(200)
+  async deleteSingle(
+    @Param('kidId') kidId: string,
+    @Param('storyId') storyId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.svc.deleteSingle(kidId, storyId, req.authUserData.userId);
+  }
+
+  @Delete()
+  @ApiOperation({ summary: 'Clear all reading history for a kid' })
+  @HttpCode(200)
+  async clearAll(
+    @Param('kidId') kidId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.svc.clearAll(kidId, req.authUserData.userId);
+  }
+
+
 }

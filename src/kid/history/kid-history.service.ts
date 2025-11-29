@@ -32,4 +32,31 @@ export class KidHistoryService {
       })),
     };
   }
+
+  /**
+   * Delete a single history entry (story progress)
+   */
+  async deleteSingle(kidId: string, storyId: string, parentId: string) {
+    await this.assertOwnership(kidId, parentId);
+
+    await this.prisma.storyProgress.deleteMany({
+      where: { kidId, storyId },
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * Clear all reading history for a kid
+   */
+  async clearAll(kidId: string, parentId: string) {
+    await this.assertOwnership(kidId, parentId);
+
+    await this.prisma.storyProgress.deleteMany({
+      where: { kidId },
+    });
+
+    return { success: true };
+  }
+
 }

@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsIn, IsString } from 'class-validator';
 
 export class KidHistoryItemDto {
   @ApiProperty()
@@ -8,19 +9,35 @@ export class KidHistoryItemDto {
   title: string;
 
   @ApiProperty()
-  coverImage: string;
+  coverImage: string | null;
 
   @ApiProperty()
   progress: number;
 
   @ApiProperty()
-  timeSpent: number;
+  totalTimeSpent: number;
 
   @ApiProperty()
   lastRead: Date;
+
+  @ApiProperty()
+  isFavorite: boolean;
+
+  @ApiProperty()
+  isDownloaded: boolean;
 }
 
 export class KidHistoryResponseDto {
   @ApiProperty({ type: [KidHistoryItemDto] })
   history: KidHistoryItemDto[];
+}
+
+export class HistoryActionDto {
+  @ApiProperty({
+    example: 'favorite',
+    enum: ['favorite', 'unfavorite', 'download', 'remove_download'],
+  })
+  @IsString()
+  @IsIn(['favorite', 'unfavorite', 'download', 'remove_download'])
+  action: 'favorite' | 'unfavorite' | 'download' | 'remove_download';
 }

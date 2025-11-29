@@ -13,7 +13,6 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
-@Injectable()
 export class UserService {
   async getUser(id: string): Promise<any> {
     const user = await prisma.user.findUnique({
@@ -40,40 +39,64 @@ export class UserService {
   }
 
   async updateUser(id: string, data: UpdateUserDto): Promise<any> {
-    const user = await prisma.user.findUnique({ where: { id } });
-    if (!user) throw new NotFoundException('User not found');
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) throw new NotFoundException('User not found');
 
-    const updateData: any = {};
-    if (data.title !== undefined) updateData.title = data.title;
-    if (data.name !== undefined) updateData.name = data.name;
-    if (data.avatarId !== undefined) updateData.avatarId = data.avatarId;
-    else if (data.avatarUrl !== undefined) updateData.avatarId = data.avatarUrl;
+  const updateData: any = {};
+  const profileUpdate: any = {};
 
-    const profileUpdate: any = {};
-    if (data.language !== undefined) profileUpdate.language = data.language;
-    if (data.country !== undefined) profileUpdate.country = data.country;
+  // -------- USER FIELDS --------
+  if (data.title !== undefined) updateData.title = data.title;
+  if (data.name !== undefined) updateData.name = data.name;
 
-    const updated = await prisma.user.update({
-      where: { id },
+  // Avatar logic
+  if (data.avatarId !== undefined) {
+    updateData.avatarId = data.avatarId;
+  } else if (data.avatarUrl !== undefined) {
+    const newAvatar = await prisma.avatar.create({
       data: {
-        ...updateData,
-        ...(Object.keys(profileUpdate).length > 0 && {
-          profile: {
-            upsert: {
-              create: profileUpdate,
-              update: profileUpdate,
-            },
-          },
-        }),
-      },
-      include: { profile: true, kids: true, avatar: true },
+        url: data.avatarUrl,
+        name: `Custom Avatar for ${id}`,
+        isSystemAvatar: false,
+      }
     });
-
-    return {
-      ...updated,
-      numberOfKids: updated.kids.length,
-    };
+    updateData.avatarId = newAvatar.id;
   }
+
+  // -------- PROFILE FIELDS --------
+  if (data.language !== undefined) profileUpdate.language = data.language;
+  if (data.country !== undefined) profileUpdate.country = data.country;
+
+  // If nothing to update, return existing
+  if (
+    Object.keys(updateData).length === 0 &&
+    Object.keys(profileUpdate).length === 0
+  ) {
+    return this.getUser(id);
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id },
+    data: {
+      ...updateData,
+      ...(Object.keys(profileUpdate).length > 0 && {
+        profile: {
+          upsert: {
+            create: profileUpdate,
+            update: profileUpdate,
+          },
+        },
+      }),
+    },
+    include: { profile: true, kids: true, avatar: true },
+  });
+
+  return {
+    ...updatedUser,
+    numberOfKids: updatedUser.kids.length,
+  };
+}
+
 
   async getUserRole(id: string) {
     const u = await prisma.user.findUnique({ where: { id } });

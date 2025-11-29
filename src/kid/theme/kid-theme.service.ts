@@ -14,18 +14,20 @@ export class KidThemeService {
 
   async getTheme(kidId: string, parentId: string) {
     await this.assertOwnership(kidId, parentId);
+
     return this.prisma.kid.findUnique({
       where: { id: kidId },
       select: { theme: true },
     });
   }
 
-  async updateTheme(kidId: string, theme: string, parentId: string) {
+  async updateTheme(kidId: string, parentId: string, theme: string) {
     await this.assertOwnership(kidId, parentId);
+
     return this.prisma.kid.update({
       where: { id: kidId },
       data: { theme },
+      select: { id: true, theme: true },
     });
   }
 }
-

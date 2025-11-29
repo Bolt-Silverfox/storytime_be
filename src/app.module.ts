@@ -17,6 +17,8 @@ import { UploadModule } from './upload/upload.module';
 import { UserModule } from './user/user.module';
 import { KidModule } from './kid/kid.module';
 import { VoiceModule } from './voice/voice.module';
+import { SubscriptionModule } from './subscription/subscription.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { VoiceModule } from './voice/voice.module';
     AgeModule,
     ReportsModule,
     VoiceModule,
+    SubscriptionModule,
+    PaymentModule,
   ],
 })
 export class AppModule { }
