@@ -39,6 +39,32 @@ export class AnalyticsService {
     return this.toActivityLogDto(log);
   }
 
+  async logActivity(params: {
+    userId?: string;
+    kidId?: string;
+    action: string;
+    status: 'SUCCESS' | 'FAILED' | string;
+    details?: string;
+    ipAddress?: string;
+    deviceName?: string;
+    deviceModel?: string;
+    os?: string;
+  }): Promise<ActivityLogDto> {
+    // Map params to DTO and call create()
+    const dto: CreateActivityLogDto = {
+      userId: params.userId,
+      kidId: params.kidId,
+      action: params.action,
+      status: params.status,
+      details: params.details,
+      ipAddress: params.ipAddress,
+      deviceName: params.deviceName,
+      deviceModel: params.deviceModel,
+      os: params.os,
+    };
+    return this.create(dto);
+  }
+
   async getForUser(userId: string): Promise<ActivityLogDto[]> {
     const logs = await prisma.activityLog.findMany({ where: { userId } });
     return logs.map((l: any) => this.toActivityLogDto(l));
