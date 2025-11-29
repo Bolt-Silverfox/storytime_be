@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { VoiceService } from '../voice/voice.service';
+import { VoiceType, VOICEID } from '@/story/story.dto';
+
 
 @Injectable()
 export class KidService {
@@ -173,4 +175,58 @@ export class KidService {
         // Fetch them back to return full structures
         return this.findAllByUser(userId);
     }
+
+    // -------------------------------------------------------------
+// SET KID PREFERRED VOICE
+// Called by PATCH /user/kids/:kidId/voice
+// -------------------------------------------------------------
+async setKidPreferredVoice(kidId: string, voiceType: string) {
+    // resolve the actual ElevenLabs ID or internal ID
+    const kid = await this.prisma.kid.findUnique({
+        where: { id: kidId },
+        include: { preferredVoice: true },
+    });
+
+    if (!kid) throw new NotFoundException('Kid not found');
+
+    // voiceType is a KEY like "MALE", "FEMALE", "ROBOT", etc.
+    const voiceId = VOICEID[voiceType as keyof typeof VOICEID];
+
+    if (!voiceId) {
+        throw new ForbiddenException('Invalid voice type');
+    }
+
+    // Update DB
+    const updatedKid = await this.prisma.kid.update({
+        where: { id: kidId },
+        data: { preferredVoiceId: voiceId },
+        include: { preferredVoice: true },
+    });
+
+    return {
+        kidId: updatedKid.id,
+        voiceId: updatedKid.preferredVoiceId,
+        voiceName: updatedKid.preferredVoice?.name ?? null,
+    };
+}
+
+// -------------------------------------------------------------
+// GET KID PREFERRED VOICE
+// Called by GET /user/kids/:kidId/voice
+// -------------------------------------------------------------
+    async getKidPreferredVoice(kidId: string) {
+        const kid = await this.prisma.kid.findUnique({
+            where: { id: kidId },
+            include: { preferredVoice: true },
+        });
+
+        if (!kid) throw new NotFoundException('Kid not found');
+
+        return {
+            kidId: kid.id,
+            voiceId: kid.preferredVoiceId,
+            voiceName: kid.preferredVoice?.name ?? null,
+        };
+    }
+
 }
