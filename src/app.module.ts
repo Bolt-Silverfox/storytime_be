@@ -21,6 +21,10 @@ import { CloudinaryModule } from './upload/cloudinary.module';
 import { UploadModule } from './upload/upload.module';
 import { UserModule } from './user/user.module';
 import { VoiceModule } from './voice/voice.module';
+import { SubscriptionModule } from './subscription/subscription.module';
+import { PaymentModule } from './payment/payment.module';
+import { StoryBuddyModule } from './story-buddy/story-buddy.module';
+import { AchievementProgressModule } from './achievement-progress/achievement-progress.module';
 
 @Module({
   imports: [
@@ -50,6 +54,7 @@ import { VoiceModule } from './voice/voice.module';
     PaymentModule,
     StoryBuddyModule,
     HelpSupportModule,
+    AchievementProgressModule,
   ],
 })
 export class AppModule {}
