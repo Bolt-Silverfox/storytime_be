@@ -73,7 +73,7 @@ export class AuthController {
     return this.authService.register(body);
   }
 
-  @Post('logout')
+  /*@Post('logout')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Logout from current session' })
@@ -84,7 +84,7 @@ export class AuthController {
       throw new UnauthorizedException('Invalid token');
     }
     return this.authService.logout(sessionId);
-  }
+  }*/
 
   @Post('logout-all')
   @UseGuards(AuthSessionGuard)
@@ -205,4 +205,28 @@ export class AuthController {
       )}&refresh=${encodeURIComponent(result.refreshToken)}`
     );
   }
+
+
+  // Logs out the user by deleting the current session record.
+  // This invalidates the JWT because the token is tied to the session ID.
+  // Once the session is removed, any further requests using the old token will be rejected.
+
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Logout (invalidate token immediately)' })
+  @ApiResponse({ status: 200, description: 'Logged out successfully.' })
+  async logout(@Req() req: Request) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer '))
+      throw new UnauthorizedException('Missing Authorization header');
+
+    const token = authHeader.replace('Bearer ', '');
+
+    return this.authService.logoutWithToken(token);
+  }
+
+
 }

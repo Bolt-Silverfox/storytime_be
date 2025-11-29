@@ -12,6 +12,8 @@ import {
   BadRequestException,
   Logger,
   Post,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -60,6 +62,7 @@ export class UserController {
   // ============================================================
 
   @Get('me')
+  @HttpCode(200)
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
@@ -70,6 +73,7 @@ export class UserController {
   }
 
   @Patch('me')
+  @HttpCode(200)
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update parent profile' })
@@ -78,6 +82,7 @@ export class UserController {
   }
 
   @Post('me/avatar')
+  @HttpCode(200)
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update parent avatar' })
@@ -86,6 +91,7 @@ export class UserController {
   }
 
   @Post('me/biometrics')
+  @HttpCode(200)
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Enable or disable biometrics' })
@@ -94,6 +100,7 @@ export class UserController {
   }
 
   @Post('me/pin')
+  @HttpCode(200)
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Set or update PIN' })
@@ -102,6 +109,7 @@ export class UserController {
   }
 
   @Post('me/pin/verify')
+  @HttpCode(200)
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Verify PIN' })
@@ -110,6 +118,7 @@ export class UserController {
   }
 
   @Post('me/pin/reset')
+  @HttpCode(200)
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Reset existing PIN' })
@@ -124,7 +133,9 @@ export class UserController {
     );
   }
 
+  
   @Delete('me')
+  @HttpCode(200)
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete my account' })
@@ -133,6 +144,7 @@ export class UserController {
   }
 
   @Post('me/delete')
+  @HttpCode(200)
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Request account deletion (verify password + reasons)' })

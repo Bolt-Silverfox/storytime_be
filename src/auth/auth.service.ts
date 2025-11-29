@@ -659,6 +659,33 @@ export class AuthService {
     user: userDto,
     jwt: tokenData.jwt,
     refreshToken: tokenData.refreshToken,
-  };
+    };
+  }
+
+
+  // Logout using Bearer JWT token — recommended for API clients
+async logoutWithToken(token: string) {
+  try {
+    const hashed = this.hashToken(token);
+
+    const session = await this.prisma.session.findUnique({
+      where: { token: hashed },
+    });
+
+    if (!session) {
+      return { success: false, message: 'Session already invalid or not found' };
+    }
+
+    await this.prisma.session.delete({
+      where: { id: session.id },
+    });
+
+    return { success: true, message: 'Logged out successfully' };
+  } catch (error) {
+    this.logger.error('Error during logoutWithToken:', error);
+    throw new BadRequestException('Logout failed');
+  }
 }
+
+
 }
