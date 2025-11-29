@@ -1,4 +1,12 @@
-import { Controller, Get, Param, Request, UseGuards, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Request,
+  UseGuards,
+  Delete,
+  HttpCode,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { KidHistoryService } from './kid-history.service';
 import { AuthSessionGuard, AuthenticatedRequest } from '../../auth/auth.guard';
@@ -19,7 +27,6 @@ export class KidHistoryController {
     return this.service.getKidHistory(kidId, req.authUserData.userId);
   }
 
-
   @Delete(':storyId')
   @ApiOperation({ summary: 'Delete a single history entry for a kid' })
   @HttpCode(200)
@@ -28,7 +35,7 @@ export class KidHistoryController {
     @Param('storyId') storyId: string,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.svc.deleteSingle(kidId, storyId, req.authUserData.userId);
+    return this.service.deleteSingle(kidId, storyId, req.authUserData.userId);
   }
 
   @Delete()
@@ -38,8 +45,6 @@ export class KidHistoryController {
     @Param('kidId') kidId: string,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.svc.clearAll(kidId, req.authUserData.userId);
+    return this.service.clearAll(kidId, req.authUserData.userId);
   }
-
-
 }

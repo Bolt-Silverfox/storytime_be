@@ -4,6 +4,7 @@ import { KidService } from './kid.service';
 import { CreateKidDto, UpdateKidDto, SetKidPreferredVoiceDto, KidVoiceDto } from './dto/kid.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { VoiceType, VOICEID } from '@/story/story.dto';
+import { UpdateKidProfileDto } from './dto/update-kid-profile.dto';
 
 @ApiTags('Kids Management')
 @ApiBearerAuth()

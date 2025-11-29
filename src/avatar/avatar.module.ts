@@ -7,7 +7,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryModule } from '../upload/cloudinary.module';
 import { UploadService } from '../upload/upload.service';
 import { AuthModule } from '../auth/auth.module'; 
-import { KidAvatarModule } from '../kid/avatar/kid-avatar.module';
+import { KidAvatarModule } from './kid-avatar/kid-avatar.module';
+
 
 @Module({
   imports: [

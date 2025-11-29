@@ -85,7 +85,8 @@ export class KidAchievementsService {
 
   async getKidAchievements(kidId: string, parentId: string) {
     const kid = await this.assertOwnership(kidId, parentId);
-    const age = this.parseAge(kid.ageRange) ?? null; // may be null
+    const age = this.parseAge(kid.ageRange ?? undefined);
+
 
     // Fetch stats from DB
     const [storyProgresses, downloadsCount, favoritesCount, questionsCount, challengesCount] =

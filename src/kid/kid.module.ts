@@ -9,6 +9,7 @@ import { KidThemeModule } from './theme/kid-theme.module';
 import { KidHistoryModule } from './history/kid-history.module';
 import { KidFavoritesModule } from './favorites/kid-favorites.module';
 import { KidAchievementsModule } from './achievements/kid-achievements.module';
+import { AvatarModule } from '@/avatar/avatar.module';
 
 
 @Module({
@@ -20,7 +21,8 @@ import { KidAchievementsModule } from './achievements/kid-achievements.module';
       KidFavoritesModule,
       KidAchievementsModule,
       KidHistoryModule,
-      VoiceModule
+      VoiceModule,
+      AvatarModule,
 
     ],
     controllers: [KidController],

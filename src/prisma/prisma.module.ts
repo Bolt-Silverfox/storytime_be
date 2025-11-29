@@ -1,18 +1,11 @@
-import { Module } from '@nestjs/common';
-import { KidController } from './kid.controller';
-import { KidService } from './kid.service';
+import { Global, Module } from '@nestjs/common';
+import { PrismaService } from './prisma.service';
 import { AuthModule } from '../auth/auth.module';
-import { KidDownloadsModule } from './downloads/kid-downloads.module';
-import { KidThemeModule } from './theme/kid-theme.module';
 
+@Global()
 @Module({
-  imports: [
-    AuthModule,
-    KidDownloadsModule,
-    KidThemeModule,
-  ],
-  controllers: [KidController],
-  providers: [KidService],
-  exports: [KidService],
+  imports: [AuthModule],
+  providers: [PrismaService],
+  exports: [PrismaService],
 })
-export class KidModule {}
+export class PrismaModule {}

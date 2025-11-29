@@ -18,7 +18,7 @@ export class KidAvatarService {
     return {
       kidId: kid.id,
       avatar: kid.avatar,
-      avatarUrl: kid.avatar?.url ?? kid.avatarUrl ?? null,
+      avatarUrl: kid.avatar?.url ?? null,
     };
   }
 

@@ -16,18 +16,26 @@ export class KidHistoryService {
     await this.assertOwnership(kidId, parentId);
 
     const progress = await this.prisma.storyProgress.findMany({
-      where: { userId: parentId, kidId },
-      include: { story: true },
+      where: { kidId },
       orderBy: { lastAccessed: 'desc' },
+      include: {
+        story: {
+          select: {
+            id: true,
+            title: true,
+            coverImageUrl: true,
+          },
+        },
+      },
     });
 
     return {
       history: progress.map((p) => ({
         storyId: p.storyId,
-        title: p.story.title,
-        coverImage: p.story.coverImageUrl,
+        title: p.story?.title ?? null,
+        coverImage: p.story?.coverImageUrl ?? null,
         progress: p.progress,
-        timeSpent: p.details ? Number(p.details) : 0,
+        timeSpent: p.totalTimeSpent ?? 0,
         lastRead: p.lastAccessed,
       })),
     };
@@ -58,5 +66,4 @@ export class KidHistoryService {
 
     return { success: true };
   }
-
 }
