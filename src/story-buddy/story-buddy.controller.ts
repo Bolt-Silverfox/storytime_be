@@ -633,6 +633,12 @@ export class StoryBuddyController {
     description: 'Story Buddy ID',
     example: 'buddy-123-uuid',
   })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the story buddy (default: false - soft delete)'
+  })
   @ApiResponse({
     status: 200,
     description: 'Story buddy deleted successfully',
@@ -660,9 +666,58 @@ export class StoryBuddyController {
     status: 404,
     description: 'Story buddy not found',
   })
-  async deleteBuddy(@Param('id') id: string) {
-    await this.storyBuddyService.deleteBuddy(id);
+  async deleteBuddy(
+    @Param('id') id: string,
+    @Query('permanent') permanent: boolean = false
+  ) {
+    await this.storyBuddyService.deleteBuddy(id, permanent);
     return new SuccessResponse(200, null, 'Story buddy deleted successfully');
+  }
+
+  @Post(':id/undo-delete')
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: 'Restore soft deleted story buddy (Admin)',
+    description: 'Restore a soft deleted story buddy. Admin access required.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Story Buddy ID',
+    example: 'buddy-123-uuid',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Story buddy restored successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'Story buddy restored successfully',
+        data: {
+          id: 'buddy-123-uuid',
+          name: 'lumina',
+          displayName: 'Lumina',
+          isActive: true,
+          isDeleted: false,
+          deletedAt: null,
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Admin access required',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Story buddy not found',
+  })
+  async undoDeleteBuddy(@Param('id') id: string) {
+    const buddy = await this.storyBuddyService.undoDeleteBuddy(id);
+    return new SuccessResponse(200, buddy, 'Story buddy restored successfully');
   }
 
   @Get('admin/stats')

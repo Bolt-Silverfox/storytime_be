@@ -9,7 +9,6 @@ import { validateEnv } from './config/env.validation';
 import { HelpSupportModule } from './help-support/help-support.module';
 import { KidModule } from './kid/kid.module';
 import { NotificationModule } from './notification/notification.module';
-import { PaymentModule } from './payment/payment.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReportsModule } from './reports/reports.module';
 import { RewardModule } from './reward/reward.module';
@@ -21,6 +20,7 @@ import { CloudinaryModule } from './upload/cloudinary.module';
 import { UploadModule } from './upload/upload.module';
 import { UserModule } from './user/user.module';
 import { VoiceModule } from './voice/voice.module';
+import { PaymentModule } from './payment/payment.module';
 import { AchievementProgressModule } from './achievement-progress/achievement-progress.module';
 
 @Module({
