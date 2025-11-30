@@ -28,6 +28,7 @@ export class StoryBuddyService {
     return await this.prisma.storyBuddy.findMany({
       where: {
         isActive: true,
+        isDeleted: false, // EXCLUDE SOFT DELETED BUDDIES
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -38,6 +39,9 @@ export class StoryBuddyService {
    */
   async getAllBuddies() {
     return await this.prisma.storyBuddy.findMany({
+      where: {
+        isDeleted: false, // EXCLUDE SOFT DELETED BUDDIES
+      },
       orderBy: { createdAt: 'asc' },
       include: {
         _count: {
@@ -55,7 +59,10 @@ export class StoryBuddyService {
    */
   async getBuddyById(buddyId: string) {
     const buddy = await this.prisma.storyBuddy.findUnique({
-      where: { id: buddyId },
+      where: { 
+        id: buddyId,
+        isDeleted: false // EXCLUDE SOFT DELETED BUDDIES
+      },
       include: {
         _count: {
           select: {
@@ -80,9 +87,12 @@ export class StoryBuddyService {
     createDto: CreateStoryBuddyDto,
     file?: Express.Multer.File,
   ) {
-    // Check if buddy with same name already exists
-    const existingBuddy = await this.prisma.storyBuddy.findUnique({
-      where: { name: createDto.name.toLowerCase() },
+    // Check if buddy with same name already exists (including soft deleted)
+    const existingBuddy = await this.prisma.storyBuddy.findFirst({
+      where: { 
+        name: createDto.name.toLowerCase(),
+        isDeleted: false // ONLY CHECK NON-DELETED BUDDIES
+      },
     });
 
     if (existingBuddy) {
@@ -201,13 +211,18 @@ export class StoryBuddyService {
 
   /**
    * Delete story buddy (admin only)
+   * @param buddyId Story buddy ID
+   * @param permanent Whether to permanently delete (default: false)
    */
-  async deleteBuddy(buddyId: string) {
+  async deleteBuddy(buddyId: string, permanent: boolean = false) {
     const buddy = await this.getBuddyById(buddyId);
 
     // Check if any kids are using this buddy
     const kidsCount = await this.prisma.kid.count({
-      where: { storyBuddyId: buddyId },
+      where: { 
+        storyBuddyId: buddyId,
+        isDeleted: false // ONLY COUNT NON-DELETED KIDS
+      },
     });
 
     if (kidsCount > 0) {
@@ -216,22 +231,59 @@ export class StoryBuddyService {
       );
     }
 
-    // Delete associated image if it was uploaded
-    if (buddy.imageUrl && this.isCloudinaryImage(buddy.imageUrl)) {
-      try {
-        await this.deleteStoryBuddyImage(buddy.imageUrl);
-      } catch (error) {
-        this.logger.warn('Failed to delete story buddy image:', error);
+    if (permanent) {
+      // Delete associated image if it was uploaded
+      if (buddy.imageUrl && this.isCloudinaryImage(buddy.imageUrl)) {
+        try {
+          await this.deleteStoryBuddyImage(buddy.imageUrl);
+        } catch (error) {
+          this.logger.warn('Failed to delete story buddy image:', error);
+        }
       }
-    }
 
-    // Delete all associated interactions
-    await this.prisma.buddyInteraction.deleteMany({
-      where: { buddyId },
+      // Delete all associated interactions
+      await this.prisma.buddyInteraction.deleteMany({
+        where: { buddyId },
+      });
+
+      return await this.prisma.storyBuddy.delete({
+        where: { id: buddyId },
+      });
+    } else {
+      // Soft delete
+      return await this.prisma.storyBuddy.update({
+        where: { id: buddyId },
+        data: { 
+          isDeleted: true, 
+          deletedAt: new Date() 
+        },
+      });
+    }
+  }
+
+  /**
+   * Restore a soft deleted story buddy (admin only)
+   * @param buddyId Story buddy ID
+   */
+  async undoDeleteBuddy(buddyId: string) {
+    const buddy = await this.prisma.storyBuddy.findUnique({
+      where: { id: buddyId },
     });
 
-    return await this.prisma.storyBuddy.delete({
+    if (!buddy) {
+      throw new NotFoundException('Story buddy not found');
+    }
+
+    if (!buddy.isDeleted) {
+      throw new BadRequestException('Story buddy is not deleted');
+    }
+
+    return await this.prisma.storyBuddy.update({
       where: { id: buddyId },
+      data: { 
+        isDeleted: false, 
+        deletedAt: null 
+      },
     });
   }
 
@@ -239,18 +291,24 @@ export class StoryBuddyService {
    * Select a story buddy for a kid
    */
   async selectBuddyForKid(kidId: string, buddyId: string) {
-    // Verify kid exists
+    // Verify kid exists and is not soft deleted
     const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT SELECT BUDDY FOR SOFT DELETED KIDS
+      },
     });
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
     }
 
-    // Verify buddy exists and is active
+    // Verify buddy exists, is active, and not soft deleted
     const buddy = await this.prisma.storyBuddy.findUnique({
-      where: { id: buddyId },
+      where: { 
+        id: buddyId,
+        isDeleted: false // CANNOT SELECT SOFT DELETED BUDDIES
+      },
     });
 
     if (!buddy) {
@@ -301,7 +359,10 @@ export class StoryBuddyService {
    */
   async getBuddyWelcome(kidId: string) {
     const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT GET WELCOME FOR SOFT DELETED KIDS
+      },
       include: {
         storyBuddy: {
           select: {
@@ -357,7 +418,10 @@ export class StoryBuddyService {
     message?: string,
   ) {
     const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT GET MESSAGE FOR SOFT DELETED KIDS
+      },
       include: {
         storyBuddy: {
           select: {
@@ -388,7 +452,10 @@ export class StoryBuddyService {
       switch (context) {
         case 'challenge':
           const challenge = await this.prisma.dailyChallenge.findUnique({
-            where: { id: contextId },
+            where: { 
+              id: contextId,
+              isDeleted: false // ONLY USE NON-DELETED CHALLENGES
+            },
             select: { wordOfTheDay: true, meaning: true },
           });
           if (challenge) {
@@ -402,7 +469,10 @@ export class StoryBuddyService {
         case 'story_start':
         case 'story_complete':
           const story = await this.prisma.story.findUnique({
-            where: { id: contextId },
+            where: { 
+              id: contextId,
+              isDeleted: false // ONLY USE NON-DELETED STORIES
+            },
             select: { title: true },
           });
           if (story) {
@@ -465,7 +535,10 @@ export class StoryBuddyService {
    */
   async getKidCurrentBuddy(kidId: string) {
     const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT GET BUDDY FOR SOFT DELETED KIDS
+      },
       include: {
         storyBuddy: {
           select: {
@@ -498,6 +571,9 @@ export class StoryBuddyService {
    */
   async getBuddyStats() {
     const buddies = await this.prisma.storyBuddy.findMany({
+      where: {
+        isDeleted: false, // ONLY COUNT NON-DELETED BUDDIES
+      },
       include: {
         _count: {
           select: {
@@ -508,9 +584,17 @@ export class StoryBuddyService {
       },
     });
 
-    const totalInteractions = await this.prisma.buddyInteraction.count();
+    const totalInteractions = await this.prisma.buddyInteraction.count({
+      where: {
+        isDeleted: false, // ONLY COUNT NON-DELETED INTERACTIONS
+      },
+    });
+
     const totalKidsWithBuddies = await this.prisma.kid.count({
-      where: { storyBuddyId: { not: null } },
+      where: { 
+        storyBuddyId: { not: null },
+        isDeleted: false // ONLY COUNT NON-DELETED KIDS
+      },
     });
 
     return {

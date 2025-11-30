@@ -32,6 +32,7 @@ export class AgeService {
     const conflict = await this.prisma.ageGroup.findFirst({
       where: {
         id: excludeId ? { not: excludeId } : undefined,
+        isDeleted: false, // ONLY CHECK NON-DELETED AGE GROUPS
         OR: [
           // A overlaps B if A.min <= B.max AND A.max >= B.min
           { min: { lte: max }, max: { gte: min } },
@@ -52,12 +53,20 @@ export class AgeService {
 
   async findAll() {
     return this.prisma.ageGroup.findMany({
+      where: {
+        isDeleted: false, // EXCLUDE SOFT DELETED AGE GROUPS
+      },
       orderBy: { min: 'asc' },
     });
   }
 
   async findOne(id: string) {
-    const ageGroup = await this.prisma.ageGroup.findUnique({ where: { id } });
+    const ageGroup = await this.prisma.ageGroup.findUnique({ 
+      where: { 
+        id,
+        isDeleted: false // EXCLUDE SOFT DELETED AGE GROUPS
+      } 
+    });
     if (!ageGroup) throw new NotFoundException('Age group not found');
     return ageGroup;
   }
@@ -70,7 +79,12 @@ export class AgeService {
   }
 
   async update(id: string, data: UpdateAgeDto) {
-    const exists = await this.prisma.ageGroup.findUnique({ where: { id } });
+    const exists = await this.prisma.ageGroup.findUnique({ 
+      where: { 
+        id,
+        isDeleted: false // CANNOT UPDATE SOFT DELETED AGE GROUPS
+      } 
+    });
     if (!exists) throw new NotFoundException('Age group not found');
 
     const min = data.min ?? exists.min;
@@ -85,11 +99,51 @@ export class AgeService {
     });
   }
 
-  async delete(id: string) {
-    const exists = await this.prisma.ageGroup.findUnique({ where: { id } });
+  /**
+   * Soft delete or permanently delete an age group
+   * @param id Age group ID
+   * @param permanent Whether to permanently delete (default: false)
+   */
+  async delete(id: string, permanent: boolean = false) {
+    const exists = await this.prisma.ageGroup.findUnique({ 
+      where: { 
+        id,
+        isDeleted: false // CANNOT DELETE ALREADY DELETED AGE GROUPS
+      } 
+    });
     if (!exists) throw new NotFoundException('Age group not found');
 
-    return this.prisma.ageGroup.delete({ where: { id } });
+    if (permanent) {
+      return this.prisma.ageGroup.delete({ where: { id } });
+    } else {
+      return this.prisma.ageGroup.update({
+        where: { id },
+        data: { 
+          isDeleted: true, 
+          deletedAt: new Date() 
+        },
+      });
+    }
+  }
+
+  /**
+   * Restore a soft deleted age group
+   * @param id Age group ID
+   */
+  async undoDelete(id: string) {
+    const ageGroup = await this.prisma.ageGroup.findUnique({ 
+      where: { id } 
+    });
+    if (!ageGroup) throw new NotFoundException('Age group not found');
+    if (!ageGroup.isDeleted) throw new BadRequestException('Age group is not deleted');
+
+    return this.prisma.ageGroup.update({
+      where: { id },
+      data: { 
+        isDeleted: false, 
+        deletedAt: null 
+      },
+    });
   }
 
   /* ----------------------------------------
@@ -101,6 +155,7 @@ export class AgeService {
       where: {
         min: { lte: age },
         max: { gte: age },
+        isDeleted: false, // ONLY USE NON-DELETED AGE GROUPS
       },
     });
 

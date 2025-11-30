@@ -97,9 +97,29 @@ export class AgeController {
   @ApiBearerAuth()
   @Delete(':id')
   @ApiOperation({ summary: 'Delete an age group (Admin only)' })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the age group (default: false - soft delete)'
+  })
   @ApiResponse({ status: 200, description: 'Age group deleted successfully.' })
   @ApiNotFoundResponse({ description: 'Age group not found.' })
-  remove(@Param('id') id: string) {
-    return this.ageService.delete(id);
+  remove(
+    @Param('id') id: string,
+    @Query('permanent') permanent: boolean = false
+  ) {
+    return this.ageService.delete(id, permanent);
+  }
+
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth()
+  @Post(':id/undo-delete')
+  @ApiOperation({ summary: 'Restore a soft deleted age group (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Age group restored successfully.' })
+  @ApiNotFoundResponse({ description: 'Age group not found.' })
+  @ApiBadRequestResponse({ description: 'Age group is not deleted.' })
+  undoDelete(@Param('id') id: string) {
+    return this.ageService.undoDelete(id);
   }
 }
