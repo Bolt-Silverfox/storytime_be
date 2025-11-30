@@ -11,6 +11,10 @@ export class TextToSpeechService {
   private cloudinaryApiSecret: string;
   private cloudinaryCloudName: string;
 
+  // ADDED: Retry limit and default fallback voice
+  private readonly maxRetries = 3; // maximum retry attempts
+  private readonly defaultVoice = VOICEID[VoiceType.MILO]; // fallback default voice
+
   constructor(
     private readonly configService: ConfigService,
     private readonly uploadService: UploadService,
@@ -46,22 +50,44 @@ export class TextToSpeechService {
     text: string,
     voicetype?: VoiceType,
   ): Promise<string> {
-    try {
-      const audioBuffer = await this.getElevenLabsAudio(
-        text,
-        VOICEID[voicetype ?? VoiceType.MILO],
-      );
+    const voiceId = VOICEID[voicetype ?? VoiceType.MILO]; // ADDED: Determine voice ID
 
-      const cloudUrl = await this.uploadService.uploadAudioBuffer(
-        audioBuffer,
-        `story_${textId}_${voicetype}_${Date.now()}.mp3`,
-      );
+    let audioBuffer: Buffer | null = null; // ADDED: Will store TTS audio
 
-      return cloudUrl;
-    } catch (error) {
-      console.error(error);
-      throw new InternalServerErrorException('Text-to-speech failed');
+    // ADDED: Retry logic
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        audioBuffer = await this.getElevenLabsAudio(text, voiceId);
+        break; // success, exit loop
+      } catch (error) {
+        console.error(
+          `TTS attempt ${attempt} failed for voice ${voiceId}:`,
+          error,
+        ); // ✅ ADDED structured logging
+
+        if (attempt === this.maxRetries) {
+          console.warn('All TTS retries failed, falling back to default voice'); // ✅ ADDED fallback log
+          try {
+            audioBuffer = await this.getElevenLabsAudio(
+              text,
+              this.defaultVoice,
+            ); // ✅ ADDED fallback to default voice
+          } catch (fallbackError) {
+            console.error('Fallback TTS also failed:', fallbackError); // ✅ ADDED
+            throw new InternalServerErrorException(
+              'Text-to-speech failed after retries',
+            ); // ✅ ADDED proper exception
+          }
+        }
+      }
     }
+
+    const cloudUrl = await this.uploadService.uploadAudioBuffer(
+      audioBuffer!, // ✅ ADDED: ensured buffer is not null
+      `story_${textId}_${voicetype}_${Date.now()}.mp3`,
+    );
+
+    return cloudUrl;
   }
 
   private async getElevenLabsAudio(
