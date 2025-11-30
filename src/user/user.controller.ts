@@ -1,3 +1,4 @@
+// src/user/user.controller.ts
 import {
   Controller,
   Get,
@@ -12,6 +13,7 @@ import {
   BadRequestException,
   Logger,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,6 +22,7 @@ import {
   ApiParam,
   ApiBody,
   ApiBearerAuth,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
@@ -128,24 +131,99 @@ export class UserController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete my account' })
-  async deleteMe(@Req() req: any) {
-    return this.userService.deleteUserAccount(req.authUserData.userId);
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the account (default: false - soft delete)'
+  })
+  async deleteMe(
+    @Req() req: any,
+    @Query('permanent') permanent: boolean = false
+  ) {
+    return this.userService.deleteUserAccount(req.authUserData.userId, permanent);
   }
 
   @Post('me/delete')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Request account deletion (verify password + reasons)' })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the account (default: false - soft delete)'
+  })
   async deleteAccountWithConfirmation(
     @Req() req: any,
     @Body() body: DeleteAccountDto,
+    @Query('permanent') permanent: boolean = false
   ) {
     return this.userService.deleteAccountWithConfirmation(
       req.authUserData.userId,
       body.password,
       body.reasons,
       body.notes,
+      permanent
     );
+  }
+
+  @Post('me/undo-delete')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'Restore my soft deleted account',
+    description: 'Restore your own soft deleted account. Only works if your account was soft deleted.'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Account restored successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'Your account has been restored successfully',
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          name: 'John Doe',
+          isDeleted: false,
+          deletedAt: null,
+          createdAt: '2023-10-01T12:00:00Z',
+          updatedAt: '2023-10-02T10:30:00Z'
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Account is not deleted or cannot be restored',
+    schema: {
+      example: {
+        statusCode: 400,
+        message: 'Your account is not deleted',
+        error: 'Bad Request'
+      }
+    }
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Account not found',
+    schema: {
+      example: {
+        statusCode: 404,
+        message: 'User not found',
+        error: 'Not Found'
+      }
+    }
+  })
+  async undoDeleteMyAccount(@Req() req: any) {
+    const restoredUser = await this.userService.undoDeleteMyAccount(req.authUserData.userId);
+    
+    return {
+      statusCode: 200,
+      message: 'Your account has been restored successfully',
+      data: restoredUser
+    };
   }
 
   // ============================================================
@@ -155,12 +233,29 @@ export class UserController {
   @Get()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all users (admin only)' })
+  @ApiOperation({ 
+    summary: 'List all users (admin only)',
+    description: 'Admins can see all users including both active and soft deleted users'
+  })
   async getAllUsers(@Req() req: any) {
     if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
     }
     return await this.userService.getAllUsers();
+  }
+
+  @Get('active')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'List only active users (admin only)',
+    description: 'Get only active (non-deleted) users'
+  })
+  async getActiveUsers(@Req() req: any) {
+    if (req.authUserData.userRole !== 'admin') {
+      throw new ForbiddenException('Admins only');
+    }
+    return await this.userService.getActiveUsers();
   }
 
   @Get(':id')
@@ -180,8 +275,57 @@ export class UserController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete user account' })
-  async deleteUserAccount(@Param('id') id: string) {
-    return await this.userService.deleteUserAccount(id);
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the account (default: false - soft delete)'
+  })
+  async deleteUserAccount(
+    @Param('id') id: string,
+    @Query('permanent') permanent: boolean = false
+  ) {
+    return await this.userService.deleteUserAccount(id, permanent);
+  }
+
+  @Post(':id/undo-delete')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Restore soft deleted user account (admin only)' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({
+    status: 200,
+    description: 'User restored successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'User restored successfully',
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          name: 'John Doe',
+          isDeleted: false,
+          deletedAt: null,
+          // ... other user fields
+        }
+      }
+    }
+  })
+  async undoDeleteUser(
+    @Param('id') id: string,
+    @Req() req: any
+  ) {
+    if (req.authUserData.userRole !== 'admin') {
+      throw new ForbiddenException('Admins only');
+    }
+
+    const restoredUser = await this.userService.undoDeleteUser(id);
+    
+    return {
+      statusCode: 200,
+      message: 'User restored successfully',
+      data: restoredUser
+    };
   }
 
   @Get(':id/role')

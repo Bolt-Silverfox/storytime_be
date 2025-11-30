@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, ParseArrayPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, ParseArrayPipe, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { KidService } from './kid.service';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
@@ -41,7 +41,26 @@ export class KidController {
 
     @Delete('/auth/kids/:kidId')
     @ApiOperation({ summary: 'Delete a kid profile' })
-    async deleteKid(@Request() req: AuthenticatedRequest, @Param('kidId') kidId: string) {
-        return this.kidService.deleteKid(kidId, req.authUserData.userId);
+    @ApiQuery({
+        name: 'permanent',
+        required: false,
+        type: Boolean,
+        description: 'Permanently delete the kid profile (default: false - soft delete)'
+    })
+    async deleteKid(
+        @Request() req: AuthenticatedRequest, 
+        @Param('kidId') kidId: string,
+        @Query('permanent') permanent: boolean = false
+    ) {
+        return this.kidService.deleteKid(kidId, req.authUserData.userId, permanent);
+    }
+
+    @Post('/auth/kids/:kidId/undo-delete')
+    @ApiOperation({ summary: 'Restore a soft deleted kid profile' })
+    async undoDeleteKid(
+        @Request() req: AuthenticatedRequest,
+        @Param('kidId') kidId: string
+    ) {
+        return this.kidService.undoDeleteKid(kidId, req.authUserData.userId);
     }
 }

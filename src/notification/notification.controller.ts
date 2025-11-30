@@ -1,10 +1,11 @@
-import { Controller, Post, Patch, Get, Param, Body } from '@nestjs/common';
+import { Controller, Post, Patch, Get, Param, Body, Delete, Query } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { NotificationService } from './notification.service';
 import {
@@ -36,6 +37,32 @@ export class NotificationController {
     @Body() dto: UpdateNotificationPreferenceDto,
   ) {
     return this.notificationService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a notification preference' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the notification preference (default: false - soft delete)'
+  })
+  @ApiResponse({ status: 200, description: 'Notification preference deleted successfully' })
+  async delete(
+    @Param('id') id: string,
+    @Query('permanent') permanent: boolean = false
+  ) {
+    await this.notificationService.delete(id, permanent);
+    return { message: 'Notification preference deleted successfully' };
+  }
+
+  @Post(':id/undo-delete')
+  @ApiOperation({ summary: 'Restore a soft deleted notification preference' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200, type: NotificationPreferenceDto })
+  async undoDelete(@Param('id') id: string) {
+    return this.notificationService.undoDelete(id);
   }
 
   @Get('user/:userId')
