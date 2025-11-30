@@ -37,6 +37,10 @@ model User {
 
   enableBiometrics Boolean? @default(false)
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   profile Profile?
   auth    Session[]
   Token   Token[]
@@ -60,6 +64,7 @@ model User {
   paymentTransactions PaymentTransaction[]
 
   @@map("users")
+  @@index([isDeleted])
 }
 
 // -------------------------
@@ -82,6 +87,10 @@ model Kid {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   rewards          Reward[]
   preferredVoiceId String?
   preferredVoice   Voice?   @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
@@ -103,6 +112,8 @@ model Kid {
   buddySelectedAt   DateTime?
   buddyInteractions BuddyInteraction[]
   storyBuddy        StoryBuddy?        @relation(fields: [storyBuddyId], references: [id])
+  kidDownloads            KidDownload[]
+
 
   // New relations
   dailyChallenges         DailyChallengeAssignment[]
@@ -114,6 +125,7 @@ model Kid {
   progresses              StoryProgress[]
 
   @@map("kids")
+  @@index([isDeleted])
 }
 
 // -------------------------
@@ -127,9 +139,14 @@ model Session {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@index([userId])
   @@index([userId, token])
   @@map("sessions")
+  @@index([isDeleted])
 }
 
 model Token {
@@ -141,10 +158,15 @@ model Token {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@index([userId])
   @@index([userId, type])
   @@index([userId, token])
   @@map("tokens")
+  @@index([isDeleted])
 }
 
 model Profile {
@@ -158,7 +180,12 @@ model Profile {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("profiles")
+  @@index([isDeleted])
 }
 
 // -------------------------
@@ -182,6 +209,10 @@ model Story {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   images   StoryImage[]
   branches StoryBranch[]
 
@@ -194,8 +225,11 @@ model Story {
   themes           Theme[]           @relation("StoryThemes")
   storyAudioCaches StoryAudioCache[]
   questions        StoryQuestion[]
+  kidDownloads            KidDownload[]
+
 
   @@map("stories")
+  @@index([isDeleted])
 }
 
 model StoryImage {
@@ -207,7 +241,12 @@ model StoryImage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("story_images")
+  @@index([isDeleted])
 }
 
 model StoryBranch {
@@ -222,7 +261,12 @@ model StoryBranch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("story_branches")
+  @@index([isDeleted])
 }
 
 model Favorite {
@@ -233,7 +277,12 @@ model Favorite {
   story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("favorites")
+  @@index([isDeleted])
 }
 
 model StoryProgress {
@@ -247,8 +296,13 @@ model StoryProgress {
   lastAccessed   DateTime @default(now())
   totalTimeSpent Int      @default(0)
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@unique([kidId, storyId])
   @@map("story_progress")
+  @@index([isDeleted])
 }
 
 // -------------------------
@@ -264,7 +318,12 @@ model Subscription {
   startedAt DateTime  @default(now())
   endsAt    DateTime?
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("subscriptions")
+  @@index([isDeleted])
 }
 
 model SupportTicket {
@@ -276,7 +335,12 @@ model SupportTicket {
   status    String   @default("open")
   createdAt DateTime @default(now())
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("support_tickets")
+  @@index([isDeleted])
 }
 
 model PaymentMethod {
@@ -291,9 +355,14 @@ model PaymentMethod {
   meta      Json?
   createdAt DateTime @default(now())
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   transactions PaymentTransaction[]
 
   @@map("payment_methods")
+  @@index([isDeleted])
 }
 
 model PaymentTransaction {
@@ -308,7 +377,12 @@ model PaymentTransaction {
   status          String
   createdAt       DateTime       @default(now())
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("payment_transactions")
+  @@index([isDeleted])
 }
 
 // -------------------------
@@ -324,7 +398,12 @@ model DailyChallenge {
   meaning       String
   assignments   DailyChallengeAssignment[]
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("daily_challenges")
+  @@index([isDeleted])
 }
 
 model Voice {
@@ -338,11 +417,16 @@ model Voice {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   usersPreferring User[] @relation("PreferredVoice")
   kidsPreferring  Kid[]  @relation("KidPreferredVoice")
 
   @@index([name])
   @@map("voices")
+  @@index([isDeleted])
 }
 
 model Reward {
@@ -354,6 +438,10 @@ model Reward {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -363,6 +451,7 @@ model Reward {
   redemptions RewardRedemption[]
 
   @@map("rewards")
+  @@index([isDeleted])
 }
 
 model DailyChallengeAssignment {
@@ -375,7 +464,12 @@ model DailyChallengeAssignment {
   completedAt DateTime?
   assignedAt  DateTime       @default(now())
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("daily_challenge_assignments")
+  @@index([isDeleted])
 }
 
 model NotificationPreference {
@@ -392,7 +486,12 @@ model NotificationPreference {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("notification_preferences")
+  @@index([isDeleted])
 }
 
 model RewardRedemption {
@@ -404,7 +503,12 @@ model RewardRedemption {
   redeemedAt DateTime @default(now())
   status     String
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("reward_redemptions")
+  @@index([isDeleted])
 }
 
 model ActivityLog {
@@ -422,7 +526,12 @@ model ActivityLog {
   details     String?
   createdAt   DateTime @default(now())
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("activity_logs")
+  @@index([isDeleted])
 }
 
 model StoryPath {
@@ -435,7 +544,12 @@ model StoryPath {
   startedAt   DateTime  @default(now())
   completedAt DateTime?
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("story_paths")
+  @@index([isDeleted])
 }
 
 model Category {
@@ -445,7 +559,27 @@ model Category {
   description     String?
   stories         Story[] @relation("StoryCategories")
   preferredByKids Kid[]   @relation("KidPreferredCategories")
+
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
+  @@index([isDeleted])
 }
+
+model KidDownload {
+  id        String   @id @default(uuid())
+  kidId     String
+  storyId   String
+  createdAt DateTime @default(now())
+
+  kid   Kid   @relation(fields: [kidId], references: [id])
+  story Story @relation(fields: [storyId], references: [id])
+
+  @@unique([kidId, storyId])
+  @@map("kid_downloads")
+}
+
 
 model Theme {
   id          String  @id @default(uuid())
@@ -453,6 +587,12 @@ model Theme {
   image       String?
   description String?
   stories     Story[] @relation("StoryThemes")
+
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
+  @@index([isDeleted])
 }
 
 model StoryAudioCache {
@@ -464,9 +604,14 @@ model StoryAudioCache {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@unique([storyId, audioUrl])
   @@unique([storyId, voiceType])
   @@map("story_audio_cache")
+  @@index([isDeleted])
 }
 
 model StoryQuestion {
@@ -478,7 +623,12 @@ model StoryQuestion {
   correctOption Int
   answers       QuestionAnswer[]
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@map("story_questions")
+  @@index([isDeleted])
 }
 
 model Avatar {
@@ -509,8 +659,13 @@ model AgeGroup {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@unique([name])
   @@map("age_groups")
+  @@index([isDeleted])
 }
 
 model ScreenTimeSession {
@@ -522,8 +677,13 @@ model ScreenTimeSession {
   duration  Int?
   date      DateTime  @default(now())
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@index([kidId, date])
   @@map("screen_time_sessions")
+  @@index([isDeleted])
 }
 
 model QuestionAnswer {
@@ -537,9 +697,14 @@ model QuestionAnswer {
   isCorrect      Boolean
   answeredAt     DateTime      @default(now())
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@index([kidId])
   @@index([kidId, answeredAt])
   @@map("question_answers")
+  @@index([isDeleted])
 }
 
 model UserIP {
@@ -551,9 +716,14 @@ model UserIP {
   firstUsed DateTime @default(now())
   lastUsed  DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@unique([userId, ipAddress])
   @@index([ipAddress])
   @@map("user_ips")
+  @@index([isDeleted])
 }
 
 model StoryBuddy {
@@ -570,10 +740,16 @@ model StoryBuddy {
   ageGroupMax       Int                @default(12)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   buddyInteractions BuddyInteraction[]
   kids              Kid[]
 
   @@map("story_buddies")
+  @@index([isDeleted])
 }
 
 model BuddyInteraction {
@@ -587,9 +763,14 @@ model BuddyInteraction {
   buddy           StoryBuddy @relation(fields: [buddyId], references: [id])
   kid             Kid        @relation(fields: [kidId], references: [id], onDelete: Cascade)
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@index([kidId, timestamp])
   @@index([buddyId])
   @@map("buddy_interactions")
+  @@index([isDeleted])
 }
 
 model Badge {
@@ -605,9 +786,14 @@ model Badge {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   userBadges UserBadge[]
 
   @@map("badges")
+  @@index([isDeleted])
 }
 
 model UserBadge {
@@ -620,8 +806,13 @@ model UserBadge {
   unlocked   Boolean   @default(false)
   unlockedAt DateTime?
 
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+
   @@unique([userId, badgeId])
   @@index([userId])
   @@index([badgeId])
   @@map("user_badges")
+  @@index([isDeleted])
 }
