@@ -21,6 +21,7 @@ export class KidDownloadsController {
   }
 
   @Post()
+  @HttpCode(200)
   @ApiOperation({ summary: 'Add a download for a kid' })
   async add(
     @Param('kidId') kidId: string,
@@ -31,7 +32,7 @@ export class KidDownloadsController {
   }
 
   @Delete(':storyId')
-  @HttpCode(204)
+  @HttpCode(200)
   @ApiOperation({ summary: 'Remove a kid download' })
   async remove(
     @Param('kidId') kidId: string,

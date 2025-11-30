@@ -116,6 +116,8 @@ model Kid {
   buddySelectedAt   DateTime?
   buddyInteractions BuddyInteraction[]
   storyBuddy        StoryBuddy?        @relation(fields: [storyBuddyId], references: [id])
+  kidDownloads            KidDownload[]
+
 
   // New relations
   downloadedStories DownloadedStory[]
@@ -234,6 +236,8 @@ model Story {
   themes           Theme[]           @relation("StoryThemes")
   storyAudioCaches StoryAudioCache[]
   questions        StoryQuestion[]
+  kidDownloads            KidDownload[]
+
 
   // Add this field to track who created it (for AI generation)
   creatorKidId String?
@@ -300,6 +304,7 @@ model Favorite {
 
   @@map("favorites")
   @@index([isDeleted])
+
 }
 
 model ParentFavorite {
@@ -315,6 +320,7 @@ model ParentFavorite {
 
   @@map("parent_favorites")
   @@unique([userId, storyId])
+
 }
 
 model StoryProgress {
@@ -599,6 +605,20 @@ model Category {
   @@index([isDeleted])
 }
 
+model KidDownload {
+  id        String   @id @default(uuid())
+  kidId     String
+  storyId   String
+  createdAt DateTime @default(now())
+
+  kid   Kid   @relation(fields: [kidId], references: [id])
+  story Story @relation(fields: [storyId], references: [id])
+
+  @@unique([kidId, storyId])
+  @@map("kid_downloads")
+}
+
+
 model Theme {
   id          String  @id @default(uuid())
   name        String  @unique
@@ -833,6 +853,7 @@ model UserBadge {
   @@index([badgeId])
   @@map("user_badges")
   @@index([isDeleted])
+
 }
 model DownloadedStory {
   id           String   @id @default(uuid())
@@ -873,4 +894,5 @@ model ParentRecommendation {
   @@index([isDeleted])
   @@index([kidId])
   @@index([userId, kidId])
+
 }
