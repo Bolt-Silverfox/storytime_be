@@ -21,7 +21,7 @@ export class CreateActivityLogDto {
   @ApiProperty({ required: false, description: 'Kid ID for the activity', example: 'c182daa8-723c-4020-bcd4-ad01cb026b90' })
   @IsOptional()
   @IsUUID('4', { message: 'kidId must be a valid UUID' })
-  kidId: string;
+  kidId?: string;
 
   @ApiProperty({ required: true, description: 'Action performed', example: 'START_STORY' })
   @IsString({ message: 'action must be a string' })
