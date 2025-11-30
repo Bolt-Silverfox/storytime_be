@@ -216,6 +216,12 @@ export class StoryController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a story' })
   @ApiParam({ name: 'id', type: String })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the story (default: false - soft delete)'
+  })
   @ApiOkResponse({ description: 'Deleted story', type: String })
   @ApiResponse({
     status: 400,
@@ -232,8 +238,34 @@ export class StoryController {
     description: 'Not Found',
     type: ErrorResponseDto,
   })
-  async deleteStory(@Param('id') id: string) {
-    return this.storyService.deleteStory(id);
+  async deleteStory(
+    @Param('id') id: string,
+    @Query('permanent') permanent: boolean = false
+  ) {
+    return this.storyService.deleteStory(id, permanent);
+  }
+
+  @Post(':id/undo-delete')
+  @ApiOperation({ summary: 'Restore a soft deleted story' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ description: 'Story restored successfully', type: UpdateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - Story is not deleted',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async undoDeleteStory(@Param('id') id: string) {
+    return this.storyService.undoDeleteStory(id);
   }
 
   // --- Images ---
