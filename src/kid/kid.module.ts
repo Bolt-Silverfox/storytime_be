@@ -4,9 +4,14 @@ import { KidService } from './kid.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthModule } from '../auth/auth.module';
 import { VoiceModule } from '../voice/voice.module';
+import { AnalyticsModule } from '@/analytics/analytics.module';
 
 @Module({
-    imports: [AuthModule, VoiceModule],
+    imports: [
+        AuthModule, 
+        VoiceModule,
+        AnalyticsModule
+    ],
     controllers: [KidController],
     providers: [KidService, PrismaService],
     exports: [KidService],
