@@ -1,3 +1,4 @@
+// src/user/user.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -14,7 +15,10 @@ const prisma = new PrismaClient();
 export class UserService {
   async getUser(id: string): Promise<any> {
     const user = await prisma.user.findUnique({
-      where: { id },
+      where: { 
+        id,
+        isDeleted: false // EXCLUDE SOFT DELETED USERS FOR NORMAL USERS
+      },
       include: { profile: true, kids: true, avatar: true },
     });
     if (!user) return null;
@@ -22,22 +26,104 @@ export class UserService {
     return { ...user, numberOfKids: user.kids.length };
   }
 
+  /**
+   * Get all users (admin only) - includes both active and soft deleted users
+   */
   async getAllUsers(): Promise<any[]> {
     return prisma.user.findMany({
+      include: { 
+        profile: true, 
+        avatar: true 
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Get only active users (non-admin)
+   */
+  async getActiveUsers(): Promise<any[]> {
+    return prisma.user.findMany({
+      where: {
+        isDeleted: false
+      },
       include: { profile: true, avatar: true },
     });
   }
 
-  async deleteUser(id: string): Promise<any> {
-    return prisma.user.delete({ where: { id } });
+  /**
+   * Soft delete or permanently delete a user
+   * @param id User ID
+   * @param permanent Whether to permanently delete (default: false)
+   */
+  async deleteUser(id: string, permanent: boolean = false): Promise<any> {
+    if (permanent) {
+      return prisma.user.delete({ where: { id } });
+    } else {
+      return prisma.user.update({
+        where: { id },
+        data: { 
+          isDeleted: true, 
+          deletedAt: new Date() 
+        },
+      });
+    }
   }
 
-  async deleteUserAccount(id: string): Promise<any> {
-    return prisma.user.delete({ where: { id } });
+  /**
+   * Soft delete or permanently delete user account
+   * @param id User ID
+   * @param permanent Whether to permanently delete (default: false)
+   */
+  async deleteUserAccount(id: string, permanent: boolean = false): Promise<any> {
+    return this.deleteUser(id, permanent);
+  }
+
+  /**
+   * Restore a soft deleted user
+   * @param id User ID
+   */
+  async undoDeleteUser(id: string): Promise<any> {
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    if (!user.isDeleted) throw new BadRequestException('User is not deleted');
+
+    return prisma.user.update({
+      where: { id },
+      data: { 
+        isDeleted: false, 
+        deletedAt: null 
+      },
+      include: { profile: true, kids: true, avatar: true },
+    });
+  }
+
+  /**
+   * Restore the current user's account
+   * @param userId Current user ID
+   */
+  async undoDeleteMyAccount(userId: string): Promise<any> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (!user.isDeleted) throw new BadRequestException('Your account is not deleted');
+
+    return prisma.user.update({
+      where: { id: userId },
+      data: { 
+        isDeleted: false, 
+        deletedAt: null 
+      },
+      include: { profile: true, kids: true, avatar: true },
+    });
   }
 
   async updateUser(id: string, data: UpdateUserDto): Promise<any> {
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findUnique({ 
+      where: { 
+        id,
+        isDeleted: false // CANNOT UPDATE SOFT DELETED USERS
+      } 
+    });
     if (!user) throw new NotFoundException('User not found');
 
     const updateData: any = {};
@@ -96,7 +182,12 @@ export class UserService {
   }
 
   async getUserRole(id: string) {
-    const u = await prisma.user.findUnique({ where: { id } });
+    const u = await prisma.user.findUnique({ 
+      where: { 
+        id,
+        isDeleted: false // EXCLUDE SOFT DELETED USERS
+      } 
+    });
     return { id: u?.id, role: u?.role };
   }
 
@@ -106,7 +197,10 @@ export class UserService {
     }
 
     const user = await prisma.user.update({
-      where: { id },
+      where: { 
+        id,
+        isDeleted: false // CANNOT UPDATE SOFT DELETED USERS
+      },
       data: { role },
       include: { avatar: true },
     });
@@ -119,7 +213,12 @@ export class UserService {
   // ----------------------------------------------------------
 
   async updateParentProfile(userId: string, data: any) {
-    const existing = await prisma.user.findUnique({ where: { id: userId } });
+    const existing = await prisma.user.findUnique({ 
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT UPDATE SOFT DELETED USERS
+      } 
+    });
     if (!existing) throw new NotFoundException('User not found');
 
     const updateUser: any = {};
@@ -151,7 +250,10 @@ export class UserService {
     if (!body.avatarId) throw new BadRequestException('avatarId is required');
 
     return prisma.user.update({
-      where: { id: userId },
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT UPDATE SOFT DELETED USERS
+      },
       data: { avatarId: body.avatarId },
       include: { avatar: true },
     });
@@ -163,7 +265,10 @@ export class UserService {
 
   async setBiometrics(userId: string, enable: boolean) {
     const updated = await prisma.user.update({
-      where: { id: userId },
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT UPDATE SOFT DELETED USERS
+      },
       data: { enableBiometrics: enable },
     });
 
@@ -180,7 +285,10 @@ export class UserService {
     const hash = await hashPin(pin);
 
     await prisma.user.update({
-      where: { id: userId },
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT UPDATE SOFT DELETED USERS
+      },
       data: { pinHash: hash },
     });
 
@@ -188,7 +296,12 @@ export class UserService {
   }
 
   async verifyPin(userId: string, pin: string) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({ 
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT VERIFY PIN FOR SOFT DELETED USERS
+      } 
+    });
     if (!user?.pinHash) throw new BadRequestException('No PIN is set');
 
     const match = await verifyPinHash(pin, user.pinHash);
@@ -198,7 +311,12 @@ export class UserService {
   }
 
   async resetPin(userId: string, oldPin: string, newPin: string) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({ 
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT RESET PIN FOR SOFT DELETED USERS
+      } 
+    });
     if (!user?.pinHash) throw new BadRequestException('No PIN set');
 
     const ok = await verifyPinHash(oldPin, user.pinHash);
@@ -223,8 +341,14 @@ export class UserService {
     password: string,
     reasons?: string[],
     notes?: string,
+    permanent: boolean = false, // ADD PERMANENT PARAMETER
   ) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({ 
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT DELETE ALREADY DELETED USERS
+      } 
+    });
     if (!user) throw new NotFoundException('User not found');
 
     const ok = await bcrypt.compare(password, user.passwordHash);
@@ -238,12 +362,12 @@ export class UserService {
           'Deletion request submitted',
           reasons?.length ? `Reasons: ${reasons.join(', ')}` : '',
           notes ? `Notes: ${notes}` : '',
+          permanent ? 'Permanent deletion requested' : 'Soft deletion requested',
         ].join('\n'),
       },
     });
 
-    await prisma.user.delete({ where: { id: userId } });
-
-    return { success: true };
+    // Use the delete method with permanent flag
+    return this.deleteUser(userId, permanent);
   }
 }

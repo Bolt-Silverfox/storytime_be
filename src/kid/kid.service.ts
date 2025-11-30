@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { VoiceService } from '../voice/voice.service';
@@ -50,7 +50,10 @@ export class KidService {
 
     async findAllByUser(userId: string) {
         const kids = await this.prisma.kid.findMany({
-            where: { parentId: userId },
+            where: { 
+                parentId: userId,
+                isDeleted: false // EXCLUDE SOFT DELETED KIDS
+            },
             include: {
                 avatar: true,
                 preferredCategories: true,
@@ -66,7 +69,10 @@ export class KidService {
 
     async findOne(kidId: string, userId: string) {
         const kid = await this.prisma.kid.findUnique({
-            where: { id: kidId },
+            where: { 
+                id: kidId,
+                isDeleted: false // EXCLUDE SOFT DELETED KIDS
+            },
             include: {
                 avatar: true,
                 preferredCategories: true,
@@ -84,8 +90,13 @@ export class KidService {
     }
 
     async updateKid(kidId: string, userId: string, dto: UpdateKidDto) {
-        // 1. Verify ownership
-        const kid = await this.prisma.kid.findUnique({ where: { id: kidId } });
+        // 1. Verify ownership and check if not soft deleted
+        const kid = await this.prisma.kid.findUnique({ 
+            where: { 
+                id: kidId,
+                isDeleted: false // CANNOT UPDATE SOFT DELETED KIDS
+            } 
+        });
         if (!kid || kid.parentId !== userId) {
             throw new NotFoundException('Kid not found or access denied');
         }
@@ -101,7 +112,10 @@ export class KidService {
 
             if (isUuid) {
                 const voice = await this.prisma.voice.findUnique({
-                    where: { id: preferredVoiceId },
+                    where: { 
+                        id: preferredVoiceId,
+                        isDeleted: false // CANNOT USE SOFT DELETED VOICES
+                    },
                 });
                 if (!voice) throw new NotFoundException('Voice not found');
                 finalVoiceId = voice.id;
@@ -138,19 +152,67 @@ export class KidService {
         return this.transformKid(updatedKid);
     }
 
-    async deleteKid(kidId: string, userId: string) {
-        const kid = await this.prisma.kid.findUnique({ where: { id: kidId } });
+    /**
+     * Soft delete or permanently delete a kid
+     * @param kidId Kid ID
+     * @param userId User ID for verification
+     * @param permanent Whether to permanently delete (default: false)
+     */
+    async deleteKid(kidId: string, userId: string, permanent: boolean = false) {
+        const kid = await this.prisma.kid.findUnique({ 
+            where: { 
+                id: kidId,
+                isDeleted: false // CANNOT DELETE ALREADY DELETED KIDS
+            } 
+        });
         if (!kid || kid.parentId !== userId) {
             throw new NotFoundException('Kid not found or access denied');
         }
 
-        return this.prisma.kid.delete({
+        if (permanent) {
+            return this.prisma.kid.delete({
+                where: { id: kidId },
+            });
+        } else {
+            return this.prisma.kid.update({
+                where: { id: kidId },
+                data: { 
+                    isDeleted: true, 
+                    deletedAt: new Date() 
+                },
+            });
+        }
+    }
+
+    /**
+     * Restore a soft deleted kid
+     * @param kidId Kid ID
+     * @param userId User ID for verification
+     */
+    async undoDeleteKid(kidId: string, userId: string) {
+        const kid = await this.prisma.kid.findUnique({ 
+            where: { id: kidId } 
+        });
+        if (!kid) throw new NotFoundException('Kid not found');
+        if (kid.parentId !== userId) throw new ForbiddenException('Access denied');
+        if (!kid.isDeleted) throw new BadRequestException('Kid is not deleted');
+
+        return this.prisma.kid.update({
             where: { id: kidId },
+            data: { 
+                isDeleted: false, 
+                deletedAt: null 
+            },
         });
     }
 
     async createKids(userId: string, dtos: CreateKidDto[]) {
-        const parent = await this.prisma.user.findUnique({ where: { id: userId } });
+        const parent = await this.prisma.user.findUnique({ 
+            where: { 
+                id: userId,
+                isDeleted: false // CANNOT CREATE KIDS FOR SOFT DELETED USERS
+            } 
+        });
         if (!parent) throw new NotFoundException('Parent User not found');
 
         // Execute creates in transaction
