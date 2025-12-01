@@ -12,6 +12,11 @@ export class AnalyticsService {
       userId: log.userId ?? undefined,
       kidId: log.kidId ?? undefined,
       action: log.action,
+      status: log.status, 
+      deviceName: log.deviceName ?? undefined,
+      deviceModel: log.deviceModel ?? undefined,
+      os: log.os ?? undefined,
+      ipAddress: log.ipAddress ?? undefined,
       details: log.details ?? undefined,
       createdAt: log.createdAt,
     };
@@ -23,10 +28,41 @@ export class AnalyticsService {
         userId: dto.userId,
         kidId: dto.kidId,
         action: dto.action,
+        status: dto.status,
+        deviceName: dto.deviceName,
+        deviceModel: dto.deviceModel,
+        os: dto.os,
+        ipAddress: dto.ipAddress,
         details: dto.details,
       },
     });
     return this.toActivityLogDto(log);
+  }
+
+  async logActivity(params: {
+    userId?: string;
+    kidId?: string;
+    action: string;
+    status: 'SUCCESS' | 'FAILED' | string;
+    details?: string;
+    ipAddress?: string;
+    deviceName?: string;
+    deviceModel?: string;
+    os?: string;
+  }): Promise<ActivityLogDto> {
+    // Map params to DTO and call create()
+    const dto: CreateActivityLogDto = {
+      userId: params.userId,
+      kidId: params.kidId,
+      action: params.action,
+      status: params.status,
+      details: params.details,
+      ipAddress: params.ipAddress,
+      deviceName: params.deviceName,
+      deviceModel: params.deviceModel,
+      os: params.os,
+    };
+    return this.create(dto);
   }
 
   async getForUser(userId: string): Promise<ActivityLogDto[]> {

@@ -24,7 +24,7 @@
           "Dark forests",
           "Storms"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "Who was Felix's best friend?",
@@ -34,7 +34,7 @@
           "A baby squirrel",
           "A grumpy badger"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why did Felix go into the dark woods?",
@@ -44,7 +44,7 @@
           "To help find Pip",
           "To hide from the storm"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Felix help Pip?",
@@ -54,7 +54,7 @@
           "He built him a house",
           "He found his favorite toy"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Felix feel after helping Pip?",
@@ -64,7 +64,7 @@
           "Brave and happy",
           "Angry"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Felix learn by the end of the story?",
@@ -74,13 +74,18 @@
           "He could be brave when his friends needed him",
           "He liked hiding"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973099/storytime/k8zuyqfhmgmkvre2wdpn.webp",
     "isInteractive": true,
     "ageMin": 4,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 263
   },
   {
     "title": "Luna and the Mountain Adventure",
@@ -106,7 +111,7 @@
           "Making friends",
           "Finding her den"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who were Luna’s friends on the mountain adventure?",
@@ -116,7 +121,7 @@
           "A squirrel and a deer",
           "Two wolf pups"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why did the friends climb Little Pine Mountain?",
@@ -126,7 +131,7 @@
           "To pick wild berries",
           "To play in the stream"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What happened to Pippa during the hike?",
@@ -136,7 +141,7 @@
           "She saw a storm",
           "She raced ahead"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Luna help her friend?",
@@ -146,7 +151,7 @@
           "She pulled Pippa out of the snow",
           "She ran away"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Luna learn by the end of the story?",
@@ -156,13 +161,18 @@
           "The mountain was dangerous",
           "Her friends did not need her"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973153/storytime/h4xv8n0lx68l2eg2grl8.webp",
     "isInteractive": true,
     "ageMin": 4,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 269
   },
   {
     "title": "Tara and the City Map",
@@ -187,7 +197,7 @@
           "In a barn",
           "In a treehouse"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Tara tuck into her backpack before the adventure?",
@@ -197,7 +207,7 @@
           "A city map",
           "A toy"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What frightened the friends and made them lose sight of the park?",
@@ -207,7 +217,7 @@
           "A thunderstorm",
           "A cat"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Tara help the group find the park again?",
@@ -217,7 +227,7 @@
           "She used her map and recognized a fountain",
           "She flew in the sky"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What was special about the park?",
@@ -227,7 +237,7 @@
           "It was empty",
           "It had a big playground"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What changed for Tara by the end of the story?",
@@ -237,13 +247,18 @@
           "She learned that with bravery she could explore new places",
           "She decided to move to the country"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973215/storytime/qd2fdzznxvz3eewwrnd3.webp",
     "isInteractive": true,
     "ageMin": 7,
-    "ageMax": 10
+    "ageMax": 10,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 305
   },
   {
     "title": "Ollie Otter’s Riverside Rescue",
@@ -267,7 +282,7 @@
           "A forest meadow",
           "A sandy beach"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who were Ollie’s close friends?",
@@ -277,7 +292,7 @@
           "A bird and a rabbit",
           "A beaver and a bear"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What made Ollie nervous about exploring downstream?",
@@ -287,7 +302,7 @@
           "He wanted to play alone",
           "He was bored"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What happened to Toby during the adventure?",
@@ -297,7 +312,7 @@
           "He got stuck between two stones",
           "He swam the fastest"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Ollie help Toby?",
@@ -307,7 +322,7 @@
           "He dove down and nudged Toby loose",
           "He built a dam"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Ollie learn by the end of the story?",
@@ -317,13 +332,18 @@
           "The river is always dangerous",
           "It’s better to play alone"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973272/storytime/p2qrbvcsvkgczyhpkjyg.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 7
+    "ageMax": 7,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 246
   },
   {
     "title": "Sammy and the Sky Lantern",
@@ -347,7 +367,7 @@
           "Harvest Feast",
           "Winter Parade"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why was Sammy afraid to join the festival adventures?",
@@ -357,7 +377,7 @@
           "He was too tired",
           "He preferred sleeping"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who made Sammy a beautiful paper lantern?",
@@ -367,7 +387,7 @@
           "Willow the chipmunk",
           "The rabbits"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What happened when the wind blew strongly?",
@@ -377,7 +397,7 @@
           "It knocked over the food table",
           "It scared everyone away"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Sammy help Mr. Owl?",
@@ -387,7 +407,7 @@
           "He climbed the tree to rescue his lantern",
           "He sang a song"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Sammy feel at the end of the story?",
@@ -397,13 +417,18 @@
           "Too tired to play",
           "Sad that the festival ended"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973306/storytime/faxoca5xqg5cf9yjo8eq.webp",
     "isInteractive": true,
     "ageMin": 6,
-    "ageMax": 9
+    "ageMax": 9,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 263
   },
   {
     "title": "Carlos and the Secret Island",
@@ -423,7 +448,7 @@
           "On a farm",
           "Near a snowy mountain"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who did Carlos find after the storm?",
@@ -433,7 +458,7 @@
           "A baby seabird named Bella",
           "A friendly fish"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "Why did Carlos hesitate to go toward the island?",
@@ -443,7 +468,7 @@
           "He didn’t want to leave his family",
           "He was tired"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Carlos help Bella?",
@@ -453,7 +478,7 @@
           "He built her a house",
           "He sang her a song"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What made Carlos forget his fear while exploring the island?",
@@ -463,7 +488,7 @@
           "He was distracted by helping Bella and discovering new things",
           "He wanted to go swimming"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Carlos learn by the end of the story?",
@@ -473,13 +498,18 @@
           "He never wanted to leave the beach again",
           "He preferred to be alone"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973351/storytime/qvhpraqt9vbtmfxj5iop.webp",
     "isInteractive": true,
     "ageMin": 8,
-    "ageMax": 11
+    "ageMax": 11,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 213
   },
   {
     "title": "Penny Penguin’s Glacier Quest",
@@ -499,7 +529,7 @@
           "In the Antarctic with her penguin colony",
           "By a mountain lake"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What makes Penny nervous about leaving home?",
@@ -509,7 +539,7 @@
           "She doesn’t have any friends",
           "She is bored"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why does Penny decide to go on an adventure?",
@@ -519,7 +549,7 @@
           "To explore glaciers",
           "To play in the snow"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How does Penny find Pip?",
@@ -529,7 +559,7 @@
           "She dances and sings",
           "She flies over the ice"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What does Penny do when she finds Pip stuck behind the ice block?",
@@ -539,7 +569,7 @@
           "Tries to push the ice with her feet",
           "Asks a seal for help"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What lesson does Penny learn by the end of her adventure?",
@@ -549,13 +579,18 @@
           "The snow is too dangerous for adventures",
           "She wants to go on adventures by herself"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973373/storytime/gs3xohgwkw0qe1fuyqn2.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 12
+    "ageMax": 12,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 259
   },
   {
     "title": "Mira the Mountain Goat’s Daring Day",
@@ -575,7 +610,7 @@
           "On the snowy mountain peaks",
           "In a city park"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What made Mira nervous on the mountain?",
@@ -585,7 +620,7 @@
           "Meeting new friends",
           "The sounds of the stream"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What happened to Timo during the climb?",
@@ -595,7 +630,7 @@
           "He ran away",
           "He helped Mira climb"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why couldn’t the older goats help Timo?",
@@ -605,7 +640,7 @@
           "They were afraid",
           "They didn’t see Timo fall"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Mira help her friend?",
@@ -615,7 +650,7 @@
           "She carefully climbed down and helped Timo up",
           "She called for help"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Mira learn at the end of the story?",
@@ -625,13 +660,18 @@
           "It's better to avoid adventures",
           "Goats shouldn't climb mountains"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973404/storytime/v6blabb0z5lryzeauua4.webp",
     "isInteractive": true,
     "ageMin": 9,
-    "ageMax": 12
+    "ageMax": 12,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 287
   },
   {
     "title": "Tiko Turtle's Hidden Lagoon",
@@ -651,7 +691,7 @@
           "Talk to other turtles",
           "Eat new food"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who was Tiko’s best friend?",
@@ -661,7 +701,7 @@
           "Gina the goose",
           "Benny the crab"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What had Layla lost?",
@@ -671,7 +711,7 @@
           "Her grandmother's necklace",
           "A shiny pebble"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "Where did Tiko and Layla search for the necklace?",
@@ -681,7 +721,7 @@
           "Near a barn",
           "In the clouds"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Tiko find the necklace?",
@@ -691,7 +731,7 @@
           "He found it tangled around a reed among the lilies",
           "He found it in the sand"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What does Tiko learn by the end of the story?",
@@ -701,13 +741,18 @@
           "Necklaces are not important",
           "Lagoons are scary places"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973429/storytime/my48m9cg4s1mf8gpl8k7.webp",
     "isInteractive": true,
     "ageMin": 6,
-    "ageMax": 10
+    "ageMax": 10,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 244
   },
   {
     "title": "Nia’s Nighttime Adventure",
@@ -727,7 +772,7 @@
           "Climbing trees",
           "Making friends"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who needed help finding their way home?",
@@ -737,7 +782,7 @@
           "A family of beetles",
           "A family of frogs"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Nia help the beetles?",
@@ -747,7 +792,7 @@
           "She lit up her glow and guided them through the forest",
           "She built a bridge"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "Where did Nia find Benny the beetle?",
@@ -757,7 +802,7 @@
           "Hiding under a curled fern",
           "Near the river"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Nia realize at the end of her adventure?",
@@ -767,7 +812,7 @@
           "She preferred to stay home forever",
           "Beetles are unfriendly"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "After this adventure, how did Nia feel about flying at night?",
@@ -777,13 +822,18 @@
           "She wanted to hide under leaves",
           "She wanted to move during the day"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973458/storytime/vminvxr38ocbqxjrc4mz.webp",
     "isInteractive": true,
     "ageMin": 3,
-    "ageMax": 6
+    "ageMax": 6,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 248
   },
   {
     "title": "Leo and the Little Library",
@@ -801,7 +851,7 @@
           "Books and stories",
           "Running through the grass"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Leo come up with the idea for the Little Library?",
@@ -811,7 +861,7 @@
           "He needed somewhere to nap",
           "He wanted a secret hiding spot"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "Where did Leo and Sadie build the Little Library?",
@@ -821,7 +871,7 @@
           "Under the acacia tree",
           "Just outside Leo's den"
         ],
-        "answer": 3
+        "correctOption": 3
       },
       {
         "question": "How did the other animals react to the Little Library?",
@@ -831,7 +881,7 @@
           "They began sharing and borrowing stories",
           "They closed the library"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What happened when the library was empty?",
@@ -841,7 +891,7 @@
           "Everyone stopped reading",
           "Leo hid the library"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Leo learn from starting the Little Library?",
@@ -851,13 +901,18 @@
           "Libraries should be secret",
           "Stories are boring"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973517/storytime/qw2zdegyqdsr2vchdep6.webp",
     "isInteractive": true,
     "ageMin": 7,
-    "ageMax": 11
+    "ageMax": 11,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 260
   },
   {
     "title": "Pip’s Painted Paws",
@@ -875,7 +930,7 @@
           "Barking at birds",
           "Sleeping under the porch"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Pip cheer up Tilly the cat?",
@@ -885,7 +940,7 @@
           "He shared his lunch",
           "He chased her"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who helped Pip make the path colorful?",
@@ -895,7 +950,7 @@
           "His owner",
           "No one"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What happened to the stone path?",
@@ -905,7 +960,7 @@
           "It was dug up",
           "It got slippery"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Pip feel when people liked his painted paw prints?",
@@ -915,7 +970,7 @@
           "Hungry",
           "Sleepy"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What lesson did Pip learn by sharing his art?",
@@ -925,13 +980,18 @@
           "Only puppies should paint",
           "Rain washes everything away"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973544/storytime/i5zxdadwphlalnh0pdoh.webp",
     "isInteractive": true,
     "ageMin": 4,
-    "ageMax": 7
+    "ageMax": 7,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 251
   },
   {
     "title": "Mina's Magical Muffins",
@@ -949,7 +1009,7 @@
           "Go swimming",
           "Travel the world"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why did Mina decide to bake muffins?",
@@ -959,7 +1019,7 @@
           "To share and spread kindness like her grandmother did",
           "She wanted to eat them all herself"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "Who got the first muffin?",
@@ -969,7 +1029,7 @@
           "Old Mr. Mole",
           "Her teacher"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Mina's neighbors react to the muffins?",
@@ -979,7 +1039,7 @@
           "They were delighted and left thank-you notes",
           "They asked her to leave"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Mina realize at the end of the day?",
@@ -989,7 +1049,7 @@
           "That she should never bake again",
           "That only her grandmother could bake"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What brought everyone together during the snowy day?",
@@ -999,13 +1059,18 @@
           "Mina sharing her muffins and kindness",
           "Sledding"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973573/storytime/mhtfmyvsv3hawikvp3kd.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 199
   },
   {
     "title": "Gus the Gentle Giraffe",
@@ -1023,7 +1088,7 @@
           "Munching leaves from tall trees and watching his friends",
           "Digging holes"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Gus help Wren the bird?",
@@ -1033,7 +1098,7 @@
           "He built a nest",
           "He taught her to fly"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Gus help the monkeys?",
@@ -1043,7 +1108,7 @@
           "Chased away a lion",
           "Sang a song"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Gus do for the elephant twins?",
@@ -1053,7 +1118,7 @@
           "Provided shade so they could nap",
           "Told them a story"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Gus learn about kindness?",
@@ -1063,7 +1128,7 @@
           "Only giraffes can be kind",
           "Kindness is boring"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Gus feel at the end of the story?",
@@ -1073,13 +1138,18 @@
           "Hungry and tired",
           "Upset with his friends"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973683/storytime/vpvpcuatrndrmlr0mfx2.webp",
     "isInteractive": true,
     "ageMin": 3,
-    "ageMax": 6
+    "ageMax": 6,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 232
   },
   {
     "title": "Ravi and the Rainy Day Umbrella",
@@ -1097,7 +1167,7 @@
           "A blue feather",
           "A red scarf"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who did Ravi first help with his umbrella?",
@@ -1107,7 +1177,7 @@
           "Suri the squirrel",
           "The bluebirds"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did the animals do together under the umbrella?",
@@ -1117,7 +1187,7 @@
           "Marched through puddles, giggling and sharing stories",
           "Ate carrots"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Ravi feel when he shared his umbrella?",
@@ -1127,7 +1197,7 @@
           "Angry",
           "Tired"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What did Ravi learn about treasures?",
@@ -1137,7 +1207,7 @@
           "Only collect new ones",
           "Never show anyone"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did the rainy day end for Ravi and his friends?",
@@ -1147,13 +1217,18 @@
           "All the animals thanked Ravi and the sun came out",
           "They hid from the rain"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973727/storytime/u6vqtxdmageotueljowb.webp",
     "isInteractive": true,
     "ageMin": 6,
-    "ageMax": 9
+    "ageMax": 9,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 201
   },
   {
     "title": "Cleo and the Midnight Feast",
@@ -1171,7 +1246,7 @@
           "In a hidden tree hollow",
           "Under a bush"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "Who did Cleo meet at the blackberry bush?",
@@ -1181,7 +1256,7 @@
           "A hungry squirrel",
           "Her cousin"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Cleo change after inviting Luna?",
@@ -1191,7 +1266,7 @@
           "She hid all her food",
           "She left the forest"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who else joined the midnight feast?",
@@ -1201,7 +1276,7 @@
           "Just birds",
           "No one else"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Cleo learn about kindness?",
@@ -1211,7 +1286,7 @@
           "It’s better to keep food to yourself",
           "It only works in the daytime"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "How did Cleo feel after sharing her midnight meals?",
@@ -1221,13 +1296,18 @@
           "Happy and warm",
           "Hungry"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973757/storytime/jiz04zw5kcgzuiccpfkb.webp",
     "isInteractive": true,
     "ageMin": 8,
-    "ageMax": 12
+    "ageMax": 12,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 201
   },
   {
     "title": "Ava and the Garden of Surprises",
@@ -1245,7 +1325,7 @@
           "On a mountain",
           "Near a river"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Ava do when she found Daisy the rabbit hungry and sad?",
@@ -1255,7 +1335,7 @@
           "Called for help",
           "Took her to the pond"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What began to happen in the garden after Ava’s kind act?",
@@ -1265,7 +1345,7 @@
           "Creatures started sharing and gathering together",
           "The plants stopped growing"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "Who baked tiny cakes for the group?",
@@ -1275,7 +1355,7 @@
           "Daisy",
           "The wind"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Ava feel after making new friends by sharing?",
@@ -1285,7 +1365,7 @@
           "Warm and happy",
           "Worried"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Ava learn by the end of the story?",
@@ -1295,13 +1375,18 @@
           "Kindness is only for friends",
           "Gardens are scary"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973793/storytime/scqaleyjcclyfbc29wyc.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 9
+    "ageMax": 9,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 209
   },
   {
     "title": "Lulu's Lost Crayon",
@@ -1319,7 +1404,7 @@
           "Playing hide and seek",
           "Jumping rope"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Lulu do when Mo lost his blue crayon?",
@@ -1329,7 +1414,7 @@
           "She found another crayon",
           "She asked the teacher"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did the other classmates react?",
@@ -1339,7 +1424,7 @@
           "They began sharing their own crayons",
           "They stopped drawing"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What big project did the class make together?",
@@ -1349,7 +1434,7 @@
           "A leaf collection",
           "A jumping game"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What made Lulu feel proud at the end?",
@@ -1359,7 +1444,7 @@
           "Winning a prize",
           "Getting a gold star"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did the friends learn about sharing?",
@@ -1369,13 +1454,18 @@
           "It causes trouble",
           "It isn’t fun"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973829/storytime/bfbexjuhkkjokcvt7f06.webp",
     "isInteractive": true,
     "ageMin": 4,
-    "ageMax": 6
+    "ageMax": 6,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 220
   },
   {
     "title": "Sam and the Sandwich Picnic",
@@ -1393,7 +1483,7 @@
           "Swimming in the lake",
           "Climbing tall trees"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who did Sam first share his sandwich with?",
@@ -1403,7 +1493,7 @@
           "A shy mole",
           "A rabbit"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did the picnic change when Sam shared?",
@@ -1413,7 +1503,7 @@
           "Sam was left hungry",
           "The animals went home"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did the blue jay do after tasting Sam’s sandwich?",
@@ -1423,7 +1513,7 @@
           "Gave Sam a berry",
           "Took all the sandwiches"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What did Sam learn from the picnic?",
@@ -1433,7 +1523,7 @@
           "Sandwiches are only for squirrels",
           "Making new friends is scary"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What food did Sam like to make?",
@@ -1443,13 +1533,18 @@
           "Honey cakes",
           "Vegetable stew"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973855/storytime/ukcobq7lopwuhcv4nkyi.webp",
     "isInteractive": true,
     "ageMin": 6,
-    "ageMax": 10
+    "ageMax": 10,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 206
   },
   {
     "title": "Emmy and the Secret Seeds",
@@ -1467,7 +1562,7 @@
           "A shiny shovel",
           "A basket of carrots"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Emmy feel when she didn’t see plants right away?",
@@ -1477,7 +1572,7 @@
           "Sleepy",
           "Hungry"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Mama Rabbit tell Emmy about the seeds?",
@@ -1487,7 +1582,7 @@
           "They don’t need water",
           "They are magic"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What did Emmy do while waiting for the seeds to grow?",
@@ -1497,7 +1592,7 @@
           "She forgot about them",
           "She ate them"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What happened after Emmy waited patiently?",
@@ -1507,7 +1602,7 @@
           "She lost her seeds",
           "It snowed"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Emmy do with her harvest?",
@@ -1517,13 +1612,18 @@
           "Shared it with her family and friends",
           "Sold it at the market"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973913/storytime/ymf06bewe1cf29aio0q1.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 220
   },
   {
     "title": "Theo and the Slowest Race",
@@ -1541,7 +1641,7 @@
           "A singing party",
           "A swimming match"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Theo feel before the race?",
@@ -1551,7 +1651,7 @@
           "Sleepy",
           "Not interested"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What did many of the fast animals do during the race?",
@@ -1561,7 +1661,7 @@
           "Tripped and tumbled",
           "Carried Theo"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Theo help his friends during the race?",
@@ -1571,7 +1671,7 @@
           "Raced past them",
           "Asked someone else to help"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Did Theo win the race?",
@@ -1581,7 +1681,7 @@
           "He gave up halfway",
           "He forgot to race"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What lesson did the animals learn from Theo?",
@@ -1591,13 +1691,18 @@
           "Always give up if you are slow",
           "Only the first place matters"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973940/storytime/md0vgybsbiwvb1zapb6o.webp",
     "isInteractive": true,
     "ageMin": 7,
-    "ageMax": 11
+    "ageMax": 11,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 236
   },
   {
     "title": "Fiona and the Waiting Well",
@@ -1615,7 +1720,7 @@
           "Falling leaves",
           "Berry juice"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who encouraged Fiona to be patient?",
@@ -1625,7 +1730,7 @@
           "Otis the wise owl",
           "The river"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Fiona do while waiting for the rain?",
@@ -1635,7 +1740,7 @@
           "Slept all day",
           "Traveled far away"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Fiona feel when she finally saw water in the well?",
@@ -1645,7 +1750,7 @@
           "Excited and proud",
           "Scared"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What lesson did Fiona learn about patience?",
@@ -1655,7 +1760,7 @@
           "Patience is about growing stronger and kinder while you wait",
           "Only the fastest foxes are happy"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did the other animals react when the well was finally full?",
@@ -1665,13 +1770,18 @@
           "They drank, splashed, and thanked Fiona",
           "They covered the well"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973971/storytime/xi11oqfoo8k4sg77uaob.webp",
     "isInteractive": true,
     "ageMin": 6,
-    "ageMax": 9
+    "ageMax": 9,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 260
   },
   {
     "title": "Pip and the Pinecone Plan",
@@ -1689,7 +1799,7 @@
           "A berry bush",
           "A mushroom"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Pip feel when his pinecone didn't sprout right away?",
@@ -1699,7 +1809,7 @@
           "Hungry",
           "Sleepy"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "Who gave Pip advice about patience?",
@@ -1709,7 +1819,7 @@
           "A squirrel",
           "A bird"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Pip do while waiting for the pinecone to sprout?",
@@ -1719,7 +1829,7 @@
           "Kept busy, watered it, and cared for the soil",
           "Forgot about it"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Pip see when spring arrived?",
@@ -1729,7 +1839,7 @@
           "A tiny green sprout",
           "A butterfly"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Pip learn from growing his pine tree?",
@@ -1739,13 +1849,18 @@
           "Don't listen to friends",
           "Trees grow overnight"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973995/storytime/kin6y2xq3bcj3uwmsx5r.webp",
     "isInteractive": true,
     "ageMin": 4,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 245
   },
   {
     "title": "Willa Waits for Wings",
@@ -1763,7 +1878,7 @@
           "Being able to fly",
           "Finding hidden treasure"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "Who told Willa that 'one day, you will have wings too'?",
@@ -1773,7 +1888,7 @@
           "Her sister",
           "A butterfly"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Willa feel inside her chrysalis?",
@@ -1783,7 +1898,7 @@
           "Very hungry",
           "Sleepy and silly"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What happened when Willa emerged from her chrysalis?",
@@ -1793,7 +1908,7 @@
           "She forgot how to crawl",
           "She was tired"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What lesson did Willa learn?",
@@ -1803,7 +1918,7 @@
           "Waiting is boring and pointless",
           "Nothing ever changes"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "How did Willa feel when she could finally fly?",
@@ -1813,13 +1928,18 @@
           "Joyful and proud",
           "Sleepy"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974023/storytime/djr3hlpog7lfuddyooap.webp",
     "isInteractive": true,
     "ageMin": 3,
-    "ageMax": 6
+    "ageMax": 6,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 216
   },
   {
     "title": "Jasper and the Towering Sunflower",
@@ -1837,7 +1957,7 @@
           "A sunflower seed",
           "A bean"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Jasper care for his sunflower?",
@@ -1847,7 +1967,7 @@
           "Let the beetles eat it",
           "Moved away"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What advice did Penny the mole give Jasper?",
@@ -1857,7 +1977,7 @@
           "Plant more seeds",
           "Don’t sing to plants"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who visited Jasper’s sunflower?",
@@ -1867,7 +1987,7 @@
           "Only Jasper and Penny",
           "Cats"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Jasper feel when his sunflower finally bloomed?",
@@ -1877,7 +1997,7 @@
           "Sad because it took so long",
           "Tired and grumpy"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What lesson did Jasper learn?",
@@ -1887,13 +2007,18 @@
           "Sunflowers are too much work",
           "Only big animals can grow flowers"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974050/storytime/ddi5rlels54yc2ap1rbt.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 9
+    "ageMax": 9,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 218
   },
   {
     "title": "Nate and the Dandelion Parade",
@@ -1911,7 +2036,7 @@
           "Dandelions",
           "Lilies"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "Why did Nate have to wait before seeing the dandelions?",
@@ -1921,7 +2046,7 @@
           "He forgot where the meadow was",
           "He was too tired"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Nate spend his time while waiting?",
@@ -1931,7 +2056,7 @@
           "Ate carrots all day",
           "Took long naps"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Nate and his friends do when the dandelions finally bloomed?",
@@ -1941,7 +2066,7 @@
           "Stayed indoors",
           "Cut down the flowers"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "How did Nate feel after seeing the field full of dandelions?",
@@ -1951,7 +2076,7 @@
           "Angry it took so long",
           "Sad that spring was ending"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Nate learn from his experience?",
@@ -1961,13 +2086,18 @@
           "Rabbits should never wait",
           "Dandelions are not worth the wait"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974079/storytime/gqanm6eqyrhn7xebk03w.webp",
     "isInteractive": true,
     "ageMin": 3,
-    "ageMax": 7
+    "ageMax": 7,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 230
   },
   {
     "title": "Layla and the Slow-Growing Shell",
@@ -1985,7 +2115,7 @@
           "Faster legs",
           "A new home"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why did Layla feel sad sometimes?",
@@ -1995,7 +2125,7 @@
           "She lost her way",
           "She couldn’t find food"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What advice did Layla's grandmother give her?",
@@ -2005,7 +2135,7 @@
           "Rush around the garden",
           "Ask the butterflies for help"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Layla do while she waited for her shell to grow?",
@@ -2015,7 +2145,7 @@
           "Stopped eating",
           "Gave up on her shell"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "How did Layla feel when her shell finally grew bigger and shinier?",
@@ -2025,7 +2155,7 @@
           "Still jealous",
           "Bored"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Layla learn about patience?",
@@ -2035,13 +2165,18 @@
           "Shiny things are only for butterflies",
           "Snails should rush everything"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974112/storytime/huajfuk3k9kw926e4uew.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 10
+    "ageMax": 10,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 246
   },
   {
     "title": "Max’s Mountain Climb",
@@ -2059,7 +2194,7 @@
           "Climb to the highest peak above his valley",
           "Swim in a river"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What happened when Max tried to climb the mountain too quickly?",
@@ -2069,7 +2204,7 @@
           "He found a shortcut",
           "He got bored"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What advice did Max’s mother give him?",
@@ -2079,7 +2214,7 @@
           "Don’t try to climb",
           "Ask the elder goats to carry him"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "How did Max practice patience while climbing?",
@@ -2089,7 +2224,7 @@
           "Climbed a little higher each day and rested when needed",
           "Called for help"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Max feel when he finally reached the top?",
@@ -2099,7 +2234,7 @@
           "Afraid of the heights",
           "Sad about climbing"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What lesson did Max learn from his adventure?",
@@ -2109,13 +2244,18 @@
           "Climbing isn’t fun",
           "Only elder goats belong at the top"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974135/storytime/u5jfc7beeejcqjcgg1h1.webp",
     "isInteractive": true,
     "ageMin": 7,
-    "ageMax": 12
+    "ageMax": 12,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 209
   },
   {
     "title": "Rumi Waits for Rainbows",
@@ -2133,7 +2273,7 @@
           "Snowflakes",
           "New mountains"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "After storms, what did Rumi do?",
@@ -2143,7 +2283,7 @@
           "Ate bamboo",
           "Played with birds"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What advice did Rumi’s grandmother give him?",
@@ -2153,7 +2293,7 @@
           "Always hurry",
           "Jump as high as you can"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Rumi practice patience while waiting for a rainbow?",
@@ -2163,7 +2303,7 @@
           "Forgot about rainbows",
           "Left the mountains"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "How did Rumi feel when he finally saw a rainbow?",
@@ -2173,7 +2313,7 @@
           "Delighted and full of wonder",
           "Scared"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What lesson did Rumi learn about patience?",
@@ -2183,13 +2323,18 @@
           "It’s always boring to wait",
           "Rainbows only appear at night"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974158/storytime/dcocgtozo0zpm4muv7hg.webp",
     "isInteractive": true,
     "ageMin": 4,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 241
   },
   {
     "title": "Ellie and the Echoing Cavern",
@@ -2207,7 +2352,7 @@
           "It was underwater",
           "Only bats could enter"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why did Leo the moth feel left out?",
@@ -2217,7 +2362,7 @@
           "He lived outside the cavern",
           "He disliked bats"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Ellie do to help Leo?",
@@ -2227,7 +2372,7 @@
           "Listened to him carefully and encouraged others to listen too",
           "Played games with him"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did the other bats change after listening to Leo?",
@@ -2237,7 +2382,7 @@
           "They discovered his stories were enchanting",
           "They talked even more loudly"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Ellie believe about echoes and listening?",
@@ -2247,7 +2392,7 @@
           "Only her voice matters",
           "Bats should only talk at night"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Echo Cavern change after everyone practiced listening?",
@@ -2257,13 +2402,18 @@
           "No one told stories anymore",
           "The cavern became empty"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974225/storytime/ijv4oeuncwyxahyu51gb.webp",
     "isInteractive": true,
     "ageMin": 7,
-    "ageMax": 11
+    "ageMax": 11,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 231
   },
   {
     "title": "Milo and the Whispering Meadow",
@@ -2281,7 +2431,7 @@
           "Sleeping all day",
           "Flying with birds"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What problem started the misunderstanding in the meadow?",
@@ -2291,7 +2441,7 @@
           "Milo hid everyone's food",
           "Tessa moved away"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why did things get more confusing at first?",
@@ -2301,7 +2451,7 @@
           "They lost their way",
           "A fox arrived"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "How did Tessa Tortoise help the animals?",
@@ -2311,7 +2461,7 @@
           "She baked a cake",
           "She gave out seeds"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Milo learn after the listening circle?",
@@ -2321,7 +2471,7 @@
           "Stories aren't important",
           "The meadow is boring"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did the meadow change after the animals learned to listen?",
@@ -2331,13 +2481,18 @@
           "They argued more often",
           "They stopped talking"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974251/storytime/c1t7gxlt8j0uxbsxsl5b.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 9
+    "ageMax": 9,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 220
   },
   {
     "title": "Tina Turtle’s Listening Lantern",
@@ -2355,7 +2510,7 @@
           "On a mountain",
           "In a city"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why was Felix the firefly glowing dimly?",
@@ -2365,7 +2520,7 @@
           "No one was listening to his story",
           "He didn’t like the pond"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What special object did Tina make?",
@@ -2375,7 +2530,7 @@
           "A dragonfly kite",
           "A big cake"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did the animals use the Listening Lantern?",
@@ -2385,7 +2540,7 @@
           "To catch bugs",
           "To find treasure"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Tina realize about listening?",
@@ -2395,7 +2550,7 @@
           "Only turtles should listen",
           "It’s too hard to do"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What changed at the pond after Tina’s idea?",
@@ -2405,13 +2560,18 @@
           "Friendships grew stronger and the pond was happier",
           "The pond dried up"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974280/storytime/on3cx2n4iqgvulxsgsbv.webp",
     "isInteractive": true,
     "ageMin": 4,
-    "ageMax": 7
+    "ageMax": 7,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 199
   },
   {
     "title": "Ollie Owl and the Wise Woods",
@@ -2429,7 +2589,7 @@
           "Ollie lost his feathers",
           "There were no more acorns"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Ollie first try to solve the problem?",
@@ -2439,7 +2599,7 @@
           "By taking the clock apart and hiding it",
           "By leaving the woods"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What did Mrs. Fox suggest to Ollie?",
@@ -2449,7 +2609,7 @@
           "Move the clock to a new tree",
           "Let the clock stay broken"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did the animals finally fix the clock?",
@@ -2459,7 +2619,7 @@
           "The clock fixed itself",
           "They gave up on meetings"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What did Ollie learn from this experience?",
@@ -2469,7 +2629,7 @@
           "Clocks can’t be fixed",
           "Only owls should solve problems"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What changed in Wise Woods because of Ollie’s new way of listening?",
@@ -2479,13 +2639,18 @@
           "No one shared ideas",
           "The clock was never used again"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974310/storytime/tbht7mfwr6xsnuszsq9t.webp",
     "isInteractive": true,
     "ageMin": 6,
-    "ageMax": 10
+    "ageMax": 10,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 229
   },
   {
     "title": "Gracie Goat Learns to Listen",
@@ -2503,7 +2668,7 @@
           "Read books",
           "Take long naps"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What happened when Gracie didn’t listen to her friends?",
@@ -2513,7 +2678,7 @@
           "They threw a party",
           "Nothing changed"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who helped Gracie realize she hadn’t listened?",
@@ -2523,7 +2688,7 @@
           "Grandpa Ram",
           "Her teacher"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Gracie fix the problem?",
@@ -2533,7 +2698,7 @@
           "She left the meadow",
           "She took a nap"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What was the result of listening to her friends?",
@@ -2543,7 +2708,7 @@
           "A shorter friendship",
           "A forgotten project"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What lesson did Gracie learn?",
@@ -2553,13 +2718,18 @@
           "Fort-building is hard work",
           "Only goats have good ideas"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974334/storytime/rd78b88tyyx22uznfejf.webp",
     "isInteractive": true,
     "ageMin": 3,
-    "ageMax": 6
+    "ageMax": 6,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 229
   },
   {
     "title": "Percy Penguin and the Polar Tune",
@@ -2577,7 +2747,7 @@
           "Collect seashells",
           "Build snow forts"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why did Percy’s friends get frustrated at first?",
@@ -2587,7 +2757,7 @@
           "He got lost",
           "He didn’t invite them"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who gave Percy advice about making music together?",
@@ -2597,7 +2767,7 @@
           "Old Walrus the teacher",
           "His mother"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Percy change his behavior the next day?",
@@ -2607,7 +2777,7 @@
           "He sang even louder",
           "He quit the band"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What happened when everyone listened to each other?",
@@ -2617,7 +2787,7 @@
           "They forgot the tune",
           "They played alone"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What lesson did Percy learn about listening?",
@@ -2627,13 +2797,18 @@
           "Only penguins can sing",
           "Being the loudest is best"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974362/storytime/innfyuxrojciqvawut8e.webp",
     "isInteractive": true,
     "ageMin": 4,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 223
   },
   {
     "title": "Nora and the Listening Leaves",
@@ -2651,7 +2826,7 @@
           "She didn’t like the oak tree",
           "She lost her acorns"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Nora do when she heard Hedgie and Willa talking?",
@@ -2661,7 +2836,7 @@
           "She threw acorns",
           "She ran away"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What secrets did Nora learn by listening?",
@@ -2671,7 +2846,7 @@
           "How to run fast",
           "How to build a nest"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Nora help her friends in return?",
@@ -2681,7 +2856,7 @@
           "She sang a song",
           "She climbed the tallest tree"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Nora’s life change after learning to listen?",
@@ -2691,7 +2866,7 @@
           "She moved away",
           "She stopped climbing trees"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What do the autumn leaves do in Nora’s favorite forest?",
@@ -2701,13 +2876,18 @@
           "Turn silver",
           "Disappear quickly"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974389/storytime/msp2bqsinzvwvpxrvlbi.webp",
     "isInteractive": true,
     "ageMin": 7,
-    "ageMax": 12
+    "ageMax": 12,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 195
   },
   {
     "title": "Benny Beaver and the Babbling Brook",
@@ -2725,7 +2905,7 @@
           "Sing loud songs",
           "Hide in the grass"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why did Benny’s first dam wash away?",
@@ -2735,7 +2915,7 @@
           "He forgot to use sticks",
           "He wanted to swim instead"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who helped Benny see the value of listening?",
@@ -2745,7 +2925,7 @@
           "A butterfly",
           "Freddie Frog"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What happened when Benny listened to his friends?",
@@ -2755,7 +2935,7 @@
           "They built the strongest dam together",
           "The brook flooded"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did listening affect Benny’s friendships?",
@@ -2765,7 +2945,7 @@
           "No one played with him",
           "Everyone argued"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What lesson did Benny learn?",
@@ -2775,13 +2955,18 @@
           "Fast is always better",
           "Dams are boring"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974430/storytime/invgsiflrogykzqvlgy5.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 228
   },
   {
     "title": "Maisie Mouse and the Secret Signal",
@@ -2799,7 +2984,7 @@
           "Inside the farmhouse",
           "By the river"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why was everyone in the farmyard confused?",
@@ -2809,7 +2994,7 @@
           "It started to rain",
           "The picnic was cancelled"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who helped Maisie learn to listen?",
@@ -2819,7 +3004,7 @@
           "Rooster",
           "Collie Dog"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What was Collie Dog’s secret signal?",
@@ -2829,7 +3014,7 @@
           "A whistle",
           "A loud howl"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What happened when Maisie listened to each friend?",
@@ -2839,7 +3024,7 @@
           "She helped everyone understand the plan",
           "She ran away"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Maisie learn about listening?",
@@ -2849,13 +3034,18 @@
           "Only big animals need to listen",
           "It makes things more confusing"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974459/storytime/kmfutzzkai3dkn0s1xta.webp",
     "isInteractive": true,
     "ageMin": 3,
-    "ageMax": 6
+    "ageMax": 6,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 212
   },
   {
     "title": "Leo the Lion Listens",
@@ -2873,7 +3063,7 @@
           "Hide in the trees",
           "Eat grass"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why did the cubs start to argue?",
@@ -2883,7 +3073,7 @@
           "It was raining",
           "Auntie Nia stopped them"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who gave Leo advice about listening?",
@@ -2893,7 +3083,7 @@
           "Auntie Nia the lioness",
           "Zuri"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Leo solve the problem?",
@@ -2903,7 +3093,7 @@
           "He chose only his own game",
           "He didn’t play at all"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "How did the friends feel after playing all the games?",
@@ -2913,7 +3103,7 @@
           "Much happier and closer",
           "Tired of listening"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What lesson did Leo learn?",
@@ -2923,13 +3113,18 @@
           "Only lions should talk",
           "There’s only one right game"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974480/storytime/ind0tzwgbkyuilg2rxdm.webp",
     "isInteractive": true,
     "ageMin": 6,
-    "ageMax": 9
+    "ageMax": 9,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 217
   },
   {
     "title": "Tara's Tulip Surprise",
@@ -2947,7 +3142,7 @@
           "Climb trees",
           "Chase butterflies"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What problem did Tara notice with her tulips?",
@@ -2957,7 +3152,7 @@
           "Too many tulips grew",
           "The flowers were too tall"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who suggested that Tara move the garden for more sun?",
@@ -2967,7 +3162,7 @@
           "Penny the pigeon",
           "A squirrel"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Tara finally help her tulips bloom?",
@@ -2977,7 +3172,7 @@
           "Removed aphids with lavender spray and invited ladybugs",
           "Sang to them every night"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Tara learn from solving her garden problem?",
@@ -2987,7 +3182,7 @@
           "Problem-solving means thinking, asking for help, and trying ideas",
           "Flowers never bloom"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Tara do after her tulips finally bloomed?",
@@ -2997,13 +3192,18 @@
           "Pulled up the flowers",
           "Moved to a new garden"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974535/storytime/cf393baxtktvkfl1pxjw.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 224
   },
   {
     "title": "Felix and the River Riddle",
@@ -3021,7 +3221,7 @@
           "It grew taller",
           "It was covered in flowers"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why were the animals stuck on the far side of the river?",
@@ -3031,7 +3231,7 @@
           "They forgot how to swim",
           "There were too many fish"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Felix get the idea to solve the river problem?",
@@ -3041,7 +3241,7 @@
           "Swam under the water",
           "Waited for the rain to stop"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What did Felix build?",
@@ -3051,7 +3251,7 @@
           "A houseboat",
           "A boat out of leaves"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did the animals make sure the raft was safe before crossing?",
@@ -3061,7 +3261,7 @@
           "They waited for the water to dry",
           "They tied it to a tree"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did the animals learn from Felix’s solution?",
@@ -3071,13 +3271,18 @@
           "Teamwork and clever thinking can overcome challenges",
           "It’s best never to try"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974564/storytime/zpegolhctyejxscvjvc3.webp",
     "isInteractive": true,
     "ageMin": 7,
-    "ageMax": 11
+    "ageMax": 11,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 218
   },
   {
     "title": "Maya and the Mysterious Map",
@@ -3095,7 +3300,7 @@
           "A golden mushroom",
           "A pile of feathers"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who did Maya invite to help solve the map?",
@@ -3105,7 +3310,7 @@
           "A family of mice",
           "A flock of birds"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did the friends find inside the hollow tree?",
@@ -3115,7 +3320,7 @@
           "A secret door",
           "A hat"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Maya figure out where the pinecone symbol led?",
@@ -3125,7 +3330,7 @@
           "Dug in the creek",
           "Asked a mole"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What was inside the hidden treasure?",
@@ -3135,7 +3340,7 @@
           "A toy boat",
           "More maps"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did the friends learn on their adventure?",
@@ -3145,13 +3350,18 @@
           "Maps are useless",
           "Treasure is never found"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974590/storytime/lavrn5l9qns2tu3i9pfh.webp",
     "isInteractive": true,
     "ageMin": 4,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 211
   },
   {
     "title": "Zara Zebra Fixes the Fence",
@@ -3169,7 +3379,7 @@
           "Lost zebra stripes",
           "A missing snack bag"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why was the gap in the fence a worry?",
@@ -3179,7 +3389,7 @@
           "It was too bright",
           "It made noise"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Zara first try to fix the gap?",
@@ -3189,7 +3399,7 @@
           "Built a bridge",
           "Sprinkled water"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Zara finally solve the problem?",
@@ -3199,7 +3409,7 @@
           "With a net",
           "By calling for help"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did the other young animals help?",
@@ -3209,7 +3419,7 @@
           "Watched from afar",
           "Sang a song"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What did this adventure teach Zara?",
@@ -3219,13 +3429,18 @@
           "Fences should be ignored",
           "Problems can wait until tomorrow"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974620/storytime/iqvgcyr7gheraxqi0zdy.webp",
     "isInteractive": true,
     "ageMin": 6,
-    "ageMax": 10
+    "ageMax": 10,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 200
   },
   {
     "title": "Penny and the Puzzle of the Pond",
@@ -3243,7 +3458,7 @@
           "Lots of rain",
           "New fish appeared"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who did Penny ask to help her solve the mystery?",
@@ -3253,7 +3468,7 @@
           "The frogs only",
           "No one"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What clue did Sally Snail find?",
@@ -3263,7 +3478,7 @@
           "A bird nest",
           "A fish jumping"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did the friends do after finding the little channel?",
@@ -3273,7 +3488,7 @@
           "Ran away",
           "Waited for rain"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did the animals feel when the pond filled again?",
@@ -3283,7 +3498,7 @@
           "Tired",
           "Worried"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What important skill did Penny use to solve the pond problem?",
@@ -3293,13 +3508,18 @@
           "Sleeping all day",
           "Ignoring the issue"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974643/storytime/ascumspaqrkesn4rih2z.webp",
     "isInteractive": true,
     "ageMin": 3,
-    "ageMax": 6
+    "ageMax": 6,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 200
   },
   {
     "title": "Simon Snake Saves the Day",
@@ -3317,7 +3537,7 @@
           "It started raining during the game",
           "Their football popped"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Why did Simon hesitate to help at first?",
@@ -3327,7 +3547,7 @@
           "He thought he wasn’t strong or fast enough",
           "He was too hungry"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Simon reach the stuck football?",
@@ -3337,7 +3557,7 @@
           "He slithered up the tree and along the branch",
           "He jumped really high"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Simon use to help the ball fall?",
@@ -3347,7 +3567,7 @@
           "His tongue",
           "A stick"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did the other animals react after Simon rescued the football?",
@@ -3357,7 +3577,7 @@
           "They left the clearing",
           "They took a nap"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Simon and his friends learn from this adventure?",
@@ -3367,13 +3587,18 @@
           "Different skills and creative thinking help solve problems",
           "Games are not important"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974685/storytime/qlf02wc1rgu9gybjcn9h.webp",
     "isInteractive": true,
     "ageMin": 7,
-    "ageMax": 10
+    "ageMax": 10,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 188
   },
   {
     "title": "Lila Ladybug and the Stuck Petal",
@@ -3391,7 +3616,7 @@
           "Buzz the bee",
           "A butterfly"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Lila do first to try and help?",
@@ -3401,7 +3626,7 @@
           "Called for help right away",
           "Cried"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "Who helped Lila solve the problem?",
@@ -3411,7 +3636,7 @@
           "Just Buzz the bee",
           "A grasshopper"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did the butterfly help?",
@@ -3421,7 +3646,7 @@
           "Used her wings to hold the petal up",
           "Brought more ants"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did the garden friends do after Buzz got free?",
@@ -3431,7 +3656,7 @@
           "Went to sleep",
           "Flew away"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What was the biggest lesson the bugs learned?",
@@ -3441,13 +3666,18 @@
           "Teamwork and solving problems together can fix anything",
           "It's better to work alone"
         ],
-        "answer": 2
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974715/storytime/ulhhguybal8vlpmyj10x.webp",
     "isInteractive": true,
     "ageMin": 3,
-    "ageMax": 6
+    "ageMax": 6,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 176
   },
   {
     "title": "Ollie Owl and the Midnight Maze",
@@ -3465,7 +3695,7 @@
           "They followed a squirrel",
           "They were playing a game"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What clue did Ollie listen for?",
@@ -3475,7 +3705,7 @@
           "Bats fluttering",
           "An owl hooting"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Margo Mouse suggest?",
@@ -3485,7 +3715,7 @@
           "Climb a tree",
           "Dig a tunnel"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Greta Goat help the group?",
@@ -3495,7 +3725,7 @@
           "Ate the bushes",
           "Slept on a log"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What did the friends learn from their adventure?",
@@ -3505,7 +3735,7 @@
           "Working together and using different clues can solve tough problems",
           "Don’t leave home after dark"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did the friends feel at the end of the story?",
@@ -3515,13 +3745,18 @@
           "Angry at the forest",
           "Too tired to walk"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974746/storytime/e3mewpnbpujm8ufcuyum.webp",
     "isInteractive": true,
     "ageMin": 8,
-    "ageMax": 12
+    "ageMax": 12,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 214
   },
   {
     "title": "Ravi's Rainy Day Blues",
@@ -3541,7 +3776,7 @@
           "He had too much homework",
           "His friends moved away"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Ravi act at first when he was feeling sad?",
@@ -3551,7 +3786,7 @@
           "He left home",
           "He ran outside in the rain"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who helped Ravi feel better?",
@@ -3561,7 +3796,7 @@
           "His teacher",
           "The sun"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What activities helped Ravi feel happier?",
@@ -3571,7 +3806,7 @@
           "Eating a snack alone",
           "Staring at the rain"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What did Ravi do after he felt better?",
@@ -3581,7 +3816,7 @@
           "Invited friends for a fort-building contest and games",
           "Wished the rain would return"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What lesson did Ravi learn about feelings?",
@@ -3591,13 +3826,18 @@
           "Rainy days are always bad",
           "Being sad is wrong"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974792/storytime/clpfqifgmtqve0jdswqc.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 216
   },
   {
     "title": "Clara Cat and the Storm of Feelings",
@@ -3617,7 +3857,7 @@
           "Her friends moved away",
           "The sun was too hot"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "Where did Clara hide when the storm started?",
@@ -3627,7 +3867,7 @@
           "In the garden",
           "On the roof"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Clara's papa help her start to feel better?",
@@ -3637,7 +3877,7 @@
           "Listened, named her feelings, and taught her to take slow breaths",
           "Played games"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What activity helped Clara calm down after the storm?",
@@ -3647,7 +3887,7 @@
           "Jumping on the bed",
           "Taking a nap"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Clara feel after she shared her feelings and used new strategies?",
@@ -3657,7 +3897,7 @@
           "Sleepy and tired",
           "Ready for another storm"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What lesson did Clara learn?",
@@ -3667,13 +3907,18 @@
           "Storms are always scary",
           "Sadness never goes away"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974817/storytime/ko4mhiwzzhf7bgdmffrm.webp",
     "isInteractive": true,
     "ageMin": 6,
-    "ageMax": 10
+    "ageMax": 10,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 212
   },
   {
     "title": "Gus Gecko Gets the Giggles",
@@ -3693,7 +3938,7 @@
           "He was hungry",
           "He missed his home"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What happened when Gus giggled a lot during storytime?",
@@ -3703,7 +3948,7 @@
           "Gus was sent home",
           "No one noticed"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who helped Gus learn to calm down?",
@@ -3713,7 +3958,7 @@
           "His friend Lila",
           "A bluebird"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What calming strategy did Gus try?",
@@ -3723,7 +3968,7 @@
           "Closing his eyes, breathing deeply and counting",
           "Running outside"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What did Gus learn about feelings?",
@@ -3733,7 +3978,7 @@
           "It's okay to be excited, but you can find helpful ways to manage it",
           "Only adults can giggle"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "How did Gus feel after practicing new strategies?",
@@ -3743,13 +3988,18 @@
           "Sleepy",
           "Unhappy"
         ],
-        "answer": 0
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974846/storytime/mxbnphlyfuuvo4diojnl.webp",
     "isInteractive": true,
     "ageMin": 4,
-    "ageMax": 7
+    "ageMax": 7,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 212
   },
   {
     "title": "Pippa Porcupine Finds Her Calm",
@@ -3769,7 +4019,7 @@
           "Meeting a hedgehog",
           "Rainy weather"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Pippa act when everything changed?",
@@ -3779,7 +4029,7 @@
           "She ran away from home",
           "She threw a party"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What did Pippa’s mom suggest to help her calm down?",
@@ -3789,7 +4039,7 @@
           "Eat more berries",
           "Sing loudly"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Pippa start to feel better in her new home?",
@@ -3799,7 +4049,7 @@
           "By hiding all day",
           "By going back to the old burrow"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "What changed for Pippa after she tried calming strategies?",
@@ -3809,7 +4059,7 @@
           "She felt braver, found new things she liked, and played again",
           "She lost her pebble"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What lesson did Pippa learn about feelings?",
@@ -3819,13 +4069,18 @@
           "Moving is always bad",
           "Change should be avoided"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974871/storytime/jemuagsq5kcp03fosnrv.webp",
     "isInteractive": true,
     "ageMin": 7,
-    "ageMax": 11
+    "ageMax": 11,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 224
   },
   {
     "title": "Milo Mole and the Bubble of Worry",
@@ -3845,7 +4100,7 @@
           "He couldn’t find dinner",
           "His tunnel collapsed"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "Who helped Milo with his worries?",
@@ -3855,7 +4110,7 @@
           "Anya Ant, his friend",
           "A butterfly"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What calming technique did Anya and Milo use together?",
@@ -3865,7 +4120,7 @@
           "Ate a snack",
           "Dug more tunnels"
         ],
-        "answer": 1
+        "correctOption": 1
       },
       {
         "question": "How did Milo feel after using mindfulness?",
@@ -3875,7 +4130,7 @@
           "He fell asleep",
           "He left the talent show"
         ],
-        "answer": 0
+        "correctOption": 0
       },
       {
         "question": "What did Milo do during the talent show?",
@@ -3885,7 +4140,7 @@
           "Sang beautifully and remembered to breathe when nervous",
           "Ran off stage"
         ],
-        "answer": 2
+        "correctOption": 2
       },
       {
         "question": "What lesson did Milo learn about worries?",
@@ -3895,280 +4150,1308 @@
           "You should never feel nervous",
           "Always ignore your feelings"
         ],
-        "answer": 1
+        "correctOption": 1
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750974903/storytime/antjnethbpadrxuxkva8.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 209
   },
   {
     "title": "The Space Explorer's Dream",
     "description": "A young astronaut discovers a friendly alien civilization and learns about cooperation across cultures.",
     "language": "English",
-    "theme": ["Sci-Fi", "Adventure", "Friendship & Belonging"],
-    "category": ["Science Fiction & Space", "Adventure & Action"],
+    "theme": [
+      "Sci-Fi",
+      "Adventure",
+      "Friendship & Belonging"
+    ],
+    "category": [
+      "Science Fiction & Space",
+      "Adventure & Action"
+    ],
     "content": "Captain Maya was the youngest astronaut on the space station Aurora. At only 12 years old, she had trained harder than anyone to earn her place among the stars. One night, while everyone else slept, Maya noticed strange lights dancing outside her window.\n\nThe lights formed patterns that seemed almost like... a message! Maya quickly decoded them using her computer. The message said: 'Hello, friend from the blue planet. We need help.'\n\nMaya's heart raced. First contact with aliens! She responded with her own light signals. Soon, a small, shimmering ship appeared. Inside was Zyx, a friendly being made of starlight with eyes like galaxies.\n\n'Our planet's sun is fading,' Zyx explained. 'We've heard Earth scientists are brilliant problem-solvers.'\n\nMaya remembered her training: different perspectives lead to better solutions. She called her crewmates, and together with Zyx's people, they worked through the night. The aliens had advanced energy technology, while humans understood solar dynamics.\n\nBy combining their knowledge, they created a solar rejuvenator that saved Zyx's world. In gratitude, the aliens shared their technology for clean energy with Earth.\n\nAs Zyx departed, they left Maya a star compass. 'For the explorer who united two worlds,' Zyx said. Maya smiled, knowing the universe had just become a friendlier place.",
     "questions": [
       {
         "question": "How old was Captain Maya?",
-        "options": ["10 years old", "11 years old", "12 years old", "13 years old"],
-        "answer": 2
+        "options": [
+          "10 years old",
+          "11 years old",
+          "12 years old",
+          "13 years old"
+        ],
+        "correctOption": 2
       },
       {
         "question": "What did Maya first notice that was unusual?",
-        "options": ["A spaceship", "Strange lights", "An alien", "A message on her computer"],
-        "answer": 1
+        "options": [
+          "A spaceship",
+          "Strange lights",
+          "An alien",
+          "A message on her computer"
+        ],
+        "correctOption": 1
       },
       {
         "question": "What problem did Zyx's people have?",
-        "options": ["Their ship was broken", "Their sun was fading", "They were lost", "They needed food"],
-        "answer": 1
+        "options": [
+          "Their ship was broken",
+          "Their sun was fading",
+          "They were lost",
+          "They needed food"
+        ],
+        "correctOption": 1
       },
       {
         "question": "How did they solve the problem?",
-        "options": ["Maya fixed it alone", "The aliens fixed it alone", "They combined their knowledge", "They asked Earth for help"],
-        "answer": 2
+        "options": [
+          "Maya fixed it alone",
+          "The aliens fixed it alone",
+          "They combined their knowledge",
+          "They asked Earth for help"
+        ],
+        "correctOption": 2
       },
       {
         "question": "What gift did Zyx leave for Maya?",
-        "options": ["A star compass", "A spaceship", "Energy technology", "A book"],
-        "answer": 0
+        "options": [
+          "A star compass",
+          "A spaceship",
+          "Energy technology",
+          "A book"
+        ],
+        "correctOption": 0
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973099/storytime/space_adventure.webp",
     "isInteractive": true,
     "ageMin": 8,
-    "ageMax": 12
+    "ageMax": 12,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 208
   },
   {
     "title": "The Magic Paintbrush",
     "description": "A young artist discovers that her paintings come to life and learns about the responsibility that comes with creative power.",
     "language": "English",
-    "theme": ["Fantasy", "Change & Transformation", "Hope & Perseverance"],
-    "category": ["Fantasy & Magic", "Educational & Learning Stories"],
+    "theme": [
+      "Fantasy",
+      "Change & Transformation",
+      "Hope & Perseverance"
+    ],
+    "category": [
+      "Fantasy & Magic",
+      "Educational & Learning Stories"
+    ],
     "content": "Lin loved to paint more than anything in the world. She saved every penny to buy art supplies, but her family was poor, and good brushes were expensive. One day, while helping an elderly woman carry her groceries, the woman gifted Lin an old paintbrush.\n\n'This brush is special,' the woman whispered. 'Use it wisely.'\n\nThat night, Lin painted a bowl of rice for her hungry little brother. To her amazement, the rice became real! Her brother ate happily while Lin stared at the magic brush in wonder.\n\nWord spread quickly about Lin's gift. The greedy landlord demanded she paint him mountains of gold. When Lin refused, he tried to steal the brush. But the brush only worked for Lin, whose heart was pure.\n\nInstead, Lin painted gardens for the hungry, warm coats for the cold, and schools for children who wanted to learn. She painted rain for farmers during drought and bridges to connect divided villages.\n\nOne day, the elderly woman returned. 'You've learned the secret,' she smiled. 'True magic isn't in the brush—it's in using our gifts to help others.'\n\nThe brush's glow faded, becoming ordinary. But Lin didn't mind. She had learned that the real magic was in her kind heart and helpful hands. She continued painting, now teaching other children, spreading joy through art and compassion.",
     "questions": [
       {
         "question": "How did Lin get the magic paintbrush?",
-        "options": ["She bought it", "She found it", "An elderly woman gave it to her", "She stole it"],
-        "answer": 2
+        "options": [
+          "She bought it",
+          "She found it",
+          "An elderly woman gave it to her",
+          "She stole it"
+        ],
+        "correctOption": 2
       },
       {
         "question": "What was the first thing Lin painted that came to life?",
-        "options": ["Gold coins", "A bowl of rice", "A garden", "A coat"],
-        "answer": 1
+        "options": [
+          "Gold coins",
+          "A bowl of rice",
+          "A garden",
+          "A coat"
+        ],
+        "correctOption": 1
       },
       {
         "question": "Why couldn't the landlord use the brush?",
-        "options": ["It was broken", "It only worked for Lin", "He didn't know how to paint", "The woman took it back"],
-        "answer": 1
+        "options": [
+          "It was broken",
+          "It only worked for Lin",
+          "He didn't know how to paint",
+          "The woman took it back"
+        ],
+        "correctOption": 1
       },
       {
         "question": "What did Lin learn was the real magic?",
-        "options": ["The paintbrush", "Her paintings", "Using gifts to help others", "Being rich"],
-        "answer": 2
+        "options": [
+          "The paintbrush",
+          "Her paintings",
+          "Using gifts to help others",
+          "Being rich"
+        ],
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973099/storytime/magic_paintbrush.webp",
     "isInteractive": true,
     "ageMin": 6,
-    "ageMax": 10
+    "ageMax": 10,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 220
   },
   {
     "title": "The Tiny Dragon's Big Heart",
     "description": "The smallest dragon in the kingdom proves that size doesn't determine the impact you can make.",
     "language": "English",
-    "theme": ["Courage / Bravery", "Identity & Self-Discovery", "Friendship & Belonging"],
-    "category": ["Fantasy & Magic", "Animal Stories"],
+    "theme": [
+      "Courage / Bravery",
+      "Identity & Self-Discovery",
+      "Friendship & Belonging"
+    ],
+    "category": [
+      "Fantasy & Magic",
+      "Animal Stories"
+    ],
     "content": "Pip was the tiniest dragon in all of Dragon Valley. While other dragons breathed mighty flames and flew high in the clouds, Pip could only puff small sparkles and flutter just above the flowers.\n\nThe other dragons laughed when Pip tried to join their flying races. 'You're too small!' they roared. 'Go play with the butterflies!' Pip felt very sad and flew to the quiet meadow to be alone.\n\nThere, Pip found a group of animal friends trapped by a fallen tree after a storm. The opening was too small for big dragons, but perfect for Pip! Pip squeezed through and used those small sparkles to create light in the darkness, helping everyone find their way out.\n\nThe rabbit, squirrel, and bird families were so grateful. They told everyone about brave little Pip. Soon, whenever small animals were in trouble—baby birds fallen from nests, mice stuck in tiny spaces—they called for Pip.\n\nOne day, the Dragon King's crown rolled into a narrow cave. No dragon could reach it except... Pip! The tiny dragon retrieved the crown, and the King declared, 'Size is not what makes a dragon great. It's the size of their heart and courage!'\n\nFrom that day on, Pip was known as the Heart of Dragon Valley, teaching everyone that being different wasn't a weakness—it was a special kind of strength.",
     "questions": [
       {
         "question": "What made Pip different from other dragons?",
-        "options": ["Different color", "Very tiny size", "No wings", "Couldn't breathe fire at all"],
-        "answer": 1
+        "options": [
+          "Different color",
+          "Very tiny size",
+          "No wings",
+          "Couldn't breathe fire at all"
+        ],
+        "correctOption": 1
       },
       {
         "question": "What could Pip's breath create?",
-        "options": ["Big flames", "Ice", "Small sparkles", "Wind"],
-        "answer": 2
+        "options": [
+          "Big flames",
+          "Ice",
+          "Small sparkles",
+          "Wind"
+        ],
+        "correctOption": 2
       },
       {
         "question": "Who did Pip first help?",
-        "options": ["The Dragon King", "Other dragons", "Animals trapped by a tree", "Baby birds"],
-        "answer": 2
+        "options": [
+          "The Dragon King",
+          "Other dragons",
+          "Animals trapped by a tree",
+          "Baby birds"
+        ],
+        "correctOption": 2
       },
       {
         "question": "What did Pip retrieve for the Dragon King?",
-        "options": ["His crown", "His sword", "His treasure", "His egg"],
-        "answer": 0
+        "options": [
+          "His crown",
+          "His sword",
+          "His treasure",
+          "His egg"
+        ],
+        "correctOption": 0
       },
       {
         "question": "What did Pip teach everyone?",
-        "options": ["Flying is important", "Size matters most", "Being different is a strength", "Dragons are the best"],
-        "answer": 2
+        "options": [
+          "Flying is important",
+          "Size matters most",
+          "Being different is a strength",
+          "Dragons are the best"
+        ],
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973099/storytime/tiny_dragon.webp",
     "isInteractive": true,
     "ageMin": 4,
-    "ageMax": 8
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 223
   },
   {
     "title": "The Garden of Kindness",
     "description": "A magical garden that only grows when children perform acts of kindness teaches a community about compassion.",
     "language": "English",
-    "theme": ["Greed vs. Generosity", "Love & Family", "Change & Transformation"],
-    "category": ["Fairy Tales", "Fables & Morality Stories"],
+    "theme": [
+      "Greed vs. Generosity",
+      "Love & Family",
+      "Change & Transformation"
+    ],
+    "category": [
+      "Fairy Tales",
+      "Fables & Morality Stories"
+    ],
     "content": "In the center of Willowbrook village stood an empty lot, dry and barren. One morning, a sign appeared: 'The Garden of Kindness - Water with good deeds.'\n\nCurious, eight-year-old Sam helped Mrs. Chen carry her heavy bags. Suddenly, a small green sprout appeared in the lot! When Sam's friend Maria shared her lunch with a hungry classmate, a beautiful flower bloomed.\n\nThe village children were amazed. Every kind act made the garden grow: Tom read to his little sister, and roses appeared. Amy included the lonely new student in her games, and a fruit tree grew. Kevin cleaned up litter, and a fountain began to flow.\n\nBut when children were mean or selfish, plants would wilt. Ben learned this when he refused to share his toys, and the strawberry bush he loved shriveled. He quickly apologized and shared, watching it bloom again.\n\nSoon, the garden was magnificent, filled with flowers, trees, and singing birds. The whole village gathered there, and something magical happened—the adults began doing kind deeds too. The garden grew beyond its borders, spreading beauty throughout the town.\n\nAn old gardener appeared one day and smiled. 'This garden was always here,' he said, 'in your hearts. Now you've learned to make it visible.' The sign changed to read: 'Kindness grows everywhere—just add love.'",
     "questions": [
       {
         "question": "What made plants grow in the garden?",
-        "options": ["Water", "Sunlight", "Kind acts", "Magic seeds"],
-        "answer": 2
+        "options": [
+          "Water",
+          "Sunlight",
+          "Kind acts",
+          "Magic seeds"
+        ],
+        "correctOption": 2
       },
       {
         "question": "What happened when children were mean?",
-        "options": ["Nothing", "Plants wilted", "New flowers grew", "The garden disappeared"],
-        "answer": 1
+        "options": [
+          "Nothing",
+          "Plants wilted",
+          "New flowers grew",
+          "The garden disappeared"
+        ],
+        "correctOption": 1
       },
       {
         "question": "Who was the first to make something grow?",
-        "options": ["Maria", "Tom", "Sam", "Ben"],
-        "answer": 2
+        "options": [
+          "Maria",
+          "Tom",
+          "Sam",
+          "Ben"
+        ],
+        "correctOption": 2
       },
       {
         "question": "What did Ben do to make the strawberry bush bloom again?",
-        "options": ["Watered it", "Apologized and shared", "Planted new seeds", "Asked for help"],
-        "answer": 1
+        "options": [
+          "Watered it",
+          "Apologized and shared",
+          "Planted new seeds",
+          "Asked for help"
+        ],
+        "correctOption": 1
       },
       {
         "question": "What did the old gardener reveal?",
-        "options": ["He planted the garden", "The garden was magic", "Kindness was always in their hearts", "The garden would disappear"],
-        "answer": 2
+        "options": [
+          "He planted the garden",
+          "The garden was magic",
+          "Kindness was always in their hearts",
+          "The garden would disappear"
+        ],
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973099/storytime/kindness_garden.webp",
     "isInteractive": true,
     "ageMin": 5,
-    "ageMax": 9
+    "ageMax": 9,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 215
   },
   {
     "title": "The Mystery of the Moonlight Music",
     "description": "Young detective twins solve the case of mysterious music that plays every full moon night.",
     "language": "English",
-    "theme": ["Adventure", "Trust & Loyalty", "Identity & Self-Discovery"],
-    "category": ["Mystery & Detective Stories", "Adventure & Action"],
+    "theme": [
+      "Adventure",
+      "Trust & Loyalty",
+      "Identity & Self-Discovery"
+    ],
+    "category": [
+      "Mystery & Detective Stories",
+      "Adventure & Action"
+    ],
     "content": "Every full moon, the village of Crescentville heard beautiful, haunting music floating through the streets. No one knew where it came from. Detective twins Max and Zoe, age ten, decided to solve the mystery.\n\nThey prepared their detective kit: notebooks, flashlights, and a sound recorder. On the next full moon, they followed the music through winding streets. It led them to the old clocktower that had been abandoned for years.\n\nClimbing carefully, they discovered a hidden room at the top. Inside sat Mr. Aldrich, the quiet librarian, playing a magnificent piano that glowed in the moonlight. He looked surprised but not angry.\n\n'Fifty years ago,' he explained, 'my daughter loved when I played piano. When she moved far away, I promised to play for her every full moon, so she could look at the moon and know I was thinking of her.'\n\nThe twins were touched. But why hide? Mr. Aldrich was shy and thought people would think him silly. Max and Zoe had an idea.\n\nThey organized a Full Moon Concert, inviting the whole village. Mr. Aldrich played his beautiful music, and everyone loved it. Best of all, they video-called his daughter, who cried happy tears. Now the village had a new tradition, and Mr. Aldrich had a whole community of friends.\n\nThe twins learned that sometimes the best mysteries have the most heartwarming solutions.",
     "questions": [
       {
         "question": "When did the mysterious music play?",
-        "options": ["Every night", "Every full moon", "Once a year", "Random nights"],
-        "answer": 1
+        "options": [
+          "Every night",
+          "Every full moon",
+          "Once a year",
+          "Random nights"
+        ],
+        "correctOption": 1
       },
       {
         "question": "Where did the music come from?",
-        "options": ["The library", "The forest", "The old clocktower", "The school"],
-        "answer": 2
+        "options": [
+          "The library",
+          "The forest",
+          "The old clocktower",
+          "The school"
+        ],
+        "correctOption": 2
       },
       {
         "question": "Who was making the music?",
-        "options": ["A ghost", "Mr. Aldrich the librarian", "The twins", "A music teacher"],
-        "answer": 1
+        "options": [
+          "A ghost",
+          "Mr. Aldrich the librarian",
+          "The twins",
+          "A music teacher"
+        ],
+        "correctOption": 1
       },
       {
         "question": "Why did Mr. Aldrich play music every full moon?",
-        "options": ["For practice", "For his daughter far away", "To scare people", "He liked the moon"],
-        "answer": 1
+        "options": [
+          "For practice",
+          "For his daughter far away",
+          "To scare people",
+          "He liked the moon"
+        ],
+        "correctOption": 1
       },
       {
         "question": "How did the twins help Mr. Aldrich?",
-        "options": ["Kept his secret", "Bought him a new piano", "Organized a public concert", "Called the police"],
-        "answer": 2
+        "options": [
+          "Kept his secret",
+          "Bought him a new piano",
+          "Organized a public concert",
+          "Called the police"
+        ],
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973099/storytime/moonlight_mystery.webp",
     "isInteractive": true,
     "ageMin": 7,
-    "ageMax": 11
+    "ageMax": 11,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 226
   },
   {
     "title": "The Rainbow Bridge Friends",
     "description": "Children from different cultures work together to rebuild a magical bridge that connects their communities.",
     "language": "English",
-    "theme": ["Friendship & Belonging", "Hope & Perseverance", "Change & Transformation"],
-    "category": ["Cultural & Folklore Stories", "Fairy Tales"],
+    "theme": [
+      "Friendship & Belonging",
+      "Hope & Perseverance",
+      "Change & Transformation"
+    ],
+    "category": [
+      "Cultural & Folklore Stories",
+      "Fairy Tales"
+    ],
     "content": "Long ago, seven villages sat around a great lake, each one a different color: Red Rock, Orange Grove, Yellow Sands, Green Valley, Blue Waters, Indigo Hills, and Violet Fields. A magical Rainbow Bridge connected them all, allowing everyone to visit and trade.\n\nOne stormy night, the bridge shattered. Without it, the villages grew apart and suspicious of each other. Years passed, and children heard only stories of the bridge.\n\nSeven brave children, one from each village, met secretly by the lake. Aisha from Red Rock brought courage, Bao from Orange Grove brought creativity, Carlos from Yellow Sands brought joy, Devi from Green Valley brought wisdom, Erik from Blue Waters brought peace, Fatima from Indigo Hills brought dreams, and Gideon from Violet Fields brought hope.\n\n'We can rebuild it together!' declared Aisha. Each child contributed something special: Aisha found the ancient building plans, Bao designed new supports, Carlos made everyone laugh during hard work, Devi solved construction puzzles, Erik settled disagreements, Fatima imagined how beautiful it would be, and Gideon kept everyone believing.\n\nAs they worked, their friendship grew stronger. When they finally placed the last piece, the bridge blazed with rainbow light! The villages reunited, celebrating with a festival of seven colors.\n\nThe children learned that like a rainbow needs all colors, communities are strongest when everyone contributes their unique gifts.",
     "questions": [
       {
         "question": "How many villages were around the lake?",
-        "options": ["Five", "Six", "Seven", "Eight"],
-        "answer": 2
+        "options": [
+          "Five",
+          "Six",
+          "Seven",
+          "Eight"
+        ],
+        "correctOption": 2
       },
       {
         "question": "What connected all the villages originally?",
-        "options": ["A road", "A Rainbow Bridge", "Boats", "A tunnel"],
-        "answer": 1
+        "options": [
+          "A road",
+          "A Rainbow Bridge",
+          "Boats",
+          "A tunnel"
+        ],
+        "correctOption": 1
       },
       {
         "question": "What did Carlos contribute to the group?",
-        "options": ["Courage", "Joy and laughter", "Dreams", "Peace"],
-        "answer": 1
+        "options": [
+          "Courage",
+          "Joy and laughter",
+          "Dreams",
+          "Peace"
+        ],
+        "correctOption": 1
       },
       {
         "question": "What happened when the bridge was completed?",
-        "options": ["It fell again", "It blazed with rainbow light", "Nothing special", "It turned gold"],
-        "answer": 1
+        "options": [
+          "It fell again",
+          "It blazed with rainbow light",
+          "Nothing special",
+          "It turned gold"
+        ],
+        "correctOption": 1
       },
       {
         "question": "What lesson did the children learn?",
-        "options": ["Bridges are important", "Colors are pretty", "Communities need everyone's unique gifts", "Children are stronger than adults"],
-        "answer": 2
+        "options": [
+          "Bridges are important",
+          "Colors are pretty",
+          "Communities need everyone's unique gifts",
+          "Children are stronger than adults"
+        ],
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973099/storytime/rainbow_bridge.webp",
     "isInteractive": true,
     "ageMin": 6,
-    "ageMax": 10
+    "ageMax": 10,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 221
   },
   {
     "title": "The Time-Traveling Telescope",
     "description": "A curious girl discovers a telescope that shows the past and future, learning valuable lessons about appreciating the present.",
     "language": "English",
-    "theme": ["Sci-Fi", "Coming of Age", "Identity & Self-Discovery"],
-    "category": ["Science Fiction & Space", "Educational & Learning Stories"],
+    "theme": [
+      "Sci-Fi",
+      "Coming of Age",
+      "Identity & Self-Discovery"
+    ],
+    "category": [
+      "Science Fiction & Space",
+      "Educational & Learning Stories"
+    ],
     "content": "Eleven-year-old Sophia loved astronomy. While exploring her grandmother's attic, she found an unusual telescope with strange symbols. When she looked through it at night, she didn't see stars—she saw her own street, but something was different.\n\nIt was her neighborhood from 50 years ago! She watched her grandmother as a young girl, playing the same games Sophia loved. Turning a dial, she saw 100 years in the past: farms where houses now stood, her great-great-grandparents planting the oak tree she climbed daily.\n\nExcited, Sophia turned the dial the other way. The future appeared: flying cars, tall gardens on buildings, and children playing with holographic pets. She saw an older version of herself, teaching a class about preserving Earth's environment.\n\nBut in every time period, she noticed something unchanged: families eating dinner together, children playing, people helping neighbors, and everyone gathering to watch sunsets. Love, friendship, and community remained constant.\n\nWhen Sophia's grandmother found her, she smiled knowingly. 'You found my special telescope. What did you learn?'\n\n'That some things change,' Sophia said, 'but the important things—love, kindness, and connection—stay the same. And that we should cherish today while building a better tomorrow.'\n\nGrandmother hugged her. 'Now you understand time's greatest secret: the present is a gift that connects all moments.'",
     "questions": [
       {
         "question": "What did Sophia see when she first looked through the telescope?",
-        "options": ["Stars", "The moon", "Her neighborhood 50 years ago", "Another planet"],
-        "answer": 2
+        "options": [
+          "Stars",
+          "The moon",
+          "Her neighborhood 50 years ago",
+          "Another planet"
+        ],
+        "correctOption": 2
       },
       {
         "question": "What did Sophia see herself doing in the future?",
-        "options": ["Flying a car", "Teaching a class", "Building gardens", "Playing with pets"],
-        "answer": 1
+        "options": [
+          "Flying a car",
+          "Teaching a class",
+          "Building gardens",
+          "Playing with pets"
+        ],
+        "correctOption": 1
       },
       {
         "question": "What remained the same across all time periods?",
-        "options": ["Buildings", "Technology", "Love and community", "Transportation"],
-        "answer": 2
+        "options": [
+          "Buildings",
+          "Technology",
+          "Love and community",
+          "Transportation"
+        ],
+        "correctOption": 2
       },
       {
         "question": "Who did the telescope originally belong to?",
-        "options": ["Sophia's mother", "Sophia's grandmother", "A scientist", "Sophia's teacher"],
-        "answer": 1
+        "options": [
+          "Sophia's mother",
+          "Sophia's grandmother",
+          "A scientist",
+          "Sophia's teacher"
+        ],
+        "correctOption": 1
       },
       {
         "question": "What was time's greatest secret?",
-        "options": ["The future is certain", "The past was better", "The present connects all moments", "Time travel is possible"],
-        "answer": 2
+        "options": [
+          "The future is certain",
+          "The past was better",
+          "The present connects all moments",
+          "Time travel is possible"
+        ],
+        "correctOption": 2
       }
     ],
     "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1750973099/storytime/time_telescope.webp",
     "isInteractive": true,
     "ageMin": 9,
-    "ageMax": 13
+    "ageMax": 13,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": false,
+    "difficultyLevel": 1,
+    "wordCount": 210
+  },
+  {
+    "title": "Robo’s Colorful Adventure",
+    "description": "A little grey robot named Robo decides to paint his dull planet with bright colors.",
+    "language": "English",
+    "theme": [
+      "Creativity",
+      "Exploration",
+      "Space"
+    ],
+    "category": [
+      "Sci-Fi",
+      "Bedtime Stories",
+      "Educational"
+    ],
+    "content": "On a small, dusty planet far away, everything was grey. The rocks were grey, the sky was grey, and even the robots were grey. Robo was a small robot with curious eyes. He didn't like the grey. He wanted to see something bright! One day, while digging near a crater, Robo found three glowing stones: one red, one blue, and one yellow.\n\n\"Wow!\" beeped Robo. He crushed the red stone and mixed it with water. Suddenly, he had red paint! He painted his metal shoes red. Then, he mixed the blue and yellow stones to make green. He painted a big smiley face on his rocket ship. \n\nSoon, other robots came to look. \"Can we have colors too?\" they asked. Robo shared his paints happily. By the time the sun set, the whole planet was a rainbow of colors. Robo beeped with joy. He learned that with a little imagination, he could change his whole world.",
+    "questions": [
+      {
+        "question": "What color was everything on the planet at the beginning?",
+        "options": [
+          "Blue",
+          "Grey",
+          "Green",
+          "Rainbow"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Robo find near the crater?",
+        "options": [
+          "A sleeping cat",
+          "A new battery",
+          "Three glowing stones",
+          "A spaceship"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Robo paint on his rocket ship?",
+        "options": [
+          "A star",
+          "A smiley face",
+          "A number",
+          "A flower"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did the other robots react?",
+        "options": [
+          "They were angry",
+          "They wanted colors too",
+          "They ran away",
+          "They went to sleep"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What lesson did Robo learn?",
+        "options": [
+          "Grey is the best color",
+          "Digging is hard work",
+          "Imagination can change the world",
+          "Robots should not paint"
+        ],
+        "correctOption": 2
+      }
+    ],
+    "coverImageUrl": "https://placehold.co/600x400?text=Robos+Adventure",
+    "isInteractive": true,
+    "ageMin": 5,
+    "ageMax": 9,
+    "audioUrl": "",
+    "recommended": true,
+    "aiGenerated": true,
+    "difficultyLevel": 1,
+    "wordCount": 185
+  },
+  {
+    "title": "Finley the Glowing Fish",
+    "description": "Finley is embarrassed by his glowing fin until he realizes it can help others in the dark ocean.",
+    "language": "English",
+    "theme": [
+      "Self-Esteem",
+      "Ocean",
+      "Helping Others"
+    ],
+    "category": [
+      "Animal Stories",
+      "Nature",
+      "Moral Stories"
+    ],
+    "content": "Deep in the ocean, where the water is very blue, lived a fish named Finley. Finley was special. He had a fin that glowed like a bright flashlight. But Finley did not like his light. \"I wish I was normal like the other fish,\" he sighed, trying to hide his fin under the sand.\n\nOne afternoon, a little crab named Snap got lost in a dark underwater cave. \"Help! It’s too dark!\" cried Snap. The other fish were too afraid of the dark to go in. Finley heard the cry and knew he had to help. He swam into the cave. His glowing fin lit up the walls, revealing beautiful shells and pointing the way out.\n\n\"Follow me, Snap!\" said Finley. He guided the little crab safely back to his family. Everyone cheered for Finley. \"Your light is amazing!\" said Snap. Finley smiled, his fin glowing brighter than ever. He finally realized that being different was what made him special.",
+    "questions": [
+      {
+        "question": "What was special about Finley?",
+        "options": [
+          "He could fly",
+          "He was very fast",
+          "He had a glowing fin",
+          "He was purple"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Why was Finley sad at first?",
+        "options": [
+          "He had no friends",
+          "He wanted to be normal",
+          "He was hungry",
+          "He lost his toy"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Who got lost in the cave?",
+        "options": [
+          "A shark",
+          "A whale",
+          "Snap the crab",
+          "A starfish"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Finley help Snap?",
+        "options": [
+          "He pulled him out",
+          "He used his light to guide him",
+          "He called for help",
+          "He gave him a map"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Finley feel at the end?",
+        "options": [
+          "Embarrassed",
+          "Proud of being different",
+          "Tired",
+          "Scared"
+        ],
+        "correctOption": 1
+      }
+    ],
+    "coverImageUrl": "https://placehold.co/600x400?text=Finley+Fish",
+    "isInteractive": true,
+    "ageMin": 4,
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": true,
+    "difficultyLevel": 1,
+    "wordCount": 198
+  },
+  {
+    "title": "The Mystery Seed",
+    "description": "Lily learns about patience when she plants a strange seed that takes a long time to grow.",
+    "language": "English",
+    "theme": [
+      "Patience",
+      "Nature",
+      "Growth"
+    ],
+    "category": [
+      "Gardening",
+      "Life Lessons",
+      "Bedtime Stories"
+    ],
+    "content": "Lily loved her garden. She grew red roses, yellow daisies, and bluebells. One day, the wind blew a strange, bumpy seed into her hand. It didn't look like any seed she had seen before. \"I wonder what you are,\" Lily said. She dug a small hole in the dirt, planted the seed, and watered it.\n\nDays went by. The roses bloomed, and the daisies danced in the wind, but the mystery seed did nothing. \"Maybe it is broken,\" Lily thought. But her grandfather said, \"Be patient, Lily. Good things take time.\" So, Lily waited. She watered the spot every day and sang songs to the dirt.\n\nFinally, after many weeks, a thick green sprout pushed through the soil. It grew fast—taller than the roses, taller than Lily, even taller than the fence! Then, a giant flower opened up. It was a massive sunflower with golden petals. Lily clapped her hands. She learned that the best surprises are worth waiting for.",
+    "questions": [
+      {
+        "question": "What did the wind blow into Lily's hand?",
+        "options": [
+          "A leaf",
+          "A strange, bumpy seed",
+          "A butterfly",
+          "A feather"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Lily do with the seed?",
+        "options": [
+          "She threw it away",
+          "She fed it to a bird",
+          "She planted and watered it",
+          "She put it in a jar"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Grandfather tell Lily?",
+        "options": [
+          "Dig it up",
+          "Be patient",
+          "Buy a new seed",
+          "Forget about it"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did the seed eventually grow into?",
+        "options": [
+          "A pumpkin",
+          "A rose bush",
+          "A giant sunflower",
+          "A tree"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What is the lesson of the story?",
+        "options": [
+          "Gardening is messy",
+          "Flowers need sun",
+          "Good things take time",
+          "Seeds are boring"
+        ],
+        "correctOption": 2
+      }
+    ],
+    "coverImageUrl": "https://placehold.co/600x400?text=Mystery+Seed",
+    "isInteractive": true,
+    "ageMin": 5,
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": true,
+    "difficultyLevel": 2,
+    "wordCount": 188
+  },
+  {
+    "title": "Bear and Bird Share a Berry",
+    "description": "Two friends find a giant blueberry and learn that sharing makes food taste better.",
+    "language": "English",
+    "theme": [
+      "Sharing",
+      "Friendship",
+      "Problem Solving"
+    ],
+    "category": [
+      "Animal Stories",
+      "Toddler Stories",
+      "Funny"
+    ],
+    "content": "Bear was walking through the forest when he saw something blue. It was a blueberry, but not just any blueberry. It was the size of a melon! \"Yum!\" said Bear. \"This is all for me.\"\n\nJust then, Bird flew down. \"Chirp! Look at that berry! I saw it too!\" Bird said. Bear frowned. \"I found it first,\" he grumbled. Bird looked sad. \"But I am very hungry,\" Bird tweeted.\n\nBear looked at the giant berry. Then he looked at his tiny friend. He realized the berry was too big for one tummy. Bear used his sharp claw to slice the berry in half. \"Here,\" Bear said, giving the bigger half to Bird. Bird chirped happily. They sat on a log and ate the sweet fruit together. \"This tastes better because we are sharing,\" said Bear. And Bird agreed.",
+    "questions": [
+      {
+        "question": "What did Bear find in the forest?",
+        "options": [
+          "A pot of honey",
+          "A giant blueberry",
+          "A red apple",
+          "A shiny rock"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Who wanted the berry besides Bear?",
+        "options": [
+          "A wolf",
+          "A squirrel",
+          "Bird",
+          "A frog"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Why did Bear frown at first?",
+        "options": [
+          "He didn't like berries",
+          "He wanted it all for himself",
+          "It was rotten",
+          "He was sleepy"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did they solve the problem?",
+        "options": [
+          "Bear ate it all",
+          "Bird flew away",
+          "They split the berry",
+          "They threw it away"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Why did the berry taste better?",
+        "options": [
+          "It was cooked",
+          "Because they shared it",
+          "It was magic",
+          "They added sugar"
+        ],
+        "correctOption": 1
+      }
+    ],
+    "coverImageUrl": "https://placehold.co/600x400?text=Bear+Bird+Berry",
+    "isInteractive": true,
+    "ageMin": 3,
+    "ageMax": 6,
+    "audioUrl": "",
+    "recommended": true,
+    "aiGenerated": true,
+    "difficultyLevel": 1,
+    "wordCount": 165
+  },
+  {
+    "title": "Oliver the Night Owl",
+    "description": "A young owl who is afraid of the dark learns to discover the beauty of the night.",
+    "language": "English",
+    "theme": [
+      "Courage",
+      "Nighttime",
+      "Discovery"
+    ],
+    "category": [
+      "Animal Stories",
+      "Bedtime Stories",
+      "Nature"
+    ],
+    "content": "Oliver was a young owl with big, round glasses. Most owls love the night, but Oliver was different. He was afraid of the dark! When the sun went down, Oliver would squeeze his eyes shut. \"The dark is scary,\" he whispered. \"There are no colors, only shadows.\"\n\nHis mother smiled gently. \"Open your eyes, Oliver. You are missing the magic.\" Slowly, Oliver opened one eye. He saw tiny flashing lights dancing in the air. \"Fireflies!\" he gasped. Then he looked up. The sky wasn't black; it was a deep, beautiful blue filled with sparkling silver stars. \n\nSuddenly, a moth with wings like velvet landed on a branch. \"Hello,\" said the moth. Oliver wasn't scared anymore. He realized the night had its own special colors and friends. From that night on, Oliver was the first owl to wake up, ready to watch the beautiful night world unfold.",
+    "questions": [
+      {
+        "question": "What was Oliver afraid of?",
+        "options": [
+          "Flying",
+          "The dark",
+          "High places",
+          "Loud noises"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Oliver do when the sun went down?",
+        "options": [
+          "He flew away",
+          "He squeezed his eyes shut",
+          "He sang a song",
+          "He ate dinner"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What were the flashing lights Oliver saw?",
+        "options": [
+          "Flashlights",
+          "Fireflies",
+          "Car lights",
+          "Lightning"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Oliver see in the sky?",
+        "options": [
+          "The sun",
+          "Rainbows",
+          "Silver stars",
+          "Clouds"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Oliver feel about the night at the end?",
+        "options": [
+          "He still hated it",
+          "He loved the beautiful night world",
+          "He was very cold",
+          "He wanted to sleep"
+        ],
+        "correctOption": 1
+      }
+    ],
+    "coverImageUrl": "https://placehold.co/600x400?text=Oliver+Owl",
+    "isInteractive": true,
+    "ageMin": 4,
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": true,
+    "difficultyLevel": 1,
+    "wordCount": 178
+  },
+  {
+    "title": "The Sleepy Blue Train",
+    "description": "A gentle bedtime story about a little train engine winding down after a busy day on the tracks.",
+    "language": "English",
+    "theme": [
+      "Bedtime",
+      "Vehicles",
+      "Routine"
+    ],
+    "category": [
+      "Toddler Stories",
+      "Bedtime Stories"
+    ],
+    "content": "Toot-toot! The little blue train chugged down the track. He had been very busy all day carrying apples to the market and wood to the carpenter. Now, the sun was setting, turning the sky purple and gold. The little blue train let out a long, slow puff of steam. \"I am so tired,\" he whispered.\n\nHe rolled slowly toward the train station. The station master waved a lantern. \"Good job today, Little Blue,\" he said. The train rolled into his warm, cozy shed. He closed his round headlights. His wheels stopped turning. With a soft sigh, the little blue train fell fast asleep, dreaming of tomorrow's adventures.",
+    "questions": [
+      {
+        "question": "What color is the train?",
+        "options": [
+          "Red",
+          "Green",
+          "Blue",
+          "Yellow"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did the train carry to the market?",
+        "options": [
+          "Apples",
+          "Bananas",
+          "Toys",
+          "Rocks"
+        ],
+        "correctOption": 0
+      },
+      {
+        "question": "Why did the train stop?",
+        "options": [
+          "He was broken",
+          "He ran out of coal",
+          "He was tired and it was bedtime",
+          "He was lost"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Where does the train sleep?",
+        "options": [
+          "In a house",
+          "In a cozy shed",
+          "In the river",
+          "On the moon"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did the train do at the end of the story?",
+        "options": [
+          "He danced",
+          "He fell asleep",
+          "He ate dinner",
+          "He whistled loudly"
+        ],
+        "correctOption": 1
+      }
+    ],
+    "coverImageUrl": "https://placehold.co/600x400?text=Sleepy+Train",
+    "isInteractive": false,
+    "ageMin": 1,
+    "ageMax": 4,
+    "audioUrl": "",
+    "recommended": true,
+    "aiGenerated": true,
+    "difficultyLevel": 1,
+    "wordCount": 130
+  },
+  {
+    "title": "Zara and the Magic Chalk",
+    "description": "Zara discovers a piece of sidewalk chalk that brings her drawings to life, teaching her about responsibility.",
+    "language": "English",
+    "theme": [
+      "Creativity",
+      "Magic",
+      "Responsibility"
+    ],
+    "category": [
+      "Fantasy",
+      "School Age",
+      "Fun"
+    ],
+    "content": "Zara loved to draw. One afternoon, she found a glittering piece of purple chalk on the sidewalk. She drew a butterfly. Suddenly, the chalk drawing wiggled, flapped its wings, and flew into the air! \"Wow!\" Zara gasped. \"It's magic!\"\n\nNext, she drew a bicycle. It popped off the ground, ready to ride. Zara was having so much fun that she drew a giant dragon. But when the dragon came to life, it roared loudly and blew smoke everywhere! The neighbors looked scared. Zara knew she had to fix this. She quickly drew a giant bowl of dragon treats and a cozy cave.\n\nThe dragon ate the treats and curled up in the cave to sleep. Zara realized that her magic was powerful, but she had to be careful with what she created. She put the chalk in her pocket, saving it for a day when she needed something helpful, not scary.",
+    "questions": [
+      {
+        "question": "What did Zara find on the sidewalk?",
+        "options": [
+          "A coin",
+          "Magic purple chalk",
+          "A lost puppy",
+          "A toy car"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the first thing Zara drew?",
+        "options": [
+          "A car",
+          "A butterfly",
+          "A flower",
+          "A house"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What happened when she drew the dragon?",
+        "options": [
+          "It danced",
+          "It roared and scared people",
+          "It flew away immediately",
+          "It turned into water"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Zara solve the problem?",
+        "options": [
+          "She erased the dragon",
+          "She ran away",
+          "She drew treats and a cave",
+          "She called the police"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What lesson did Zara learn?",
+        "options": [
+          "Dragons are mean",
+          "Drawing is boring",
+          "To be careful with what she creates",
+          "Never use chalk"
+        ],
+        "correctOption": 2
+      }
+    ],
+    "coverImageUrl": "https://placehold.co/600x400?text=Magic+Chalk",
+    "isInteractive": true,
+    "ageMin": 5,
+    "ageMax": 8,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": true,
+    "difficultyLevel": 2,
+    "wordCount": 185
+  },
+  {
+    "title": "Captain Whiskers and the Cheese Moon",
+    "description": "A brave cat astronaut blasts off to space to see if the moon is really made of cheese.",
+    "language": "English",
+    "theme": [
+      "Space",
+      "Humor",
+      "Exploration"
+    ],
+    "category": [
+      "Sci-Fi",
+      "Animal Stories",
+      "Funny"
+    ],
+    "content": "Captain Whiskers was not an ordinary cat. He was an astronaut. He had a tiny space helmet and a rocket ship made from a shiny trash can. His mission was simple: find out if the moon was made of cheddar cheese.\n\n\"3, 2, 1, BLAST OFF!\" shouted the neighborhood mice, who were his ground control. The rocket zoomed past the clouds and stars. When Captain Whiskers landed, he bounced on the dusty surface. He took out a cracker and licked a moon rock. Yuck! It tasted like dust, not cheese.\n\nCaptain Whiskers was disappointed. But then he looked back at Earth. It was a beautiful blue and green ball floating in the dark. \"The moon isn't lunch,\" he radioed back to the mice, \"but the view is delicious!\" He planted a flag with a paw print on it and flew home for a real dinner.",
+    "questions": [
+      {
+        "question": "What was Captain Whiskers' job?",
+        "options": [
+          "Baker",
+          "Astronaut",
+          "Teacher",
+          "Farmer"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was his rocket ship made of?",
+        "options": [
+          "Gold",
+          "Cardboard",
+          "A shiny trash can",
+          "Plastic bottles"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did he want to know about the moon?",
+        "options": [
+          "If aliens lived there",
+          "If it was made of cheese",
+          "If it was hot",
+          "If dogs lived there"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did the moon taste like?",
+        "options": [
+          "Cheddar cheese",
+          "Chocolate",
+          "Dust",
+          "Milk"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Captain Whiskers think was beautiful?",
+        "options": [
+          "The view of Earth",
+          "His spaceship",
+          "The stars",
+          "The flag"
+        ],
+        "correctOption": 0
+      }
+    ],
+    "coverImageUrl": "https://placehold.co/600x400?text=Captain+Whiskers",
+    "isInteractive": true,
+    "ageMin": 4,
+    "ageMax": 9,
+    "audioUrl": "",
+    "recommended": true,
+    "aiGenerated": true,
+    "difficultyLevel": 2,
+    "wordCount": 175
+  },
+  {
+    "title": "The Boy Who Fixed the Wind",
+    "description": "In a village where the wind stopped blowing, a young inventor named Kael uses science to save the day.",
+    "language": "English",
+    "theme": [
+      "Science / STEM",
+      "Problem Solving",
+      "Community"
+    ],
+    "category": [
+      "Educational",
+      "Adventure",
+      "Inspirational"
+    ],
+    "content": "In the High Valley, the windmills turned to grind the wheat into flour. But one summer, the air stood still. The windmills stopped. The bakers couldn't bake, and the village became worried. While the elders argued, a young boy named Kael climbed the highest peak.\n\nKael loved machines. He saw that a rockslide had blocked the Great Air Tunnel, a narrow cave that funneled the breeze into the valley. The rocks were too heavy to move by hand. Kael didn't give up. He used sturdy branches and a large stone to create a lever. \"Give me a place to stand, and I will move the Earth,\" he remembered reading.\n\nWith a mighty push on his lever, the giant rocks rolled away. Whoosh! The cool air rushed through the tunnel. Below in the valley, the windmills began to spin again. The villagers cheered for Kael, the boy who used his brain to fix the wind.",
+    "questions": [
+      {
+        "question": "Why were the villagers worried?",
+        "options": [
+          "It was raining",
+          "The windmills stopped turning",
+          "There was no water",
+          "The sun disappeared"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What had caused the wind to stop?",
+        "options": [
+          "A magic spell",
+          "A sleeping giant",
+          "A rockslide blocking the tunnel",
+          "The trees grew too tall"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What simple machine did Kael build?",
+        "options": [
+          "A pulley",
+          "A lever",
+          "A wheel",
+          "A screw"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What happened when the rocks moved?",
+        "options": [
+          "Lava came out",
+          "Water flooded the valley",
+          "The wind rushed back in",
+          "Nothing happened"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What is the main theme of the story?",
+        "options": [
+          "Magic is real",
+          "Fighting is bad",
+          "Using knowledge to solve problems",
+          "Climbing mountains is dangerous"
+        ],
+        "correctOption": 2
+      }
+    ],
+    "coverImageUrl": "https://placehold.co/600x400?text=Wind+Inventor",
+    "isInteractive": false,
+    "ageMin": 8,
+    "ageMax": 12,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": true,
+    "difficultyLevel": 3,
+    "wordCount": 195
+  },
+  {
+    "title": "The Secret of the Old Oak",
+    "description": "Two siblings discover an old diary hidden in a tree and learn about the history of their home.",
+    "language": "English",
+    "theme": [
+      "History",
+      "Family",
+      "Mystery"
+    ],
+    "category": [
+      "Mystery",
+      "Realistic Fiction",
+      "Nature"
+    ],
+    "content": "Maya and her brother Leo were playing hide-and-seek when they found a hollow space in the giant oak tree in their backyard. Inside, wrapped in oilcloth, was an old, leather-bound book. It was a diary from 100 years ago!\n\nThe diary belonged to a girl named Eliza who had lived in their house long ago. Maya read aloud. Eliza wrote about planting the very oak tree they were standing under. She wrote about hiding a small metal box with her \"treasures\" near the roots. \n\nExcited, Leo grabbed a garden shovel. They dug gently where the diary said. Clink! They hit metal. They pulled out a rusty tin box. Inside were marbles, a silver coin, and a photograph of Eliza standing by a sapling. \"We are connected to her,\" Maya said softly. They carefully put the box back and wrote a new note to put inside, adding their own story to the secret of the old oak.",
+    "questions": [
+      {
+        "question": "What did Maya and Leo find inside the tree?",
+        "options": [
+          "A bird's nest",
+          "An old diary",
+          "A map",
+          "A gold ring"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Who wrote the diary?",
+        "options": [
+          "Their grandmother",
+          "A girl named Eliza",
+          "A pirate",
+          "The gardener"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Eliza write about in the diary?",
+        "options": [
+          "Planting the oak tree",
+          "Her school homework",
+          "A storm",
+          "Her pet dog"
+        ],
+        "correctOption": 0
+      },
+      {
+        "question": "What treasure did they find in the metal box?",
+        "options": [
+          "Diamonds",
+          "Candy",
+          "Marbles, a coin, and a photo",
+          "A key"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did the siblings do at the end?",
+        "options": [
+          "They sold the coin",
+          "They threw the box away",
+          "They added their own note to the box",
+          "They cut down the tree"
+        ],
+        "correctOption": 2
+      }
+    ],
+    "coverImageUrl": "https://placehold.co/600x400?text=Secret+Oak",
+    "isInteractive": true,
+    "ageMin": 7,
+    "ageMax": 12,
+    "audioUrl": "",
+    "recommended": true,
+    "aiGenerated": true,
+    "difficultyLevel": 3,
+    "wordCount": 210
   }
 ]

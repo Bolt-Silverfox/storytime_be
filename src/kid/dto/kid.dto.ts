@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsOptional, IsBoolean, IsArray, IsInt, Matches, Min, Max } from 'class-validator';
-import { VoiceType } from '@/story/story.dto';
 
 // 1. Create Kid DTO
 export class CreateKidDto {
@@ -17,14 +16,14 @@ export class CreateKidDto {
     @IsString()
     avatarId?: string;
 
-    @ApiProperty({ required: false, type: [String], description: 'Array of Category IDs to prefer' })
+    @ApiProperty({ required: false, type: [String] })
     @IsOptional()
     @IsArray()
     @IsString({ each: true })
     preferredCategoryIds?: string[];
 }
 
-// 2. Update Kid DTO (Includes Bedtime & Preferences)
+// 2. Update Kid DTO
 export class UpdateKidDto {
     @ApiProperty({ required: false })
     @IsOptional()
@@ -47,7 +46,7 @@ export class UpdateKidDto {
     @IsString({ each: true })
     preferredCategoryIds?: string[];
 
-    @ApiProperty({ required: false, type: [String], example: ['ghosts'] })
+    @ApiProperty({ required: false, type: [String] })
     @IsOptional()
     @IsArray()
     @IsString({ each: true })
@@ -71,7 +70,7 @@ export class UpdateKidDto {
     @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'Format HH:mm' })
     bedtimeEnd?: string;
 
-    @ApiProperty({ required: false, type: [Number], description: '0=Sun, 1=Mon' })
+    @ApiProperty({ required: false, type: [Number] })
     @IsOptional()
     @IsArray()
     @IsInt({ each: true })
@@ -79,25 +78,15 @@ export class UpdateKidDto {
     @Max(6, { each: true })
     bedtimeDays?: number[];
 
-    @ApiProperty({ required: false, example: 'voice-uuid-123' })
+    @IsOptional() @IsBoolean() bedtimeLockApp?: boolean;
+    @IsOptional() @IsBoolean() bedtimeDimScreen?: boolean;
+    @IsOptional() @IsBoolean() bedtimeReminder?: boolean;
+    @IsOptional() @IsBoolean() bedtimeStoriesOnly?: boolean;
+    @IsOptional() @IsInt() dailyScreenTimeLimitMins?: number;
+
+    //Frontend can send a UUID (local) OR an ElevenLabs ID (external)
+    @ApiProperty({ required: false, example: 'voice-uuid-OR-elevenlabs-id' })
     @IsOptional()
     @IsString()
     preferredVoiceId?: string;
-}
-
-export class SetKidPreferredVoiceDto {
-    @ApiProperty({ description: 'Voice ID to set as preferred', example: 'MILO' })
-    @IsString()
-    voiceType: string;
-}
-
-export class KidVoiceDto {
-    @ApiProperty()
-    kidId: string;
-
-    @ApiProperty()
-    preferredVoiceId: string;
-
-    @ApiProperty()
-    voiceType: VoiceType;
 }

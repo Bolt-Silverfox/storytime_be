@@ -8,11 +8,13 @@ import {
 } from './reports.dto';
 // import { SetDailyLimitDto } from '@/control/control.dto';
 import { QuestionAnswerDto } from '../story/story.dto'; // Import from story module
+import { BadgeProgressEngine } from '../achievement-progress/badge-progress.engine';
 
 const prisma = new PrismaClient();
 
 @Injectable()
 export class ReportsService {
+  constructor(private badgeProgressEngine: BadgeProgressEngine) { }
   /**
    * Start a screen time session for a kid
    */
@@ -106,6 +108,21 @@ export class ReportsService {
         isCorrect: true,
       },
     });
+
+    // Trigger badge progress for quiz answered
+    const kid = await prisma.kid.findUnique({
+      where: { id: dto.kidId },
+      select: { parentId: true },
+    });
+
+    if (kid?.parentId) {
+      await this.badgeProgressEngine.recordActivity(
+        kid.parentId,
+        'quiz_answered',
+        dto.kidId,
+        { questionId: dto.questionId, isCorrect }
+      );
+    }
 
     return {
       answerId: answer.id,
@@ -360,6 +377,52 @@ export class ReportsService {
       totalStoriesCompleted,
       totalScreenTimeMins,
     };
+  }
+
+  /**
+   * Mark a story as completed
+   */
+  async completeStory(kidId: string, storyId: string) {
+    const kid = await prisma.kid.findUnique({
+      where: { id: kidId },
+      select: { parentId: true },
+    });
+
+    if (!kid) {
+      throw new BadRequestException('Kid not found');
+    }
+
+    // Update or create progress record
+    const progress = await prisma.storyProgress.upsert({
+      where: {
+        kidId_storyId: {
+          kidId,
+          storyId,
+        },
+      },
+      update: {
+        completed: true,
+        progress: 100,
+        lastAccessed: new Date(),
+      },
+      create: {
+        kidId,
+        storyId,
+        completed: true,
+        progress: 100,
+        lastAccessed: new Date(),
+      },
+    });
+
+    // Trigger badge progress for story read
+    await this.badgeProgressEngine.recordActivity(
+      kid.parentId,
+      'story_read',
+      kidId,
+      { storyId, duration: progress.totalTimeSpent }
+    );
+
+    return progress;
   }
 
   /**

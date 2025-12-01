@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { KidService } from './kid.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { VoiceService } from '../voice/voice.service';
 import { VoiceType } from '@/story/story.dto';
 
 const mockPrismaService = {
@@ -21,6 +22,10 @@ const mockPrismaService = {
     },
 };
 
+const mockVoiceService = {
+    findOrCreateElevenLabsVoice: jest.fn(),
+};
+
 describe('KidService', () => {
     let service: KidService;
     let prisma: typeof mockPrismaService;
@@ -30,6 +35,7 @@ describe('KidService', () => {
             providers: [
                 KidService,
                 { provide: PrismaService, useValue: mockPrismaService },
+                { provide: VoiceService, useValue: mockVoiceService },
             ],
         }).compile();
 
@@ -119,6 +125,19 @@ describe('KidService', () => {
             prisma.kid.findUnique.mockResolvedValue(null);
             await expect(service.updateKid('kid-1', 'user-1', {})).rejects.toThrow(NotFoundException);
         });
+
+        it('should throw NotFoundException if preferredVoiceId is invalid', async () => {
+            const kidId = 'kid-1';
+            const userId = 'user-1';
+            // Use a valid UUID that doesn't exist to trigger the UUID check path
+            const dto = { preferredVoiceId: '00000000-0000-0000-0000-000000000000' };
+            const existingKid = { id: kidId, parentId: userId };
+
+            prisma.kid.findUnique.mockResolvedValue(existingKid);
+            prisma.voice.findUnique.mockResolvedValue(null);
+
+            await expect(service.updateKid(kidId, userId, dto)).rejects.toThrow(NotFoundException);
+        });
     });
 
     describe('deleteKid', () => {
@@ -135,62 +154,7 @@ describe('KidService', () => {
         });
     });
 
-    describe('setKidPreferredVoice', () => {
-        it('should set preferred voice', async () => {
-            const kidId = 'kid-1';
-            const voiceType = VoiceType.MILO;
-            const voice = { id: 'voice-1', name: 'MILO' };
-            const updatedKid = { id: kidId, preferredVoiceId: voice.id };
 
-            prisma.voice.findFirst.mockResolvedValue(voice);
-            prisma.kid.update.mockResolvedValue(updatedKid);
-
-            const result = await service.setKidPreferredVoice(kidId, voiceType);
-            expect(result).toEqual({
-                kidId,
-                voiceType,
-                preferredVoiceId: voice.id,
-            });
-        });
-
-        it('should throw NotFoundException if voice not found', async () => {
-            prisma.voice.findFirst.mockResolvedValue(null);
-            await expect(service.setKidPreferredVoice('kid-1', VoiceType.MILO)).rejects.toThrow(NotFoundException);
-        });
-    });
-
-    describe('getKidPreferredVoice', () => {
-        it('should return preferred voice', async () => {
-            const kidId = 'kid-1';
-            const voiceId = 'voice-1';
-            const kid = { id: kidId, preferredVoiceId: voiceId };
-            const voice = { id: voiceId, name: 'MILO' };
-
-            prisma.kid.findUnique.mockResolvedValue(kid);
-            prisma.voice.findUnique.mockResolvedValue(voice);
-
-            const result = await service.getKidPreferredVoice(kidId);
-            expect(result).toEqual({
-                kidId,
-                voiceType: VoiceType.MILO,
-                preferredVoiceId: voiceId,
-            });
-        });
-
-        it('should return default voice if no preference set', async () => {
-            const kidId = 'kid-1';
-            const kid = { id: kidId, preferredVoiceId: null };
-
-            prisma.kid.findUnique.mockResolvedValue(kid);
-
-            const result = await service.getKidPreferredVoice(kidId);
-            expect(result).toEqual({
-                kidId,
-                voiceType: VoiceType.MILO,
-                preferredVoiceId: '',
-            });
-        });
-    });
     describe('createKids', () => {
         it('should create multiple kids in a transaction', async () => {
             const userId = 'user-1';
@@ -198,12 +162,13 @@ describe('KidService', () => {
                 { name: 'Kid 1', ageRange: '5-8', avatarId: 'avatar-1' },
                 { name: 'Kid 2', ageRange: '9-12', avatarId: 'avatar-2' },
             ];
-            const expectedResult = [
-                { id: 'kid-2', ...dtos[1], parentId: userId },
+            const dbKids = [
+                { id: 'kid-1', ...dtos[0], parentId: userId, preferredVoiceId: null },
+                { id: 'kid-2', ...dtos[1], parentId: userId, preferredVoiceId: null },
             ];
 
             // Mock prisma.$transaction
-            (prisma as any).$transaction = jest.fn().mockResolvedValue(expectedResult);
+            (prisma as any).$transaction = jest.fn().mockResolvedValue(dbKids);
 
             // Mock parent user check
             prisma.user.findUnique.mockResolvedValue({ id: userId } as any);
@@ -211,9 +176,12 @@ describe('KidService', () => {
             // Mock kid.create
             prisma.kid.create.mockReturnValue('mock-prisma-promise' as any);
 
+            // Mock findMany called by findAllByUser
+            prisma.kid.findMany.mockResolvedValue(dbKids);
+
             const result = await service.createKids(userId, dtos);
 
-            expect(result).toEqual(expectedResult);
+            expect(result).toEqual(dbKids);
             expect(prisma.kid.create).toHaveBeenCalledTimes(2);
             expect(prisma.kid.create).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({

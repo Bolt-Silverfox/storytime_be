@@ -54,7 +54,7 @@ export class StoryService {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
-  ) {}
+  ) { }
 
   async getStories(filter: {
     theme?: string;
@@ -69,9 +69,14 @@ export class StoryService {
     const limit = filter.limit || 12;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: any = {
+    isDeleted: false, // ADD THIS - exclude soft deleted stories
+  };
+    
     if (filter.theme) where.themes = { some: { id: filter.theme } };
     if (filter.category) where.categories = { some: { id: filter.category } };
+
+    // Filter by the boolean 'recommended' flag on the Story model
     if (filter.recommended !== undefined)
       where.recommended = filter.recommended;
 
@@ -79,10 +84,16 @@ export class StoryService {
 
     if (filter.kidId) {
       const kid = await this.prisma.kid.findUnique({
-        where: { id: filter.kidId },
+        where: { 
+          id: filter.kidId,
+          isDeleted: false // CANNOT GET STORIES FOR SOFT DELETED KIDS
+        },
+        // Include preferred categories
+        include: { preferredCategories: true },
       });
 
       if (kid) {
+        // --- 1. Age / Reading Level Logic (Existing) ---
         // Prioritize Reading Level if available
         if (kid.currentReadingLevel > 0) {
           targetLevel = kid.currentReadingLevel;
@@ -100,6 +111,24 @@ export class StoryService {
             where.ageMin = { lte: age };
             where.ageMax = { gte: age };
           }
+        }
+
+        // --- 2. Recommended Category Logic ---
+        // If we want recommendations AND the kid has preferences
+        if (filter.recommended === true && kid.preferredCategories.length > 0) {
+
+          // Remove the static DB flag check. 
+          // We are switching from "Editor's Choice" to "Personalized For You"...active boys and girls
+          delete where.recommended;
+
+          const categoryIds = kid.preferredCategories.map((c) => c.id);
+
+          // Add to existing where clause (merges with Age/Level logic)
+          where.categories = {
+            some: {
+              id: { in: categoryIds },
+            },
+          };
         }
       }
     }
@@ -187,6 +216,17 @@ export class StoryService {
   }
 
   async updateStory(id: string, data: UpdateStoryDto) {
+     const story = await this.prisma.story.findUnique({
+      where: { 
+        id,
+        isDeleted: false // CANNOT UPDATE SOFT DELETED STORIES
+      }
+    });
+    
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+    
     if (data.categoryIds && data.categoryIds.length > 0) {
       const categories = await this.prisma.category.findMany({
         where: { id: { in: data.categoryIds } },
@@ -195,7 +235,7 @@ export class StoryService {
       if (categories.length !== data.categoryIds.length) {
         throw new BadRequestException('One or more category IDs do not exist');
       }
-    }
+   
 
     let audioUrl = data.audioUrl;
     if (!audioUrl && data.description) {
@@ -204,7 +244,7 @@ export class StoryService {
       );
       audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
     }
-    const story = await this.prisma.story.update({
+    const updatedStory = await this.prisma.story.update({
       where: { id },
       data: {
         title: data.title,
@@ -231,15 +271,78 @@ export class StoryService {
 
     this.logger.log('Categories cache invalidated after story creation');
 
-    return story;
+    return updatedStory;
   }
 
-  async deleteStory(id: string) {
-    return await this.prisma.story.delete({ where: { id } });
+  /**
+   * Soft delete or permanently delete a story
+   * @param id Story ID
+   * @param permanent Whether to permanently delete (default: false)
+   */
+  async deleteStory(id: string, permanent: boolean = false) {
+    const story = await this.prisma.story.findUnique({
+      where: { 
+        id,
+        isDeleted: false // CANNOT DELETE ALREADY DELETED STORIES
+      }
+    });
+    
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+
+    if (permanent) {
+      return await this.prisma.story.delete({ where: { id } });
+    } else {
+      return await this.prisma.story.update({
+        where: { id },
+        data: { 
+          isDeleted: true, 
+          deletedAt: new Date() 
+        },
+      });
+    }
+  }
+
+  /**
+   * Restore a soft deleted story
+   * @param id Story ID
+   */
+  async undoDeleteStory(id: string) {
+    const story = await this.prisma.story.findUnique({ 
+      where: { id } 
+    });
+    
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+    
+    if (!story.isDeleted) {
+      throw new BadRequestException('Story is not deleted');
+    }
+
+    return await this.prisma.story.update({
+      where: { id },
+      data: { 
+        isDeleted: false, 
+        deletedAt: null 
+      },
+    });
   }
 
   // --- Images ---
   async addImage(storyId: string, image: StoryImageDto) {
+    const story = await this.prisma.story.findUnique({
+      where: { 
+        id: storyId,
+        isDeleted: false // CANNOT ADD IMAGES TO SOFT DELETED STORIES
+      }
+    });
+    
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+
     return await this.prisma.storyImage.create({
       data: { ...image, storyId },
     });
@@ -247,6 +350,17 @@ export class StoryService {
 
   // --- Branches ---
   async addBranch(storyId: string, branch: StoryBranchDto) {
+    const story = await this.prisma.story.findUnique({
+      where: { 
+        id: storyId,
+        isDeleted: false // CANNOT ADD BRANCHES TO SOFT DELETED STORIES
+      }
+    });
+    
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+
     return await this.prisma.storyBranch.create({
       data: { ...branch, storyId },
     });
@@ -254,16 +368,52 @@ export class StoryService {
 
   // --- Favorites ---
   async addFavorite(dto: FavoriteDto) {
+    // Verify both kid and story exist and are not soft deleted
+    const kid = await this.prisma.kid.findUnique({
+      where: { 
+        id: dto.kidId,
+        isDeleted: false // CANNOT ADD FAVORITES FOR SOFT DELETED KIDS
+      }
+    });
+    
+    if (!kid) {
+      throw new NotFoundException('Kid not found');
+    }
+
+    const story = await this.prisma.story.findUnique({
+      where: { 
+        id: dto.storyId,
+        isDeleted: false // CANNOT ADD SOFT DELETED STORIES TO FAVORITES
+      }
+    });
+    
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+
     return await this.prisma.favorite.create({
       data: { kidId: dto.kidId, storyId: dto.storyId },
     });
   }
+
   async removeFavorite(kidId: string, storyId: string) {
     return await this.prisma.favorite.deleteMany({
       where: { kidId, storyId },
     });
   }
+
   async getFavorites(kidId: string) {
+    const kid = await this.prisma.kid.findUnique({
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT GET FAVORITES FOR SOFT DELETED KIDS
+      }
+    });
+    
+    if (!kid) {
+      throw new NotFoundException('Kid not found');
+    }
+
     return await this.prisma.favorite.findMany({
       where: { kidId },
       include: { story: true },
@@ -273,6 +423,29 @@ export class StoryService {
   // --- Progress ---
 
   async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
+    // Verify both kid and story exist and are not soft deleted
+    const kid = await this.prisma.kid.findUnique({
+      where: { 
+        id: dto.kidId,
+        isDeleted: false // CANNOT SET PROGRESS FOR SOFT DELETED KIDS
+      }
+    });
+    
+    if (!kid) {
+      throw new NotFoundException('Kid not found');
+    }
+
+    const story = await this.prisma.story.findUnique({
+      where: { 
+        id: dto.storyId,
+        isDeleted: false // CANNOT SET PROGRESS FOR SOFT DELETED STORIES
+      }
+    });
+    
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+
     // Get existing progress to calculate total time
     const existing = await this.prisma.storyProgress.findUnique({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
@@ -308,7 +481,30 @@ export class StoryService {
 
     return result;
   }
+
   async getProgress(kidId: string, storyId: string) {
+    const kid = await this.prisma.kid.findUnique({
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT GET PROGRESS FOR SOFT DELETED KIDS
+      }
+    });
+    
+    if (!kid) {
+      throw new NotFoundException('Kid not found');
+    }
+
+    const story = await this.prisma.story.findUnique({
+      where: { 
+        id: storyId,
+        isDeleted: false // CANNOT GET PROGRESS FOR SOFT DELETED STORIES
+      }
+    });
+    
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+
     return await this.prisma.storyProgress.findUnique({
       where: { kidId_storyId: { kidId, storyId } },
     });
@@ -316,12 +512,26 @@ export class StoryService {
 
   // --- Daily Challenge ---
   async setDailyChallenge(dto: DailyChallengeDto) {
+    const story = await this.prisma.story.findUnique({
+      where: { 
+        id: dto.storyId,
+        isDeleted: false // CANNOT CREATE CHALLENGES FOR SOFT DELETED STORIES
+      }
+    });
+    
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+
     return await this.prisma.dailyChallenge.create({ data: dto });
   }
 
   async getDailyChallenge(date: string) {
     return await this.prisma.dailyChallenge.findMany({
-      where: { challengeDate: new Date(date) },
+      where: { 
+        challengeDate: new Date(date),
+        isDeleted: false // EXCLUDE SOFT DELETED CHALLENGES
+      },
       include: { story: true },
     });
   }
@@ -343,6 +553,29 @@ export class StoryService {
   async assignDailyChallenge(
     dto: AssignDailyChallengeDto,
   ): Promise<DailyChallengeAssignmentDto> {
+    // Verify kid and challenge exist and are not soft deleted
+    const kid = await this.prisma.kid.findUnique({
+      where: { 
+        id: dto.kidId,
+        isDeleted: false // CANNOT ASSIGN CHALLENGES TO SOFT DELETED KIDS
+      }
+    });
+    
+    if (!kid) {
+      throw new NotFoundException('Kid not found');
+    }
+
+    const challenge = await this.prisma.dailyChallenge.findUnique({
+      where: { 
+        id: dto.challengeId,
+        isDeleted: false // CANNOT ASSIGN SOFT DELETED CHALLENGES
+      }
+    });
+    
+    if (!challenge) {
+      throw new NotFoundException('Daily challenge not found');
+    }
+
     const assignment = await this.prisma.dailyChallengeAssignment.create({
       data: {
         kidId: dto.kidId,
@@ -365,6 +598,17 @@ export class StoryService {
   async getAssignmentsForKid(
     kidId: string,
   ): Promise<DailyChallengeAssignmentDto[]> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT GET ASSIGNMENTS FOR SOFT DELETED KIDS
+      }
+    });
+    
+    if (!kid) {
+      throw new NotFoundException('Kid not found');
+    }
+
     const assignments = await this.prisma.dailyChallengeAssignment.findMany({
       where: { kidId },
     });
@@ -388,6 +632,17 @@ export class StoryService {
     fileUrl: string,
     dto: UploadVoiceDto,
   ): Promise<VoiceResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT UPLOAD VOICES FOR SOFT DELETED USERS
+      }
+    });
+    
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     const voice = await this.prisma.voice.create({
       data: {
         userId,
@@ -403,6 +658,17 @@ export class StoryService {
     userId: string,
     dto: CreateElevenLabsVoiceDto,
   ): Promise<VoiceResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT CREATE VOICES FOR SOFT DELETED USERS
+      }
+    });
+    
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     const voice = await this.prisma.voice.create({
       data: {
         userId,
@@ -415,7 +681,23 @@ export class StoryService {
   }
 
   async listVoices(userId: string): Promise<VoiceResponseDto[]> {
-    const voices = await this.prisma.voice.findMany({ where: { userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT LIST VOICES FOR SOFT DELETED USERS
+      }
+    });
+    
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const voices = await this.prisma.voice.findMany({ 
+      where: { 
+        userId,
+        isDeleted: false // EXCLUDE SOFT DELETED VOICES
+      } 
+    });
     return voices.map((v: Voice) => this.toVoiceResponse(v));
   }
 
@@ -423,6 +705,31 @@ export class StoryService {
     userId: string,
     dto: SetPreferredVoiceDto,
   ): Promise<any> {
+    const user = await this.prisma.user.findUnique({
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT SET PREFERRED VOICE FOR SOFT DELETED USERS
+      }
+    });
+    
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Verify the voice exists and is not soft deleted
+    if (dto.voiceId) {
+      const voice = await this.prisma.voice.findUnique({
+        where: { 
+          id: dto.voiceId,
+          isDeleted: false // CANNOT SET SOFT DELETED VOICE AS PREFERRED
+        }
+      });
+      
+      if (!voice) {
+        throw new NotFoundException('Voice not found');
+      }
+    }
+
     const result = await this.prisma.user.update({
       where: { id: userId },
       data: { preferredVoiceId: dto.voiceId },
@@ -437,10 +744,18 @@ export class StoryService {
 
   async getPreferredVoice(userId: string): Promise<VoiceResponseDto | null> {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT GET PREFERRED VOICE FOR SOFT DELETED USERS
+      },
       include: { preferredVoice: true },
     });
-    if (!user || !user.preferredVoice)
+    
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    
+    if (!user.preferredVoice)
       return {
         id: '',
         name: '',
@@ -467,9 +782,17 @@ export class StoryService {
     text: string,
   ): Promise<{ buffer: Buffer; filename: string }> {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { 
+        id: userId,
+        isDeleted: false // CANNOT GENERATE AUDIO FOR SOFT DELETED USERS
+      },
       include: { preferredVoice: true },
     });
+    
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    
     let voice: string | undefined = undefined;
     if (user && user.preferredVoice) {
       const prefVoice = user.preferredVoice;
@@ -480,12 +803,6 @@ export class StoryService {
     }
     return this.elevenLabs.generateAudioBuffer(text, voice);
   }
-
-  // Stub for Eleven Labs integration
-  // async generateAudio(text: string): Promise<string> {
-  //   // Call Eleven Labs API and return audio URL
-  //   return 'https://elevenlabs.example/audio.mp3';
-  // }
 
   private toStoryPathDto(path: StoryPath): StoryPathDto {
     return {
@@ -499,6 +816,29 @@ export class StoryService {
   }
 
   async startStoryPath(dto: StartStoryPathDto): Promise<StoryPathDto> {
+    // Verify kid and story exist and are not soft deleted
+    const kid = await this.prisma.kid.findUnique({
+      where: { 
+        id: dto.kidId,
+        isDeleted: false // CANNOT START STORY PATH FOR SOFT DELETED KIDS
+      }
+    });
+    
+    if (!kid) {
+      throw new NotFoundException('Kid not found');
+    }
+
+    const story = await this.prisma.story.findUnique({
+      where: { 
+        id: dto.storyId,
+        isDeleted: false // CANNOT START STORY PATH FOR SOFT DELETED STORIES
+      }
+    });
+    
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+
     const storyPath = await this.prisma.storyPath.create({
       data: {
         kidId: dto.kidId,
@@ -521,6 +861,17 @@ export class StoryService {
   }
 
   async getStoryPathsForKid(kidId: string): Promise<StoryPathDto[]> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT GET STORY PATHS FOR SOFT DELETED KIDS
+      }
+    });
+    
+    if (!kid) {
+      throw new NotFoundException('Kid not found');
+    }
+
     const paths = await this.prisma.storyPath.findMany({ where: { kidId } });
     return paths.map((p: StoryPath) => this.toStoryPathDto(p));
   }
@@ -538,6 +889,9 @@ export class StoryService {
     this.logger.log('Fetching categories with story counts from database');
 
     const categories = await this.prisma.category.findMany({
+      where: {
+      isDeleted: false, // EXCLUDE SOFT DELETED CATEGORIES
+    },
       include: {
         _count: {
           select: { stories: true },
@@ -545,7 +899,7 @@ export class StoryService {
       },
     });
 
-    return categories.map((c) => ({
+    return categories.map((c: Category) => ({
       id: c.id,
       name: c.name,
       image: c.image ?? undefined,
@@ -555,7 +909,11 @@ export class StoryService {
   }
 
   async getThemes(): Promise<ThemeDto[]> {
-    const themes = await this.prisma.theme.findMany();
+    const themes = await this.prisma.theme.findMany({
+      where: {
+        isDeleted: false, // EXCLUDE SOFT DELETED THEMES
+      }
+    });
     return themes.map((t: Theme) => ({
       ...t,
       image: t.image ?? undefined,
@@ -568,7 +926,12 @@ export class StoryService {
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Normalize to midnight
 
-    const kids = await this.prisma.kid.findMany();
+    const kids = await this.prisma.kid.findMany({
+      where: {
+        isDeleted: false, // ONLY ASSIGN TO NON-DELETED KIDS
+      }
+    });
+    
     let totalAssigned = 0;
     for (const kid of kids) {
       // Parse kid's age from ageRange (e.g., '6-8' -> 6)
@@ -582,6 +945,7 @@ export class StoryService {
         where: {
           ageMin: { lte: kidAge },
           ageMax: { gte: kidAge },
+          isDeleted: false, // ONLY USE NON-DELETED STORIES
         },
       });
       if (stories.length === 0) continue;
@@ -618,6 +982,7 @@ export class StoryService {
         where: {
           storyId: story.id,
           challengeDate: today,
+          isDeleted: false, // ONLY USE NON-DELETED CHALLENGES
         },
       });
       if (!challenge) {
@@ -664,6 +1029,17 @@ export class StoryService {
   }
 
   async getTodaysDailyChallengeAssignment(kidId: string) {
+    const kid = await this.prisma.kid.findUnique({
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT GET CHALLENGES FOR SOFT DELETED KIDS
+      }
+    });
+    
+    if (!kid) {
+      throw new NotFoundException('Kid not found');
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -676,6 +1052,7 @@ export class StoryService {
             gte: today,
             lt: tomorrow,
           },
+          isDeleted: false, // ONLY GET NON-DELETED CHALLENGES
         },
       },
       include: {
@@ -699,7 +1076,10 @@ export class StoryService {
     voiceType: VoiceType,
   ): Promise<string> {
     const story = await this.prisma.story.findUnique({
-      where: { id: storyId },
+      where: { 
+        id: storyId,
+        isDeleted: false // CANNOT GET AUDIO FOR SOFT DELETED STORIES
+      },
       select: { textContent: true },
     });
     if (!story) {
@@ -735,6 +1115,17 @@ export class StoryService {
   }
 
   async getWeeklyDailyChallengeAssignments(kidId: string, weekStart: Date) {
+    const kid = await this.prisma.kid.findUnique({
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT GET ASSIGNMENTS FOR SOFT DELETED KIDS
+      }
+    });
+    
+    if (!kid) {
+      throw new NotFoundException('Kid not found');
+    }
+
     // weekStart should be a Sunday at 00:00:00
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 7); // Next Sunday (exclusive)
@@ -746,6 +1137,7 @@ export class StoryService {
             gte: weekStart,
             lt: weekEnd,
           },
+          isDeleted: false, // ONLY GET NON-DELETED CHALLENGES
         },
       },
       include: {
@@ -762,7 +1154,10 @@ export class StoryService {
 
   async getStoryById(id: string) {
     const story = await this.prisma.story.findUnique({
-      where: { id },
+      where: { 
+        id,
+        isDeleted: false // EXCLUDE SOFT DELETED STORIES
+      },
       include: {
         images: true,
         branches: true,
@@ -799,10 +1194,16 @@ export class StoryService {
 
       // Get theme and category IDs from names
       const themes = await this.prisma.theme.findMany({
-        where: { name: { in: generatedStory.theme } },
+        where: { 
+          name: { in: generatedStory.theme },
+          isDeleted: false // ONLY USE NON-DELETED THEMES
+        },
       });
       const categories = await this.prisma.category.findMany({
-        where: { name: { in: generatedStory.category } },
+        where: { 
+          name: { in: generatedStory.category },
+          isDeleted: false // ONLY USE NON-DELETED CATEGORIES
+        },
       });
 
       // Save the story to the database
@@ -853,9 +1254,13 @@ export class StoryService {
     themeNames?: string[],
     categoryNames?: string[],
   ) {
-    // Get kid's information
+    // 1. Get kid's information, preferred categories, AND excluded tags
     const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT GENERATE STORY FOR SOFT DELETED KIDS
+      },
+      include: { preferredCategories: true },
     });
 
     if (!kid) {
@@ -873,19 +1278,33 @@ export class StoryService {
       }
     }
 
-    // Use provided themes/categories or get random ones
+    // 2. Prepare Themes
     let themes = themeNames || [];
-    let categories = categoryNames || [];
-
     if (themes.length === 0) {
-      const availableThemes = await this.prisma.theme.findMany();
+      const availableThemes = await this.prisma.theme.findMany({
+        where: {
+          isDeleted: false, // ONLY USE NON-DELETED THEMES
+        }
+      });
       const randomTheme =
         availableThemes[Math.floor(Math.random() * availableThemes.length)];
       themes = [randomTheme.name];
     }
 
+    // 3. Prepare Categories (Merge Input + Preferences)
+    let categories = categoryNames || [];
+
+    if (kid.preferredCategories && kid.preferredCategories.length > 0) {
+      const prefCategoryNames = kid.preferredCategories.map((c) => c.name);
+      categories = [...new Set([...categories, ...prefCategoryNames])];
+    }
+
     if (categories.length === 0) {
-      const availableCategories = await this.prisma.category.findMany();
+      const availableCategories = await this.prisma.category.findMany({
+        where: {
+          isDeleted: false, // ONLY USE NON-DELETED CATEGORIES
+        }
+      });
       const randomCategory =
         availableCategories[
           Math.floor(Math.random() * availableCategories.length)
@@ -893,26 +1312,50 @@ export class StoryService {
       categories = [randomCategory.name];
     }
 
+    // 4. Handle Excluded Tags
+    let contextString = '';
+    
+    if (kid.excludedTags && kid.excludedTags.length > 0) {
+      const exclusions = kid.excludedTags.join(', ');
+      // We explicitly instruct the AI to avoid these
+      contextString = `IMPORTANT: The story must strictly AVOID the following topics, themes, creatures, or elements: ${exclusions}. Ensure the content is safe and comfortable for the child regarding these exclusions.`;
+    }
+
+    // 5. Construct Options
     const options: GenerateStoryOptions = {
       theme: themes,
       category: categories,
       ageMin,
       ageMax,
-      kidName: kid.name || undefined,
+      kidName: kid.name || 'Hero',
       language: 'English',
+      additionalContext: contextString, // Pass the exclusion instruction here
     };
+
+    this.logger.log(
+      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}]. Exclusions: [${kid.excludedTags.join(', ')}]`
+    );
 
     return this.generateStoryWithAI(options);
   }
+
   private async adjustReadingLevel(
     kidId: string,
     storyId: string,
     totalTimeSeconds: number,
   ) {
     const story = await this.prisma.story.findUnique({
-      where: { id: storyId },
+      where: { 
+        id: storyId,
+        isDeleted: false // CANNOT ADJUST LEVEL BASED ON SOFT DELETED STORIES
+      },
     });
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId } });
+    const kid = await this.prisma.kid.findUnique({ 
+      where: { 
+        id: kidId,
+        isDeleted: false // CANNOT ADJUST LEVEL FOR SOFT DELETED KIDS
+      } 
+    });
 
     if (!story || !kid || story.wordCount === 0) return;
 
