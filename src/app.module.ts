@@ -22,6 +22,7 @@ import { UserModule } from './user/user.module';
 import { VoiceModule } from './voice/voice.module';
 import { PaymentModule } from './payment/payment.module';
 import { AchievementProgressModule } from './achievement-progress/achievement-progress.module';
+import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { AchievementProgressModule } from './achievement-progress/achievement-pr
     StoryBuddyModule,
     HelpSupportModule,
     AchievementProgressModule,
+    ParentFavoriteModule,
   ],
 })
 export class AppModule {}
