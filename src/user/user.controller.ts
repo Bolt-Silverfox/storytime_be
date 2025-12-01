@@ -1,4 +1,3 @@
-// src/user/user.controller.ts
 import {
   Controller,
   Get,
@@ -11,9 +10,10 @@ import {
   ForbiddenException,
   Patch,
   BadRequestException,
-  Logger,
   Post,
   Query,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -36,10 +36,6 @@ import { SetPinDto } from './dto/set-pin.dto';
 import { ResetPinDto } from './dto/reset-pin.dto';
 import { ParentProfileResponseDto } from './dto/parent-profile-response.dto';
 import { mapParentProfile } from './utils/parent-profile.mapper';
-import { CreateSubscriptionDto } from './dto/create-subscription.dto';
-import { SubscriptionResponseDto } from './dto/subscription-response.dto';
-import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
-import { SupportTicketResponseDto } from './dto/support-ticket-response.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 
 export enum UserRole {
@@ -55,8 +51,6 @@ class UpdateUserRoleDto {
 @ApiTags('user')
 @Controller('user')
 export class UserController {
-  private readonly logger = new Logger(UserController.name);
-
   constructor(private readonly userService: UserService) {}
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
@@ -67,8 +61,47 @@ export class UserController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiResponse({ status: 200, type: ParentProfileResponseDto })
+  @ApiResponse({
+    status: 410,
+    description: 'Account is deactivated',
+    schema: {
+      example: {
+        statusCode: 410,
+        success: false,
+        error: 'Gone',
+        message: 'Your account has been deactivated. Please restore your account to continue.',
+        data: {
+          isDeleted: true,
+          deletedAt: '2025-12-01T12:43:35.939Z',
+          restoreEndpoint: '/api/v1/user/me/undo-delete'
+        }
+      }
+    }
+  })
   async getMe(@Req() req: any) {
     const raw = await this.userService.getUser(req.authUserData.userId);
+    
+    // If user is not found (likely because isDeleted: true filter), check if user exists but is deleted
+    if (!raw) {
+      const userExists = await this.userService.getUserIncludingDeleted(req.authUserData.userId);
+      if (userExists && userExists.isDeleted) {
+        throw new HttpException(
+          {
+            statusCode: 410,
+            success: false,
+            error: 'Gone',
+            message: 'Your account has been deactivated. Please restore your account to continue.',
+            data: {
+              isDeleted: true,
+              deletedAt: userExists.deletedAt,
+              restoreEndpoint: '/api/v1/user/me/undo-delete'
+            }
+          },
+          HttpStatus.GONE
+        );
+      }
+    }
+    
     return mapParentProfile(raw);
   }
 
@@ -135,37 +168,131 @@ export class UserController {
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the account (default: false - soft delete)'
+    description: 'Permanently delete the account and all associated data (default: false - soft delete)'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Account deactivated successfully (soft delete)',
+    schema: {
+      example: {
+        statusCode: 200,
+        success: true,
+        data: {
+          id: 'user-id',
+          email: 'user@example.com',
+          isDeleted: true,
+          deletedAt: '2025-12-01T13:20:00.000Z',
+          message: 'Account deactivated successfully'
+        },
+        message: 'Account deactivated successfully'
+      }
+    }
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Account and all associated data deleted permanently',
+    schema: {
+      example: {
+        statusCode: 200,
+        success: true,
+        data: {
+          id: 'user-id',
+          email: 'user@example.com',
+          message: 'Account and all associated data deleted permanently. All active sessions have been terminated.'
+        },
+        message: 'Account and all associated data deleted permanently'
+      }
+    }
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Account not found',
+    schema: {
+      example: {
+        statusCode: 404,
+        success: false,
+        error: 'Not Found',
+        message: 'Account not found'
+      }
+    }
   })
   async deleteMe(
     @Req() req: any,
     @Query('permanent') permanent: boolean = false
   ) {
-    return this.userService.deleteUserAccount(req.authUserData.userId, permanent);
+    const result = await this.userService.deleteUserAccount(req.authUserData.userId, permanent);
+    
+    return {
+      statusCode: 200,
+      success: true,
+      data: result,
+      message: result.message
+    };
   }
 
   @Post('me/delete')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Request account deletion (verify password + reasons)' })
+  @ApiOperation({ 
+    summary: 'Request account deletion (verify password + reasons)',
+    description: 'Verifies password and logs deletion request. After successful verification, use DELETE /api/v1/user/me to actually delete the account.'
+  })
   @ApiQuery({
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the account (default: false - soft delete)'
+    description: 'Permanently delete the account and all associated data (default: false - soft delete)'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'DELETE request submitted.',
+    schema: {
+      example: {
+        statusCode: 200,
+        success: true,
+        data: {
+          verified: true,
+          message: 'Delete request submitted successfully.'
+        },
+        message: 'Delete request successful'
+      }
+    }
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Account already deactivated',
+    schema: {
+      example: {
+        statusCode: 400,
+        success: false,
+        error: 'Bad Request',
+        message: 'Account is already deactivated. Please restore your account first or contact support.'
+      }
+    }
   })
   async deleteAccountWithConfirmation(
     @Req() req: any,
     @Body() body: DeleteAccountDto,
     @Query('permanent') permanent: boolean = false
   ) {
-    return this.userService.deleteAccountWithConfirmation(
+    // Verify password and create support ticket
+    const result = await this.userService.verifyPasswordAndLogDeletion(
       req.authUserData.userId,
       body.password,
       body.reasons,
       body.notes,
       permanent
     );
+
+    return {
+      statusCode: 200,
+      success: true,
+      data: {
+        verified: true,
+        message: 'Delete request submitted successfully.'
+      },
+      message: 'Delete request successful'
+    };
   }
 
   @Post('me/undo-delete')
@@ -279,7 +406,7 @@ export class UserController {
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the account (default: false - soft delete)'
+    description: 'Permanently delete the account and all associated data (default: false - soft delete)'
   })
   async deleteUserAccount(
     @Param('id') id: string,
@@ -305,8 +432,7 @@ export class UserController {
           email: 'user@example.com',
           name: 'John Doe',
           isDeleted: false,
-          deletedAt: null,
-          // ... other user fields
+          deletedAt: null
         }
       }
     }

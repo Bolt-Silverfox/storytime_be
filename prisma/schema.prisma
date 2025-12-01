@@ -169,7 +169,7 @@ model Token {
 
 model Profile {
   id                String   @id @default(uuid())
-  user              User     @relation(fields: [userId], references: [id])
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId            String   @unique
   explicitContent   Boolean  @default(true)
   maxScreenTimeMins Int?
@@ -308,7 +308,7 @@ model StoryProgress {
 model Subscription {
   id        String    @id @default(uuid())
   userId    String
-  user      User      @relation(fields: [userId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan      String
   status    String    @default("active")
   startedAt DateTime  @default(now())
@@ -325,7 +325,7 @@ model Subscription {
 model SupportTicket {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   subject   String
   message   String
   status    String   @default("open")
