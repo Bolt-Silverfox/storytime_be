@@ -1,39 +1,180 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { VOICEID, VoiceResponseDto } from '../story/story.dto'; // Importing existing constants
+import {
+  CreateElevenLabsVoiceDto,
+  SetPreferredVoiceDto,
+  UploadVoiceDto,
+  VoiceResponseDto,
+  VOICEID,
+} from './voice.dto';
 
 @Injectable()
 export class VoiceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) { }
 
-  async getAllAvailableVoices(userId: string): Promise<VoiceResponseDto[]> {
-    // 1. Define System Voices (Hardcoded based on your existing VOICIED constant)
-    // These are available to everyone.
-    const systemVoices: VoiceResponseDto[] = [
-      { id: VOICEID.MILO, name: 'Milo', type: 'system', elevenLabsVoiceId: VOICEID.MILO },
-      { id: VOICEID.BELLA, name: 'Bella', type: 'system', elevenLabsVoiceId: VOICEID.BELLA },
-      { id: VOICEID.COSMO, name: 'Cosmo', type: 'system', elevenLabsVoiceId: VOICEID.COSMO },
-      { id: VOICEID.NIMBUS, name: 'Nimbus', type: 'system', elevenLabsVoiceId: VOICEID.NIMBUS },
-      { id: VOICEID.GRANDPA_JO, name: 'Grandpa Jo', type: 'system', elevenLabsVoiceId: VOICEID.GRANDPA_JO },
-      { id: VOICEID.CHIP, name: 'Chip', type: 'system', elevenLabsVoiceId: VOICEID.CHIP },
-    ];
+  // --- Upload a new voice file ---
+  async uploadVoice(
+    userId: string,
+    fileUrl: string,
+    dto: UploadVoiceDto,
+  ): Promise<VoiceResponseDto> {
+    const voice = await this.prisma.voice.create({
+      data: {
+        userId,
+        name: dto.name,
+        type: 'uploaded',
+        url: fileUrl,
+      },
+    });
+    return this.toVoiceResponse(voice);
+  }
 
-    // 2. Fetch User-Specific Voices from DB (Cloned/Uploaded voices)
-    const userVoices = await this.prisma.voice.findMany({
-      where: { userId: userId },
-      orderBy: { createdAt: 'desc' },
+  // --- Create a voice using ElevenLabs ID ---
+  async createElevenLabsVoice(
+    userId: string,
+    dto: CreateElevenLabsVoiceDto,
+  ): Promise<VoiceResponseDto> {
+    const voice = await this.prisma.voice.create({
+      data: {
+        userId,
+        name: dto.name,
+        type: 'elevenlabs',
+        elevenLabsVoiceId: dto.elevenLabsVoiceId,
+      },
+    });
+    return this.toVoiceResponse(voice);
+  }
+
+  // --- List all voices for a user ---
+  async listVoices(userId: string): Promise<VoiceResponseDto[]> {
+    const voices = await this.prisma.voice.findMany({ where: { userId } });
+    return voices.map((v) => this.toVoiceResponse(v));
+  }
+
+  // --- Set preferred voice for a user (Parent) ---
+  async setPreferredVoice(
+    userId: string,
+    dto: SetPreferredVoiceDto,
+  ): Promise<any> {
+    const result = await this.prisma.user.update({
+      where: { id: userId },
+      data: { preferredVoiceId: dto.voiceId },
+    });
+    return {
+      id: result.id,
+      email: result.email,
+      preferredVoice: result.preferredVoiceId,
+    };
+  }
+
+  // --- Get the preferred voice for a user ---
+  async getPreferredVoice(userId: string): Promise<VoiceResponseDto | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { preferredVoice: true },
     });
 
-    // 3. Map DB voices to DTO
-    const mappedUserVoices: VoiceResponseDto[] = userVoices.map((v) => ({
-      id: v.id,
-      name: v.name,
-      type: v.type, // 'uploaded' or 'elevenlabs'
-      url: v.url ?? undefined,
-      elevenLabsVoiceId: v.elevenLabsVoiceId ?? undefined,
-    }));
+    if (!user || !user.preferredVoice)
+      return {
+        id: '',
+        name: '',
+        type: '',
+        url: undefined,
+        elevenLabsVoiceId: undefined,
+      };
 
-    // 4. Combine and return
-    return [...systemVoices, ...mappedUserVoices];
+    return this.toVoiceResponse(user.preferredVoice);
+  }
+
+  // --- Helper to map Prisma Voice to VoiceResponseDto ---
+  private toVoiceResponse(voice: any): VoiceResponseDto {
+    return {
+      id: voice.id,
+      name: voice.name,
+      type: voice.type,
+      url: voice.url ?? undefined,
+      elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
+    };
+  }
+
+ // ... inside VoiceService class ...
+
+  async findOrCreateElevenLabsVoice(
+    elevenLabsId: string,
+    userId: string,
+  ): Promise<{ id: string }> {
+    // 1. Check if we already have this voice locally for this user
+    const existing = await this.prisma.voice.findFirst({
+      where: {
+        userId: userId,
+        elevenLabsVoiceId: elevenLabsId,
+      },
+    });
+
+    if (existing) {
+      return { id: existing.id };
+    }
+
+    // 2. Fetch details from ElevenLabs to get Name AND Preview URL
+    let voiceName = 'Imported ElevenLabs Voice';
+    let voicePreviewUrl: string | null = null;
+
+    console.log(`Fetching voice ${elevenLabsId} from ElevenLabs API...`);
+
+    try {
+      const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/voices/${elevenLabsId}`,
+        {
+          method: 'GET',
+          headers: {
+            'xi-api-key': apiKey ?? '',
+          },
+        },
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        voiceName = data.name; // e.g., "Harry"
+        voicePreviewUrl = data.preview_url; // e.g., "https://..."
+      } else {
+        console.warn(
+          `ElevenLabs API returned ${response.status}: ${response.statusText}`,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        'Failed to fetch voice details from ElevenLabs, using fallback.',
+        error,
+      );
+    }
+
+    // 3. Fallback: If API failed, check if it's a known voice just to fix the name
+    if (voiceName === 'Imported ElevenLabs Voice') {
+      const knownKey = Object.keys(VOICEID).find(
+        (key) => VOICEID[key as keyof typeof VOICEID] === elevenLabsId,
+      );
+      if (knownKey) {
+        voiceName =
+          knownKey.charAt(0).toUpperCase() + knownKey.slice(1).toLowerCase();
+      }
+    }
+
+    // 4. Save to our Database with the URL
+    const newVoice = await this.prisma.voice.create({
+      data: {
+        userId: userId,
+        name: voiceName,
+        type: 'elevenlabs',
+        elevenLabsVoiceId: elevenLabsId,
+        url: voicePreviewUrl,
+      },
+    });
+
+    return { id: newVoice.id };
   }
 }

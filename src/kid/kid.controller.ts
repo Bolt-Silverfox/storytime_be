@@ -1,27 +1,28 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Patch, BadRequestException, ForbiddenException, ParseArrayPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse } from '@nestjs/swagger';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, ParseArrayPipe, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { KidService } from './kid.service';
-import { CreateKidDto, UpdateKidDto, SetKidPreferredVoiceDto, KidVoiceDto } from './dto/kid.dto';
+import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
-import { VoiceType, VOICEID } from '@/story/story.dto';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @ApiTags('Kids Management')
 @ApiBearerAuth()
 @UseGuards(AuthSessionGuard)
 @Controller()
 export class KidController {
-    constructor(private readonly kidService: KidService) { }
+    constructor(
+        private readonly kidService: KidService,
+        private readonly analyticsService: AnalyticsService
+    ) { }
 
-    // 1. GET /auth/kids (Get all kids)
     @Get('/auth/kids')
     @ApiOperation({ summary: 'Get all kids for the logged-in user' })
     async getMyKids(@Request() req: AuthenticatedRequest) {
         return this.kidService.findAllByUser(req.authUserData.userId);
     }
 
-    // 2. POST /auth/kids (Add a kid)
     @Post('/auth/kids')
-    @ApiOperation({ summary: 'Add one or more kids (Send as Array)' })
+    @ApiOperation({ summary: 'Add one or more kids' })
     @ApiBody({ type: [CreateKidDto] })
     async createKids(
         @Request() req: AuthenticatedRequest,
@@ -30,53 +31,72 @@ export class KidController {
         return this.kidService.createKids(req.authUserData.userId, dtos);
     }
 
-    // 3. GET /user/kids/:kidId (Get child by ID)
     @Get('/user/kids/:kidId')
     @ApiOperation({ summary: 'Get details of a specific kid' })
-    async getKid(@Request() req: AuthenticatedRequest, @Param('kidId') kidId: string) {
-        return this.kidService.findOne(kidId, req.authUserData.userId);
+    async getKid(
+        @Request() req: AuthenticatedRequest, 
+        @Param('kidId') kidId: string
+    ){  
+        // Get the kid details first
+        const kid = await this.kidService.findOne(kidId, req.authUserData.userId);
+        
+        // Extract device information from the request
+        // This captures IP address, device name, OS, etc.
+        const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+        
+        // Parse User-Agent to get device details
+        const UAParser = require('ua-parser-js');
+        const parser = new UAParser(req.headers['user-agent'] as string);
+        const ua = parser.getResult();
+        
+        // Log the activity with full device information
+        // This runs in the background and doesn't block the response
+        this.analyticsService.logActivity({
+            userId: req.authUserData.userId,
+            kidId: kidId,
+            action: 'ACCESS_KID_ACCOUNT',
+            status: 'SUCCESS',
+            details: `Parent accessed kid account from home page`,
+            ipAddress: ip as string,
+            deviceName: ua.device.model || ua.browser.name || 'unknown',
+            deviceModel: ua.device.vendor || 'unknown',
+            os: `${ua.os.name || 'unknown'} ${ua.os.version || ''}`.trim(),
+        }).catch(err => {
+            // Silently catch errors so logging failures don't affect user experience
+            console.error('Failed to log activity:', err);
+        });
+        
+        return kid;
     }
 
-    // 4. PUT /auth/kids/:kidId (Update profile)
     @Put('/auth/kids/:kidId')
-    @ApiOperation({ summary: 'Update kid profile, preferences, and bedtime' })
+    @ApiOperation({ summary: 'Update kid profile, preferences, bedtime, and voice' })
     async updateKid(@Request() req: AuthenticatedRequest, @Param('kidId') kidId: string, @Body() dto: UpdateKidDto) {
         return this.kidService.updateKid(kidId, req.authUserData.userId, dto);
     }
 
-    // 5. DELETE /auth/kids/:kidId (Delete profile)
     @Delete('/auth/kids/:kidId')
     @ApiOperation({ summary: 'Delete a kid profile' })
-    async deleteKid(@Request() req: AuthenticatedRequest, @Param('kidId') kidId: string) {
-        return this.kidService.deleteKid(kidId, req.authUserData.userId);
-    }
-
-    // 6. PATCH /user/kids/:kidId/voice (Set preferred voice)
-    @Patch('/user/kids/:kidId/voice')
-    @ApiOperation({ summary: 'Set preferred voice for a kid' })
-    @ApiBody({ type: SetKidPreferredVoiceDto })
-    @ApiResponse({ status: 200, type: KidVoiceDto })
-    async setKidPreferredVoice(
+    @ApiQuery({
+        name: 'permanent',
+        required: false,
+        type: Boolean,
+        description: 'Permanently delete the kid profile (default: false - soft delete)'
+    })
+    async deleteKid(
+        @Request() req: AuthenticatedRequest, 
         @Param('kidId') kidId: string,
-        @Body() body: SetKidPreferredVoiceDto,
+        @Query('permanent') permanent: boolean = false
     ) {
-        if (!body.voiceType) {
-            throw new BadRequestException('Voice type is required');
-        }
-        const voiceKey = body.voiceType.toUpperCase() as keyof typeof VOICEID;
-        const voiceId = VOICEID[voiceKey];
-        if (!voiceId) {
-            throw new ForbiddenException('Invalid voice type');
-        }
-        return this.kidService.setKidPreferredVoice(kidId, voiceKey as VoiceType);
+        return this.kidService.deleteKid(kidId, req.authUserData.userId, permanent);
     }
 
-    // 7. GET /user/kids/:kidId/voice (Get preferred voice)
-    @Get('/user/kids/:kidId/voice')
-    @ApiOperation({ summary: 'Get preferred voice for a kid' })
-    @ApiResponse({ status: 200, type: KidVoiceDto })
-    async getKidPreferredVoice(@Param('kidId') kidId: string) {
-        return await this.kidService.getKidPreferredVoice(kidId);
+    @Post('/auth/kids/:kidId/undo-delete')
+    @ApiOperation({ summary: 'Restore a soft deleted kid profile' })
+    async undoDeleteKid(
+        @Request() req: AuthenticatedRequest,
+        @Param('kidId') kidId: string
+    ) {
+        return this.kidService.undoDeleteKid(kidId, req.authUserData.userId);
     }
-
 }

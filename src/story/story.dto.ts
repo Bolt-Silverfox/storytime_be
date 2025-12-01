@@ -2,6 +2,12 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsBoolean,
+  IsDate,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -12,241 +18,249 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 
 export class StoryImageDto {
   @ApiProperty()
+  @IsString()
   url: string;
+
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   caption?: string;
 }
 
 export class StoryBranchDto {
   @ApiProperty()
+  @IsString()
   prompt: string;
+
   @ApiProperty()
+  @IsString()
   optionA: string;
+
   @ApiProperty()
+  @IsString()
   optionB: string;
+
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   nextA?: string;
+
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   nextB?: string;
 }
 
 export class CreateStoryDto {
-  @ApiProperty({ example: 'The Adventure of Little Bear' })
+  @ApiProperty()
   @IsString()
-  @IsNotEmpty({ message: 'Title is required' })
-  @MinLength(3, { message: 'Title must be at least 3 characters' })
-  @MaxLength(200, { message: 'Title must not exceed 200 characters' })
+  @IsNotEmpty()
   title: string;
 
-  @ApiProperty({ example: 'A heartwarming tale about a brave little bear...' })
+  @ApiProperty()
   @IsString()
-  @IsNotEmpty({ message: 'Description is required' })
+  @IsNotEmpty()
   description: string;
 
-  @ApiProperty({ example: 'English' })
+  @ApiProperty()
   @IsString()
-  @IsNotEmpty({ message: 'Language is required' })
+  @IsNotEmpty()
   language: string;
-
-  @ApiPropertyOptional({ example: 'https://example.com/cover.jpg' })
-  @IsString()
-  @IsOptional()
-  coverImageUrl?: string;
-
-  @ApiPropertyOptional({ example: 'https://example.com/thumbnail.jpg' })
-  @IsString()
-  @IsOptional()
-  thumbnailUrl?: string;
-
-  @ApiPropertyOptional({ example: 'https://example.com/audio.mp3' })
-  @IsString()
-  @IsOptional()
-  audioUrl?: string;
-
-  @ApiPropertyOptional({ example: 15 })
-  @IsInt({ message: 'Reading length must be an integer' })
-  @Min(1, { message: 'Reading length must be at least 1 minute' })
-  @Max(120, { message: 'Reading length must not exceed 120 minutes' })
-  @IsOptional()
-  readingLength?: number;
-
-  @ApiPropertyOptional({ example: false })
-  @IsBoolean()
-  @IsOptional()
-  isPremium?: boolean;
-
-  @ApiPropertyOptional({ example: true })
-  @IsBoolean()
-  @IsOptional()
-  isInteractive?: boolean;
-
-  @ApiPropertyOptional({ example: 4 })
-  @IsInt()
-  @Min(0)
-  @Max(18)
-  @IsOptional()
-  ageMin?: number;
-
-  @ApiPropertyOptional({ example: 8 })
-  @IsInt()
-  @Min(0)
-  @Max(18)
-  @IsOptional()
-  ageMax?: number;
 
   @ApiProperty({ type: [String] })
   @IsArray()
-  @IsUUID('4', { each: true, message: 'Each category ID must be a valid UUID' })
-  @IsNotEmpty({ message: 'At least one category is required' })
-  categoryIds: string[];
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsArray()
-  @IsUUID('4', { each: true, message: 'Each theme ID must be a valid UUID' })
-  @IsOptional()
+  @IsString({ each: true })
   themeIds: string[];
 
-  @ApiPropertyOptional()
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  categoryIds: string[];
+
+  @ApiProperty({ required: false })
   @IsOptional()
+  @IsString()
+  coverImageUrl?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  audioUrl?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  isInteractive?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  ageMin?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  ageMax?: number;
+
+  @ApiProperty({ type: [StoryImageDto], required: false })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => StoryImageDto)
   images?: StoryImageDto[];
 
-  @ApiPropertyOptional()
+  @ApiProperty({ type: [StoryBranchDto], required: false })
   @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => StoryBranchDto)
   branches?: StoryBranchDto[];
 }
 
 export class UpdateStoryDto {
-  @ApiPropertyOptional()
-  @IsString()
+  @ApiProperty({ required: false })
   @IsOptional()
-  @MinLength(3, { message: 'Title must be at least 3 characters' })
-  @MaxLength(200, { message: 'Title must not exceed 200 characters' })
+  @IsString()
   title?: string;
 
-  @ApiPropertyOptional()
-  @IsString()
+  @ApiProperty({ required: false })
   @IsOptional()
+  @IsString()
   description?: string;
 
-  @ApiPropertyOptional()
-  @IsString()
+  @ApiProperty({ required: false })
   @IsOptional()
+  @IsString()
   language?: string;
 
-  @ApiPropertyOptional()
-  @IsString()
+  @ApiProperty({ type: [String], required: false })
   @IsOptional()
-  coverImageUrl?: string;
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
-  thumbnailUrl?: string;
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
-  audioUrl?: string;
-
-  @ApiPropertyOptional()
-  @IsInt({ message: 'Reading length must be an integer' })
-  @Min(1, { message: 'Reading length must be at least 1 minute' })
-  @Max(120, { message: 'Reading length must not exceed 120 minutes' })
-  @IsOptional()
-  readingLength?: number;
-
-  @ApiPropertyOptional()
-  @IsBoolean()
-  @IsOptional()
-  isPremium?: boolean;
-
-  @ApiPropertyOptional()
-  @IsBoolean()
-  @IsOptional()
-  isInteractive?: boolean;
-
-  @ApiPropertyOptional()
-  @IsInt()
-  @Min(0)
-  @Max(18)
-  @IsOptional()
-  ageMin?: number;
-
-  @ApiPropertyOptional()
-  @IsInt()
-  @Min(0)
-  @Max(18)
-  @IsOptional()
-  ageMax?: number;
-
-  @ApiPropertyOptional()
   @IsArray()
-  @IsUUID('4', { each: true })
-  @IsOptional()
-  categoryIds?: string[];
-
-  @ApiPropertyOptional()
-  @IsArray()
-  @IsUUID('4', { each: true })
-  @IsOptional()
+  @IsString({ each: true })
   themeIds?: string[];
 
-  @ApiPropertyOptional()
+  @ApiProperty({ type: [String], required: false })
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  categoryIds?: string[];
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  coverImageUrl?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  audioUrl?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  isInteractive?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  ageMin?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  ageMax?: number;
+
+  @ApiProperty({ type: [StoryImageDto], required: false })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => StoryImageDto)
   images?: StoryImageDto[];
 
-  @ApiPropertyOptional()
+  @ApiProperty({ type: [StoryBranchDto], required: false })
   @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => StoryBranchDto)
   branches?: StoryBranchDto[];
 }
 
 export class FavoriteDto {
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   kidId: string;
+
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   storyId: string;
 }
 
 export class StoryProgressDto {
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   kidId: string;
+
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   storyId: string;
+
   @ApiProperty()
+  @IsNumber()
   progress: number;
+
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
   completed?: boolean;
+
   @ApiProperty({
     required: false,
     description: 'Time spent in this specific session in seconds',
   })
+  @IsOptional()
+  @IsNumber()
   sessionTime?: number;
 }
 
 export class DailyChallengeDto {
   @ApiProperty()
+  @IsString()
   storyId: string;
+
   @ApiProperty()
+  @IsString()
   challengeDate: string;
+
   @ApiProperty()
+  @IsString()
   wordOfTheDay: string;
+
   @ApiProperty()
+  @IsString()
   meaning: string;
 }
 
 export class UploadVoiceDto {
   @ApiProperty({ description: 'Voice name', example: 'Dad Voice' })
+  @IsString()
+  @IsNotEmpty()
   name: string;
 }
 
 export class CreateElevenLabsVoiceDto {
   @ApiProperty({ description: 'Voice name', example: 'Robot Voice' })
+  @IsString()
+  @IsNotEmpty()
   name: string;
+
   @ApiProperty({ description: 'ElevenLabs Voice ID', example: 'abc123xyz' })
+  @IsString()
+  @IsNotEmpty()
   elevenLabsVoiceId: string;
 }
 
@@ -256,6 +270,7 @@ export class SetPreferredVoiceDto {
     example: 'uuid-voice-id',
   })
   @IsString()
+  @IsNotEmpty()
   voiceId: string;
 }
 
@@ -274,13 +289,17 @@ export class VoiceResponseDto {
 
 export class AssignDailyChallengeDto {
   @ApiProperty()
+  @IsString()
   kidId: string;
+
   @ApiProperty()
+  @IsString()
   challengeId: string;
 }
 
 export class CompleteDailyChallengeDto {
   @ApiProperty()
+  @IsString()
   assignmentId: string;
 }
 
@@ -301,19 +320,29 @@ export class DailyChallengeAssignmentDto {
 
 export class StartStoryPathDto {
   @ApiProperty({ description: 'Kid ID' })
+  @IsString()
   kidId: string;
+
   @ApiProperty({ description: 'Story ID' })
+  @IsString()
   storyId: string;
 }
 
 export class UpdateStoryPathDto {
   @ApiProperty({ description: 'StoryPath ID' })
+  @IsString()
   pathId: string;
+
   @ApiProperty({
     description: 'Updated path (JSON or delimited string of choices)',
   })
+  @IsString()
   path: string;
+
   @ApiProperty({ required: false, description: 'Mark as completed' })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
   completedAt?: Date;
 }
 
@@ -401,29 +430,48 @@ export class ErrorResponseDto {
   details?: any;
 }
 
+// --- THIS WAS THE MISSING PART ---
 export class GenerateStoryDto {
   @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   themes?: string[];
 
   @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   categories?: string[];
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   kidId?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   kidName?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsInt()
   ageMin?: number;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsInt()
   ageMax?: number;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   language?: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   additionalContext?: string;
 }
 
@@ -447,23 +495,31 @@ export enum VoiceType {
 
 export class StoryContentAudioDto {
   @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   content: string;
 
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsEnum(VoiceType)
   voiceType?: VoiceType;
 }
 
 export class QuestionAnswerDto {
   @ApiProperty()
+  @IsString()
   kidId: string;
 
   @ApiProperty()
+  @IsString()
   questionId: string;
 
   @ApiProperty()
+  @IsString()
   storyId: string;
 
   @ApiProperty()
+  @IsInt()
   selectedOption: number;
 }
 
@@ -499,4 +555,5 @@ export class PaginatedStoriesDto {
     type: PaginationMetaDto,
   })
   pagination: PaginationMetaDto;
+}
 }

@@ -7,12 +7,14 @@ import { firstValueFrom } from 'rxjs';
 export class ElevenLabsService {
   private readonly logger = new Logger(ElevenLabsService.name);
   private readonly baseUrl = 'https://api.elevenlabs.io/v1';
-  private readonly defaultVoice = 'Rachel'; // You can make this configurable
+
+  // CHANGED: Use the UUID for Rachel, not the name 'Rachel'
+  private readonly defaultVoice = '21m00Tcm4TlvDq8ikWAM';
 
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   async generateAudioBuffer(
     text: string,
@@ -20,6 +22,7 @@ export class ElevenLabsService {
   ): Promise<{ buffer: Buffer; filename: string }> {
     try {
       const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
+
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.baseUrl}/text-to-speech/${voice}`,
@@ -34,10 +37,10 @@ export class ElevenLabsService {
         ),
       );
       const buffer = Buffer.from(response.data);
-      const filename = `story-${Date.now()}`;
+      const filename = `story-${Date.now()}.mp3`;
       return { buffer, filename };
     } catch (error) {
-      this.logger.error('Failed to generate audio with Eleven Labs', error);
+      this.logger.error('Failed to generate audio with Eleven Labs', error.response?.data || error.message);
       throw error;
     }
   }
@@ -45,10 +48,10 @@ export class ElevenLabsService {
   async fetchAvailableVoices(): Promise<any[]> {
     const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
     const response = await firstValueFrom(
-      this.httpService.get('https://api.elevenlabs.io/v2/voices', {
+      this.httpService.get('https://api.elevenlabs.io/v1/voices', {
         headers: { 'xi-api-key': apiKey },
       }),
     );
-    return response.data.voices; // Array of voices
+    return response.data.voices;
   }
 }

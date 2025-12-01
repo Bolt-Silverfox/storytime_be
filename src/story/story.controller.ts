@@ -1,13 +1,15 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
   Body,
+  Controller,
+  Delete,
+  Get,
+  Logger,
   Param,
+  Patch,
+  Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -15,45 +17,48 @@ import {
   DefaultValuePipe,
   ParseIntPipe,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  ApiTags,
-  ApiOperation,
-  ApiQuery,
-  ApiParam,
-  ApiBody,
   ApiBearerAuth,
-  ApiResponse,
+  ApiBody,
   ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
-import { StoryService } from './story.service';
+import { randomUUID } from 'crypto';
+import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { StoryContentAudioDto } from '../voice/voice.dto';
 import {
-  CreateStoryDto,
-  UpdateStoryDto,
-  StoryImageDto,
-  StoryBranchDto,
-  FavoriteDto,
-  StoryProgressDto,
-  DailyChallengeDto,
-  UploadVoiceDto,
-  CreateElevenLabsVoiceDto,
-  SetPreferredVoiceDto,
-  VoiceResponseDto,
   AssignDailyChallengeDto,
-  CompleteDailyChallengeDto,
-  DailyChallengeAssignmentDto,
-  StartStoryPathDto,
-  UpdateStoryPathDto,
-  StoryPathDto,
   CategoryDto,
-  ThemeDto,
+  CompleteDailyChallengeDto,
+  CreateElevenLabsVoiceDto,
+  CreateStoryDto,
+  DailyChallengeAssignmentDto,
+  DailyChallengeDto,
   ErrorResponseDto,
+  FavoriteDto,
+  GenerateStoryDto,
+  SetPreferredVoiceDto,
+  StartStoryPathDto,
+  StoryBranchDto,
+  StoryImageDto,
+  StoryPathDto,
+  StoryProgressDto,
+  ThemeDto,
+  UpdateStoryDto,
+  UpdateStoryPathDto,
+  UploadVoiceDto,
+  VoiceResponseDto,
   VoiceType,
   StoryContentAudioDto,
   GenerateStoryDto,
   PaginatedStoriesDto,
 } from './story.dto';
-import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
 import { randomUUID } from 'crypto';
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
@@ -233,6 +238,12 @@ export class StoryController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a story' })
   @ApiParam({ name: 'id', type: String })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the story (default: false - soft delete)'
+  })
   @ApiOkResponse({ description: 'Deleted story', type: String })
   @ApiResponse({
     status: 400,
@@ -249,8 +260,34 @@ export class StoryController {
     description: 'Not Found',
     type: ErrorResponseDto,
   })
-  async deleteStory(@Param('id') id: string) {
-    return this.storyService.deleteStory(id);
+  async deleteStory(
+    @Param('id') id: string,
+    @Query('permanent') permanent: boolean = false
+  ) {
+    return this.storyService.deleteStory(id, permanent);
+  }
+
+  @Post(':id/undo-delete')
+  @ApiOperation({ summary: 'Restore a soft deleted story' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ description: 'Story restored successfully', type: UpdateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - Story is not deleted',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async undoDeleteStory(@Param('id') id: string) {
+    return this.storyService.undoDeleteStory(id);
   }
 
   // --- Images ---

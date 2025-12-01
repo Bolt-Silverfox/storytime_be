@@ -1,3 +1,4 @@
+// src/user/user.controller.ts
 import {
   Controller,
   Get,
@@ -11,6 +12,8 @@ import {
   Patch,
   BadRequestException,
   Logger,
+  Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -19,39 +22,31 @@ import {
   ApiParam,
   ApiBody,
   ApiBearerAuth,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { AuthSessionGuard } from '../auth/auth.guard';
 import { UserDto } from '../auth/auth.dto';
-import {
-  UpdateUserDto,
-} from './user.dto';
+import { UpdateUserDto } from './dto/user.dto';
+
+import { UpdateParentProfileDto } from './dto/update-parent-profile.dto';
+import { UpdateAvatarDto } from './dto/update-avatar.dto';
+import { EnableBiometricsDto } from './dto/enable-biometrics.dto';
+import { SetPinDto } from './dto/set-pin.dto';
+import { ResetPinDto } from './dto/reset-pin.dto';
+import { ParentProfileResponseDto } from './dto/parent-profile-response.dto';
+import { mapParentProfile } from './utils/parent-profile.mapper';
+import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { SubscriptionResponseDto } from './dto/subscription-response.dto';
+import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
+import { SupportTicketResponseDto } from './dto/support-ticket-response.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 
 export enum UserRole {
   ADMIN = 'admin',
   PARENT = 'parent',
   KID = 'kid',
 }
-
-// class UpdateUserDto {
-//   @ApiProperty({ example: 'John Doe' })
-//   name?: string;
-
-//   @ApiProperty({ example: 'https://avatar.com' })
-//   avatarUrl?: string;
-
-//   @ApiProperty({ example: 'en' })
-//   language?: string;
-
-//   @ApiProperty({ example: 'Nigeria' })
-//   country?: string;
-
-//   @ApiProperty({ example: 'Mr' })
-//   title?: string;
-
-//   @ApiProperty({ example: 1 })
-//   numberOfKids?: number;
-// }
 
 class UpdateUserRoleDto {
   role: UserRole;
@@ -61,142 +56,186 @@ class UpdateUserRoleDto {
 @Controller('user')
 export class UserController {
   private readonly logger = new Logger(UserController.name);
-  constructor(private readonly userService: UserService) { }
 
-  // ==================== CURRENT USER ENDPOINTS ====================
+  constructor(private readonly userService: UserService) {}
+  // ============================================================
+  //                 SELF / PARENT PROFILE ENDPOINTS
+  // ============================================================
 
   @Get('me')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get current user profile',
-    description: 'Requires authentication.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Current user profile returned.',
-    type: UserDto,
-  })
+  @ApiOperation({ summary: 'Get current user profile' })
+  @ApiResponse({ status: 200, type: ParentProfileResponseDto })
   async getMe(@Req() req: any) {
-    const user = await this.userService.getUser(
-      req.authUserData.userId as string,
+    const raw = await this.userService.getUser(req.authUserData.userId);
+    return mapParentProfile(raw);
+  }
+
+  @Patch('me')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update parent profile' })
+  async updateMyProfile(@Req() req: any, @Body() body: UpdateParentProfileDto) {
+    return this.userService.updateParentProfile(req.authUserData.userId, body);
+  }
+
+  @Post('me/avatar')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update parent avatar' })
+  async updateAvatar(@Req() req: any, @Body() body: UpdateAvatarDto) {
+    return this.userService.updateAvatarForParent(req.authUserData.userId, body);
+  }
+
+  @Post('me/biometrics')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Enable or disable biometrics' })
+  async setBiometrics(@Req() req: any, @Body() body: EnableBiometricsDto) {
+    return this.userService.setBiometrics(req.authUserData.userId, body.enable);
+  }
+
+  @Post('me/pin')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Set or update PIN' })
+  async setPin(@Req() req: any, @Body() body: SetPinDto) {
+    return this.userService.setPin(req.authUserData.userId, body.pin);
+  }
+
+  @Post('me/pin/verify')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Verify PIN' })
+  async verifyPin(@Req() req: any, @Body() body: SetPinDto) {
+    return this.userService.verifyPin(req.authUserData.userId, body.pin);
+  }
+
+  @Post('me/pin/reset')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Reset existing PIN' })
+  async resetPin(@Req() req: any, @Body() body: ResetPinDto) {
+    if (body.newPin !== body.confirmNewPin) {
+      throw new BadRequestException('New PIN and confirmation do not match');
+    }
+    return this.userService.resetPin(
+      req.authUserData.userId,
+      body.oldPin,
+      body.newPin,
     );
-    return user ? new UserDto(user) : null;
   }
 
-  // ==================== USER CRUD ENDPOINTS ====================
-
-
-  @Get(':id')
-  @ApiOperation({
-    summary: 'Get user profile',
-    description: 'Retrieve a user profile by ID.',
+  @Delete('me')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete my account' })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the account (default: false - soft delete)'
   })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
+  async deleteMe(
+    @Req() req: any,
+    @Query('permanent') permanent: boolean = false
+  ) {
+    return this.userService.deleteUserAccount(req.authUserData.userId, permanent);
+  }
+
+  @Post('me/delete')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Request account deletion (verify password + reasons)' })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the account (default: false - soft delete)'
+  })
+  async deleteAccountWithConfirmation(
+    @Req() req: any,
+    @Body() body: DeleteAccountDto,
+    @Query('permanent') permanent: boolean = false
+  ) {
+    return this.userService.deleteAccountWithConfirmation(
+      req.authUserData.userId,
+      body.password,
+      body.reasons,
+      body.notes,
+      permanent
+    );
+  }
+
+  @Post('me/undo-delete')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'Restore my soft deleted account',
+    description: 'Restore your own soft deleted account. Only works if your account was soft deleted.'
+  })
   @ApiResponse({
     status: 200,
-    description: 'User profile returned.',
+    description: 'Account restored successfully',
     schema: {
       example: {
-        id: 'abc123',
-        email: 'user@example.com',
-        name: 'John Doe',
-        avatarUrl: 'https://avatar.com',
-        role: 'user',
-        createdAt: '2023-10-01T12:00:00Z',
-        updatedAt: '2023-10-01T12:00:00Z',
-        profile: {
-          explicitContent: true,
-          maxScreenTimeMins: 60,
-          language: 'en',
-          country: 'nigeria',
-        },
-      },
-    },
-  })
-  @ApiResponse({ status: 404, description: 'User not found.' })
-  async getUser(@Param('id') id: string) {
-    const user = await this.userService.getUser(id);
-    return user ? new UserDto(user) : null;
-  }
-
-  @Put(':id')
-  @ApiOperation({
-    summary: 'Update user profile',
-    description: 'Update a user profile by ID.',
-  })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
-  @ApiBody({
-    type: UpdateUserDto,
-    examples: {
-      example1: {
-        value: {
-          title: 'Mr',
-          name: 'Jane Doe',
-          avatarUrl: 'https://avatar.com/jane',
-          language: 'en',
-          country: 'nigeria',
-        },
-      },
-    },
+        statusCode: 200,
+        message: 'Your account has been restored successfully',
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          name: 'John Doe',
+          isDeleted: false,
+          deletedAt: null,
+          createdAt: '2023-10-01T12:00:00Z',
+          updatedAt: '2023-10-02T10:30:00Z'
+        }
+      }
+    }
   })
   @ApiResponse({
-    status: 200,
-    description: 'User profile updated.',
+    status: 400,
+    description: 'Account is not deleted or cannot be restored',
     schema: {
       example: {
-        id: 'abc123',
-        title: 'Mr',
-        name: 'Jane Doe',
-        avatarUrl: 'https://avatar.com/jane',
-        language: 'en',
-        country: 'nigeria',
-        numberOfKids: 1,
-      },
-    },
+        statusCode: 400,
+        message: 'Your account is not deleted',
+        error: 'Bad Request'
+      }
+    }
   })
-  @ApiResponse({ status: 404, description: 'User not found.' })
-  async updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
-    return await this.userService.updateUser(id, body);
-  }
-
-  @Delete('account/:id')
-  @ApiOperation({
-    summary: 'Delete user account',
-    description: 'Delete my account as a user',
-  })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
   @ApiResponse({
-    status: 200,
-    description: 'User account deleted.',
-    schema: { example: { id: 'abc123', deleted: true } },
+    status: 404,
+    description: 'Account not found',
+    schema: {
+      example: {
+        statusCode: 404,
+        message: 'User not found',
+        error: 'Not Found'
+      }
+    }
   })
-  async deleteUserAccount(@Param('id') id: string) {
-    return this.userService.deleteUserAccount(id);
+  async undoDeleteMyAccount(@Req() req: any) {
+    const restoredUser = await this.userService.undoDeleteMyAccount(req.authUserData.userId);
+    
+    return {
+      statusCode: 200,
+      message: 'Your account has been restored successfully',
+      data: restoredUser
+    };
   }
 
-  // ==================== ADMIN ENDPOINTS ====================
+  // ============================================================
+  //                       ADMIN + GENERIC ROUTES
+  // ============================================================
 
   @Get()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
+  @ApiOperation({ 
     summary: 'List all users (admin only)',
-    description: 'Requires admin role and authentication.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'List of users returned.',
-    schema: {
-      example: [
-        {
-          id: 'abc123',
-          email: 'user@example.com',
-          name: 'John Doe',
-          role: 'user',
-        },
-      ],
-    },
+    description: 'Admins can see all users including both active and soft deleted users'
   })
   async getAllUsers(@Req() req: any) {
     if (req.authUserData.userRole !== 'admin') {
@@ -205,39 +244,94 @@ export class UserController {
     return await this.userService.getAllUsers();
   }
 
-  @Delete(':id')
+  @Get('active')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Delete user (admin only)',
-    description: 'Requires admin role and authentication.',
+  @ApiOperation({ 
+    summary: 'List only active users (admin only)',
+    description: 'Get only active (non-deleted) users'
   })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'User deleted.',
-    schema: { example: { id: 'abc123', deleted: true } },
-  })
-  async deleteUser(@Param('id') id: string, @Req() req: any) {
+  async getActiveUsers(@Req() req: any) {
     if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
     }
-    return await this.userService.deleteUser(id);
+    return await this.userService.getActiveUsers();
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get user profile' })
+  @ApiParam({ name: 'id', type: String })
+  async getUser(@Param('id') id: string) {
+    const user = await this.userService.getUser(id);
+    return user ? new UserDto(user) : null;
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update user profile' })
+  @ApiParam({ name: 'id', type: String })
+  async updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
+    return await this.userService.updateUser(id, body);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete user account' })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the account (default: false - soft delete)'
+  })
+  async deleteUserAccount(
+    @Param('id') id: string,
+    @Query('permanent') permanent: boolean = false
+  ) {
+    return await this.userService.deleteUserAccount(id, permanent);
+  }
+
+  @Post(':id/undo-delete')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Restore soft deleted user account (admin only)' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({
+    status: 200,
+    description: 'User restored successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'User restored successfully',
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          name: 'John Doe',
+          isDeleted: false,
+          deletedAt: null,
+          // ... other user fields
+        }
+      }
+    }
+  })
+  async undoDeleteUser(
+    @Param('id') id: string,
+    @Req() req: any
+  ) {
+    if (req.authUserData.userRole !== 'admin') {
+      throw new ForbiddenException('Admins only');
+    }
+
+    const restoredUser = await this.userService.undoDeleteUser(id);
+    
+    return {
+      statusCode: 200,
+      message: 'User restored successfully',
+      data: restoredUser
+    };
   }
 
   @Get(':id/role')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get user role (admin only)',
-    description: 'Requires admin role and authentication.',
-  })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'User role returned.',
-    schema: { example: { id: 'abc123', role: 'admin' } },
-  })
+  @ApiOperation({ summary: 'Get user role (admin only)' })
   async getUserRole(@Param('id') id: string, @Req() req: any) {
     if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
@@ -248,20 +342,9 @@ export class UserController {
   @Patch(':id/role')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Update user role (admin only)',
-    description: 'Requires admin role and authentication.',
-  })
-  @ApiParam({ name: 'id', type: String, description: 'The user ID' })
-  @ApiBody({
-    type: UpdateUserRoleDto,
-    examples: { example1: { value: { role: 'admin' } } },
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'User role updated.',
-    schema: { example: { id: 'abc123', role: 'admin' } },
-  })
+  @ApiOperation({ summary: 'Update user role (admin only)' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiBody({ type: UpdateUserRoleDto })
   async updateUserRole(
     @Param('id') id: string,
     @Body('role') role: UserRole,
@@ -275,6 +358,4 @@ export class UserController {
     }
     return await this.userService.updateUserRole(id, role);
   }
-
-
 }

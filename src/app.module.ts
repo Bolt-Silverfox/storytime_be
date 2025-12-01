@@ -1,27 +1,33 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { validateEnv } from './config/env.validation';
-import { AuthModule } from './auth/auth.module';
-import { UserModule } from './user/user.module';
-import { SettingsModule } from './settings/settings.module';
-import { NotificationModule } from './notification/notification.module';
-import { CloudinaryModule } from './upload/cloudinary.module';
-import { UploadModule } from './upload/upload.module';
-import { StoryModule } from './story/story.module';
-import { RewardModule } from './reward/reward.module';
-import { AnalyticsModule } from './analytics/analytics.module';
-import { CommonModule } from './common/common.module';
-import { PrismaModule } from './prisma/prisma.module';
-import { AvatarModule } from './avatar/avatar.module';
 import { AgeModule } from './age/age.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { AuthModule } from './auth/auth.module';
+import { AvatarModule } from './avatar/avatar.module';
+import { CommonModule } from './common/common.module';
+import { validateEnv } from './config/env.validation';
+import { HelpSupportModule } from './help-support/help-support.module';
+import { KidModule } from './kid/kid.module';
+import { NotificationModule } from './notification/notification.module';
+import { PrismaModule } from './prisma/prisma.module';
 import { ReportsModule } from './reports/reports.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import Keyv from 'keyv';
 import { CacheableMemory } from 'cacheable';
 import KeyvRedis from '@keyv/redis';
 import { KidModule } from './kid/kid.module';
+import { RewardModule } from './reward/reward.module';
+import { SettingsModule } from './settings/settings.module';
+import { StoryBuddyModule } from './story-buddy/story-buddy.module';
+import { StoryModule } from './story/story.module';
+import { SubscriptionModule } from './subscription/subscription.module';
+import { CloudinaryModule } from './upload/cloudinary.module';
+import { UploadModule } from './upload/upload.module';
+import { UserModule } from './user/user.module';
 import { VoiceModule } from './voice/voice.module';
+import { PaymentModule } from './payment/payment.module';
+import { AchievementProgressModule } from './achievement-progress/achievement-progress.module';
 
 @Module({
   imports: [
@@ -67,6 +73,12 @@ import { VoiceModule } from './voice/voice.module';
     AvatarModule,
     AgeModule,
     ReportsModule,
+    VoiceModule,
+    SubscriptionModule,
+    PaymentModule,
+    StoryBuddyModule,
+    HelpSupportModule,
+    AchievementProgressModule,
   ],
 })
 export class AppModule {}

@@ -44,17 +44,22 @@ export class TextToSpeechService {
   async textToSpeechCloudUrl(
     textId: string,
     text: string,
-    voicetype?: VoiceType,
+    voiceIdOrType?: string, 
   ): Promise<string> {
     try {
+      // 1. Determine the actual ID to send to ElevenLabs
+      // Check if the input matches a key in your hardcoded list (e.g. "MILO")
+      // If yes, use the ID from the list. If no, assume it IS the ID.
+      const resolvedVoiceId = VOICEID[voiceIdOrType as keyof typeof VOICEID] || voiceIdOrType || VOICEID.MILO;
+
       const audioBuffer = await this.getElevenLabsAudio(
         text,
-        VOICEID[voicetype ?? VoiceType.MILO],
+        resolvedVoiceId,
       );
 
       const cloudUrl = await this.uploadService.uploadAudioBuffer(
         audioBuffer,
-        `story_${textId}_${voicetype}_${Date.now()}.mp3`,
+        `story_${textId}_${resolvedVoiceId}_${Date.now()}.mp3`,
       );
 
       return cloudUrl;
