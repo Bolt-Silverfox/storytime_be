@@ -45,6 +45,7 @@ model User {
   auth    Session[]
   Token   Token[]
   kids    Kid[]
+  parentFavorites ParentFavorite[]
 
   voices           Voice[]
   preferredVoiceId String?
@@ -215,6 +216,8 @@ model Story {
   branches StoryBranch[]
 
   favorites       Favorite[]
+
+  parentFavorites ParentFavorite[]
   progresses      StoryProgress[]
   dailyChallenges DailyChallenge[]
   paths           StoryPath[]
@@ -279,6 +282,21 @@ model Favorite {
 
   @@map("favorites")
   @@index([isDeleted])
+}
+
+model ParentFavorite {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  isDeleted Boolean     @default(false)
+  deletedAt DateTime?
+
+  @@map("parent_favorites")
+  @@unique([userId, storyId])
 }
 
 model StoryProgress {
