@@ -1269,7 +1269,8 @@ export class StoryService {
 
     if (kid.preferredCategories && kid.preferredCategories.length > 0) {
       const prefCategoryNames = kid.preferredCategories.map((c) => c.name);
-      categories = [...new Set([...categories, ...prefCategoryNames])];
+      categories = Array.from(new Set([...categories, ...prefCategoryNames]));
+
     }
 
     if (categories.length === 0) {
