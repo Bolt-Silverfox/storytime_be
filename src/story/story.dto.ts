@@ -12,7 +12,6 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
-import { AgeGroupResponseDto } from '../age/age.dto';
 
 export class StoryImageDto {
   @ApiProperty()
@@ -100,6 +99,11 @@ export class CreateStoryDto {
   @IsNumber()
   ageMax?: number;
 
+  @ApiProperty({ required: false, example: '4-6' })
+  @IsOptional()
+  @IsString()
+  ageRange?: string;
+
   @ApiProperty({ type: [StoryImageDto], required: false })
   @IsOptional()
   @ValidateNested({ each: true })
@@ -165,6 +169,11 @@ export class UpdateStoryDto {
   @IsOptional()
   @IsNumber()
   ageMax?: number;
+
+  @ApiProperty({ required: false, example: '4-6' })
+  @IsOptional()
+  @IsString()
+  ageRange?: string;
 
   @ApiProperty({ type: [StoryImageDto], required: false })
   @IsOptional()
@@ -476,12 +485,4 @@ export class QuestionAnswerDto {
   @ApiProperty()
   @IsInt()
   selectedOption: number;
-}
-
-export class StoryResponseDto extends CreateStoryDto {
-  @ApiProperty({ example: 'uuid-1234' })
-  id: string;
-
-  @ApiProperty({ required: false, type: () => AgeGroupResponseDto })
-  ageGroup?: AgeGroupResponseDto;
 }

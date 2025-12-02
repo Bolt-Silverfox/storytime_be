@@ -47,6 +47,41 @@ export class AgeService {
   }
 
   /* ----------------------------------------
+   * helper function to parse age range string like "4-6"
+   ---------------------------------------- */
+  parseRange(range: string) {
+    const [minStr, maxStr] = range.split('-');
+    const min = parseInt(minStr, 10);
+    const max = parseInt(maxStr, 10);
+
+    if (isNaN(min) || isNaN(max) || min > max) {
+      throw new BadRequestException('Invalid age range');
+    }
+
+    return { min, max };
+  }
+
+  async findGroupForRange(range: string) {
+    const { min, max } = this.parseRange(range);
+
+    // find first age group that **overlaps** the given range
+    const group = await this.prisma.ageGroup.findFirst({
+      where: {
+        isDeleted: false,
+        AND: [
+          { min: { lte: max } }, // min <= max of range
+          { max: { gte: min } }, // max >= min of range
+        ],
+      },
+    });
+
+    if (!group)
+      throw new NotFoundException(`No age group found for range ${range}`);
+
+    return group;
+  }
+
+  /* ----------------------------------------
    * CRUD OPERATIONS
    ---------------------------------------- */
 
@@ -60,11 +95,11 @@ export class AgeService {
   }
 
   async findOne(id: string) {
-    const ageGroup = await this.prisma.ageGroup.findUnique({ 
-      where: { 
+    const ageGroup = await this.prisma.ageGroup.findUnique({
+      where: {
         id,
-        isDeleted: false // EXCLUDE SOFT DELETED AGE GROUPS
-      } 
+        isDeleted: false, // EXCLUDE SOFT DELETED AGE GROUPS
+      },
     });
     if (!ageGroup) throw new NotFoundException('Age group not found');
     return ageGroup;
@@ -78,11 +113,11 @@ export class AgeService {
   }
 
   async update(id: string, data: UpdateAgeDto) {
-    const exists = await this.prisma.ageGroup.findUnique({ 
-      where: { 
+    const exists = await this.prisma.ageGroup.findUnique({
+      where: {
         id,
-        isDeleted: false // CANNOT UPDATE SOFT DELETED AGE GROUPS
-      } 
+        isDeleted: false, // CANNOT UPDATE SOFT DELETED AGE GROUPS
+      },
     });
     if (!exists) throw new NotFoundException('Age group not found');
 
@@ -104,11 +139,11 @@ export class AgeService {
    * @param permanent Whether to permanently delete (default: false)
    */
   async delete(id: string, permanent: boolean = false) {
-    const exists = await this.prisma.ageGroup.findUnique({ 
-      where: { 
+    const exists = await this.prisma.ageGroup.findUnique({
+      where: {
         id,
-        isDeleted: false // CANNOT DELETE ALREADY DELETED AGE GROUPS
-      } 
+        isDeleted: false, // CANNOT DELETE ALREADY DELETED AGE GROUPS
+      },
     });
     if (!exists) throw new NotFoundException('Age group not found');
 
@@ -117,9 +152,9 @@ export class AgeService {
     } else {
       return this.prisma.ageGroup.update({
         where: { id },
-        data: { 
-          isDeleted: true, 
-          deletedAt: new Date() 
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
         },
       });
     }
@@ -130,17 +165,18 @@ export class AgeService {
    * @param id Age group ID
    */
   async undoDelete(id: string) {
-    const ageGroup = await this.prisma.ageGroup.findUnique({ 
-      where: { id } 
+    const ageGroup = await this.prisma.ageGroup.findUnique({
+      where: { id },
     });
     if (!ageGroup) throw new NotFoundException('Age group not found');
-    if (!ageGroup.isDeleted) throw new BadRequestException('Age group is not deleted');
+    if (!ageGroup.isDeleted)
+      throw new BadRequestException('Age group is not deleted');
 
     return this.prisma.ageGroup.update({
       where: { id },
-      data: { 
-        isDeleted: false, 
-        deletedAt: null 
+      data: {
+        isDeleted: false,
+        deletedAt: null,
       },
     });
   }

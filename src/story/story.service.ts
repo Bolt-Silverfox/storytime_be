@@ -41,6 +41,8 @@ import {
 } from '@nestjs/common';
 import { GeminiService, GenerateStoryOptions } from './gemini.service';
 
+import { AgeService } from '../age/age.service';
+
 @Injectable()
 export class StoryService {
   private readonly logger = new Logger(StoryService.name);
@@ -50,6 +52,7 @@ export class StoryService {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
+    private readonly ageService: AgeService,
   ) {}
 
   async getStories(filter: {
@@ -128,7 +131,7 @@ export class StoryService {
       where.ageMax = { gte: filter.age };
     }
 
-    return this.prisma.story.findMany({
+    const stories = await this.prisma.story.findMany({
       where,
       include: {
         images: true,
@@ -136,8 +139,15 @@ export class StoryService {
         categories: true,
         themes: true,
         questions: true,
+        ageGroup: true,
       },
     });
+    return stories.map((story) => ({
+      ...story,
+      ageGroup: story.ageGroup
+        ? `${story.ageGroup.min}-${story.ageGroup.max}`
+        : undefined,
+    }));
   }
 
   async createStory(data: CreateStoryDto) {
@@ -153,7 +163,18 @@ export class StoryService {
         'audioUrl or description is required to generate story audio.',
       );
     }
-    return this.prisma.story.create({
+    let ageGroupId: string | undefined;
+    let ageMin = data.ageMin ?? 0;
+    let ageMax = data.ageMax ?? 9;
+
+    if (data.ageRange) {
+      const ageGroup = await this.ageService.findGroupForRange(data.ageRange);
+      ageGroupId = ageGroup.id;
+      ageMin = ageGroup.min;
+      ageMax = ageGroup.max;
+    }
+
+    const story = await this.prisma.story.create({
       data: {
         title: data.title,
         description: data.description,
@@ -161,15 +182,23 @@ export class StoryService {
         coverImageUrl: data.coverImageUrl ?? '',
         audioUrl,
         isInteractive: data.isInteractive ?? false,
-        ageMin: data.ageMin ?? 0,
-        ageMax: data.ageMax ?? 9,
+        ageMin,
+        ageMax,
+        ageGroup: ageGroupId ? { connect: { id: ageGroupId } } : undefined,
         images: data.images ? { create: data.images } : undefined,
         branches: data.branches ? { create: data.branches } : undefined,
         categories: { connect: data.categoryIds.map((id) => ({ id })) },
         themes: { connect: data.themeIds.map((id) => ({ id })) },
       },
-      include: { images: true, branches: true },
+      include: { images: true, branches: true, ageGroup: true },
     });
+
+    return {
+      ...story,
+      ageGroup: story.ageGroup
+        ? `${story.ageGroup.min}-${story.ageGroup.max}`
+        : undefined,
+    };
   }
 
   async updateStory(id: string, data: UpdateStoryDto) {
@@ -192,7 +221,18 @@ export class StoryService {
       audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
     }
 
-    return this.prisma.story.update({
+    let ageGroupId: string | undefined;
+    let ageMin = data.ageMin;
+    let ageMax = data.ageMax;
+
+    if (data.ageRange) {
+      const ageGroup = await this.ageService.findGroupForRange(data.ageRange);
+      ageGroupId = ageGroup.id;
+      ageMin = ageGroup.min;
+      ageMax = ageGroup.max;
+    }
+
+    const story = await this.prisma.story.update({
       where: { id },
       data: {
         title: data.title,
@@ -200,8 +240,9 @@ export class StoryService {
         language: data.language,
         coverImageUrl: data.coverImageUrl,
         isInteractive: data.isInteractive,
-        ageMin: data.ageMin,
-        ageMax: data.ageMax,
+        ageMin,
+        ageMax,
+        ageGroup: ageGroupId ? { connect: { id: ageGroupId } } : undefined,
         audioUrl,
         images: data.images ? { create: data.images } : undefined,
         branches: data.branches ? { create: data.branches } : undefined,
@@ -212,8 +253,15 @@ export class StoryService {
           ? { set: data.themeIds.map((id) => ({ id })) }
           : undefined,
       },
-      include: { images: true, branches: true },
+      include: { images: true, branches: true, ageGroup: true },
     });
+
+    return {
+      ...story,
+      ageGroup: story.ageGroup
+        ? `${story.ageGroup.min}-${story.ageGroup.max}`
+        : undefined,
+    };
   }
 
   /**
