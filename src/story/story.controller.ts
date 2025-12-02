@@ -61,7 +61,7 @@ export class StoryController {
   constructor(
     private readonly storyService: StoryService,
     private readonly textToSpeechService: TextToSpeechService,
-  ) {}
+  ) { }
 
   @Get()
   @ApiOperation({
@@ -684,14 +684,17 @@ export class StoryController {
   @ApiOperation({ summary: 'Get audio for a story path by id' })
   @ApiParam({ name: 'id', type: String })
   @ApiQuery({ name: 'voiceType', required: false, enum: VoiceType })
+  @ApiQuery({ name: 'kidId', required: false, type: String })
   @ApiResponse({ status: 200, type: StoryPathDto })
   async getStoryPathAudioById(
     @Param('id') id: string,
     @Query('voiceType') voiceType?: VoiceType,
+    @Query('kidId') kidId?: string,
   ) {
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
-      voiceType ?? VoiceType.MILO,
+      voiceType,
+      kidId
     );
 
     return {

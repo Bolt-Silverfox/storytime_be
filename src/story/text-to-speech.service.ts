@@ -1,5 +1,5 @@
 import { UploadService } from '@/upload/upload.service';
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { VOICEID, VoiceType } from './story.dto';
@@ -10,6 +10,7 @@ export class TextToSpeechService {
   private cloudinaryApiKey: string;
   private cloudinaryApiSecret: string;
   private cloudinaryCloudName: string;
+  private readonly logger = new Logger(TextToSpeechService.name);
 
   constructor(
     private readonly configService: ConfigService,
@@ -44,12 +45,11 @@ export class TextToSpeechService {
   async textToSpeechCloudUrl(
     textId: string,
     text: string,
-    voiceIdOrType?: string, 
+    voiceIdOrType?: string,
   ): Promise<string> {
     try {
-      // 1. Determine the actual ID to send to ElevenLabs
-      // Check if the input matches a key in your hardcoded list (e.g. "MILO")
-      // If yes, use the ID from the list. If no, assume it IS the ID.
+      // Logic: If voiceIdOrType matches a key in VOICEID (e.g. 'MILO'), use that ID.
+      // Otherwise, assume voiceIdOrType IS the actual ElevenLabs ID.
       const resolvedVoiceId = VOICEID[voiceIdOrType as keyof typeof VOICEID] || voiceIdOrType || VOICEID.MILO;
 
       const audioBuffer = await this.getElevenLabsAudio(
@@ -64,7 +64,7 @@ export class TextToSpeechService {
 
       return cloudUrl;
     } catch (error) {
-      console.error(error);
+      this.logger.error('Text-to-speech failed', error); 
       throw new InternalServerErrorException('Text-to-speech failed');
     }
   }
@@ -74,20 +74,24 @@ export class TextToSpeechService {
     voiceId: string,
   ): Promise<Buffer> {
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+
+    //Used 'eleven_multilingual_v2' instead of 'eleven_monolingual_v1'
+    const modelId = 'eleven_multilingual_v2';
+
     const response = await axios.post(
       url,
       {
         text,
-        model_id: 'eleven_monolingual_v1', // or other model
+        model_id: modelId,
       },
       {
         headers: {
           'xi-api-key': this.elevenLabsApiKey,
           'Content-Type': 'application/json',
         },
-        responseType: 'arraybuffer', // <--- so we get audio as a buffer
+        responseType: 'arraybuffer',
       },
     );
-    return Buffer.from(response.data); // MP3 buffer
+    return Buffer.from(response.data);
   }
 }

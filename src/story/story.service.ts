@@ -999,42 +999,63 @@ export class StoryService {
     return assignment;
   }
 
-  async getStoryAudioUrl(
+ async getStoryAudioUrl(
     storyId: string,
-    voiceType: VoiceType,
+    voiceType?: VoiceType,
+    kidId?: string
   ): Promise<string> {
     const story = await this.prisma.story.findUnique({
       where: { 
         id: storyId,
-        isDeleted: false // CANNOT GET AUDIO FOR SOFT DELETED STORIES
+        isDeleted: false 
       },
       select: { textContent: true },
     });
+    
     if (!story) {
       throw new NotFoundException(`Story with ID ${storyId} not found`);
     }
 
-    // check StoryAudioCache model for storyId and voiceType
+    // Determine the effective Voice ID / Key
+    let effectiveVoiceKey = voiceType || VoiceType.MILO; // Default to MILO
+
+    // If a kidId is provided, try to override with their preferred voice
+    if (kidId) {
+      const kid = await this.prisma.kid.findUnique({
+        where: { id: kidId, isDeleted: false },
+        include: { preferredVoice: true }
+      });
+
+      // If kid has a preferred ElevenLabs voice, use that ID
+      if (kid?.preferredVoice?.elevenLabsVoiceId) {
+        effectiveVoiceKey = kid.preferredVoice.elevenLabsVoiceId as any;
+      }
+    }
+
+    // Check Cache using the effective key (which might be "MILO" or a weird UUID)
     const cachedAudio = await this.prisma.storyAudioCache.findFirst({
-      where: { storyId, voiceType },
+      where: { storyId, voiceType: effectiveVoiceKey },
     });
+    
     if (cachedAudio) {
+      this.logger.log(`Using cached audio for story ${storyId} with voice ${effectiveVoiceKey}`);
       return cachedAudio.audioUrl;
     }
 
-    // If not cached, generate audio using text-to-speech service
+    // Generate new audio
+    // textToSpeechCloudUrl handles logic: if key matches Enum (MILO), it gets ID from constant. 
+    // If it's a raw UUID, it uses it directly.
     const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
       storyId,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       story?.textContent ?? '',
-      voiceType,
+      effectiveVoiceKey,
     );
 
-    // Cache the generated audio URL
+    // Cache it
     await this.prisma.storyAudioCache.create({
       data: {
         storyId,
-        voiceType,
+        voiceType: effectiveVoiceKey,
         audioUrl,
       },
     });
