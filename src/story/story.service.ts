@@ -81,8 +81,8 @@ export class StoryService {
           id: filter.kidId,
           isDeleted: false, // CANNOT GET STORIES FOR SOFT DELETED KIDS
         },
-        // Include preferred categories
-        include: { preferredCategories: true },
+        // Include preferred categories and age group
+        include: { preferredCategories: true, ageGroup: true },
       });
 
       if (kid) {
@@ -96,14 +96,10 @@ export class StoryService {
             lte: targetLevel + 1,
           };
         }
-        // Fallback to Age Range
-        else if (kid.ageRange) {
-          const match = kid.ageRange.match(/(\d+)/);
-          if (match) {
-            const age = parseInt(match[1], 10);
-            where.ageMin = { lte: age };
-            where.ageMax = { gte: age };
-          }
+        // Fallback to Age Group
+        else if (kid.ageGroup) {
+          where.ageMin = { lte: kid.ageGroup.max };
+          where.ageMax = { gte: kid.ageGroup.min };
         }
 
         // --- 2. Recommended Category Logic ---
@@ -232,7 +228,7 @@ export class StoryService {
       ageMax = ageGroup.max;
     }
 
-    const story = await this.prisma.story.update({
+    const updatedStory = await this.prisma.story.update({
       where: { id },
       data: {
         title: data.title,
@@ -257,9 +253,9 @@ export class StoryService {
     });
 
     return {
-      ...story,
-      ageGroup: story.ageGroup
-        ? `${story.ageGroup.min}-${story.ageGroup.max}`
+      ...updatedStory,
+      ageGroup: updatedStory.ageGroup
+        ? `${updatedStory.ageGroup.min}-${updatedStory.ageGroup.max}`
         : undefined,
     };
   }
@@ -910,15 +906,15 @@ export class StoryService {
       where: {
         isDeleted: false, // ONLY ASSIGN TO NON-DELETED KIDS
       },
+      include: { ageGroup: true },
     });
 
     let totalAssigned = 0;
     for (const kid of kids) {
-      // Parse kid's age from ageRange (e.g., '6-8' -> 6)
+      // Get kid's age from ageGroup
       let kidAge = 0;
-      if (kid.ageRange) {
-        const match = kid.ageRange.match(/(\d+)/);
-        if (match) kidAge = parseInt(match[1], 10);
+      if (kid.ageGroup) {
+        kidAge = kid.ageGroup.min; // Use the minimum age from the age group
       }
       // Get all age-appropriate stories
       const stories = await this.prisma.story.findMany({
@@ -1240,22 +1236,19 @@ export class StoryService {
         id: kidId,
         isDeleted: false, // CANNOT GENERATE STORY FOR SOFT DELETED KIDS
       },
-      include: { preferredCategories: true },
+      include: { preferredCategories: true, ageGroup: true },
     });
 
     if (!kid) {
       throw new NotFoundException(`Kid with id ${kidId} not found`);
     }
 
-    // Extract age from age range
+    // Extract age from ageGroup
     let ageMin = 4;
     let ageMax = 8;
-    if (kid.ageRange && typeof kid.ageRange === 'string') {
-      const match = kid.ageRange.match(/(\d+)-?(\d+)?/);
-      if (match) {
-        ageMin = parseInt(match[1], 10);
-        ageMax = match[2] ? parseInt(match[2], 10) : ageMin + 2;
-      }
+    if (kid.ageGroup) {
+      ageMin = kid.ageGroup.min;
+      ageMax = kid.ageGroup.max;
     }
 
     // 2. Prepare Themes
