@@ -2,14 +2,19 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { VoiceService } from '../voice/voice.service';
+import { AgeService } from '../age/age.service';
 
 @Injectable()
 export class KidService {
-    constructor(private prisma: PrismaService, private voiceService: VoiceService) { }
+    constructor(
+        private prisma: PrismaService, 
+        private voiceService: VoiceService,
+        private ageService: AgeService
+    ) { }
 
     // --- HELPER: Transforms the DB response for the Frontend ---
     // This ensures preferredVoiceId is ALWAYS the ElevenLabs ID (if available) (frontend specified smh)
-    private transformKid(kid: any) {
+    private async transformKid(kid: any) {
         if (!kid) return null;
 
         let finalVoiceId = kid.preferredVoiceId;
@@ -19,9 +24,25 @@ export class KidService {
             finalVoiceId = kid.preferredVoice.elevenLabsVoiceId;
         }
 
+        // Parse ageRange like "4-6" to get a representative age (use min)
+        let ageGroup = null;
+        if (kid.ageRange) {
+            const parts = kid.ageRange.split('-');
+            const age = parseInt(parts[0], 10);
+            if (!isNaN(age)) {
+                try {
+                    ageGroup = await this.ageService.findGroupForAge(age);
+                } catch (e) {
+                    // If no group found, leave null
+                    ageGroup = null;
+                }
+            }
+        }
+
         return {
             ...kid,
             preferredVoiceId: finalVoiceId,
+            ageGroup: ageGroup,
             // We keep the preferredVoice object too, in case they need the name/url
         };
     }
@@ -64,7 +85,7 @@ export class KidService {
         });
 
         // Map every kid through the transformer
-        return kids.map(k => this.transformKid(k));
+        return Promise.all(kids.map(k => this.transformKid(k)));
     }
 
     async findOne(kidId: string, userId: string) {

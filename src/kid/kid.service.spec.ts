@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { VoiceService } from '../voice/voice.service';
 import { VoiceType } from '@/story/story.dto';
+import { AgeService } from '../age/age.service';
 
 const mockPrismaService = {
     kid: {
@@ -26,6 +27,10 @@ const mockVoiceService = {
     findOrCreateElevenLabsVoice: jest.fn(),
 };
 
+const mockAgeService = {
+    findGroupForAge: jest.fn(),
+};
+
 describe('KidService', () => {
     let service: KidService;
     let prisma: typeof mockPrismaService;
@@ -36,6 +41,7 @@ describe('KidService', () => {
                 KidService,
                 { provide: PrismaService, useValue: mockPrismaService },
                 { provide: VoiceService, useValue: mockVoiceService },
+                { provide: AgeService, useValue: mockAgeService },
             ],
         }).compile();
 
@@ -52,7 +58,7 @@ describe('KidService', () => {
         it('should create a kid', async () => {
             const dto = { name: 'Alex', ageRange: '5-8', avatarId: 'avatar-1' };
             const userId = 'user-1';
-            const expectedResult = { id: 'kid-1', ...dto, parentId: userId };
+            const expectedResult = { id: 'kid-1', ...dto, parentId: userId, ageGroup: null };
 
             prisma.kid.create.mockResolvedValue(expectedResult);
 
@@ -71,7 +77,7 @@ describe('KidService', () => {
     describe('findAllByUser', () => {
         it('should return array of kids', async () => {
             const userId = 'user-1';
-            const expectedResult = [{ id: 'kid-1', parentId: userId }];
+            const expectedResult = [{ id: 'kid-1', parentId: userId, ageGroup: null }];
 
             prisma.kid.findMany.mockResolvedValue(expectedResult);
 
@@ -87,7 +93,7 @@ describe('KidService', () => {
         it('should return a kid if found and owned by user', async () => {
             const kidId = 'kid-1';
             const userId = 'user-1';
-            const expectedResult = { id: kidId, parentId: userId };
+            const expectedResult = { id: kidId, parentId: userId, ageGroup: null };
 
             prisma.kid.findUnique.mockResolvedValue(expectedResult);
 
@@ -112,7 +118,7 @@ describe('KidService', () => {
             const userId = 'user-1';
             const dto = { name: 'Alex Updated' };
             const existingKid = { id: kidId, parentId: userId };
-            const updatedKid = { ...existingKid, ...dto };
+            const updatedKid = { ...existingKid, ...dto, ageGroup: null };
 
             prisma.kid.findUnique.mockResolvedValue(existingKid);
             prisma.kid.update.mockResolvedValue(updatedKid);
@@ -166,6 +172,7 @@ describe('KidService', () => {
                 { id: 'kid-1', ...dtos[0], parentId: userId, preferredVoiceId: null },
                 { id: 'kid-2', ...dtos[1], parentId: userId, preferredVoiceId: null },
             ];
+            const expectedResult = dbKids.map(k => ({ ...k, ageGroup: null }));
 
             // Mock prisma.$transaction
             (prisma as any).$transaction = jest.fn().mockResolvedValue(dbKids);
@@ -181,7 +188,7 @@ describe('KidService', () => {
 
             const result = await service.createKids(userId, dtos);
 
-            expect(result).toEqual(dbKids);
+            expect(result).toEqual(expectedResult);
             expect(prisma.kid.create).toHaveBeenCalledTimes(2);
             expect(prisma.kid.create).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({

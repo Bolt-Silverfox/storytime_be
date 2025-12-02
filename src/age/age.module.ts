@@ -6,5 +6,6 @@ import { AgeGroupSeederService } from './age.seeders';
 @Module({
   controllers: [AgeController],
   providers: [AgeService, AgeGroupSeederService],
+  exports: [AgeService],
 })
 export class AgeModule {}

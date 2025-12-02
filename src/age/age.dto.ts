@@ -77,3 +77,14 @@ export class UpdateAgeDto extends PartialType(CreateAgeDto) {
   @Min(1)
   max?: number;
 }
+
+export class AgeGroupResponseDto extends CreateAgeDto {
+  @ApiProperty({ example: 'uuid-1234' })
+  id: string;
+
+  @ApiProperty({ example: '2023-01-01T00:00:00.000Z' })
+  createdAt: Date;
+
+  @ApiProperty({ example: '2023-01-01T00:00:00.000Z' })
+  updatedAt: Date;
+}

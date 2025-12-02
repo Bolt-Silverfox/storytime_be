@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, ParseArrayPipe, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { KidService } from './kid.service';
-import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
+import { CreateKidDto, UpdateKidDto, KidResponseDto } from './dto/kid.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { AnalyticsService } from '../analytics/analytics.service';
 
@@ -17,6 +17,7 @@ export class KidController {
 
     @Get('/auth/kids')
     @ApiOperation({ summary: 'Get all kids for the logged-in user' })
+    @ApiResponse({ status: 200, description: 'List of kids retrieved successfully.', type: [KidResponseDto] })
     async getMyKids(@Request() req: AuthenticatedRequest) {
         return this.kidService.findAllByUser(req.authUserData.userId);
     }
@@ -24,6 +25,7 @@ export class KidController {
     @Post('/auth/kids')
     @ApiOperation({ summary: 'Add one or more kids' })
     @ApiBody({ type: [CreateKidDto] })
+    @ApiResponse({ status: 201, description: 'Kids created successfully.', type: [KidResponseDto] })
     async createKids(
         @Request() req: AuthenticatedRequest,
         @Body(new ParseArrayPipe({ items: CreateKidDto })) dtos: CreateKidDto[]
@@ -33,6 +35,7 @@ export class KidController {
 
     @Get('/user/kids/:kidId')
     @ApiOperation({ summary: 'Get details of a specific kid' })
+    @ApiResponse({ status: 200, description: 'Kid details retrieved successfully.', type: KidResponseDto })
     async getKid(
         @Request() req: AuthenticatedRequest, 
         @Param('kidId') kidId: string
@@ -71,6 +74,7 @@ export class KidController {
 
     @Put('/auth/kids/:kidId')
     @ApiOperation({ summary: 'Update kid profile, preferences, bedtime, and voice' })
+    @ApiResponse({ status: 200, description: 'Kid updated successfully.', type: KidResponseDto })
     async updateKid(@Request() req: AuthenticatedRequest, @Param('kidId') kidId: string, @Body() dto: UpdateKidDto) {
         return this.kidService.updateKid(kidId, req.authUserData.userId, dto);
     }
@@ -83,6 +87,7 @@ export class KidController {
         type: Boolean,
         description: 'Permanently delete the kid profile (default: false - soft delete)'
     })
+    @ApiResponse({ status: 200, description: 'Kid deleted successfully.' })
     async deleteKid(
         @Request() req: AuthenticatedRequest, 
         @Param('kidId') kidId: string,
@@ -93,6 +98,7 @@ export class KidController {
 
     @Post('/auth/kids/:kidId/undo-delete')
     @ApiOperation({ summary: 'Restore a soft deleted kid profile' })
+    @ApiResponse({ status: 200, description: 'Kid restored successfully.', type: KidResponseDto })
     async undoDeleteKid(
         @Request() req: AuthenticatedRequest,
         @Param('kidId') kidId: string

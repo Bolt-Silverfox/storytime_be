@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsOptional, IsBoolean, IsArray, IsInt, Matches, Min, Max } from 'class-validator';
+import { AgeGroupResponseDto } from '../../age/age.dto';
 
 // 1. Create Kid DTO
 export class CreateKidDto {
@@ -89,4 +90,12 @@ export class UpdateKidDto {
     @IsOptional()
     @IsString()
     preferredVoiceId?: string;
+}
+
+export class KidResponseDto extends CreateKidDto {
+    @ApiProperty({ example: 'uuid-1234' })
+    id: string;
+
+    @ApiProperty({ required: false, type: () => AgeGroupResponseDto })
+    ageGroup?: AgeGroupResponseDto;
 }
