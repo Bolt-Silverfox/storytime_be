@@ -3,9 +3,8 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateAgeDto, UpdateAgeDto } from './age.dto';
-
 @Injectable()
 export class AgeService {
   constructor(private prisma: PrismaService) {}

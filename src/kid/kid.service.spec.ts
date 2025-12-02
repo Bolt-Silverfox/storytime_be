@@ -58,7 +58,7 @@ describe('KidService', () => {
         it('should create a kid', async () => {
             const dto = { name: 'Alex', ageRange: '5-8', avatarId: 'avatar-1' };
             const userId = 'user-1';
-            const expectedResult = { id: 'kid-1', ...dto, parentId: userId, ageGroup: null };
+            const expectedResult = { id: 'kid-1', ...dto, parentId: userId };
 
             prisma.kid.create.mockResolvedValue(expectedResult);
 
@@ -77,7 +77,7 @@ describe('KidService', () => {
     describe('findAllByUser', () => {
         it('should return array of kids', async () => {
             const userId = 'user-1';
-            const expectedResult = [{ id: 'kid-1', parentId: userId, ageGroup: null }];
+            const expectedResult = [{ id: 'kid-1', parentId: userId }];
 
             prisma.kid.findMany.mockResolvedValue(expectedResult);
 
