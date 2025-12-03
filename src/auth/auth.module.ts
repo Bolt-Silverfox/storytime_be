@@ -39,11 +39,6 @@ import { GoogleOAuthStrategy } from './strategies/google-oauth.strategy';
     GoogleOAuthStrategy,
   ],
 
-  exports: [
-    AuthService,
-    JwtModule,         
-    PassportModule,
-    AuthSessionGuard,     
-  ],
+  exports: [AuthService, JwtModule, PassportModule, AuthSessionGuard],
 })
 export class AuthModule {}
