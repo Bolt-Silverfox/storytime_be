@@ -130,3 +130,220 @@ export class SetDailyLimitDto {
   })
   limitMins?: number;
 }
+
+// ============== CUSTOM DATE RANGE ==============
+export class CustomDateRangeDto {
+  @ApiProperty()
+  startDate: Date;
+
+  @ApiProperty()
+  endDate: Date;
+}
+
+export class CustomRangeReportDto {
+  @ApiProperty()
+  startDate: Date;
+
+  @ApiProperty()
+  endDate: Date;
+
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  kidName: string;
+
+  @ApiProperty()
+  avatarUrl?: string;
+
+  @ApiProperty()
+  storiesCompleted: number;
+
+  @ApiProperty()
+  screenTimeMins: number;
+
+  @ApiProperty()
+  starsEarned: number;
+
+  @ApiProperty()
+  badgesEarned: number;
+
+  @ApiProperty()
+  rightAnswers: number;
+
+  @ApiProperty()
+  totalAnswers: number;
+
+  @ApiProperty()
+  accuracyPercentage: number;
+}
+
+// ============== DAILY BREAKDOWN ==============
+export class DailyBreakdownDto {
+  @ApiProperty()
+  date: Date;
+
+  @ApiProperty()
+  dayOfWeek: string; // Mon, Tue, Wed, etc.
+
+  @ApiProperty()
+  screenTimeMins: number;
+
+  @ApiProperty()
+  storiesCompleted: number;
+
+  @ApiProperty()
+  quizzesTaken: number;
+
+  @ApiProperty()
+  accuracyPercentage: number;
+}
+
+export class WeeklyDailyBreakdownDto {
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  kidName: string;
+
+  @ApiProperty()
+  weekStartDate: Date;
+
+  @ApiProperty()
+  weekEndDate: Date;
+
+  @ApiProperty({ type: [DailyBreakdownDto] })
+  dailyBreakdown: DailyBreakdownDto[];
+}
+
+// ============== ACTIVITY CATEGORIES ==============
+export enum ActivityCategory {
+  STORIES = 'stories',
+  PLAY_TIME = 'play_time',
+  READING = 'reading',
+  CREATIVITY = 'creativity',
+  OFF_THE_CUFF = 'off_the_cuff',
+  QUIZ = 'quiz',
+}
+
+export class ActivityCategoryBreakdownDto {
+  @ApiProperty({ enum: ActivityCategory })
+  category: ActivityCategory;
+
+  @ApiProperty()
+  categoryLabel: string;
+
+  @ApiProperty()
+  timeMins: number;
+
+  @ApiProperty()
+  count: number;
+
+  @ApiProperty()
+  percentage: number;
+}
+
+export class KidActivityCategoriesDto {
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  kidName: string;
+
+  @ApiProperty()
+  startDate: Date;
+
+  @ApiProperty()
+  endDate: Date;
+
+  @ApiProperty({ type: [ActivityCategoryBreakdownDto] })
+  categories: ActivityCategoryBreakdownDto[];
+
+  @ApiProperty()
+  totalTimeMins: number;
+}
+
+// ============== WEEK-OVER-WEEK COMPARISON ==============
+export class WeekComparisonMetricsDto {
+  @ApiProperty()
+  currentWeekValue: number;
+
+  @ApiProperty()
+  previousWeekValue: number;
+
+  @ApiProperty()
+  change: number;
+
+  @ApiProperty()
+  changePercentage: number;
+
+  @ApiProperty()
+  isIncrease: boolean;
+}
+
+export class KidWeekComparisonDto {
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  kidName: string;
+
+  @ApiProperty()
+  avatarUrl?: string;
+
+  @ApiProperty()
+  currentWeekStart: Date;
+
+  @ApiProperty()
+  currentWeekEnd: Date;
+
+  @ApiProperty()
+  screenTime: WeekComparisonMetricsDto;
+
+  @ApiProperty()
+  storiesCompleted: WeekComparisonMetricsDto;
+
+  @ApiProperty()
+  quizAccuracy: WeekComparisonMetricsDto;
+
+  @ApiProperty()
+  starsEarned: WeekComparisonMetricsDto;
+}
+
+// ============== QUIZ ACCURACY TRENDS ==============
+export class QuizAccuracyTrendDto {
+  @ApiProperty()
+  date: Date;
+
+  @ApiProperty()
+  weekLabel: string; // e.g., "Nov 14-20"
+
+  @ApiProperty()
+  totalQuestions: number;
+
+  @ApiProperty()
+  correctAnswers: number;
+
+  @ApiProperty()
+  accuracyPercentage: number;
+}
+
+export class KidQuizTrendsDto {
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  kidName: string;
+
+  @ApiProperty({ type: [QuizAccuracyTrendDto] })
+  weeklyTrends: QuizAccuracyTrendDto[];
+
+  @ApiProperty()
+  overallAccuracy: number;
+
+  @ApiProperty()
+  totalQuestions: number;
+
+  @ApiProperty()
+  totalCorrect: number;
+}
