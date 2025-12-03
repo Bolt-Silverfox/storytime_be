@@ -158,13 +158,13 @@ export class UserDto {
 
     this.avatar = user.avatar
       ? {
-          id: user.avatar.id,
-          name: user.avatar.name,
-          url: user.avatar.url,
-          isSystemAvatar: user.avatar.isSystemAvatar,
-          publicId: user.avatar.publicId,
-          createdAt: user.avatar.createdAt,
-        }
+        id: user.avatar.id,
+        name: user.avatar.name,
+        url: user.avatar.url,
+        isSystemAvatar: user.avatar.isSystemAvatar,
+        publicId: user.avatar.publicId,
+        createdAt: user.avatar.createdAt,
+      }
       : null;
 
     this.id = user.id as string;
@@ -322,4 +322,21 @@ export class VerifyEmailDto {
   @IsString()
   @IsNotEmpty()
   token: string;
+}
+
+export class ChangePasswordDto {
+  @ApiProperty({ example: 'OldPassword1#' })
+  @IsNotEmpty()
+  oldPassword: string;
+
+  @ApiProperty({ example: 'NewStrongPassword1#' })
+  @IsStrongPassword({
+    minLength: 8,
+    minLowercase: 1,
+    minUppercase: 1,
+    minNumbers: 1,
+    minSymbols: 1,
+  })
+  @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
+  newPassword: string;
 }

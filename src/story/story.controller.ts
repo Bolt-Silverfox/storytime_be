@@ -12,8 +12,6 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
-  UploadedFile,
-  Logger,
   DefaultValuePipe,
   ParseIntPipe,
 } from '@nestjs/common';
@@ -30,7 +28,7 @@ import {
 } from '@nestjs/swagger';
 import { randomUUID } from 'crypto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
-import { StoryContentAudioDto } from '../voice/voice.dto';
+
 import {
   AssignDailyChallengeDto,
   CategoryDto,
@@ -55,12 +53,12 @@ import {
   VoiceResponseDto,
   VoiceType,
   StoryContentAudioDto,
-  GenerateStoryDto,
+
   PaginatedStoriesDto,
 } from './story.dto';
 import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
-import { randomUUID } from 'crypto';
+
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 
 @ApiTags('stories')
@@ -70,7 +68,7 @@ export class StoryController {
   constructor(
     private readonly storyService: StoryService,
     private readonly textToSpeechService: TextToSpeechService,
-  ) {}
+  ) { }
 
   @Get()
   @UseInterceptors(CacheInterceptor)
