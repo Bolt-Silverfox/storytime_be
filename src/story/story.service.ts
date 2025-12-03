@@ -20,6 +20,7 @@ import {
   CategoryDto,
   ThemeDto,
   VoiceType,
+  PaginatedStoriesDto,
 } from './story.dto';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
@@ -33,14 +34,22 @@ import {
 } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TextToSpeechService } from './text-to-speech.service';
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { GeminiService, GenerateStoryOptions } from './gemini.service';
+import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 
 @Injectable()
 export class StoryService {
   private readonly logger = new Logger(StoryService.name);
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private readonly elevenLabs: ElevenLabsService,
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
@@ -53,10 +62,16 @@ export class StoryService {
     recommended?: boolean;
     age?: number;
     kidId?: string;
-  }) {
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedStoriesDto> {
+    const page = filter.page || 1;
+    const limit = filter.limit || 12;
+    const skip = (page - 1) * limit;
+
     const where: any = {
-      isDeleted: false, // EXCLUDE SOFT DELETED STORIES
-    };
+    isDeleted: false, // ADD THIS - exclude soft deleted stories
+  };
     
     if (filter.theme) where.themes = { some: { id: filter.theme } };
     if (filter.category) where.categories = { some: { id: filter.category } };
@@ -124,8 +139,13 @@ export class StoryService {
       where.ageMax = { gte: filter.age };
     }
 
-    return this.prisma.story.findMany({
+    const totalCount = await this.prisma.story.count({ where });
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const stories = await this.prisma.story.findMany({
       where,
+      skip,
+      take: limit,
       include: {
         images: true,
         branches: true,
@@ -134,9 +154,29 @@ export class StoryService {
         questions: true,
       },
     });
+
+    return {
+      data: stories,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        pageSize: limit,
+        totalCount,
+      },
+    };
   }
 
   async createStory(data: CreateStoryDto) {
+    if (data.categoryIds && data.categoryIds.length > 0) {
+      const categories = await this.prisma.category.findMany({
+        where: { id: { in: data.categoryIds } },
+      });
+
+      if (categories.length !== data.categoryIds.length) {
+        throw new BadRequestException('One or more category IDs do not exist');
+      }
+    }
+
     let audioUrl = data.audioUrl;
     if (!audioUrl && data.description) {
       const { buffer, filename } = await this.elevenLabs.generateAudioBuffer(
@@ -149,7 +189,8 @@ export class StoryService {
         'audioUrl or description is required to generate story audio.',
       );
     }
-    return this.prisma.story.create({
+
+    const story = await this.prisma.story.create({
       data: {
         title: data.title,
         description: data.description,
@@ -166,10 +207,16 @@ export class StoryService {
       },
       include: { images: true, branches: true },
     });
+
+    await this.cacheManager.del('categories:all');
+
+    this.logger.log('Categories cache invalidated after story creation');
+
+    return story;
   }
 
   async updateStory(id: string, data: UpdateStoryDto) {
-    const story = await this.prisma.story.findUnique({
+     const story = await this.prisma.story.findUnique({
       where: { 
         id,
         isDeleted: false // CANNOT UPDATE SOFT DELETED STORIES
@@ -179,6 +226,16 @@ export class StoryService {
     if (!story) {
       throw new NotFoundException('Story not found');
     }
+    
+    if (data.categoryIds && data.categoryIds.length > 0) {
+      const categories = await this.prisma.category.findMany({
+        where: { id: { in: data.categoryIds } },
+      });
+
+      if (categories.length !== data.categoryIds.length) {
+        throw new BadRequestException('One or more category IDs do not exist');
+      }
+   
 
     let audioUrl = data.audioUrl;
     if (!audioUrl && data.description) {
@@ -187,8 +244,7 @@ export class StoryService {
       );
       audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
     }
-    
-    return this.prisma.story.update({
+    const updatedStory = await this.prisma.story.update({
       where: { id },
       data: {
         title: data.title,
@@ -210,6 +266,12 @@ export class StoryService {
       },
       include: { images: true, branches: true },
     });
+
+    await this.cacheManager.del('categories:all');
+
+    this.logger.log('Categories cache invalidated after story creation');
+
+    return updatedStory;
   }
 
   /**
@@ -824,15 +886,25 @@ export class StoryService {
   }
 
   async getCategories(): Promise<CategoryDto[]> {
+    this.logger.log('Fetching categories with story counts from database');
+
     const categories = await this.prisma.category.findMany({
       where: {
-        isDeleted: false, // EXCLUDE SOFT DELETED CATEGORIES
-      }
+      isDeleted: false, // EXCLUDE SOFT DELETED CATEGORIES
+    },
+      include: {
+        _count: {
+          select: { stories: true },
+        },
+      },
     });
+
     return categories.map((c: Category) => ({
-      ...c,
+      id: c.id,
+      name: c.name,
       image: c.image ?? undefined,
       description: c.description ?? undefined,
+      storyCount: c._count.stories,
     }));
   }
 

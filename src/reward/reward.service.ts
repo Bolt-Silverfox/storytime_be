@@ -41,7 +41,9 @@ export class RewardService {
     return await prisma.reward.findMany({ where: { kidId } });
   }
 
-  private toRewardRedemptionDto(redemption: RewardRedemptionDto): RewardRedemptionDto {
+  private toRewardRedemptionDto(
+    redemption: RewardRedemptionDto,
+  ): RewardRedemptionDto {
     return {
       id: redemption.id,
       rewardId: redemption.rewardId,
@@ -76,7 +78,9 @@ export class RewardService {
     const redemptions = await prisma.rewardRedemption.findMany({
       where: { kidId },
     });
-    return redemptions.map((r: RewardRedemption) => this.toRewardRedemptionDto(r));
+    return redemptions.map((r: RewardRedemption) =>
+      this.toRewardRedemptionDto(r),
+    );
   }
 
   async getRedemptionById(id: string): Promise<RewardRedemptionDto | null> {
