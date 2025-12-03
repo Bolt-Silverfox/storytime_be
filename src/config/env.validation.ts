@@ -23,6 +23,7 @@ export const envSchema = z.object({
   SMTP_PASS: z.string().min(1, 'SMTP_PASS is required'),
   MAIL_ENCRYPTION: z.enum(['TLS', 'SSL']).optional().default('TLS'),
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
+  ADMIN_SECRET: z.string().min(1, 'ADMIN_SECRET is required'),
   SECRET: z.string().min(1, 'SECRET is required'),
   WEB_APP_BASE_URL: z.string().url('WEB_APP_BASE_URL must be a valid URL'),
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
