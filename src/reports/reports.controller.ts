@@ -72,4 +72,93 @@ export class ReportsController {
   async recordAnswer(@Body() dto: QuestionAnswerDto) {
     return this.reportsService.recordAnswer(dto);
   }
+
+  // ============== NEW FEATURES - CUSTOM DATE RANGE ==============
+  @Get('custom-range/:kidId/:startDate/:endDate')
+  @ApiOperation({ summary: 'Get report for a kid within a custom date range' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'startDate', type: String, description: 'ISO date string' })
+  @ApiParam({ name: 'endDate', type: String, description: 'ISO date string' })
+  @ApiResponse({ status: 200, description: 'Custom range report' })
+  async getCustomRangeReport(
+    @Param('kidId') kidId: string,
+    @Param('startDate') startDate: string,
+    @Param('endDate') endDate: string,
+  ) {
+    return this.reportsService.getCustomRangeReport(
+      kidId,
+      new Date(startDate),
+      new Date(endDate),
+    );
+  }
+
+  // ============== NEW FEATURES - DAILY BREAKDOWN ==============
+  @Get('daily-breakdown/:kidId')
+  @ApiOperation({ summary: 'Get daily breakdown for a kid for the current week' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, description: 'Daily breakdown for the week' })
+  async getDailyBreakdown(@Param('kidId') kidId: string) {
+    return this.reportsService.getDailyBreakdown(kidId);
+  }
+
+  @Get('daily-breakdown/:kidId/:weekStart')
+  @ApiOperation({ summary: 'Get daily breakdown for a kid for a specific week' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'weekStart', type: String, description: 'ISO date string for week start' })
+  @ApiResponse({ status: 200, description: 'Daily breakdown for the week' })
+  async getDailyBreakdownForWeek(
+    @Param('kidId') kidId: string,
+    @Param('weekStart') weekStart: string,
+  ) {
+    return this.reportsService.getDailyBreakdown(kidId, new Date(weekStart));
+  }
+
+  // ============== NEW FEATURES - ACTIVITY CATEGORIES ==============
+  @Get('activity-categories/:kidId/:startDate/:endDate')
+  @ApiOperation({ summary: 'Get activity breakdown by category for a kid' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'startDate', type: String, description: 'ISO date string' })
+  @ApiParam({ name: 'endDate', type: String, description: 'ISO date string' })
+  @ApiResponse({ status: 200, description: 'Activity categories breakdown' })
+  async getActivityCategories(
+    @Param('kidId') kidId: string,
+    @Param('startDate') startDate: string,
+    @Param('endDate') endDate: string,
+  ) {
+    return this.reportsService.getActivityCategories(
+      kidId,
+      new Date(startDate),
+      new Date(endDate),
+    );
+  }
+
+  // ============== NEW FEATURES - WEEK-OVER-WEEK COMPARISON ==============
+  @Get('week-comparison/:kidId')
+  @ApiOperation({ summary: 'Get week-over-week comparison for a kid' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, description: 'Week-over-week comparison metrics' })
+  async getWeekComparison(@Param('kidId') kidId: string) {
+    return this.reportsService.getWeekComparison(kidId);
+  }
+
+  // ============== NEW FEATURES - QUIZ ACCURACY TRENDS ==============
+  @Get('quiz-trends/:kidId')
+  @ApiOperation({ summary: 'Get quiz accuracy trends for a kid (last 4 weeks)' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, description: 'Quiz accuracy trends' })
+  async getQuizTrends(@Param('kidId') kidId: string) {
+    return this.reportsService.getQuizTrends(kidId);
+  }
+
+  @Get('quiz-trends/:kidId/:weeksCount')
+  @ApiOperation({ summary: 'Get quiz accuracy trends for a kid (custom weeks count)' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'weeksCount', type: Number })
+  @ApiResponse({ status: 200, description: 'Quiz accuracy trends' })
+  async getQuizTrendsCustom(
+    @Param('kidId') kidId: string,
+    @Param('weeksCount') weeksCount: string,
+  ) {
+    return this.reportsService.getQuizTrends(kidId, parseInt(weeksCount));
+  }
 }
