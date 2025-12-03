@@ -73,9 +73,9 @@ export class StoryService {
     const skip = (page - 1) * limit;
 
     const where: any = {
-    isDeleted: false, // ADD THIS - exclude soft deleted stories
-  };
-    
+      isDeleted: false, // ADD THIS - exclude soft deleted stories
+    };
+
     if (filter.theme) where.themes = { some: { id: filter.theme } };
     if (filter.category) where.categories = { some: { id: filter.category } };
 
@@ -243,10 +243,18 @@ async updateStory(id: string, data: UpdateStoryDto) {
   });
 
 
+  async updateStory(id: string, data: UpdateStoryDto) {
+    const story = await this.prisma.story.findUnique({
+      where: {
+        id,
+        isDeleted: false // CANNOT UPDATE SOFT DELETED STORIES
+      }
+    });
+
     if (!story) {
       throw new NotFoundException('Story not found');
     }
-    
+
     if (data.categoryIds && data.categoryIds.length > 0) {
       const categories = await this.prisma.category.findMany({
         where: { id: { in: data.categoryIds } },
@@ -255,7 +263,8 @@ async updateStory(id: string, data: UpdateStoryDto) {
       if (categories.length !== data.categoryIds.length) {
         throw new BadRequestException('One or more category IDs do not exist');
       }
-   
+    }
+
 
     let audioUrl = data.audioUrl;
     if (!audioUrl && data.description) {
@@ -347,7 +356,7 @@ return {
    */
   async undoDeleteStory(id: string) {
     const story = await this.prisma.story.findUnique({
-      where: { id },
+      where: { id }
     });
 
     if (!story) {
@@ -362,7 +371,7 @@ return {
       where: { id },
       data: {
         isDeleted: false,
-        deletedAt: null,
+        deletedAt: null
       },
     });
   }
@@ -925,19 +934,18 @@ return {
   async getCategories(): Promise<CategoryDto[]> {
     this.logger.log('Fetching categories with story counts from database');
 
-const categories = await this.prisma.category.findMany({
-  where: {
-    isDeleted: false, // EXCLUDE SOFT DELETED CATEGORIES
-  },
-  include: {
-    _count: {
-      select: { stories: true },
-    },
-  },
-});
+    const categories = await this.prisma.category.findMany({
+      where: {
+        isDeleted: false, // EXCLUDE SOFT DELETED CATEGORIES
+      },
+      include: {
+        _count: {
+          select: { stories: true },
+        },
+      },
+    });
 
-
-    return categories.map((c: Category) => ({
+    return categories.map((c) => ({
       id: c.id,
       name: c.name,
       image: c.image ?? undefined,
@@ -1343,7 +1351,7 @@ const categories = await this.prisma.category.findMany({
       });
       const randomCategory =
         availableCategories[
-          Math.floor(Math.random() * availableCategories.length)
+        Math.floor(Math.random() * availableCategories.length)
         ];
       categories = [randomCategory.name];
     }
@@ -1389,8 +1397,8 @@ const categories = await this.prisma.category.findMany({
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: kidId,
-        isDeleted: false, // CANNOT ADJUST LEVEL FOR SOFT DELETED KIDS
-      },
+        isDeleted: false // CANNOT ADJUST LEVEL FOR SOFT DELETED KIDS
+      }
     });
 
     if (!story || !kid || story.wordCount === 0) return;

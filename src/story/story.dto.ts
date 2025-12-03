@@ -1,7 +1,4 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsArray,
-  IsBoolean,
 import { Type } from 'class-transformer';
 import {
   IsArray,
@@ -565,5 +562,4 @@ export class PaginatedStoriesDto {
     type: PaginationMetaDto,
   })
   pagination: PaginationMetaDto;
-}
 }

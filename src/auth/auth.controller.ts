@@ -29,6 +29,7 @@ import {
   ResetPasswordDto,
   VerifyEmailDto,
   SendEmailVerificationDto,
+  ChangePasswordDto,
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -43,7 +44,7 @@ import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('login')
   @HttpCode(200)
@@ -127,6 +128,21 @@ export class AuthController {
     @Body() data: updateProfileDto,
   ) {
     return this.authService.updateProfile(req.authUserData['userId'], data);
+  }
+
+  @Post('change-password')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change password' })
+  @ApiBody({ type: ChangePasswordDto })
+  @ApiResponse({ status: 200, description: 'Password changed successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid old password.' })
+  async changePassword(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(req.authUserData['userId'], body);
   }
 
   // ===== PASSWORD RESET =====

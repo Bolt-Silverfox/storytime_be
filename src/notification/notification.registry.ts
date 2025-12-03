@@ -2,8 +2,9 @@ import { render } from '@react-email/render';
 import { EmailVerificationTemplate } from './templates/email-verification';
 import { PasswordResetTemplate } from './templates/password-reset';
 import { PasswordResetAlertTemplate } from './templates/password-reset-alert';
+import { PasswordChangedTemplate } from './templates/password-changed';
 
-export type Notifications = 'EmailVerification' | 'PasswordReset' | 'PasswordResetAlert';
+export type Notifications = 'EmailVerification' | 'PasswordReset' | 'PasswordResetAlert' | 'PasswordChanged';
 export type Medium = 'email' | 'sms';
 
 export const NotificationRegistry: Record<
@@ -69,6 +70,24 @@ export const NotificationRegistry: Record<
           ipAddress: data.ipAddress as string,
           userAgent: data.userAgent as string,
           timestamp: data.timestamp as string,
+          userName: data.userName as string,
+        }),
+      );
+      return emailHtml;
+    },
+  },
+  PasswordChanged: {
+    medium: 'email',
+    subject: 'Password Changed Successfully',
+    validate: (data) => {
+      if (!data.email) return 'Email is required';
+      if (!data.userName) return 'User name is required';
+      return null;
+    },
+    getTemplate: async (data) => {
+      const emailHtml = render(
+        PasswordChangedTemplate({
+          email: data.email as string,
           userName: data.userName as string,
         }),
       );
