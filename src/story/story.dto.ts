@@ -1,4 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsBoolean,
 import { Type } from 'class-transformer';
 import {
   IsArray,
@@ -10,6 +13,11 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 
@@ -356,12 +364,50 @@ export class StoryPathDto {
 export class CategoryDto {
   @ApiProperty()
   id: string;
+
   @ApiProperty()
   name: string;
-  @ApiProperty({ required: false })
+
+  @ApiPropertyOptional()
   image?: string;
-  @ApiProperty({ required: false })
+
+  @ApiPropertyOptional()
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Number of stories in this category' })
+  storyCount?: number;
+}
+
+export class CreateCategoryDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  slug: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  image?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  iconUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsInt()
+  @IsOptional()
+  sortOrder?: number;
 }
 
 export class ThemeDto {
@@ -475,4 +521,39 @@ export class QuestionAnswerDto {
   @ApiProperty()
   @IsInt()
   selectedOption: number;
+}
+
+export class PaginationMetaDto {
+  @ApiProperty({ description: 'Current page number', example: 1 })
+  @IsNumber()
+  currentPage: number;
+
+  @ApiProperty({ description: 'Total number of pages', example: 5 })
+  @IsNumber()
+  totalPages: number;
+
+  @ApiProperty({ description: 'Number of items per page', example: 12 })
+  @IsNumber()
+  pageSize: number;
+
+  @ApiProperty({ description: 'Total number of items', example: 50 })
+  @IsNumber()
+  totalCount: number;
+}
+
+export class PaginatedStoriesDto {
+  @ApiProperty({
+    description: 'Array of stories',
+    type: 'array',
+    isArray: true,
+  })
+  @IsArray()
+  data: any[];
+
+  @ApiProperty({
+    description: 'Pagination metadata',
+    type: PaginationMetaDto,
+  })
+  pagination: PaginationMetaDto;
+}
 }

@@ -372,57 +372,10 @@ export class AuthService {
   }
 
   // ==================== PASSWORD RESET ====================
-  async requestPasswordReset(
-    data: RequestResetDto,
-    ip?: string,
-    userAgent?: string
-  ) {
+  async requestPasswordReset(data: RequestResetDto) {
     const { email } = data;
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) throw new NotFoundException('User not found');
-
-    // Security: Check for new IP and send alert
-    if (ip) {
-      try {
-        const isKnownIp = await this.prisma.userIP.findUnique({
-          where: {
-            userId_ipAddress: {
-              userId: user.id,
-              ipAddress: ip
-            }
-          }
-        });
-
-        if (!isKnownIp) {
-          // Alert user before proceeding with password reset
-          await this.notificationService.sendNotification('PasswordResetAlert', {
-            email: user.email,
-            ipAddress: ip,
-            userAgent: userAgent || 'Unknown Device',
-            timestamp: new Date().toISOString(),
-            userName: user.name || user.email.split('@')[0]
-          });
-
-          // Log the new IP for future reference
-          await this.prisma.userIP.create({
-            data: {
-              userId: user.id,
-              ipAddress: ip,
-              userAgent: userAgent
-            }
-          });
-        } else {
-          // Update last used timestamp for existing IP
-          await this.prisma.userIP.update({
-            where: { id: isKnownIp.id },
-            data: { lastUsed: new Date() }
-          });
-        }
-      } catch (error) {
-        this.logger.error(`IP check/alert failed: ${error.message}`, error.stack);
-        // Continue with password reset even if alert fails - security should not block user
-      }
-    }
 
     await this.prisma.token.deleteMany({
       where: { userId: user.id, type: TokenType.PASSWORD_RESET },
@@ -514,7 +467,7 @@ export class AuthService {
   }
 
   // ===============================
-  // GOOGLE AUTH 
+  // GOOGLE AUTH
   // ===============================
 
   async loginWithGoogleIdToken(idToken: string) {
@@ -596,7 +549,6 @@ export class AuthService {
         include: { profile: true, avatar: true },
       });
     }
-  }
 
   // 3. Create new user
   if (!user) {
@@ -628,6 +580,7 @@ export class AuthService {
           name: `google_${googleId || user.id}`,
           isSystemAvatar: false,
         },
+        include: { profile: true, avatar: true },
       });
     }
 
@@ -638,7 +591,6 @@ export class AuthService {
         include: { profile: true, avatar: true },
       });
     }
-  }
 
   // 5. Must be verified
   if (!user.isEmailVerified) {
