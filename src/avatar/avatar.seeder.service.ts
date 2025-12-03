@@ -15,7 +15,7 @@ export class AvatarSeederService implements OnModuleInit {
     const systemAvatars = [
       {
         name: 'Avatar one',
-        url: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1763976793/avatar_1_omlrrp.png',
+        url: 'https://res.cloudinary.com/billmal/image/upload/v1764772597/storytime/avatars/mvji3pg3apczrtt64pfg.png',
         isSystemAvatar: true,
       },
       {
