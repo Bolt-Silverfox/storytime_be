@@ -39,7 +39,7 @@ import { SuccessResponse } from '../common/dtos/api-response.dto';
 @Controller('avatars')
 @UseGuards(AuthSessionGuard)
 export class AvatarController {
-  constructor(private readonly avatarService: AvatarService) {}
+  constructor(private readonly avatarService: AvatarService) { }
 
   @Get('system')
   @ApiOperation({
@@ -828,7 +828,7 @@ export class AvatarController {
   @Delete(':id')
   @UseGuards(AdminGuard)
   async deleteAvatar(@Param('id') id: string) {
-    await this.avatarService.deleteAvatar(id);
+    await this.avatarService.softDeleteAvatar(id);
     return new SuccessResponse(200, null, 'Avatar deleted successfully');
   }
 }

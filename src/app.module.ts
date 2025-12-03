@@ -16,7 +16,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import Keyv from 'keyv';
 import { CacheableMemory } from 'cacheable';
 import KeyvRedis from '@keyv/redis';
-import { KidModule } from './kid/kid.module';
+
 import { RewardModule } from './reward/reward.module';
 import { SettingsModule } from './settings/settings.module';
 import { StoryBuddyModule } from './story-buddy/story-buddy.module';
@@ -74,7 +74,6 @@ import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module
     AvatarModule,
     AgeModule,
     ReportsModule,
-    VoiceModule,
     SubscriptionModule,
     PaymentModule,
     StoryBuddyModule,
@@ -83,4 +82,4 @@ import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module
     ParentFavoriteModule,
   ],
 })
-export class AppModule {}
+export class AppModule { }

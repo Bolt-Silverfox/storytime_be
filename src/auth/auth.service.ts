@@ -19,6 +19,7 @@ import {
   RequestResetDto,
   ValidateResetTokenDto,
   ResetPasswordDto,
+  ChangePasswordDto,
 } from './auth.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
@@ -372,7 +373,11 @@ export class AuthService {
   }
 
   // ==================== PASSWORD RESET ====================
-  async requestPasswordReset(data: RequestResetDto) {
+  async requestPasswordReset(
+    data: RequestResetDto,
+    ip?: string,
+    userAgent?: string,
+  ) {
     const { email } = data;
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) throw new NotFoundException('User not found');
@@ -458,6 +463,32 @@ export class AuthService {
     return { message: 'Password has been reset successfully' };
   }
 
+  async changePassword(userId: string, data: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const isPasswordValid = await bcrypt.compare(
+      data.oldPassword,
+      user.passwordHash,
+    );
+    if (!isPasswordValid) {
+      throw new BadRequestException('Invalid old password');
+    }
+
+    const hashedPassword = await bcrypt.hash(data.newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: hashedPassword },
+    });
+
+    await this.notificationService.sendNotification('PasswordChanged', {
+      email: user.email,
+      userName: user.name,
+    });
+
+    return { message: 'Password changed successfully' };
+  }
+
   generateRefreshToken(): string {
     return crypto.randomBytes(64).toString('hex');
   }
@@ -517,100 +548,102 @@ export class AuthService {
   // INTERNAL: Unified Google upsert logic
   // ====================================================
   private async _upsertOrReturnUserFromGooglePayload(payload: {
-  googleId?: string;
-  email: string;
-  picture?: string | null;
-  name?: string | null;
-  emailVerified?: boolean;
-}) {
-  const { googleId, email, picture, name, emailVerified } = payload;
+    googleId?: string;
+    email: string;
+    picture?: string | null;
+    name?: string | null;
+    emailVerified?: boolean;
+  }) {
+    const { googleId, email, picture, name, emailVerified } = payload;
 
-  let user = null;
+    let user = null;
 
-  // 1. Try find by googleId
-  if (googleId) {
-    user = await this.prisma.user.findFirst({
-      where: { googleId },
-      include: { profile: true, avatar: true },
-    });
-  }
+    // 1. Try find by googleId
+    if (googleId) {
+      user = await this.prisma.user.findFirst({
+        where: { googleId },
+        include: { profile: true, avatar: true },
+      });
+    }
 
-  // 2. Try find by email
-  if (!user) {
-    const existing = await this.prisma.user.findUnique({ where: { email } });
+    // 2. Try find by email
+    if (!user) {
+      const existing = await this.prisma.user.findUnique({ where: { email } });
 
-    if (existing) {
-      user = await this.prisma.user.update({
-        where: { id: existing.id },
+      if (existing) {
+        user = await this.prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            isEmailVerified: emailVerified ? true : existing.isEmailVerified,
+            googleId: googleId || existing.googleId,
+          },
+          include: { profile: true, avatar: true },
+        });
+      }
+    }
+
+    // 3. Create new user
+    if (!user) {
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+      user = await this.prisma.user.create({
         data: {
-          isEmailVerified: emailVerified ? true : existing.isEmailVerified,
-          googleId: googleId || existing.googleId,
+          name: name || email || 'Google User',
+          email,
+          passwordHash: hashedPassword,
+          isEmailVerified: emailVerified === true,
+          googleId: googleId || null,
+          role: 'parent',
+          profile: { create: {} },
         },
         include: { profile: true, avatar: true },
       });
     }
 
-  // 3. Create new user
-  if (!user) {
-    const randomPassword = crypto.randomBytes(16).toString('hex');
-    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+    // 4. Handle avatar from Google picture
+    if (picture) {
+      let avatar = await this.prisma.avatar.findFirst({ where: { url: picture } });
 
-    user = await this.prisma.user.create({
-      data: {
-        name: name || email || 'Google User',
-        email,
-        passwordHash: hashedPassword,
-        isEmailVerified: emailVerified === true,
-        googleId: googleId || null,
-        role: 'parent',
-        profile: { create: {} },
-      },
-      include: { profile: true, avatar: true },
+      if (!avatar) {
+        avatar = await this.prisma.avatar.create({
+          data: {
+            url: picture,
+            name: `google_${googleId || user.id}`,
+            isSystemAvatar: false,
+          },
+
+        });
+      }
+
+      if (user.avatarId !== avatar.id) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { avatarId: avatar.id },
+          include: { profile: true, avatar: true },
+        });
+      }
+    }
+
+    // 5. Must be verified
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
+
+    // 6. Build response
+    const numberOfKids = await this.prisma.kid.count({
+      where: { parentId: user.id },
     });
+
+    const userDto = new UserDto({ ...user, numberOfKids });
+    const tokenData = await this.createToken(userDto);
+
+    return {
+      user: userDto,
+      jwt: tokenData.jwt,
+      refreshToken: tokenData.refreshToken,
+    };
   }
-
-  // 4. Handle avatar from Google picture
-  if (picture) {
-    let avatar = await this.prisma.avatar.findFirst({ where: { url: picture } });
-
-    if (!avatar) {
-      avatar = await this.prisma.avatar.create({
-        data: {
-          url: picture,
-          name: `google_${googleId || user.id}`,
-          isSystemAvatar: false,
-        },
-        include: { profile: true, avatar: true },
-      });
-    }
-
-    if (user.avatarId !== avatar.id) {
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: { avatarId: avatar.id },
-        include: { profile: true, avatar: true },
-      });
-    }
-
-  // 5. Must be verified
-  if (!user.isEmailVerified) {
-    throw new BadRequestException(
-      'Email not verified. Please check your inbox.',
-    );
-  }
-
-  // 6. Build response
-  const numberOfKids = await this.prisma.kid.count({
-    where: { parentId: user.id },
-  });
-
-  const userDto = new UserDto({ ...user, numberOfKids });
-  const tokenData = await this.createToken(userDto);
-
-  return {
-    user: userDto,
-    jwt: tokenData.jwt,
-    refreshToken: tokenData.refreshToken,
-  };
-}
 }
