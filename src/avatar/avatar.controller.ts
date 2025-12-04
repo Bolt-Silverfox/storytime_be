@@ -90,6 +90,7 @@ export class AvatarController {
       },
     },
   })
+  @Public()
   async getSystemAvatars() {
     const avatars = await this.avatarService.getSystemAvatars();
     return new SuccessResponse(
