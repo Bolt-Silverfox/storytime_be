@@ -53,7 +53,6 @@ import {
   VoiceResponseDto,
   VoiceType,
   StoryContentAudioDto,
-
   PaginatedStoriesDto,
 } from './story.dto';
 import { StoryService } from './story.service';
@@ -68,10 +67,9 @@ export class StoryController {
   constructor(
     private readonly storyService: StoryService,
     private readonly textToSpeechService: TextToSpeechService,
-  ) { }
+  ) {}
 
   @Get()
-  @UseInterceptors(CacheInterceptor)
   @ApiOperation({
     summary:
       'Get stories (optionally filtered by theme, category, recommended, kidId, and age)',
@@ -238,7 +236,7 @@ export class StoryController {
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the story (default: false - soft delete)'
+    description: 'Permanently delete the story (default: false - soft delete)',
   })
   @ApiOkResponse({ description: 'Deleted story', type: String })
   @ApiResponse({
@@ -258,7 +256,7 @@ export class StoryController {
   })
   async deleteStory(
     @Param('id') id: string,
-    @Query('permanent') permanent: boolean = false
+    @Query('permanent') permanent: boolean = false,
   ) {
     return this.storyService.deleteStory(id, permanent);
   }
@@ -266,7 +264,10 @@ export class StoryController {
   @Post(':id/undo-delete')
   @ApiOperation({ summary: 'Restore a soft deleted story' })
   @ApiParam({ name: 'id', type: String })
-  @ApiOkResponse({ description: 'Story restored successfully', type: UpdateStoryDto })
+  @ApiOkResponse({
+    description: 'Story restored successfully',
+    type: UpdateStoryDto,
+  })
   @ApiResponse({
     status: 400,
     description: 'Bad Request - Story is not deleted',
