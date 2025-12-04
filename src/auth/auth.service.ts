@@ -1,10 +1,11 @@
 import {
-  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
+  ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   kidDto,
@@ -163,12 +164,21 @@ export class AuthService {
     });
     if (existingUser) throw new BadRequestException('Email already exists');
 
+    let role = 'parent';
+    if (data.role === 'admin') {
+      if (data.adminSecret !== process.env.ADMIN_SECRET) {
+        throw new ForbiddenException('Invalid admin secret');
+      }
+      role = 'admin';
+    }
+
     const user = await this.prisma.user.create({
       data: {
         name: data.fullName,
         email: data.email,
         passwordHash: hashedPassword,
         title: data.title,
+        role: role as any,
         profile: {
           create: {},
         },
