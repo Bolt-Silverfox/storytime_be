@@ -72,8 +72,6 @@ export class StoryController {
 
   @Get()
   @UseInterceptors(CacheInterceptor)
-  @CacheKey('categories:all')
-  @CacheTTL(4 * 60 * 60 * 1000)
   @ApiOperation({
     summary:
       'Get stories (optionally filtered by theme, category, recommended, kidId, and age)',
