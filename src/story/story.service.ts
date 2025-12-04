@@ -70,41 +70,46 @@ export class StoryService {
     const skip = (page - 1) * limit;
 
     const where: any = {
-      isDeleted: false, // ADD THIS - exclude soft deleted stories
+      isDeleted: false,
     };
 
+    // 1. Apply basic manual filters
     if (filter.theme) where.themes = { some: { id: filter.theme } };
-    if (filter.category) where.categories = { some: { id: filter.category } };
 
-    // Filter by the boolean 'recommended' flag on the Story model
-    if (filter.recommended !== undefined)
+    // If a manual category is requested, prioritize it
+    if (filter.category) {
+      where.categories = { some: { id: filter.category } };
+    }
+
+    // 2. Initial "Recommended" Handling
+    if (filter.recommended !== undefined && !filter.kidId) {
       where.recommended = filter.recommended;
+    }
 
     let targetLevel: number | undefined;
 
+    // 3. Kid-Specific Filtering Logic
     if (filter.kidId) {
       const kid = await this.prisma.kid.findUnique({
         where: {
           id: filter.kidId,
-          isDeleted: false // CANNOT GET STORIES FOR SOFT DELETED KIDS
+          isDeleted: false,
         },
-        // Include preferred categories
         include: { preferredCategories: true },
       });
 
       if (kid) {
-        // --- 1. Age / Reading Level Logic (Existing) ---
-        // Prioritize Reading Level if available
+        // --- A. Age / Reading Level Logic ---
+        // This ensures "filter based on the age of the child" happens regardless of preferences
         if (kid.currentReadingLevel > 0) {
           targetLevel = kid.currentReadingLevel;
-          //let learning be around +/- 1 level
+          // Let learning be around +/- 1 level
           where.difficultyLevel = {
             gte: Math.max(1, targetLevel - 1),
             lte: targetLevel + 1,
           };
-        }
-        // Fallback to Age Range
-        else if (kid.ageRange) {
+        } else if (kid.ageRange) {
+          // Fallback to Age Range string parsing (e.g. "6-8")
           const match = kid.ageRange.match(/(\d+)/);
           if (match) {
             const age = parseInt(match[1], 10);
@@ -113,27 +118,32 @@ export class StoryService {
           }
         }
 
-        // --- 2. Recommended Category Logic ---
-        // If we want recommendations AND the kid has preferences
-        if (filter.recommended === true && kid.preferredCategories.length > 0) {
-
-          // Remove the static DB flag check. 
-          // We are switching from "Editor's Choice" to "Personalized For You"...active boys and girls
+        // --- B. Recommended + Preference Logic ---
+        if (filter.recommended === true) {
+          // We are now defining "Recommended" as "Personalized for this Kid"
           delete where.recommended;
 
-          const categoryIds = kid.preferredCategories.map((c) => c.id);
+          // Only apply category preference filter IF:
+          // 1. No manual category was selected in the UI (filter.category is undefined)
+          // 2. The kid actually has preferences
+          if (!filter.category && kid.preferredCategories.length > 0) {
+            const categoryIds = kid.preferredCategories.map((c) => c.id);
 
-          // Add to existing where clause (merges with Age/Level logic)
-          where.categories = {
-            some: {
-              id: { in: categoryIds },
-            },
-          };
+            // Add AND condition: Must be in preferred categories
+            where.categories = {
+              some: {
+                id: { in: categoryIds },
+              },
+            };
+          }
+          // If (!filter.category && kid.preferredCategories.length === 0),
+          // we do nothing here. The 'where' clause already contains the Age/Level logic
+          // from Step A, so it simply returns "Age Appropriate" stories.
         }
       }
     }
 
-    // Only use manual age filter if we haven't already filtered by difficulty/kid
+    // 4. Manual Age Filter Fallback
     if (filter.age && !targetLevel && !where.ageMin) {
       where.ageMin = { lte: filter.age };
       where.ageMax = { gte: filter.age };
