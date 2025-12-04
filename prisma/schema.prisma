@@ -115,6 +115,8 @@ model Kid {
   storyBuddy        StoryBuddy?        @relation(fields: [storyBuddyId], references: [id])
 
   // New relations
+  downloadedStories DownloadedStory[]
+  createdStories    Story[]           @relation("CreatedStories") // Stories the kid generated
   dailyChallenges         DailyChallengeAssignment[]
   notificationPreferences NotificationPreference[]
   rewardRedemptions       RewardRedemption[]
@@ -226,6 +228,13 @@ model Story {
   themes           Theme[]           @relation("StoryThemes")
   storyAudioCaches StoryAudioCache[]
   questions        StoryQuestion[]
+
+  // Add this field to track who created it (for AI generation)
+  creatorKidId String?
+  creatorKid   Kid?    @relation("CreatedStories", fields: [creatorKidId], references: [id])
+
+  // New Relation
+  downloads DownloadedStory[]
 
   @@map("stories")
   @@index([isDeleted])
@@ -815,4 +824,15 @@ model UserBadge {
   @@index([badgeId])
   @@map("user_badges")
   @@index([isDeleted])
+}
+model DownloadedStory {
+  id           String   @id @default(uuid())
+  kidId        String
+  kid          Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  storyId      String
+  story        Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  downloadedAt DateTime @default(now())
+
+  @@unique([kidId, storyId]) // Prevent duplicate downloads
+  @@map("downloaded_stories")
 }

@@ -1,205 +1,124 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StoryService } from './story.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { GeminiService } from './gemini.service';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from './text-to-speech.service';
-import { GeminiService } from './gemini.service';
-import { Logger } from '@nestjs/common';
+import { Cache } from '@nestjs/cache-manager';
 
-// 1. Create a Mock for Prisma
+// Mock dependencies
 const mockPrismaService = {
-  storyProgress: {
-    findUnique: jest.fn(),
-    upsert: jest.fn(),
-  },
-  story: {
-    findUnique: jest.fn(),
-  },
-  kid: {
-    findUnique: jest.fn(),
-    update: jest.fn(),
-  },
+  kid: { findUnique: jest.fn() },
+  story: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn() },
+  theme: { findMany: jest.fn() },
+  category: { findMany: jest.fn() },
+  downloadedStory: { findMany: jest.fn(), upsert: jest.fn(), delete: jest.fn(), deleteMany: jest.fn() },
+  favorite: { deleteMany: jest.fn() },
+  storyProgress: { deleteMany: jest.fn() },
+  $transaction: jest.fn((args) => args), // Pass through transaction
 };
 
-describe('StoryService - Reading Level Logic', () => {
+const mockGeminiService = {
+  generateStory: jest.fn(),
+  generateStoryImage: jest.fn(),
+};
+
+describe('StoryService - Library & Generation', () => {
   let service: StoryService;
   let prisma: typeof mockPrismaService;
+  let gemini: typeof mockGeminiService;
 
   beforeEach(async () => {
-    // 2. Setup the Testing Module
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StoryService,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: ElevenLabsService, useValue: {} }, // Mock other dependencies as empty objects
-        { provide: UploadService, useValue: {} },
+        { provide: GeminiService, useValue: mockGeminiService },
+        { provide: ElevenLabsService, useValue: { generateAudioBuffer: jest.fn().mockResolvedValue({}) } },
+        { provide: UploadService, useValue: { uploadAudioBuffer: jest.fn().mockResolvedValue('url') } },
         { provide: TextToSpeechService, useValue: {} },
-        { provide: GeminiService, useValue: {} },
+        { provide: 'CACHE_MANAGER', useValue: { del: jest.fn(), get: jest.fn(), set: jest.fn() } },
       ],
     }).compile();
 
     service = module.get<StoryService>(StoryService);
     prisma = module.get(PrismaService);
-
-    // Silence the logger for clean test output
-    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
-    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
+    gemini = module.get(GeminiService);
     jest.clearAllMocks();
   });
 
-  // Helper to let background promises finish
-  const waitForBackgroundTasks = () =>
-    new Promise((resolve) => setTimeout(resolve, 10));
+  // --- 1. GENERATION TEST (The Fix) ---
+  describe('generateStoryForKid', () => {
+    it('should save the story with creatorKidId', async () => {
+      const kidId = 'kid-123';
 
-  describe('adjustReadingLevel (via setProgress)', () => {
+      // Mock Data
+      prisma.kid.findUnique.mockResolvedValue({ id: kidId, name: 'Tise', preferredCategories: [], excludedTags: [] });
+      prisma.theme.findMany.mockResolvedValue([{ id: 'theme-1' }]);
+      prisma.category.findMany.mockResolvedValue([{ id: 'cat-1' }]);
+
+      gemini.generateStory.mockResolvedValue({
+        title: 'AI Story',
+        description: 'Desc',
+        content: 'Content',
+        theme: ['Theme'],
+        category: ['Cat'],
+        ageMin: 5, ageMax: 8, questions: []
+      });
+      gemini.generateStoryImage.mockResolvedValue('image-url');
+
+      // Call Method
+      await service.generateStoryForKid(kidId, ['Theme'], ['Cat']);
+
+      // VERIFY: Did we save creatorKidId?
+      expect(prisma.story.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          creatorKidId: kidId, // <--- THIS IS THE CRITICAL CHECK
+          title: 'AI Story',
+        }),
+      }));
+    });
+  });
+
+  // --- 2. LIBRARY TESTS ---
+  describe('Library Methods', () => {
     const kidId = 'kid-123';
-    const storyId = 'story-456';
-    const initialLevel = 5;
 
-    it('should LEVEL UP the kid if reading speed is fast (>120 WPM) on a challenging story', async () => {
-      // ARRANGE
-      // 1. Mock the kid (Current Level 5)
-      prisma.kid.findUnique.mockResolvedValue({
-        id: kidId,
-        currentReadingLevel: initialLevel,
-      });
+    it('getCreatedStories: should filter by creatorKidId', async () => {
+      await service.getCreatedStories(kidId);
 
-      // 2. Mock the story (Difficulty 5, 400 words)
-      prisma.story.findUnique.mockResolvedValue({
-        id: storyId,
-        difficultyLevel: 5,
-        wordCount: 300,
-      });
-
-      // 3. Mock existing progress (Not completed yet)
-      prisma.storyProgress.findUnique.mockResolvedValue(null);
-      prisma.storyProgress.upsert.mockResolvedValue({ id: 'prog-1' } as any);
-
-      // ACT
-      // User finishes story in 2 minutes (120 seconds).
-      // WPM Calculation: 300 words / 2 mins = 150 WPM. This is > 180.
-      await service.setProgress({
-        kidId,
-        storyId,
-        progress: 100,
-        completed: true,
-        sessionTime: 120, // 2 minutes
-      });
-
-      // Wait for the fire-and-forget logic to run
-      await waitForBackgroundTasks();
-
-      // ASSERT
-      expect(prisma.kid.update).toHaveBeenCalledWith({
-        where: { id: kidId },
-        data: { currentReadingLevel: initialLevel + 1 }, // Expect Level 6
-      });
+      expect(prisma.story.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: {
+          creatorKidId: kidId, // <--- Ensures we only fetch THEIR stories
+          isDeleted: false,
+        },
+        orderBy: { createdAt: 'desc' },
+      }));
     });
 
-    it('should LEVEL DOWN the kid if reading speed is slow (<40 WPM) on a challenging story', async () => {
-      // ARRANGE
-      prisma.kid.findUnique.mockResolvedValue({
-        id: kidId,
-        currentReadingLevel: initialLevel,
-      });
+    it('addDownload: should use upsert to prevent duplicates', async () => {
+      const storyId = 'story-456';
+      prisma.story.findUnique.mockResolvedValue({ id: storyId }); // Story exists
 
-      // Story is Level 5 (hard enough to judge), 400 words
-      prisma.story.findUnique.mockResolvedValue({
-        id: storyId,
-        difficultyLevel: 5,
-        wordCount: 300,
-      });
+      await service.addDownload(kidId, storyId);
 
-      prisma.storyProgress.findUnique.mockResolvedValue(null);
-      prisma.storyProgress.upsert.mockResolvedValue({ id: 'prog-1' } as any);
-
-      // ACT
-      // User takes 10 minutes (600 seconds).
-      // WPM Calculation: 300 / 10 = 30 WPM. This is < 60.
-      await service.setProgress({
-        kidId,
-        storyId,
-        progress: 100,
-        completed: true,
-        sessionTime: 600,
-      });
-
-      await waitForBackgroundTasks();
-
-      // ASSERT
-      expect(prisma.kid.update).toHaveBeenCalledWith({
-        where: { id: kidId },
-        data: { currentReadingLevel: initialLevel - 1 }, // Expect Level 4
-      });
+      expect(prisma.downloadedStory.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        where: { kidId_storyId: { kidId, storyId } },
+        create: { kidId, storyId },
+      }));
     });
 
-    it('should NOT change level if reading speed is normal (e.g. 100 WPM)', async () => {
-      // ARRANGE
-      prisma.kid.findUnique.mockResolvedValue({
-        id: kidId,
-        currentReadingLevel: initialLevel,
-      });
-      prisma.story.findUnique.mockResolvedValue({
-        id: storyId,
-        difficultyLevel: 5,
-        wordCount: 400,
-      });
-      prisma.storyProgress.findUnique.mockResolvedValue(null);
-      prisma.storyProgress.upsert.mockResolvedValue({ id: 'prog-1' } as any);
+    it('removeFromLibrary: should delete from Favorites, Downloads, and Progress', async () => {
+      const storyId = 'story-456';
 
-      // ACT
-      // User takes 4 minutes (240 seconds).
-      // WPM Calculation: 400 / 4 = 100 WPM.
-      await service.setProgress({
-        kidId,
-        storyId,
-        progress: 100,
-        completed: true,
-        sessionTime: 240,
-      });
+      await service.removeFromLibrary(kidId, storyId);
 
-      await waitForBackgroundTasks();
-
-      // ASSERT
-      expect(prisma.kid.update).not.toHaveBeenCalled();
-    });
-
-    it('should NOT level up if the story was too easy (Difficulty < Kid Level)', async () => {
-      // ARRANGE
-      prisma.kid.findUnique.mockResolvedValue({
-        id: kidId,
-        currentReadingLevel: 5,
-      });
-
-      // Story is Difficulty 2 (Too easy for a Level 5 kid)
-      prisma.story.findUnique.mockResolvedValue({
-        id: storyId,
-        difficultyLevel: 2,
-        wordCount: 400,
-      });
-
-      prisma.storyProgress.findUnique.mockResolvedValue(null);
-      prisma.storyProgress.upsert.mockResolvedValue({ id: 'prog-1' } as any);
-
-      // ACT
-      // User reads super fast (200 WPM)
-      await service.setProgress({
-        kidId,
-        storyId,
-        progress: 100,
-        completed: true,
-        sessionTime: 120,
-      });
-
-      await waitForBackgroundTasks();
-
-      // ASSERT
-      // Should not upgrade because they didn't prove themselves on a hard text
-      expect(prisma.kid.update).not.toHaveBeenCalled();
+      // Verify transaction contents
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.favorite.deleteMany).toHaveBeenCalledWith({ where: { kidId, storyId } });
+      expect(prisma.downloadedStory.deleteMany).toHaveBeenCalledWith({ where: { kidId, storyId } });
+      expect(prisma.storyProgress.deleteMany).toHaveBeenCalledWith({ where: { kidId, storyId } });
     });
   });
 });

@@ -13,6 +13,7 @@ export interface GenerateStoryOptions {
   language?: string;
   kidName?: string;
   additionalContext?: string;
+  creatorKidId?: string;
 }
 
 export interface GeneratedStory {
