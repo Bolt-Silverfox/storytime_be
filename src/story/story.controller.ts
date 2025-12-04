@@ -54,6 +54,8 @@ import {
   VoiceType,
   StoryContentAudioDto,
   PaginatedStoriesDto,
+  DownloadedStoryDto,
+  LibraryStatsDto,
 } from './story.dto';
 import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
@@ -67,7 +69,7 @@ export class StoryController {
   constructor(
     private readonly storyService: StoryService,
     private readonly textToSpeechService: TextToSpeechService,
-  ) {}
+  ) { }
 
   @Get()
   @ApiOperation({
@@ -837,56 +839,73 @@ export class StoryController {
   async getStoryById(@Param('id') id: string) {
     return await this.storyService.getStoryById(id);
   }
-  
+
   // --- LIBRARY ENDPOINTS ---
 
   @Get('library/:kidId/continue-reading')
   @ApiOperation({ summary: 'Get stories currently in progress' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [CreateStoryDto] })
   async getContinueReading(@Param('kidId') kidId: string) {
     return this.storyService.getContinueReading(kidId);
   }
 
   @Get('library/:kidId/completed')
   @ApiOperation({ summary: 'Get completed stories history' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [CreateStoryDto] })
   async getCompleted(@Param('kidId') kidId: string) {
     return this.storyService.getCompletedStories(kidId);
   }
 
   @Get('library/:kidId/created')
   @ApiOperation({ summary: 'Get stories created by the kid' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [CreateStoryDto] })
   async getCreated(@Param('kidId') kidId: string) {
     return this.storyService.getCreatedStories(kidId);
   }
 
   @Get('library/:kidId/downloads')
   @ApiOperation({ summary: 'Get downloaded stories' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [DownloadedStoryDto] })
   async getDownloads(@Param('kidId') kidId: string) {
     return this.storyService.getDownloads(kidId);
   }
 
   @Post('library/:kidId/download/:storyId')
   @ApiOperation({ summary: 'Mark a story as downloaded' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiResponse({ status: 201, type: DownloadedStoryDto })
   async addDownload(
     @Param('kidId') kidId: string,
-    @Param('storyId') storyId: string
+    @Param('storyId') storyId: string,
   ) {
     return this.storyService.addDownload(kidId, storyId);
   }
 
   @Delete('library/:kidId/download/:storyId')
   @ApiOperation({ summary: 'Remove a story from downloads' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiResponse({ status: 200, type: DownloadedStoryDto })
   async removeDownload(
     @Param('kidId') kidId: string,
-    @Param('storyId') storyId: string
+    @Param('storyId') storyId: string,
   ) {
     return this.storyService.removeDownload(kidId, storyId);
   }
 
   @Delete('library/:kidId/remove/:storyId')
   @ApiOperation({ summary: 'Remove from library (Resets progress, favs, downloads)' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiResponse({ status: 200, description: 'Story removed from library successfully' })
   async removeFromLibrary(
     @Param('kidId') kidId: string,
-    @Param('storyId') storyId: string
+    @Param('storyId') storyId: string,
   ) {
     await this.storyService.removeFromLibrary(kidId, storyId);
     return { message: 'Story removed from library successfully' };
