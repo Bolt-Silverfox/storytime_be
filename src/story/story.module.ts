@@ -4,7 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from 'src/auth/auth.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
-import { ElevenLabsService } from './elevenlabs.service';
+import { GoogleTTSService } from './google-tts.service';
 import { GeminiService } from './gemini.service';
 import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
@@ -16,11 +16,11 @@ import { TextToSpeechService } from './text-to-speech.service';
   providers: [
     StoryService,
     PrismaService,
-    ElevenLabsService,
+    GoogleTTSService,
     UploadService,
     TextToSpeechService,
     GeminiService,
   ],
-  exports: [StoryService],
+  exports: [StoryService, GoogleTTSService],
 })
-export class StoryModule {}
+export class StoryModule { }

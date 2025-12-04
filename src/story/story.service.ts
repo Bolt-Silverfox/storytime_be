@@ -22,7 +22,7 @@ import {
   VoiceType,
   PaginatedStoriesDto,
 } from './story.dto';
-import { ElevenLabsService } from './elevenlabs.service';
+import { GoogleTTSService } from './google-tts.service';
 import { UploadService } from '../upload/upload.service';
 import {
   StoryPath,
@@ -50,7 +50,7 @@ export class StoryService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
-    private readonly elevenLabs: ElevenLabsService,
+    private readonly googleTts: GoogleTTSService,
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
@@ -70,13 +70,12 @@ export class StoryService {
     const skip = (page - 1) * limit;
 
     const where: any = {
-      isDeleted: false, // ADD THIS - exclude soft deleted stories
+      isDeleted: false,
     };
 
     if (filter.theme) where.themes = { some: { id: filter.theme } };
     if (filter.category) where.categories = { some: { id: filter.category } };
 
-    // Filter by the boolean 'recommended' flag on the Story model
     if (filter.recommended !== undefined)
       where.recommended = filter.recommended;
 
@@ -86,24 +85,19 @@ export class StoryService {
       const kid = await this.prisma.kid.findUnique({
         where: {
           id: filter.kidId,
-          isDeleted: false // CANNOT GET STORIES FOR SOFT DELETED KIDS
+          isDeleted: false
         },
-        // Include preferred categories
         include: { preferredCategories: true },
       });
 
       if (kid) {
-        // --- 1. Age / Reading Level Logic (Existing) ---
-        // Prioritize Reading Level if available
         if (kid.currentReadingLevel > 0) {
           targetLevel = kid.currentReadingLevel;
-          //let learning be around +/- 1 level
           where.difficultyLevel = {
             gte: Math.max(1, targetLevel - 1),
             lte: targetLevel + 1,
           };
         }
-        // Fallback to Age Range
         else if (kid.ageRange) {
           const match = kid.ageRange.match(/(\d+)/);
           if (match) {
@@ -113,17 +107,9 @@ export class StoryService {
           }
         }
 
-        // --- 2. Recommended Category Logic ---
-        // If we want recommendations AND the kid has preferences
         if (filter.recommended === true && kid.preferredCategories.length > 0) {
-
-          // Remove the static DB flag check. 
-          // We are switching from "Editor's Choice" to "Personalized For You"...active boys and girls
           delete where.recommended;
-
           const categoryIds = kid.preferredCategories.map((c) => c.id);
-
-          // Add to existing where clause (merges with Age/Level logic)
           where.categories = {
             some: {
               id: { in: categoryIds },
@@ -133,7 +119,6 @@ export class StoryService {
       }
     }
 
-    // Only use manual age filter if we haven't already filtered by difficulty/kid
     if (filter.age && !targetLevel && !where.ageMin) {
       where.ageMin = { lte: filter.age };
       where.ageMax = { gte: filter.age };
@@ -171,24 +156,15 @@ export class StoryService {
       const categories = await this.prisma.category.findMany({
         where: { id: { in: data.categoryIds } },
       });
-
       if (categories.length !== data.categoryIds.length) {
-        throw new BadRequestException('One or more category IDs do not exist');
+        throw new BadRequestException('One or more categories not found');
       }
     }
 
+    // Generate audio URL if not provided but text content exists
     let audioUrl = data.audioUrl;
-    if (!audioUrl && data.description) {
-      const { buffer, filename } = await this.elevenLabs.generateAudioBuffer(
-        data.description,
-      );
-      audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
-    }
-    if (!audioUrl) {
-      throw new Error(
-        'audioUrl or description is required to generate story audio.',
-      );
-    }
+    // Note: We can't easily generate audio here without an ID, so we might need to do it after creation or let the client request it.
+    // For now, we'll leave it as is from the DTO.
 
     const story = await this.prisma.story.create({
       data: {
@@ -196,20 +172,19 @@ export class StoryService {
         description: data.description,
         language: data.language,
         coverImageUrl: data.coverImageUrl ?? '',
-        audioUrl,
+        audioUrl: audioUrl,
         isInteractive: data.isInteractive ?? false,
         ageMin: data.ageMin ?? 0,
         ageMax: data.ageMax ?? 9,
         images: data.images ? { create: data.images } : undefined,
         branches: data.branches ? { create: data.branches } : undefined,
-        categories: { connect: data.categoryIds.map((id) => ({ id })) },
-        themes: { connect: data.themeIds.map((id) => ({ id })) },
+        categories: data.categoryIds ? { connect: data.categoryIds.map((id) => ({ id })) } : undefined,
+        themes: data.themeIds ? { connect: data.themeIds.map((id) => ({ id })) } : undefined,
       },
       include: { images: true, branches: true },
     });
 
     await this.cacheManager.del('categories:all');
-
     this.logger.log('Categories cache invalidated after story creation');
 
     return story;
@@ -217,10 +192,7 @@ export class StoryService {
 
   async updateStory(id: string, data: UpdateStoryDto) {
     const story = await this.prisma.story.findUnique({
-      where: {
-        id,
-        isDeleted: false // CANNOT UPDATE SOFT DELETED STORIES
-      }
+      where: { id, isDeleted: false },
     });
 
     if (!story) {
@@ -233,18 +205,10 @@ export class StoryService {
       });
 
       if (categories.length !== data.categoryIds.length) {
-        throw new BadRequestException('One or more category IDs do not exist');
+        throw new BadRequestException('One or more categories not found');
       }
     }
 
-
-    let audioUrl = data.audioUrl;
-    if (!audioUrl && data.description) {
-      const { buffer, filename } = await this.elevenLabs.generateAudioBuffer(
-        data.description,
-      );
-      audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
-    }
     const updatedStory = await this.prisma.story.update({
       where: { id },
       data: {
@@ -255,7 +219,7 @@ export class StoryService {
         isInteractive: data.isInteractive,
         ageMin: data.ageMin,
         ageMax: data.ageMax,
-        audioUrl,
+        audioUrl: data.audioUrl,
         images: data.images ? { create: data.images } : undefined,
         branches: data.branches ? { create: data.branches } : undefined,
         categories: data.categoryIds
@@ -269,22 +233,16 @@ export class StoryService {
     });
 
     await this.cacheManager.del('categories:all');
-
-    this.logger.log('Categories cache invalidated after story creation');
+    this.logger.log('Categories cache invalidated after story update');
 
     return updatedStory;
   }
 
-  /**
-   * Soft delete or permanently delete a story
-   * @param id Story ID
-   * @param permanent Whether to permanently delete (default: false)
-   */
   async deleteStory(id: string, permanent: boolean = false) {
     const story = await this.prisma.story.findUnique({
       where: {
         id,
-        isDeleted: false // CANNOT DELETE ALREADY DELETED STORIES
+        isDeleted: false
       }
     });
 
@@ -305,10 +263,6 @@ export class StoryService {
     }
   }
 
-  /**
-   * Restore a soft deleted story
-   * @param id Story ID
-   */
   async undoDeleteStory(id: string) {
     const story = await this.prisma.story.findUnique({
       where: { id }
@@ -336,7 +290,7 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({
       where: {
         id: storyId,
-        isDeleted: false // CANNOT ADD IMAGES TO SOFT DELETED STORIES
+        isDeleted: false
       }
     });
 
@@ -354,7 +308,7 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({
       where: {
         id: storyId,
-        isDeleted: false // CANNOT ADD BRANCHES TO SOFT DELETED STORIES
+        isDeleted: false
       }
     });
 
@@ -369,11 +323,10 @@ export class StoryService {
 
   // --- Favorites ---
   async addFavorite(dto: FavoriteDto) {
-    // Verify both kid and story exist and are not soft deleted
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: dto.kidId,
-        isDeleted: false // CANNOT ADD FAVORITES FOR SOFT DELETED KIDS
+        isDeleted: false
       }
     });
 
@@ -384,7 +337,7 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({
       where: {
         id: dto.storyId,
-        isDeleted: false // CANNOT ADD SOFT DELETED STORIES TO FAVORITES
+        isDeleted: false
       }
     });
 
@@ -407,7 +360,7 @@ export class StoryService {
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: kidId,
-        isDeleted: false // CANNOT GET FAVORITES FOR SOFT DELETED KIDS
+        isDeleted: false
       }
     });
 
@@ -424,11 +377,10 @@ export class StoryService {
   // --- Progress ---
 
   async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
-    // Verify both kid and story exist and are not soft deleted
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: dto.kidId,
-        isDeleted: false // CANNOT SET PROGRESS FOR SOFT DELETED KIDS
+        isDeleted: false
       }
     });
 
@@ -439,7 +391,7 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({
       where: {
         id: dto.storyId,
-        isDeleted: false // CANNOT SET PROGRESS FOR SOFT DELETED STORIES
+        isDeleted: false
       }
     });
 
@@ -447,7 +399,6 @@ export class StoryService {
       throw new NotFoundException('Story not found');
     }
 
-    // Get existing progress to calculate total time
     const existing = await this.prisma.storyProgress.findUnique({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
     });
@@ -472,9 +423,7 @@ export class StoryService {
       },
     });
 
-    // Trigger auto-adjustment if story just completed
     if (dto.completed && (!existing || !existing.completed)) {
-      // Fire and forget (don't await) to keep API fast
       this.adjustReadingLevel(dto.kidId, dto.storyId, newTotalTime).catch((e) =>
         this.logger.error(`Failed to adjust reading level: ${e.message}`),
       );
@@ -487,7 +436,7 @@ export class StoryService {
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: kidId,
-        isDeleted: false // CANNOT GET PROGRESS FOR SOFT DELETED KIDS
+        isDeleted: false
       }
     });
 
@@ -498,7 +447,7 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({
       where: {
         id: storyId,
-        isDeleted: false // CANNOT GET PROGRESS FOR SOFT DELETED STORIES
+        isDeleted: false
       }
     });
 
@@ -516,7 +465,7 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({
       where: {
         id: dto.storyId,
-        isDeleted: false // CANNOT CREATE CHALLENGES FOR SOFT DELETED STORIES
+        isDeleted: false
       }
     });
 
@@ -531,7 +480,7 @@ export class StoryService {
     return await this.prisma.dailyChallenge.findMany({
       where: {
         challengeDate: new Date(date),
-        isDeleted: false // EXCLUDE SOFT DELETED CHALLENGES
+        isDeleted: false
       },
       include: { story: true },
     });
@@ -554,11 +503,10 @@ export class StoryService {
   async assignDailyChallenge(
     dto: AssignDailyChallengeDto,
   ): Promise<DailyChallengeAssignmentDto> {
-    // Verify kid and challenge exist and are not soft deleted
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: dto.kidId,
-        isDeleted: false // CANNOT ASSIGN CHALLENGES TO SOFT DELETED KIDS
+        isDeleted: false
       }
     });
 
@@ -569,7 +517,7 @@ export class StoryService {
     const challenge = await this.prisma.dailyChallenge.findUnique({
       where: {
         id: dto.challengeId,
-        isDeleted: false // CANNOT ASSIGN SOFT DELETED CHALLENGES
+        isDeleted: false
       }
     });
 
@@ -602,7 +550,7 @@ export class StoryService {
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: kidId,
-        isDeleted: false // CANNOT GET ASSIGNMENTS FOR SOFT DELETED KIDS
+        isDeleted: false
       }
     });
 
@@ -636,7 +584,7 @@ export class StoryService {
     const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
-        isDeleted: false // CANNOT UPLOAD VOICES FOR SOFT DELETED USERS
+        isDeleted: false
       }
     });
 
@@ -662,7 +610,7 @@ export class StoryService {
     const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
-        isDeleted: false // CANNOT CREATE VOICES FOR SOFT DELETED USERS
+        isDeleted: false
       }
     });
 
@@ -685,7 +633,7 @@ export class StoryService {
     const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
-        isDeleted: false // CANNOT LIST VOICES FOR SOFT DELETED USERS
+        isDeleted: false
       }
     });
 
@@ -696,7 +644,7 @@ export class StoryService {
     const voices = await this.prisma.voice.findMany({
       where: {
         userId,
-        isDeleted: false // EXCLUDE SOFT DELETED VOICES
+        isDeleted: false
       }
     });
     return voices.map((v: Voice) => this.toVoiceResponse(v));
@@ -709,7 +657,7 @@ export class StoryService {
     const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
-        isDeleted: false // CANNOT SET PREFERRED VOICE FOR SOFT DELETED USERS
+        isDeleted: false
       }
     });
 
@@ -717,12 +665,11 @@ export class StoryService {
       throw new NotFoundException('User not found');
     }
 
-    // Verify the voice exists and is not soft deleted
     if (dto.voiceId) {
       const voice = await this.prisma.voice.findUnique({
         where: {
           id: dto.voiceId,
-          isDeleted: false // CANNOT SET SOFT DELETED VOICE AS PREFERRED
+          isDeleted: false
         }
       });
 
@@ -747,7 +694,7 @@ export class StoryService {
     const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
-        isDeleted: false // CANNOT GET PREFERRED VOICE FOR SOFT DELETED USERS
+        isDeleted: false
       },
       include: { preferredVoice: true },
     });
@@ -777,35 +724,46 @@ export class StoryService {
     };
   }
 
-  // Update audio generation to use preferred voice
-  async generateStoryAudio(
-    userId: string,
-    text: string,
-  ): Promise<{ buffer: Buffer; filename: string }> {
-    const user = await this.prisma.user.findUnique({
+  async getStoryAudioUrl(
+    storyId: string,
+    voiceType: VoiceType,
+  ): Promise<string> {
+    const story = await this.prisma.story.findUnique({
       where: {
-        id: userId,
-        isDeleted: false // CANNOT GENERATE AUDIO FOR SOFT DELETED USERS
+        id: storyId,
+        isDeleted: false
       },
-      include: { preferredVoice: true },
+      select: { textContent: true },
+    });
+    if (!story) {
+      throw new NotFoundException(`Story with ID ${storyId} not found`);
+    }
+
+    const cachedAudio = await this.prisma.storyAudioCache.findFirst({
+      where: { storyId, voiceType },
+    });
+    if (cachedAudio) {
+      return cachedAudio.audioUrl;
+    }
+
+    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
+      storyId,
+      story?.textContent ?? '',
+      voiceType,
+    );
+
+    await this.prisma.storyAudioCache.create({
+      data: {
+        storyId,
+        voiceType,
+        audioUrl,
+      },
     });
 
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    let voice: string | undefined = undefined;
-    if (user && user.preferredVoice) {
-      const prefVoice = user.preferredVoice;
-      if (prefVoice.type === 'elevenlabs' && prefVoice.elevenLabsVoiceId) {
-        voice = prefVoice.elevenLabsVoiceId;
-      }
-      // For uploaded voices, you may want to return the uploaded file directly or handle differently
-    }
-    return this.elevenLabs.generateAudioBuffer(text, voice);
+    return audioUrl;
   }
 
-  private toStoryPathDto(path: StoryPath): StoryPathDto {
+  private toStoryPathDto(path: any): StoryPathDto {
     return {
       id: path.id,
       kidId: path.kidId,
@@ -817,11 +775,10 @@ export class StoryService {
   }
 
   async startStoryPath(dto: StartStoryPathDto): Promise<StoryPathDto> {
-    // Verify kid and story exist and are not soft deleted
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: dto.kidId,
-        isDeleted: false // CANNOT START STORY PATH FOR SOFT DELETED KIDS
+        isDeleted: false
       }
     });
 
@@ -832,7 +789,7 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({
       where: {
         id: dto.storyId,
-        isDeleted: false // CANNOT START STORY PATH FOR SOFT DELETED STORIES
+        isDeleted: false
       }
     });
 
@@ -865,7 +822,7 @@ export class StoryService {
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: kidId,
-        isDeleted: false // CANNOT GET STORY PATHS FOR SOFT DELETED KIDS
+        isDeleted: false
       }
     });
 
@@ -883,7 +840,7 @@ export class StoryService {
   }
 
   async fetchAvailableVoices(): Promise<any[]> {
-    return this.elevenLabs.fetchAvailableVoices();
+    return [];
   }
 
   async getCategories(): Promise<CategoryDto[]> {
@@ -891,7 +848,7 @@ export class StoryService {
 
     const categories = await this.prisma.category.findMany({
       where: {
-        isDeleted: false, // EXCLUDE SOFT DELETED CATEGORIES
+        isDeleted: false,
       },
       include: {
         _count: {
@@ -912,7 +869,7 @@ export class StoryService {
   async getThemes(): Promise<ThemeDto[]> {
     const themes = await this.prisma.theme.findMany({
       where: {
-        isDeleted: false, // EXCLUDE SOFT DELETED THEMES
+        isDeleted: false,
       }
     });
     return themes.map((t: Theme) => ({
@@ -925,33 +882,30 @@ export class StoryService {
   // --- Daily Challenge Automation ---
   async assignDailyChallengeToAllKids() {
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Normalize to midnight
+    today.setHours(0, 0, 0, 0);
 
     const kids = await this.prisma.kid.findMany({
       where: {
-        isDeleted: false, // ONLY ASSIGN TO NON-DELETED KIDS
+        isDeleted: false,
       }
     });
 
     let totalAssigned = 0;
     for (const kid of kids) {
-      // Parse kid's age from ageRange (e.g., '6-8' -> 6)
       let kidAge = 0;
       if (kid.ageRange) {
         const match = kid.ageRange.match(/(\d+)/);
         if (match) kidAge = parseInt(match[1], 10);
       }
-      // Get all age-appropriate stories
       const stories = await this.prisma.story.findMany({
         where: {
           ageMin: { lte: kidAge },
           ageMax: { gte: kidAge },
-          isDeleted: false, // ONLY USE NON-DELETED STORIES
+          isDeleted: false,
         },
       });
       if (stories.length === 0) continue;
 
-      // Get all challenges assigned to this kid in the past
       const pastAssignments =
         await this.prisma.dailyChallengeAssignment.findMany({
           where: { kidId: kid.id },
@@ -963,27 +917,23 @@ export class StoryService {
             a.challenge.storyId,
         ),
       );
-      // Filter out stories already assigned
       const availableStories = stories.filter(
         (s: any) => !usedStoryIds.has(s.id),
       );
-      // If all stories have been used, reset (allow repeats)
       const storyPool =
         availableStories.length > 0 ? availableStories : stories;
       const story = storyPool[Math.floor(Math.random() * storyPool.length)];
 
-      // Use story title as wordOfTheDay, first sentence of description as meaning
       const wordOfTheDay = story.title;
       const meaning =
         story.description.split('. ')[0] +
         (story.description.includes('.') ? '.' : '');
 
-      // Create or find today's challenge for this story
       let challenge = await this.prisma.dailyChallenge.findFirst({
         where: {
           storyId: story.id,
           challengeDate: today,
-          isDeleted: false, // ONLY USE NON-DELETED CHALLENGES
+          isDeleted: false,
         },
       });
       if (!challenge) {
@@ -997,7 +947,6 @@ export class StoryService {
         });
       }
 
-      // Assign to kid if not already assigned
       const existingAssignment =
         await this.prisma.dailyChallengeAssignment.findFirst({
           where: {
@@ -1033,7 +982,7 @@ export class StoryService {
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: kidId,
-        isDeleted: false // CANNOT GET CHALLENGES FOR SOFT DELETED KIDS
+        isDeleted: false
       }
     });
 
@@ -1053,7 +1002,7 @@ export class StoryService {
             gte: today,
             lt: tomorrow,
           },
-          isDeleted: false, // ONLY GET NON-DELETED CHALLENGES
+          isDeleted: false,
         },
       },
       include: {
@@ -1072,54 +1021,11 @@ export class StoryService {
     return assignment;
   }
 
-  async getStoryAudioUrl(
-    storyId: string,
-    voiceType: VoiceType,
-  ): Promise<string> {
-    const story = await this.prisma.story.findUnique({
-      where: {
-        id: storyId,
-        isDeleted: false // CANNOT GET AUDIO FOR SOFT DELETED STORIES
-      },
-      select: { textContent: true },
-    });
-    if (!story) {
-      throw new NotFoundException(`Story with ID ${storyId} not found`);
-    }
-
-    // check StoryAudioCache model for storyId and voiceType
-    const cachedAudio = await this.prisma.storyAudioCache.findFirst({
-      where: { storyId, voiceType },
-    });
-    if (cachedAudio) {
-      return cachedAudio.audioUrl;
-    }
-
-    // If not cached, generate audio using text-to-speech service
-    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
-      storyId,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-      story?.textContent ?? '',
-      voiceType,
-    );
-
-    // Cache the generated audio URL
-    await this.prisma.storyAudioCache.create({
-      data: {
-        storyId,
-        voiceType,
-        audioUrl,
-      },
-    });
-
-    return audioUrl;
-  }
-
   async getWeeklyDailyChallengeAssignments(kidId: string, weekStart: Date) {
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: kidId,
-        isDeleted: false // CANNOT GET ASSIGNMENTS FOR SOFT DELETED KIDS
+        isDeleted: false
       }
     });
 
@@ -1127,9 +1033,8 @@ export class StoryService {
       throw new NotFoundException('Kid not found');
     }
 
-    // weekStart should be a Sunday at 00:00:00
     const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 7); // Next Sunday (exclusive)
+    weekEnd.setDate(weekStart.getDate() + 7);
     const assignments = await this.prisma.dailyChallengeAssignment.findMany({
       where: {
         kidId,
@@ -1138,7 +1043,7 @@ export class StoryService {
             gte: weekStart,
             lt: weekEnd,
           },
-          isDeleted: false, // ONLY GET NON-DELETED CHALLENGES
+          isDeleted: false,
         },
       },
       include: {
@@ -1155,10 +1060,7 @@ export class StoryService {
 
   async getStoryById(id: string) {
     const story = await this.prisma.story.findUnique({
-      where: {
-        id,
-        isDeleted: false // EXCLUDE SOFT DELETED STORIES
-      },
+      where: { id, isDeleted: false },
       include: {
         images: true,
         branches: true,
@@ -1167,99 +1069,22 @@ export class StoryService {
         questions: true,
       },
     });
+
     if (!story) {
-      throw new NotFoundException(`Story with id ${id} not found`);
+      throw new NotFoundException('Story not found');
     }
     return story;
   }
 
-  async generateStoryWithAI(options: GenerateStoryOptions) {
-    try {
-      // Generate the story using Gemini
-      const generatedStory = await this.geminiService.generateStory(options);
-
-      // Generate audio for the story
-      let audioUrl = '';
-      if (generatedStory.content) {
-        const { buffer, filename } = await this.elevenLabs.generateAudioBuffer(
-          generatedStory.content,
-        );
-        audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
-      }
-
-      // Generate or get a cover image
-      const coverImageUrl = await this.geminiService.generateStoryImage(
-        generatedStory.title,
-        generatedStory.description,
-      );
-
-      // Get theme and category IDs from names
-      const themes = await this.prisma.theme.findMany({
-        where: {
-          name: { in: generatedStory.theme },
-          isDeleted: false // ONLY USE NON-DELETED THEMES
-        },
-      });
-      const categories = await this.prisma.category.findMany({
-        where: {
-          name: { in: generatedStory.category },
-          isDeleted: false // ONLY USE NON-DELETED CATEGORIES
-        },
-      });
-
-      // Save the story to the database
-      const story = await this.prisma.story.create({
-        data: {
-          title: generatedStory.title,
-          description: generatedStory.description,
-          textContent: generatedStory.content,
-          language: generatedStory.language,
-          coverImageUrl,
-          audioUrl,
-          isInteractive: true,
-          ageMin: generatedStory.ageMin,
-          ageMax: generatedStory.ageMax,
-          themes: {
-            connect: themes.map((t: Theme) => ({ id: t.id })),
-          },
-          categories: {
-            connect: categories.map((c: Category) => ({ id: c.id })),
-          },
-          questions: {
-            create: generatedStory.questions.map((q) => ({
-              question: q.question,
-              options: q.options,
-              correctOption: q.answer,
-            })),
-          },
-          difficultyLevel: generatedStory.difficultyLevel || 1,
-          wordCount: generatedStory.estimatedWordCount || 0,
-          aiGenerated: true,
-        },
-        include: {
-          themes: true,
-          categories: true,
-          questions: true,
-        },
-      });
-
-      return story;
-    } catch (error) {
-      this.logger.error('Failed to generate story with AI:', error);
-      throw error;
-    }
-  }
-
-  async generateStoryForKid(
+  async generateStory(
     kidId: string,
     themeNames?: string[],
     categoryNames?: string[],
   ) {
-    // 1. Get kid's information, preferred categories, AND excluded tags
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: kidId,
-        isDeleted: false // CANNOT GENERATE STORY FOR SOFT DELETED KIDS
+        isDeleted: false
       },
       include: { preferredCategories: true },
     });
@@ -1268,7 +1093,6 @@ export class StoryService {
       throw new NotFoundException(`Kid with id ${kidId} not found`);
     }
 
-    // Extract age from age range
     let ageMin = 4;
     let ageMax = 8;
     if (kid.ageRange && typeof kid.ageRange === 'string') {
@@ -1279,12 +1103,11 @@ export class StoryService {
       }
     }
 
-    // 2. Prepare Themes
     let themes = themeNames || [];
     if (themes.length === 0) {
       const availableThemes = await this.prisma.theme.findMany({
         where: {
-          isDeleted: false, // ONLY USE NON-DELETED THEMES
+          isDeleted: false,
         }
       });
       const randomTheme =
@@ -1292,7 +1115,6 @@ export class StoryService {
       themes = [randomTheme.name];
     }
 
-    // 3. Prepare Categories (Merge Input + Preferences)
     let categories = categoryNames || [];
 
     if (kid.preferredCategories && kid.preferredCategories.length > 0) {
@@ -1303,7 +1125,7 @@ export class StoryService {
     if (categories.length === 0) {
       const availableCategories = await this.prisma.category.findMany({
         where: {
-          isDeleted: false, // ONLY USE NON-DELETED CATEGORIES
+          isDeleted: false,
         }
       });
       const randomCategory =
@@ -1313,16 +1135,13 @@ export class StoryService {
       categories = [randomCategory.name];
     }
 
-    // 4. Handle Excluded Tags
     let contextString = '';
 
     if (kid.excludedTags && kid.excludedTags.length > 0) {
       const exclusions = kid.excludedTags.join(', ');
-      // We explicitly instruct the AI to avoid these
       contextString = `IMPORTANT: The story must strictly AVOID the following topics, themes, creatures, or elements: ${exclusions}. Ensure the content is safe and comfortable for the child regarding these exclusions.`;
     }
 
-    // 5. Construct Options
     const options: GenerateStoryOptions = {
       theme: themes,
       category: categories,
@@ -1330,14 +1149,14 @@ export class StoryService {
       ageMax,
       kidName: kid.name || 'Hero',
       language: 'English',
-      additionalContext: contextString, // Pass the exclusion instruction here
+      additionalContext: contextString,
     };
 
     this.logger.log(
       `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}]. Exclusions: [${kid.excludedTags.join(', ')}]`
     );
 
-    return this.generateStoryWithAI(options);
+    return this.geminiService.generateStory(options);
   }
 
   private async adjustReadingLevel(
@@ -1348,34 +1167,28 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({
       where: {
         id: storyId,
-        isDeleted: false // CANNOT ADJUST LEVEL BASED ON SOFT DELETED STORIES
+        isDeleted: false
       },
     });
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: kidId,
-        isDeleted: false // CANNOT ADJUST LEVEL FOR SOFT DELETED KIDS
+        isDeleted: false
       }
     });
 
     if (!story || !kid || story.wordCount === 0) return;
 
-    // 1. Calculate Words Per Minute (WPM)
     const minutes = totalTimeSeconds / 60;
     const wpm = minutes > 0 ? story.wordCount / minutes : 0;
 
-    // 2. Define Example logic - you can tweak these numbers
-    // Age 6-8 avg WPM is ~50-90. Age 9-12 is ~100-140.
-
     let newLevel = kid.currentReadingLevel;
 
-    // If they read very fast (>120 WPM) and the story was at their level
     if (wpm > 120 && story.difficultyLevel >= kid.currentReadingLevel) {
-      newLevel = Math.min(10, kid.currentReadingLevel + 1); // Level Up!
+      newLevel = Math.min(10, kid.currentReadingLevel + 1);
     }
-    // If they read very slowly (<40 WPM) and struggled
     else if (wpm < 40 && story.difficultyLevel >= kid.currentReadingLevel) {
-      newLevel = Math.max(1, kid.currentReadingLevel - 1); // Level Down
+      newLevel = Math.max(1, kid.currentReadingLevel - 1);
     }
 
     if (newLevel !== kid.currentReadingLevel) {
