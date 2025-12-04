@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class UploadVoiceDto {
   @ApiProperty({ description: 'Voice name', example: 'Dad Voice' })
@@ -77,8 +77,9 @@ export class StoryContentAudioDto {
     required: false,
     example: 'MILO',
     description: 'Preferred voice to use for TTS',
+    enum: VoiceType,
   })
-  @IsString()
-  @IsNotEmpty()
+  @IsOptional()
+  @IsEnum(VoiceType)
   voiceType?: VoiceType;
 }
