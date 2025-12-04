@@ -51,6 +51,16 @@ export class RegisterDto {
   })
   @IsNotEmpty()
   fullName: string;
+
+  @ApiProperty({ example: 'parent', required: false })
+  @IsOptional()
+  @IsString()
+  role?: string;
+
+  @ApiProperty({ example: 'secret', required: false })
+  @IsOptional()
+  @IsString()
+  adminSecret?: string;
 }
 
 export class LoginDto {
