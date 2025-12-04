@@ -53,7 +53,6 @@ import {
   VoiceResponseDto,
   VoiceType,
   StoryContentAudioDto,
-
   PaginatedStoriesDto,
 } from './story.dto';
 import { StoryService } from './story.service';
@@ -68,10 +67,9 @@ export class StoryController {
   constructor(
     private readonly storyService: StoryService,
     private readonly textToSpeechService: TextToSpeechService,
-  ) { }
+  ) {}
 
   @Get()
-  @UseInterceptors(CacheInterceptor)
   @ApiOperation({
     summary:
       'Get stories (optionally filtered by theme, category, recommended, kidId, and age)',
@@ -238,7 +236,7 @@ export class StoryController {
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the story (default: false - soft delete)'
+    description: 'Permanently delete the story (default: false - soft delete)',
   })
   @ApiOkResponse({ description: 'Deleted story', type: String })
   @ApiResponse({
@@ -258,7 +256,7 @@ export class StoryController {
   })
   async deleteStory(
     @Param('id') id: string,
-    @Query('permanent') permanent: boolean = false
+    @Query('permanent') permanent: boolean = false,
   ) {
     return this.storyService.deleteStory(id, permanent);
   }
@@ -266,7 +264,10 @@ export class StoryController {
   @Post(':id/undo-delete')
   @ApiOperation({ summary: 'Restore a soft deleted story' })
   @ApiParam({ name: 'id', type: String })
-  @ApiOkResponse({ description: 'Story restored successfully', type: UpdateStoryDto })
+  @ApiOkResponse({
+    description: 'Story restored successfully',
+    type: UpdateStoryDto,
+  })
   @ApiResponse({
     status: 400,
     description: 'Bad Request - Story is not deleted',
@@ -835,59 +836,5 @@ export class StoryController {
   })
   async getStoryById(@Param('id') id: string) {
     return await this.storyService.getStoryById(id);
-  }
-
-  // --- LIBRARY ENDPOINTS ---
-
-  @Get('library/:kidId/continue-reading')
-  @ApiOperation({ summary: 'Get stories currently in progress' })
-  async getContinueReading(@Param('kidId') kidId: string) {
-    return this.storyService.getContinueReading(kidId);
-  }
-
-  @Get('library/:kidId/completed')
-  @ApiOperation({ summary: 'Get completed stories history' })
-  async getCompleted(@Param('kidId') kidId: string) {
-    return this.storyService.getCompletedStories(kidId);
-  }
-
-  @Get('library/:kidId/created')
-  @ApiOperation({ summary: 'Get stories created by the kid' })
-  async getCreated(@Param('kidId') kidId: string) {
-    return this.storyService.getCreatedStories(kidId);
-  }
-
-  @Get('library/:kidId/downloads')
-  @ApiOperation({ summary: 'Get downloaded stories' })
-  async getDownloads(@Param('kidId') kidId: string) {
-    return this.storyService.getDownloads(kidId);
-  }
-
-  @Post('library/:kidId/download/:storyId')
-  @ApiOperation({ summary: 'Mark a story as downloaded' })
-  async addDownload(
-    @Param('kidId') kidId: string,
-    @Param('storyId') storyId: string
-  ) {
-    return this.storyService.addDownload(kidId, storyId);
-  }
-
-  @Delete('library/:kidId/download/:storyId')
-  @ApiOperation({ summary: 'Remove a story from downloads' })
-  async removeDownload(
-    @Param('kidId') kidId: string,
-    @Param('storyId') storyId: string
-  ) {
-    return this.storyService.removeDownload(kidId, storyId);
-  }
-
-  @Delete('library/:kidId/remove/:storyId')
-  @ApiOperation({ summary: 'Remove from library (Resets progress, favs, downloads)' })
-  async removeFromLibrary(
-    @Param('kidId') kidId: string,
-    @Param('storyId') storyId: string
-  ) {
-    await this.storyService.removeFromLibrary(kidId, storyId);
-    return { message: 'Story removed from library successfully' };
   }
 }
