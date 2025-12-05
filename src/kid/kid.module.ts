@@ -6,11 +6,12 @@ import { AuthModule } from '../auth/auth.module';
 import { VoiceModule } from '../voice/voice.module';
 import { AnalyticsModule } from '@/analytics/analytics.module';
 
+
 @Module({
     imports: [
         AuthModule, 
         VoiceModule,
-        AnalyticsModule
+        AnalyticsModule,
     ],
     controllers: [KidController],
     providers: [KidService, PrismaService],

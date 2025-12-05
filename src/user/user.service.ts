@@ -459,25 +459,6 @@ export class UserService {
     });
   }
 
-  // ----------------------------------------------------------
-  // BIOMETRICS + PIN
-  // ----------------------------------------------------------
-
-  async setBiometrics(userId: string, enable: boolean) {
-    const updated = await prisma.user.update({
-      where: {
-        id: userId,
-        isDeleted: false,
-      },
-      data: { enableBiometrics: enable },
-    });
-
-    return {
-      success: true,
-      enableBiometrics: !!updated.enableBiometrics,
-    };
-  }
-
   async setPin(userId: string, pin: string) {
     if (!/^\d{6}$/.test(pin))
       throw new BadRequestException('PIN must be exactly 6 digits');

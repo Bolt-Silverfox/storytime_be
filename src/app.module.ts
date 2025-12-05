@@ -29,6 +29,7 @@ import { VoiceModule } from './voice/voice.module';
 import { PaymentModule } from './payment/payment.module';
 import { AchievementProgressModule } from './achievement-progress/achievement-progress.module';
 import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module';
+import { BiometricsModule } from './biometrics/biometrics.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module
     HelpSupportModule,
     AchievementProgressModule,
     ParentFavoriteModule,
+    BiometricsModule,
   ],
 })
 export class AppModule { }
