@@ -34,10 +34,10 @@ model User {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   pinHash         String?
+  deviceAuths DeviceAuth[]
 
-  enableBiometrics Boolean? @default(false)
 
-  // SOFT DELETE FIELDS
+    // SOFT DELETE FIELDS
   isDeleted       Boolean     @default(false)
   deletedAt       DateTime?
 
@@ -69,6 +69,24 @@ model User {
 
   @@map("users")
   @@index([isDeleted])
+}
+
+
+//--------------------------
+//Biometric enabled
+//-------------------------
+
+model DeviceAuth {
+  id           String   @id @default(uuid())
+  userId       String
+  deviceId     String
+  biometricsOn Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
 }
 
 // -------------------------
@@ -116,6 +134,8 @@ model Kid {
   buddySelectedAt   DateTime?
   buddyInteractions BuddyInteraction[]
   storyBuddy        StoryBuddy?        @relation(fields: [storyBuddyId], references: [id])
+ 
+
 
   // New relations
   downloadedStories DownloadedStory[]
@@ -234,6 +254,8 @@ model Story {
   themes           Theme[]           @relation("StoryThemes")
   storyAudioCaches StoryAudioCache[]
   questions        StoryQuestion[]
+  
+
 
   // Add this field to track who created it (for AI generation)
   creatorKidId String?
@@ -300,6 +322,7 @@ model Favorite {
 
   @@map("favorites")
   @@index([isDeleted])
+
 }
 
 model ParentFavorite {
@@ -315,6 +338,7 @@ model ParentFavorite {
 
   @@map("parent_favorites")
   @@unique([userId, storyId])
+
 }
 
 model StoryProgress {
@@ -599,6 +623,8 @@ model Category {
   @@index([isDeleted])
 }
 
+
+
 model Theme {
   id          String  @id @default(uuid())
   name        String  @unique
@@ -833,6 +859,7 @@ model UserBadge {
   @@index([badgeId])
   @@map("user_badges")
   @@index([isDeleted])
+
 }
 model DownloadedStory {
   id           String   @id @default(uuid())
@@ -873,4 +900,5 @@ model ParentRecommendation {
   @@index([isDeleted])
   @@index([kidId])
   @@index([userId, kidId])
+
 }
