@@ -59,6 +59,8 @@ import {
   ParentRecommendationDto,
   RecommendationResponseDto,
   RecommendationsStatsDto,
+  StoryDto,
+  StoryWithProgressDto,
 } from './story.dto';
 import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
@@ -848,7 +850,7 @@ export class StoryController {
   @Get('library/:kidId/continue-reading')
   @ApiOperation({ summary: 'Get stories currently in progress' })
   @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({ status: 200, type: [CreateStoryDto] })
+  @ApiResponse({ status: 200, type: [StoryWithProgressDto] })
   async getContinueReading(@Param('kidId') kidId: string) {
     return this.storyService.getContinueReading(kidId);
   }
@@ -856,7 +858,7 @@ export class StoryController {
   @Get('library/:kidId/completed')
   @ApiOperation({ summary: 'Get completed stories history' })
   @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({ status: 200, type: [CreateStoryDto] })
+  @ApiResponse({ status: 200, type: [StoryDto] })
   async getCompleted(@Param('kidId') kidId: string) {
     return this.storyService.getCompletedStories(kidId);
   }
@@ -864,7 +866,7 @@ export class StoryController {
   @Get('library/:kidId/created')
   @ApiOperation({ summary: 'Get stories created by the kid' })
   @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({ status: 200, type: [CreateStoryDto] })
+  @ApiResponse({ status: 200, type: [StoryDto] })
   async getCreated(@Param('kidId') kidId: string) {
     return this.storyService.getCreatedStories(kidId);
   }
@@ -872,7 +874,7 @@ export class StoryController {
   @Get('library/:kidId/downloads')
   @ApiOperation({ summary: 'Get downloaded stories' })
   @ApiParam({ name: 'kidId', type: String })
-  @ApiResponse({ status: 200, type: [DownloadedStoryDto] })
+  @ApiResponse({ status: 200, type: [StoryDto] })
   async getDownloads(@Param('kidId') kidId: string) {
     return this.storyService.getDownloads(kidId);
   }
