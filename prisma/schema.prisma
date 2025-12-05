@@ -64,6 +64,9 @@ model User {
   paymentMethods      PaymentMethod[]
   paymentTransactions PaymentTransaction[]
 
+  // ADDED: Parent recommendations
+  parentRecommendations ParentRecommendation[]
+
   @@map("users")
   @@index([isDeleted])
 }
@@ -124,6 +127,9 @@ model Kid {
   storyPaths              StoryPath[]
   favorites               Favorite[]
   progresses              StoryProgress[]
+
+  // ADDED: Parent recommendations
+  parentRecommendations ParentRecommendation[]
 
   @@map("kids")
   @@index([isDeleted])
@@ -235,6 +241,9 @@ model Story {
 
   // New Relation
   downloads DownloadedStory[]
+
+  // ADDED: Parent recommendations
+  parentRecommendations ParentRecommendation[]
 
   @@map("stories")
   @@index([isDeleted])
@@ -835,4 +844,33 @@ model DownloadedStory {
 
   @@unique([kidId, storyId]) // Prevent duplicate downloads
   @@map("downloaded_stories")
+}
+
+// -------------------------
+// PARENT RECOMMENDATIONS
+// -------------------------
+model ParentRecommendation {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kidId     String
+  kid       Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  
+  // Optional message from parent
+  message   String?
+  
+  // Timestamps
+  recommendedAt DateTime @default(now())
+  
+  // SOFT DELETE FIELDS
+  isDeleted     Boolean  @default(false)
+  deletedAt     DateTime?
+
+  @@unique([userId, kidId, storyId])
+  @@map("parent_recommendations")
+  @@index([isDeleted])
+  @@index([kidId])
+  @@index([userId, kidId])
 }

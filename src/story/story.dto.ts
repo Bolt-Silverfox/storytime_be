@@ -507,6 +507,58 @@ export class LibraryStatsDto {
   completedStoriesCount: number;
 }
 
+// --- Parent Recommendation DTOs ---
+export class ParentRecommendationDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  kidId: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  storyId: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  message?: string;
+}
+
+export class RecommendationResponseDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  userId: string;
+
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  storyId: string;
+
+  @ApiProperty({ required: false })
+  message?: string;
+
+  @ApiProperty()
+  recommendedAt: Date;
+
+  @ApiProperty({ required: false })
+  story?: CreateStoryDto;
+
+  @ApiProperty({ required: false })
+  user?: any;
+
+  @ApiProperty({ required: false })
+  kid?: any;
+}
+
+export class RecommendationsStatsDto {
+  @ApiProperty()
+  totalCount: number;
+}
+
 export class QuestionAnswerDto {
   @ApiProperty()
   id: string;
