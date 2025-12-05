@@ -1106,79 +1106,7 @@ export class StoryService {
   }
 
   async generateStoryWithAI(options: GenerateStoryOptions) {
-    try {
-      // Generate the story using Gemini
-      const generatedStory = await this.geminiService.generateStory(options);
-
-      // Generate audio for the story
-      let audioUrl = '';
-      if (generatedStory.content) {
-        audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
-          'ai-story',
-          generatedStory.content,
-        );
-      }
-
-      // Generate or get a cover image
-      const coverImageUrl = await this.geminiService.generateStoryImage(
-        generatedStory.title,
-        generatedStory.description,
-      );
-
-      // Get theme and category IDs from names
-      const themes = await this.prisma.theme.findMany({
-        where: {
-          name: { in: generatedStory.theme },
-          isDeleted: false // ONLY USE NON-DELETED THEMES
-        },
-      });
-      const categories = await this.prisma.category.findMany({
-        where: {
-          name: { in: generatedStory.category },
-          isDeleted: false // ONLY USE NON-DELETED CATEGORIES
-        },
-      });
-
-      // Save the story to the database
-      const story = await this.prisma.story.create({
-        data: {
-          title: generatedStory.title,
-          description: generatedStory.description,
-          textContent: generatedStory.content,
-          language: generatedStory.language,
-          coverImageUrl,
-          audioUrl,
-          isInteractive: true,
-          ageMin: generatedStory.ageMin,
-          ageMax: generatedStory.ageMax,
-          themes: {
-            connect: themes.map((t: Theme) => ({ id: t.id })),
-          },
-          categories: {
-            connect: categories.map((c: Category) => ({ id: c.id })),
-          },
-          questions: {
-            create: generatedStory.questions.map((q) => ({
-              question: q.question,
-              options: q.options,
-              correctOption: q.answer,
-            })),
-          },
-          difficultyLevel: generatedStory.difficultyLevel || 1,
-          wordCount: generatedStory.estimatedWordCount || 0,
-          aiGenerated: true,
-          creatorKidId: options.creatorKidId,
-        },
-        include: {
-          themes: true,
-          categories: true,
-        },
-      });
-      return story;
-    } catch (error) {
-      this.logger.error('Failed to generate story with AI:', error);
-      throw error;
-    }
+    return this.geminiService.generateStory(options);
   }
 
   async generateStoryForKid(
@@ -1192,7 +1120,7 @@ export class StoryService {
         id: kidId,
         isDeleted: false
       },
-      include: { preferredCategories: true },
+      include: { preferredCategories: true, preferredVoice: true },
     });
 
     if (!kid) {
@@ -1248,6 +1176,21 @@ export class StoryService {
       contextString = `IMPORTANT: The story must strictly AVOID the following topics, themes, creatures, or elements: ${exclusions}. Ensure the content is safe and comfortable for the child regarding these exclusions.`;
     }
 
+    let voiceType: VoiceType | undefined;
+    if (kid.preferredVoice) {
+      // Check if the voice name matches a VoiceType key
+      const voiceName = kid.preferredVoice.name.toUpperCase();
+      if (voiceName in VoiceType) {
+        voiceType = VoiceType[voiceName as keyof typeof VoiceType];
+      } else if (kid.preferredVoice.elevenLabsVoiceId) {
+        // Check if elevenLabsVoiceId matches a VoiceType key (e.g. "MILO")
+        const elId = kid.preferredVoice.elevenLabsVoiceId.toUpperCase();
+        if (elId in VoiceType) {
+          voiceType = VoiceType[elId as keyof typeof VoiceType];
+        }
+      }
+    }
+
     const options: GenerateStoryOptions = {
       theme: themes,
       category: categories,
@@ -1257,6 +1200,7 @@ export class StoryService {
       language: 'English',
       additionalContext: contextString,
       creatorKidId: kidId,
+      voiceType,
     };
 
     this.logger.log(

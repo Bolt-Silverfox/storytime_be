@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { VoiceType } from '../voice/voice.dto';
 
 export interface GenerateStoryOptions {
   theme: string[];
@@ -14,6 +15,7 @@ export interface GenerateStoryOptions {
   kidName?: string;
   additionalContext?: string;
   creatorKidId?: string;
+  voiceType?: VoiceType;
 }
 
 export interface GeneratedStory {
