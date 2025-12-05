@@ -21,6 +21,9 @@ import {
   ThemeDto,
   VoiceType,
   PaginatedStoriesDto,
+  ParentRecommendationDto,
+  RecommendationResponseDto,
+  RecommendationsStatsDto,
 } from './story.dto';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
@@ -40,6 +43,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { GeminiService, GenerateStoryOptions } from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -147,6 +151,35 @@ export class StoryService {
     if (filter.age && !targetLevel && !where.ageMin) {
       where.ageMin = { lte: filter.age };
       where.ageMax = { gte: filter.age };
+    }
+
+    // 5. If kidId is provided, include parent-recommended stories as "recommended"
+    let recommendedStoryIds: string[] = [];
+    if (filter.kidId && filter.recommended !== false) {
+      // Get all recommendations for this kid
+      const recommendations = await this.prisma.parentRecommendation.findMany({
+        where: {
+          kidId: filter.kidId,
+          isDeleted: false,
+        },
+        select: { storyId: true },
+      });
+      recommendedStoryIds = recommendations.map((rec) => rec.storyId);
+    }
+
+    // If we have recommended stories for this kid, ensure they appear
+    if (recommendedStoryIds.length > 0 && filter.recommended === undefined) {
+      // Add OR condition to include recommended stories
+      where.OR = [
+        { ...where }, // Original conditions
+        { id: { in: recommendedStoryIds } }, // Plus recommended stories
+      ];
+    }
+
+    // If specifically asking for recommended stories (filter.recommended === true)
+    if (filter.recommended === true && filter.kidId) {
+      // Only show recommended stories for this kid
+      where.id = { in: recommendedStoryIds };
     }
 
     const totalCount = await this.prisma.story.count({ where });
@@ -1398,6 +1431,7 @@ export class StoryService {
       this.logger.log(`Adjusted Kid ${kidId} reading level to ${newLevel}`);
     }
   }
+
   //------ Library service methods--------------------
 
   // 1. GET CONTINUE READING (In Progress)
@@ -1500,5 +1534,182 @@ export class StoryService {
         where: { kidId, storyId },
       }),
     ]);
+  }
+
+  // --- Parent Recommendations ---
+
+  async recommendStoryToKid(
+    userId: string,
+    dto: ParentRecommendationDto,
+  ): Promise<RecommendationResponseDto> {
+    // Verify parent owns the kid
+    const kid = await this.prisma.kid.findUnique({
+      where: {
+        id: dto.kidId,
+        parentId: userId,
+        isDeleted: false,
+      },
+    });
+
+    if (!kid) {
+      throw new NotFoundException('Kid not found or access denied');
+    }
+
+    // Verify story exists
+    const story = await this.prisma.story.findUnique({
+      where: {
+        id: dto.storyId,
+        isDeleted: false,
+      },
+    });
+
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+
+    // Check if recommendation already exists
+    const existing = await this.prisma.parentRecommendation.findUnique({
+      where: {
+        userId_kidId_storyId: {
+          userId,
+          kidId: dto.kidId,
+          storyId: dto.storyId,
+        },
+      },
+    });
+
+    if (existing) {
+      if (existing.isDeleted) {
+        // Restore soft-deleted recommendation
+        const restored = await this.prisma.parentRecommendation.update({
+          where: { id: existing.id },
+          data: {
+            isDeleted: false,
+            deletedAt: null,
+            message: dto.message,
+          },
+          include: {
+            story: true,
+            user: { select: { id: true, name: true, email: true } },
+            kid: { select: { id: true, name: true } },
+          },
+        });
+        return this.toRecommendationResponse(restored);
+      }
+      throw new BadRequestException('You have already recommended this story');
+    }
+
+    // Create new recommendation
+    const recommendation = await this.prisma.parentRecommendation.create({
+      data: {
+        userId,
+        kidId: dto.kidId,
+        storyId: dto.storyId,
+        message: dto.message,
+      },
+      include: {
+        story: true,
+        user: { select: { id: true, name: true, email: true } },
+        kid: { select: { id: true, name: true } },
+      },
+    });
+
+    return this.toRecommendationResponse(recommendation);
+  }
+
+  async getKidRecommendations(kidId: string, userId: string): Promise<RecommendationResponseDto[]> {
+    // Verify parent owns the kid
+    const kid = await this.prisma.kid.findUnique({
+      where: {
+        id: kidId,
+        parentId: userId,
+        isDeleted: false,
+      },
+    });
+
+    if (!kid) {
+      throw new NotFoundException('Kid not found or access denied');
+    }
+
+    const recommendations = await this.prisma.parentRecommendation.findMany({
+      where: {
+        kidId,
+        isDeleted: false,
+      },
+      include: {
+        story: true,
+        user: { select: { id: true, name: true, email: true } },
+        kid: { select: { id: true, name: true } },
+      },
+      orderBy: { recommendedAt: 'desc' },
+    });
+
+    return recommendations.map((rec) => this.toRecommendationResponse(rec));
+  }
+
+  async deleteRecommendation(recommendationId: string, userId: string, permanent: boolean = false) {
+    const recommendation = await this.prisma.parentRecommendation.findUnique({
+      where: { id: recommendationId },
+    });
+
+    if (!recommendation) {
+      throw new NotFoundException('Recommendation not found');
+    }
+
+    // Verify user owns the recommendation
+    if (recommendation.userId !== userId) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    if (permanent) {
+      return this.prisma.parentRecommendation.delete({
+        where: { id: recommendationId },
+      });
+    } else {
+      return this.prisma.parentRecommendation.update({
+        where: { id: recommendationId },
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
+        },
+      });
+    }
+  }
+
+  async getRecommendationStats(kidId: string, userId: string): Promise<RecommendationsStatsDto> {
+    // Verify parent owns the kid
+    const kid = await this.prisma.kid.findUnique({
+      where: {
+        id: kidId,
+        parentId: userId,
+        isDeleted: false,
+      },
+    });
+
+    if (!kid) {
+      throw new NotFoundException('Kid not found or access denied');
+    }
+
+    const totalCount = await this.prisma.parentRecommendation.count({
+      where: { kidId, isDeleted: false },
+    });
+
+    return {
+      totalCount,
+    };
+  }
+
+  private toRecommendationResponse(recommendation: any): RecommendationResponseDto {
+    return {
+      id: recommendation.id,
+      userId: recommendation.userId,
+      kidId: recommendation.kidId,
+      storyId: recommendation.storyId,
+      message: recommendation.message ?? undefined,
+      recommendedAt: recommendation.recommendedAt,
+      story: recommendation.story,
+      user: recommendation.user,
+      kid: recommendation.kid,
+    };
   }
 }
