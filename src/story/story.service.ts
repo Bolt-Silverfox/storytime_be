@@ -1452,6 +1452,8 @@ export class StoryService {
     return progressRecords.map((record) => ({
       ...record.story,
       progress: record.progress,
+      totalTimeSpent: record.totalTimeSpent,
+      lastAccessed: record.lastAccessed,
     }));
   }
 
