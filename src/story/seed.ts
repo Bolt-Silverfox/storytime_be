@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
-import { VOICEID } from './story.dto';
+import { VOICE_CONFIG } from '../voice/voice.dto';
 import { categories, defaultAgeGroups, systemAvatars, themes } from '../../prisma/data';
 
 const prisma = new PrismaClient();
@@ -55,7 +55,7 @@ async function main() {
     const storyCategories = Array.isArray(story.category)
       ? story.category
       : [story.category];
-    
+
     // Filter out empty strings if any
     const cleanCategories = storyCategories.filter((c: string) => c && c.length > 0);
 
@@ -77,7 +77,7 @@ async function main() {
         categories: {
           connectOrCreate: cleanCategories.map((name: string) => ({
             where: { name: name },
-            create: { 
+            create: {
               name: name,
               description: 'Auto-generated category'
             },
@@ -86,7 +86,7 @@ async function main() {
         themes: {
           connectOrCreate: cleanThemes.map((name: string) => ({
             where: { name: name },
-            create: { 
+            create: {
               name: name,
               description: 'Auto-generated theme'
             },
@@ -107,16 +107,16 @@ async function main() {
 
   // 7. Seed Voices
   console.log('Seeding voices...');
-  for (const [key, voice] of Object.entries(VOICEID)) {
+  for (const [key, config] of Object.entries(VOICE_CONFIG)) {
     const existingVoice = await prisma.voice.findFirst({
-      where: { elevenLabsVoiceId: voice },
+      where: { name: key },
     });
     if (!existingVoice) {
       await prisma.voice.create({
         data: {
-          elevenLabsVoiceId: voice,
+          elevenLabsVoiceId: config.model,
           name: key,
-          type: 'elevenlabs',
+          type: 'deepgram',
         },
       });
     }

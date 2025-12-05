@@ -46,15 +46,6 @@ export class VoiceResponseDto {
   elevenLabsVoiceId?: string;
 }
 
-export const VOICEID = {
-  MILO: 'pNInz6obpgDQGcFmaJgB',
-  BELLA: 'EXAVITQu4vr4xnSDxMaL',
-  COSMO: 'TxGEqnHWrfWFTfGW9XjX',
-  NIMBUS: '21m00Tcm4TlvDq8ikWAM',
-  GRANDPA_JO: 'pqHfZKP75CvOlQylNhV4',
-  CHIP: 'AZnzlk1XvdvUeBnXmlld',
-};
-
 export enum VoiceType {
   MILO = 'MILO',
   BELLA = 'BELLA',
@@ -63,6 +54,33 @@ export enum VoiceType {
   GRANDPA_JO = 'GRANDPA_JO',
   CHIP = 'CHIP',
 }
+
+export const VOICE_CONFIG = {
+  [VoiceType.MILO]: {
+    model: 'aura-orion-en',
+    gender: 'Male',
+  },
+  [VoiceType.BELLA]: {
+    model: 'aura-asteria-en',
+    gender: 'Female',
+  },
+  [VoiceType.COSMO]: {
+    model: 'aura-arcas-en',
+    gender: 'Male',
+  },
+  [VoiceType.NIMBUS]: {
+    model: 'aura-luna-en',
+    gender: 'Female',
+  },
+  [VoiceType.GRANDPA_JO]: {
+    model: 'aura-angus-en',
+    gender: 'Male',
+  },
+  [VoiceType.CHIP]: {
+    model: 'aura-perseus-en',
+    gender: 'Male',
+  },
+};
 
 export class StoryContentAudioDto {
   @ApiProperty({

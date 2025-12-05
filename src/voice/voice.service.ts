@@ -6,7 +6,7 @@ import {
   SetPreferredVoiceDto,
   UploadVoiceDto,
   VoiceResponseDto,
-  VOICEID,
+  VOICE_CONFIG,
 } from './voice.dto';
 
 @Injectable()
@@ -101,8 +101,6 @@ export class VoiceService {
     };
   }
 
- // ... inside VoiceService class ...
-
   async findOrCreateElevenLabsVoice(
     elevenLabsId: string,
     userId: string,
@@ -155,8 +153,8 @@ export class VoiceService {
 
     // 3. Fallback: If API failed, check if it's a known voice just to fix the name
     if (voiceName === 'Imported ElevenLabs Voice') {
-      const knownKey = Object.keys(VOICEID).find(
-        (key) => VOICEID[key as keyof typeof VOICEID] === elevenLabsId,
+      const knownKey = Object.keys(VOICE_CONFIG).find(
+        (key) => VOICE_CONFIG[key as keyof typeof VOICE_CONFIG].model === elevenLabsId,
       );
       if (knownKey) {
         voiceName =

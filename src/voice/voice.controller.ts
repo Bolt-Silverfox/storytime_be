@@ -26,7 +26,7 @@ import { randomUUID } from 'crypto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { StoryService } from '../story/story.service';
 import { UploadService } from '../upload/upload.service';
-import { TextToSpeechService } from './text-to-speech.service';
+import { TextToSpeechService } from '../story/text-to-speech.service';
 import {
   CreateElevenLabsVoiceDto,
   SetPreferredVoiceDto,
@@ -45,7 +45,7 @@ export class VoiceController {
     private readonly storyService: StoryService,
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
-  ) {}
+  ) { }
 
   @Post('upload')
   @UseGuards(AuthSessionGuard)
@@ -158,9 +158,8 @@ export class VoiceController {
     @Param('id') id: string,
     @Query('voiceType') voiceType?: VoiceType,
   ) {
-    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
+    const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
-      // await this.storyService.getStoryAudioUrl, // <--- assumes story content retrieval
       voiceType ?? VoiceType.MILO,
     );
 

@@ -33,14 +33,12 @@ import {
   AssignDailyChallengeDto,
   CategoryDto,
   CompleteDailyChallengeDto,
-  CreateElevenLabsVoiceDto,
   CreateStoryDto,
   DailyChallengeAssignmentDto,
   DailyChallengeDto,
   ErrorResponseDto,
   FavoriteDto,
   GenerateStoryDto,
-  SetPreferredVoiceDto,
   StartStoryPathDto,
   StoryBranchDto,
   StoryImageDto,
@@ -49,16 +47,20 @@ import {
   ThemeDto,
   UpdateStoryDto,
   UpdateStoryPathDto,
-  UploadVoiceDto,
-  VoiceResponseDto,
-  VoiceType,
-  StoryContentAudioDto,
   PaginatedStoriesDto,
   DownloadedStoryDto,
   LibraryStatsDto,
   StoryDto,
   StoryWithProgressDto,
 } from './story.dto';
+import {
+  CreateElevenLabsVoiceDto,
+  SetPreferredVoiceDto,
+  UploadVoiceDto,
+  VoiceResponseDto,
+  VoiceType,
+  StoryContentAudioDto,
+} from '../voice/voice.dto';
 import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
 
@@ -755,11 +757,7 @@ export class StoryController {
     description: 'Bad Request',
     type: ErrorResponseDto,
   })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-    type: ErrorResponseDto,
-  })
+
   async generateStory(@Body() body: GenerateStoryDto) {
     // If kidId is provided, use the specialized method
     if (body.kidId) {
@@ -767,6 +765,7 @@ export class StoryController {
         body.kidId,
         body.themes,
         body.categories,
+        body.kidName,
       );
     }
 

@@ -27,6 +27,7 @@
     "deploy:dev": "/home/ubuntu/.local/share/pnpm/pnpm make-migration && /home/ubuntu/.local/share/pnpm/pnpm generate && /home/ubuntu/.local/share/pnpm/pnpm start:pm2"
   },
   "dependencies": {
+    "@deepgram/sdk": "^4.11.2",
     "@google/generative-ai": "^0.24.1",
     "@hng-sdk/email": "^0.0.0",
     "@keyv/redis": "^5.1.4",
