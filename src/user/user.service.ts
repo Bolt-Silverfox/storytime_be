@@ -495,6 +495,21 @@ export class UserService {
     return { success: true, message: 'PIN set successfully' };
   }
 
+  async verifyPin(userId: string, pin: string) {
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+        isDeleted: false,
+      },
+    });
+    if (!user?.pinHash) throw new BadRequestException('No PIN is set');
+
+    const match = await verifyPinHash(pin, user.pinHash);
+    if (!match) throw new BadRequestException('Incorrect PIN');
+
+    return { success: true, message: 'PIN verified successfully' };
+  }
+
   // ----------------------------------------------------------
   // PIN RESET VIA OTP (EMAIL)
   // ----------------------------------------------------------

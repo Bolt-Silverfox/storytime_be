@@ -147,6 +147,36 @@ export class UserController {
     return this.userService.setPin(req.authUserData.userId, body.pin);
   }
 
+  @Post('me/pin/verify')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Verify PIN to access profile' })
+  @ApiBody({ type: SetPinDto })
+  @ApiResponse({
+    status: 200,
+    description: 'PIN is correct',
+    schema: {
+      example: {
+        success: true,
+        message: 'PIN verified successfully',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Incorrect PIN or no PIN set',
+    schema: {
+      example: {
+        statusCode: 400,
+        message: 'Incorrect PIN',
+        error: 'Bad Request',
+      },
+    },
+  })
+  async verifyPin(@Req() req: any, @Body() body: SetPinDto) {
+    return this.userService.verifyPin(req.authUserData.userId, body.pin);
+  }
+
   @Post('me/pin/request-reset')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
