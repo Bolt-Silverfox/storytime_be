@@ -117,6 +117,8 @@ model Kid {
   storyBuddy        StoryBuddy?        @relation(fields: [storyBuddyId], references: [id])
 
   // New relations
+  downloadedStories DownloadedStory[]
+  createdStories    Story[]           @relation("CreatedStories") // Stories the kid generated
   dailyChallenges         DailyChallengeAssignment[]
   notificationPreferences NotificationPreference[]
   rewardRedemptions       RewardRedemption[]
@@ -232,6 +234,14 @@ model Story {
   ageGroupId String?
   ageGroup   AgeGroup? @relation(fields: [ageGroupId], references: [id])
 
+  // Add this field to track who created it (for AI generation)
+  creatorKidId String?
+  creatorKid   Kid?    @relation("CreatedStories", fields: [creatorKidId], references: [id])
+
+  // New Relation
+  downloads DownloadedStory[]
+
+  @@map("stories")
   @@index([isDeleted])
   @@map("stories")
 }
@@ -824,3 +834,16 @@ model UserBadge {
   @@index([isDeleted])
   @@map("user_badges")
 }
+
+model DownloadedStory {
+  id           String   @id @default(uuid())
+  kidId        String
+  kid          Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  storyId      String
+  story        Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  downloadedAt DateTime @default(now())
+
+  @@unique([kidId, storyId])
+  @@map("downloaded_stories")
+}
+

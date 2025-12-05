@@ -482,35 +482,9 @@ export class GenerateStoryDto {
   additionalContext?: string;
 }
 
-export const VOICEID = {
-  MILO: 'pNInz6obpgDQGcFmaJgB',
-  BELLA: 'EXAVITQu4vr4xnSDxMaL',
-  COSMO: 'TxGEqnHWrfWFTfGW9XjX',
-  NIMBUS: '21m00Tcm4TlvDq8ikWAM',
-  GRANDPA_JO: 'pqHfZKP75CvOlQylNhV4',
-  CHIP: 'AZnzlk1XvdvUeBnXmlld',
-};
+import { VOICEID, VoiceType, StoryContentAudioDto } from '../voice/voice.dto';
 
-export enum VoiceType {
-  MILO = 'MILO',
-  BELLA = 'BELLA',
-  COSMO = 'COSMO',
-  NIMBUS = 'NIMBUS',
-  GRANDPA_JO = 'GRANDPA_JO',
-  CHIP = 'CHIP',
-}
-
-export class StoryContentAudioDto {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  content: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsEnum(VoiceType)
-  voiceType?: VoiceType;
-}
+export { VOICEID, VoiceType, StoryContentAudioDto };
 
 export class QuestionAnswerDto {
   @ApiProperty()
@@ -562,4 +536,26 @@ export class PaginatedStoriesDto {
     type: PaginationMetaDto,
   })
   pagination: PaginationMetaDto;
+}
+
+export class DownloadedStoryDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  storyId: string;
+
+  @ApiProperty()
+  downloadedAt: Date;
+}
+
+export class LibraryStatsDto {
+  @ApiProperty()
+  totalStoriesRead: number;
+
+  @ApiProperty()
+  completedStoriesCount: number;
 }

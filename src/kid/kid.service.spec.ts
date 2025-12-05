@@ -84,7 +84,14 @@ describe('KidService', () => {
             const result = await service.findAllByUser(userId);
             expect(result).toEqual(expectedResult);
             expect(prisma.kid.findMany).toHaveBeenCalledWith(expect.objectContaining({
-                where: { parentId: userId },
+                where: { isDeleted: false, parentId: userId },
+                include: {
+                    avatar: true,
+                    parent: { select: { id: true, name: true, email: true } },
+                    preferredCategories: true,
+                    preferredVoice: true,
+                },
+                orderBy: { createdAt: 'desc' },
             }));
         });
     });
@@ -153,10 +160,15 @@ describe('KidService', () => {
             const existingKid = { id: kidId, parentId: userId };
 
             prisma.kid.findUnique.mockResolvedValue(existingKid);
-            prisma.kid.delete.mockResolvedValue(existingKid);
+            const softDeletedKid = { ...existingKid, isDeleted: true, deletedAt: new Date() };
+            prisma.kid.update.mockResolvedValue(softDeletedKid);
 
             const result = await service.deleteKid(kidId, userId);
-            expect(result).toEqual(existingKid);
+            expect(result).toEqual(softDeletedKid);
+            expect(prisma.kid.update).toHaveBeenCalledWith(expect.objectContaining({
+                where: { id: kidId },
+                data: expect.objectContaining({ isDeleted: true }),
+            }));
         });
     });
 
