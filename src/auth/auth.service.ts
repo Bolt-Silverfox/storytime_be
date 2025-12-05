@@ -485,6 +485,17 @@ export class AuthService {
       throw new BadRequestException('Invalid old password');
     }
 
+    // Check if new password is same as old password
+    const isSameAsOld = await bcrypt.compare(
+      data.newPassword,
+      user.passwordHash,
+    );
+    if (isSameAsOld) {
+      throw new BadRequestException(
+        'New password cannot be the same as old password',
+      );
+    }
+
     const hashedPassword = await bcrypt.hash(data.newPassword, 10);
     await this.prisma.user.update({
       where: { id: userId },
@@ -613,7 +624,9 @@ export class AuthService {
 
     // 4. Handle avatar from Google picture
     if (picture) {
-      let avatar = await this.prisma.avatar.findFirst({ where: { url: picture } });
+      let avatar = await this.prisma.avatar.findFirst({
+        where: { url: picture },
+      });
 
       if (!avatar) {
         avatar = await this.prisma.avatar.create({
@@ -622,7 +635,6 @@ export class AuthService {
             name: `google_${googleId || user.id}`,
             isSystemAvatar: false,
           },
-
         });
       }
 

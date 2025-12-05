@@ -73,32 +73,43 @@ export class StoryService {
       isDeleted: false,
     };
 
+    // 1. Apply basic manual filters
     if (filter.theme) where.themes = { some: { id: filter.theme } };
-    if (filter.category) where.categories = { some: { id: filter.category } };
 
-    if (filter.recommended !== undefined)
+    // If a manual category is requested, prioritize it
+    if (filter.category) {
+      where.categories = { some: { id: filter.category } };
+    }
+
+    // 2. Initial "Recommended" Handling
+    if (filter.recommended !== undefined && !filter.kidId) {
       where.recommended = filter.recommended;
+    }
 
     let targetLevel: number | undefined;
 
+    // 3. Kid-Specific Filtering Logic
     if (filter.kidId) {
       const kid = await this.prisma.kid.findUnique({
         where: {
           id: filter.kidId,
-          isDeleted: false
+          isDeleted: false,
         },
         include: { preferredCategories: true },
       });
 
       if (kid) {
+        // --- A. Age / Reading Level Logic ---
+        // This ensures "filter based on the age of the child" happens regardless of preferences
         if (kid.currentReadingLevel > 0) {
           targetLevel = kid.currentReadingLevel;
+          // Let learning be around +/- 1 level
           where.difficultyLevel = {
             gte: Math.max(1, targetLevel - 1),
             lte: targetLevel + 1,
           };
-        }
-        else if (kid.ageRange) {
+        } else if (kid.ageRange) {
+          // Fallback to Age Range string parsing (e.g. "6-8")
           const match = kid.ageRange.match(/(\d+)/);
           if (match) {
             const age = parseInt(match[1], 10);
@@ -107,18 +118,32 @@ export class StoryService {
           }
         }
 
-        if (filter.recommended === true && kid.preferredCategories.length > 0) {
+        // --- B. Recommended + Preference Logic ---
+        if (filter.recommended === true) {
+          // We are now defining "Recommended" as "Personalized for this Kid"
           delete where.recommended;
-          const categoryIds = kid.preferredCategories.map((c) => c.id);
-          where.categories = {
-            some: {
-              id: { in: categoryIds },
-            },
-          };
+
+          // Only apply category preference filter IF:
+          // 1. No manual category was selected in the UI (filter.category is undefined)
+          // 2. The kid actually has preferences
+          if (!filter.category && kid.preferredCategories.length > 0) {
+            const categoryIds = kid.preferredCategories.map((c) => c.id);
+
+            // Add AND condition: Must be in preferred categories
+            where.categories = {
+              some: {
+                id: { in: categoryIds },
+              },
+            };
+          }
+          // If (!filter.category && kid.preferredCategories.length === 0),
+          // we do nothing here. The 'where' clause already contains the Age/Level logic
+          // from Step A, so it simply returns "Age Appropriate" stories.
         }
       }
     }
 
+    // 4. Manual Age Filter Fallback
     if (filter.age && !targetLevel && !where.ageMin) {
       where.ageMin = { lte: filter.age };
       where.ageMax = { gte: filter.age };
@@ -1076,7 +1101,85 @@ export class StoryService {
     return story;
   }
 
-  async generateStory(
+  async generateStoryWithAI(options: GenerateStoryOptions) {
+    try {
+      // Generate the story using Gemini
+      const generatedStory = await this.geminiService.generateStory(options);
+
+      // Generate audio for the story
+      let audioUrl = '';
+      if (generatedStory.content) {
+        const { buffer, filename } = await this.elevenLabs.generateAudioBuffer(
+          generatedStory.content,
+        );
+        audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
+      }
+
+      // Generate or get a cover image
+      const coverImageUrl = await this.geminiService.generateStoryImage(
+        generatedStory.title,
+        generatedStory.description,
+      );
+
+      // Get theme and category IDs from names
+      const themes = await this.prisma.theme.findMany({
+        where: {
+          name: { in: generatedStory.theme },
+          isDeleted: false // ONLY USE NON-DELETED THEMES
+        },
+      });
+      const categories = await this.prisma.category.findMany({
+        where: {
+          name: { in: generatedStory.category },
+          isDeleted: false // ONLY USE NON-DELETED CATEGORIES
+        },
+      });
+
+      // Save the story to the database
+      const story = await this.prisma.story.create({
+        data: {
+          title: generatedStory.title,
+          description: generatedStory.description,
+          textContent: generatedStory.content,
+          language: generatedStory.language,
+          coverImageUrl,
+          audioUrl,
+          isInteractive: true,
+          ageMin: generatedStory.ageMin,
+          ageMax: generatedStory.ageMax,
+          themes: {
+            connect: themes.map((t: Theme) => ({ id: t.id })),
+          },
+          categories: {
+            connect: categories.map((c: Category) => ({ id: c.id })),
+          },
+          questions: {
+            create: generatedStory.questions.map((q) => ({
+              question: q.question,
+              options: q.options,
+              correctOption: q.answer,
+            })),
+          },
+          difficultyLevel: generatedStory.difficultyLevel || 1,
+          wordCount: generatedStory.estimatedWordCount || 0,
+          aiGenerated: true,
+          creatorKidId: options.creatorKidId,
+        },
+        include: {
+          themes: true,
+          categories: true,
+          questions: true,
+        },
+      });
+
+      return story;
+    } catch (error) {
+      this.logger.error('Failed to generate story with AI:', error);
+      throw error;
+    }
+  }
+
+  async generateStoryForKid(
     kidId: string,
     themeNames?: string[],
     categoryNames?: string[],
@@ -1150,6 +1253,7 @@ export class StoryService {
       kidName: kid.name || 'Hero',
       language: 'English',
       additionalContext: contextString,
+      creatorKidId: kidId,
     };
 
     this.logger.log(
@@ -1198,5 +1302,108 @@ export class StoryService {
       });
       this.logger.log(`Adjusted Kid ${kidId} reading level to ${newLevel}`);
     }
+  }
+  //------ Library service methods--------------------
+
+  // 1. GET CONTINUE READING (In Progress)
+  async getContinueReading(kidId: string) {
+    // Fetch progress where progress > 0 but NOT completed
+    const progressRecords = await this.prisma.storyProgress.findMany({
+      where: {
+        kidId,
+        progress: { gt: 0 },
+        completed: false,
+        isDeleted: false,
+      },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
+
+    // Transform to return just the stories with their progress attached
+    return progressRecords.map((record) => ({
+      ...record.story,
+      progress: record.progress,
+    }));
+  }
+
+  // 2. GET COMPLETED STORIES (History)
+  async getCompletedStories(kidId: string) {
+    const records = await this.prisma.storyProgress.findMany({
+      where: {
+        kidId,
+        completed: true,
+        isDeleted: false,
+      },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
+    return records.map(r => r.story);
+  }
+
+  // 3. GET MY CREATIONS (AI Stories generated by this kid)
+  async getCreatedStories(kidId: string) {
+    return await this.prisma.story.findMany({
+      where: {
+        creatorKidId: kidId,
+        isDeleted: false,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // 4. GET DOWNLOADS
+  async getDownloads(kidId: string) {
+    const downloads = await this.prisma.downloadedStory.findMany({
+      where: { kidId },
+      include: { story: true },
+      orderBy: { downloadedAt: 'desc' },
+    });
+    return downloads.map((d) => d.story);
+  }
+
+  // 5. ADD DOWNLOAD
+  async addDownload(kidId: string, storyId: string) {
+    const story = await this.prisma.story.findUnique({ where: { id: storyId } });
+    if (!story) throw new NotFoundException('Story not found');
+
+    return await this.prisma.downloadedStory.upsert({
+      where: {
+        kidId_storyId: { kidId, storyId },
+      },
+      create: { kidId, storyId },
+      update: { downloadedAt: new Date() },
+    });
+  }
+
+  // 6. REMOVE DOWNLOAD
+  async removeDownload(kidId: string, storyId: string) {
+    try {
+      return await this.prisma.downloadedStory.delete({
+        where: {
+          kidId_storyId: { kidId, storyId },
+        },
+      });
+    } catch (error) {
+      return { message: 'Download removed' };
+    }
+  }
+
+  // 7. REMOVE FROM LIBRARY (The "Reset" Button)
+  // This removes it from Favorites, Downloads, and resets Progress
+  async removeFromLibrary(kidId: string, storyId: string) {
+    return await this.prisma.$transaction([
+      // 1. Remove from Favorites
+      this.prisma.favorite.deleteMany({
+        where: { kidId, storyId },
+      }),
+      // 2. Remove from Downloads
+      this.prisma.downloadedStory.deleteMany({
+        where: { kidId, storyId },
+      }),
+      // 3. Reset Progress (Hard delete the progress record)
+      this.prisma.storyProgress.deleteMany({
+        where: { kidId, storyId },
+      }),
+    ]);
   }
 }
