@@ -5,6 +5,7 @@ import { AuthenticatedRequest, AuthSessionGuard } from '../auth/auth.guard';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { VoiceType } from '@/story/story.dto';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 const mockKidService = {
     findAllByUser: jest.fn(),
@@ -20,13 +21,15 @@ describe('KidController', () => {
 
     const mockRequest = {
         authUserData: { userId: 'user-1' },
-    } as AuthenticatedRequest;
+        headers: { 'user-agent': 'Jest Test' },
+    } as unknown as AuthenticatedRequest;
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             controllers: [KidController],
             providers: [
                 { provide: KidService, useValue: mockKidService },
+                { provide: AnalyticsService, useValue: { logActivity: jest.fn().mockResolvedValue({}) } }, // Mock AnalyticsService
             ],
         })
             .overrideGuard(AuthSessionGuard)
@@ -98,7 +101,7 @@ describe('KidController', () => {
 
             const result = await controller.deleteKid(mockRequest, kidId);
             expect(result).toEqual(expectedResult);
-            expect(service.deleteKid).toHaveBeenCalledWith(kidId, 'user-1');
+            expect(service.deleteKid).toHaveBeenCalledWith(kidId, 'user-1', false);
         });
     });
 
