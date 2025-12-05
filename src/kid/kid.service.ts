@@ -86,7 +86,23 @@ export class KidService {
         if (!kid) throw new NotFoundException('Kid not found');
         if (kid.parentId !== userId) throw new ForbiddenException('Access denied');
 
-        return this.transformKid(kid);
+        // Get recommendation stats
+        const totalRecommendations = await this.prisma.parentRecommendation.count({
+            where: { 
+                kidId,
+                isDeleted: false 
+            },
+        });
+
+        const transformedKid = this.transformKid(kid);
+        
+        // Add recommendation stats to the response
+        return {
+            ...transformedKid,
+            recommendationStats: {
+                total: totalRecommendations,
+            },
+        };
     }
 
     async updateKid(kidId: string, userId: string, dto: UpdateKidDto) {
