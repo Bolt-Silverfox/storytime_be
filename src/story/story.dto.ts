@@ -542,6 +542,32 @@ export class DownloadedStoryDto {
   downloadedAt: Date;
 }
 
+export class StoryDto extends CreateStoryDto {
+  @ApiProperty()
+  @IsString()
+  id: string;
+
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiProperty()
+  updatedAt: Date;
+}
+
+export class StoryWithProgressDto extends StoryDto {
+  @ApiProperty()
+  @IsNumber()
+  progress: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  totalTimeSpent?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  lastAccessed?: Date;
+}
+
 export class LibraryStatsDto {
   @ApiProperty()
   totalStoriesRead: number;

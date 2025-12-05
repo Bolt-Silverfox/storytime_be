@@ -1303,6 +1303,7 @@ export class StoryService {
       this.logger.log(`Adjusted Kid ${kidId} reading level to ${newLevel}`);
     }
   }
+
   //------ Library service methods--------------------
 
   // 1. GET CONTINUE READING (In Progress)
@@ -1323,6 +1324,8 @@ export class StoryService {
     return progressRecords.map((record) => ({
       ...record.story,
       progress: record.progress,
+      totalTimeSpent: record.totalTimeSpent,
+      lastAccessed: record.lastAccessed,
     }));
   }
 
