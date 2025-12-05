@@ -29,6 +29,7 @@ import {
   ResetPasswordDto,
   VerifyEmailDto,
   SendEmailVerificationDto,
+  ChangePasswordDto,
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -129,6 +130,21 @@ export class AuthController {
     return this.authService.updateProfile(req.authUserData['userId'], data);
   }
 
+  @Post('change-password')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change password' })
+  @ApiBody({ type: ChangePasswordDto })
+  @ApiResponse({ status: 200, description: 'Password changed successfully.' })
+  @ApiResponse({ status: 400, description: 'Invalid old password.' })
+  async changePassword(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(req.authUserData['userId'], body);
+  }
+
   // ===== PASSWORD RESET =====
   @Post('request-password-reset')
   @HttpCode(HttpStatus.OK)
@@ -172,7 +188,10 @@ export class AuthController {
   @Post('google')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Google sign-in (id_token) — mobile/web' })
-  @ApiBody({ description: 'Google id_token', schema: { example: { id_token: 'eyJhbGci...' } } })
+  @ApiBody({
+    description: 'Google id_token',
+    schema: { example: { id_token: 'eyJhbGci...' } },
+  })
   async googleIdToken(@Body('id_token') idToken: string) {
     if (!idToken) {
       throw new BadRequestException('id_token is required');
@@ -181,16 +200,12 @@ export class AuthController {
     return this.authService.loginWithGoogleIdToken(idToken);
   }
 
-
-
   // ===== GOOGLE OAUTH (web redirect flow) =====
   @Get('google/oauth')
   @UseGuards(GoogleAuthGuard)
   async googleLogin() {
     // Guard will redirect to Google
   }
-
-
 
   // ===== GOOGLE OAUTH CALLBACK =====
   @Get('google/oauth/callback')
@@ -202,7 +217,7 @@ export class AuthController {
     return res.redirect(
       `${process.env.WEB_APP_BASE_URL}/oauth-success?jwt=${encodeURIComponent(
         result.jwt,
-      )}&refresh=${encodeURIComponent(result.refreshToken)}`
+      )}&refresh=${encodeURIComponent(result.refreshToken)}`,
     );
   }
 }

@@ -17,7 +17,14 @@ import {
   Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiConsumes,
+  ApiBody,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { AvatarService } from './avatar.service';
 import {
   CreateAvatarDto,
@@ -31,18 +38,17 @@ import { SuccessResponse } from '../common/dtos/api-response.dto';
 
 @Controller('avatars')
 @UseGuards(AuthSessionGuard)
-@ApiTags('Avatar')
 export class AvatarController {
-  constructor(private readonly avatarService: AvatarService) {}
-  
-  @Public()
+  constructor(private readonly avatarService: AvatarService) { }
+
   @Get('system')
   @ApiOperation({
     summary: 'Get available system avatars',
-    description: 'Retrieve all system avatars that are available (not deleted). Does not require authentication.',
+    description:
+      'Retrieve all system avatars that are available (not deleted). Does not require authentication.',
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'System avatars retrieved successfully',
     schema: {
       example: {
@@ -56,11 +62,11 @@ export class AvatarController {
             isSystemAvatar: true,
             publicId: 'public_id_123',
             createdAt: '2023-10-01T12:00:00Z',
-            updatedAt: '2023-10-01T12:00:00Z'
-          }
-        ]
-      }
-    }
+            updatedAt: '2023-10-01T12:00:00Z',
+          },
+        ],
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -69,9 +75,9 @@ export class AvatarController {
       example: {
         message: 'Error message',
         statusCode: 400,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -80,34 +86,40 @@ export class AvatarController {
       example: {
         message: 'Error message',
         statusCode: 404,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
+  @Public()
   async getSystemAvatars() {
     const avatars = await this.avatarService.getSystemAvatars();
-    return new SuccessResponse(200, avatars, 'System avatars retrieved successfully');
+    return new SuccessResponse(
+      200,
+      avatars,
+      'System avatars retrieved successfully',
+    );
   }
 
   @Post('assign/user')
   @ApiOperation({
     summary: 'Assign avatar to user',
-    description: 'Assign an existing avatar to a user by providing userId and avatarId.',
+    description:
+      'Assign an existing avatar to a user by providing userId and avatarId.',
   })
-  @ApiBody({ 
+  @ApiBody({
     type: AssignAvatarDto,
     examples: {
       example1: {
         summary: 'Assign avatar to user',
         value: {
           userId: 'user-123',
-          avatarId: 'avatar-456'
-        }
-      }
-    }
+          avatarId: 'avatar-456',
+        },
+      },
+    },
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Avatar assigned to user successfully',
     schema: {
       example: {
@@ -125,7 +137,7 @@ export class AvatarController {
               isSystemAvatar: false,
               publicId: 'public_id_456',
               createdAt: '2023-10-01T12:00:00Z',
-              updatedAt: '2023-10-02T10:30:00Z'
+              updatedAt: '2023-10-02T10:30:00Z',
             },
             role: 'user',
             createdAt: '2023-10-01T12:00:00Z',
@@ -138,13 +150,13 @@ export class AvatarController {
               language: 'english',
               country: 'nigeria',
               createdAt: '2023-10-01T12:00:00Z',
-              updatedAt: '2023-10-02T10:30:00Z'
+              updatedAt: '2023-10-02T10:30:00Z',
             },
-            numberOfKids: 2
-          }
-        }
-      }
-    }
+            numberOfKids: 2,
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -153,9 +165,9 @@ export class AvatarController {
       example: {
         message: 'userId is required',
         statusCode: 400,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 401,
@@ -164,9 +176,9 @@ export class AvatarController {
       example: {
         message: 'Unauthorized',
         statusCode: 401,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -175,41 +187,46 @@ export class AvatarController {
       example: {
         message: 'User or avatar not found',
         statusCode: 404,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   async assignAvatarToUser(@Body() assignAvatarDto: AssignAvatarDto) {
     if (!assignAvatarDto.userId) {
       throw new BadRequestException('userId is required');
     }
-    
+
     const user = await this.avatarService.assignAvatarToUser(
       assignAvatarDto.userId,
       assignAvatarDto.avatarId,
     );
-    return new SuccessResponse(200, { user }, 'Avatar assigned to user successfully');
+    return new SuccessResponse(
+      200,
+      { user },
+      'Avatar assigned to user successfully',
+    );
   }
 
   @Post('assign/kid')
   @ApiOperation({
     summary: 'Assign avatar to kid',
-    description: 'Assign an existing avatar to a kid by providing kidId and avatarId.',
+    description:
+      'Assign an existing avatar to a kid by providing kidId and avatarId.',
   })
-  @ApiBody({ 
+  @ApiBody({
     type: AssignAvatarDto,
     examples: {
       example1: {
         summary: 'Assign avatar to kid',
         value: {
           kidId: 'kid-123',
-          avatarId: 'avatar-456'
-        }
-      }
-    }
+          avatarId: 'avatar-456',
+        },
+      },
+    },
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Avatar assigned to kid successfully',
     schema: {
       example: {
@@ -227,15 +244,15 @@ export class AvatarController {
               isSystemAvatar: true,
               publicId: 'public_id_456',
               createdAt: '2023-10-01T12:00:00Z',
-              updatedAt: '2023-10-02T10:30:00Z'
+              updatedAt: '2023-10-02T10:30:00Z',
             },
             parentId: 'user-123',
             createdAt: '2023-10-01T12:00:00Z',
-            updatedAt: '2023-10-02T10:30:00Z'
-          }
-        }
-      }
-    }
+            updatedAt: '2023-10-02T10:30:00Z',
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -244,9 +261,9 @@ export class AvatarController {
       example: {
         message: 'kidId is required',
         statusCode: 400,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 401,
@@ -255,9 +272,9 @@ export class AvatarController {
       example: {
         message: 'Unauthorized',
         statusCode: 401,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -266,27 +283,32 @@ export class AvatarController {
       example: {
         message: 'Kid or avatar not found',
         statusCode: 404,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   async assignAvatarToKid(@Body() assignAvatarDto: AssignAvatarDto) {
     if (!assignAvatarDto.kidId) {
       throw new BadRequestException('kidId is required');
     }
-    
+
     const kid = await this.avatarService.assignAvatarToKid(
       assignAvatarDto.kidId,
       assignAvatarDto.avatarId,
     );
-    return new SuccessResponse(200, { kid }, 'Avatar assigned to kid successfully');
+    return new SuccessResponse(
+      200,
+      { kid },
+      'Avatar assigned to kid successfully',
+    );
   }
 
   @Post('upload/user')
   @UseInterceptors(FileInterceptor('image'))
   @ApiOperation({
     summary: 'Upload and assign user avatar',
-    description: 'Upload a custom avatar image and assign it to a user. Max file size: 5MB. Supported formats: PNG, JPEG, JPG, GIF, WebP.',
+    description:
+      'Upload a custom avatar image and assign it to a user. Max file size: 5MB. Supported formats: PNG, JPEG, JPG, GIF, WebP.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -307,8 +329,8 @@ export class AvatarController {
       },
     },
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'User avatar uploaded successfully',
     schema: {
       example: {
@@ -326,7 +348,7 @@ export class AvatarController {
               isSystemAvatar: false,
               publicId: 'uploaded_public_id_123',
               createdAt: '2023-10-02T10:30:00Z',
-              updatedAt: '2023-10-02T10:30:00Z'
+              updatedAt: '2023-10-02T10:30:00Z',
             },
             role: 'user',
             createdAt: '2023-10-01T12:00:00Z',
@@ -339,13 +361,13 @@ export class AvatarController {
               language: 'english',
               country: 'nigeria',
               createdAt: '2023-10-01T12:00:00Z',
-              updatedAt: '2023-10-02T10:30:00Z'
+              updatedAt: '2023-10-02T10:30:00Z',
             },
-            numberOfKids: 2
-          }
-        }
-      }
-    }
+            numberOfKids: 2,
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -354,9 +376,9 @@ export class AvatarController {
       example: {
         message: 'Invalid file or upload failed',
         statusCode: 400,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 401,
@@ -365,9 +387,9 @@ export class AvatarController {
       example: {
         message: 'Unauthorized',
         statusCode: 401,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -376,9 +398,9 @@ export class AvatarController {
       example: {
         message: 'User not found',
         statusCode: 404,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   async uploadUserAvatar(
     @UploadedFile(
@@ -392,15 +414,19 @@ export class AvatarController {
     file: Express.Multer.File,
     @Body('userId') userId: string,
   ) {
-    const user = await this.avatarService.uploadAndAssignUserAvatar(userId, file);
-    return new SuccessResponse(200, { user }, 'User avatar uploaded successfully');
+    const user = await this.avatarService.uploadAndAssignUserAvatar(
+      userId,
+      file,
+    );
+    return new SuccessResponse(200, user, 'User avatar uploaded successfully');
   }
 
   @Post('upload/kid')
   @UseInterceptors(FileInterceptor('image'))
   @ApiOperation({
     summary: 'Upload and assign kid avatar',
-    description: 'Upload a custom avatar image and assign it to a kid. Max file size: 5MB. Supported formats: PNG, JPEG, JPG, GIF, WebP.',
+    description:
+      'Upload a custom avatar image and assign it to a kid. Max file size: 5MB. Supported formats: PNG, JPEG, JPG, GIF, WebP.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -421,8 +447,8 @@ export class AvatarController {
       },
     },
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Kid avatar uploaded successfully',
     schema: {
       example: {
@@ -440,15 +466,15 @@ export class AvatarController {
               isSystemAvatar: false,
               publicId: 'kid_uploaded_public_id_456',
               createdAt: '2023-10-02T10:30:00Z',
-              updatedAt: '2023-10-02T10:30:00Z'
+              updatedAt: '2023-10-02T10:30:00Z',
             },
             parentId: 'user-123',
             createdAt: '2023-10-01T12:00:00Z',
-            updatedAt: '2023-10-02T10:30:00Z'
-          }
-        }
-      }
-    }
+            updatedAt: '2023-10-02T10:30:00Z',
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -457,9 +483,9 @@ export class AvatarController {
       example: {
         message: 'Invalid file or upload failed',
         statusCode: 400,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 401,
@@ -468,9 +494,9 @@ export class AvatarController {
       example: {
         message: 'Unauthorized',
         statusCode: 401,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -479,9 +505,9 @@ export class AvatarController {
       example: {
         message: 'Kid not found',
         statusCode: 404,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   async uploadKidAvatar(
     @UploadedFile(
@@ -496,15 +522,28 @@ export class AvatarController {
     @Body('kidId') kidId: string,
   ) {
     const kid = await this.avatarService.uploadAndAssignKidAvatar(kidId, file);
-    return new SuccessResponse(200, { kid }, 'Kid avatar uploaded successfully');
+    return new SuccessResponse(
+      200,
+      { kid },
+      'Kid avatar uploaded successfully',
+    );
   }
 
-  // UNIVERSAL AVATAR CREATION ENDPOINT
+  // ADMIN ONLY ENDPOINTS
+
+  @Get()
+  @UseGuards(AdminGuard)
+  async getAllAvatars() {
+    const avatars = await this.avatarService.getAllAvatars();
+    return new SuccessResponse(200, avatars, 'Avatars retrieved successfully');
+  }
+
   @Post()
   @UseInterceptors(FileInterceptor('image'))
   @ApiOperation({
     summary: 'Create avatar',
-    description: 'Create a new avatar. For non-admin users, avatars are created as custom avatars. For admin users, avatars are created as system avatars. Max file size: 5MB. Supported formats: PNG, JPEG, JPG, GIF, WebP.',
+    description:
+      'Create a new avatar. For non-admin users, avatars are created as custom avatars. For admin users, avatars are created as system avatars. Max file size: 5MB. Supported formats: PNG, JPEG, JPG, GIF, WebP.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -529,8 +568,8 @@ export class AvatarController {
       },
     },
   })
-  @ApiResponse({ 
-    status: 201, 
+  @ApiResponse({
+    status: 201,
     description: 'Avatar created successfully',
     schema: {
       example: {
@@ -545,10 +584,10 @@ export class AvatarController {
           isDeleted: false,
           deletedAt: null,
           createdAt: '2023-10-02T10:30:00Z',
-          updatedAt: '2023-10-02T10:30:00Z'
-        }
-      }
-    }
+          updatedAt: '2023-10-02T10:30:00Z',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -557,9 +596,9 @@ export class AvatarController {
       example: {
         message: 'Either image file or URL is required',
         statusCode: 400,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 401,
@@ -568,9 +607,9 @@ export class AvatarController {
       example: {
         message: 'Unauthorized',
         statusCode: 401,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   async createAvatar(
     @Req() req: AuthenticatedRequest,
@@ -587,20 +626,20 @@ export class AvatarController {
     @Body() createAvatarDto: CreateAvatarDto,
   ) {
     const isAdmin = req.authUserData.userRole === 'admin';
-    
+
     // Determine isSystemAvatar based on user role
     const isSystemAvatar = isAdmin;
 
     const avatar = await this.avatarService.createAvatar(
-      createAvatarDto, 
-      file, 
-      isSystemAvatar
+      createAvatarDto,
+      file,
+      isSystemAvatar,
     );
-    
-    const message = isAdmin 
-      ? 'System avatar created successfully' 
+
+    const message = isAdmin
+      ? 'System avatar created successfully'
       : 'Avatar created successfully';
-    
+
     return new SuccessResponse(201, avatar, message);
   }
 
@@ -610,10 +649,11 @@ export class AvatarController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'List all system avatars',
-    description: 'Retrieve all system avatars including deleted ones. Admin access required.',
+    description:
+      'Retrieve all system avatars including deleted ones. Admin access required.',
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'System avatars retrieved successfully',
     schema: {
       example: {
@@ -629,7 +669,7 @@ export class AvatarController {
             isDeleted: false,
             deletedAt: null,
             createdAt: '2023-10-01T12:00:00Z',
-            updatedAt: '2023-10-01T12:00:00Z'
+            updatedAt: '2023-10-01T12:00:00Z',
           },
           {
             id: 'avatar-456',
@@ -640,11 +680,11 @@ export class AvatarController {
             isDeleted: true,
             deletedAt: '2023-10-02T10:30:00Z',
             createdAt: '2023-10-01T12:00:00Z',
-            updatedAt: '2023-10-02T10:30:00Z'
-          }
-        ]
-      }
-    }
+            updatedAt: '2023-10-02T10:30:00Z',
+          },
+        ],
+      },
+    },
   })
   @ApiResponse({
     status: 401,
@@ -653,9 +693,9 @@ export class AvatarController {
       example: {
         message: 'Unauthorized',
         statusCode: 401,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 403,
@@ -664,13 +704,17 @@ export class AvatarController {
       example: {
         message: 'Forbidden resource',
         statusCode: 403,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   async getAllSystemAvatars() {
     const avatars = await this.avatarService.getAllSystemAvatars();
-    return new SuccessResponse(200, avatars, 'System avatars retrieved successfully');
+    return new SuccessResponse(
+      200,
+      avatars,
+      'System avatars retrieved successfully',
+    );
   }
 
   @Put(':id')
@@ -678,7 +722,8 @@ export class AvatarController {
   @UseInterceptors(FileInterceptor('image'))
   @ApiOperation({
     summary: 'Update system avatar',
-    description: 'Update an existing system avatar. Admin access required. Max file size: 5MB. Supported formats: PNG, JPEG, JPG, GIF, WebP.',
+    description:
+      'Update an existing system avatar. Admin access required. Max file size: 5MB. Supported formats: PNG, JPEG, JPG, GIF, WebP.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -703,8 +748,8 @@ export class AvatarController {
       },
     },
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'System avatar updated successfully',
     schema: {
       example: {
@@ -719,10 +764,10 @@ export class AvatarController {
           isDeleted: false,
           deletedAt: null,
           createdAt: '2023-10-01T12:00:00Z',
-          updatedAt: '2023-10-02T10:30:00Z'
-        }
-      }
-    }
+          updatedAt: '2023-10-02T10:30:00Z',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -731,9 +776,9 @@ export class AvatarController {
       example: {
         message: 'Cannot update non-system avatar',
         statusCode: 400,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 401,
@@ -742,9 +787,9 @@ export class AvatarController {
       example: {
         message: 'Unauthorized',
         statusCode: 401,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 403,
@@ -753,9 +798,9 @@ export class AvatarController {
       example: {
         message: 'Forbidden resource',
         statusCode: 403,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -764,182 +809,27 @@ export class AvatarController {
       example: {
         message: 'System avatar not found',
         statusCode: 404,
-        details: {}
-      }
-    }
+        details: {},
+      },
+    },
   })
   async updateAvatar(
     @Param('id') id: string,
     @Body() updateAvatarDto: UpdateAvatarDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    const avatar = await this.avatarService.updateSystemAvatar(id, updateAvatarDto, file);
-    return new SuccessResponse(200, avatar, 'System avatar updated successfully');
+    const avatar = await this.avatarService.updateAvatar(
+      id,
+      updateAvatarDto,
+      file,
+    );
+    return new SuccessResponse(200, avatar, 'Avatar updated successfully');
   }
 
   @Delete(':id')
   @UseGuards(AdminGuard)
-  @ApiOperation({
-    summary: 'Delete system avatar',
-    description: 'Delete a system avatar. Use permanent=true query parameter for permanent deletion. Default is soft delete. Admin access required.',
-  })
-  @ApiQuery({
-    name: 'permanent',
-    required: false,
-    type: Boolean,
-    description: 'Permanently delete the avatar (default: false - soft delete)',
-  })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'System avatar soft deleted successfully',
-    schema: {
-      example: {
-        statusCode: 200,
-        message: 'System avatar soft deleted successfully',
-        data: {
-          id: 'avatar-123',
-          name: 'Deleted Avatar',
-          url: 'https://example.com/avatar.png',
-          isSystemAvatar: true,
-          publicId: 'public_id_123',
-          isDeleted: true,
-          deletedAt: '2023-10-02T10:30:00Z',
-          createdAt: '2023-10-01T12:00:00Z',
-          updatedAt: '2023-10-02T10:30:00Z'
-        }
-      }
-    }
-  })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'System avatar permanently deleted successfully',
-    schema: {
-      example: {
-        statusCode: 200,
-        message: 'System avatar permanently deleted successfully',
-        data: null
-      }
-    }
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Bad Request',
-    schema: {
-      example: {
-        message: 'Cannot delete avatar that is currently in use',
-        statusCode: 400,
-        details: {}
-      }
-    }
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-    schema: {
-      example: {
-        message: 'Unauthorized',
-        statusCode: 401,
-        details: {}
-      }
-    }
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden',
-    schema: {
-      example: {
-        message: 'Forbidden resource',
-        statusCode: 403,
-        details: {}
-      }
-    }
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Not Found',
-    schema: {
-      example: {
-        message: 'System avatar not found',
-        statusCode: 404,
-        details: {}
-      }
-    }
-  })
-  async deleteAvatar(
-    @Param('id') id: string,
-    @Query('permanent') permanent?: boolean,
-  ) {
-    if (permanent === true) {
-      await this.avatarService.permanentDeleteAvatar(id);
-      return new SuccessResponse(200, null, 'System avatar permanently deleted successfully');
-    } else {
-      const avatar = await this.avatarService.softDeleteAvatar(id);
-      return new SuccessResponse(200, avatar, 'System avatar soft deleted successfully');
-    }
-  }
-
-  @Post(':id/undo-delete')
-  @UseGuards(AdminGuard)
-  @ApiOperation({
-    summary: 'Restore soft deleted system avatar',
-    description: 'Restore a soft deleted system avatar. Admin access required.',
-  })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'System avatar restored successfully',
-    schema: {
-      example: {
-        statusCode: 200,
-        message: 'System avatar restored successfully',
-        data: {
-          id: 'avatar-123',
-          name: 'Restored Avatar',
-          url: 'https://example.com/avatar.png',
-          isSystemAvatar: true,
-          publicId: 'public_id_123',
-          isDeleted: false,
-          deletedAt: null,
-          createdAt: '2023-10-01T12:00:00Z',
-          updatedAt: '2023-10-02T10:30:00Z'
-        }
-      }
-    }
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-    schema: {
-      example: {
-        message: 'Unauthorized',
-        statusCode: 401,
-        details: {}
-      }
-    }
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden',
-    schema: {
-      example: {
-        message: 'Forbidden resource',
-        statusCode: 403,
-        details: {}
-      }
-    }
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Not Found',
-    schema: {
-      example: {
-        message: 'System avatar not found',
-        statusCode: 404,
-        details: {}
-      }
-    }
-  })
-  async undoDeleteAvatar(@Param('id') id: string) {
-    const avatar = await this.avatarService.restoreAvatar(id);
-    return new SuccessResponse(200, avatar, 'System avatar restored successfully');
+  async deleteAvatar(@Param('id') id: string) {
+    await this.avatarService.softDeleteAvatar(id);
+    return new SuccessResponse(200, null, 'Avatar deleted successfully');
   }
 }

@@ -2,8 +2,16 @@ import { render } from '@react-email/render';
 import { EmailVerificationTemplate } from './templates/email-verification';
 import { PasswordResetTemplate } from './templates/password-reset';
 import { PasswordResetAlertTemplate } from './templates/password-reset-alert';
+import { PasswordChangedTemplate } from './templates/password-changed';
+import { PinResetTemplate } from './templates/pin-reset';
 
-export type Notifications = 'EmailVerification' | 'PasswordReset' | 'PasswordResetAlert';
+export type Notifications =
+  | 'EmailVerification'
+  | 'PasswordReset'
+  | 'PasswordResetAlert'
+  | 'PasswordChanged'
+  | 'PinReset';
+
 export type Medium = 'email' | 'sms';
 
 export const NotificationRegistry: Record<
@@ -69,6 +77,44 @@ export const NotificationRegistry: Record<
           ipAddress: data.ipAddress as string,
           userAgent: data.userAgent as string,
           timestamp: data.timestamp as string,
+          userName: data.userName as string,
+        }),
+      );
+      return emailHtml;
+    },
+  },
+  PasswordChanged: {
+    medium: 'email',
+    subject: 'Password Changed Successfully',
+    validate: (data) => {
+      if (!data.email) return 'Email is required';
+      if (!data.userName) return 'User name is required';
+      return null;
+    },
+    getTemplate: async (data) => {
+      const emailHtml = render(
+        PasswordChangedTemplate({
+          email: data.email as string,
+          userName: data.userName as string,
+        }),
+      );
+      return emailHtml;
+    },
+  },
+  PinReset: {
+    medium: 'email',
+    subject: 'Your PIN Reset Code',
+    validate: (data) => {
+      if (!data.email) return 'Email is required';
+      if (!data.otp) return 'OTP is required';
+      if (!data.userName) return 'User name is required';
+      return null;
+    },
+    getTemplate: async (data) => {
+      const emailHtml = render(
+        PinResetTemplate({
+          email: data.email as string,
+          otp: data.otp as string,
           userName: data.userName as string,
         }),
       );

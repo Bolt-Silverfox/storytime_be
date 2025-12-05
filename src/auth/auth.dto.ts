@@ -51,6 +51,16 @@ export class RegisterDto {
   })
   @IsNotEmpty()
   fullName: string;
+
+  @ApiProperty({ example: 'parent', required: false })
+  @IsOptional()
+  @IsString()
+  role?: string;
+
+  @ApiProperty({ example: 'secret', required: false })
+  @IsOptional()
+  @IsString()
+  adminSecret?: string;
 }
 
 export class LoginDto {
@@ -322,4 +332,21 @@ export class VerifyEmailDto {
   @IsString()
   @IsNotEmpty()
   token: string;
+}
+
+export class ChangePasswordDto {
+  @ApiProperty({ example: 'OldPassword1#' })
+  @IsNotEmpty()
+  oldPassword: string;
+
+  @ApiProperty({ example: 'NewStrongPassword1#' })
+  @IsStrongPassword({
+    minLength: 8,
+    minLowercase: 1,
+    minUppercase: 1,
+    minNumbers: 1,
+    minSymbols: 1,
+  })
+  @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
+  newPassword: string;
 }

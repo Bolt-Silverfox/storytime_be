@@ -1,4 +1,3 @@
-// src/user/user.controller.ts
 import {
   Controller,
   Get,
@@ -11,9 +10,10 @@ import {
   ForbiddenException,
   Patch,
   BadRequestException,
-  Logger,
   Post,
   Query,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,14 +33,13 @@ import { UpdateParentProfileDto } from './dto/update-parent-profile.dto';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
 import { EnableBiometricsDto } from './dto/enable-biometrics.dto';
 import { SetPinDto } from './dto/set-pin.dto';
-import { ResetPinDto } from './dto/reset-pin.dto';
 import { ParentProfileResponseDto } from './dto/parent-profile-response.dto';
 import { mapParentProfile } from './utils/parent-profile.mapper';
-import { CreateSubscriptionDto } from './dto/create-subscription.dto';
-import { SubscriptionResponseDto } from './dto/subscription-response.dto';
-import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
-import { SupportTicketResponseDto } from './dto/support-ticket-response.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
+import {
+  ResetPinWithOtpDto,
+  ValidatePinResetOtpDto,
+} from './dto/pin-reset-otp.dto';
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -55,8 +54,6 @@ class UpdateUserRoleDto {
 @ApiTags('user')
 @Controller('user')
 export class UserController {
-  private readonly logger = new Logger(UserController.name);
-
   constructor(private readonly userService: UserService) {}
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
@@ -67,8 +64,51 @@ export class UserController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiResponse({ status: 200, type: ParentProfileResponseDto })
+  @ApiResponse({
+    status: 410,
+    description: 'Account is deactivated',
+    schema: {
+      example: {
+        statusCode: 410,
+        success: false,
+        error: 'Gone',
+        message:
+          'Your account has been deactivated. Please restore your account to continue.',
+        data: {
+          isDeleted: true,
+          deletedAt: '2025-12-01T12:43:35.939Z',
+          restoreEndpoint: '/api/v1/user/me/undo-delete',
+        },
+      },
+    },
+  })
   async getMe(@Req() req: any) {
     const raw = await this.userService.getUser(req.authUserData.userId);
+
+    // If user is not found (likely because isDeleted: true filter), check if user exists but is deleted
+    if (!raw) {
+      const userExists = await this.userService.getUserIncludingDeleted(
+        req.authUserData.userId,
+      );
+      if (userExists && userExists.isDeleted) {
+        throw new HttpException(
+          {
+            statusCode: 410,
+            success: false,
+            error: 'Gone',
+            message:
+              'Your account has been deactivated. Please restore your account to continue.',
+            data: {
+              isDeleted: true,
+              deletedAt: userExists.deletedAt,
+              restoreEndpoint: '/api/v1/user/me/undo-delete',
+            },
+          },
+          HttpStatus.GONE,
+        );
+      }
+    }
+
     return mapParentProfile(raw);
   }
 
@@ -85,7 +125,10 @@ export class UserController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update parent avatar' })
   async updateAvatar(@Req() req: any, @Body() body: UpdateAvatarDto) {
-    return this.userService.updateAvatarForParent(req.authUserData.userId, body);
+    return this.userService.updateAvatarForParent(
+      req.authUserData.userId,
+      body,
+    );
   }
 
   @Post('me/biometrics')
@@ -104,25 +147,83 @@ export class UserController {
     return this.userService.setPin(req.authUserData.userId, body.pin);
   }
 
-  @Post('me/pin/verify')
+  @Post('me/pin/request-reset')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Verify PIN' })
-  async verifyPin(@Req() req: any, @Body() body: SetPinDto) {
-    return this.userService.verifyPin(req.authUserData.userId, body.pin);
+  @ApiOperation({
+    summary: 'Request PIN reset via email OTP',
+    description: 'Sends a 6-digit OTP to user email for PIN reset',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'OTP sent successfully',
+    schema: {
+      example: {
+        success: true,
+        message: 'PIN reset OTP sent to your email',
+      },
+    },
+  })
+  async requestPinResetOtp(@Req() req: any) {
+    return this.userService.requestPinResetOtp(req.authUserData.userId);
   }
 
-  @Post('me/pin/reset')
+  @Post('me/pin/validate-otp')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Reset existing PIN' })
-  async resetPin(@Req() req: any, @Body() body: ResetPinDto) {
+  @ApiOperation({ summary: 'Validate PIN reset OTP' })
+  @ApiResponse({
+    status: 200,
+    description: 'OTP is valid',
+    schema: {
+      example: {
+        success: true,
+        message: 'Valid OTP',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid or expired OTP',
+  })
+  async validatePinResetOtp(
+    @Req() req: any,
+    @Body() body: ValidatePinResetOtpDto,
+  ) {
+    return this.userService.validatePinResetOtp(
+      req.authUserData.userId,
+      body.otp,
+    );
+  }
+
+  @Post('me/pin/reset-with-otp')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Reset PIN using OTP',
+    description: 'Reset PIN after validating OTP code',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'PIN reset successfully',
+    schema: {
+      example: {
+        success: true,
+        message: 'PIN has been reset successfully',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid OTP or PIN mismatch',
+  })
+  async resetPinWithOtp(@Req() req: any, @Body() body: ResetPinWithOtpDto) {
     if (body.newPin !== body.confirmNewPin) {
       throw new BadRequestException('New PIN and confirmation do not match');
     }
-    return this.userService.resetPin(
+    return this.userService.resetPinWithOtp(
       req.authUserData.userId,
-      body.oldPin,
+      body.otp,
       body.newPin,
     );
   }
@@ -135,45 +236,148 @@ export class UserController {
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the account (default: false - soft delete)'
+    description:
+      'Permanently delete the account and all associated data (default: false - soft delete)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Account deactivated successfully (soft delete)',
+    schema: {
+      example: {
+        statusCode: 200,
+        success: true,
+        data: {
+          id: 'user-id',
+          email: 'user@example.com',
+          isDeleted: true,
+          deletedAt: '2025-12-01T13:20:00.000Z',
+          message: 'Account deactivated successfully',
+        },
+        message: 'Account deactivated successfully',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Account and all associated data deleted permanently',
+    schema: {
+      example: {
+        statusCode: 200,
+        success: true,
+        data: {
+          id: 'user-id',
+          email: 'user@example.com',
+          message:
+            'Account and all associated data deleted permanently. All active sessions have been terminated.',
+        },
+        message: 'Account and all associated data deleted permanently',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Account not found',
+    schema: {
+      example: {
+        statusCode: 404,
+        success: false,
+        error: 'Not Found',
+        message: 'Account not found',
+      },
+    },
   })
   async deleteMe(
     @Req() req: any,
-    @Query('permanent') permanent: boolean = false
+    @Query('permanent') permanent: boolean = false,
   ) {
-    return this.userService.deleteUserAccount(req.authUserData.userId, permanent);
+    const result = await this.userService.deleteUserAccount(
+      req.authUserData.userId,
+      permanent,
+    );
+
+    return {
+      statusCode: 200,
+      success: true,
+      data: result,
+      message: result.message,
+    };
   }
 
   @Post('me/delete')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Request account deletion (verify password + reasons)' })
+  @ApiOperation({
+    summary: 'Request account deletion (verify password + reasons)',
+    description:
+      'Verifies password and logs deletion request. After successful verification, use DELETE /api/v1/user/me to actually delete the account.',
+  })
   @ApiQuery({
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the account (default: false - soft delete)'
+    description:
+      'Permanently delete the account and all associated data (default: false - soft delete)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'DELETE request submitted.',
+    schema: {
+      example: {
+        statusCode: 200,
+        success: true,
+        data: {
+          verified: true,
+          message: 'Delete request submitted successfully.',
+        },
+        message: 'Delete request successful',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Account already deactivated',
+    schema: {
+      example: {
+        statusCode: 400,
+        success: false,
+        error: 'Bad Request',
+        message:
+          'Account is already deactivated. Please restore your account first or contact support.',
+      },
+    },
   })
   async deleteAccountWithConfirmation(
     @Req() req: any,
     @Body() body: DeleteAccountDto,
-    @Query('permanent') permanent: boolean = false
+    @Query('permanent') permanent: boolean = false,
   ) {
-    return this.userService.deleteAccountWithConfirmation(
+    // Verify password and create support ticket
+    const result = await this.userService.verifyPasswordAndLogDeletion(
       req.authUserData.userId,
       body.password,
       body.reasons,
       body.notes,
-      permanent
+      permanent,
     );
+
+    return {
+      statusCode: 200,
+      success: true,
+      data: {
+        verified: true,
+        message: 'Delete request submitted successfully.',
+      },
+      message: 'Delete request successful',
+    };
   }
 
   @Post('me/undo-delete')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Restore my soft deleted account',
-    description: 'Restore your own soft deleted account. Only works if your account was soft deleted.'
+    description:
+      'Restore your own soft deleted account. Only works if your account was soft deleted.',
   })
   @ApiResponse({
     status: 200,
@@ -189,10 +393,10 @@ export class UserController {
           isDeleted: false,
           deletedAt: null,
           createdAt: '2023-10-01T12:00:00Z',
-          updatedAt: '2023-10-02T10:30:00Z'
-        }
-      }
-    }
+          updatedAt: '2023-10-02T10:30:00Z',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -201,9 +405,9 @@ export class UserController {
       example: {
         statusCode: 400,
         message: 'Your account is not deleted',
-        error: 'Bad Request'
-      }
-    }
+        error: 'Bad Request',
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -212,17 +416,19 @@ export class UserController {
       example: {
         statusCode: 404,
         message: 'User not found',
-        error: 'Not Found'
-      }
-    }
+        error: 'Not Found',
+      },
+    },
   })
   async undoDeleteMyAccount(@Req() req: any) {
-    const restoredUser = await this.userService.undoDeleteMyAccount(req.authUserData.userId);
-    
+    const restoredUser = await this.userService.undoDeleteMyAccount(
+      req.authUserData.userId,
+    );
+
     return {
       statusCode: 200,
       message: 'Your account has been restored successfully',
-      data: restoredUser
+      data: restoredUser,
     };
   }
 
@@ -233,9 +439,10 @@ export class UserController {
   @Get()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'List all users (admin only)',
-    description: 'Admins can see all users including both active and soft deleted users'
+    description:
+      'Admins can see all users including both active and soft deleted users',
   })
   async getAllUsers(@Req() req: any) {
     if (req.authUserData.userRole !== 'admin') {
@@ -247,9 +454,9 @@ export class UserController {
   @Get('active')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'List only active users (admin only)',
-    description: 'Get only active (non-deleted) users'
+    description: 'Get only active (non-deleted) users',
   })
   async getActiveUsers(@Req() req: any) {
     if (req.authUserData.userRole !== 'admin') {
@@ -279,11 +486,12 @@ export class UserController {
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the account (default: false - soft delete)'
+    description:
+      'Permanently delete the account and all associated data (default: false - soft delete)',
   })
   async deleteUserAccount(
     @Param('id') id: string,
-    @Query('permanent') permanent: boolean = false
+    @Query('permanent') permanent: boolean = false,
   ) {
     return await this.userService.deleteUserAccount(id, permanent);
   }
@@ -306,25 +514,21 @@ export class UserController {
           name: 'John Doe',
           isDeleted: false,
           deletedAt: null,
-          // ... other user fields
-        }
-      }
-    }
+        },
+      },
+    },
   })
-  async undoDeleteUser(
-    @Param('id') id: string,
-    @Req() req: any
-  ) {
+  async undoDeleteUser(@Param('id') id: string, @Req() req: any) {
     if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
     }
 
     const restoredUser = await this.userService.undoDeleteUser(id);
-    
+
     return {
       statusCode: 200,
       message: 'User restored successfully',
-      data: restoredUser
+      data: restoredUser,
     };
   }
 

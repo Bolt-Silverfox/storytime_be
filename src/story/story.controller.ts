@@ -12,6 +12,8 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -26,7 +28,7 @@ import {
 } from '@nestjs/swagger';
 import { randomUUID } from 'crypto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
-import { StoryContentAudioDto } from '../voice/voice.dto';
+
 import {
   AssignDailyChallengeDto,
   CategoryDto,
@@ -50,9 +52,17 @@ import {
   UploadVoiceDto,
   VoiceResponseDto,
   VoiceType,
+  StoryContentAudioDto,
+  PaginatedStoriesDto,
+  DownloadedStoryDto,
+  LibraryStatsDto,
+  StoryDto,
+  StoryWithProgressDto,
 } from './story.dto';
 import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
+
+import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -61,7 +71,7 @@ export class StoryController {
   constructor(
     private readonly storyService: StoryService,
     private readonly textToSpeechService: TextToSpeechService,
-  ) {}
+  ) { }
 
   @Get()
   @ApiOperation({
@@ -99,7 +109,12 @@ export class StoryController {
     @Query('recommended') recommended?: string,
     @Query('kidId') kidId?: string,
     @Query('age') age?: string,
-  ) {
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number = 12,
+  ): Promise<PaginatedStoriesDto> {
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.max(1, Math.min(100, limit));
+
     return this.storyService.getStories({
       theme,
       category,
@@ -111,10 +126,15 @@ export class StoryController {
             : undefined,
       kidId,
       age: age ? parseInt(age) : undefined,
+      page: safePage,
+      limit: safeLimit,
     });
   }
 
   @Get('categories')
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey('categories:all')
+  @CacheTTL(4 * 60 * 60 * 1000)
   @ApiOperation({ summary: 'Get all categories' })
   @ApiOkResponse({
     description: 'List of categories',
@@ -220,7 +240,7 @@ export class StoryController {
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the story (default: false - soft delete)'
+    description: 'Permanently delete the story (default: false - soft delete)',
   })
   @ApiOkResponse({ description: 'Deleted story', type: String })
   @ApiResponse({
@@ -240,7 +260,7 @@ export class StoryController {
   })
   async deleteStory(
     @Param('id') id: string,
-    @Query('permanent') permanent: boolean = false
+    @Query('permanent') permanent: boolean = false,
   ) {
     return this.storyService.deleteStory(id, permanent);
   }
@@ -248,7 +268,10 @@ export class StoryController {
   @Post(':id/undo-delete')
   @ApiOperation({ summary: 'Restore a soft deleted story' })
   @ApiParam({ name: 'id', type: String })
-  @ApiOkResponse({ description: 'Story restored successfully', type: UpdateStoryDto })
+  @ApiOkResponse({
+    description: 'Story restored successfully',
+    type: UpdateStoryDto,
+  })
   @ApiResponse({
     status: 400,
     description: 'Bad Request - Story is not deleted',
@@ -817,5 +840,76 @@ export class StoryController {
   })
   async getStoryById(@Param('id') id: string) {
     return await this.storyService.getStoryById(id);
+  }
+
+  // --- LIBRARY ENDPOINTS ---
+
+  @Get('library/:kidId/continue-reading')
+  @ApiOperation({ summary: 'Get stories currently in progress' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [StoryWithProgressDto] })
+  async getContinueReading(@Param('kidId') kidId: string) {
+    return this.storyService.getContinueReading(kidId);
+  }
+
+  @Get('library/:kidId/completed')
+  @ApiOperation({ summary: 'Get completed stories history' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [StoryDto] })
+  async getCompleted(@Param('kidId') kidId: string) {
+    return this.storyService.getCompletedStories(kidId);
+  }
+
+  @Get('library/:kidId/created')
+  @ApiOperation({ summary: 'Get stories created by the kid' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [StoryDto] })
+  async getCreated(@Param('kidId') kidId: string) {
+    return this.storyService.getCreatedStories(kidId);
+  }
+
+  @Get('library/:kidId/downloads')
+  @ApiOperation({ summary: 'Get downloaded stories' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [StoryDto] })
+  async getDownloads(@Param('kidId') kidId: string) {
+    return this.storyService.getDownloads(kidId);
+  }
+
+  @Post('library/:kidId/download/:storyId')
+  @ApiOperation({ summary: 'Mark a story as downloaded' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiResponse({ status: 201, type: DownloadedStoryDto })
+  async addDownload(
+    @Param('kidId') kidId: string,
+    @Param('storyId') storyId: string,
+  ) {
+    return this.storyService.addDownload(kidId, storyId);
+  }
+
+  @Delete('library/:kidId/download/:storyId')
+  @ApiOperation({ summary: 'Remove a story from downloads' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiResponse({ status: 200, type: DownloadedStoryDto })
+  async removeDownload(
+    @Param('kidId') kidId: string,
+    @Param('storyId') storyId: string,
+  ) {
+    return this.storyService.removeDownload(kidId, storyId);
+  }
+
+  @Delete('library/:kidId/remove/:storyId')
+  @ApiOperation({ summary: 'Remove from library (Resets progress, favs, downloads)' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiResponse({ status: 200, description: 'Story removed from library successfully' })
+  async removeFromLibrary(
+    @Param('kidId') kidId: string,
+    @Param('storyId') storyId: string,
+  ) {
+    await this.storyService.removeFromLibrary(kidId, storyId);
+    return { message: 'Story removed from library successfully' };
   }
 }

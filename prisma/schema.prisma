@@ -45,6 +45,7 @@ model User {
   auth    Session[]
   Token   Token[]
   kids    Kid[]
+  parentFavorites ParentFavorite[]
 
   voices           Voice[]
   preferredVoiceId String?
@@ -116,6 +117,8 @@ model Kid {
 
 
   // New relations
+  downloadedStories DownloadedStory[]
+  createdStories    Story[]           @relation("CreatedStories") // Stories the kid generated
   dailyChallenges         DailyChallengeAssignment[]
   notificationPreferences NotificationPreference[]
   rewardRedemptions       RewardRedemption[]
@@ -171,7 +174,7 @@ model Token {
 
 model Profile {
   id                String   @id @default(uuid())
-  user              User     @relation(fields: [userId], references: [id])
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId            String   @unique
   explicitContent   Boolean  @default(true)
   maxScreenTimeMins Int?
@@ -217,6 +220,8 @@ model Story {
   branches StoryBranch[]
 
   favorites       Favorite[]
+
+  parentFavorites ParentFavorite[]
   progresses      StoryProgress[]
   dailyChallenges DailyChallenge[]
   paths           StoryPath[]
@@ -227,6 +232,13 @@ model Story {
   questions        StoryQuestion[]
   kidDownloads            KidDownload[]
 
+
+  // Add this field to track who created it (for AI generation)
+  creatorKidId String?
+  creatorKid   Kid?    @relation("CreatedStories", fields: [creatorKidId], references: [id])
+
+  // New Relation
+  downloads DownloadedStory[]
 
   @@map("stories")
   @@index([isDeleted])
@@ -285,6 +297,21 @@ model Favorite {
   @@index([isDeleted])
 }
 
+model ParentFavorite {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  isDeleted Boolean     @default(false)
+  deletedAt DateTime?
+
+  @@map("parent_favorites")
+  @@unique([userId, storyId])
+}
+
 model StoryProgress {
   id             String   @id @default(uuid())
   kidId          String
@@ -312,7 +339,7 @@ model StoryProgress {
 model Subscription {
   id        String    @id @default(uuid())
   userId    String
-  user      User      @relation(fields: [userId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan      String
   status    String    @default("active")
   startedAt DateTime  @default(now())
@@ -329,7 +356,7 @@ model Subscription {
 model SupportTicket {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   subject   String
   message   String
   status    String   @default("open")
@@ -815,4 +842,15 @@ model UserBadge {
   @@index([badgeId])
   @@map("user_badges")
   @@index([isDeleted])
+}
+model DownloadedStory {
+  id           String   @id @default(uuid())
+  kidId        String
+  kid          Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  storyId      String
+  story        Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  downloadedAt DateTime @default(now())
+
+  @@unique([kidId, storyId]) // Prevent duplicate downloads
+  @@map("downloaded_stories")
 }

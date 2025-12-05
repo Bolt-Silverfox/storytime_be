@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
@@ -10,6 +10,11 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 
@@ -356,12 +361,50 @@ export class StoryPathDto {
 export class CategoryDto {
   @ApiProperty()
   id: string;
+
   @ApiProperty()
   name: string;
-  @ApiProperty({ required: false })
+
+  @ApiPropertyOptional()
   image?: string;
-  @ApiProperty({ required: false })
+
+  @ApiPropertyOptional()
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Number of stories in this category' })
+  storyCount?: number;
+}
+
+export class CreateCategoryDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  slug: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  image?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  iconUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsInt()
+  @IsOptional()
+  sortOrder?: number;
 }
 
 export class ThemeDto {
@@ -429,35 +472,9 @@ export class GenerateStoryDto {
   additionalContext?: string;
 }
 
-export const VOICEID = {
-  MILO: 'pNInz6obpgDQGcFmaJgB',
-  BELLA: 'EXAVITQu4vr4xnSDxMaL',
-  COSMO: 'TxGEqnHWrfWFTfGW9XjX',
-  NIMBUS: '21m00Tcm4TlvDq8ikWAM',
-  GRANDPA_JO: 'pqHfZKP75CvOlQylNhV4',
-  CHIP: 'AZnzlk1XvdvUeBnXmlld',
-};
+import { VOICEID, VoiceType, StoryContentAudioDto } from '../voice/voice.dto';
 
-export enum VoiceType {
-  MILO = 'MILO',
-  BELLA = 'BELLA',
-  COSMO = 'COSMO',
-  NIMBUS = 'NIMBUS',
-  GRANDPA_JO = 'GRANDPA_JO',
-  CHIP = 'CHIP',
-}
-
-export class StoryContentAudioDto {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  content: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsEnum(VoiceType)
-  voiceType?: VoiceType;
-}
+export { VOICEID, VoiceType, StoryContentAudioDto };
 
 export class QuestionAnswerDto {
   @ApiProperty()
@@ -475,4 +492,86 @@ export class QuestionAnswerDto {
   @ApiProperty()
   @IsInt()
   selectedOption: number;
+}
+
+export class PaginationMetaDto {
+  @ApiProperty({ description: 'Current page number', example: 1 })
+  @IsNumber()
+  currentPage: number;
+
+  @ApiProperty({ description: 'Total number of pages', example: 5 })
+  @IsNumber()
+  totalPages: number;
+
+  @ApiProperty({ description: 'Number of items per page', example: 12 })
+  @IsNumber()
+  pageSize: number;
+
+  @ApiProperty({ description: 'Total number of items', example: 50 })
+  @IsNumber()
+  totalCount: number;
+}
+
+export class PaginatedStoriesDto {
+  @ApiProperty({
+    description: 'Array of stories',
+    type: 'array',
+    isArray: true,
+  })
+  @IsArray()
+  data: any[];
+
+  @ApiProperty({
+    description: 'Pagination metadata',
+    type: PaginationMetaDto,
+  })
+  pagination: PaginationMetaDto;
+}
+
+export class DownloadedStoryDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  storyId: string;
+
+  @ApiProperty()
+  downloadedAt: Date;
+}
+
+export class StoryDto extends CreateStoryDto {
+  @ApiProperty()
+  @IsString()
+  id: string;
+
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiProperty()
+  updatedAt: Date;
+}
+
+export class StoryWithProgressDto extends StoryDto {
+  @ApiProperty()
+  @IsNumber()
+  progress: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  totalTimeSpent?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  lastAccessed?: Date;
+}
+
+export class LibraryStatsDto {
+  @ApiProperty()
+  totalStoriesRead: number;
+
+  @ApiProperty()
+  completedStoriesCount: number;
 }

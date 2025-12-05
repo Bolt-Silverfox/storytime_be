@@ -10,75 +10,58 @@ async function main() {
   await prisma.$executeRawUnsafe(
     'TRUNCATE TABLE "stories", "_StoryCategories", "_StoryThemes", "Category", "Theme" RESTART IDENTITY CASCADE;',
   );
-
   await prisma.$executeRawUnsafe(
     'TRUNCATE TABLE "age_groups" RESTART IDENTITY CASCADE;',
   );
-
   await prisma.$executeRawUnsafe(
     'TRUNCATE TABLE "voices" RESTART IDENTITY CASCADE;',
   );
-
   await prisma.$executeRawUnsafe(
     'TRUNCATE TABLE "avatars" RESTART IDENTITY CASCADE;',
   );
 
-  // Load stories from stories.json
   const storiesPath = path.resolve('src/story/stories.json');
   const getStories = () => {
     return JSON.parse(fs.readFileSync(storiesPath, 'utf-8'));
   };
-
   const stories = getStories();
 
+  // We do this first so the "Main" categories have beautiful images/descriptions
+  console.log('Seeding master categories...');
   await prisma.category.createMany({
     data: categories,
     skipDuplicates: true,
   });
 
+  console.log('Seeding master themes...');
   await prisma.theme.createMany({
     data: themes,
     skipDuplicates: true,
   });
 
-  // Before the loop, keep your master arrays:
-  const categoriesArray = categories; // your master categories array
-  const themesArray = themes; // your master themes array
-
   console.log('Seeding age groups...');
-
   for (const group of defaultAgeGroups) {
     await prisma.ageGroup.upsert({
       where: { name: group.name },
-      update: {
-        min: group.min,
-        max: group.max,
-      },
-      create: {
-        name: group.name,
-        min: group.min,
-        max: group.max,
-      },
+      update: { min: group.min, max: group.max },
+      create: { name: group.name, min: group.min, max: group.max },
     });
-
-    console.log(`Upserted age group: ${group.name}`);
   }
 
-  console.log('Age group seeding completed!');
-
-  console.log('Seeding stories');
+  // 6. Seed Stories with "connectOrCreate"
+  console.log('Seeding stories...');
   for (const story of stories) {
-    // Support both single and array for category/theme
-    const categories = Array.isArray(story.category)
+    // Ensure we handle both strings and arrays
+    const storyCategories = Array.isArray(story.category)
       ? story.category
       : [story.category];
-    const themes = Array.isArray(story.theme) ? story.theme : [story.theme];
-    const validCategories = categories.filter((name: string) =>
-      categoriesArray.some((cat) => cat.name === name),
-    );
-    const validThemes = themes.filter((name: string) =>
-      themesArray.some((theme) => theme.name === name),
-    );
+    
+    // Filter out empty strings if any
+    const cleanCategories = storyCategories.filter((c: string) => c && c.length > 0);
+
+    const storyThemes = Array.isArray(story.theme) ? story.theme : [story.theme];
+    const cleanThemes = storyThemes.filter((t: string) => t && t.length > 0);
+
     await prisma.story.create({
       data: {
         title: story.title,
@@ -89,11 +72,27 @@ async function main() {
         isInteractive: story.isInteractive ?? false,
         ageMin: story.ageMin ?? 0,
         ageMax: story.ageMax ?? 9,
-        categories: {
-          connect: validCategories.map((name: string) => ({ name })),
-        },
-        themes: { connect: validThemes.map((name: string) => ({ name })) },
         textContent: story.content,
+        recommended: story.recommended ?? false,
+        categories: {
+          connectOrCreate: cleanCategories.map((name: string) => ({
+            where: { name: name },
+            create: { 
+              name: name,
+              description: 'Auto-generated category'
+            },
+          })),
+        },
+        themes: {
+          connectOrCreate: cleanThemes.map((name: string) => ({
+            where: { name: name },
+            create: { 
+              name: name,
+              description: 'Auto-generated theme'
+            },
+          })),
+        },
+
         questions: {
           create: story.questions.map((question: any) => ({
             question: question.question,
@@ -101,80 +100,51 @@ async function main() {
             correctOption: question.correctOption,
           })),
         },
-        recommended: story.recommended ?? false,
       },
     });
   }
-
   console.log('Seeded stories!');
 
-  console.log('seeding voices');
+  // 7. Seed Voices
+  console.log('Seeding voices...');
   for (const [key, voice] of Object.entries(VOICEID)) {
-    // check for existing voice by elevenLabsVoiceId = voice and create if not exists
-    console.log(`Seeding voice: ${key} with ID: ${voice}`);
-
     const existingVoice = await prisma.voice.findFirst({
       where: { elevenLabsVoiceId: voice },
     });
-    if (existingVoice) {
-      console.log(`Voice ${key} already exists, skipping.`);
-      continue;
+    if (!existingVoice) {
+      await prisma.voice.create({
+        data: {
+          elevenLabsVoiceId: voice,
+          name: key,
+          type: 'elevenlabs',
+        },
+      });
     }
-    await prisma.voice.create({
-      data: {
-        elevenLabsVoiceId: voice,
-        name: key,
-        type: 'elevenlabs',
-      },
-    });
   }
-  console.log('Seeded voices!');
 
-
+  // 8. Seed Avatars
+  console.log('Seeding avatars...');
   const existingAvatars = await prisma.avatar.findMany({
-    where: {
-      name: {
-        in: systemAvatars.map((a) => a.name),
-      },
-    },
-    select: {
-      name: true,
-    },
+    where: { name: { in: systemAvatars.map((a) => a.name) } },
+    select: { name: true },
   });
-
-  const existingNames = new Set(existingAvatars.map((a: typeof existingAvatars[0]) => a.name));
-
-  // Filter out avatars that already exist
+  const existingNames = new Set(existingAvatars.map((a) => a.name));
   const avatarsToCreate = systemAvatars.filter(
     (avatar) => !existingNames.has(avatar.name),
   );
 
-  // Skip if all avatars already exist
-  if (avatarsToCreate.length === 0) {
-    console.log('All system avatars already exist. Skipping seeding.');
-    return;
-  }
-
-  console.log(
-    `Seeding ${avatarsToCreate.length} new system avatars...`,
-  );
-
-  // Create only new avatars
   for (const avatarData of avatarsToCreate) {
     await prisma.avatar.create({
       data: {
         name: avatarData.name,
         url: avatarData.url,
         isSystemAvatar: true,
-        isDeleted: false,        // Explicitly set to false
-        deletedAt: null,         // Explicitly set to null
+        isDeleted: false,
+        deletedAt: null,
       },
     });
-
-    console.log(`Created system avatar: ${avatarData.name}`);
   }
-
-  console.log('System avatar seeding completed!');
+  console.log('Seeding completed!');
 }
 
 void main()
