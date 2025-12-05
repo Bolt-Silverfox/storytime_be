@@ -7,10 +7,6 @@ import {
   FavoriteDto,
   StoryProgressDto,
   DailyChallengeDto,
-  UploadVoiceDto,
-  CreateElevenLabsVoiceDto,
-  SetPreferredVoiceDto,
-  VoiceResponseDto,
   AssignDailyChallengeDto,
   CompleteDailyChallengeDto,
   DailyChallengeAssignmentDto,
@@ -19,10 +15,14 @@ import {
   StoryPathDto,
   CategoryDto,
   ThemeDto,
-  VoiceType,
   PaginatedStoriesDto,
 } from './story.dto';
-import { GoogleTTSService } from './google-tts.service';
+import {
+  UploadVoiceDto,
+  CreateElevenLabsVoiceDto,
+  SetPreferredVoiceDto,
+  VoiceResponseDto,
+} from '../voice/voice.dto';
 import { UploadService } from '../upload/upload.service';
 import {
   StoryPath,
@@ -43,6 +43,7 @@ import {
 } from '@nestjs/common';
 import { GeminiService, GenerateStoryOptions } from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
+import { VoiceType } from '../voice/voice.dto';
 
 @Injectable()
 export class StoryService {
@@ -50,7 +51,6 @@ export class StoryService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
-    private readonly googleTts: GoogleTTSService,
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
@@ -197,7 +197,7 @@ export class StoryService {
         description: data.description,
         language: data.language,
         coverImageUrl: data.coverImageUrl ?? '',
-        audioUrl: audioUrl,
+        audioUrl: audioUrl ?? '',
         isInteractive: data.isInteractive ?? false,
         ageMin: data.ageMin ?? 0,
         ageMax: data.ageMax ?? 9,
@@ -865,7 +865,11 @@ export class StoryService {
   }
 
   async fetchAvailableVoices(): Promise<any[]> {
-    return [];
+    // Return the configured voices from VOICE_CONFIG
+    return Object.keys(VoiceType).map((key) => ({
+      voice_id: key,
+      name: key,
+    }));
   }
 
   async getCategories(): Promise<CategoryDto[]> {
@@ -1109,10 +1113,10 @@ export class StoryService {
       // Generate audio for the story
       let audioUrl = '';
       if (generatedStory.content) {
-        const { buffer, filename } = await this.elevenLabs.generateAudioBuffer(
+        audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
+          'ai-story',
           generatedStory.content,
         );
-        audioUrl = await this.uploadService.uploadAudioBuffer(buffer, filename);
       }
 
       // Generate or get a cover image
@@ -1168,10 +1172,8 @@ export class StoryService {
         include: {
           themes: true,
           categories: true,
-          questions: true,
         },
       });
-
       return story;
     } catch (error) {
       this.logger.error('Failed to generate story with AI:', error);
@@ -1183,6 +1185,7 @@ export class StoryService {
     kidId: string,
     themeNames?: string[],
     categoryNames?: string[],
+    kidName?: string,
   ) {
     const kid = await this.prisma.kid.findUnique({
       where: {
@@ -1250,7 +1253,7 @@ export class StoryService {
       category: categories,
       ageMin,
       ageMax,
-      kidName: kid.name || 'Hero',
+      kidName: kidName || kid.name || 'Hero',
       language: 'English',
       additionalContext: contextString,
       creatorKidId: kidId,

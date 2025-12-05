@@ -17,6 +17,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+export { VoiceType } from '../voice/voice.dto';
 
 export class StoryImageDto {
   @ApiProperty()
@@ -106,12 +107,14 @@ export class CreateStoryDto {
 
   @ApiProperty({ type: [StoryImageDto], required: false })
   @IsOptional()
+  @IsArray()
   @ValidateNested({ each: true })
   @Type(() => StoryImageDto)
   images?: StoryImageDto[];
 
   @ApiProperty({ type: [StoryBranchDto], required: false })
   @IsOptional()
+  @IsArray()
   @ValidateNested({ each: true })
   @Type(() => StoryBranchDto)
   branches?: StoryBranchDto[];
@@ -172,12 +175,14 @@ export class UpdateStoryDto {
 
   @ApiProperty({ type: [StoryImageDto], required: false })
   @IsOptional()
+  @IsArray()
   @ValidateNested({ each: true })
   @Type(() => StoryImageDto)
   images?: StoryImageDto[];
 
   @ApiProperty({ type: [StoryBranchDto], required: false })
   @IsOptional()
+  @IsArray()
   @ValidateNested({ each: true })
   @Type(() => StoryBranchDto)
   branches?: StoryBranchDto[];
@@ -185,53 +190,44 @@ export class UpdateStoryDto {
 
 export class FavoriteDto {
   @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @IsUUID()
   kidId: string;
 
   @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @IsUUID()
   storyId: string;
 }
 
 export class StoryProgressDto {
   @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @IsUUID()
   kidId: string;
 
   @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @IsUUID()
   storyId: string;
 
   @ApiProperty()
   @IsNumber()
+  @Min(0)
+  @Max(100)
   progress: number;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
   completed?: boolean;
-
-  @ApiProperty({
-    required: false,
-    description: 'Time spent in this specific session in seconds',
-  })
-  @IsOptional()
-  @IsNumber()
-  sessionTime?: number;
 }
 
 export class DailyChallengeDto {
   @ApiProperty()
-  @IsString()
+  @IsUUID()
   storyId: string;
 
   @ApiProperty()
-  @IsString()
-  challengeDate: string;
+  @IsDate()
+  @Type(() => Date)
+  challengeDate: Date;
 
   @ApiProperty()
   @IsString()
@@ -240,48 +236,6 @@ export class DailyChallengeDto {
   @ApiProperty()
   @IsString()
   meaning: string;
-}
-
-export class UploadVoiceDto {
-  @ApiProperty({ description: 'Voice name', example: 'Dad Voice' })
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-}
-
-export class CreateElevenLabsVoiceDto {
-  @ApiProperty({ description: 'Voice name', example: 'Robot Voice' })
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-
-  @ApiProperty({ description: 'ElevenLabs Voice ID', example: 'abc123xyz' })
-  @IsString()
-  @IsNotEmpty()
-  elevenLabsVoiceId: string;
-}
-
-export class SetPreferredVoiceDto {
-  @ApiProperty({
-    description: 'Voice ID to set as preferred',
-    example: 'uuid-voice-id',
-  })
-  @IsString()
-  @IsNotEmpty()
-  voiceId: string;
-}
-
-export class VoiceResponseDto {
-  @ApiProperty()
-  id: string;
-  @ApiProperty()
-  name: string;
-  @ApiProperty({ description: "'uploaded' or 'elevenlabs'" })
-  type: string;
-  @ApiProperty({ required: false })
-  url?: string;
-  @ApiProperty({ required: false })
-  elevenLabsVoiceId?: string;
 }
 
 export class AssignDailyChallengeDto {
@@ -303,40 +257,43 @@ export class CompleteDailyChallengeDto {
 export class DailyChallengeAssignmentDto {
   @ApiProperty()
   id: string;
+
   @ApiProperty()
   kidId: string;
+
   @ApiProperty()
   challengeId: string;
+
   @ApiProperty()
   completed: boolean;
+
   @ApiProperty({ required: false })
   completedAt?: Date;
+
   @ApiProperty()
   assignedAt: Date;
 }
 
 export class StartStoryPathDto {
-  @ApiProperty({ description: 'Kid ID' })
+  @ApiProperty()
   @IsString()
   kidId: string;
 
-  @ApiProperty({ description: 'Story ID' })
+  @ApiProperty()
   @IsString()
   storyId: string;
 }
 
 export class UpdateStoryPathDto {
-  @ApiProperty({ description: 'StoryPath ID' })
+  @ApiProperty()
   @IsString()
   pathId: string;
 
-  @ApiProperty({
-    description: 'Updated path (JSON or delimited string of choices)',
-  })
+  @ApiProperty()
   @IsString()
-  path: string;
+  path: string; // JSON string of choices
 
-  @ApiProperty({ required: false, description: 'Mark as completed' })
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsDate()
   @Type(() => Date)
@@ -346,14 +303,19 @@ export class UpdateStoryPathDto {
 export class StoryPathDto {
   @ApiProperty()
   id: string;
+
   @ApiProperty()
   kidId: string;
+
   @ApiProperty()
   storyId: string;
+
   @ApiProperty()
   path: string;
+
   @ApiProperty()
   startedAt: Date;
+
   @ApiProperty({ required: false })
   completedAt?: Date;
 }
@@ -365,40 +327,18 @@ export class CategoryDto {
   @ApiProperty()
   name: string;
 
-  @ApiPropertyOptional()
+  @ApiProperty({ required: false })
   image?: string;
 
-  @ApiPropertyOptional()
+  @ApiProperty({ required: false })
   description?: string;
 
-  @ApiPropertyOptional({ description: 'Number of stories in this category' })
+  @ApiProperty({ required: false })
   storyCount?: number;
-}
 
-export class CreateCategoryDto {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  slug: string;
-
-  @ApiPropertyOptional()
-  @IsString()
+  @ApiProperty({ required: false })
   @IsOptional()
-  image?: string;
-
-  @ApiPropertyOptional()
   @IsString()
-  @IsOptional()
-  description?: string;
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
   iconUrl?: string;
 
   @ApiPropertyOptional()
@@ -427,7 +367,6 @@ export class ErrorResponseDto {
   details?: any;
 }
 
-// --- THIS WAS THE MISSING PART ---
 export class GenerateStoryDto {
   @ApiProperty({ type: [String], required: false })
   @IsOptional()
@@ -472,15 +411,7 @@ export class GenerateStoryDto {
   additionalContext?: string;
 }
 
-import { VOICEID, VoiceType, StoryContentAudioDto } from '../voice/voice.dto';
-
-export { VOICEID, VoiceType, StoryContentAudioDto };
-
-export class QuestionAnswerDto {
-  @ApiProperty()
-  @IsString()
-  kidId: string;
-
+export class SubmitQuestionAnswerDto {
   @ApiProperty()
   @IsString()
   questionId: string;
@@ -574,4 +505,27 @@ export class LibraryStatsDto {
 
   @ApiProperty()
   completedStoriesCount: number;
+}
+
+export class QuestionAnswerDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  kidId: string;
+
+  @ApiProperty()
+  questionId: string;
+
+  @ApiProperty()
+  storyId: string;
+
+  @ApiProperty()
+  selectedOption: number;
+
+  @ApiProperty()
+  isCorrect: boolean;
+
+  @ApiProperty()
+  answeredAt: Date;
 }

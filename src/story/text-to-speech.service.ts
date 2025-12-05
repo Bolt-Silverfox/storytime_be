@@ -1,93 +1,159 @@
-import { UploadService } from '@/upload/upload.service';
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { UploadService } from '../upload/upload.service';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
-import { VOICEID, VoiceType } from './story.dto';
+import { createClient } from '@deepgram/sdk';
+import { VoiceType, VOICE_CONFIG } from '../voice/voice.dto';
 
 @Injectable()
 export class TextToSpeechService {
-  private elevenLabsApiKey: string;
-  private cloudinaryApiKey: string;
-  private cloudinaryApiSecret: string;
-  private cloudinaryCloudName: string;
+  private readonly logger = new Logger(TextToSpeechService.name);
+  private deepgramApiKey: string;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly uploadService: UploadService,
   ) {
-    this.elevenLabsApiKey =
-      this.configService.get<string>('ELEVEN_LABS_KEY') ?? '';
-    if (!this.elevenLabsApiKey) {
-      throw new Error('ELEVEN_LABS_KEY is not set in environment variables');
-    }
-    this.cloudinaryApiKey =
-      this.configService.get<string>('CLOUDINARY_API_KEY') ?? '';
-    if (!this.cloudinaryApiKey) {
-      throw new Error('CLOUDINARY_API_KEY is not set in environment variables');
-    }
-    this.cloudinaryApiSecret =
-      this.configService.get<string>('CLOUDINARY_API_SECRET') ?? '';
-    if (!this.cloudinaryApiSecret) {
-      throw new Error(
-        'CLOUDINARY_API_SECRET is not set in environment variables',
-      );
-    }
-    this.cloudinaryCloudName =
-      this.configService.get<string>('CLOUDINARY_CLOUD_NAME') ?? '';
-    if (!this.cloudinaryCloudName) {
-      throw new Error(
-        'CLOUDINARY_CLOUD_NAME is not set in environment variables',
-      );
+    this.deepgramApiKey = this.configService.get<string>('DEEPGRAM_API_KEY') ?? '';
+    if (!this.deepgramApiKey) {
+      this.logger.warn('DEEPGRAM_API_KEY is not set');
     }
   }
 
   async textToSpeechCloudUrl(
-    textId: string,
+    storyId: string,
     text: string,
-    voiceIdOrType?: string, 
+    voicetype?: VoiceType,
   ): Promise<string> {
+    if (!this.deepgramApiKey) {
+      throw new InternalServerErrorException('Deepgram API key is missing');
+    }
+
+    const voiceConfig = VOICE_CONFIG[voicetype ?? VoiceType.MILO];
+    const deepgram = createClient(this.deepgramApiKey);
+
+    // 1. Transform raw text into "Storyteller Mode" (SSML)
+    const ssmlText = this.formatTextToSSML(text);
+
     try {
-      // 1. Determine the actual ID to send to ElevenLabs
-      // Check if the input matches a key in your hardcoded list (e.g. "MILO")
-      // If yes, use the ID from the list. If no, assume it IS the ID.
-      const resolvedVoiceId = VOICEID[voiceIdOrType as keyof typeof VOICEID] || voiceIdOrType || VOICEID.MILO;
+      this.logger.log(`Generating Audio with Model: ${voiceConfig.model}`);
 
-      const audioBuffer = await this.getElevenLabsAudio(
-        text,
-        resolvedVoiceId,
+      // Deepgram has a 2000 char limit. Split text into chunks.
+      const MAX_CHARS = 1900; // Safety margin
+      const chunks = this.chunkText(ssmlText, MAX_CHARS);
+      const audioBuffers: Buffer[] = [];
+
+      this.logger.log(`Splitting text into ${chunks.length} chunks`);
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        // Ensure each chunk is wrapped in <speak> tags if not already
+        const chunkSSML = chunk.startsWith('<speak>') ? chunk : `<speak>${chunk}</speak>`;
+
+        this.logger.log(`Processing chunk ${i + 1}/${chunks.length} (Length: ${chunkSSML.length})`);
+
+        try {
+          const response = await deepgram.speak.request(
+            { text: chunkSSML },
+            {
+              model: voiceConfig.model,
+              encoding: 'linear16',
+              container: 'wav',
+            },
+          );
+
+          const stream = await response.getStream();
+          if (!stream) {
+            throw new Error('No audio stream returned from Deepgram');
+          }
+          audioBuffers.push(await this.getAudioBuffer(stream));
+        } catch (innerError) {
+          this.logger.error(`Failed on chunk ${i + 1}: ${innerError.message}`);
+          throw innerError;
+        }
+      }
+
+      const combinedBuffer = Buffer.concat(audioBuffers);
+
+      return await this.uploadService.uploadAudioBuffer(
+        combinedBuffer,
+        `story_${storyId}_deepgram_${Date.now()}.wav`,
       );
 
-      const cloudUrl = await this.uploadService.uploadAudioBuffer(
-        audioBuffer,
-        `story_${textId}_${resolvedVoiceId}_${Date.now()}.mp3`,
-      );
-
-      return cloudUrl;
     } catch (error) {
-      console.error(error);
-      throw new InternalServerErrorException('Text-to-speech failed');
+      this.logger.error(`Deepgram TTS failed for story ${storyId}: ${error.message}`);
+      throw new InternalServerErrorException('Deepgram TTS failed');
     }
   }
 
-  private async getElevenLabsAudio(
-    text: string,
-    voiceId: string,
-  ): Promise<Buffer> {
-    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
-    const response = await axios.post(
-      url,
-      {
-        text,
-        model_id: 'eleven_monolingual_v1', // or other model
-      },
-      {
-        headers: {
-          'xi-api-key': this.elevenLabsApiKey,
-          'Content-Type': 'application/json',
-        },
-        responseType: 'arraybuffer', // <--- so we get audio as a buffer
-      },
-    );
-    return Buffer.from(response.data); // MP3 buffer
+  // --- Helper: Adds "Breathing Room" to the story ---
+  private formatTextToSSML(rawText: string): string {
+    // 1. Clean up weird spacing
+    let text = rawText.replace(/\s+/g, ' ').trim();
+
+    // 2. Escape special XML characters to prevent errors
+    text = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+
+    // 3. Add pauses for dramatic effect
+    // Pause after commas (short breath)
+    text = text.replace(/,/g, ', <break time="300ms"/>');
+
+    // Pause after sentences (medium breath)
+    text = text.replace(/([.!?])\s/g, '$1 <break time="800ms"/> ');
+
+    // Long pause between paragraphs/ideas (if you have double newlines in raw text)
+    // text = text.replace(/\n\n/g, '<break time="1500ms"/>'); 
+
+    // 4. Wrap in <speak> tags
+    return `<speak>${text}</speak>`;
+  }
+
+  private chunkText(text: string, maxLength: number): string[] {
+    // Remove outer <speak> tags for splitting, we'll add them back to chunks
+    let cleanText = text.replace(/^<speak>/, '').replace(/<\/speak>$/, '');
+
+    const chunks: string[] = [];
+    while (cleanText.length > maxLength) {
+      let splitIndex = cleanText.lastIndexOf(' ', maxLength);
+      // Try to split at a sentence end if possible
+      const sentenceEnd = cleanText.lastIndexOf('. ', maxLength);
+      if (sentenceEnd > maxLength * 0.5) {
+        splitIndex = sentenceEnd + 1;
+      }
+
+      if (splitIndex === -1) splitIndex = maxLength;
+
+      chunks.push(cleanText.substring(0, splitIndex).trim());
+      cleanText = cleanText.substring(splitIndex).trim();
+    }
+    if (cleanText.length > 0) {
+      chunks.push(cleanText);
+    }
+    return chunks;
+  }
+
+  private async getAudioBuffer(stream: ReadableStream<Uint8Array>): Promise<Buffer> {
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+
+    const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    return Buffer.from(result.buffer);
   }
 }
