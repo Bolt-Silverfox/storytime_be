@@ -32,7 +32,7 @@ export class KidController {
     }
 
     @Get('/user/kids/:kidId')
-    @ApiOperation({ summary: 'Get details of a specific kid' })
+    @ApiOperation({ summary: 'Get details of a specific kid (including recommendation stats)' })
     async getKid(
         @Request() req: AuthenticatedRequest, 
         @Param('kidId') kidId: string
@@ -98,5 +98,27 @@ export class KidController {
         @Param('kidId') kidId: string
     ) {
         return this.kidService.undoDeleteKid(kidId, req.authUserData.userId);
+    }
+
+    // === NEW ENDPOINT: Get kid's recommendation stats ===
+    @Get('/auth/kids/:kidId/recommendation-stats')
+    @ApiOperation({ 
+        summary: 'Get recommendation statistics for a kid',
+        description: 'Returns total number of stories recommended to this kid'
+    })
+    async getKidRecommendationStats(
+        @Request() req: AuthenticatedRequest,
+        @Param('kidId') kidId: string
+    ) {
+        // First verify the kid belongs to the parent
+        const kid = await this.kidService.findOne(kidId, req.authUserData.userId);
+        
+        // The findOne method already includes recommendation stats
+        // But we can return just the stats if needed
+        return {
+            kidId: kid.id,
+            kidName: kid.name,
+            recommendationStats: kid.recommendationStats
+        };
     }
 }
