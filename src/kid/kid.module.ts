@@ -5,14 +5,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthModule } from '../auth/auth.module';
 import { VoiceModule } from '../voice/voice.module';
 import { AnalyticsModule } from '@/analytics/analytics.module';
-import { KidDownloadsModule } from './downloads/kid-downloads.module';
+
 
 @Module({
     imports: [
         AuthModule, 
         VoiceModule,
         AnalyticsModule,
-        KidDownloadsModule,
     ],
     controllers: [KidController],
     providers: [KidService, PrismaService],

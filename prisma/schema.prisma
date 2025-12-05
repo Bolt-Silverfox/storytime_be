@@ -34,6 +34,8 @@ model User {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   pinHash         String?
+  deviceAuths DeviceAuth[]
+
 
     // SOFT DELETE FIELDS
   isDeleted       Boolean     @default(false)
@@ -132,7 +134,7 @@ model Kid {
   buddySelectedAt   DateTime?
   buddyInteractions BuddyInteraction[]
   storyBuddy        StoryBuddy?        @relation(fields: [storyBuddyId], references: [id])
-  kidDownloads            KidDownload[]
+ 
 
 
   // New relations
@@ -252,7 +254,7 @@ model Story {
   themes           Theme[]           @relation("StoryThemes")
   storyAudioCaches StoryAudioCache[]
   questions        StoryQuestion[]
-  kidDownloads            KidDownload[]
+  
 
 
   // Add this field to track who created it (for AI generation)
@@ -621,18 +623,6 @@ model Category {
   @@index([isDeleted])
 }
 
-model KidDownload {
-  id        String   @id @default(uuid())
-  kidId     String
-  storyId   String
-  createdAt DateTime @default(now())
-
-  kid   Kid   @relation(fields: [kidId], references: [id])
-  story Story @relation(fields: [storyId], references: [id])
-
-  @@unique([kidId, storyId])
-  @@map("kid_downloads")
-}
 
 
 model Theme {
