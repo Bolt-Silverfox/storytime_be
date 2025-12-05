@@ -29,7 +29,7 @@ export const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
   GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET is required'),
   BACKEND_BASE_URL: z.string().url('BACKEND_BASE_URL must be a valid URL'),
-  GOOGLE_TTS_API_KEY: z.string().min(1, 'GOOGLE_TTS_API_KEY is required'),
+  DEEPGRAM_API_KEY: z.string().min(1, 'GOOGLE_TTS_API_KEY is required'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
