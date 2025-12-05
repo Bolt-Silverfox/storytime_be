@@ -56,6 +56,9 @@ import {
   PaginatedStoriesDto,
   DownloadedStoryDto,
   LibraryStatsDto,
+  ParentRecommendationDto,
+  RecommendationResponseDto,
+  RecommendationsStatsDto,
 } from './story.dto';
 import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
@@ -909,5 +912,136 @@ export class StoryController {
   ) {
     await this.storyService.removeFromLibrary(kidId, storyId);
     return { message: 'Story removed from library successfully' };
+  }
+
+  // --- PARENT RECOMMENDATIONS ---
+
+  @Post('recommend')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Recommend a story to your kid' })
+  @ApiBody({ type: ParentRecommendationDto })
+  @ApiOkResponse({ 
+    description: 'Story recommended successfully', 
+    type: RecommendationResponseDto 
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async recommendStory(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: ParentRecommendationDto,
+  ) {
+    return this.storyService.recommendStoryToKid(req.authUserData.userId, body);
+  }
+
+  @Get('recommendations/kid/:kidId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all recommended stories for a kid' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiOkResponse({
+    description: 'List of recommended stories',
+    type: RecommendationResponseDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getKidRecommendations(
+    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+  ) {
+    return this.storyService.getKidRecommendations(kidId, req.authUserData.userId);
+  }
+
+  @Delete('recommendations/:recommendationId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a recommendation' })
+  @ApiParam({ name: 'recommendationId', type: String })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete (default: false - soft delete)',
+  })
+  @ApiOkResponse({ description: 'Recommendation deleted successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async deleteRecommendation(
+    @Req() req: AuthenticatedRequest,
+    @Param('recommendationId') recommendationId: string,
+    @Query('permanent') permanent: boolean = false,
+  ) {
+    return this.storyService.deleteRecommendation(recommendationId, req.authUserData.userId, permanent);
+  }
+
+  @Get('recommendations/kid/:kidId/stats')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get recommendation statistics for a kid' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiOkResponse({
+    description: 'Recommendation statistics',
+    type: RecommendationsStatsDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getRecommendationStats(
+    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+  ) {
+    return this.storyService.getRecommendationStats(kidId, req.authUserData.userId);
   }
 }
