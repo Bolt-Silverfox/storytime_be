@@ -131,14 +131,7 @@ export class UserController {
     );
   }
 
-  @Post('me/biometrics')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Enable or disable biometrics' })
-  async setBiometrics(@Req() req: any, @Body() body: EnableBiometricsDto) {
-    return this.userService.setBiometrics(req.authUserData.userId, body.enable);
-  }
-
+ 
   @Post('me/pin')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()

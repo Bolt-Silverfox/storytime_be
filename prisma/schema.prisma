@@ -35,9 +35,7 @@ model User {
   updatedAt       DateTime    @updatedAt
   pinHash         String?
 
-  enableBiometrics Boolean? @default(false)
-
-  // SOFT DELETE FIELDS
+    // SOFT DELETE FIELDS
   isDeleted       Boolean     @default(false)
   deletedAt       DateTime?
 
@@ -69,6 +67,24 @@ model User {
 
   @@map("users")
   @@index([isDeleted])
+}
+
+
+//--------------------------
+//Biometric enabled
+//-------------------------
+
+model DeviceAuth {
+  id           String   @id @default(uuid())
+  userId       String
+  deviceId     String
+  biometricsOn Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
 }
 
 // -------------------------
