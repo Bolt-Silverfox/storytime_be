@@ -229,6 +229,7 @@ model Story {
   isInteractive   Boolean
   ageMin          Int
   ageMax          Int
+  backgroundColor String   @default("#5E3A54")
   recommended     Boolean  @default(false)
   aiGenerated     Boolean  @default(false)
   difficultyLevel Int      @default(1)

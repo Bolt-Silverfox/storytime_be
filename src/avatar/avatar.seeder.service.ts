@@ -15,19 +15,38 @@ export class AvatarSeederService implements OnModuleInit {
   private async seedSystemAvatars() {
     try {
       this.logger.log('Starting avatar seeding process...');
-
-      // 1. Unlink avatars from Users and Kids to avoid FK constraints
-      this.logger.log('Unlinking avatars from users and kids...');
-      await this.prisma.user.updateMany({
-        data: { avatarId: null },
-      });
-      await this.prisma.kid.updateMany({
-        data: { avatarId: null },
+      const existingAvatarsCount = await this.prisma.avatar.count({
+        where: { isSystemAvatar: true },
       });
 
-      // 2. Truncate the Avatar table (delete all records)
-      this.logger.log('Truncating Avatar table...');
-      await this.prisma.avatar.deleteMany({});
+      if (existingAvatarsCount >= systemAvatars.length) {
+        for (const avatarData of systemAvatars) {
+          const existingAvatar = await this.prisma.avatar.findFirst({
+            where: {
+              name: avatarData.name,
+              isSystemAvatar: true,
+            },
+          });
+          if (!existingAvatar) {
+            this.logger.log(`Seeding missing system avatar: ${avatarData.name}`);
+            await this.prisma.avatar.create({
+              data: {
+                name: avatarData.name,
+                url: avatarData.url,
+                isSystemAvatar: true,
+                isDeleted: false,
+                deletedAt: null,
+              },
+            });
+          } else {
+            await this.prisma.avatar.update({
+              where: { id: existingAvatar.id },
+              data: { url: avatarData.url },
+            });
+            this.logger.log(`Updated system avatar URL: ${avatarData.name}`);
+          }
+        }
+      }
 
       // 3. Populate avatars
       this.logger.log(`Seeding ${systemAvatars.length} system avatars...`);

@@ -74,6 +74,7 @@ async function main() {
         ageMax: story.ageMax ?? 9,
         textContent: story.content,
         recommended: story.recommended ?? false,
+        backgroundColor: story.backgroundColor || '#5E3A54',
         categories: {
           connectOrCreate: cleanCategories.map((name: string) => ({
             where: { name: name },
