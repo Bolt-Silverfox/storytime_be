@@ -157,6 +157,44 @@ Launch the visual database browser:
 ```bash
 pnpx prisma studio
 ```
+
+## Achievement / Badge Per-Child (kidId) Changes
+
+This project was updated to support per-child (per `Kid`) badge progress. Key notes:
+
+- The Prisma model `UserBadge` now includes an optional `kidId` field and the unique constraint is on `(userId, kidId, badgeId)`. This allows storing badges per child as well as parent-level badges.
+- Service updates: `BadgeService.updateBadgeProgress(userId, badgeType, increment, metadata, kidId?)` accepts an optional `kidId` to scope progress.
+- The `BadgeProgressEngine` now propagates `kidId` from activity events into badge updates when available.
+
+Important migration steps (run locally):
+
+1. Create a migration to update the database schema:
+```powershell
+pnpm prisma migrate dev --name add-userbadge-kidid
+```
+
+2. Generate the Prisma client:
+```powershell
+pnpm prisma generate
+```
+
+3. Initialize badges for existing users (optional): the `BadgeService.initializeUserBadges(userId)` will create both parent-level and per-kid badge records for each user. You can call this from a seed script or an admin endpoint.
+
+Testing the kid-scoped endpoints and badge flow (Postman):
+
+1. Start the server:
+```powershell
+pnpm start:dev
+```
+
+2. Create or use an authenticated parent user and create a `Kid` record.
+
+3. Trigger a kid-scoped activity (for example, complete a daily challenge): POST to `/achievement/complete-daily-challenge` (or call the equivalent endpoint) with the `kidId` in the body. The engine will record activity and update the per-kid `UserBadge` record.
+
+4. Retrieve badges for the kid:
+- GET `/badges/preview?kidId=<kidId>` — returns top 3 badges scoped to that kid.
+- GET `/badges/full?kidId=<kidId>` — returns the full badge list for the kid.
+
 ## License
 
 UNLICENSED - Private project
