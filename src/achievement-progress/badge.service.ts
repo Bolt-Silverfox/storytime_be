@@ -34,12 +34,11 @@ export class BadgeService {
         const txOps = [] as any[];
 
         for (const badge of badges) {
-            // Parent-level (kidId null)
+            // Parent-level (kidId omitted)
             txOps.push(
                 this.prisma.userBadge.create({
                     data: {
                         userId,
-                        kidId: null,
                         badgeId: badge.id,
                         count: 0,
                         unlocked: false,
@@ -75,8 +74,15 @@ export class BadgeService {
      */
     async getBadgePreview(userId: string, kidId?: string): Promise<BadgePreviewDto[]> {
         try {
+            const where: any = { userId };
+            if (typeof kidId === 'undefined') {
+                where.kidId = null;
+            } else {
+                where.kidId = kidId;
+            }
+
             const userBadges = await this.prisma.userBadge.findMany({
-                where: { userId, kidId: typeof kidId === 'undefined' ? null : kidId },
+                where,
                 include: {
                     badge: true,
                 },
@@ -90,13 +96,15 @@ export class BadgeService {
 
             // If less than 3, fill with locked badges
             if (userBadges.length < 3) {
+                const where2: any = { userId, unlocked: false, id: { notIn: userBadges.map((ub) => ub.id) } };
+                if (typeof kidId === 'undefined') {
+                    where2.kidId = null;
+                } else {
+                    where2.kidId = kidId;
+                }
+
                 const remaining = await this.prisma.userBadge.findMany({
-                    where: {
-                            userId,
-                            kidId: typeof kidId === 'undefined' ? null : kidId,
-                            unlocked: false,
-                            id: { notIn: userBadges.map((ub) => ub.id) },
-                        },
+                    where: where2,
                     include: { badge: true },
                     orderBy: [{ badge: { priority: 'desc' } }],
                     take: 3 - userBadges.length,
@@ -121,8 +129,15 @@ export class BadgeService {
     // Get full badge list with unlock status
 
     async getFullBadgeList(userId: string, kidId?: string): Promise<FullBadgeListResponseDto> {
+        const whereAll: any = { userId };
+        if (typeof kidId === 'undefined') {
+            whereAll.kidId = null;
+        } else {
+            whereAll.kidId = kidId;
+        }
+
         const userBadges = await this.prisma.userBadge.findMany({
-            where: { userId, kidId: typeof kidId === 'undefined' ? null : kidId },
+            where: whereAll,
             include: {
                 badge: true,
             },
@@ -147,14 +162,14 @@ export class BadgeService {
     // Get a specific user badge
 
     async getUserBadge(userId: string, badgeId: string, kidId?: string) {
+        const composite: any = {
+            userId,
+            kidId: typeof kidId === 'undefined' ? null : kidId,
+            badgeId,
+        };
+
         return this.prisma.userBadge.findUnique({
-            where: {
-                userId_kidId_badgeId: {
-                    userId,
-                    kidId: typeof kidId === 'undefined' ? null : kidId,
-                    badgeId,
-                },
-            },
+            where: { userId_kidId_badgeId: composite },
             include: { badge: true },
         });
     }
@@ -186,14 +201,9 @@ export class BadgeService {
             }
 
             await this.prisma.$transaction(async (tx) => {
+                const compositeKey: any = { userId, kidId: typeof kidId === 'undefined' ? null : kidId, badgeId: badge.id };
                 const userBadge = await tx.userBadge.findUnique({
-                    where: {
-                        userId_kidId_badgeId: {
-                            userId,
-                            kidId: typeof kidId === 'undefined' ? null : kidId,
-                            badgeId: badge.id,
-                        },
-                    },
+                    where: { userId_kidId_badgeId: compositeKey },
                 });
 
                 if (!userBadge) {
