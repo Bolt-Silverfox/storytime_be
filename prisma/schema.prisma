@@ -116,7 +116,8 @@ model Kid {
   preferredVoice   Voice?   @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
 
   preferredCategories Category[] @relation("KidPreferredCategories")
-  excludedTags        String[]   @default([])
+  // excludedTags        String[]   @default([])
+  excludedStoryTags KidStoryTagExclusion[]
 
   isBedtimeEnabled Boolean @default(false)
   bedtimeStart     String? // Format: "HH:mm" e.g., "20:00"
@@ -259,6 +260,8 @@ model Story {
   storyAudioCaches StoryAudioCache[]
   questions        StoryQuestion[]
 
+  tags StoryTag[] @relation("StoryTags")
+
   // Add this field to track who created it (for AI generation)
   creatorKidId String?
   creatorKid   Kid?    @relation("CreatedStories", fields: [creatorKidId], references: [id])
@@ -272,6 +275,53 @@ model Story {
   @@index([isDeleted])
   @@map("stories")
 }
+
+//-----------------------------
+//STORY TAGS 
+//-----------------------------
+
+model StoryTag {
+  id        String   @id @default(uuid())
+  name      String   @unique        // "Magic", "Monsters", "Romance"
+  slug      String   @unique        // "magic", "monsters", "romance"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // SOFT DELETE FIELDS
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  // Relations
+  stories           Story[]               @relation("StoryTags")
+  excludedByKids    KidStoryTagExclusion[]
+
+  @@map("story_tags")
+  @@index([isDeleted])
+}
+
+
+//-------------------------------
+//KID EXCLUDED STORY tags
+//-------------------------------
+model KidStoryTagExclusion {
+  id        String   @id @default(uuid())
+  kidId     String
+  tagId     String
+
+  kid       Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  tag       StoryTag @relation(fields: [tagId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  // SOFT DELETE FIELDS
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  @@unique([kidId, tagId])              // No duplicate exclusions
+  @@map("kid_story_tag_exclusions")
+  @@index([kidId])
+}
+
 
 model StoryImage {
   id        String   @id @default(uuid())
