@@ -729,8 +729,12 @@ export class StoryService {
     }
 
     let contextString = '';
-    if (kid.excludedTags && kid.excludedTags.length > 0) {
-      const exclusions = kid.excludedTags.join(', ');
+
+    if (kid.excludedStoryTags && kid.excludedStoryTags.length > 0) {
+      const exclusions = kid.excludedStoryTags
+        .map(item => item.tag.name)
+        .join(', ');
+
       contextString = `IMPORTANT: The story must strictly AVOID the following topics, themes, creatures, or elements: ${exclusions}. Ensure the content is safe and comfortable for the child regarding these exclusions.`;
     }
 
