@@ -844,6 +844,8 @@ model UserBadge {
   id         String    @id @default(uuid())
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kidId      String?
+  kid        Kid?      @relation(fields: [kidId], references: [id], onDelete: Cascade)
   badgeId    String
   badge      Badge     @relation(fields: [badgeId], references: [id], onDelete: Cascade)
   count      Int       @default(0) // Current progress count
@@ -854,8 +856,9 @@ model UserBadge {
   isDeleted       Boolean     @default(false)
   deletedAt       DateTime?
 
-  @@unique([userId, badgeId])
+  @@unique([userId, kidId, badgeId])
   @@index([userId])
+  @@index([kidId])
   @@index([badgeId])
   @@map("user_badges")
   @@index([isDeleted])
