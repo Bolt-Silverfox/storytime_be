@@ -104,6 +104,90 @@ export class StreakService {
             };
         }
     }
+    
+    // Get streak summary for a specific kid
+    async getStreakSummaryForKid(kidId: string): Promise<StreakResponseDto> {
+        try {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+            // Query activity logs where kid was active
+            const activities = await this.prisma.activityLog.findMany({
+                where: {
+                    kidId,
+                    createdAt: { gte: thirtyDaysAgo },
+                    action: {
+                        in: ['story_read', 'challenge_completed', 'quiz_answered'],
+                    },
+                },
+                select: { createdAt: true },
+                orderBy: { createdAt: 'desc' },
+            });
+
+            const activeDates = new Set(
+                activities.map((a) => a.createdAt.toISOString().split('T')[0]),
+            );
+
+            let currentStreak = 0;
+            const today = new Date().toISOString().split('T')[0];
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+            if (activeDates.has(today) || activeDates.has(yesterdayStr)) {
+                const checkDate = new Date();
+                if (!activeDates.has(today)) {
+                    checkDate.setDate(checkDate.getDate() - 1);
+                }
+
+                while (true) {
+                    const dateStr = checkDate.toISOString().split('T')[0];
+                    if (activeDates.has(dateStr)) {
+                        currentStreak++;
+                        checkDate.setDate(checkDate.getDate() - 1);
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            const weeklyActivity: WeeklyActivityDto[] = [];
+            const now = new Date();
+            const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date(now);
+                date.setDate(date.getDate() - i);
+                date.setHours(0, 0, 0, 0);
+                const dayName = dayNames[date.getDay()];
+                const dateStr = date.toISOString().split('T')[0];
+                const isActive = activeDates.has(dateStr);
+                weeklyActivity.push({
+                    day: dayName,
+                    date: date.toISOString(),
+                    isActive,
+                });
+            }
+
+            const lastActivity = await this.prisma.activityLog.findFirst({
+                where: { kidId },
+                orderBy: { createdAt: 'desc' },
+                select: { createdAt: true },
+            });
+
+            return {
+                currentStreak,
+                weeklyActivity,
+                lastActiveDate: lastActivity?.createdAt?.toISOString() || null,
+            };
+        } catch (error) {
+            this.logger.error(`Error calculating streak for kid ${kidId}:`, error);
+            return {
+                currentStreak: 0,
+                weeklyActivity: this.getDefaultWeeklyActivity(),
+                lastActiveDate: null,
+            };
+        }
+    }
 
     private getDefaultWeeklyActivity(): WeeklyActivityDto[] {
         const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
