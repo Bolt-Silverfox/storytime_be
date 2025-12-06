@@ -187,7 +187,7 @@ Testing the kid-scoped endpoints and badge flow (Postman):
 pnpm start:dev
 ```
 
-2. Create or use an authenticated parent user and create a `Kid` record (via API or directly in the DB).
+2. Create or use an authenticated parent user and create a `Kid` record.
 
 3. Trigger a kid-scoped activity (for example, complete a daily challenge): POST to `/achievement/complete-daily-challenge` (or call the equivalent endpoint) with the `kidId` in the body. The engine will record activity and update the per-kid `UserBadge` record.
 
@@ -195,9 +195,6 @@ pnpm start:dev
 - GET `/badges/preview?kidId=<kidId>` — returns top 3 badges scoped to that kid.
 - GET `/badges/full?kidId=<kidId>` — returns the full badge list for the kid.
 
-If you prefer, you can also query the `user_badges` table directly in Prisma Studio to inspect per-kid rows.
-
-If you want, I can add explicit controller endpoints for kid-scoped badge queries and a small Postman collection with example requests.
 ## License
 
 UNLICENSED - Private project
