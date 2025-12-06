@@ -11,3 +11,4 @@ import { ConfigModule } from '@nestjs/config';
   exports: [BiometricsService],
 })
 export class BiometricsModule { }
+export class BiometricsModule { }
