@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { VoiceService } from '../voice/voice.service';
+import { UpdateExcludedStoryTagsDto } from './dto/update-excluded-tags.dto';
 
 @Injectable()
 export class KidService {
@@ -251,4 +252,79 @@ export class KidService {
         // Fetch them back to return full structures
         return this.findAllByUser(userId);
     }
+
+    // Update excluded story tags for a kid
+    async getExcludedStoryTags(kidId: string) {
+      const kid = await this.prisma.kid.findFirst({
+        where: { id: kidId, isDeleted: false },
+        select: {
+          id: true,
+          excludedStoryTags: {
+            where: { isDeleted: false },
+            select: { tag: true },
+          },
+        },
+      });
+
+      if (!kid) {
+        throw new NotFoundException('Kid not found');
+      }
+
+      return kid.excludedStoryTags.map((e) => e.tag);
+    }
+
+   async updateExcludedStoryTags(
+     kidId: string,
+     dto: UpdateExcludedStoryTagsDto,
+   ) {
+      // Ensure kid exists
+     const kid = await this.prisma.kid.findFirst({
+       where: { id: kidId, isDeleted: false },
+       select: { id: true },
+    });
+
+     if (!kid) {
+       throw new NotFoundException('Kid not found');
+     }
+
+      // Validate tags exist & not deleted
+     const uniqueTagIds = Array.from(new Set(dto.tagIds));
+
+     const tags = await this.prisma.storyTag.findMany({
+       where: {
+         id: { in: uniqueTagIds },
+         isDeleted: false,
+       },
+       select: { id: true },
+     });
+
+     if (tags.length !== uniqueTagIds.length) {
+       throw new BadRequestException('One or more tagIds are invalid');
+     }
+
+      // Overwrite pattern: clear previous then insert new ones
+     await this.prisma.kidStoryTagExclusion.updateMany({
+       where: { kidId, isDeleted: false },
+       data: {
+         isDeleted: true,
+         deletedAt: new Date(),
+       },
+     });
+
+      if (uniqueTagIds.length === 0) {
+        return []; // nothing excluded now
+      }
+
+     await this.prisma.kidStoryTagExclusion.createMany({
+       data: uniqueTagIds.map((tagId) => ({
+         kidId,
+         tagId,
+       })),
+       skipDuplicates: true,
+     });
+
+      // Return updated list
+      return this.getExcludedStoryTags(kidId);
+     }
+
 }

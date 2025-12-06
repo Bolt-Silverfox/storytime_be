@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, ParseArrayPipe, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, ParseArrayPipe, Query, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { KidService } from './kid.service';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { UpdateExcludedStoryTagsDto } from './dto/update-excluded-tags.dto';
 
 @ApiTags('Kids Management')
 @ApiBearerAuth()
@@ -120,5 +121,23 @@ export class KidController {
             kidName: kid.name,
             recommendationStats: kid.recommendationStats
         };
+    }
+
+    // Excluded Story Tags Management for Kids
+
+    @Get(':kidId/excluded-story-tags')
+    @ApiOperation({ summary: "Get a kid's excluded story tags" })
+    getExcludedStoryTags(@Param('kidId') kidId: string) {
+        return this.kidService.getExcludedStoryTags(kidId);
+    }
+
+    @Put(':kidId/excluded-story-tags')
+    @HttpCode(200)
+    @ApiOperation({ summary: "Update a kid's excluded story tags" })
+    updateExcludedStoryTags(
+        @Param('kidId') kidId: string,
+        @Body() dto: UpdateExcludedStoryTagsDto,
+    ) {
+        return this.kidService.updateExcludedStoryTags(kidId, dto);
     }
 }

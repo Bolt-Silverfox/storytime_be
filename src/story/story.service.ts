@@ -679,9 +679,21 @@ export class StoryService {
     kidName?: string,
   ) {
     const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-      include: { preferredCategories: true, preferredVoice: true },
+      where: {
+        id: kidId,
+        isDeleted: false,
+      },
+      include: {
+        preferredCategories: true,
+        preferredVoice: true,
+        excludedStoryTags: {
+          include: { tag: true }, 
+          where: { isDeleted: false },
+        },
+      },
     });
+
+      
 
     if (!kid) {
       throw new NotFoundException(`Kid with id ${kidId} not found`);
@@ -748,7 +760,7 @@ export class StoryService {
     };
 
     this.logger.log(
-      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}].`
+      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}]. Exclusions: [${kid.excludedStoryTags.map((e: any) => e.tag?.name).join(', ')}]`
     );
 
     // 2. Generate Content via AI
@@ -997,4 +1009,64 @@ export class StoryService {
       kid: recommendation.kid,
     };
   }
+
+  //  FIND STORIES FOR KID (Excluding Tags)
+
+  async findStoriesForKid(kidId: string, page = 1, limit = 12) {
+  // 1. Load excluded tag IDs for this kid
+    const exclusions = await this.prisma.kidStoryTagExclusion.findMany({
+      where: { kidId, isDeleted: false },
+      select: { tagId: true },
+    });
+
+    const excludedTagIds = exclusions.map(e => e.tagId);
+
+    // 2. Pagination
+    const skip = (page - 1) * limit;
+
+    // 3. Build base query
+    const where: any = {
+      isDeleted: false,
+    };
+
+    // 4. If kid has exclusions, filter OUT stories that contain any excluded tag
+    if (excludedTagIds.length > 0) {
+      where.tags = {
+        none: {
+          id: { in: excludedTagIds },
+        },
+      };
+    }
+
+  // 5. Count for pagination
+    const totalCount = await this.prisma.story.count({ where });
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // 6. Fetch stories + their tags + other useful relations
+    const stories = await this.prisma.story.findMany({
+      where,
+      skip,
+      take: limit,
+      include: {
+        tags: true,      
+        images: true,
+        branches: true,
+        categories: true,
+        themes: true,
+        questions: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      data: stories,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        pageSize: limit,
+        totalCount,
+      },
+    };
+  }
+
 }

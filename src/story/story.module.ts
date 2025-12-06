@@ -8,9 +8,10 @@ import { GeminiService } from './gemini.service';
 import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
+import { StoryTagModule } from './story-tag/story-tag.module';
 
 @Module({
-  imports: [HttpModule, ScheduleModule.forRoot(), AuthModule],
+  imports: [HttpModule, ScheduleModule.forRoot(), AuthModule, StoryTagModule],
   controllers: [StoryController],
   providers: [
     StoryService,

@@ -66,7 +66,6 @@ import {
 } from '../voice/voice.dto';
 import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
-
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 
 @ApiTags('stories')
@@ -1045,4 +1044,19 @@ export class StoryController {
   ) {
     return this.storyService.getRecommendationStats(kidId, req.authUserData.userId);
   }
+
+  //story tags 
+  @Get('kid/:kidId')
+  findStoriesForKid(
+    @Param('kidId') kidId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.storyService.findStoriesForKid(
+      kidId,
+      Number(page) || 1,
+      Number(limit) || 12,
+    );
+  }
+
 }
