@@ -28,9 +28,14 @@ export class BadgeService {
             return;
         }
 
-        // Create user badge records in transaction
-        await this.prisma.$transaction(
-            badges.map((badge) =>
+        // Fetch kids for user and create per-kid and parent-level badge records
+        const kids = await this.prisma.kid.findMany({ where: { parentId: userId }, select: { id: true } });
+
+        const txOps = [] as any[];
+
+        for (const badge of badges) {
+            // Parent-level (kidId omitted)
+            txOps.push(
                 this.prisma.userBadge.create({
                     data: {
                         userId,
@@ -39,19 +44,45 @@ export class BadgeService {
                         unlocked: false,
                     },
                 }),
-            ),
-        );
+            );
 
-        this.logger.log(`Initialized ${badges.length} badges for user ${userId}`);
+            // Per-kid badges
+            for (const k of kids) {
+                txOps.push(
+                    this.prisma.userBadge.create({
+                        data: {
+                            userId,
+                            kidId: k.id,
+                            badgeId: badge.id,
+                            count: 0,
+                            unlocked: false,
+                        },
+                    }),
+                );
+            }
+        }
+
+        if (txOps.length > 0) {
+            await this.prisma.$transaction(txOps);
+        }
+
+        this.logger.log(`Initialized ${badges.length} badges for user ${userId} (including per-kid records)`);
     }
 
     /**
      * Get badge preview (top 3 badges)
      */
-    async getBadgePreview(userId: string): Promise<BadgePreviewDto[]> {
+    async getBadgePreview(userId: string, kidId?: string): Promise<BadgePreviewDto[]> {
         try {
+            const where: any = { userId };
+            if (typeof kidId === 'undefined') {
+                where.kidId = null;
+            } else {
+                where.kidId = kidId;
+            }
+
             const userBadges = await this.prisma.userBadge.findMany({
-                where: { userId },
+                where,
                 include: {
                     badge: true,
                 },
@@ -65,12 +96,15 @@ export class BadgeService {
 
             // If less than 3, fill with locked badges
             if (userBadges.length < 3) {
+                const where2: any = { userId, unlocked: false, id: { notIn: userBadges.map((ub) => ub.id) } };
+                if (typeof kidId === 'undefined') {
+                    where2.kidId = null;
+                } else {
+                    where2.kidId = kidId;
+                }
+
                 const remaining = await this.prisma.userBadge.findMany({
-                    where: {
-                        userId,
-                        unlocked: false,
-                        id: { notIn: userBadges.map((ub) => ub.id) },
-                    },
+                    where: where2,
                     include: { badge: true },
                     orderBy: [{ badge: { priority: 'desc' } }],
                     take: 3 - userBadges.length,
@@ -94,9 +128,16 @@ export class BadgeService {
 
     // Get full badge list with unlock status
 
-    async getFullBadgeList(userId: string): Promise<FullBadgeListResponseDto> {
+    async getFullBadgeList(userId: string, kidId?: string): Promise<FullBadgeListResponseDto> {
+        const whereAll: any = { userId };
+        if (typeof kidId === 'undefined') {
+            whereAll.kidId = null;
+        } else {
+            whereAll.kidId = kidId;
+        }
+
         const userBadges = await this.prisma.userBadge.findMany({
-            where: { userId },
+            where: whereAll,
             include: {
                 badge: true,
             },
@@ -120,14 +161,15 @@ export class BadgeService {
 
     // Get a specific user badge
 
-    async getUserBadge(userId: string, badgeId: string) {
+    async getUserBadge(userId: string, badgeId: string, kidId?: string) {
+        const composite: any = {
+            userId,
+            kidId: typeof kidId === 'undefined' ? null : kidId,
+            badgeId,
+        };
+
         return this.prisma.userBadge.findUnique({
-            where: {
-                userId_badgeId: {
-                    userId,
-                    badgeId,
-                },
-            },
+            where: { userId_kidId_badgeId: composite },
             include: { badge: true },
         });
     }
@@ -139,6 +181,7 @@ export class BadgeService {
         badgeType: string,
         increment: number = 1,
         metadata?: any,
+        kidId?: string,
     ): Promise<void> {
         const relevantBadges = this.badgeConstants.BADGE_DEFS_BY_TYPE[badgeType] || [];
 
@@ -158,13 +201,9 @@ export class BadgeService {
             }
 
             await this.prisma.$transaction(async (tx) => {
+                const compositeKey: any = { userId, kidId: typeof kidId === 'undefined' ? null : kidId, badgeId: badge.id };
                 const userBadge = await tx.userBadge.findUnique({
-                    where: {
-                        userId_badgeId: {
-                            userId,
-                            badgeId: badge.id,
-                        },
-                    },
+                    where: { userId_kidId_badgeId: compositeKey },
                 });
 
                 if (!userBadge) {
@@ -196,6 +235,7 @@ export class BadgeService {
                     // Emit unlock event
                     this.eventEmitter.emit('badge.unlocked', {
                         userId,
+                        kidId: kidId ?? null,
                         badgeId: badge.id,
                         timestamp: new Date(),
                     });

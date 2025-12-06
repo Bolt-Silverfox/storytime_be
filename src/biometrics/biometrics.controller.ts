@@ -8,10 +8,10 @@ import { DisableBiometricsDto } from './dto/disable-biometrics.dto';
 
 @ApiTags('biometrics')
 @ApiBearerAuth()
-@Controller('api/v1/biometrics')
+@Controller('biometrics')
 @UseGuards(AuthSessionGuard)
 export class BiometricsController {
-  constructor(private readonly biometricsService: BiometricsService) {}
+  constructor(private readonly biometricsService: BiometricsService) { }
 
   @Post('enable')
   @ApiOperation({ summary: 'Enable biometrics for a device' })

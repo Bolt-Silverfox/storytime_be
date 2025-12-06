@@ -45,8 +45,8 @@ export class BadgeProgressEngine implements OnModuleInit {
                 },
             });
 
-            // Emit corresponding badge events
-            await this.handleBadgeEvent(userId, action, metadata);
+            // Emit corresponding badge events (pass kidId through)
+            await this.handleBadgeEvent(userId, action, kidId, metadata);
         } catch (error) {
             this.logger.error(`Error recording activity: ${error.message}`, error.stack);
         }
@@ -60,6 +60,7 @@ export class BadgeProgressEngine implements OnModuleInit {
             'story_read',
             1,
             event.metadata,
+            event.kidId,
         );
     }
 
@@ -71,6 +72,7 @@ export class BadgeProgressEngine implements OnModuleInit {
             'challenge_completed',
             1,
             event.metadata,
+            event.kidId,
         );
     }
 
@@ -82,6 +84,7 @@ export class BadgeProgressEngine implements OnModuleInit {
             'quiz_answered',
             1,
             { isCorrect: event.isCorrect },
+            event.kidId,
         );
     }
 
@@ -94,6 +97,7 @@ export class BadgeProgressEngine implements OnModuleInit {
     private async handleBadgeEvent(
         userId: string,
         action: string,
+        kidId?: string,
         metadata?: any,
     ): Promise<void> {
         // Map action to badge event types
@@ -109,7 +113,7 @@ export class BadgeProgressEngine implements OnModuleInit {
             return;
         }
 
-        await this.badgeService.updateBadgeProgress(userId, badgeType, 1, metadata);
+        await this.badgeService.updateBadgeProgress(userId, badgeType, 1, metadata, kidId);
     }
 
     /**
