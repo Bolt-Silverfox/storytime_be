@@ -9,6 +9,7 @@ import { Request } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 export interface JwtPayload {
   userId: string;
@@ -29,9 +30,10 @@ export class AuthSessionGuard implements CanActivate {
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
     private readonly reflector: Reflector,
+    private readonly prisma: PrismaService,
   ) { }
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -44,7 +46,7 @@ export class AuthSessionGuard implements CanActivate {
     return this.validateRequest(request);
   }
 
-  private validateRequest(request: Request): boolean {
+  private async validateRequest(request: Request): Promise<boolean> {
     const authHeader = request.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -59,6 +61,16 @@ export class AuthSessionGuard implements CanActivate {
       if (!payload.authSessionId) {
         throw new UnauthorizedException('Invalid or expired token');
       }
+
+      // Check if session exists and is active
+      const session = await this.prisma.session.findUnique({
+        where: { id: payload.authSessionId },
+      });
+
+      if (!session) {
+        throw new UnauthorizedException('Session invalid or expired');
+      }
+
       (request as AuthenticatedRequest).authUserData = payload;
       return true;
     } catch (error) {

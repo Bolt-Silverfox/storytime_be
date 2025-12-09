@@ -205,7 +205,11 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() body: ChangePasswordDto,
   ) {
-    return this.authService.changePassword(req.authUserData['userId'], body);
+    return this.authService.changePassword(
+      req.authUserData['userId'],
+      body,
+      req.authUserData['authSessionId']!,
+    );
   }
 
   // ===== PASSWORD RESET =====
