@@ -473,7 +473,11 @@ export class AuthService {
     return { message: 'Password has been reset successfully' };
   }
 
-  async changePassword(userId: string, data: ChangePasswordDto) {
+  async changePassword(
+    userId: string,
+    data: ChangePasswordDto,
+    currentSessionId: string,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -497,9 +501,21 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(data.newPassword, 10);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash: hashedPassword },
+
+    // Use transaction to update password and cleanup sessions atomicity
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash: hashedPassword },
+      });
+
+      // Delete all sessions for this user EXCEPT the current one
+      await tx.session.deleteMany({
+        where: {
+          userId: userId,
+          id: { not: currentSessionId },
+        },
+      });
     });
 
     await this.notificationService.sendNotification('PasswordChanged', {
