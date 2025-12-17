@@ -33,6 +33,7 @@ import { BiometricsModule } from './biometrics/biometrics.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { throttleConfig } from './common/config/throttle.config';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { throttleConfig } from './common/config/throttle.config';
     AchievementProgressModule,
     ParentFavoriteModule,
     BiometricsModule,
+    AdminModule,
   ],
   providers: [
     {
