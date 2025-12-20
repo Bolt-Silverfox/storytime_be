@@ -157,49 +157,51 @@ export class AuthService {
     }
   }
 
-  async register(data: RegisterDto): Promise<LoginResponseDto | null> {
-    const hashedPassword = await bcrypt.hash(data.password, 10);
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: data.email },
-    });
-    if (existingUser) throw new BadRequestException('Email already exists');
+ async register(data: RegisterDto): Promise<LoginResponseDto | null> {
+  const hashedPassword = await bcrypt.hash(data.password, 10);
+  const existingUser = await this.prisma.user.findUnique({
+    where: { email: data.email },
+  });
+  if (existingUser) throw new BadRequestException('Email already exists');
 
-    let role = 'parent';
-    if (data.role === 'admin') {
-      if (data.adminSecret !== process.env.ADMIN_SECRET) {
-        throw new ForbiddenException('Invalid admin secret');
-      }
-      role = 'admin';
+  let role = 'parent';
+  if (data.role === 'admin') {
+    if (data.adminSecret !== process.env.ADMIN_SECRET) {
+      throw new ForbiddenException('Invalid admin secret');
     }
+    role = 'admin';
+  }
 
-    const user = await this.prisma.user.create({
-      data: {
-        name: data.fullName,
-        email: data.email,
-        passwordHash: hashedPassword,
-        title: data.title,
-        role: role as any,
-        profile: {
-          create: {},
+  const user = await this.prisma.user.create({
+    data: {
+      name: data.fullName,
+      email: data.email,
+      passwordHash: hashedPassword,
+      role: role as any,
+      profile: {
+        create: {
+          language: data.language,  
+          country: data.nationality,
         },
       },
-      include: {
-        profile: true,
-        avatar: true,
-      },
-    });
+    },
+    include: {
+      profile: true,
+      avatar: true,
+    },
+  });
 
-    await this.sendEmailVerification(user.email);
+  await this.sendEmailVerification(user.email);
 
-    const tokenData = await this.createToken(user);
-    const numberOfKids = 0;
+  const tokenData = await this.createToken(user);
+  const numberOfKids = 0;
 
-    return {
-      user: new UserDto({ ...user, numberOfKids }),
-      jwt: tokenData.jwt,
-      refreshToken: tokenData.refreshToken,
-    };
-  }
+  return {
+    user: new UserDto({ ...user, numberOfKids }),
+    jwt: tokenData.jwt,
+    refreshToken: tokenData.refreshToken,
+  };
+}
 
   async sendEmailVerification(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
@@ -276,14 +278,25 @@ export class AuthService {
 
     if (Object.keys(updateData).length === 0) {
       if (!user.profile)
-        return this.prisma.profile.create({ data: { userId } });
+        return this.prisma.profile.create({ 
+          data: { 
+            userId,
+            language: 'en', 
+            country: 'NG',  
+          } 
+        });
       return user.profile;
     }
 
     const profile = await this.prisma.profile.upsert({
       where: { userId },
       update: updateData,
-      create: { userId, ...updateData },
+      create: { 
+        userId, 
+        language: data.language || 'en', 
+        country: data.country || 'NG',  
+        ...updateData 
+      },
     });
 
     const userWithKids = await this.prisma.user.findUnique({
@@ -616,7 +629,12 @@ export class AuthService {
           isEmailVerified: emailVerified === true,
           googleId: googleId || null,
           role: 'parent',
-          profile: { create: {} },
+          profile: { 
+            create: {
+              language: 'en', // FIXED: Required field
+              country: 'NG',  // FIXED: Required field
+            } 
+          },
         },
         include: { profile: true, avatar: true },
       });

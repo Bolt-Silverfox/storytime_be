@@ -330,7 +330,6 @@ export class UserService {
     const profileUpdate: any = {};
 
     // -------- USER FIELDS --------
-    if (data.title !== undefined) updateData.title = data.title;
     if (data.name !== undefined) updateData.name = data.name;
 
     // Avatar logic
