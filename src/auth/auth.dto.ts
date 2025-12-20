@@ -41,16 +41,28 @@ export class RegisterDto {
   @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   password: string;
 
-  @ApiProperty({ example: 'Mr' })
-  @IsNotEmpty()
-  title: string;
-
   @ApiProperty({ example: 'firstname lastname' })
   @Matches(/^[a-zA-Z]+(?:\s+[a-zA-Z]+)+$/, {
     message: 'Full name must contain at least two names',
   })
   @IsNotEmpty()
   fullName: string;
+
+  @ApiProperty({ example: 'en' })
+  @IsNotEmpty({ message: 'Language is required' })
+  @IsString()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toLowerCase() : value,
+  )
+  language: string;  
+  
+  @ApiProperty({ example: 'NG' })
+  @IsNotEmpty({ message: 'Nationality is required' })
+  @IsString()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toUpperCase() : value,
+  )
+  nationality: string;  // Maps to country
 
   @ApiProperty({ example: 'parent', required: false })
   @IsOptional()
@@ -85,11 +97,11 @@ export class ProfileDto {
   @ApiProperty({ example: 50 })
   maxScreenTimeMins: number | null;
 
-  @ApiProperty({ example: 'english' })
-  language: string | null;
+  @ApiProperty({ example: 'en' })
+  language: string;
 
-  @ApiProperty({ example: 'nigeria' })
-  country: string | null;
+  @ApiProperty({ example: 'NG' })
+  country: string;
 
   @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   createdAt: Date;
@@ -150,10 +162,6 @@ export class UserDto {
   @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   updatedAt: Date;
 
-  @ApiProperty({ example: 'Mr', required: false })
-  @Optional()
-  title?: string | null;
-
   @ApiProperty({ type: ProfileDto })
   profile: ProfileDto | null;
 
@@ -185,7 +193,6 @@ export class UserDto {
     this.createdAt = user.createdAt as Date;
     this.updatedAt = user.updatedAt as Date;
     this.numberOfKids = user.kids?.length || user.numberOfKids || 0;
-    this.title = user.title ?? null;
   }
 }
 
@@ -217,16 +224,16 @@ export class updateProfileDto {
   @IsOptional()
   maxScreenTimeMins?: number;
 
-  @ApiProperty({ example: 'english' })
+  @ApiProperty({ example: 'en' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.toLowerCase() : value,
   )
   @IsOptional()
   language?: string;
 
-  @ApiProperty({ example: 'nigeria' })
+  @ApiProperty({ example: 'NG' })
   @Transform(({ value }) =>
-    typeof value === 'string' ? value.toLowerCase() : value,
+    typeof value === 'string' ? value.toUpperCase() : value,  //FIXED: Changed to toUpperCase
   )
   @IsOptional()
   country?: string;
@@ -313,6 +320,7 @@ export class ResetPasswordDto {
   @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   newPassword: string;
 }
+
 export class SendEmailVerificationDto {
   @ApiProperty({
     example: 'test@gmail.com',
