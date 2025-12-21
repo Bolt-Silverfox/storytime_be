@@ -20,6 +20,13 @@ enum NotificationType {
   push
 }
 
+enum OnboardingStatus {
+  account_created
+  email_verified
+  profile_setup
+  pin_setup
+}
+
 model User {
   id                      String                   @id @default(uuid())
   email                   String                   @unique
@@ -28,6 +35,7 @@ model User {
   avatarId                String?
   avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
   isEmailVerified         Boolean                  @default(false)
+  onboardingStatus        OnboardingStatus         @default(account_created) // NEW FIELD
   role                    Role                     @default(parent)
   badges                  UserBadge[]
   createdAt               DateTime                 @default(now())
@@ -57,6 +65,8 @@ model User {
   paymentTransactions     PaymentTransaction[]
   // ADDED: Parent recommendations
   parentRecommendations   ParentRecommendation[]
+  // NEW: Learning expectations (marketing data)
+  learningExpectations    UserLearningExpectation[]
 
   @@index([isDeleted])
   @@map("users")
@@ -183,7 +193,8 @@ model Profile {
   userId            String    @unique
   explicitContent   Boolean   @default(true)
   maxScreenTimeMins Int?
-  language          String
+  language          String?
+  languageCode      String?   // "en", "es", "fr" 
   country           String
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -193,6 +204,42 @@ model Profile {
 
   @@index([isDeleted])
   @@map("profiles")
+}
+model LearningExpectation {
+  id          String                      @id @default(uuid())
+  name        String                      @unique  
+  description String?
+  category    String?                     
+  isActive    Boolean                     @default(true)
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+  isDeleted   Boolean                     @default(false)
+  deletedAt   DateTime?
+  
+  // Relation to users who selected this
+  users       UserLearningExpectation[]
+
+  @@index([isDeleted])
+  @@index([isActive])
+  @@map("learning_expectations")
+}
+
+// Junction table for many-to-many relationship
+model UserLearningExpectation {
+  id                      String               @id @default(uuid())
+  userId                  String
+  user                    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  learningExpectationId   String
+  learningExpectation     LearningExpectation  @relation(fields: [learningExpectationId], references: [id], onDelete: Cascade)
+  selectedAt              DateTime             @default(now())
+  isDeleted               Boolean              @default(false)
+  deletedAt               DateTime?
+
+  @@unique([userId, learningExpectationId])
+  @@index([userId])
+  @@index([learningExpectationId])
+  @@index([isDeleted])
+  @@map("user_learning_expectations")
 }
 
 // -------------------------

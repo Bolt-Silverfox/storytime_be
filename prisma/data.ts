@@ -282,3 +282,22 @@ export const systemAvatars = [
         isSystemAvatar: true,
     },
 ];
+
+export const learningExpectations = [
+    { name: 'Speaking Skills', description: 'Expressing thoughts and ideas clearly through speech' },
+    { name: 'Listening Skills', description: 'Paying attention and understanding what others say' },
+    { name: 'Conversation Skills', description: 'Engaging in back-and-forth dialogue effectively' },
+    { name: 'Vocabulary Building', description: 'Learning and using new words to communicate better' },
+    { name: 'Storytelling Skills', description: 'Narrating events and ideas in an engaging way' },
+    { name: 'Problem Solving', description: 'Finding solutions to challenges and difficulties' },
+    { name: 'Critical Thinking', description: 'Analyzing information and making reasoned judgments' },
+    { name: 'Memory & Recall', description: 'Remembering and retrieving information when needed' },
+    { name: 'Curiosity & Exploration', description: 'Showing interest in learning and discovering new things' },
+    { name: 'Decision Making', description: 'Choosing between different options thoughtfully' },
+    { name: 'Empathy & Kindness', description: 'Understanding others and treating them with care' },
+    { name: 'Confidence Building', description: 'Developing self-assurance and belief in abilities' },
+    { name: 'Responsibility', description: 'Being accountable for actions and duties' },
+    { name: 'Independence', description: 'Doing things on your own and being self-reliant' },
+    { name: 'Imagination', description: 'Creating mental images and ideas beyond reality' },
+    { name: 'Creative Thinking', description: 'Generating original and innovative ideas' },
+];

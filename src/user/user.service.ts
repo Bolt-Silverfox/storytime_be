@@ -469,7 +469,7 @@ export class UserService {
         id: userId,
         isDeleted: false,
       },
-      data: { pinHash: hash },
+      data: { pinHash: hash, onboardingStatus: 'pin_setup' },
     });
 
     return { success: true, message: 'PIN set successfully' };

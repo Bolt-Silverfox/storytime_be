@@ -21,6 +21,7 @@ import {
   ValidateResetTokenDto,
   ResetPasswordDto,
   ChangePasswordDto,
+  CompleteProfileDto, 
 } from './auth.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
@@ -157,6 +158,7 @@ export class AuthService {
     }
   }
 
+  // ==================== REGISTRATION (UPDATED) ====================
  async register(data: RegisterDto): Promise<LoginResponseDto | null> {
   const hashedPassword = await bcrypt.hash(data.password, 10);
   const existingUser = await this.prisma.user.findUnique({
@@ -180,7 +182,6 @@ export class AuthService {
       role: role as any,
       profile: {
         create: {
-          language: data.language,  
           country: data.nationality,
         },
       },
@@ -201,6 +202,90 @@ export class AuthService {
     jwt: tokenData.jwt,
     refreshToken: tokenData.refreshToken,
   };
+}
+  // ==================== COMPLETE PROFILE ====================
+async completeProfile(userId: string, data: CompleteProfileDto) {
+  const user = await this.prisma.user.findFirst({
+    where: { id: userId },
+    include: { profile: true },
+  });
+  if (!user) throw new NotFoundException('User not found');
+  if (data.learningExpectations && data.learningExpectations.length > 0) {
+    const existingExpectations = await this.prisma.learningExpectation.findMany({
+      where: { 
+        name: { in: data.learningExpectations },
+        isActive: true,
+        isDeleted: false,
+      },
+    });
+    
+    if (existingExpectations.length !== data.learningExpectations.length) {
+      throw new BadRequestException('Some selected learning expectations do not exist or are inactive');
+    }
+
+    await this.prisma.userLearningExpectation.createMany({
+      data: existingExpectations.map(exp => ({
+        userId,
+        learningExpectationId: exp.id,
+      })),
+      skipDuplicates: true,
+    });
+  }
+  const profile = await this.prisma.profile.update({
+    where: { userId },
+    data: {
+      language: data.language,
+      languageCode: data.languageCode, 
+    },
+  });
+  if (data.profileImageUrl) {
+    let avatar = await this.prisma.avatar.findFirst({
+      where: { url: data.profileImageUrl },
+    });
+
+    if (!avatar) {
+      avatar = await this.prisma.avatar.create({
+        data: {
+          url: data.profileImageUrl,
+          name: `user_${userId}`,
+          isSystemAvatar: false,
+        },
+      });
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarId: avatar.id },
+    });
+  }
+
+  await this.prisma.user.update({
+    where: { id: userId },
+    data: { onboardingStatus: 'profile_setup' },
+  });
+  const updatedUser = await this.prisma.user.findUnique({
+    where: { id: userId },
+    include: { 
+      profile: true, 
+      avatar: true,
+      learningExpectations: {
+        include: {
+          learningExpectation: true,
+        },
+      },
+    },
+  });
+  if (!updatedUser) throw new NotFoundException('User not found');
+
+  const numberOfKids = await this.prisma.kid.count({
+    where: { parentId: userId },
+  });
+
+  return new UserDto({
+    ...updatedUser,
+    numberOfKids,
+    profile,
+  });
 }
 
   async sendEmailVerification(email: string) {
@@ -254,67 +339,103 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: verificationToken.userId },
-      data: { isEmailVerified: true },
+      data: { isEmailVerified: true, onboardingStatus: 'email_verified',
+ },
     });
     await this.prisma.token.delete({ where: { id: verificationToken.id } });
 
     return { message: 'Email verified successfully' };
   }
 
-  async updateProfile(userId: string, data: updateProfileDto) {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId },
-      include: { profile: true },
-    });
-    if (!user) throw new NotFoundException('User not found');
+  // ==================== UPDATE PROFILE (UPDATED) ====================
+async updateProfile(userId: string, data: updateProfileDto) {
+  const user = await this.prisma.user.findFirst({
+    where: { id: userId },
+    include: { profile: true },
+  });
+  if (!user) throw new NotFoundException('User not found');
 
-    const updateData: Partial<any> = {};
-    if (data.country !== undefined) updateData.country = data.country;
-    if (data.language !== undefined) updateData.language = data.language;
-    if (data.explicitContent !== undefined)
-      updateData.explicitContent = data.explicitContent;
-    if (data.maxScreenTimeMins !== undefined)
-      updateData.maxScreenTimeMins = data.maxScreenTimeMins;
+  const updateData: Partial<any> = {};
+  if (data.country !== undefined) updateData.country = data.country;
+  if (data.language !== undefined) updateData.language = data.language;
+  if (data.languageCode !== undefined) updateData.languageCode = data.languageCode;
+  if (data.explicitContent !== undefined) updateData.explicitContent = data.explicitContent;
+  if (data.maxScreenTimeMins !== undefined) updateData.maxScreenTimeMins = data.maxScreenTimeMins;
+  if (data.learningExpectations !== undefined) {
+    if (data.learningExpectations.length > 0) {
+      const existingExpectations = await this.prisma.learningExpectation.findMany({
+        where: { 
+          name: { in: data.learningExpectations },
+          isActive: true,
+          isDeleted: false,
+        },
+      });
+      
+      if (existingExpectations.length !== data.learningExpectations.length) {
+        throw new BadRequestException('Some selected learning expectations do not exist or are inactive');
+      }
+      await this.prisma.userLearningExpectation.deleteMany({
+        where: { userId },
+      });
 
-    if (Object.keys(updateData).length === 0) {
-      if (!user.profile)
-        return this.prisma.profile.create({ 
-          data: { 
-            userId,
-            language: 'en', 
-            country: 'NG',  
-          } 
-        });
-      return user.profile;
+      await this.prisma.userLearningExpectation.createMany({
+        data: existingExpectations.map(exp => ({
+          userId,
+          learningExpectationId: exp.id,
+        })),
+      });
+    } else {
+      await this.prisma.userLearningExpectation.deleteMany({
+        where: { userId },
+      });
     }
+  }
 
-    const profile = await this.prisma.profile.upsert({
-      where: { userId },
-      update: updateData,
-      create: { 
-        userId, 
-        language: data.language || 'en', 
-        country: data.country || 'NG',  
-        ...updateData 
+  // Update profile
+  if (Object.keys(updateData).length === 0 && !user.profile) {
+    return this.prisma.profile.create({
+      data: {
+        userId,
+        country: 'NG',
       },
     });
-
-    const userWithKids = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { profile: true },
-    });
-    if (!userWithKids) throw new NotFoundException('User not found');
-
-    const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: userId },
-    });
-
-    return new UserDto({
-      ...userWithKids,
-      numberOfKids,
-      profile,
-    });
   }
+
+  const profile = await this.prisma.profile.upsert({
+    where: { userId },
+    update: updateData,
+    create: {
+      userId,
+      country: data.country || 'NG',
+      language: data.language,
+      languageCode: data.languageCode, 
+      ...updateData,
+    },
+  });
+
+  const userWithKids = await this.prisma.user.findUnique({
+    where: { id: userId },
+    include: { 
+      profile: true,
+      learningExpectations: {
+        include: {
+          learningExpectation: true,
+        },
+      },
+    },
+  });
+  if (!userWithKids) throw new NotFoundException('User not found');
+
+  const numberOfKids = await this.prisma.kid.count({
+    where: { parentId: userId },
+  });
+
+  return new UserDto({
+    ...userWithKids,
+    numberOfKids,
+    profile,
+  });
+}
 
   // ==================== KIDS ====================
   async addKids(userId: string, kids: kidDto[]) {
@@ -532,7 +653,7 @@ export class AuthService {
   }
 
   // ===============================
-  // GOOGLE AUTH
+  // GOOGLE AUTH (UPDATED)
   // ===============================
 
   async loginWithGoogleIdToken(idToken: string) {
@@ -579,111 +700,110 @@ export class AuthService {
   }
 
   // ====================================================
-  // INTERNAL: Unified Google upsert logic
+  // INTERNAL: Unified Google upsert logic (UPDATED)
   // ====================================================
-  private async _upsertOrReturnUserFromGooglePayload(payload: {
-    googleId?: string;
-    email: string;
-    picture?: string | null;
-    name?: string | null;
-    emailVerified?: boolean;
-  }) {
-    const { googleId, email, picture, name, emailVerified } = payload;
+ private async _upsertOrReturnUserFromGooglePayload(payload: {
+  googleId?: string;
+  email: string;
+  picture?: string | null;
+  name?: string | null;
+  emailVerified?: boolean;
+}) {
+  const { googleId, email, picture, name, emailVerified } = payload;
 
-    let user = null;
+  let user = null;
 
-    // 1. Try find by googleId
-    if (googleId) {
-      user = await this.prisma.user.findFirst({
-        where: { googleId },
-        include: { profile: true, avatar: true },
-      });
-    }
+  // 1. Try find by googleId
+  if (googleId) {
+    user = await this.prisma.user.findFirst({
+      where: { googleId },
+      include: { profile: true, avatar: true },
+    });
+  }
 
-    // 2. Try find by email
-    if (!user) {
-      const existing = await this.prisma.user.findUnique({ where: { email } });
+  // 2. Try find by email
+  if (!user) {
+    const existing = await this.prisma.user.findUnique({ where: { email } });
 
-      if (existing) {
-        user = await this.prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            isEmailVerified: emailVerified ? true : existing.isEmailVerified,
-            googleId: googleId || existing.googleId,
-          },
-          include: { profile: true, avatar: true },
-        });
-      }
-    }
-
-    // 3. Create new user
-    if (!user) {
-      const randomPassword = crypto.randomBytes(16).toString('hex');
-      const hashedPassword = await bcrypt.hash(randomPassword, 10);
-
-      user = await this.prisma.user.create({
+    if (existing) {
+      user = await this.prisma.user.update({
+        where: { id: existing.id },
         data: {
-          name: name || email || 'Google User',
-          email,
-          passwordHash: hashedPassword,
-          isEmailVerified: emailVerified === true,
-          googleId: googleId || null,
-          role: 'parent',
-          profile: { 
-            create: {
-              language: 'en', // FIXED: Required field
-              country: 'NG',  // FIXED: Required field
-            } 
-          },
+          isEmailVerified: emailVerified ? true : existing.isEmailVerified,
+          googleId: googleId || existing.googleId,
         },
         include: { profile: true, avatar: true },
       });
     }
+  }
 
-    // 4. Handle avatar from Google picture
-    if (picture) {
-      let avatar = await this.prisma.avatar.findFirst({
-        where: { url: picture },
-      });
+  // 3. Create new user
+  if (!user) {
+    const randomPassword = crypto.randomBytes(16).toString('hex');
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
 
-      if (!avatar) {
-        avatar = await this.prisma.avatar.create({
-          data: {
-            url: picture,
-            name: `google_${googleId || user.id}`,
-            isSystemAvatar: false,
+    user = await this.prisma.user.create({
+      data: {
+        name: name || email || 'Google User',
+        email,
+        passwordHash: hashedPassword,
+        isEmailVerified: emailVerified === true,
+        googleId: googleId || null,
+        role: 'parent',
+        profile: {
+          create: {
+            country: 'NG',
           },
-        });
-      }
+        },
+      },
+      include: { profile: true, avatar: true },
+    });
+  }
 
-      if (user.avatarId !== avatar.id) {
-        user = await this.prisma.user.update({
-          where: { id: user.id },
-          data: { avatarId: avatar.id },
-          include: { profile: true, avatar: true },
-        });
-      }
-    }
-
-    // 5. Must be verified
-    if (!user.isEmailVerified) {
-      throw new BadRequestException(
-        'Email not verified. Please check your inbox.',
-      );
-    }
-
-    // 6. Build response
-    const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: user.id },
+  // 4. Handle avatar from Google picture
+  if (picture) {
+    let avatar = await this.prisma.avatar.findFirst({
+      where: { url: picture },
     });
 
-    const userDto = new UserDto({ ...user, numberOfKids });
-    const tokenData = await this.createToken(userDto);
+    if (!avatar) {
+      avatar = await this.prisma.avatar.create({
+        data: {
+          url: picture,
+          name: `google_${googleId || user.id}`,
+          isSystemAvatar: false,
+        },
+      });
+    }
 
-    return {
-      user: userDto,
-      jwt: tokenData.jwt,
-      refreshToken: tokenData.refreshToken,
-    };
+    if (user.avatarId !== avatar.id) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { avatarId: avatar.id },
+        include: { profile: true, avatar: true },
+      });
+    }
   }
+
+  // 5. Must be verified
+  if (!user.isEmailVerified) {
+    throw new BadRequestException(
+      'Email not verified. Please check your inbox.',
+    );
+  }
+
+  // 6. Build response
+  const numberOfKids = await this.prisma.kid.count({
+    where: { parentId: user.id },
+  });
+
+  const userDto = new UserDto({ ...user, numberOfKids });
+  const tokenData = await this.createToken(userDto);
+
+  return {
+    user: userDto,
+    jwt: tokenData.jwt,
+    refreshToken: tokenData.refreshToken,
+  };
+}
 }
