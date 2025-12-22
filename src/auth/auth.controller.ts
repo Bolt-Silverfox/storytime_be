@@ -104,6 +104,20 @@ export class AuthController {
   ) {
     return this.authService.completeProfile(req.authUserData['userId'], data);
   }
+// ==================== GET LEARNING EXPECTATIONS ====================
+@Get('learning-expectations')
+@HttpCode(HttpStatus.OK)
+@ApiOperation({
+  summary: 'Get available learning expectations',
+  description: 'Fetch all active learning expectations that users can select during profile completion. No authentication required.',
+})
+@ApiResponse({
+  status: 200,
+  description: 'List of available learning expectations',
+})
+async getLearningExpectations() {
+  return this.authService.getLearningExpectations();
+}
 
   @Post('logout')
   @UseGuards(AuthSessionGuard)
