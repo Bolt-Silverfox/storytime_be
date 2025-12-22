@@ -180,6 +180,7 @@ export class AuthService {
       email: data.email,
       passwordHash: hashedPassword,
       role: role as any,
+      onboardingStatus: 'account_created',
       profile: {
         create: {
           country: data.nationality,
@@ -210,6 +211,10 @@ async completeProfile(userId: string, data: CompleteProfileDto) {
     include: { profile: true },
   });
   if (!user) throw new NotFoundException('User not found');
+   if (user.onboardingStatus === 'pin_setup') {
+      throw new BadRequestException('Onboarding already completed');
+    }
+
   if (data.learningExpectations && data.learningExpectations.length > 0) {
     const existingExpectations = await this.prisma.learningExpectation.findMany({
       where: { 
@@ -288,6 +293,23 @@ async completeProfile(userId: string, data: CompleteProfileDto) {
   });
 }
 
+async getLearningExpectations() {
+    return this.prisma.learningExpectation.findMany({
+      where: { 
+        isActive: true,
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        category: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+  }
   async sendEmailVerification(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) throw new NotFoundException('User not found');
@@ -361,35 +383,7 @@ async updateProfile(userId: string, data: updateProfileDto) {
   if (data.languageCode !== undefined) updateData.languageCode = data.languageCode;
   if (data.explicitContent !== undefined) updateData.explicitContent = data.explicitContent;
   if (data.maxScreenTimeMins !== undefined) updateData.maxScreenTimeMins = data.maxScreenTimeMins;
-  if (data.learningExpectations !== undefined) {
-    if (data.learningExpectations.length > 0) {
-      const existingExpectations = await this.prisma.learningExpectation.findMany({
-        where: { 
-          name: { in: data.learningExpectations },
-          isActive: true,
-          isDeleted: false,
-        },
-      });
-      
-      if (existingExpectations.length !== data.learningExpectations.length) {
-        throw new BadRequestException('Some selected learning expectations do not exist or are inactive');
-      }
-      await this.prisma.userLearningExpectation.deleteMany({
-        where: { userId },
-      });
-
-      await this.prisma.userLearningExpectation.createMany({
-        data: existingExpectations.map(exp => ({
-          userId,
-          learningExpectationId: exp.id,
-        })),
-      });
-    } else {
-      await this.prisma.userLearningExpectation.deleteMany({
-        where: { userId },
-      });
-    }
-  }
+ 
 
   // Update profile
   if (Object.keys(updateData).length === 0 && !user.profile) {

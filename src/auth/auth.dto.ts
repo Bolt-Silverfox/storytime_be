@@ -145,16 +145,6 @@ export class updateProfileDto {
   @IsOptional()
   country?: string;
 
-  @ApiProperty({
-    example: ['Empathy', 'Kindness', 'Courage'],
-    description: 'Update learning expectations (marketing data)',
-    required: false,
-    type: [String],
-  })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  learningExpectations?: string[]; // Changed from preferredLanguages
 }
 
 export class LoginDto {
