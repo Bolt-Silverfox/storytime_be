@@ -20,69 +20,69 @@ enum NotificationType {
   push
 }
 
+enum OnboardingStatus {
+  account_created
+  email_verified
+  profile_setup
+  pin_setup
+}
+
 model User {
-  id              String       @id @default(uuid())
-  email           String       @unique
-  passwordHash    String
-  title           String?
-  name            String?
-  avatarId        String?
-  avatar          Avatar?      @relation(fields: [avatarId], references: [id])
-  isEmailVerified Boolean      @default(false)
-  role            Role         @default(parent)
-  badges          UserBadge[]
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  pinHash         String?
-  deviceAuths     DeviceAuth[]
-
+  id                      String                   @id @default(uuid())
+  email                   String                   @unique
+  passwordHash            String
+  name                    String?
+  avatarId                String?
+  avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
+  isEmailVerified         Boolean                  @default(false)
+  onboardingStatus        OnboardingStatus         @default(account_created) // NEW FIELD
+  role                    Role                     @default(parent)
+  badges                  UserBadge[]
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  pinHash                 String?
+  deviceAuths             DeviceAuth[]
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
-  profile         Profile?
-  auth            Session[]
-  Token           Token[]
-  kids            Kid[]
-  parentFavorites ParentFavorite[]
-
-  voices           Voice[]
-  preferredVoiceId String?
-  preferredVoice   Voice?  @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
-
+  isDeleted               Boolean                  @default(false)
+  deletedAt               DateTime?
+  profile                 Profile?
+  auth                    Session[]
+  Token                   Token[]
+  kids                    Kid[]
+  parentFavorites         ParentFavorite[]
+  voices                  Voice[]
+  preferredVoiceId        String?
+  preferredVoice          Voice?                   @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
   Reward                  Reward[]
   notificationPreferences NotificationPreference[]
   activityLogs            ActivityLog[]
   userIps                 UserIP[]
-
-  googleId String? @unique
-
+  googleId                String?                  @unique
   //PAYMENT MODELS RESTORED
-  subscriptions       Subscription[]
-  supportTickets      SupportTicket[]
-  paymentMethods      PaymentMethod[]
-  paymentTransactions PaymentTransaction[]
-
+  subscriptions           Subscription[]
+  supportTickets          SupportTicket[]
+  paymentMethods          PaymentMethod[]
+  paymentTransactions     PaymentTransaction[]
   // ADDED: Parent recommendations
-  parentRecommendations ParentRecommendation[]
+  parentRecommendations   ParentRecommendation[]
+  // NEW: Learning expectations (marketing data)
+  learningExpectations    UserLearningExpectation[]
 
   @@index([isDeleted])
   @@map("users")
 }
 
-//--------------------------
+//-------------------------- 
 //Biometric enabled
 //-------------------------
-
 model DeviceAuth {
-  id           String   @id @default(uuid())
-  userId       String
-  deviceId     String
-  biometricsOn Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String   @id @default(uuid())
+  userId        String
+  deviceId      String
+  biometricsOn  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, deviceId])
 }
@@ -91,48 +91,39 @@ model DeviceAuth {
 // KID MODEL
 // -------------------------
 model Kid {
-  id                       String              @id @default(uuid())
-  name                     String?
-  avatarId                 String?
-  avatar                   Avatar?             @relation(fields: [avatarId], references: [id])
-  ageRange                 String?
+  id                      String                     @id @default(uuid())
+  name                    String?
+  avatarId                String?
+  avatar                  Avatar?                    @relation(fields: [avatarId], references: [id])
+  ageRange                String?
   dailyScreenTimeLimitMins Int?
-  screenTimeSessions       ScreenTimeSession[]
-  questionAnswers          QuestionAnswer[]
-
-  parentId String
-  parent   User   @relation(fields: [parentId], references: [id], onDelete: Cascade)
-
-  currentReadingLevel Int      @default(1)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
+  screenTimeSessions      ScreenTimeSession[]
+  questionAnswers         QuestionAnswer[]
+  parentId                String
+  parent                  User                       @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  currentReadingLevel     Int                        @default(1)
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
-  rewards          Reward[]
-  preferredVoiceId String?
-  preferredVoice   Voice?   @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
-
-  preferredCategories Category[] @relation("KidPreferredCategories")
-  excludedTags        String[]   @default([])
-
-  isBedtimeEnabled Boolean @default(false)
-  bedtimeStart     String? // Format: "HH:mm" e.g., "20:00"
-  bedtimeEnd       String? // Format: "HH:mm" e.g., "07:00"
-  bedtimeDays      Int[]   @default([]) // 0=Sunday, 1=Monday, etc.
-
-  bedtimeLockApp     Boolean @default(false) // "Lock app during bedtime"
-  bedtimeDimScreen   Boolean @default(false) // "Dim screen during bedtime"
-  bedtimeReminder    Boolean @default(false) // "Show bedtime reminder"
-  bedtimeStoriesOnly Boolean @default(false) // "Allow bedtime stories only"
-
-  storyBuddyId      String?
-  buddySelectedAt   DateTime?
-  buddyInteractions BuddyInteraction[]
-  storyBuddy        StoryBuddy?        @relation(fields: [storyBuddyId], references: [id])
-
+  isDeleted               Boolean                    @default(false)
+  deletedAt               DateTime?
+  rewards                 Reward[]
+  preferredVoiceId        String?
+  preferredVoice          Voice?                     @relation("KidPreferredVoice", fields: [preferredVoiceId], references: [id])
+  preferredCategories     Category[]                 @relation("KidPreferredCategories")
+  excludedTags            String[]                   @default([])
+  isBedtimeEnabled        Boolean                    @default(false)
+  bedtimeStart            String? // Format: "HH:mm" e.g., "20:00"
+  bedtimeEnd              String? // Format: "HH:mm" e.g., "07:00"
+  bedtimeDays             Int[]                      @default([]) // 0=Sunday, 1=Monday, etc.
+  bedtimeLockApp          Boolean                    @default(false) // "Lock app during bedtime"
+  bedtimeDimScreen        Boolean                    @default(false) // "Dim screen during bedtime"
+  bedtimeReminder         Boolean                    @default(false) // "Show bedtime reminder"
+  bedtimeStoriesOnly      Boolean                    @default(false) // "Allow bedtime stories only"
+  storyBuddyId            String?
+  buddySelectedAt         DateTime?
+  buddyInteractions       BuddyInteraction[]
+  storyBuddy              StoryBuddy?                @relation(fields: [storyBuddyId], references: [id])
   // New relations
   downloadedStories       DownloadedStory[]
   createdStories          Story[]                    @relation("CreatedStories") // Stories the kid generated
@@ -143,12 +134,10 @@ model Kid {
   storyPaths              StoryPath[]
   favorites               Favorite[]
   progresses              StoryProgress[]
-
   // Relation: user badges associated with this kid
-  userBadges UserBadge[]
-
+  userBadges              UserBadge[]
   // ADDED: Parent recommendations
-  parentRecommendations ParentRecommendation[]
+  parentRecommendations   ParentRecommendation[]
 
   @@index([isDeleted])
   @@map("kids")
@@ -163,13 +152,12 @@ model Kid {
 // SESSION / TOKEN / PROFILE
 // -------------------------
 model Session {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  token     String   @unique
+  token     String    @unique
   expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -181,14 +169,13 @@ model Session {
 }
 
 model Token {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  token     String   @unique
+  token     String    @unique
   type      String
   expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -201,72 +188,100 @@ model Token {
 }
 
 model Profile {
-  id                String   @id @default(uuid())
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId            String   @unique
-  explicitContent   Boolean  @default(true)
+  id                String    @id @default(uuid())
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String    @unique
+  explicitContent   Boolean   @default(true)
   maxScreenTimeMins Int?
   language          String?
-  country           String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
+  languageCode      String?   // "en", "es", "fr" 
+  country           String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted         Boolean   @default(false)
+  deletedAt         DateTime?
 
   @@index([isDeleted])
   @@map("profiles")
+}
+model LearningExpectation {
+  id          String                      @id @default(uuid())
+  name        String                      @unique  
+  description String?
+  category    String?                     
+  isActive    Boolean                     @default(true)
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+  isDeleted   Boolean                     @default(false)
+  deletedAt   DateTime?
+  
+  // Relation to users who selected this
+  users       UserLearningExpectation[]
+
+  @@index([isDeleted])
+  @@index([isActive])
+  @@map("learning_expectations")
+}
+
+// Junction table for many-to-many relationship
+model UserLearningExpectation {
+  id                      String               @id @default(uuid())
+  userId                  String
+  user                    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  learningExpectationId   String
+  learningExpectation     LearningExpectation  @relation(fields: [learningExpectationId], references: [id], onDelete: Cascade)
+  selectedAt              DateTime             @default(now())
+  isDeleted               Boolean              @default(false)
+  deletedAt               DateTime?
+
+  @@unique([userId, learningExpectationId])
+  @@index([userId])
+  @@index([learningExpectationId])
+  @@index([isDeleted])
+  @@map("user_learning_expectations")
 }
 
 // -------------------------
 // STORY MODELS
 // -------------------------
 model Story {
-  id              String   @id @default(uuid())
-  title           String
-  description     String
-  language        String
-  coverImageUrl   String
-  audioUrl        String
-  textContent     String?
-  isInteractive   Boolean
-  ageMin          Int
-  ageMax          Int
-  backgroundColor String   @default("#5E3A54")
-  recommended     Boolean  @default(false)
-  aiGenerated     Boolean  @default(false)
-  difficultyLevel Int      @default(1)
-  wordCount       Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
+  id                    String                   @id @default(uuid())
+  title                 String
+  description           String
+  language              String
+  coverImageUrl         String
+  audioUrl              String
+  textContent           String?
+  isInteractive         Boolean
+  ageMin                Int
+  ageMax                Int
+  backgroundColor       String                   @default("#5E3A54")
+  recommended           Boolean                  @default(false)
+  aiGenerated           Boolean                  @default(false)
+  difficultyLevel       Int                      @default(1)
+  wordCount             Int                      @default(0)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
-  images   StoryImage[]
-  branches StoryBranch[]
-
-  favorites Favorite[]
-
-  parentFavorites ParentFavorite[]
-  progresses      StoryProgress[]
-  dailyChallenges DailyChallenge[]
-  paths           StoryPath[]
-
-  categories       Category[]        @relation("StoryCategories")
-  themes           Theme[]           @relation("StoryThemes")
-  storyAudioCaches StoryAudioCache[]
-  questions        StoryQuestion[]
-
+  isDeleted             Boolean                  @default(false)
+  deletedAt             DateTime?
+  images                StoryImage[]
+  branches              StoryBranch[]
+  favorites             Favorite[]
+  parentFavorites       ParentFavorite[]
+  progresses            StoryProgress[]
+  dailyChallenges       DailyChallenge[]
+  paths                 StoryPath[]
+  categories            Category[]               @relation("StoryCategories")
+  themes                Theme[]                  @relation("StoryThemes")
+  storyAudioCaches      StoryAudioCache[]
+  questions             StoryQuestion[]
   // Add this field to track who created it (for AI generation)
-  creatorKidId String?
-  creatorKid   Kid?    @relation("CreatedStories", fields: [creatorKidId], references: [id])
-
+  creatorKidId          String?
+  creatorKid            Kid?                     @relation("CreatedStories", fields: [creatorKidId], references: [id])
   // New Relation
-  downloads DownloadedStory[]
-
+  downloads             DownloadedStory[]
   // ADDED: Parent recommendations
   parentRecommendations ParentRecommendation[]
 
@@ -275,14 +290,13 @@ model Story {
 }
 
 model StoryImage {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   url       String
   caption   String?
   storyId   String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  story     Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -292,17 +306,16 @@ model StoryImage {
 }
 
 model StoryBranch {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   storyId   String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  story     Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
   prompt    String
   optionA   String
   optionB   String
   nextA     String?
   nextB     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -312,13 +325,12 @@ model StoryBranch {
 }
 
 model Favorite {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   kidId     String
-  kid       Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  kid       Kid       @relation(fields: [kidId], references: [id], onDelete: Cascade)
   storyId   String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
+  story     Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -328,13 +340,12 @@ model Favorite {
 }
 
 model ParentFavorite {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   storyId   String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
+  story     Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
@@ -343,19 +354,18 @@ model ParentFavorite {
 }
 
 model StoryProgress {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   kidId          String
-  kid            Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  kid            Kid       @relation(fields: [kidId], references: [id], onDelete: Cascade)
   storyId        String
-  story          Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  progress       Float    @default(0)
-  completed      Boolean  @default(false)
-  lastAccessed   DateTime @default(now())
-  totalTimeSpent Int      @default(0)
-
+  story          Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  progress       Float     @default(0)
+  completed      Boolean   @default(false)
+  lastAccessed   DateTime  @default(now())
+  totalTimeSpent Int       @default(0)
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted      Boolean   @default(false)
+  deletedAt      DateTime?
 
   @@unique([kidId, storyId])
   @@index([isDeleted])
@@ -365,7 +375,6 @@ model StoryProgress {
 // -------------------------
 // PAYMENT MODELS (RESTORED)
 // -------------------------
-
 model Subscription {
   id        String    @id @default(uuid())
   userId    String
@@ -374,7 +383,6 @@ model Subscription {
   status    String    @default("active")
   startedAt DateTime  @default(now())
   endsAt    DateTime?
-
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -384,14 +392,13 @@ model Subscription {
 }
 
 model SupportTicket {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   subject   String
   message   String
-  status    String   @default("open")
-  createdAt DateTime @default(now())
-
+  status    String    @default("open")
+  createdAt DateTime  @default(now())
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -401,21 +408,19 @@ model SupportTicket {
 }
 
 model PaymentMethod {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String
-  details   String
-  provider  String?
-  last4     String?
-  expiry    String?
-  meta      Json?
-  createdAt DateTime @default(now())
-
+  id           String               @id @default(uuid())
+  userId       String
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String
+  details      String
+  provider     String?
+  last4        String?
+  expiry       String?
+  meta         Json?
+  createdAt    DateTime             @default(now())
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
+  isDeleted    Boolean              @default(false)
+  deletedAt    DateTime?
   transactions PaymentTransaction[]
 
   @@index([isDeleted])
@@ -433,10 +438,9 @@ model PaymentTransaction {
   amount          Float
   status          String
   createdAt       DateTime       @default(now())
-
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted       Boolean        @default(false)
+  deletedAt       DateTime?
 
   @@index([isDeleted])
   @@map("payment_transactions")
@@ -445,7 +449,6 @@ model PaymentTransaction {
 // -------------------------
 // DAILY CHALLENGES, VOICE, REWARD, ETC...
 // -------------------------
-
 model DailyChallenge {
   id            String                     @id @default(uuid())
   storyId       String
@@ -454,32 +457,29 @@ model DailyChallenge {
   wordOfTheDay  String
   meaning       String
   assignments   DailyChallengeAssignment[]
-
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted     Boolean                    @default(false)
+  deletedAt     DateTime?
 
   @@index([isDeleted])
   @@map("daily_challenges")
 }
 
 model Voice {
-  id                String   @id @default(uuid())
-  userId            String?
-  user              User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name              String
-  type              String
-  url               String?
-  elevenLabsVoiceId String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
+  id                  String    @id @default(uuid())
+  userId              String?
+  user                User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  type                String
+  url                 String?
+  elevenLabsVoiceId   String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
-  usersPreferring User[] @relation("PreferredVoice")
-  kidsPreferring  Kid[]  @relation("KidPreferredVoice")
+  isDeleted           Boolean   @default(false)
+  deletedAt           DateTime?
+  usersPreferring     User[]    @relation("PreferredVoice")
+  kidsPreferring      Kid[]     @relation("KidPreferredVoice")
 
   @@index([name])
   @@index([isDeleted])
@@ -487,24 +487,20 @@ model Voice {
 }
 
 model Reward {
-  id          String   @id @default(uuid())
+  id          String              @id @default(uuid())
   name        String
   description String?
   points      Int
   imageUrl    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  kidId String?
-  kid   Kid?    @relation(fields: [kidId], references: [id])
-
+  isDeleted   Boolean             @default(false)
+  deletedAt   DateTime?
+  userId      String?
+  user        User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kidId       String?
+  kid         Kid?                @relation(fields: [kidId], references: [id])
   redemptions RewardRedemption[]
 
   @@index([isDeleted])
@@ -512,39 +508,34 @@ model Reward {
 }
 
 model DailyChallengeAssignment {
-  id          String         @id @default(uuid())
+  id          String          @id @default(uuid())
   kidId       String
-  kid         Kid            @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  kid         Kid             @relation(fields: [kidId], references: [id], onDelete: Cascade)
   challengeId String
-  challenge   DailyChallenge @relation(fields: [challengeId], references: [id])
-  completed   Boolean        @default(false)
+  challenge   DailyChallenge  @relation(fields: [challengeId], references: [id])
+  completed   Boolean         @default(false)
   completedAt DateTime?
-  assignedAt  DateTime       @default(now())
-
+  assignedAt  DateTime        @default(now())
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted   Boolean         @default(false)
+  deletedAt   DateTime?
 
   @@index([isDeleted])
   @@map("daily_challenge_assignments")
 }
 
 model NotificationPreference {
-  id      String           @id @default(uuid())
-  type    NotificationType
-  enabled Boolean          @default(true)
-
-  userId String?
-  kidId  String?
-
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kid  Kid?  @relation(fields: [kidId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  id        String           @id @default(uuid())
+  type      NotificationType
+  enabled   Boolean          @default(true)
+  userId    String?
+  kidId     String?
+  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kid       Kid?             @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
+  isDeleted Boolean          @default(false)
   deletedAt DateTime?
 
   @@index([isDeleted])
@@ -552,40 +543,38 @@ model NotificationPreference {
 }
 
 model RewardRedemption {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   rewardId   String
-  reward     Reward   @relation(fields: [rewardId], references: [id])
+  reward     Reward    @relation(fields: [rewardId], references: [id])
   kidId      String
-  kid        Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
-  redeemedAt DateTime @default(now())
+  kid        Kid       @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  redeemedAt DateTime  @default(now())
   status     String
-
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted  Boolean   @default(false)
+  deletedAt  DateTime?
 
   @@index([isDeleted])
   @@map("reward_redemptions")
 }
 
 model ActivityLog {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   userId      String?
-  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   kidId       String?
-  kid         Kid?     @relation(fields: [kidId], references: [id])
-  action      String // e.g. 'story_read', 'reward_redeemed', etc.
-  status      String // NEW: 'SUCCESS', 'FAILED', etc.
-  deviceName  String? // NEW: e.g. 'iPhone 13'
-  deviceModel String? // NEW: e.g. 'A2482'
-  os          String? // NEW: e.g. 'iOS 17'
-  ipAddress   String? // NEW: e.g. '102.89.33.110'
+  kid         Kid?      @relation(fields: [kidId], references: [id])
+  action      String    // e.g. 'story_read', 'reward_redeemed', etc.
+  status      String    // NEW: 'SUCCESS', 'FAILED', etc.
+  deviceName  String?   // NEW: e.g. 'iPhone 13'
+  deviceModel String?   // NEW: e.g. 'A2482'
+  os          String?   // NEW: e.g. 'iOS 17'
+  ipAddress   String?   // NEW: e.g. '102.89.33.110'
   details     String?
-  createdAt   DateTime @default(now())
-
+  createdAt   DateTime  @default(now())
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
 
   @@index([isDeleted])
   @@map("activity_logs")
@@ -597,56 +586,52 @@ model StoryPath {
   kid         Kid       @relation(fields: [kidId], references: [id], onDelete: Cascade)
   storyId     String
   story       Story     @relation(fields: [storyId], references: [id])
-  path        String // JSON or delimited string of choices
+  path        String    // JSON or delimited string of choices
   startedAt   DateTime  @default(now())
   completedAt DateTime?
-
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
 
   @@index([isDeleted])
   @@map("story_paths")
 }
 
 model Category {
-  id              String  @id @default(uuid())
-  name            String  @unique
+  id              String    @id @default(uuid())
+  name            String    @unique
   image           String?
   description     String?
-  stories         Story[] @relation("StoryCategories")
-  preferredByKids Kid[]   @relation("KidPreferredCategories")
-
+  stories         Story[]   @relation("StoryCategories")
+  preferredByKids Kid[]     @relation("KidPreferredCategories")
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted       Boolean   @default(false)
+  deletedAt       DateTime?
 
   @@index([isDeleted])
 }
 
 model Theme {
-  id          String  @id @default(uuid())
-  name        String  @unique
+  id          String    @id @default(uuid())
+  name        String    @unique
   image       String?
   description String?
-  stories     Story[] @relation("StoryThemes")
-
+  stories     Story[]   @relation("StoryThemes")
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
 
   @@index([isDeleted])
 }
 
 model StoryAudioCache {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   storyId   String
   voiceType String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  story     Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
   audioUrl  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -665,10 +650,9 @@ model StoryQuestion {
   options       String[]
   correctOption Int
   answers       QuestionAnswer[]
-
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted     Boolean          @default(false)
+  deletedAt     DateTime?
 
   @@index([isDeleted])
   @@map("story_questions")
@@ -684,9 +668,8 @@ model Avatar {
   deletedAt      DateTime?
   publicId       String?
   createdAt      DateTime  @default(now())
-
-  users User[]
-  kids  Kid[]
+  users          User[]
+  kids           Kid[]
 
   @@unique([name])
   @@index([name])
@@ -695,13 +678,12 @@ model Avatar {
 }
 
 model AgeGroup {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   name      String
   min       Int
   max       Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -719,7 +701,6 @@ model ScreenTimeSession {
   endTime   DateTime?
   duration  Int?
   date      DateTime  @default(now())
-
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -730,19 +711,18 @@ model ScreenTimeSession {
 }
 
 model QuestionAnswer {
-  id             String        @id @default(uuid())
+  id             String         @id @default(uuid())
   kidId          String
-  kid            Kid           @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  kid            Kid            @relation(fields: [kidId], references: [id], onDelete: Cascade)
   questionId     String
-  question       StoryQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question       StoryQuestion  @relation(fields: [questionId], references: [id], onDelete: Cascade)
   storyId        String
   selectedOption Int
   isCorrect      Boolean
-  answeredAt     DateTime      @default(now())
-
+  answeredAt     DateTime       @default(now())
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted      Boolean        @default(false)
+  deletedAt      DateTime?
 
   @@index([kidId])
   @@index([kidId, answeredAt])
@@ -751,14 +731,13 @@ model QuestionAnswer {
 }
 
 model UserIP {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   ipAddress String
   userAgent String?
-  firstUsed DateTime @default(now())
-  lastUsed  DateTime @updatedAt
-
+  firstUsed DateTime  @default(now())
+  lastUsed  DateTime  @updatedAt
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -770,24 +749,22 @@ model UserIP {
 }
 
 model StoryBuddy {
-  id               String   @id @default(uuid())
-  name             String   @unique
-  displayName      String
-  description      String?
-  type             String
-  imageUrl         String
-  profileAvatarUrl String?
-  isActive         Boolean  @default(true)
-  themeColor       String?
-  ageGroupMin      Int      @default(3)
-  ageGroupMax      Int      @default(12)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
+  id                String              @id @default(uuid())
+  name              String              @unique
+  displayName       String
+  description       String?
+  type              String
+  imageUrl          String
+  profileAvatarUrl  String?
+  isActive          Boolean             @default(true)
+  themeColor        String?
+  ageGroupMin       Int                 @default(3)
+  ageGroupMax       Int                 @default(12)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
+  isDeleted         Boolean             @default(false)
+  deletedAt         DateTime?
   buddyInteractions BuddyInteraction[]
   kids              Kid[]
 
@@ -796,19 +773,18 @@ model StoryBuddy {
 }
 
 model BuddyInteraction {
-  id              String     @id @default(uuid())
+  id              String      @id @default(uuid())
   kidId           String
   buddyId         String
   interactionType String
   context         String?
   message         String?
-  timestamp       DateTime   @default(now())
-  buddy           StoryBuddy @relation(fields: [buddyId], references: [id])
-  kid             Kid        @relation(fields: [kidId], references: [id], onDelete: Cascade)
-
+  timestamp       DateTime    @default(now())
+  buddy           StoryBuddy  @relation(fields: [buddyId], references: [id])
+  kid             Kid         @relation(fields: [kidId], references: [id], onDelete: Cascade)
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
 
   @@index([kidId, timestamp])
   @@index([buddyId])
@@ -817,23 +793,21 @@ model BuddyInteraction {
 }
 
 model Badge {
-  id              String   @id @default(uuid())
+  id              String      @id @default(uuid())
   title           String
   description     String?
   iconUrl         String?
   unlockCondition String
-  badgeType       String // "count", "streak", "time", "special"
-  requiredAmount  Int      @default(1)
-  priority        Int      @default(0) // Higher = more important for preview
-  metadata        Json? // Flexible storage for badge rules
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
+  badgeType       String      // "count", "streak", "time", "special"
+  requiredAmount  Int         @default(1)
+  priority        Int         @default(0) // Higher = more important for preview
+  metadata        Json?       // Flexible storage for badge rules
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
-  userBadges UserBadge[]
+  isDeleted       Boolean     @default(false)
+  deletedAt       DateTime?
+  userBadges      UserBadge[]
 
   @@index([isDeleted])
   @@map("badges")
@@ -850,10 +824,9 @@ model UserBadge {
   count      Int       @default(0) // Current progress count
   unlocked   Boolean   @default(false)
   unlockedAt DateTime?
-
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted  Boolean   @default(false)
+  deletedAt  DateTime?
 
   @@unique([userId, kidId, badgeId])
   @@index([userId])
@@ -879,20 +852,17 @@ model DownloadedStory {
 // PARENT RECOMMENDATIONS
 // -------------------------
 model ParentRecommendation {
-  id      String @id @default(uuid())
-  userId  String
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kidId   String
-  kid     Kid    @relation(fields: [kidId], references: [id], onDelete: Cascade)
-  storyId String
-  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
-
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kidId     String
+  kid       Kid       @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  storyId   String
+  story     Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
   // Optional message from parent
-  message String?
-
+  message   String?
   // Timestamps
   recommendedAt DateTime @default(now())
-
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?

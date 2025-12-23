@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import { VOICE_CONFIG } from '../voice/voice.dto';
-import { categories, defaultAgeGroups, systemAvatars, themes } from '../../prisma/data';
+import { categories, defaultAgeGroups, systemAvatars, themes, learningExpectations } from '../../prisma/data'; // ADD learningExpectations import
 
 const prisma = new PrismaClient();
 
@@ -18,6 +18,10 @@ async function main() {
   );
   await prisma.$executeRawUnsafe(
     'TRUNCATE TABLE "avatars" RESTART IDENTITY CASCADE;',
+  );
+  // ADD THIS LINE - Truncate learning expectations
+  await prisma.$executeRawUnsafe(
+    'TRUNCATE TABLE "learning_expectations", "user_learning_expectations" RESTART IDENTITY CASCADE;',
   );
 
   const storiesPath = path.resolve('src/story/stories.json');
@@ -47,6 +51,20 @@ async function main() {
       create: { name: group.name, min: group.min, max: group.max },
     });
   }
+
+  // ADD THIS SECTION - Seed Learning Expectations
+  console.log('Seeding learning expectations...');
+  for (const expectation of learningExpectations) {
+    await prisma.learningExpectation.upsert({
+      where: { name: expectation.name },
+      update: {
+        description: expectation.description,
+        isActive: true,
+      },
+      create: expectation,
+    });
+  }
+  console.log('Learning expectations seeded!');
 
   // 6. Seed Stories with "connectOrCreate"
   console.log('Seeding stories...');
