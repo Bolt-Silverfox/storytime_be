@@ -68,6 +68,8 @@ import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
 
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
+import { SubscriptionThrottleGuard } from '@/common/guards/subscription-throttle.guard';
+import { Throttle } from '@nestjs/throttler';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -108,6 +110,7 @@ export class StoryController {
     description: 'Not Found',
     type: ErrorResponseDto,
   })
+  @Throttle({ long: { limit: 100, ttl: 60000 } }) // 100 per minute
   async getStories(
     @Query('theme') theme?: string,
     @Query('category') category?: string,
@@ -750,11 +753,12 @@ export class StoryController {
   }
 
   @Post('generate')
-  @UseGuards(AuthSessionGuard)
+  @UseGuards(AuthSessionGuard, SubscriptionThrottleGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate a story using AI' })
   @ApiBody({ type: GenerateStoryDto })
   @ApiOkResponse({ description: 'Generated story', type: CreateStoryDto })
+  @Throttle({ medium: { limit: 10, ttl: 3600000 } }) // 10/hour free, 50/hour premium
   @ApiResponse({
     status: 400,
     description: 'Bad Request',
@@ -922,9 +926,9 @@ export class StoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Recommend a story to your kid' })
   @ApiBody({ type: ParentRecommendationDto })
-  @ApiOkResponse({ 
-    description: 'Story recommended successfully', 
-    type: RecommendationResponseDto 
+  @ApiOkResponse({
+    description: 'Story recommended successfully',
+    type: RecommendationResponseDto
   })
   @ApiResponse({
     status: 400,
