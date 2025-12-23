@@ -8,6 +8,8 @@ import {
   Matches,
   IsString,
   MaxLength,
+  IsArray,
+  ArrayMinSize,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -22,11 +24,12 @@ export enum TokenType {
   PASSWORD_RESET = 'password_reset',
 }
 
+// ==================== REGISTRATION (UPDATED) ====================
 export class RegisterDto {
   @ApiProperty({ example: 'test@gmail.com' })
   @IsEmail()
   @IsNotEmpty()
-  @SanitizeEmail() // Auto-trim and lowercase
+  @SanitizeEmail()
   email: string;
 
   @IsNotEmpty()
@@ -41,16 +44,20 @@ export class RegisterDto {
   @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   password: string;
 
-  @ApiProperty({ example: 'Mr' })
-  @IsNotEmpty()
-  title: string;
-
   @ApiProperty({ example: 'firstname lastname' })
   @Matches(/^[a-zA-Z]+(?:\s+[a-zA-Z]+)+$/, {
     message: 'Full name must contain at least two names',
   })
   @IsNotEmpty()
   fullName: string;
+
+  @ApiProperty({ example: 'NG' })
+  @IsNotEmpty({ message: 'Nationality is required' })
+  @IsString()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toUpperCase() : value,
+  )
+  nationality: string; // Maps to profile.country
 
   @ApiProperty({ example: 'parent', required: false })
   @IsOptional()
@@ -61,6 +68,83 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   adminSecret?: string;
+}
+
+// ==================== COMPLETE PROFILE DTO (NEW) ====================
+// ==================== COMPLETE PROFILE DTO (UPDATED) ====================
+export class CompleteProfileDto {
+  @ApiProperty({ 
+    example: 'English',
+    description: 'Language display name',
+    required: false
+  })
+  @IsOptional()  
+  @IsString()
+  language?: string;
+ @ApiProperty({ 
+    example: 'en',
+    description: 'Language code for i18n',
+    required: false
+  })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toLowerCase() : value,
+  )
+  languageCode?: string;
+
+  @ApiProperty({
+    example: ['Empathy & Kindness', 'Creative thinking', 'Decision Making'],
+    description: 'Learning expectations - character values parents want kids to learn (marketing data)',
+    required: false,
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  learningExpectations?: string[]; // Changed from preferredLanguages
+
+  @ApiProperty({
+    example: 'https://storage.com/avatar.jpg',
+    description: 'Profile image URL',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  profileImageUrl?: string;
+}
+
+// ==================== UPDATE PROFILE (UPDATED) ====================
+export class updateProfileDto {
+  @ApiProperty({ example: true })
+  @IsOptional()
+  explicitContent?: boolean;
+
+  @ApiProperty({ example: 50 })
+  @IsOptional()
+  maxScreenTimeMins?: number;
+  
+@ApiProperty({ example: 'English', description: 'Language display name' })
+  @IsOptional()
+  @IsString()
+  language?: string;
+
+  @ApiProperty({ example: 'en', description: 'Language code for i18n' })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toLowerCase() : value,
+  )
+  languageCode?: string; 
+
+
+  @ApiProperty({ example: 'NG' })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toUpperCase() : value,
+  )
+  @IsOptional()
+  country?: string;
+
 }
 
 export class LoginDto {
@@ -79,23 +163,32 @@ export class ProfileDto {
   @ApiProperty({ example: 'id' })
   id: string;
 
+  @ApiProperty({ example: 'userId' })
+  userId: string;
+
   @ApiProperty({ example: true })
   explicitContent: boolean;
 
   @ApiProperty({ example: 50 })
   maxScreenTimeMins: number | null;
 
-  @ApiProperty({ example: 'english' })
+  @ApiProperty({ example: 'en', description: 'Interface language code' })
   language: string | null;
 
-  @ApiProperty({ example: 'nigeria' })
-  country: string | null;
+  @ApiProperty({ example: 'NG' })
+  country: string;
 
   @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   createdAt: Date;
 
   @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   updatedAt: Date;
+
+  @ApiProperty({ example: false })
+  isDeleted: boolean;  
+
+  @ApiProperty({ example: null })
+  deletedAt: Date | null;  
 
   constructor(profile: Partial<ProfileDto>) {
     Object.assign(this, profile);
@@ -150,10 +243,6 @@ export class UserDto {
   @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   updatedAt: Date;
 
-  @ApiProperty({ example: 'Mr', required: false })
-  @Optional()
-  title?: string | null;
-
   @ApiProperty({ type: ProfileDto })
   profile: ProfileDto | null;
 
@@ -168,13 +257,13 @@ export class UserDto {
 
     this.avatar = user.avatar
       ? {
-        id: user.avatar.id,
-        name: user.avatar.name,
-        url: user.avatar.url,
-        isSystemAvatar: user.avatar.isSystemAvatar,
-        publicId: user.avatar.publicId,
-        createdAt: user.avatar.createdAt,
-      }
+          id: user.avatar.id,
+          name: user.avatar.name,
+          url: user.avatar.url,
+          isSystemAvatar: user.avatar.isSystemAvatar,
+          publicId: user.avatar.publicId,
+          createdAt: user.avatar.createdAt,
+        }
       : null;
 
     this.id = user.id as string;
@@ -185,7 +274,6 @@ export class UserDto {
     this.createdAt = user.createdAt as Date;
     this.updatedAt = user.updatedAt as Date;
     this.numberOfKids = user.kids?.length || user.numberOfKids || 0;
-    this.title = user.title ?? null;
   }
 }
 
@@ -208,29 +296,7 @@ export class RefreshResponseDto {
   jwt: string;
 }
 
-export class updateProfileDto {
-  @ApiProperty({ example: true })
-  @IsOptional()
-  explicitContent?: boolean;
 
-  @ApiProperty({ example: 50 })
-  @IsOptional()
-  maxScreenTimeMins?: number;
-
-  @ApiProperty({ example: 'english' })
-  @Transform(({ value }) =>
-    typeof value === 'string' ? value.toLowerCase() : value,
-  )
-  @IsOptional()
-  language?: string;
-
-  @ApiProperty({ example: 'nigeria' })
-  @Transform(({ value }) =>
-    typeof value === 'string' ? value.toLowerCase() : value,
-  )
-  @IsOptional()
-  country?: string;
-}
 
 export class kidDto {
   @ApiProperty({ example: 'firstname lastname' })
@@ -313,6 +379,7 @@ export class ResetPasswordDto {
   @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   newPassword: string;
 }
+
 export class SendEmailVerificationDto {
   @ApiProperty({
     example: 'test@gmail.com',

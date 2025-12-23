@@ -30,6 +30,7 @@ import {
   VerifyEmailDto,
   SendEmailVerificationDto,
   ChangePasswordDto,
+  CompleteProfileDto, 
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -39,12 +40,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
-// import { Request } from 'express';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Post('login')
   @HttpCode(200)
@@ -54,7 +54,7 @@ export class AuthController {
   async login(@Body() body: LoginDto) {
     return this.authService.login(body);
   }
-  //
+
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
@@ -66,13 +66,58 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',
-    description: 'Default role: parent.',
+    description: 'Default role: parent. Language and preferred themes set in complete-profile step.',
   })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
   async register(@Body() body: RegisterDto) {
     return this.authService.register(body);
   }
+
+  // ==================== COMPLETE PROFILE (NEW) ====================
+  @Post('complete-profile')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Complete user profile after registration',
+    description:
+      'Set language, preferred learning themes (empathy, kindness, etc.), and profile image. Must be called after email verification.',
+  })
+  @ApiBody({ type: CompleteProfileDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile completed successfully',
+    type: LoginResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid themes or missing required fields',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - JWT required',
+  })
+  async completeProfile(
+    @Req() req: AuthenticatedRequest,
+    @Body() data: CompleteProfileDto,
+  ) {
+    return this.authService.completeProfile(req.authUserData['userId'], data);
+  }
+// ==================== GET LEARNING EXPECTATIONS ====================
+@Get('learning-expectations')
+@HttpCode(HttpStatus.OK)
+@ApiOperation({
+  summary: 'Get available learning expectations',
+  description: 'Fetch all active learning expectations that users can select during profile completion. No authentication required.',
+})
+@ApiResponse({
+  status: 200,
+  description: 'List of available learning expectations',
+})
+async getLearningExpectations() {
+  return this.authService.getLearningExpectations();
+}
 
   @Post('logout')
   @UseGuards(AuthSessionGuard)
@@ -152,7 +197,10 @@ export class AuthController {
   @ApiBody({ type: RequestResetDto })
   @ApiResponse({ status: 200, description: 'Password reset email sent.' })
   @ApiResponse({ status: 400, description: 'Invalid email format' })
-  async requestPasswordReset(@Body() body: RequestResetDto, @Req() req: Request) {
+  async requestPasswordReset(
+    @Body() body: RequestResetDto,
+    @Req() req: Request,
+  ) {
     // Extract IP and user agent for security checking
     const ip =
       req.ip ||
