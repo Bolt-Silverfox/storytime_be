@@ -70,6 +70,7 @@ import { TextToSpeechService } from './text-to-speech.service';
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 import { SubscriptionThrottleGuard } from '@/common/guards/subscription-throttle.guard';
 import { Throttle } from '@nestjs/throttler';
+import { THROTTLE_LIMITS } from '@/common/constants/throttle.constants';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -110,7 +111,7 @@ export class StoryController {
     description: 'Not Found',
     type: ErrorResponseDto,
   })
-  @Throttle({ long: { limit: 100, ttl: 60000 } }) // 100 per minute
+  @Throttle({ long: { limit: THROTTLE_LIMITS.LONG.LIMIT, ttl: THROTTLE_LIMITS.LONG.TTL } }) // 100 per minute
   async getStories(
     @Query('theme') theme?: string,
     @Query('category') category?: string,
@@ -758,7 +759,12 @@ export class StoryController {
   @ApiOperation({ summary: 'Generate a story using AI' })
   @ApiBody({ type: GenerateStoryDto })
   @ApiOkResponse({ description: 'Generated story', type: CreateStoryDto })
-  @Throttle({ medium: { limit: 10, ttl: 3600000 } }) // 10/hour free, 50/hour premium
+  @Throttle({
+    medium: {
+      limit: THROTTLE_LIMITS.GENERATION.FREE.LIMIT,
+      ttl: THROTTLE_LIMITS.GENERATION.FREE.TTL,
+    },
+  })
   @ApiResponse({
     status: 400,
     description: 'Bad Request',

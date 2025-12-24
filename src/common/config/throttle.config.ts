@@ -1,21 +1,22 @@
 import { ThrottlerModuleOptions } from '@nestjs/throttler';
+import { THROTTLE_LIMITS } from '../constants/throttle.constants';
 
 export const throttleConfig: ThrottlerModuleOptions = {
   throttlers: [
     {
       name: 'short',
-      ttl: 1000,  // 1 second
-      limit: 10,  // 10 requests per second
+      ttl: THROTTLE_LIMITS.SHORT.TTL,
+      limit: THROTTLE_LIMITS.SHORT.LIMIT,
     },
     {
       name: 'medium',
-      ttl: 10000, // 10 seconds
-      limit: 50,  // 50 requests per 10 seconds
+      ttl: THROTTLE_LIMITS.MEDIUM.TTL,
+      limit: THROTTLE_LIMITS.MEDIUM.LIMIT,
     },
     {
       name: 'long',
-      ttl: 60000, // 1 minute
-      limit: 100, // 100 requests per minute
+      ttl: THROTTLE_LIMITS.LONG.TTL,
+      limit: THROTTLE_LIMITS.LONG.LIMIT,
     },
   ],
 };
