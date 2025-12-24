@@ -10,6 +10,8 @@ import {
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from 'src/prisma/prisma.service';
 
+import { THROTTLE_LIMITS } from '../constants/throttle.constants';
+
 /**
  * Custom throttle guard that adjusts rate limits based on user subscription status
  * Premium users get 5x the rate limit of free users
@@ -34,8 +36,8 @@ export class SubscriptionThrottleGuard extends ThrottlerGuard {
         // Check if user has active premium subscription
         const isPremium = await this.checkPremiumStatus(user?.userId);
 
-        // Adjust limits based on subscription (5x for premium)
-        const adjustedLimit = isPremium ? limit * 5 : limit;
+        // Adjust limits based on subscription
+        const adjustedLimit = isPremium ? limit * THROTTLE_LIMITS.PREMIUM_MULTIPLIER : limit;
 
         // Call parent with adjusted limit
         return super.handleRequest({

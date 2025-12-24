@@ -42,6 +42,7 @@ import {
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
+import { THROTTLE_LIMITS } from '@/common/constants/throttle.constants';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -51,7 +52,12 @@ export class AuthController {
 
   @Post('login')
   @UseGuards(AuthThrottleGuard)
-  @Throttle({ short: { limit: 3, ttl: 60000 } }) // 3 attempts per email per minute
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.LOGIN.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.LOGIN.TTL,
+    },
+  })
   @HttpCode(200)
   @ApiOperation({ summary: 'User login', description: 'Login for all roles.' })
   @ApiBody({ type: LoginDto })
@@ -69,7 +75,12 @@ export class AuthController {
 
   @Post('register')
   @UseGuards(AuthThrottleGuard)
-  @Throttle({ short: { limit: 3, ttl: 3600000 } }) // 3 signups per email per hour
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.REGISTER.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.REGISTER.TTL,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',

@@ -17,10 +17,15 @@ export class AuthThrottleGuard extends ThrottlerGuard {
         suffix: string,
         name: string,
     ): string {
-        const request = context.switchToHttp().getRequest<Request & { body?: { email?: string } }>();
+        const request = context.switchToHttp().getRequest<Request & { body?: any }>();
 
         // For login/signup, use email from request body
-        const email = request.body?.email?.toLowerCase();
+        // Ensure body exists and email is a string before normalizing
+        const body = request.body;
+        const email =
+            body && typeof body === 'object' && 'email' in body && typeof body.email === 'string'
+                ? body.email.toLowerCase().trim()
+                : null;
 
         if (email) {
             // Track by email address (prevents brute force on specific accounts)
