@@ -7,9 +7,10 @@ on:
 
 jobs:
   build-and-test:
-    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     environment: development
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
     steps:
     - uses: actions/checkout@v3
@@ -50,9 +51,12 @@ jobs:
     #   run: pnpm test
 
   deploy:
+    needs: build-and-test
     if: github.event.action == 'closed' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     environment: development
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
     steps:
     - uses: actions/checkout@v3
@@ -106,7 +110,7 @@ jobs:
 
     - name: Rsync files to EC2
       run: |
-        rsync -avz --exclude='.git' --exclude='.github' --exclude='.env' \
+        rsync -avz --exclude='.git' --exclude='.github' \
           -e "ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no" \
           ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/storytime-api/
 
