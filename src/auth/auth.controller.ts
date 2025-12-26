@@ -30,7 +30,7 @@ import {
   VerifyEmailDto,
   SendEmailVerificationDto,
   ChangePasswordDto,
-  CompleteProfileDto, 
+  CompleteProfileDto,
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -40,13 +40,24 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
+import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
+import { THROTTLE_LIMITS } from '@/common/constants/throttle.constants';
 
 @ApiTags('Auth')
 @Controller('auth')
+@SkipThrottle() // Skip default throttling, apply specific guards per endpoint
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('login')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.LOGIN.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.LOGIN.TTL,
+    },
+  })
   @HttpCode(200)
   @ApiOperation({ summary: 'User login', description: 'Login for all roles.' })
   @ApiBody({ type: LoginDto })
@@ -63,6 +74,13 @@ export class AuthController {
   }
 
   @Post('register')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.REGISTER.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.REGISTER.TTL,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',
@@ -104,20 +122,20 @@ export class AuthController {
   ) {
     return this.authService.completeProfile(req.authUserData['userId'], data);
   }
-// ==================== GET LEARNING EXPECTATIONS ====================
-@Get('learning-expectations')
-@HttpCode(HttpStatus.OK)
-@ApiOperation({
-  summary: 'Get available learning expectations',
-  description: 'Fetch all active learning expectations that users can select during profile completion. No authentication required.',
-})
-@ApiResponse({
-  status: 200,
-  description: 'List of available learning expectations',
-})
-async getLearningExpectations() {
-  return this.authService.getLearningExpectations();
-}
+  // ==================== GET LEARNING EXPECTATIONS ====================
+  @Get('learning-expectations')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get available learning expectations',
+    description: 'Fetch all active learning expectations that users can select during profile completion. No authentication required.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of available learning expectations',
+  })
+  async getLearningExpectations() {
+    return this.authService.getLearningExpectations();
+  }
 
   @Post('logout')
   @UseGuards(AuthSessionGuard)

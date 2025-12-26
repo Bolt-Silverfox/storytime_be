@@ -42,6 +42,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/schedule": "^6.0.0",
     "@nestjs/swagger": "^11.1.6",
+    "@nestjs/throttler": "^6.5.0",
     "@prisma/client": "6.19.0",
     "@react-email/components": "^1.0.1",
     "@react-email/render": "^2.0.0",

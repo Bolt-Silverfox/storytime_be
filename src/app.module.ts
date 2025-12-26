@@ -30,6 +30,9 @@ import { PaymentModule } from './payment/payment.module';
 import { AchievementProgressModule } from './achievement-progress/achievement-progress.module';
 import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module';
 import { BiometricsModule } from './biometrics/biometrics.module';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { throttleConfig } from './common/config/throttle.config';
 
 @Module({
   imports: [
@@ -59,6 +62,7 @@ import { BiometricsModule } from './biometrics/biometrics.module';
         ],
       }),
     }),
+    ThrottlerModule.forRoot(throttleConfig),
     CommonModule,
     AuthModule,
     UserModule,
@@ -82,6 +86,12 @@ import { BiometricsModule } from './biometrics/biometrics.module';
     AchievementProgressModule,
     ParentFavoriteModule,
     BiometricsModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule { }
