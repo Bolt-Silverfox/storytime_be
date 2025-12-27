@@ -12,7 +12,8 @@
     "build": "nest build",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "start:pm2": "pm2 restart --update-env storytime-api || pm2 start dist/main.js --name storytime-api",
+    "start:pm2:dev": "pm2 start ecosystem.config.js",
+    "start:pm2:prod": "pm2 start ecosystem.config.js --env production",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -24,7 +25,7 @@
     "make-migration": "npx prisma migrate dev",
     "db:reset": "npx prisma migrate reset",
     "db:seed": "ts-node src/story/seed.ts",
-    "deploy:dev": "/home/ubuntu/.local/share/pnpm/pnpm make-migration && /home/ubuntu/.local/share/pnpm/pnpm generate && /home/ubuntu/.local/share/pnpm/pnpm start:pm2"
+    "deploy:dev": "pnpm make-migration && pnpm generate && pnpm start:pm2"
   },
   "dependencies": {
     "@deepgram/sdk": "^4.11.2",
