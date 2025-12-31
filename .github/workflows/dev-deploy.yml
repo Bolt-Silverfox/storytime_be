@@ -103,24 +103,17 @@ jobs:
             mkdir -p /home/ubuntu/storytime/storytime-api
             exit 0
 
-      - name: Write SSH key to file
+      - name: Sync files and restart app
         run: |
           echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
           chmod 600 /tmp/ssh_key
 
-      - name: Rsync files to EC2
-        run: |
           rsync -avz --exclude='.git' --exclude='.github' \
             -e "ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/storytime-api/
 
-      - name: Restart app
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd /home/ubuntu/storytime/storytime-api
-            pnpm install --frozen-lockfile
-            pnpm deploy:dev
+          ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no \
+            ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+            'cd /home/ubuntu/storytime/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:dev'
+
+          rm -f /tmp/ssh_key
