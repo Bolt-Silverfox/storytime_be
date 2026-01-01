@@ -25,7 +25,9 @@
     "make-migration": "npx prisma migrate dev",
     "db:reset": "npx prisma migrate reset",
     "db:seed": "ts-node src/story/seed.ts",
-    "deploy:dev": "pnpm make-migration && pnpm generate && pnpm start:pm2"
+    "deploy:dev": "pnpm make-migration && pnpm generate && pnpm start:pm2:dev",
+    "start:pm2:staging": "pm2 start ecosystem.config.js --env staging",
+    "deploy:staging": "pnpm make-migration && pnpm generate && pnpm start:pm2:staging"
   },
   "dependencies": {
     "@deepgram/sdk": "^4.11.2",
