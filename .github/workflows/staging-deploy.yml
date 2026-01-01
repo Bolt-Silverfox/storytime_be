@@ -114,6 +114,6 @@ jobs:
 
           ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-            'cd /home/ubuntu/storytime/staging/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:staging'
+            'source ~/.nvm/nvm.sh && cd /home/ubuntu/storytime/staging/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:staging'
 
           rm -f /tmp/ssh_key

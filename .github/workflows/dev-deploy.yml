@@ -100,7 +100,7 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            mkdir -p /home/ubuntu/storytime/storytime-api
+            mkdir -p /home/ubuntu/storytime/development/storytime-api
             exit 0
 
       - name: Sync files and restart app
@@ -110,10 +110,10 @@ jobs:
 
           rsync -avz --exclude='.git' --exclude='.github' \
             -e "ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no" \
-            ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/storytime-api/
+            ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/development/storytime-api/
 
           ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-            'cd /home/ubuntu/storytime/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:dev'
+            'source ~/.nvm/nvm.sh && cd /home/ubuntu/storytime/development/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:dev'
 
           rm -f /tmp/ssh_key
