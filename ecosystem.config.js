@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'storytime-api',
+      name: `storytime-api-${process.env.NODE_ENV || 'development'}`,
       script: 'dist/src/main.js',
       instances: 'max',
       exec_mode: 'cluster',
