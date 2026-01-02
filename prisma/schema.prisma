@@ -65,6 +65,8 @@ model User {
   paymentTransactions     PaymentTransaction[]
   // ADDED: Parent recommendations
   parentRecommendations   ParentRecommendation[]
+  // ADDED: Restricted stories
+  restrictedStories       RestrictedStory[]
   // NEW: Learning expectations (marketing data)
   learningExpectations    UserLearningExpectation[]
 
@@ -138,6 +140,8 @@ model Kid {
   userBadges              UserBadge[]
   // ADDED: Parent recommendations
   parentRecommendations   ParentRecommendation[]
+  // ADDED: Restricted stories
+  restrictedStories       RestrictedStory[]
 
   @@index([isDeleted])
   @@map("kids")
@@ -284,6 +288,8 @@ model Story {
   downloads             DownloadedStory[]
   // ADDED: Parent recommendations
   parentRecommendations ParentRecommendation[]
+  // ADDED: Restricted stories
+  restrictedStories     RestrictedStory[]
 
   @@index([isDeleted])
   @@map("stories")
@@ -872,4 +878,23 @@ model ParentRecommendation {
   @@index([kidId])
   @@index([userId, kidId])
   @@map("parent_recommendations")
+}
+
+// -------------------------
+// RESTRICTED STORIES
+// -------------------------
+model RestrictedStory {
+  id        String   @id @default(uuid())
+  kidId     String
+  kid       Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@unique([kidId, storyId])
+  @@index([kidId])
+  @@map("restricted_stories")
 }

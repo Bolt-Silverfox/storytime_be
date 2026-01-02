@@ -53,6 +53,7 @@ import {
   ParentRecommendationDto,
   RecommendationResponseDto,
   RecommendationsStatsDto,
+  RestrictStoryDto,
   StoryDto,
   StoryWithProgressDto,
 } from './story.dto';
@@ -433,6 +434,54 @@ export class StoryController {
   async getFavorites(@Param('kidId') kidId: string) {
     return this.storyService.getFavorites(kidId);
   }
+
+  // === RESTRICTED STORIES ENDPOINTS ===
+
+  @Post('/auth/restrict')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Restrict a story for a specific kid' })
+  @ApiBody({ type: RestrictStoryDto })
+  async restrictStory(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: RestrictStoryDto,
+  ) {
+    return this.storyService.restrictStory({
+      ...body,
+      userId: req.authUserData.userId,
+    });
+  }
+
+  @Delete('/auth/restrict/:kidId/:storyId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unrestrict a story for a kid' })
+  async unrestrictStory(
+    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+    @Param('storyId') storyId: string,
+  ) {
+    return this.storyService.unrestrictStory(
+      kidId,
+      storyId,
+      req.authUserData.userId,
+    );
+  }
+
+  @Get('/auth/restrict/:kidId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get list of restricted stories for a kid' })
+  async getRestrictedStories(
+    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+  ) {
+    return this.storyService.getRestrictedStories(
+      kidId,
+      req.authUserData.userId,
+    );
+  }
+
 
   // --- Progress ---
   @Post('progress')
