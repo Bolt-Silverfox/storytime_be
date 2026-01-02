@@ -19,6 +19,7 @@ import {
   ParentRecommendationDto,
   RecommendationResponseDto,
   RecommendationsStatsDto,
+  RestrictStoryDto,
 } from './story.dto';
 import {
   UploadVoiceDto,
@@ -140,6 +141,18 @@ export class StoryService {
         { ...where },
         { id: { in: recommendedStoryIds } },
       ];
+    }
+
+    // Exclude restricted stories if kidId is provided
+    if (filter.kidId) {
+      const restrictedStories = await this.prisma.restrictedStory.findMany({
+        where: { kidId: filter.kidId },
+        select: { storyId: true },
+      });
+      const restrictedStoryIds = restrictedStories.map((r) => r.storyId);
+      if (restrictedStoryIds.length > 0) {
+        where.id = { notIn: restrictedStoryIds, ...where.id };
+      }
     }
 
     if (filter.recommended === true && filter.kidId) {
@@ -341,6 +354,73 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
     if (!story) throw new NotFoundException('Story not found');
     return await this.prisma.storyProgress.findUnique({ where: { kidId_storyId: { kidId, storyId } } });
+  }
+
+  async restrictStory(dto: RestrictStoryDto & { userId: string }) {
+    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+    if (!kid) throw new NotFoundException('Kid not found');
+
+    // Ensure parent owns the kid
+    if (kid.parentId !== dto.userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
+    }
+
+    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    if (!story) throw new NotFoundException('Story not found');
+
+    return await this.prisma.restrictedStory.upsert({
+      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
+      create: {
+        kidId: dto.kidId,
+        storyId: dto.storyId,
+        userId: dto.userId,
+        reason: dto.reason,
+      },
+      update: {
+        reason: dto.reason,
+      },
+    });
+  }
+
+  async unrestrictStory(kidId: string, storyId: string, userId: string) {
+    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    if (!kid) throw new NotFoundException('Kid not found');
+
+    if (kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
+    }
+
+    const restriction = await this.prisma.restrictedStory.findUnique({
+      where: { kidId_storyId: { kidId, storyId } },
+    });
+
+    if (!restriction) {
+      throw new NotFoundException('Story is not restricted for this kid');
+    }
+
+    return await this.prisma.restrictedStory.delete({
+      where: { kidId_storyId: { kidId, storyId } },
+    });
+  }
+
+  async getRestrictedStories(kidId: string, userId: string) {
+    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    if (!kid) throw new NotFoundException('Kid not found');
+
+    if (kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
+    }
+
+    const restricted = await this.prisma.restrictedStory.findMany({
+      where: { kidId },
+      include: { story: true },
+    });
+
+    return restricted.map((r) => ({
+      ...r.story,
+      restrictionReason: r.reason,
+      restrictedAt: r.createdAt,
+    }));
   }
 
   async setDailyChallenge(dto: DailyChallengeDto) {
