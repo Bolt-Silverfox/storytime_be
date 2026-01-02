@@ -1,6 +1,7 @@
 {
   "name": "storytime_be",
   "version": "0.0.1",
+  "packageManager": "pnpm@10.15.1",
   "description": "Storytime API",
   "author": "",
   "private": true,
@@ -27,7 +28,8 @@
     "db:reset": "npx prisma migrate reset",
     "db:seed": "ts-node src/story/seed.ts",
     "deploy:dev": "pnpm make-migration && pnpm generate && pnpm start:pm2:dev",
-    "deploy:staging": "pnpm make-migration && pnpm generate && pnpm start:pm2:staging"
+    "deploy:staging": "pnpm make-migration && pnpm generate && pnpm start:pm2:staging",
+    "deploy:prod": "pnpm make-migration && pnpm generate && pnpm start:pm2:prod"
   },
   "dependencies": {
     "@deepgram/sdk": "^4.11.2",
