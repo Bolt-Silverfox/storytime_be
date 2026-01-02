@@ -108,12 +108,12 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
           chmod 600 /tmp/ssh_key
 
-          rsync -avz --exclude='.git' --exclude='.github' \
+          rsync -avz --exclude='.git' --exclude='.github' --exclude='node_modules' \
             -e "ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/development/storytime-api/
 
           ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-            'source ~/.nvm/nvm.sh && cd /home/ubuntu/storytime/development/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:dev'
+            'cd /home/ubuntu/storytime/development/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:dev'
 
           rm -f /tmp/ssh_key
