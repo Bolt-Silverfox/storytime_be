@@ -1011,6 +1011,17 @@ export class StoryService {
     if (!kid) throw new NotFoundException('Kid not found or access denied');
     const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
     if (!story) throw new NotFoundException('Story not found');
+
+    const isRestricted = await this.prisma.restrictedStory.findUnique({
+      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
+    });
+
+    if (isRestricted) {
+      throw new BadRequestException(
+        'This story is currently restricted for this kid. Please unrestrict it first.',
+      );
+    }
+
     const existing = await this.prisma.parentRecommendation.findUnique({
       where: { userId_kidId_storyId: { userId, kidId: dto.kidId, storyId: dto.storyId } },
     });
