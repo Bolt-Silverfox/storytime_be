@@ -1,6 +1,7 @@
 {
   "name": "storytime_be",
   "version": "0.0.1",
+  "packageManager": "pnpm@10.15.1",
   "description": "Storytime API",
   "author": "",
   "private": true,
