@@ -1,10 +1,7 @@
-import { Controller, Post, Get, Body, Req, UseGuards, Query } from '@nestjs/common';
+import { Controller, Post, Get, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
-
 import { BiometricsService } from './biometrics.service';
-import { EnableBiometricsDto } from './dto/enable-biometrics.dto';
-import { DisableBiometricsDto } from './dto/disable-biometrics.dto';
 
 @ApiTags('biometrics')
 @ApiBearerAuth()
@@ -14,30 +11,20 @@ export class BiometricsController {
   constructor(private readonly biometricsService: BiometricsService) { }
 
   @Post('enable')
-  @ApiOperation({ summary: 'Enable biometrics for a device' })
-  async enable(@Req() req: AuthenticatedRequest, @Body() body: EnableBiometricsDto) {
-    return this.biometricsService.enableBiometrics(
-      req.authUserData.userId,
-      body.deviceId,
-      body.hasBiometrics,
-    );
+  @ApiOperation({ summary: 'Enable biometrics for user' })
+  async enable(@Req() req: AuthenticatedRequest) {
+    return this.biometricsService.enableBiometrics(req.authUserData.userId);
   }
 
   @Post('disable')
-  @ApiOperation({ summary: 'Disable biometrics for a device' })
-  async disable(@Req() req: AuthenticatedRequest, @Body() body: DisableBiometricsDto) {
-    return this.biometricsService.disableBiometrics(
-      req.authUserData.userId,
-      body.deviceId,
-    );
+  @ApiOperation({ summary: 'Disable biometrics for user' })
+  async disable(@Req() req: AuthenticatedRequest) {
+    return this.biometricsService.disableBiometrics(req.authUserData.userId);
   }
 
   @Get('status')
-  @ApiOperation({ summary: 'Get biometrics status for a device' })
-  async status(@Req() req: AuthenticatedRequest, @Query('deviceId') deviceId: string) {
-    return this.biometricsService.biometricsStatus(
-      req.authUserData.userId,
-      deviceId,
-    );
+  @ApiOperation({ summary: 'Get biometrics status for user' })
+  async status(@Req() req: AuthenticatedRequest) {
+    return this.biometricsService.biometricsStatus(req.authUserData.userId);
   }
 }
