@@ -1,45 +1,31 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class BiometricsService {
-  async enableBiometrics(userId: string, deviceId: string, hasBiometrics: boolean) {
-    if (!hasBiometrics) {
-      throw new BadRequestException('Device does not support biometrics');
-    }
+  constructor(private readonly prisma: PrismaService) { }
 
-    const record = await prisma.deviceAuth.upsert({
-      where: { userId_deviceId: { userId, deviceId } },
-      update: { biometricsOn: true },
-      create: { userId, deviceId, biometricsOn: true },
+  async enableBiometrics(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { biometricsEnabled: true },
     });
-
-    return { success: true, deviceId, biometricsOn: record.biometricsOn };
+    return { success: true, biometricsEnabled: true };
   }
 
-  async disableBiometrics(userId: string, deviceId: string) {
-    await prisma.deviceAuth.updateMany({
-      where: { userId, deviceId },
-      data: { biometricsOn: false },
+  async disableBiometrics(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { biometricsEnabled: false },
     });
-
-    return { success: true };
+    return { success: true, biometricsEnabled: false };
   }
 
-  async biometricsStatus(userId: string, deviceId: string) {
-    const record = await prisma.deviceAuth.findUnique({
-      where: { userId_deviceId: { userId, deviceId } },
+  async biometricsStatus(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { biometricsEnabled: true },
     });
-
-    return { deviceId, biometricsOn: record?.biometricsOn ?? false };
-  }
-
-  async revokeOtherUsersOnDevice(deviceId: string, currentUserId: string) {
-    await prisma.deviceAuth.updateMany({
-      where: { deviceId, userId: { not: currentUserId } },
-      data: { biometricsOn: false },
-    });
+    return { biometricsEnabled: user?.biometricsEnabled ?? false };
   }
 }
