@@ -59,26 +59,32 @@ export const VOICE_CONFIG = {
   [VoiceType.MILO]: {
     model: 'aura-orion-en',
     gender: 'Male',
+    elevenLabsId: 'pNInz6obpgDQGcFmaJgB', // Adam
   },
   [VoiceType.BELLA]: {
     model: 'aura-asteria-en',
     gender: 'Female',
+    elevenLabsId: '21m00Tcm4TlvDq8ikWAM', // Rachel
   },
   [VoiceType.COSMO]: {
     model: 'aura-arcas-en',
     gender: 'Male',
+    elevenLabsId: 'ErXwobaYiN019PkySvjV', // Antoni
   },
   [VoiceType.NIMBUS]: {
     model: 'aura-luna-en',
     gender: 'Female',
+    elevenLabsId: 'MF3mGyEYCl7XYWbV9V6O', // Elli
   },
   [VoiceType.GRANDPA_JO]: {
     model: 'aura-angus-en',
     gender: 'Male',
+    elevenLabsId: 'yoZ06aMxZJJ28mfd3POQ', // Sam
   },
   [VoiceType.CHIP]: {
     model: 'aura-perseus-en',
     gender: 'Male',
+    elevenLabsId: 'TxGEqnHWrfWFTfGW9XjX', // Josh
   },
 };
 
