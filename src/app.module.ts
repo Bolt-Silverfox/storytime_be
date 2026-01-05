@@ -29,7 +29,6 @@ import { VoiceModule } from './voice/voice.module';
 import { PaymentModule } from './payment/payment.module';
 import { AchievementProgressModule } from './achievement-progress/achievement-progress.module';
 import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module';
-import { BiometricsModule } from './biometrics/biometrics.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { throttleConfig } from './common/config/throttle.config';
@@ -100,7 +99,6 @@ import { AdminModule } from './admin/admin.module';
     HelpSupportModule,
     AchievementProgressModule,
     ParentFavoriteModule,
-    BiometricsModule,
     AdminModule,
   ],
   providers: [
