@@ -53,6 +53,9 @@ import { VoiceType } from '../voice/voice.dto';
 @Injectable()
 export class StoryService {
   private readonly logger = new Logger(StoryService.name);
+  // Average reading speed for children: ~150 words per minute
+  private readonly WORDS_PER_MINUTE = 150;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
@@ -60,6 +63,20 @@ export class StoryService {
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
   ) { }
+
+  /**
+   * Calculate estimated reading duration in seconds based on text content or word count
+   */
+  calculateDurationSeconds(textOrWordCount: string | number): number {
+    const wordCount = typeof textOrWordCount === 'string'
+      ? textOrWordCount.split(/\s+/).filter(word => word.length > 0).length
+      : textOrWordCount;
+
+    if (wordCount <= 0) return 0;
+
+    // Convert words per minute to seconds: (wordCount / wordsPerMinute) * 60
+    return Math.ceil((wordCount / this.WORDS_PER_MINUTE) * 60);
+  }
 
   async getStories(filter: {
     theme?: string;
@@ -874,6 +891,8 @@ export class StoryService {
     })) || [];
 
     const textContent = generatedStory.content || generatedStory.textContent || generatedStory.description || '';
+    const wordCount = textContent.split(/\s+/).filter((word: string) => word.length > 0).length;
+    const durationSeconds = this.calculateDurationSeconds(wordCount);
 
     // 3. Create Story Record
     let story = await this.prisma.story.create({
@@ -886,6 +905,8 @@ export class StoryService {
         isInteractive: false,
         coverImageUrl: coverImageUrl,
         textContent: textContent,
+        wordCount: wordCount,
+        durationSeconds: durationSeconds,
         audioUrl: '', // Will update momentarily
         creatorKidId: creatorKidId || null, // Allow null for orphan stories
         aiGenerated: true,
