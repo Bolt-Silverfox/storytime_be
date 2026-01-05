@@ -2,18 +2,34 @@ import { UploadService } from '../upload/upload.service';
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient } from '@deepgram/sdk';
+import { ElevenLabsClient } from 'elevenlabs';
 import { VoiceType, VOICE_CONFIG } from '../voice/voice.dto';
+import { Readable } from 'stream';
 
 @Injectable()
 export class TextToSpeechService {
   private readonly logger = new Logger(TextToSpeechService.name);
   private deepgramApiKey: string;
+  private elevenLabsApiKey: string;
+  private elevenLabs: ElevenLabsClient;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly uploadService: UploadService,
   ) {
     this.deepgramApiKey = this.configService.get<string>('DEEPGRAM_API_KEY') ?? '';
+    this.elevenLabsApiKey = this.configService.get<string>('ELEVEN_LABS_KEY') ?? '';
+
+    if (this.elevenLabsApiKey) {
+      try {
+        this.elevenLabs = new ElevenLabsClient({ apiKey: this.elevenLabsApiKey });
+      } catch (err) {
+        this.logger.error(`Failed to initialize ElevenLabs client: ${err.message}`);
+      }
+    } else {
+      this.logger.warn('ELEVEN_LABS_KEY is not set');
+    }
+
     if (!this.deepgramApiKey) {
       this.logger.warn('DEEPGRAM_API_KEY is not set');
     }
@@ -24,18 +40,77 @@ export class TextToSpeechService {
     text: string,
     voicetype?: VoiceType,
   ): Promise<string> {
+    const type = voicetype ?? VoiceType.MILO;
+    const voiceConfig = VOICE_CONFIG[type];
+
+    // Priority 1: ElevenLabs
+    if (this.elevenLabs && voiceConfig.elevenLabsId) {
+      try {
+        this.logger.log(`Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${voiceConfig.elevenLabsId})`);
+        return await this.textToSpeechElevenLabs(storyId, text, voiceConfig.elevenLabsId);
+      } catch (error) {
+        this.logger.warn(`ElevenLabs generation failed for story ${storyId}: ${error.message}. Falling back to Deepgram.`);
+        // Proceed to fallback
+      }
+    } else {
+      if (!this.elevenLabs) this.logger.debug('Skipping ElevenLabs: Client not initialized');
+      else if (!voiceConfig.elevenLabsId) this.logger.debug(`Skipping ElevenLabs: No ID configured for voice ${type}`);
+    }
+
+    // Priority 2: Deepgram Fallback
+    if (this.deepgramApiKey) {
+      try {
+        this.logger.log(`Attempting Deepgram generation for story ${storyId} with voice ${type}`);
+        return await this.textToSpeechDeepgram(storyId, text, type);
+      } catch (error) {
+        this.logger.error(`Deepgram fallback failed for story ${storyId}: ${error.message}`);
+        throw new InternalServerErrorException('Voice generation failed on both providers');
+      }
+    }
+
+    throw new InternalServerErrorException('No voice generation provider available');
+  }
+
+  private async textToSpeechElevenLabs(
+    storyId: string,
+    text: string,
+    voiceId: string,
+  ): Promise<string> {
+    try {
+      const audioStream = await this.elevenLabs.textToSpeech.convert(voiceId, {
+        text: text,
+        model_id: 'eleven_multilingual_v2',
+        output_format: 'mp3_44100_128',
+      });
+
+      const audioBuffer = await this.streamToBuffer(audioStream);
+
+      return await this.uploadService.uploadAudioBuffer(
+        audioBuffer,
+        `story_${storyId}_elevenlabs_${Date.now()}.mp3`,
+      );
+    } catch (error) {
+      throw error; // Rethrow to be caught by fallback logic
+    }
+  }
+
+  private async textToSpeechDeepgram(
+    storyId: string,
+    text: string,
+    voicetype: VoiceType,
+  ): Promise<string> {
     if (!this.deepgramApiKey) {
       throw new InternalServerErrorException('Deepgram API key is missing');
     }
 
-    const voiceConfig = VOICE_CONFIG[voicetype ?? VoiceType.MILO];
+    const voiceConfig = VOICE_CONFIG[voicetype];
     const deepgram = createClient(this.deepgramApiKey);
 
     // 1. Transform raw text into "Storyteller Mode" (SSML)
     const ssmlText = this.formatTextToSSML(text);
 
     try {
-      this.logger.log(`Generating Audio with Model: ${voiceConfig.model}`);
+      this.logger.log(`Generating Audio with Deepgram Model: ${voiceConfig.model}`);
 
       // Deepgram has a 2000 char limit. Split text into chunks.
       const MAX_CHARS = 1900; // Safety margin
@@ -81,7 +156,7 @@ export class TextToSpeechService {
 
     } catch (error) {
       this.logger.error(`Deepgram TTS failed for story ${storyId}: ${error.message}`);
-      throw new InternalServerErrorException('Deepgram TTS failed');
+      throw error;
     }
   }
 
@@ -106,7 +181,7 @@ export class TextToSpeechService {
     text = text.replace(/([.!?])\s/g, '$1 <break time="800ms"/> ');
 
     // Long pause between paragraphs/ideas (if you have double newlines in raw text)
-    // text = text.replace(/\n\n/g, '<break time="1500ms"/>'); 
+    text = text.replace(/\n\n/g, '<break time="1500ms"/>'); 
 
     // 4. Wrap in <speak> tags
     return `<speak>${text}</speak>`;
@@ -155,5 +230,13 @@ export class TextToSpeechService {
     }
 
     return Buffer.from(result.buffer);
+  }
+
+  private async streamToBuffer(stream: Readable): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
   }
 }
