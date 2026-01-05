@@ -252,6 +252,7 @@ model Story {
   aiGenerated           Boolean                  @default(false)
   difficultyLevel       Int                      @default(1)
   wordCount             Int                      @default(0)
+  durationSeconds       Int?                     // Estimated reading time in seconds
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
   // SOFT DELETE FIELDS

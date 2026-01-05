@@ -478,6 +478,11 @@ export class StoryDto extends CreateStoryDto {
   @IsString()
   id: string;
 
+  @ApiPropertyOptional({ description: 'Estimated reading time in seconds' })
+  @IsOptional()
+  @IsNumber()
+  durationSeconds?: number;
+
   @ApiProperty()
   createdAt: Date;
 
