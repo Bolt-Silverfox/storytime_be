@@ -53,6 +53,9 @@ import { VoiceType } from '../voice/voice.dto';
 @Injectable()
 export class StoryService {
   private readonly logger = new Logger(StoryService.name);
+  // Average reading speed for children: ~150 words per minute
+  private readonly WORDS_PER_MINUTE = 150;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
@@ -60,6 +63,20 @@ export class StoryService {
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
   ) { }
+
+  /**
+   * Calculate estimated reading duration in seconds based on text content or word count
+   */
+  calculateDurationSeconds(textOrWordCount: string | number): number {
+    const wordCount = typeof textOrWordCount === 'string'
+      ? textOrWordCount.split(/\s+/).filter(word => word.length > 0).length
+      : textOrWordCount;
+
+    if (wordCount <= 0) return 0;
+
+    // Convert words per minute to seconds: (wordCount / wordsPerMinute) * 60
+    return Math.ceil((wordCount / this.WORDS_PER_MINUTE) * 60);
+  }
 
   async getStories(filter: {
     theme?: string;
@@ -874,6 +891,8 @@ export class StoryService {
     })) || [];
 
     const textContent = generatedStory.content || generatedStory.textContent || generatedStory.description || '';
+    const wordCount = textContent.split(/\s+/).filter((word: string) => word.length > 0).length;
+    const durationSeconds = this.calculateDurationSeconds(wordCount);
 
     // 3. Create Story Record
     let story = await this.prisma.story.create({
@@ -886,6 +905,8 @@ export class StoryService {
         isInteractive: false,
         coverImageUrl: coverImageUrl,
         textContent: textContent,
+        wordCount: wordCount,
+        durationSeconds: durationSeconds,
         audioUrl: '', // Will update momentarily
         creatorKidId: creatorKidId || null, // Allow null for orphan stories
         aiGenerated: true,
@@ -1034,7 +1055,7 @@ export class StoryService {
         });
         return this.toRecommendationResponse(restored);
       }
-      throw new BadRequestException('You have already recommended this story');
+      throw new BadRequestException(`You have already recommended this story to ${kid.name}`);
     }
     const recommendation = await this.prisma.parentRecommendation.create({
       data: { userId, kidId: dto.kidId, storyId: dto.storyId, message: dto.message },
@@ -1087,5 +1108,37 @@ export class StoryService {
       user: recommendation.user,
       kid: recommendation.kid,
     };
+  }
+
+  async getTopPicksFromParents(limit: number = 10): Promise<any[]> {
+    const topStories = await this.prisma.parentRecommendation.groupBy({
+      by: ['storyId'],
+      where: { isDeleted: false },
+      _count: { storyId: true },
+      orderBy: { _count: { storyId: 'desc' } },
+      take: limit,
+    });
+
+    if (topStories.length === 0) {
+      return [];
+    }
+
+    const storyIds = topStories.map((s) => s.storyId);
+    const stories = await this.prisma.story.findMany({
+      where: { id: { in: storyIds }, isDeleted: false },
+      include: {
+        themes: true,
+        categories: true,
+        images: true,
+      },
+    });
+
+    const countMap = new Map(topStories.map((s) => [s.storyId, s._count.storyId]));
+    return stories
+      .map((story) => ({
+        ...story,
+        recommendationCount: countMap.get(story.id) || 0,
+      }))
+      .sort((a, b) => b.recommendationCount - a.recommendationCount);
   }
 }
