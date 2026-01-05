@@ -16,6 +16,7 @@ const mockPrismaService = {
   downloadedStory: { findMany: jest.fn(), upsert: jest.fn(), delete: jest.fn(), deleteMany: jest.fn() },
   favorite: { deleteMany: jest.fn() },
   storyProgress: { deleteMany: jest.fn() },
+  parentRecommendation: { groupBy: jest.fn() },
   $transaction: jest.fn((args) => args), // Pass through transaction
 };
 
@@ -120,6 +121,71 @@ describe('StoryService - Library & Generation', () => {
       expect(prisma.favorite.deleteMany).toHaveBeenCalledWith({ where: { kidId, storyId } });
       expect(prisma.downloadedStory.deleteMany).toHaveBeenCalledWith({ where: { kidId, storyId } });
       expect(prisma.storyProgress.deleteMany).toHaveBeenCalledWith({ where: { kidId, storyId } });
+    });
+  });
+
+  // --- 3. TOP PICKS TESTS ---
+  describe('getTopPicksFromParents', () => {
+    it('should return stories sorted by recommendation count', async () => {
+      const mockGroupByResult = [
+        { storyId: 'story-1', _count: { storyId: 5 } },
+        { storyId: 'story-2', _count: { storyId: 3 } },
+      ];
+      const mockStories = [
+        { id: 'story-2', title: 'Story Two', themes: [], categories: [], images: [] },
+        { id: 'story-1', title: 'Story One', themes: [], categories: [], images: [] },
+      ];
+
+      prisma.parentRecommendation.groupBy.mockResolvedValue(mockGroupByResult);
+      prisma.story.findMany.mockResolvedValue(mockStories);
+
+      const result = await service.getTopPicksFromParents(10);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('story-1');
+      expect(result[0].recommendationCount).toBe(5);
+      expect(result[1].id).toBe('story-2');
+      expect(result[1].recommendationCount).toBe(3);
+    });
+
+    it('should respect the limit parameter', async () => {
+      prisma.parentRecommendation.groupBy.mockResolvedValue([]);
+
+      await service.getTopPicksFromParents(5);
+
+      expect(prisma.parentRecommendation.groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 5 }),
+      );
+    });
+
+    it('should return empty array when no recommendations exist', async () => {
+      prisma.parentRecommendation.groupBy.mockResolvedValue([]);
+
+      const result = await service.getTopPicksFromParents(10);
+
+      expect(result).toEqual([]);
+      expect(prisma.story.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should include themes, categories, and images in the result', async () => {
+      const mockGroupByResult = [{ storyId: 'story-1', _count: { storyId: 2 } }];
+      const mockStory = {
+        id: 'story-1',
+        title: 'Test Story',
+        themes: [{ id: 'theme-1', name: 'Adventure' }],
+        categories: [{ id: 'cat-1', name: 'Fantasy' }],
+        images: [{ url: 'http://example.com/img.png' }],
+      };
+
+      prisma.parentRecommendation.groupBy.mockResolvedValue(mockGroupByResult);
+      prisma.story.findMany.mockResolvedValue([mockStory]);
+
+      const result = await service.getTopPicksFromParents(10);
+
+      expect(result[0]).toHaveProperty('themes');
+      expect(result[0]).toHaveProperty('categories');
+      expect(result[0]).toHaveProperty('images');
+      expect(result[0].themes).toEqual([{ id: 'theme-1', name: 'Adventure' }]);
     });
   });
 });

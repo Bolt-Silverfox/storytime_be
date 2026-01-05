@@ -1034,7 +1034,7 @@ export class StoryService {
         });
         return this.toRecommendationResponse(restored);
       }
-      throw new BadRequestException('You have already recommended this story');
+      throw new BadRequestException(`You have already recommended this story to ${kid.name}`);
     }
     const recommendation = await this.prisma.parentRecommendation.create({
       data: { userId, kidId: dto.kidId, storyId: dto.storyId, message: dto.message },
@@ -1087,5 +1087,37 @@ export class StoryService {
       user: recommendation.user,
       kid: recommendation.kid,
     };
+  }
+
+  async getTopPicksFromParents(limit: number = 10): Promise<any[]> {
+    const topStories = await this.prisma.parentRecommendation.groupBy({
+      by: ['storyId'],
+      where: { isDeleted: false },
+      _count: { storyId: true },
+      orderBy: { _count: { storyId: 'desc' } },
+      take: limit,
+    });
+
+    if (topStories.length === 0) {
+      return [];
+    }
+
+    const storyIds = topStories.map((s) => s.storyId);
+    const stories = await this.prisma.story.findMany({
+      where: { id: { in: storyIds }, isDeleted: false },
+      include: {
+        themes: true,
+        categories: true,
+        images: true,
+      },
+    });
+
+    const countMap = new Map(topStories.map((s) => [s.storyId, s._count.storyId]));
+    return stories
+      .map((story) => ({
+        ...story,
+        recommendationCount: countMap.get(story.id) || 0,
+      }))
+      .sort((a, b) => b.recommendationCount - a.recommendationCount);
   }
 }
