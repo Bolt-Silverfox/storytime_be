@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AgeModule } from './age/age.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
@@ -62,7 +62,21 @@ import { throttleConfig } from './common/config/throttle.config';
         ],
       }),
     }),
-    ThrottlerModule.forRoot(throttleConfig),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const isDev = config.get('NODE_ENV') === 'development';
+        const multiplier = isDev ? 100 : 1; // 100x limit in dev
+
+        return {
+          throttlers: (throttleConfig as any).throttlers.map((t: any) => ({
+            ...t,
+            limit: t.limit * multiplier,
+          })),
+        };
+      },
+    }),
     CommonModule,
     AuthModule,
     UserModule,
