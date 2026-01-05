@@ -559,6 +559,22 @@ export class RecommendationsStatsDto {
   totalCount: number;
 }
 
+export class TopPickStoryDto extends StoryDto {
+  @ApiProperty({ description: 'Number of times this story has been recommended by parents' })
+  @IsNumber()
+  recommendationCount: number;
+
+  @ApiPropertyOptional({ description: 'Story themes' })
+  @IsOptional()
+  themes?: ThemeDto[];
+
+  @ApiPropertyOptional({ description: 'Story categories' })
+  @IsOptional()
+  categories?: CategoryDto[];
+
+  // images is inherited from StoryDto -> CreateStoryDto
+}
+
 export class QuestionAnswerDto {
   @ApiProperty()
   id: string;

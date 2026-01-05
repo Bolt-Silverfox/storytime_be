@@ -56,6 +56,7 @@ import {
   RestrictStoryDto,
   StoryDto,
   StoryWithProgressDto,
+  TopPickStoryDto,
 } from './story.dto';
 import {
   CreateElevenLabsVoiceDto,
@@ -1103,5 +1104,22 @@ export class StoryController {
     @Param('kidId') kidId: string,
   ) {
     return this.storyService.getRecommendationStats(kidId, req.authUserData.userId);
+  }
+
+  @Get('recommendations/top-picks')
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey('recommendations:top-picks')
+  @CacheTTL(30 * 60 * 1000) // 30 minutes
+  @ApiOperation({ summary: 'Get top picked stories by parents (most recommended)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of stories to return (default: 10)' })
+  @ApiOkResponse({
+    description: 'List of top picked stories with recommendation counts',
+    type: TopPickStoryDto,
+    isArray: true,
+  })
+  async getTopPicksFromParents(
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ): Promise<TopPickStoryDto[]> {
+    return this.storyService.getTopPicksFromParents(Math.min(limit, 50));
   }
 }
