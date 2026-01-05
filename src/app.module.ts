@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AgeModule } from './age/age.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
@@ -30,6 +30,9 @@ import { PaymentModule } from './payment/payment.module';
 import { AchievementProgressModule } from './achievement-progress/achievement-progress.module';
 import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module';
 import { BiometricsModule } from './biometrics/biometrics.module';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { throttleConfig } from './common/config/throttle.config';
 
 @Module({
   imports: [
@@ -59,6 +62,21 @@ import { BiometricsModule } from './biometrics/biometrics.module';
         ],
       }),
     }),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const isDev = config.get('NODE_ENV') === 'development';
+        const multiplier = isDev ? 100 : 1; // 100x limit in dev
+
+        return {
+          throttlers: (throttleConfig as any).throttlers.map((t: any) => ({
+            ...t,
+            limit: t.limit * multiplier,
+          })),
+        };
+      },
+    }),
     CommonModule,
     AuthModule,
     UserModule,
@@ -82,6 +100,12 @@ import { BiometricsModule } from './biometrics/biometrics.module';
     AchievementProgressModule,
     ParentFavoriteModule,
     BiometricsModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule { }

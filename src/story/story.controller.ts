@@ -53,6 +53,7 @@ import {
   ParentRecommendationDto,
   RecommendationResponseDto,
   RecommendationsStatsDto,
+  RestrictStoryDto,
   StoryDto,
   StoryWithProgressDto,
 } from './story.dto';
@@ -68,6 +69,9 @@ import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
 
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
+import { SubscriptionThrottleGuard } from '@/common/guards/subscription-throttle.guard';
+import { Throttle } from '@nestjs/throttler';
+import { THROTTLE_LIMITS } from '@/common/constants/throttle.constants';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -108,6 +112,7 @@ export class StoryController {
     description: 'Not Found',
     type: ErrorResponseDto,
   })
+  @Throttle({ long: { limit: THROTTLE_LIMITS.LONG.LIMIT, ttl: THROTTLE_LIMITS.LONG.TTL } }) // 100 per minute
   async getStories(
     @Query('theme') theme?: string,
     @Query('category') category?: string,
@@ -430,6 +435,54 @@ export class StoryController {
     return this.storyService.getFavorites(kidId);
   }
 
+  // === RESTRICTED STORIES ENDPOINTS ===
+
+  @Post('/auth/restrict')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Restrict a story for a specific kid' })
+  @ApiBody({ type: RestrictStoryDto })
+  async restrictStory(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: RestrictStoryDto,
+  ) {
+    return this.storyService.restrictStory({
+      ...body,
+      userId: req.authUserData.userId,
+    });
+  }
+
+  @Delete('/auth/restrict/:kidId/:storyId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unrestrict a story for a kid' })
+  async unrestrictStory(
+    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+    @Param('storyId') storyId: string,
+  ) {
+    return this.storyService.unrestrictStory(
+      kidId,
+      storyId,
+      req.authUserData.userId,
+    );
+  }
+
+  @Get('/auth/restrict/:kidId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get list of restricted stories for a kid' })
+  async getRestrictedStories(
+    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+  ) {
+    return this.storyService.getRestrictedStories(
+      kidId,
+      req.authUserData.userId,
+    );
+  }
+
+
   // --- Progress ---
   @Post('progress')
   @UseGuards(AuthSessionGuard)
@@ -750,11 +803,17 @@ export class StoryController {
   }
 
   @Post('generate')
-  @UseGuards(AuthSessionGuard)
+  @UseGuards(AuthSessionGuard, SubscriptionThrottleGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate a story using AI' })
   @ApiBody({ type: GenerateStoryDto })
   @ApiOkResponse({ description: 'Generated story', type: CreateStoryDto })
+  @Throttle({
+    medium: {
+      limit: THROTTLE_LIMITS.GENERATION.FREE.LIMIT,
+      ttl: THROTTLE_LIMITS.GENERATION.FREE.TTL,
+    },
+  })
   @ApiResponse({
     status: 400,
     description: 'Bad Request',
@@ -922,9 +981,9 @@ export class StoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Recommend a story to your kid' })
   @ApiBody({ type: ParentRecommendationDto })
-  @ApiOkResponse({ 
-    description: 'Story recommended successfully', 
-    type: RecommendationResponseDto 
+  @ApiOkResponse({
+    description: 'Story recommended successfully',
+    type: RecommendationResponseDto
   })
   @ApiResponse({
     status: 400,

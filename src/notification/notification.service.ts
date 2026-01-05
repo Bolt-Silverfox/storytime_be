@@ -1,5 +1,11 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EnvConfig } from '../config/env.validation';
 import * as nodemailer from 'nodemailer';
 import { NotificationRegistry, Notifications } from './notification.registry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,16 +22,16 @@ export class NotificationService {
   private transporter: nodemailer.Transporter;
 
   constructor(
-    private readonly configService: ConfigService,
+    private readonly configService: ConfigService<EnvConfig, true>,
     private readonly prisma: PrismaService,
   ) {
     this.transporter = nodemailer.createTransport({
-      host: this.configService.get<string>('SMTP_HOST'),
-      port: this.configService.get<number>('SMTP_PORT') || 587,
-      secure: false,
+      host: this.configService.get('SMTP_HOST'),
+      port: this.configService.get('SMTP_PORT') || 587,
+      secure: this.configService.get('SMTP_SECURE'),
       auth: {
-        user: this.configService.get<string>('SMTP_USER'),
-        pass: this.configService.get<string>('SMTP_PASS'),
+        user: this.configService.get('SMTP_USER'),
+        pass: this.configService.get('SMTP_PASS'),
       },
     });
   }
@@ -85,14 +91,13 @@ export class NotificationService {
     try {
       const mailOptions = {
         from: {
-          name: this.configService.get<string>('DEFAULT_SENDER_NAME')!,
-          address: this.configService.get<string>('DEFAULT_SENDER_EMAIL')!,
+          name: this.configService.get('DEFAULT_SENDER_NAME'),
+          address: this.configService.get('DEFAULT_SENDER_EMAIL'),
         },
         to: email,
         subject: subject,
         html: htmlContent,
       };
-
       const info = await this.transporter.sendMail(mailOptions);
       this.logger.log(`Email sent successfully to ${email}: ${info.messageId}`);
       return {
@@ -130,20 +135,20 @@ export class NotificationService {
     // Verify user or kid exists and is not soft deleted
     if (dto.userId) {
       const user = await this.prisma.user.findUnique({
-        where: { 
+        where: {
           id: dto.userId,
-          isDeleted: false // CANNOT CREATE PREFERENCES FOR SOFT DELETED USERS
-        }
+          isDeleted: false, // CANNOT CREATE PREFERENCES FOR SOFT DELETED USERS
+        },
       });
       if (!user) throw new NotFoundException('User not found');
     }
 
     if (dto.kidId) {
       const kid = await this.prisma.kid.findUnique({
-        where: { 
+        where: {
           id: dto.kidId,
-          isDeleted: false // CANNOT CREATE PREFERENCES FOR SOFT DELETED KIDS
-        }
+          isDeleted: false, // CANNOT CREATE PREFERENCES FOR SOFT DELETED KIDS
+        },
       });
       if (!kid) throw new NotFoundException('Kid not found');
     }
@@ -164,9 +169,9 @@ export class NotificationService {
     dto: UpdateNotificationPreferenceDto,
   ): Promise<NotificationPreferenceDto> {
     const pref = await this.prisma.notificationPreference.update({
-      where: { 
+      where: {
         id,
-        isDeleted: false // CANNOT UPDATE SOFT DELETED PREFERENCES
+        isDeleted: false, // CANNOT UPDATE SOFT DELETED PREFERENCES
       },
       data: dto,
     });
@@ -175,20 +180,20 @@ export class NotificationService {
 
   async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {
     const user = await this.prisma.user.findUnique({
-      where: { 
+      where: {
         id: userId,
-        isDeleted: false // CANNOT GET PREFERENCES FOR SOFT DELETED USERS
-      }
+        isDeleted: false, // CANNOT GET PREFERENCES FOR SOFT DELETED USERS
+      },
     });
-    
+
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
     const prefs = await this.prisma.notificationPreference.findMany({
-      where: { 
+      where: {
         userId,
-        isDeleted: false // EXCLUDE SOFT DELETED PREFERENCES
+        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
       },
     });
     return prefs.map((p) => this.toNotificationPreferenceDto(p));
@@ -196,20 +201,20 @@ export class NotificationService {
 
   async getForKid(kidId: string): Promise<NotificationPreferenceDto[]> {
     const kid = await this.prisma.kid.findUnique({
-      where: { 
+      where: {
         id: kidId,
-        isDeleted: false // CANNOT GET PREFERENCES FOR SOFT DELETED KIDS
-      }
+        isDeleted: false, // CANNOT GET PREFERENCES FOR SOFT DELETED KIDS
+      },
     });
-    
+
     if (!kid) {
       throw new NotFoundException('Kid not found');
     }
 
     const prefs = await this.prisma.notificationPreference.findMany({
-      where: { 
+      where: {
         kidId,
-        isDeleted: false // EXCLUDE SOFT DELETED PREFERENCES
+        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
       },
     });
     return prefs.map((p) => this.toNotificationPreferenceDto(p));
@@ -217,9 +222,9 @@ export class NotificationService {
 
   async getById(id: string): Promise<NotificationPreferenceDto> {
     const pref = await this.prisma.notificationPreference.findUnique({
-      where: { 
+      where: {
         id,
-        isDeleted: false // EXCLUDE SOFT DELETED PREFERENCES
+        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
       },
     });
     if (!pref) throw new NotFoundException('Notification preference not found');
@@ -233,12 +238,12 @@ export class NotificationService {
    */
   async delete(id: string, permanent: boolean = false): Promise<void> {
     const pref = await this.prisma.notificationPreference.findUnique({
-      where: { 
+      where: {
         id,
-        isDeleted: false // CANNOT DELETE ALREADY DELETED PREFERENCES
-      }
+        isDeleted: false, // CANNOT DELETE ALREADY DELETED PREFERENCES
+      },
     });
-    
+
     if (!pref) {
       throw new NotFoundException('Notification preference not found');
     }
@@ -250,9 +255,9 @@ export class NotificationService {
     } else {
       await this.prisma.notificationPreference.update({
         where: { id },
-        data: { 
-          isDeleted: true, 
-          deletedAt: new Date() 
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
         },
       });
     }
@@ -266,23 +271,23 @@ export class NotificationService {
     const pref = await this.prisma.notificationPreference.findUnique({
       where: { id },
     });
-    
+
     if (!pref) {
       throw new NotFoundException('Notification preference not found');
     }
-    
+
     if (!pref.isDeleted) {
       throw new BadRequestException('Notification preference is not deleted');
     }
 
     const restored = await this.prisma.notificationPreference.update({
       where: { id },
-      data: { 
-        isDeleted: false, 
-        deletedAt: null 
+      data: {
+        isDeleted: false,
+        deletedAt: null,
       },
     });
-    
+
     return this.toNotificationPreferenceDto(restored);
   }
 }

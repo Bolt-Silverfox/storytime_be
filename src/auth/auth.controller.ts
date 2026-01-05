@@ -30,6 +30,7 @@ import {
   VerifyEmailDto,
   SendEmailVerificationDto,
   ChangePasswordDto,
+  CompleteProfileDto,
 } from './auth.dto';
 import {
   ApiBearerAuth,
@@ -39,14 +40,24 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
-// import { Request } from 'express';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
+import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
+import { THROTTLE_LIMITS } from '@/common/constants/throttle.constants';
 
 @ApiTags('Auth')
 @Controller('auth')
+@SkipThrottle() // Skip default throttling, apply specific guards per endpoint
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
   @Post('login')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.LOGIN.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.LOGIN.TTL,
+    },
+  })
   @HttpCode(200)
   @ApiOperation({ summary: 'User login', description: 'Login for all roles.' })
   @ApiBody({ type: LoginDto })
@@ -54,7 +65,7 @@ export class AuthController {
   async login(@Body() body: LoginDto) {
     return this.authService.login(body);
   }
-  //
+
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
@@ -63,15 +74,67 @@ export class AuthController {
   }
 
   @Post('register')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.REGISTER.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.REGISTER.TTL,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',
-    description: 'Default role: parent.',
+    description: 'Default role: parent. Language and preferred themes set in complete-profile step.',
   })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
   async register(@Body() body: RegisterDto) {
     return this.authService.register(body);
+  }
+
+  // ==================== COMPLETE PROFILE (NEW) ====================
+  @Post('complete-profile')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Complete user profile after registration',
+    description:
+      'Set language, preferred learning themes (empathy, kindness, etc.), and profile image. Must be called after email verification.',
+  })
+  @ApiBody({ type: CompleteProfileDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile completed successfully',
+    type: LoginResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid themes or missing required fields',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - JWT required',
+  })
+  async completeProfile(
+    @Req() req: AuthenticatedRequest,
+    @Body() data: CompleteProfileDto,
+  ) {
+    return this.authService.completeProfile(req.authUserData['userId'], data);
+  }
+  // ==================== GET LEARNING EXPECTATIONS ====================
+  @Get('learning-expectations')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get available learning expectations',
+    description: 'Fetch all active learning expectations that users can select during profile completion. No authentication required.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of available learning expectations',
+  })
+  async getLearningExpectations() {
+    return this.authService.getLearningExpectations();
   }
 
   @Post('logout')
@@ -156,7 +219,10 @@ export class AuthController {
   @ApiBody({ type: RequestResetDto })
   @ApiResponse({ status: 200, description: 'Password reset email sent.' })
   @ApiResponse({ status: 400, description: 'Invalid email format' })
-  async requestPasswordReset(@Body() body: RequestResetDto, @Req() req: Request) {
+  async requestPasswordReset(
+    @Body() body: RequestResetDto,
+    @Req() req: Request,
+  ) {
     // Extract IP and user agent for security checking
     const ip =
       req.ip ||

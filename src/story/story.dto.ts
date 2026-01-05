@@ -581,3 +581,18 @@ export class QuestionAnswerDto {
   @ApiProperty()
   answeredAt: Date;
 }
+
+export class RestrictStoryDto {
+  @ApiProperty()
+  @IsUUID()
+  kidId: string;
+
+  @ApiProperty()
+  @IsUUID()
+  storyId: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
