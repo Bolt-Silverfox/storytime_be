@@ -1,14 +1,14 @@
-name: Dev CI/CD Pipeline
+name: Staging CI/CD Pipeline
 
 on:
   pull_request:
-    branches: ['develop-v*.*.*']
+    branches: ['release-v*.*.*']
     types: [opened, synchronize, closed]
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    environment: development
+    environment: staging
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
@@ -40,7 +40,7 @@ jobs:
     needs: build-and-test
     if: github.event.action == 'closed' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
-    environment: development
+    environment: staging
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
@@ -72,7 +72,7 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            mkdir -p /home/ubuntu/storytime/development/storytime-api
+            mkdir -p /home/ubuntu/storytime/staging/storytime-api
             exit 0
 
       - name: Sync files and restart app
@@ -80,12 +80,12 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
           chmod 600 /tmp/ssh_key
 
-          rsync -avz --exclude='.git' --exclude='.github' --exclude='node_modules' \
+          rsync -avz --exclude='.git' --exclude='.github' \
             -e "ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no" \
-            ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/development/storytime-api/
+            ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/staging/storytime-api/
 
           ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-            'bash -l -c "cd /home/ubuntu/storytime/development/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:dev"'
+            'bash -l -c "cd /home/ubuntu/storytime/staging/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:staging"'
 
           rm -f /tmp/ssh_key

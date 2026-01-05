@@ -37,7 +37,7 @@ describe('StoryService - Library & Generation', () => {
         { provide: GeminiService, useValue: mockGeminiService },
         { provide: ElevenLabsService, useValue: { generateAudioBuffer: jest.fn().mockResolvedValue({}) } },
         { provide: UploadService, useValue: { uploadAudioBuffer: jest.fn().mockResolvedValue('url') } },
-        { provide: TextToSpeechService, useValue: {} },
+        { provide: TextToSpeechService, useValue: { textToSpeechCloudUrl: jest.fn().mockResolvedValue('http://audio.url') } },
         { provide: 'CACHE_MANAGER', useValue: { del: jest.fn(), get: jest.fn(), set: jest.fn() } },
       ],
     }).compile();
@@ -67,6 +67,7 @@ describe('StoryService - Library & Generation', () => {
         ageMin: 5, ageMax: 8, questions: []
       });
       gemini.generateStoryImage.mockResolvedValue('image-url');
+      prisma.story.create.mockResolvedValue({ id: 'story-123', textContent: 'Content', title: 'AI Story' });
 
       // Call Method
       await service.generateStoryForKid(kidId, ['Theme'], ['Cat']);

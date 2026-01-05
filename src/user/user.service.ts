@@ -330,7 +330,6 @@ export class UserService {
     const profileUpdate: any = {};
 
     // -------- USER FIELDS --------
-    if (data.title !== undefined) updateData.title = data.title;
     if (data.name !== undefined) updateData.name = data.name;
 
     // Avatar logic
@@ -463,6 +462,17 @@ export class UserService {
     if (!/^\d{6}$/.test(pin))
       throw new BadRequestException('PIN must be exactly 6 digits');
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+    if (user.onboardingStatus !== 'profile_setup') {
+      throw new BadRequestException(
+        'Complete profile setup before setting PIN',
+      );
+    }
+
     const hash = await hashPin(pin);
 
     await prisma.user.update({
@@ -470,7 +480,7 @@ export class UserService {
         id: userId,
         isDeleted: false,
       },
-      data: { pinHash: hash },
+      data: { pinHash: hash, onboardingStatus: 'pin_setup' },
     });
 
     return { success: true, message: 'PIN set successfully' };
