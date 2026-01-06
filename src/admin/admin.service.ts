@@ -472,6 +472,26 @@ export class AdminService {
       if (createdBefore) where.createdAt.lte = new Date(createdBefore);
     }
 
+    // Filter by subscription status
+    if (typeof filters.hasActiveSubscription === 'boolean') {
+      const now = new Date();
+      /* 
+       * Logic: 
+       * - Active subscription means status='active' AND (endsAt is null OR endsAt > now)
+       */
+      const subscriptionCondition: Prisma.SubscriptionListRelationFilter = {
+        [filters.hasActiveSubscription ? 'some' : 'none']: {
+          status: 'active',
+          OR: [
+            { endsAt: null },
+            { endsAt: { gt: now } }
+          ]
+        }
+      };
+
+      where.subscriptions = subscriptionCondition;
+    }
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
@@ -511,18 +531,23 @@ export class AdminService {
     ]);
 
     return {
-      data: users.map(user => ({
-        ...user,
-        isPaidUser: user.subscriptions.length > 0,
-        activeSubscription: user.subscriptions[0] || null,
-        kidsCount: user._count.kids,
-        sessionsCount: user._count.auth,
-        favoritesCount: user._count.parentFavorites,
-        subscriptionsCount: user._count.subscriptions,
-        transactionsCount: user._count.paymentTransactions,
-        _count: undefined,
-        subscriptions: undefined,
-      })),
+      data: users.map(user => {
+        // Sanitize user object
+        const { passwordHash, pinHash, ...safeUser } = user;
+
+        return {
+          ...safeUser,
+          isPaidUser: user.subscriptions.length > 0,
+          activeSubscription: user.subscriptions[0] || null,
+          kidsCount: user._count.kids,
+          sessionsCount: user._count.auth,
+          favoritesCount: user._count.parentFavorites,
+          subscriptionsCount: user._count.subscriptions,
+          transactionsCount: user._count.paymentTransactions,
+          _count: undefined,
+          subscriptions: undefined,
+        };
+      }),
       meta: {
         total,
         page,
@@ -588,8 +613,10 @@ export class AdminService {
       },
     });
 
+    const { passwordHash, pinHash, ...safeUser } = user;
+
     return {
-      ...user,
+      ...safeUser,
       isPaidUser: hasActiveSubscription,
       totalSpent: totalSpentResult._sum.amount || 0,
       stats: {
@@ -638,7 +665,12 @@ export class AdminService {
     });
   }
 
-  async updateUser(userId: string, data: UpdateUserDto): Promise<any> {
+  async updateUser(userId: string, data: UpdateUserDto, currentAdminId?: string): Promise<any> {
+    // Safety check: prevent self-demotion
+    if (userId === currentAdminId && data.role && data.role !== Role.admin) {
+      throw new BadRequestException('You cannot demote yourself from admin status.');
+    }
+
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
@@ -674,7 +706,12 @@ export class AdminService {
     });
   }
 
-  async deleteUser(userId: string, permanent: boolean = false): Promise<any> {
+  async deleteUser(userId: string, permanent: boolean = false, currentAdminId?: string): Promise<any> {
+    // Safety check: prevent self-deletion
+    if (userId === currentAdminId) {
+      throw new BadRequestException('You cannot delete your own account.');
+    }
+
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {

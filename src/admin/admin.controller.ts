@@ -10,9 +10,11 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { Admin } from './decorators/admin.decorator';
+import { AuthenticatedRequest } from '../auth/auth.guard';
 import {
   UserFilterDto,
   StoryFilterDto,
@@ -50,7 +52,7 @@ import {
 @ApiTags('admin')
 @ApiBearerAuth()
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(private readonly adminService: AdminService) { }
 
   // =====================
   // DASHBOARD & ANALYTICS
@@ -936,10 +938,11 @@ export class AdminController {
     }
   })
   async updateUser(
+    @Req() req: AuthenticatedRequest,
     @Param('userId') userId: string,
     @Body() updateUserDto: UpdateUserDto,
   ) {
-    const data = await this.adminService.updateUser(userId, updateUserDto);
+    const data = await this.adminService.updateUser(userId, updateUserDto, req.authUserData.userId);
     return {
       statusCode: 200,
       message: 'User updated successfully',
@@ -981,10 +984,11 @@ export class AdminController {
     }
   })
   async deleteUser(
+    @Req() req: AuthenticatedRequest,
     @Param('userId') userId: string,
     @Query('permanent') permanent?: boolean,
   ) {
-    await this.adminService.deleteUser(userId, permanent);
+    await this.adminService.deleteUser(userId, permanent, req.authUserData.userId);
     return {
       statusCode: 204,
       message: permanent ? 'User permanently deleted' : 'User soft deleted'

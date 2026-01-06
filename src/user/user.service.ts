@@ -49,12 +49,17 @@ export class UserService {
    * Get all users (admin only) - includes both active and soft deleted users
    */
   async getAllUsers(): Promise<any[]> {
-    return prisma.user.findMany({
+    const users = await prisma.user.findMany({
       include: {
         profile: true,
         avatar: true,
       },
       orderBy: { createdAt: 'desc' },
+    });
+
+    return users.map(user => {
+      const { passwordHash, pinHash, ...safeUser } = user;
+      return safeUser;
     });
   }
 
@@ -62,11 +67,16 @@ export class UserService {
    * Get only active users (non-admin)
    */
   async getActiveUsers(): Promise<any[]> {
-    return prisma.user.findMany({
+    const users = await prisma.user.findMany({
       where: {
         isDeleted: false,
       },
       include: { profile: true, avatar: true },
+    });
+
+    return users.map(user => {
+      const { passwordHash, pinHash, ...safeUser } = user;
+      return safeUser;
     });
   }
 
