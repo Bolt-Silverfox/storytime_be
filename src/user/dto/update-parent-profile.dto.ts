@@ -10,4 +10,6 @@ export class UpdateParentProfileDto {
   @ApiProperty({ required: false, example: 'Nigeria' })
   country?: string;
 
+  @ApiProperty({ required: false, example: true })
+  biometricsEnabled?: boolean;
 }

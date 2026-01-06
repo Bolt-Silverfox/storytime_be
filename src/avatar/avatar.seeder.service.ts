@@ -28,7 +28,9 @@ export class AvatarSeederService implements OnModuleInit {
             },
           });
           if (!existingAvatar) {
-            this.logger.log(`Seeding missing system avatar: ${avatarData.name}`);
+            this.logger.log(
+              `Seeding missing system avatar: ${avatarData.name}`,
+            );
             await this.prisma.avatar.create({
               data: {
                 name: avatarData.name,
