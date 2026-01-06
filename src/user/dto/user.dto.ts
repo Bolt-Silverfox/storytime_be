@@ -32,6 +32,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   avatarId?: string;
+
+  @ApiProperty({ example: true, required: false })
+  @IsOptional()
+  biometricsEnabled?: boolean;
 }
 
 
