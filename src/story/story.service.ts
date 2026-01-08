@@ -203,6 +203,78 @@ export class StoryService {
     };
   }
 
+  async getHomePageStories(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+      include: { preferredCategories: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // 1. Recommended Stories (based on preferred categories)
+    let recommended: any[] = [];
+    if (user.preferredCategories.length > 0) {
+      recommended = await this.prisma.story.findMany({
+        where: {
+          isDeleted: false,
+          categories: {
+            some: {
+              id: { in: user.preferredCategories.map((c: Category) => c.id) },
+            },
+          },
+        },
+        take: 5,
+        include: { images: true, categories: true },
+      });
+    } else {
+      // Fallback if no preferences: just fresh stories
+      recommended = await this.prisma.story.findMany({
+        where: { isDeleted: false },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        include: { images: true, categories: true }
+      })
+    }
+
+    // 2. Seasonal Stories (Logic: find themes named "Seasonal", "Holiday", "Christmas", etc.)
+    // For now, let's look for stories with "Seasonal" theme or created recently described as seasonal
+    const seasonal = await this.prisma.story.findMany({
+      where: {
+        isDeleted: false,
+        themes: {
+          some: {
+            name: { in: ['Seasonal', 'Holiday', 'Winter', 'Christmas'] }
+          }
+        }
+      },
+      take: 5,
+      include: { images: true, themes: true },
+    });
+
+    // 3. Top Liked by Parents
+    // We need to aggregate ParentFavorite.
+    // Since Prisma doesn't support direct aggregation in findMany options easily for this relation count sort without groupBy
+    const topLiked = await this.prisma.story.findMany({
+      where: { isDeleted: false },
+      orderBy: {
+        parentFavorites: {
+          _count: 'desc'
+        }
+      },
+      take: 5,
+      include: { images: true }
+    });
+
+
+    return {
+      recommended,
+      seasonal,
+      topLiked,
+    };
+  }
+
   async createStory(data: CreateStoryDto) {
     if (data.categoryIds && data.categoryIds.length > 0) {
       const categories = await this.prisma.category.findMany({
