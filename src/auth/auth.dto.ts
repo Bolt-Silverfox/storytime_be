@@ -73,15 +73,15 @@ export class RegisterDto {
 // ==================== COMPLETE PROFILE DTO (NEW) ====================
 // ==================== COMPLETE PROFILE DTO (UPDATED) ====================
 export class CompleteProfileDto {
-  @ApiProperty({ 
+  @ApiProperty({
     example: 'English',
     description: 'Language display name',
     required: false
   })
-  @IsOptional()  
+  @IsOptional()
   @IsString()
   language?: string;
- @ApiProperty({ 
+  @ApiProperty({
     example: 'en',
     description: 'Language code for i18n',
     required: false
@@ -94,15 +94,26 @@ export class CompleteProfileDto {
   languageCode?: string;
 
   @ApiProperty({
-    example: ['Empathy & Kindness', 'Creative thinking', 'Decision Making'],
-    description: 'Learning expectations - character values parents want kids to learn (marketing data)',
+    example: ['expectation-uuid-1', 'expectation-uuid-2'],
+    description: 'Learning expectation IDs - character values parents want kids to learn',
     required: false,
     type: [String],
   })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  learningExpectations?: string[]; // Changed from preferredLanguages
+  learningExpectationIds?: string[];
+
+  @ApiProperty({
+    example: ['category-id-1', 'category-id-2'],
+    description: 'Preferred story categories',
+    required: false,
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  preferredCategories?: string[];
 
   @ApiProperty({
     example: 'https://storage.com/avatar.jpg',
@@ -123,8 +134,8 @@ export class updateProfileDto {
   @ApiProperty({ example: 50 })
   @IsOptional()
   maxScreenTimeMins?: number;
-  
-@ApiProperty({ example: 'English', description: 'Language display name' })
+
+  @ApiProperty({ example: 'English', description: 'Language display name' })
   @IsOptional()
   @IsString()
   language?: string;
@@ -135,7 +146,7 @@ export class updateProfileDto {
   @Transform(({ value }) =>
     typeof value === 'string' ? value.toLowerCase() : value,
   )
-  languageCode?: string; 
+  languageCode?: string;
 
 
   @ApiProperty({ example: 'NG' })
@@ -185,10 +196,10 @@ export class ProfileDto {
   updatedAt: Date;
 
   @ApiProperty({ example: false })
-  isDeleted: boolean;  
+  isDeleted: boolean;
 
   @ApiProperty({ example: null })
-  deletedAt: Date | null;  
+  deletedAt: Date | null;
 
   constructor(profile: Partial<ProfileDto>) {
     Object.assign(this, profile);
@@ -257,13 +268,13 @@ export class UserDto {
 
     this.avatar = user.avatar
       ? {
-          id: user.avatar.id,
-          name: user.avatar.name,
-          url: user.avatar.url,
-          isSystemAvatar: user.avatar.isSystemAvatar,
-          publicId: user.avatar.publicId,
-          createdAt: user.avatar.createdAt,
-        }
+        id: user.avatar.id,
+        name: user.avatar.name,
+        url: user.avatar.url,
+        isSystemAvatar: user.avatar.isSystemAvatar,
+        publicId: user.avatar.publicId,
+        createdAt: user.avatar.createdAt,
+      }
       : null;
 
     this.id = user.id as string;

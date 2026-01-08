@@ -129,17 +129,21 @@ export class StoryController {
     return this.storyService.getStories({
       theme,
       category,
-      recommended:
-        recommended === 'true'
-          ? true
-          : recommended === 'false'
-            ? false
-            : undefined,
+      recommended: recommended === 'true',
       kidId,
-      age: age ? parseInt(age) : undefined,
+      age: age ? parseInt(age, 10) : undefined,
       page: safePage,
       limit: safeLimit,
     });
+  }
+
+  @Get('homepage/parent')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get parent homepage stories (Recommended, Seasonal, Top Liked)' })
+  @ApiResponse({ status: 200, description: 'Homepage stories retrieved successfully.' })
+  async getParentHomepage(@Req() req: AuthenticatedRequest) {
+    return this.storyService.getHomePageStories(req.authUserData.userId);
   }
 
   @Get('categories')

@@ -55,6 +55,7 @@ model User {
   preferredVoice          Voice?                   @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
   Reward                  Reward[]
   notificationPreferences NotificationPreference[]
+  preferredCategories     Category[]               @relation("UserPreferredCategories")
   activityLogs            ActivityLog[]
   userIps                 UserIP[]
   googleId                String?                  @unique
@@ -598,6 +599,7 @@ model Category {
   description     String?
   stories         Story[]   @relation("StoryCategories")
   preferredByKids Kid[]     @relation("KidPreferredCategories")
+  preferredByUsers User[]   @relation("UserPreferredCategories")
   // SOFT DELETE FIELDS
   isDeleted       Boolean   @default(false)
   deletedAt       DateTime?
