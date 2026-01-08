@@ -100,7 +100,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Complete user profile after registration',
     description:
-      'Set language, preferred learning themes (empathy, kindness, etc.), and profile image. Must be called after email verification.',
+      'Set language, preferred learning expectations (IDs), preferred categories (IDs), and profile image. Must be called after email verification.',
   })
   @ApiBody({ type: CompleteProfileDto })
   @ApiResponse({

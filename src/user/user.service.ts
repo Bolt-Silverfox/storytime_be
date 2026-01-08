@@ -440,6 +440,23 @@ export class UserService {
     if (data.language !== undefined) updateProfile.language = data.language;
     if (data.country !== undefined) updateProfile.country = data.country;
 
+    // Handle preferred categories if provided
+    if (data.preferredCategories) {
+      updateUser.preferredCategories = {
+        set: data.preferredCategories.map((id: string) => ({ id })),
+      };
+    }
+
+    // Handle learning expectations if provided (explicit M-N)
+    if (data.learningExpectationIds) {
+      updateUser.learningExpectations = {
+        deleteMany: {},
+        create: data.learningExpectationIds.map((id: string) => ({
+          learningExpectationId: id,
+        })),
+      };
+    }
+
     return prisma.user.update({
       where: { id: userId },
       data: {
@@ -453,7 +470,7 @@ export class UserService {
           },
         }),
       },
-      include: { profile: true, avatar: true },
+      include: { profile: true, avatar: true, preferredCategories: true },
     });
   }
 
