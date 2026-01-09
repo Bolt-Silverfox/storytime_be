@@ -31,7 +31,17 @@ export class ParentFavoritesController {
     summary: 'Add a story to parent favorites',
     description: 'Adds a story to the authenticated parent\'s list of favorites.',
   })
-  @ApiBody({ type: CreateParentFavoriteDto })
+  @ApiBody({
+    type: CreateParentFavoriteDto,
+    examples: {
+      example1: {
+        summary: 'Add story to favorites',
+        value: {
+          storyId: 'd290f1ee-6c54-4b01-90e6-d701748f0851',
+        },
+      },
+    },
+  })
   @ApiOkResponse({
     description: 'Story successfully added to favorites',
     type: ParentFavoriteDto,
