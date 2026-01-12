@@ -29,7 +29,6 @@ export class ParentFavoritesService {
     return {
       id: favorite.id,
       parentId: favorite.userId,
-      storyId: favorite.storyId,
       story: {
         ...favorite.story,
         durationSeconds: favorite.story.durationSeconds ?? undefined,
@@ -69,7 +68,6 @@ export class ParentFavoritesService {
     return favorites.map((fav) => ({
       id: fav.id,
       parentId: fav.userId,
-      storyId: fav.storyId,
       story: {
         ...fav.story,
         durationSeconds: fav.story.durationSeconds ?? undefined,
