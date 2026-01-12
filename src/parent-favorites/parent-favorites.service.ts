@@ -2,13 +2,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateParentFavoriteDto } from './dto/create-parent-favorite.dto';
-import { ParentFavoriteDto } from './dto/parent-favorite.dto';
+import { ParentFavoriteResponseDto } from './dto/parent-favorite-response.dto';
 
 @Injectable()
 export class ParentFavoritesService {
   constructor(private prisma: PrismaService) { }
 
-  async addFavorite(userId: string, dto: CreateParentFavoriteDto): Promise<ParentFavoriteDto> {
+  async addFavorite(userId: string, dto: CreateParentFavoriteDto): Promise<ParentFavoriteResponseDto> {
     const favorite = await this.prisma.parentFavorite.create({
       data: {
         userId,
@@ -17,10 +17,7 @@ export class ParentFavoritesService {
       include: {
         story: {
           include: {
-            images: true,
-            branches: true,
-            themes: true,
-            categories: true,
+            creatorKid: true,
           },
         },
       },
@@ -28,28 +25,16 @@ export class ParentFavoritesService {
 
     return {
       id: favorite.id,
-      parentId: favorite.userId,
-      story: {
-        ...favorite.story,
-        durationSeconds: favorite.story.durationSeconds ?? undefined,
-        textContent: favorite.story.textContent ?? undefined,
-        images: favorite.story.images.map((image) => ({
-          ...image,
-          caption: image.caption ?? undefined,
-        })),
-        branches: favorite.story.branches.map((branch) => ({
-          ...branch,
-          nextA: branch.nextA ?? undefined,
-          nextB: branch.nextB ?? undefined,
-        })),
-        themeIds: favorite.story.themes.map((t) => t.id),
-        categoryIds: favorite.story.categories.map((c) => c.id),
-      },
+      storyId: favorite.storyId,
+      title: favorite.story.title,
+      description: favorite.story.description,
+      coverImageUrl: favorite.story.coverImageUrl,
+      author: favorite.story.creatorKid?.name ?? undefined,
       createdAt: favorite.createdAt,
     };
   }
 
-  async getFavorites(userId: string): Promise<ParentFavoriteDto[]> {
+  async getFavorites(userId: string): Promise<ParentFavoriteResponseDto[]> {
     const favorites = await this.prisma.parentFavorite.findMany({
       where: { userId },
       include: {
@@ -59,6 +44,7 @@ export class ParentFavoritesService {
             branches: true,
             themes: true,
             categories: true,
+            creatorKid: true,
           },
         },
       },
@@ -67,23 +53,11 @@ export class ParentFavoritesService {
 
     return favorites.map((fav) => ({
       id: fav.id,
-      parentId: fav.userId,
-      story: {
-        ...fav.story,
-        durationSeconds: fav.story.durationSeconds ?? undefined,
-        textContent: fav.story.textContent ?? undefined,
-        images: fav.story.images.map((image) => ({
-          ...image,
-          caption: image.caption ?? undefined,
-        })),
-        branches: fav.story.branches.map((branch) => ({
-          ...branch,
-          nextA: branch.nextA ?? undefined,
-          nextB: branch.nextB ?? undefined,
-        })),
-        themeIds: fav.story.themes.map((t) => t.id),
-        categoryIds: fav.story.categories.map((c) => c.id),
-      },
+      storyId: fav.storyId,
+      title: fav.story.title,
+      description: fav.story.description,
+      coverImageUrl: fav.story.coverImageUrl,
+      author: fav.story.creatorKid?.name ?? undefined,
       createdAt: fav.createdAt,
     }));
   }
