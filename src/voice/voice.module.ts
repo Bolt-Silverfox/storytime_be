@@ -7,6 +7,10 @@ import { TextToSpeechService } from '../story/text-to-speech.service';
 import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
 import { SpeechToTextService } from './speech-to-text.service';
+import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
+import { DeepgramTTSProvider } from './providers/deepgram-tts.provider';
+import { ElevenLabsSTTProvider } from './providers/eleven-labs-stt.provider';
+import { DeepgramSTTProvider } from './providers/deepgram-stt.provider';
 
 @Module({
   imports: [
@@ -20,7 +24,19 @@ import { SpeechToTextService } from './speech-to-text.service';
     PrismaService,
     TextToSpeechService,
     SpeechToTextService,
+    ElevenLabsTTSProvider,
+    DeepgramTTSProvider,
+    ElevenLabsSTTProvider,
+    DeepgramSTTProvider,
   ],
-  exports: [VoiceService, TextToSpeechService, SpeechToTextService],
+  exports: [
+    VoiceService,
+    TextToSpeechService,
+    SpeechToTextService,
+    ElevenLabsTTSProvider,
+    DeepgramTTSProvider,
+    ElevenLabsSTTProvider,
+    DeepgramSTTProvider
+  ],
 })
 export class VoiceModule { }
