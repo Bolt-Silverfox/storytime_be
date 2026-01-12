@@ -60,8 +60,8 @@ export class SpeechToTextService {
         try {
             const result = await this.elevenLabs.speechToText.convert({
                 file: new Blob([new Uint8Array(buffer)], { type: mimetype }),
-                model_id: 'scribe_v1',
-                tag_audio_events: true, // Enable audio events by default as per doc recommendations
+                model_id: 'scribe_v2', // Updated to Scribe v2 for better long-form transcription
+                tag_audio_events: true,
                 diarize: false,
             });
 

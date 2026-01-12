@@ -10,6 +10,8 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
+  ParseFilePipeBuilder,
+  HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -209,7 +211,19 @@ export class VoiceController {
   @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: 'Transcribe audio file to text' })
   async transcribeAudio(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({
+          fileType: /(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/ogg|audio\/webm)/,
+        })
+        .addMaxSizeValidator({
+          maxSize: 50 * 1024 * 1024, // 50MB
+        })
+        .build({
+          errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        }),
+    )
+    file: Express.Multer.File,
   ) {
     const text = await this.speechToTextService.transcribeAudio(
       file.buffer,
