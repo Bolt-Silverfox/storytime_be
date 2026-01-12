@@ -92,6 +92,11 @@ export class CreateStoryDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @IsString()
+  textContent?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsBoolean()
   isInteractive?: boolean;
 
