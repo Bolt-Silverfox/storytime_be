@@ -14,7 +14,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody, ApiOkResponse, ApiParam,
 import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { ParentFavoritesService } from './parent-favorites.service';
 import { CreateParentFavoriteDto } from './dto/create-parent-favorite.dto';
-import { ParentFavoriteDto } from './dto/parent-favorite.dto';
+import { ParentFavoriteResponseDto } from './dto/parent-favorite-response.dto';
 import { ErrorResponseDto } from '@/story/story.dto';
 
 @ApiTags('parent-favorites')
@@ -44,7 +44,7 @@ export class ParentFavoritesController {
   })
   @ApiOkResponse({
     description: 'Story successfully added to favorites',
-    type: ParentFavoriteDto,
+    type: ParentFavoriteResponseDto,
   })
   @ApiResponse({
     status: 400,
@@ -76,7 +76,7 @@ export class ParentFavoritesController {
   })
   @ApiOkResponse({
     description: 'List of parent favorites retrieved successfully',
-    type: ParentFavoriteDto,
+    type: ParentFavoriteResponseDto,
     isArray: true,
   })
   @ApiResponse({
