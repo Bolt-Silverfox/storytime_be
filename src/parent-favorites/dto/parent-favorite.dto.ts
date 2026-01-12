@@ -8,9 +8,6 @@ export class ParentFavoriteDto {
   @ApiProperty({ description: 'ID of the parent user' })
   parentId: string;
 
-  @ApiProperty({ description: 'ID of the favorite story' })
-  storyId: string;
-
   @ApiProperty({ description: 'The full story object' })
   story: StoryDto;
 
