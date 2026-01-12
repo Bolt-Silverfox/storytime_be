@@ -181,11 +181,6 @@ export class AuthService {
         passwordHash: hashedPassword,
         role: role as any,
         onboardingStatus: 'account_created',
-        profile: {
-          create: {
-            country: data.nationality,
-          },
-        },
       },
       include: {
         profile: true,
