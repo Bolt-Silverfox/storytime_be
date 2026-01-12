@@ -200,9 +200,10 @@ export const themes = [
 ];
 
 export const defaultAgeGroups = [
-    { name: 'Age 1 - 4', min: 1, max: 4 },
-    { name: 'Age 5 - 8', min: 5, max: 8 },
-    { name: 'Age 9 - 12', min: 9, max: 12 },
+    { name: '1-3', min: 1, max: 3 },
+    { name: '4-6', min: 4, max: 6 },
+    { name: '7-9', min: 7, max: 9 },
+    { name: '10-12', min: 10, max: 12 },
 ];
 
 export const systemAvatars = [
