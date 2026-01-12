@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AuthModule } from 'src/auth/auth.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { StoryModule } from '../story/story.module';
@@ -15,7 +15,7 @@ import { DeepgramSTTProvider } from './providers/deepgram-stt.provider';
 @Module({
   imports: [
     AuthModule,
-    StoryModule,
+    forwardRef(() => StoryModule),
   ],
   controllers: [VoiceController],
   providers: [
