@@ -1,5 +1,5 @@
-// src/parent-favorites/dto/parent-favorite.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
+import { StoryDto } from '../../story/story.dto';
 
 export class ParentFavoriteDto {
   @ApiProperty({ description: 'ID of the favorite entry' })
@@ -10,6 +10,9 @@ export class ParentFavoriteDto {
 
   @ApiProperty({ description: 'ID of the favorite story' })
   storyId: string;
+
+  @ApiProperty({ description: 'The full story object' })
+  story: StoryDto;
 
   @ApiProperty({ description: 'Date the story was favorited' })
   createdAt: Date;
