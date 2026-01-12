@@ -6,14 +6,21 @@ import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
+import { SpeechToTextService } from './speech-to-text.service';
 
 @Module({
   imports: [
     AuthModule,
-    StoryModule, // <-- IMPORT instead of re-providing StoryService
+    StoryModule,
   ],
   controllers: [VoiceController],
-  providers: [VoiceService, UploadService, PrismaService, TextToSpeechService],
-  exports: [VoiceService, TextToSpeechService],
+  providers: [
+    VoiceService,
+    UploadService,
+    PrismaService,
+    TextToSpeechService,
+    SpeechToTextService,
+  ],
+  exports: [VoiceService, TextToSpeechService, SpeechToTextService],
 })
 export class VoiceModule { }
