@@ -19,6 +19,9 @@ export class ParentFavoriteResponseDto {
     @ApiProperty({ description: 'Author of the story (if any)', required: false })
     author?: string;
 
+    @ApiProperty({ description: 'Age range of the story (e.g. "3-5")', required: false })
+    ageRange?: string;
+
     @ApiProperty({ description: 'Date the story was favorited' })
     createdAt: Date;
 }
