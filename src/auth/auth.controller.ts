@@ -84,7 +84,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',
-    description: 'Default role: parent. Language and preferred themes set in complete-profile step.',
+    description: 'Register with just full name, email, and password. Default role: parent.',
   })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })

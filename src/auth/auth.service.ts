@@ -159,52 +159,52 @@ export class AuthService {
   }
 
   // ==================== REGISTRATION (UPDATED) ====================
-  async register(data: RegisterDto): Promise<LoginResponseDto | null> {
-    const hashedPassword = await bcrypt.hash(data.password, 10);
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: data.email },
-    });
-    if (existingUser) throw new BadRequestException('Email already exists');
+ async register(data: RegisterDto): Promise<LoginResponseDto | null> {
+  const existingUser = await this.prisma.user.findUnique({
+    where: { email: data.email },
+  });
+  if (existingUser) throw new BadRequestException('Email already exists');
 
-    let role = 'parent';
-    if (data.role === 'admin') {
-      if (data.adminSecret !== process.env.ADMIN_SECRET) {
-        throw new ForbiddenException('Invalid admin secret');
-      }
-      role = 'admin';
+  let role = 'parent';
+  if (data.role === 'admin') {
+    if (data.adminSecret !== process.env.ADMIN_SECRET) {
+      throw new ForbiddenException('Invalid admin secret');
     }
-
-    const user = await this.prisma.user.create({
-      data: {
-        name: data.fullName,
-        email: data.email,
-        passwordHash: hashedPassword,
-        role: role as any,
-        onboardingStatus: 'account_created',
-        profile: {
-          create: {
-            country: data.nationality,
-          },
-        },
-      },
-      include: {
-        profile: true,
-        avatar: true,
-      },
-    });
-
-    await this.sendEmailVerification(user.email);
-
-    const tokenData = await this.createToken(user);
-    const numberOfKids = 0;
-
-    return {
-      user: new UserDto({ ...user, numberOfKids }),
-      jwt: tokenData.jwt,
-      refreshToken: tokenData.refreshToken,
-    };
+    role = 'admin';
   }
-  // ==================== COMPLETE PROFILE ====================
+
+  const hashedPassword = await bcrypt.hash(data.password, 10);
+
+  const user = await this.prisma.user.create({
+    data: {
+      name: data.fullName,
+      email: data.email,
+      passwordHash: hashedPassword,
+      role: role as any,
+      onboardingStatus: 'account_created',
+    },
+    include: {
+      profile: true,
+      avatar: true,
+    },
+  });
+
+  try {
+    await this.sendEmailVerification(user.email);
+  } catch (error) {
+    console.error('Email failed but user registered:', error.message);
+  }
+
+  const tokenData = await this.createToken(user);
+  const numberOfKids = 0;
+
+  return {
+    user: new UserDto({ ...user, numberOfKids }),
+    jwt: tokenData.jwt,
+    refreshToken: tokenData.refreshToken,
+  };
+}
+  // ==================== COMPLETE PROFILE =====================
   async completeProfile(userId: string, data: CompleteProfileDto) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId },

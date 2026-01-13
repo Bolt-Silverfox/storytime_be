@@ -43,21 +43,12 @@ export class RegisterDto {
   })
   @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   password: string;
-
   @ApiProperty({ example: 'firstname lastname' })
   @Matches(/^[a-zA-Z]+(?:\s+[a-zA-Z]+)+$/, {
     message: 'Full name must contain at least two names',
   })
   @IsNotEmpty()
   fullName: string;
-
-  @ApiProperty({ example: 'NG' })
-  @IsNotEmpty({ message: 'Nationality is required' })
-  @IsString()
-  @Transform(({ value }) =>
-    typeof value === 'string' ? value.toUpperCase() : value,
-  )
-  nationality: string; // Maps to profile.country
 
   @ApiProperty({ example: 'parent', required: false })
   @IsOptional()
