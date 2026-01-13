@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { defaultAgeGroups } from '../../prisma/data';
 
 @Injectable()
 export class AgeGroupSeederService {
@@ -8,12 +9,7 @@ export class AgeGroupSeederService {
   constructor(private readonly prisma: PrismaService) { }
 
   async seedAgeGroups() {
-    const defaultAgeGroups = [
-      { name: '1-3', min: 1, max: 3 },
-      { name: '4-6', min: 4, max: 6 },
-      { name: '7-9', min: 7, max: 9 },
-      { name: '10-12', min: 10, max: 12 },
-    ];
+
 
     try {
       this.logger.log('Seeding age groups...');
