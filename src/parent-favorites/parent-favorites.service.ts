@@ -30,6 +30,7 @@ export class ParentFavoritesService {
       description: favorite.story.description,
       coverImageUrl: favorite.story.coverImageUrl,
       author: favorite.story.creatorKid?.name ?? undefined,
+      ageRange: `${favorite.story.ageMin}-${favorite.story.ageMax}`,
       createdAt: favorite.createdAt,
     };
   }
@@ -58,6 +59,7 @@ export class ParentFavoritesService {
       description: fav.story.description,
       coverImageUrl: fav.story.coverImageUrl,
       author: fav.story.creatorKid?.name ?? undefined,
+      ageRange: `${fav.story.ageMin}-${fav.story.ageMax}`,
       createdAt: fav.createdAt,
     }));
   }
