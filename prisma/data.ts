@@ -302,3 +302,30 @@ export const learningExpectations = [
     { name: 'Imagination', description: 'Creating mental images and ideas beyond reality' },
     { name: 'Creative Thinking', description: 'Generating original and innovative ideas' },
 ];
+
+export const storyBuddiesData = [
+    {
+        name: 'lumina',
+        displayName: 'Lumina',
+        type: 'robot',
+        description: 'A friendly and curious robot companion who loves learning new things and exploring stories with you.',
+        imageUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Lumina_b9niso.png',
+        profileAvatarUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Lumina_Avatar_wuoxcq.png',
+        isActive: true,
+        themeColor: '#af3f0bff',
+        ageGroupMin: 1,
+        ageGroupMax: 12,
+    },
+    {
+        name: 'zylo',
+        displayName: 'Zylo',
+        type: 'alien',
+        description: 'A magical space explorer buddy who brings the wonders of the universe into every story.',
+        imageUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Zylo_qgqd3n.png',
+        profileAvatarUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Zylo_Avatar.png',
+        isActive: true,
+        themeColor: '#2196F3',
+        ageGroupMin: 1,
+        ageGroupMax: 12,
+    },
+];
