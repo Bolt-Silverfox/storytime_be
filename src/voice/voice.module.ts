@@ -11,6 +11,9 @@ import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
 import { DeepgramTTSProvider } from './providers/deepgram-tts.provider';
 import { ElevenLabsSTTProvider } from './providers/eleven-labs-stt.provider';
 import { DeepgramSTTProvider } from './providers/deepgram-stt.provider';
+import { SSMLFormatter } from './utils/ssml-formatter';
+import { TextChunker } from './utils/text-chunker';
+import { StreamConverter } from './utils/stream-converter';
 
 @Module({
   imports: [
@@ -28,6 +31,9 @@ import { DeepgramSTTProvider } from './providers/deepgram-stt.provider';
     DeepgramTTSProvider,
     ElevenLabsSTTProvider,
     DeepgramSTTProvider,
+    SSMLFormatter,
+    TextChunker,
+    StreamConverter,
   ],
   exports: [
     VoiceService,
@@ -36,7 +42,10 @@ import { DeepgramSTTProvider } from './providers/deepgram-stt.provider';
     ElevenLabsTTSProvider,
     DeepgramTTSProvider,
     ElevenLabsSTTProvider,
-    DeepgramSTTProvider
+    DeepgramSTTProvider,
+    SSMLFormatter,
+    TextChunker,
+    StreamConverter,
   ],
 })
 export class VoiceModule { }

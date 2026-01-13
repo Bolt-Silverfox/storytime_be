@@ -2,6 +2,9 @@ import { ITextToSpeechProvider } from '../interfaces/speech-provider.interface';
 import { createClient, DeepgramClient } from '@deepgram/sdk';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SSMLFormatter } from '../utils/ssml-formatter';
+import { TextChunker } from '../utils/text-chunker';
+import { StreamConverter } from '../utils/stream-converter';
 
 @Injectable()
 export class DeepgramTTSProvider implements ITextToSpeechProvider {
@@ -10,7 +13,12 @@ export class DeepgramTTSProvider implements ITextToSpeechProvider {
     public readonly name = 'Deepgram';
     private apiKey: string;
 
-    constructor(private readonly configService: ConfigService) {
+    constructor(
+        private readonly configService: ConfigService,
+        private readonly formatter: SSMLFormatter,
+        private readonly chunker: TextChunker,
+        private readonly converter: StreamConverter,
+    ) {
         this.apiKey = this.configService.get<string>('DEEPGRAM_API_KEY') ?? '';
         if (this.apiKey) {
             this.deepgram = createClient(this.apiKey);
@@ -25,11 +33,11 @@ export class DeepgramTTSProvider implements ITextToSpeechProvider {
         }
 
         // 1. Transform raw text into "Storyteller Mode" (SSML)
-        const ssmlText = this.formatTextToSSML(text);
+        const ssmlText = this.formatter.format(text);
 
         // Deepgram has a 2000 char limit. Split text into chunks.
         const MAX_CHARS = 1900; // Safety margin
-        const chunks = this.chunkText(ssmlText, MAX_CHARS);
+        const chunks = this.chunker.chunk(ssmlText, MAX_CHARS);
         const audioBuffers: Buffer[] = [];
 
         this.logger.log(`Splitting text into ${chunks.length} chunks for Deepgram`);
@@ -53,7 +61,7 @@ export class DeepgramTTSProvider implements ITextToSpeechProvider {
                 if (!stream) {
                     throw new Error('No audio stream returned from Deepgram');
                 }
-                audioBuffers.push(await this.getAudioBuffer(stream));
+                audioBuffers.push(await this.converter.toBuffer(stream));
             } catch (innerError) {
                 this.logger.error(`Failed on chunk ${i + 1}: ${innerError.message}`);
                 throw innerError;
@@ -61,77 +69,5 @@ export class DeepgramTTSProvider implements ITextToSpeechProvider {
         }
 
         return Buffer.concat(audioBuffers);
-    }
-
-    // --- Helper: Adds "Breathing Room" to the story ---
-    private formatTextToSSML(rawText: string): string {
-        // 1. Clean up weird spacing
-        let text = rawText.replace(/\s+/g, ' ').trim();
-
-        // 2. Escape special XML characters to prevent errors
-        text = text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&apos;');
-
-        // 3. Add pauses for dramatic effect
-        // Pause after commas (short breath)
-        text = text.replace(/,/g, ', <break time="300ms"/>');
-
-        // Pause after sentences (medium breath)
-        text = text.replace(/([.!?])\s/g, '$1 <break time="800ms"/> ');
-
-        // Long pause between paragraphs/ideas (if you have double newlines in raw text)
-        text = text.replace(/\n\n/g, '<break time="1500ms"/>');
-
-        // 4. Wrap in <speak> tags
-        return `<speak>${text}</speak>`;
-    }
-
-    private chunkText(text: string, maxLength: number): string[] {
-        // Remove outer <speak> tags for splitting, we'll add them back to chunks
-        let cleanText = text.replace(/^<speak>/, '').replace(/<\/speak>$/, '');
-
-        const chunks: string[] = [];
-        while (cleanText.length > maxLength) {
-            let splitIndex = cleanText.lastIndexOf(' ', maxLength);
-            // Try to split at a sentence end if possible
-            const sentenceEnd = cleanText.lastIndexOf('. ', maxLength);
-            if (sentenceEnd > maxLength * 0.5) {
-                splitIndex = sentenceEnd + 1;
-            }
-
-            if (splitIndex === -1) splitIndex = maxLength;
-
-            chunks.push(cleanText.substring(0, splitIndex).trim());
-            cleanText = cleanText.substring(splitIndex).trim();
-        }
-        if (cleanText.length > 0) {
-            chunks.push(cleanText);
-        }
-        return chunks;
-    }
-
-    private async getAudioBuffer(stream: ReadableStream<Uint8Array>): Promise<Buffer> {
-        const reader = stream.getReader();
-        const chunks: Uint8Array[] = [];
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-        }
-
-        const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-        const result = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const chunk of chunks) {
-            result.set(chunk, offset);
-            offset += chunk.length;
-        }
-
-        return Buffer.from(result.buffer);
     }
 }
