@@ -3,6 +3,7 @@ import { ElevenLabsClient } from 'elevenlabs';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Readable } from 'stream';
+import { StreamConverter } from '../utils/stream-converter';
 
 @Injectable()
 export class ElevenLabsTTSProvider implements ITextToSpeechProvider {
@@ -10,7 +11,10 @@ export class ElevenLabsTTSProvider implements ITextToSpeechProvider {
     private client: ElevenLabsClient;
     public readonly name = 'ElevenLabs';
 
-    constructor(private readonly configService: ConfigService) {
+    constructor(
+        private readonly configService: ConfigService,
+        private readonly converter: StreamConverter,
+    ) {
         const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
         if (apiKey) {
             try {
@@ -36,18 +40,10 @@ export class ElevenLabsTTSProvider implements ITextToSpeechProvider {
                 output_format: 'mp3_44100_128',
             });
 
-            return await this.streamToBuffer(audioStream);
+            return await this.converter.toBuffer(audioStream);
         } catch (error) {
             this.logger.error(`ElevenLabs generation failed: ${error.message}`);
             throw error;
         }
-    }
-
-    private async streamToBuffer(stream: Readable): Promise<Buffer> {
-        const chunks: Buffer[] = [];
-        for await (const chunk of stream) {
-            chunks.push(Buffer.from(chunk));
-        }
-        return Buffer.concat(chunks);
     }
 }
