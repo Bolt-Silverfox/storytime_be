@@ -204,7 +204,7 @@ export class AuthService {
     refreshToken: tokenData.refreshToken,
   };
 }
-  // ==================== COMPLETE PROFILE ====================
+  // ==================== COMPLETE PROFILE =====================
   async completeProfile(userId: string, data: CompleteProfileDto) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId },
