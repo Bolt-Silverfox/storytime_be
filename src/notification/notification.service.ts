@@ -33,6 +33,9 @@ export class NotificationService {
         user: this.configService.get('SMTP_USER'),
         pass: this.configService.get('SMTP_PASS'),
       },
+       tls: {
+      rejectUnauthorized: false,
+    },
     });
   }
 
