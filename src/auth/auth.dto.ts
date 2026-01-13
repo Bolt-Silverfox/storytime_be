@@ -50,7 +50,6 @@ export class RegisterDto {
   @IsNotEmpty()
   fullName: string;
 
-  // Optional fields for admin registration
   @ApiProperty({ example: 'parent', required: false })
   @IsOptional()
   @IsString()
