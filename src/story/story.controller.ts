@@ -120,6 +120,8 @@ export class StoryController {
     @Query('recommended') recommended?: string,
     @Query('kidId') kidId?: string,
     @Query('age') age?: string,
+    @Query('minAge') minAge?: string,
+    @Query('maxAge') maxAge?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
     @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number = 12,
   ): Promise<PaginatedStoriesDto> {
@@ -132,6 +134,8 @@ export class StoryController {
       recommended: recommended === 'true',
       kidId,
       age: age ? parseInt(age, 10) : undefined,
+      minAge: minAge ? parseInt(minAge, 10) : undefined,
+      maxAge: maxAge ? parseInt(maxAge, 10) : undefined,
       page: safePage,
       limit: safeLimit,
     });
