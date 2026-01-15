@@ -83,6 +83,8 @@ export class StoryService {
     category?: string;
     recommended?: boolean;
     age?: number;
+    minAge?: number;
+    maxAge?: number;
     kidId?: string;
     page?: number;
     limit?: number;
@@ -142,6 +144,17 @@ export class StoryService {
     if (filter.age && !targetLevel && !where.ageMin) {
       where.ageMin = { lte: filter.age };
       where.ageMax = { gte: filter.age };
+    }
+
+    // Add minAge and maxAge filter logic
+    if ((filter.minAge !== undefined || filter.maxAge !== undefined) && !targetLevel) {
+      // Overlap logic: story.ageMin <= filter.maxAge AND story.ageMax >= filter.minAge
+      if (filter.minAge !== undefined) {
+        where.ageMax = { ...where.ageMax, gte: filter.minAge };
+      }
+      if (filter.maxAge !== undefined) {
+        where.ageMin = { ...where.ageMin, lte: filter.maxAge };
+      }
     }
 
     let recommendedStoryIds: string[] = [];

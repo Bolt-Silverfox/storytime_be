@@ -10,7 +10,7 @@ import { Cache } from '@nestjs/cache-manager';
 // Mock dependencies
 const mockPrismaService = {
   kid: { findUnique: jest.fn() },
-  story: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn() },
+  story: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), count: jest.fn() },
   theme: { findMany: jest.fn() },
   category: { findMany: jest.fn() },
   downloadedStory: { findMany: jest.fn(), upsert: jest.fn(), delete: jest.fn(), deleteMany: jest.fn() },
@@ -85,6 +85,52 @@ describe('StoryService - Library & Generation', () => {
 
   // --- 2. LIBRARY TESTS ---
   describe('Library Methods', () => {
+    describe('getStories', () => {
+      it('should filter by minAge and maxAge', async () => {
+        prisma.story.count.mockResolvedValue(1);
+        prisma.story.findMany.mockResolvedValue([]);
+
+        await service.getStories({ minAge: 3, maxAge: 5 });
+
+        expect(prisma.story.findMany).toHaveBeenCalledWith(expect.objectContaining({
+          where: expect.objectContaining({
+            isDeleted: false,
+            // Check overlap logic: story.ageMin <= 5 AND story.ageMax >= 3
+            ageMin: { lte: 5 },
+            ageMax: { gte: 3 },
+          })
+        }));
+      });
+
+      it('should filter by minAge only', async () => {
+        prisma.story.count.mockResolvedValue(1);
+        prisma.story.findMany.mockResolvedValue([]);
+
+        await service.getStories({ minAge: 4 });
+
+        expect(prisma.story.findMany).toHaveBeenCalledWith(expect.objectContaining({
+          where: expect.objectContaining({
+            isDeleted: false,
+            ageMax: { gte: 4 },
+          })
+        }));
+      });
+
+      it('should filter by maxAge only', async () => {
+        prisma.story.count.mockResolvedValue(1);
+        prisma.story.findMany.mockResolvedValue([]);
+
+        await service.getStories({ maxAge: 8 });
+
+        expect(prisma.story.findMany).toHaveBeenCalledWith(expect.objectContaining({
+          where: expect.objectContaining({
+            isDeleted: false,
+            ageMin: { lte: 8 },
+          })
+        }));
+      });
+    });
+
     const kidId = 'kid-123';
 
     it('getCreatedStories: should filter by creatorKidId', async () => {
