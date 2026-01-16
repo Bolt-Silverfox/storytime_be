@@ -30,5 +30,12 @@ export function mapParentProfile(user: any) {
     biometricsEnabled: !!user.biometricsEnabled,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
+    subscriptionStatus: getSubscriptionStatus(user.subscriptions),
   };
+}
+
+function getSubscriptionStatus(subscriptions: any[]): string {
+  if (!subscriptions || subscriptions.length === 0) return 'free';
+  const activeSub = subscriptions.find((sub) => sub.status === 'active');
+  return activeSub ? 'active' : 'free';
 }

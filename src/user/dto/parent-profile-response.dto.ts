@@ -58,4 +58,7 @@ export class ParentProfileResponseDto {
 
   @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   updatedAt: Date;
+
+  @ApiProperty({ example: 'active' })
+  subscriptionStatus?: string;
 }
