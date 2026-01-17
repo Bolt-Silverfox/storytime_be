@@ -17,6 +17,7 @@ export interface GenerateStoryOptions {
   additionalContext?: string;
   creatorKidId?: string;
   voiceType?: VoiceType;
+  seasonIds?: string[];
 }
 
 export interface GeneratedStory {

@@ -404,10 +404,7 @@ export class GenerateStoryDto {
   @IsString({ each: true })
   themes?: string[];
 
-  @ApiProperty({ type: [String], required: false })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
+
   @ApiProperty({ type: [String], required: false })
   @IsOptional()
   @IsArray()
