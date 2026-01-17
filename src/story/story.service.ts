@@ -221,7 +221,12 @@ export class StoryService {
     };
   }
 
-  async getHomePageStories(userId: string) {
+  async getHomePageStories(
+    userId: string,
+    limitRecommended: number = 5,
+    limitSeasonal: number = 5,
+    limitTopLiked: number = 5,
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId, isDeleted: false },
       include: { preferredCategories: true },
@@ -243,7 +248,7 @@ export class StoryService {
             },
           },
         },
-        take: 5,
+        take: limitRecommended,
         include: { images: true, categories: true },
       });
     } else {
@@ -251,23 +256,26 @@ export class StoryService {
       recommended = await this.prisma.story.findMany({
         where: { isDeleted: false },
         orderBy: { createdAt: 'desc' },
-        take: 5,
-        include: { images: true, categories: true }
-      })
+        take: limitRecommended,
+        include: { images: true, categories: true },
+      });
     }
 
     // 2. Seasonal Stories (Logic: find active season based on today's date)
     const today = new Date();
     const currentMonth = today.getMonth() + 1; // 1-12
     const currentDay = today.getDate(); // 1-31
-    const currentDateStr = `${currentMonth.toString().padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
+    const currentDateStr = `${currentMonth
+      .toString()
+      .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
 
     // Find seasons that cover today
-    // Note: This string comparison works for "MM-DD" if we are careful, but let's just fetch all and filter in app or raw query
-    // Simple approach: Fetch all active seasons, check dates.
-    const allSeasons = await this.prisma.season.findMany({ where: { isActive: true, isDeleted: false } });
+    const allSeasons = await this.prisma.season.findMany({
+      where: { isDeleted: false }, // Fetch all to sort into active/past
+    });
 
-    const activeSeasons = allSeasons.filter(s => {
+    const activeSeasons = allSeasons.filter((s) => {
+      if (!s.isActive) return false;
       if (!s.startDate || !s.endDate) return false;
       // Handle year wrap for winter (e.g. 12-01 to 02-28)
       if (s.startDate > s.endDate) {
@@ -277,42 +285,78 @@ export class StoryService {
     });
 
     let seasonal: any[] = [];
+    let seasonalCount = 0;
+
     if (activeSeasons.length > 0) {
       seasonal = await this.prisma.story.findMany({
         where: {
           isDeleted: false,
           seasons: {
             some: {
-              id: { in: activeSeasons.map(s => s.id) }
-            }
-          }
+              id: { in: activeSeasons.map((s) => s.id) },
+            },
+          },
         },
-        take: 5,
+        take: limitSeasonal,
         include: { images: true, themes: true, seasons: true },
       });
+      seasonalCount = seasonal.length;
     }
 
-    // Fallback? If no active season stories, maybe show "Winter" if it's winter etc? 
-    // For now, if no seasonal stories found via relation, fallback to old theme logic?
-    // Or just leave empty. The user might prefer strict "Season" model usage now.
-    // Let's keep the old theme search as a backup OR combine it.
-    // Actually, let's strictly use the Season model effectively replacing the implicit theme logic.
-    // If no active season, seasonal list is empty.
+    // Backfill if needed
+    if (seasonalCount < limitSeasonal) {
+      const needed = limitSeasonal - seasonalCount;
+      const existingIds = new Set(seasonal.map((s) => s.id));
+
+      // Strategy: Find "previous" seasons.
+      // We can define "previous" roughly by checking seasons that are NOT active
+      // and maybe have endDate < today? Or simply all non-active seasons.
+      // Let's take all inactive seasons and perhaps just pick random or recent ones?
+      // A simple heuristic for "previous" season: seasons that ended recently.
+
+      const previousSeasons = allSeasons.filter((s) => {
+        if (activeSeasons.find(active => active.id === s.id)) return false; // Skip active
+        // For simplistic "previous", we just take everything else that has dates.
+        return !!s.startDate && !!s.endDate;
+      });
+
+      // Sort by endDate descending (pseudo-code since endDate is MM-DD string without year)
+      // Since we don't have years, sorting by MM-DD descending is a decent proxy for "latest in the year"
+      // but might wrap around.
+      // Let's just shuffle or take any for now to ensure variety, or rely on Prisma to fetch.
+      // Actually, let's fetch stories from these seasons.
+
+      if (previousSeasons.length > 0) {
+        const backfillStories = await this.prisma.story.findMany({
+          where: {
+            isDeleted: false,
+            seasons: {
+              some: {
+                id: { in: previousSeasons.map(s => s.id) }
+              }
+            },
+            id: { notIn: Array.from(existingIds) }
+          },
+          take: needed,
+          include: { images: true, themes: true, seasons: true },
+          orderBy: { createdAt: 'desc' } // Fresh content from old seasons?
+        });
+
+        seasonal = [...seasonal, ...backfillStories];
+      }
+    }
 
     // 3. Top Liked by Parents
-    // We need to aggregate ParentFavorite.
-    // Since Prisma doesn't support direct aggregation in findMany options easily for this relation count sort without groupBy
     const topLiked = await this.prisma.story.findMany({
       where: { isDeleted: false },
       orderBy: {
         parentFavorites: {
-          _count: 'desc'
-        }
+          _count: 'desc',
+        },
       },
-      take: 5,
-      include: { images: true }
+      take: limitTopLiked,
+      include: { images: true },
     });
-
 
     return {
       recommended,
