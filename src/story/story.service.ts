@@ -889,6 +889,15 @@ export class StoryService {
   }
 
   async generateStoryWithAI(options: GenerateStoryOptions) {
+    // Resolve Season IDs to names if needed for AI context
+    if (options.seasonIds && options.seasonIds.length > 0 && (!options.seasons || options.seasons.length === 0)) {
+      const seasons = await this.prisma.season.findMany({
+        where: { id: { in: options.seasonIds }, isDeleted: false },
+        select: { name: true },
+      });
+      options.seasons = seasons.map((s) => s.name);
+    }
+
     // 1. Generate Story Content
     const generatedStory = await this.geminiService.generateStory(options);
 
@@ -897,7 +906,8 @@ export class StoryService {
       generatedStory,
       options.kidName || 'Hero',
       options.creatorKidId,
-      options.voiceType
+      options.voiceType,
+      options.seasonIds
     );
   }
 
@@ -1087,7 +1097,7 @@ export class StoryService {
         story = await this.prisma.story.update({
           where: { id: story.id },
           data: { audioUrl },
-          include: { images: true, branches: true, categories: true, themes: true },
+          include: { images: true, branches: true, categories: true, themes: true, seasons: true },
         });
       } catch (error) {
         this.logger.error(`Failed to generate audio for story ${story.id}: ${error.message}`);

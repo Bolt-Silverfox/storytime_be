@@ -864,6 +864,7 @@ export class StoryController {
       language: body.language || 'English',
       kidName: body.kidName,
       additionalContext: body.additionalContext,
+      seasonIds: body.seasonIds,
     };
 
     return this.storyService.generateStoryWithAI(options);
