@@ -322,9 +322,6 @@ export class StoryService {
 
       // Sort by endDate descending (pseudo-code since endDate is MM-DD string without year)
       // Since we don't have years, sorting by MM-DD descending is a decent proxy for "latest in the year"
-      // but might wrap around.
-      // Let's just shuffle or take any for now to ensure variety, or rely on Prisma to fetch.
-      // Actually, let's fetch stories from these seasons.
 
       if (previousSeasons.length > 0) {
         const backfillStories = await this.prisma.story.findMany({
