@@ -9,6 +9,7 @@ import { VoiceType } from '../voice/voice.dto';
 export interface GenerateStoryOptions {
   theme: string[];
   category: string[];
+  seasons?: string[];
   ageMin: number;
   ageMax: number;
   language?: string;
@@ -29,6 +30,7 @@ export interface GeneratedStory {
   }>;
   theme: string[];
   category: string[];
+  seasons?: string[];
   ageMin: number;
   ageMax: number;
   language: string;
@@ -82,6 +84,7 @@ export class GeminiService {
         ...story,
         theme: options.theme,
         category: options.category,
+        seasons: options.seasons,
         ageMin: options.ageMin,
         ageMax: options.ageMax,
         language: options.language || 'English',
@@ -122,6 +125,7 @@ export class GeminiService {
 
 Theme(s): ${options.theme.join(', ')}
 Category(s): ${options.category.join(', ')}
+${options.seasons && options.seasons.length > 0 ? `Season(s): ${options.seasons.join(', ')}` : ''}
 Age range: ${options.ageMin} to ${options.ageMax} years old
 Language: ${options.language || 'English'}
 ${kidNamePart}
