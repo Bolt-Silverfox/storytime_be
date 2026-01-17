@@ -90,6 +90,7 @@ export class StoryController {
   })
   @ApiQuery({ name: 'theme', required: false, type: String })
   @ApiQuery({ name: 'category', required: false, type: String })
+  @ApiQuery({ name: 'season', required: false, type: String })
   @ApiQuery({ name: 'recommended', required: false, type: String })
   @ApiQuery({ name: 'kidId', required: false, type: String })
   @ApiQuery({ name: 'age', required: false, type: String })
@@ -117,6 +118,7 @@ export class StoryController {
   async getStories(
     @Query('theme') theme?: string,
     @Query('category') category?: string,
+    @Query('season') season?: string,
     @Query('recommended') recommended?: string,
     @Query('kidId') kidId?: string,
     @Query('age') age?: string,
@@ -131,6 +133,7 @@ export class StoryController {
     return this.storyService.getStories({
       theme,
       category,
+      season,
       recommended: recommended === 'true',
       kidId,
       age: age ? parseInt(age, 10) : undefined,
@@ -203,6 +206,17 @@ export class StoryController {
   })
   async getThemes() {
     return this.storyService.getThemes();
+  }
+
+  @Get('seasons')
+  @ApiOperation({ summary: 'Get all seasons' })
+  @ApiOkResponse({
+    description: 'List of seasons',
+    type: ThemeDto, // Using ThemeDto struct or similar since SeasonDto is simple
+    isArray: true,
+  })
+  async getSeasons() {
+    return this.storyService.getSeasons();
   }
 
   @Post()
@@ -836,6 +850,7 @@ export class StoryController {
         body.kidId,
         body.themes,
         body.categories,
+        body.seasonIds,
         body.kidName,
       );
     }
