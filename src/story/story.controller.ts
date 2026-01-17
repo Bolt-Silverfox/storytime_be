@@ -149,8 +149,21 @@ export class StoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get parent homepage stories (Recommended, Seasonal, Top Liked)' })
   @ApiResponse({ status: 200, description: 'Homepage stories retrieved successfully.' })
-  async getParentHomepage(@Req() req: AuthenticatedRequest) {
-    return this.storyService.getHomePageStories(req.authUserData.userId);
+  @ApiQuery({ name: 'limitRecommended', required: false, type: Number })
+  @ApiQuery({ name: 'limitSeasonal', required: false, type: Number })
+  @ApiQuery({ name: 'limitTopLiked', required: false, type: Number })
+  async getParentHomepage(
+    @Req() req: AuthenticatedRequest,
+    @Query('limitRecommended', new DefaultValuePipe(5), ParseIntPipe) limitRecommended: number,
+    @Query('limitSeasonal', new DefaultValuePipe(5), ParseIntPipe) limitSeasonal: number,
+    @Query('limitTopLiked', new DefaultValuePipe(5), ParseIntPipe) limitTopLiked: number,
+  ) {
+    return this.storyService.getHomePageStories(
+      req.authUserData.userId,
+      limitRecommended,
+      limitSeasonal,
+      limitTopLiked,
+    );
   }
 
   @Get('categories')
