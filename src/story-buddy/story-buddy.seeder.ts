@@ -1,34 +1,10 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { storyBuddiesData } from '../../prisma/data';
 
 const prisma = new PrismaClient();
 
-const storyBuddiesData = [
-  {
-    name: 'lumina',
-    displayName: 'Lumina',
-    type: 'robot',
-    description: 'A friendly and curious robot companion who loves learning new things and exploring stories with you.',
-    imageUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Lumina_b9niso.png',
-    profileAvatarUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Lumina_Avatar_wuoxcq.png',
-    isActive: true,
-    themeColor: '#af3f0bff',
-    ageGroupMin: 1,
-    ageGroupMax: 12,
-  },
-  {
-    name: 'zylo',
-    displayName: 'Zylo',
-    type: 'alien',
-    description: 'A magical space explorer buddy who brings the wonders of the universe into every story.',
-    imageUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Zylo_qgqd3n.png',
-    profileAvatarUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Zylo_Avatar.png',
-    isActive: true,
-    themeColor: '#2196F3',
-    ageGroupMin: 1,
-    ageGroupMax: 12,
-  },
-];
+
 
 @Injectable()
 export class StoryBuddySeederService implements OnModuleInit {
@@ -36,7 +12,7 @@ export class StoryBuddySeederService implements OnModuleInit {
 
   async onModuleInit() {
     this.logger.log('Checking for story buddies seeding...');
-    
+
     try {
       await this.seedStoryBuddies();
       this.logger.log('Story buddies seeding completed successfully');
@@ -53,9 +29,9 @@ export class StoryBuddySeederService implements OnModuleInit {
       const existingBuddies = await prisma.storyBuddy.findMany({
         select: { name: true },
       });
-      
+
       const existingBuddyNames = new Set(existingBuddies.map(buddy => buddy.name));
-      
+
       const buddiesToCreate = storyBuddiesData.filter(
         buddyData => !existingBuddyNames.has(buddyData.name)
       );
@@ -96,9 +72,9 @@ export async function seedStoryBuddies() {
     const existingBuddies = await prisma.storyBuddy.findMany({
       select: { name: true },
     });
-    
+
     const existingBuddyNames = new Set(existingBuddies.map(buddy => buddy.name));
-    
+
     const buddiesToCreate = storyBuddiesData.filter(
       buddyData => !existingBuddyNames.has(buddyData.name)
     );
