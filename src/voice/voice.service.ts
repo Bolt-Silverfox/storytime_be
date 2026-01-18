@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,6 +11,7 @@ import {
   VoiceSourceType,
 } from './voice.dto';
 import { VOICE_CONFIG } from './voice.constants';
+import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
 
 @Injectable()
 export class VoiceService {
@@ -20,6 +21,7 @@ export class VoiceService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
+    private readonly elevenLabsProvider: ElevenLabsTTSProvider,
   ) { }
 
   // --- Upload a new voice file ---
@@ -27,13 +29,34 @@ export class VoiceService {
     userId: string,
     fileUrl: string,
     dto: UploadVoiceDto,
+    fileBuffer?: Buffer, // Pass buffer for cloning
   ): Promise<VoiceResponseDto> {
+    let elevenLabsId = '';
+
+    // If fileBuffer is provided, clone voice with ElevenLabs
+    if (fileBuffer) {
+      try {
+        elevenLabsId = await this.elevenLabsProvider.addVoice(dto.name, fileBuffer);
+        this.logger.log(`Cloned voice ${dto.name} with ID ${elevenLabsId}`);
+      } catch (error) {
+        this.logger.warn(`Failed to clone voice with ElevenLabs: ${error.message}`);
+        // We continue without cloning, or throw? 
+        // Better to throw if cloning was the intent, but for now we might want to just save uploaded file.
+        // The user requested cloning, so we should probably error if it fails?
+        // "we would use the users cloned voice" -> implying cloning is required.
+        throw new InternalServerErrorException('Voice cloning failed: ' + error.message);
+      }
+    }
+
     const voice = await this.prisma.voice.create({
       data: {
         userId,
         name: dto.name,
-        type: VoiceSourceType.UPLOADED,
+        type: VoiceSourceType.UPLOADED, // Or maybe we should use ELEVENLABS source type if it was cloned?
+        // Actually, if we cloned it, we should probably mark it as ELEVENLABS or keep UPLOADED but with ID
+        // Let's keep UPLOADED to know source, but store ID
         url: fileUrl,
+        elevenLabsVoiceId: elevenLabsId || null,
       },
     });
     return this.toVoiceResponse(voice);

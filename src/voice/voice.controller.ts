@@ -83,6 +83,7 @@ export class VoiceController {
       userId,
       uploadResult.secure_url,
       dto,
+      file.buffer,
     );
 
     return {
