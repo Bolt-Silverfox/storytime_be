@@ -57,7 +57,7 @@ describe('TextToSpeechService', () => {
     describe('textToSpeechCloudUrl', () => {
         const storyId = 'story-123';
         const text = 'Once upon a time';
-        const voiceType = VoiceType.MILO;
+        const voiceType = VoiceType.CHARLIE;
 
         it('should prioritize ElevenLabs and return url on success', async () => {
             mockElevenLabsGenerate.mockResolvedValue(Buffer.from('eleven-audio'));
