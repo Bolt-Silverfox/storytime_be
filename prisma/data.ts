@@ -200,9 +200,10 @@ export const themes = [
 ];
 
 export const defaultAgeGroups = [
-    { name: 'Age 1 - 4', min: 1, max: 4 },
-    { name: 'Age 5 - 8', min: 5, max: 8 },
-    { name: 'Age 9 - 12', min: 9, max: 12 },
+    { name: '1-3', min: 1, max: 3 },
+    { name: '4-6', min: 4, max: 6 },
+    { name: '7-9', min: 7, max: 9 },
+    { name: '10-12', min: 10, max: 12 },
 ];
 
 export const systemAvatars = [
@@ -311,4 +312,31 @@ export const seasons = [
     { name: 'Winter', description: 'Stories for the winter season', startDate: '12-01', endDate: '02-28' },
     { name: 'Spring', description: 'Stories for the spring season', startDate: '03-01', endDate: '05-31' },
     { name: 'Autumn', description: 'Stories for the autumn season', startDate: '09-01', endDate: '11-30' },
+];
+
+export const storyBuddiesData = [
+    {
+        name: 'lumina',
+        displayName: 'Lumina',
+        type: 'robot',
+        description: 'A friendly and curious robot companion who loves learning new things and exploring stories with you.',
+        imageUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Lumina_b9niso.png',
+        profileAvatarUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Lumina_Avatar_wuoxcq.png',
+        isActive: true,
+        themeColor: '#af3f0bff',
+        ageGroupMin: 1,
+        ageGroupMax: 12,
+    },
+    {
+        name: 'zylo',
+        displayName: 'Zylo',
+        type: 'alien',
+        description: 'A magical space explorer buddy who brings the wonders of the universe into every story.',
+        imageUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Zylo_qgqd3n.png',
+        profileAvatarUrl: 'https://res.cloudinary.com/dbt4qvman/image/upload/v1764155351/Zylo_Avatar.png',
+        isActive: true,
+        themeColor: '#2196F3',
+        ageGroupMin: 1,
+        ageGroupMax: 12,
+    },
 ];
