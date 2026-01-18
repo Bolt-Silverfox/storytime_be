@@ -1,6 +1,5 @@
-/**
- * Map Prisma User -> Parent profile DTO / response
- */
+import { Subscription } from '@prisma/client';
+import { SUBSCRIPTION_STATUS } from '../../subscription/subscription.constants';
 
 export function mapParentProfile(user: any) {
   if (!user) return null;
@@ -34,8 +33,8 @@ export function mapParentProfile(user: any) {
   };
 }
 
-function getSubscriptionStatus(subscriptions: any[]): string {
-  if (!subscriptions || subscriptions.length === 0) return 'free';
-  const activeSub = subscriptions.find((sub) => sub.status === 'active');
-  return activeSub ? 'active' : 'free';
+function getSubscriptionStatus(subscriptions: Subscription[]): string {
+  if (!subscriptions || subscriptions.length === 0) return SUBSCRIPTION_STATUS.FREE;
+  const activeSub = subscriptions.find((sub) => sub.status === SUBSCRIPTION_STATUS.ACTIVE);
+  return activeSub ? SUBSCRIPTION_STATUS.ACTIVE : SUBSCRIPTION_STATUS.FREE;
 }

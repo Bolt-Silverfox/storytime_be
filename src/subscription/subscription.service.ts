@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PaymentService } from '../payment/payment.service';
+import { SUBSCRIPTION_STATUS } from './subscription.constants';
 
 const prisma = new PrismaClient();
 
@@ -16,7 +17,7 @@ export const PLANS: Record<string, { display: string; amount: number; days: numb
 
 @Injectable()
 export class SubscriptionService {
-  constructor(private readonly paymentService?: PaymentService) {}
+  constructor(private readonly paymentService?: PaymentService) { }
 
   getPlans() {
     return PLANS;
@@ -68,7 +69,7 @@ export class SubscriptionService {
     if (existing) {
       const updated = await prisma.subscription.update({
         where: { id: existing.id },
-        data: { plan: planKey, status: 'active', startedAt: now, endsAt },
+        data: { plan: planKey, status: SUBSCRIPTION_STATUS.ACTIVE, startedAt: now, endsAt },
       });
       return { subscription: updated };
     }
@@ -77,7 +78,7 @@ export class SubscriptionService {
       data: {
         userId,
         plan: planKey,
-        status: 'active',
+        status: SUBSCRIPTION_STATUS.ACTIVE,
         startedAt: now,
         endsAt,
       },
@@ -96,7 +97,7 @@ export class SubscriptionService {
 
     const cancelled = await prisma.subscription.update({
       where: { id: existing.id },
-      data: { status: 'cancelled', endsAt },
+      data: { status: SUBSCRIPTION_STATUS.CANCELLED, endsAt },
     });
 
     return cancelled;
