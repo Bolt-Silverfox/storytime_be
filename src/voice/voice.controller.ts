@@ -129,7 +129,7 @@ export class VoiceController {
   async setPreferredVoice(
     @Req() req: AuthenticatedRequest,
     @Body() body: SetPreferredVoiceDto,
-  ) {
+  ): Promise<VoiceResponseDto> {
     return this.voiceService.setPreferredVoice(req.authUserData.userId, body);
   }
 

@@ -45,7 +45,7 @@ export class VoiceResponseDto {
   type: string;
 
   @ApiProperty({ required: false })
-  previewUrl?: string; // Was previously 'url'
+  previewUrl?: string;
 
   @ApiProperty({ required: false })
   voiceAvatar?: string;

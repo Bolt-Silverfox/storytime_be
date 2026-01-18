@@ -65,16 +65,18 @@ export class VoiceService {
   async setPreferredVoice(
     userId: string,
     dto: SetPreferredVoiceDto,
-  ): Promise<any> {
+  ): Promise<VoiceResponseDto> {
     const result = await this.prisma.user.update({
       where: { id: userId },
       data: { preferredVoiceId: dto.voiceId },
+      include: { preferredVoice: true },
     });
-    return {
-      id: result.id,
-      email: result.email,
-      preferredVoice: result.preferredVoiceId,
-    };
+
+    if (!result.preferredVoice) {
+      throw new Error('Preferred voice not found');
+    }
+
+    return this.toVoiceResponse(result.preferredVoice);
   }
 
   // --- Get the preferred voice for a user ---
@@ -203,14 +205,32 @@ export class VoiceService {
 
   // Moved from StoryService and updated
   async fetchAvailableVoices(): Promise<VoiceResponseDto[]> {
-    // Return the system voices defined in configuration
-    return Object.values(VOICE_CONFIG).map((config) => ({
-      id: config.id,
-      name: config.name,
-      type: VoiceSourceType.ELEVENLABS,
-      previewUrl: config.previewUrl,
-      voiceAvatar: config.voiceAvatar,
-      elevenLabsVoiceId: config.elevenLabsId,
-    }));
+    // Get the IDs we expect from config
+    const systemIds = Object.values(VOICE_CONFIG).map((c) => c.elevenLabsId);
+
+    // Fetch actual records from DB to get UUIDs
+    const dbVoices = await this.prisma.voice.findMany({
+      where: {
+        elevenLabsVoiceId: { in: systemIds },
+      },
+    });
+
+    // Map DB voices to response, enriching with config data (avatar, preview) if needed
+    // Note: seed.ts might have populated avatar/preview, but config is reliable for statics
+    return dbVoices.map((voice) => {
+      // Find matching config to get extra metadata if missing in DB
+      const config = Object.values(VOICE_CONFIG).find(
+        (c) => c.elevenLabsId === voice.elevenLabsVoiceId,
+      );
+
+      return {
+        id: voice.id, // THE REAL UUID
+        name: voice.name,
+        type: voice.type,
+        previewUrl: voice.url || config?.previewUrl,
+        voiceAvatar: voice.voiceAvatar || config?.voiceAvatar,
+        elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
+      };
+    });
   }
 }
