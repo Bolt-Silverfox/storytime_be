@@ -144,12 +144,25 @@ async function main() {
     const existingVoice = await prisma.voice.findFirst({
       where: { name: key },
     });
-    if (!existingVoice) {
+
+    const voiceData = {
+      elevenLabsVoiceId: config.elevenLabsId,
+      name: key,
+      type: 'elevenlabs',
+      voiceAvatar: config.voiceAvatar,
+      url: config.previewUrl,
+    };
+
+    if (existingVoice) {
+      await prisma.voice.update({
+        where: { id: existingVoice.id },
+        data: voiceData,
+      });
+    } else {
       await prisma.voice.create({
         data: {
-          elevenLabsVoiceId: config.model,
-          name: key,
-          type: 'deepgram',
+          ...voiceData,
+          userId: null,
         },
       });
     }
