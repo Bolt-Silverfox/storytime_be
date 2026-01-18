@@ -63,6 +63,7 @@ import {
   VoiceType,
   StoryContentAudioDto,
 } from '../voice/voice.dto';
+import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { StoryService } from './story.service';
 import { VoiceService } from '../voice/voice.service';
 import { TextToSpeechService } from './text-to-speech.service';
@@ -736,13 +737,13 @@ export class StoryController {
   ) {
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
-      voiceType ?? VoiceType.MILO,
+      voiceType ?? DEFAULT_VOICE,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceType: voiceType || VoiceType.MILO,
+      voiceType: voiceType || DEFAULT_VOICE,
       statusCode: 200,
     };
   }
@@ -761,7 +762,7 @@ export class StoryController {
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceType: dto.voiceType || VoiceType.MILO,
+      voiceType: dto.voiceType || DEFAULT_VOICE,
       statusCode: 200,
     };
   }

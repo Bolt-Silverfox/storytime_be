@@ -55,12 +55,12 @@ export class VoiceResponseDto {
 }
 
 export enum VoiceType {
-  MILO = 'MILO',
-  BELLA = 'BELLA',
-  COSMO = 'COSMO',
-  NIMBUS = 'NIMBUS',
-  GRANDPA_JO = 'GRANDPA_JO',
-  CHIP = 'CHIP',
+  CHARLIE = 'CHARLIE',
+  JESSICA = 'JESSICA',
+  WILL = 'WILL',
+  LILY = 'LILY',
+  BILL = 'BILL',
+  LAURA = 'LAURA',
 }
 
 

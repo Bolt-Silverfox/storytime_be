@@ -29,6 +29,7 @@ import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { StoryService } from '../story/story.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
+import { DEFAULT_VOICE } from './voice.constants';
 import {
   CreateElevenLabsVoiceDto,
   SetPreferredVoiceDto,
@@ -164,13 +165,13 @@ export class VoiceController {
   ) {
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
-      voiceType ?? VoiceType.MILO,
+      voiceType ?? DEFAULT_VOICE,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceType: voiceType || VoiceType.MILO,
+      voiceType: voiceType || DEFAULT_VOICE,
       statusCode: 200,
     };
   }
@@ -183,13 +184,13 @@ export class VoiceController {
     const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
       randomUUID().toString(),
       dto.content,
-      dto.voiceType ?? VoiceType.MILO,
+      dto.voiceType ?? DEFAULT_VOICE,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceType: dto.voiceType || VoiceType.MILO,
+      voiceType: dto.voiceType || DEFAULT_VOICE,
       statusCode: 200,
     };
   }

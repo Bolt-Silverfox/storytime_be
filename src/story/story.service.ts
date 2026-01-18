@@ -44,6 +44,7 @@ import {
 import { GeminiService, GenerateStoryOptions } from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { VoiceType } from '../voice/voice.dto';
+import { DEFAULT_VOICE } from '../voice/voice.constants';
 
 @Injectable()
 export class StoryService {
@@ -1065,7 +1066,7 @@ export class StoryService {
         const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
           story.id,
           story.textContent,
-          voiceType ?? VoiceType.MILO
+          voiceType ?? DEFAULT_VOICE
         );
 
         // Update story with audio URL

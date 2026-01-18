@@ -1,7 +1,7 @@
 import { UploadService } from '../upload/upload.service';
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { VoiceType } from '../voice/voice.dto';
-import { VOICE_CONFIG } from '../voice/voice.constants';
+import { VOICE_CONFIG, DEFAULT_VOICE } from '../voice/voice.constants';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';
 
@@ -20,7 +20,7 @@ export class TextToSpeechService {
     text: string,
     voicetype?: VoiceType,
   ): Promise<string> {
-    const type = voicetype ?? VoiceType.MILO;
+    const type = voicetype ?? DEFAULT_VOICE;
     const voiceConfig = VOICE_CONFIG[type];
 
     // Priority 1: ElevenLabs
