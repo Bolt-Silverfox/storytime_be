@@ -8,9 +8,9 @@ import {
   SetPreferredVoiceDto,
   UploadVoiceDto,
   VoiceResponseDto,
-  VOICE_CONFIG,
   VoiceSourceType,
 } from './voice.dto';
+import { VOICE_CONFIG } from './voice.constants';
 
 @Injectable()
 export class VoiceService {
