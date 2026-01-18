@@ -59,10 +59,7 @@ import {
   TopPickStoryDto,
 } from './story.dto';
 import {
-  CreateElevenLabsVoiceDto,
-  SetPreferredVoiceDto,
-  UploadVoiceDto,
-  VoiceResponseDto,
+
   VoiceType,
   StoryContentAudioDto,
 } from '../voice/voice.dto';
@@ -693,78 +690,7 @@ export class StoryController {
     );
   }
 
-  // --- Voices ---
-  @Post('voices/upload')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @UseInterceptors(FileInterceptor('file'))
-  @ApiOperation({ summary: 'Upload a custom voice (audio file)' })
-  async uploadVoice(
-    @Req() req: AuthenticatedRequest,
-    @UploadedFile() file: Express.Multer.File,
-    @Body() body: UploadVoiceDto,
-  ): Promise<VoiceResponseDto> {
-    // Upload file to Cloudinary
-    const url = await this.storyService.uploadService.uploadFile(file);
-    return this.storyService.uploadVoice(
-      req.authUserData.userId,
-      url.secure_url,
-      body,
-    );
-  }
 
-  @Post('voices/elevenlabs')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Register a custom ElevenLabs voice' })
-  async createElevenLabsVoice(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: CreateElevenLabsVoiceDto,
-  ): Promise<VoiceResponseDto> {
-    return this.storyService.createElevenLabsVoice(
-      req.authUserData.userId,
-      body,
-    );
-  }
-
-  @Get('voices')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all voices for the user' })
-  async listVoices(
-    @Req() req: AuthenticatedRequest,
-  ): Promise<VoiceResponseDto[]> {
-    return this.storyService.listVoices(req.authUserData.userId);
-  }
-
-  @Patch('voices/preferred')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Set preferred voice for the user' })
-  async setPreferredVoice(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: SetPreferredVoiceDto,
-  ): Promise<void> {
-    return this.storyService.setPreferredVoice(req.authUserData.userId, body);
-  }
-
-  @Get('voices/preferred')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get preferred voice for the user' })
-  async getPreferredVoice(
-    @Req() req: AuthenticatedRequest,
-  ): Promise<VoiceResponseDto | null> {
-    return this.storyService.getPreferredVoice(req.authUserData.userId);
-  }
-
-  @Get('voices/available')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all available ElevenLabs voices' })
-  async listAvailableVoices(): Promise<any[]> {
-    return this.voiceService.fetchAvailableVoices();
-  }
 
   // --- Story Path / Choice Tracking ---
   @Post('story-path/start')
