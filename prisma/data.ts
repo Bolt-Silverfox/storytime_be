@@ -303,6 +303,17 @@ export const learningExpectations = [
     { name: 'Creative Thinking', description: 'Generating original and innovative ideas' },
 ];
 
+export const seasons = [
+    { name: 'Christmas', description: 'Stories for Christmas time', startDate: '12-01', endDate: '12-31' },
+    { name: 'Easter', description: 'Stories for Easter', startDate: '03-20', endDate: '04-20' },
+    { name: 'Valentine', description: 'Stories about love and friendship for Valentine\'s Day', startDate: '02-01', endDate: '02-15' },
+    { name: 'Halloween', description: 'Spooky stories for Halloween', startDate: '10-01', endDate: '10-31' },
+    { name: 'Summer', description: 'Stories for the summer season', startDate: '06-01', endDate: '08-31' },
+    { name: 'Winter', description: 'Stories for the winter season', startDate: '12-01', endDate: '02-28' },
+    { name: 'Spring', description: 'Stories for the spring season', startDate: '03-01', endDate: '05-31' },
+    { name: 'Autumn', description: 'Stories for the autumn season', startDate: '09-01', endDate: '11-30' },
+];
+
 export const storyBuddiesData = [
     {
         name: 'lumina',

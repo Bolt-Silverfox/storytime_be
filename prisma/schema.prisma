@@ -270,6 +270,7 @@ model Story {
   themes                Theme[]                  @relation("StoryThemes")
   storyAudioCaches      StoryAudioCache[]
   questions             StoryQuestion[]
+  seasons               Season[]                 @relation("StorySeasons")
   // Add this field to track who created it (for AI generation)
   creatorKidId          String?
   creatorKid            Kid?                     @relation("CreatedStories", fields: [creatorKidId], references: [id])
@@ -830,6 +831,25 @@ model UserBadge {
   @@index([badgeId])
   @@index([isDeleted])
   @@map("user_badges")
+}
+
+model Season {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  iconUrl     String?
+  startDate   String?   // "MM-DD" generic start (approx)
+  endDate     String?   // "MM-DD" generic end (approx)
+  stories     Story[]   @relation("StorySeasons")
+  isActive    Boolean   @default(true) 
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  // SOFT DELETE FIELDS
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+
+  @@index([isDeleted])
+  @@map("seasons")
 }
 
 model DownloadedStory {

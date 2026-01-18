@@ -80,6 +80,12 @@ export class CreateStoryDto {
   @IsString({ each: true })
   categoryIds: string[];
 
+  @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  seasonIds?: string[];
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
@@ -152,6 +158,12 @@ export class UpdateStoryDto {
   @IsArray()
   @IsString({ each: true })
   categoryIds?: string[];
+
+  @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  seasonIds?: string[];
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -352,6 +364,19 @@ export class CategoryDto {
   sortOrder?: number;
 }
 
+export class SeasonDto {
+  @ApiProperty()
+  id: string;
+  @ApiProperty()
+  name: string;
+  @ApiProperty({ required: false })
+  description?: string;
+  @ApiProperty({ required: false })
+  startDate?: string;
+  @ApiProperty({ required: false })
+  endDate?: string;
+}
+
 export class ThemeDto {
   @ApiProperty()
   id: string;
@@ -379,11 +404,18 @@ export class GenerateStoryDto {
   @IsString({ each: true })
   themes?: string[];
 
+
   @ApiProperty({ type: [String], required: false })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   categories?: string[];
+
+  @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  seasonIds?: string[];
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -581,6 +613,10 @@ export class TopPickStoryDto extends StoryDto {
   @ApiPropertyOptional({ description: 'Story categories' })
   @IsOptional()
   categories?: CategoryDto[];
+
+  @ApiPropertyOptional({ description: 'Story seasons' })
+  @IsOptional()
+  seasons?: SeasonDto[];
 
   // images is inherited from StoryDto -> CreateStoryDto
 }
