@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
-import { VOICE_CONFIG } from '../voice/voice.dto';
+import { VoiceType } from '../voice/voice.dto';
+import { VOICE_CONFIG } from '../voice/voice.constants';
 import { categories, defaultAgeGroups, systemAvatars, themes, learningExpectations, seasons } from '../../prisma/data';
 
 const prisma = new PrismaClient();

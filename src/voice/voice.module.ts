@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { HttpModule } from '@nestjs/axios';
 import { AuthModule } from 'src/auth/auth.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { StoryModule } from '../story/story.module';
@@ -18,6 +19,7 @@ import { StreamConverter } from './utils/stream-converter';
 @Module({
   imports: [
     AuthModule,
+    HttpModule,
     forwardRef(() => StoryModule),
   ],
   controllers: [VoiceController],
