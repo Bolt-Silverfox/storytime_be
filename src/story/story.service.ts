@@ -21,12 +21,7 @@ import {
   RecommendationsStatsDto,
   RestrictStoryDto,
 } from './story.dto';
-import {
-  UploadVoiceDto,
-  CreateElevenLabsVoiceDto,
-  SetPreferredVoiceDto,
-  VoiceResponseDto,
-} from '../voice/voice.dto';
+
 import { UploadService } from '../upload/upload.service';
 import {
   StoryPath,
@@ -663,65 +658,7 @@ export class StoryService {
     return assignment ? this.toDailyChallengeAssignmentDto(assignment) : null;
   }
 
-  async uploadVoice(userId: string, fileUrl: string, dto: UploadVoiceDto): Promise<VoiceResponseDto> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    const voice = await this.prisma.voice.create({
-      data: { userId, name: dto.name, type: 'uploaded', url: fileUrl },
-    });
-    return this.toVoiceResponse(voice);
-  }
 
-  async createElevenLabsVoice(userId: string, dto: CreateElevenLabsVoiceDto): Promise<VoiceResponseDto> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    const voice = await this.prisma.voice.create({
-      data: { userId, name: dto.name, type: 'elevenlabs', elevenLabsVoiceId: dto.elevenLabsVoiceId },
-    });
-    return this.toVoiceResponse(voice);
-  }
-
-  async listVoices(userId: string): Promise<VoiceResponseDto[]> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    const voices = await this.prisma.voice.findMany({ where: { userId, isDeleted: false } });
-    return voices.map((v: Voice) => this.toVoiceResponse(v));
-  }
-
-  async setPreferredVoice(userId: string, dto: SetPreferredVoiceDto): Promise<any> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    if (dto.voiceId) {
-      const voice = await this.prisma.voice.findUnique({ where: { id: dto.voiceId, isDeleted: false } });
-      if (!voice) throw new NotFoundException('Voice not found');
-    }
-    const result = await this.prisma.user.update({
-      where: { id: userId },
-      data: { preferredVoiceId: dto.voiceId },
-    });
-    return { id: result.id, email: result.email, name: result.name, preferredVoice: result.preferredVoiceId };
-  }
-
-  async getPreferredVoice(userId: string): Promise<VoiceResponseDto | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-      include: { preferredVoice: true },
-    });
-    if (!user) throw new NotFoundException('User not found');
-    if (!user.preferredVoice) return { id: '', name: '', type: '', previewUrl: undefined, elevenLabsVoiceId: undefined };
-    return this.toVoiceResponse(user.preferredVoice);
-  }
-
-  private toVoiceResponse(voice: any): VoiceResponseDto {
-    return {
-      id: voice.id,
-      name: voice.name,
-      type: voice.type,
-      previewUrl: voice.url ?? undefined, // Key Changed
-      voiceAvatar: voice.voiceAvatar ?? undefined,
-      elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
-    };
-  }
 
   async getStoryAudioUrl(storyId: string, voiceType: VoiceType): Promise<string> {
     const story = await this.prisma.story.findUnique({
