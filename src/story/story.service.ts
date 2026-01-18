@@ -81,6 +81,7 @@ export class StoryService {
   async getStories(filter: {
     theme?: string;
     category?: string;
+    season?: string;
     recommended?: boolean;
     age?: number;
     minAge?: number;
@@ -100,6 +101,9 @@ export class StoryService {
     if (filter.theme) where.themes = { some: { id: filter.theme } };
     if (filter.category) {
       where.categories = { some: { id: filter.category } };
+    }
+    if (filter.season) {
+      where.seasons = { some: { id: filter.season } };
     }
     if (filter.recommended !== undefined && !filter.kidId) {
       where.recommended = filter.recommended;
@@ -201,6 +205,7 @@ export class StoryService {
         branches: true,
         categories: true,
         themes: true,
+        seasons: true,
         questions: true,
       },
     });
@@ -216,7 +221,12 @@ export class StoryService {
     };
   }
 
-  async getHomePageStories(userId: string) {
+  async getHomePageStories(
+    userId: string,
+    limitRecommended: number = 5,
+    limitSeasonal: number = 5,
+    limitTopLiked: number = 5,
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId, isDeleted: false },
       include: { preferredCategories: true },
@@ -238,7 +248,7 @@ export class StoryService {
             },
           },
         },
-        take: 5,
+        take: limitRecommended,
         include: { images: true, categories: true },
       });
     } else {
@@ -246,40 +256,104 @@ export class StoryService {
       recommended = await this.prisma.story.findMany({
         where: { isDeleted: false },
         orderBy: { createdAt: 'desc' },
-        take: 5,
-        include: { images: true, categories: true }
-      })
+        take: limitRecommended,
+        include: { images: true, categories: true },
+      });
     }
 
-    // 2. Seasonal Stories (Logic: find themes named "Seasonal", "Holiday", "Christmas", etc.)
-    // For now, let's look for stories with "Seasonal" theme or created recently described as seasonal
-    const seasonal = await this.prisma.story.findMany({
-      where: {
-        isDeleted: false,
-        themes: {
-          some: {
-            name: { in: ['Seasonal', 'Holiday', 'Winter', 'Christmas'] }
-          }
-        }
-      },
-      take: 5,
-      include: { images: true, themes: true },
+    // 2. Seasonal Stories (Logic: find active season based on today's date)
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    const currentDay = today.getDate(); // 1-31
+    const currentDateStr = `${currentMonth
+      .toString()
+      .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
+
+    // Find seasons that cover today
+    const allSeasons = await this.prisma.season.findMany({
+      where: { isDeleted: false }, // Fetch all to sort into active/past
     });
 
+    const activeSeasons = allSeasons.filter((s) => {
+      if (!s.isActive) return false;
+      if (!s.startDate || !s.endDate) return false;
+      // Handle year wrap for winter (e.g. 12-01 to 02-28)
+      if (s.startDate > s.endDate) {
+        return currentDateStr >= s.startDate || currentDateStr <= s.endDate;
+      }
+      return currentDateStr >= s.startDate && currentDateStr <= s.endDate;
+    });
+
+    let seasonal: any[] = [];
+    let seasonalCount = 0;
+
+    if (activeSeasons.length > 0) {
+      seasonal = await this.prisma.story.findMany({
+        where: {
+          isDeleted: false,
+          seasons: {
+            some: {
+              id: { in: activeSeasons.map((s) => s.id) },
+            },
+          },
+        },
+        take: limitSeasonal,
+        include: { images: true, themes: true, seasons: true },
+      });
+      seasonalCount = seasonal.length;
+    }
+
+    // Backfill if needed
+    if (seasonalCount < limitSeasonal) {
+      const needed = limitSeasonal - seasonalCount;
+      const existingIds = new Set(seasonal.map((s) => s.id));
+
+      // Strategy: Find "previous" seasons.
+      // We can define "previous" roughly by checking seasons that are NOT active
+      // and maybe have endDate < today? Or simply all non-active seasons.
+      // Let's take all inactive seasons and perhaps just pick random or recent ones?
+      // A simple heuristic for "previous" season: seasons that ended recently.
+
+      const previousSeasons = allSeasons.filter((s) => {
+        if (activeSeasons.find(active => active.id === s.id)) return false; // Skip active
+        // For simplistic "previous", we just take everything else that has dates.
+        return !!s.startDate && !!s.endDate;
+      });
+
+      // Sort by endDate descending (pseudo-code since endDate is MM-DD string without year)
+      // Since we don't have years, sorting by MM-DD descending is a decent proxy for "latest in the year"
+
+      if (previousSeasons.length > 0) {
+        const backfillStories = await this.prisma.story.findMany({
+          where: {
+            isDeleted: false,
+            seasons: {
+              some: {
+                id: { in: previousSeasons.map(s => s.id) }
+              }
+            },
+            id: { notIn: Array.from(existingIds) }
+          },
+          take: needed,
+          include: { images: true, themes: true, seasons: true },
+          orderBy: { createdAt: 'desc' } // Fresh content from old seasons?
+        });
+
+        seasonal = [...seasonal, ...backfillStories];
+      }
+    }
+
     // 3. Top Liked by Parents
-    // We need to aggregate ParentFavorite.
-    // Since Prisma doesn't support direct aggregation in findMany options easily for this relation count sort without groupBy
     const topLiked = await this.prisma.story.findMany({
       where: { isDeleted: false },
       orderBy: {
         parentFavorites: {
-          _count: 'desc'
-        }
+          _count: 'desc',
+        },
       },
-      take: 5,
-      include: { images: true }
+      take: limitTopLiked,
+      include: { images: true },
     });
-
 
     return {
       recommended,
@@ -314,6 +388,9 @@ export class StoryService {
         branches: data.branches ? { create: data.branches } : undefined,
         categories: data.categoryIds ? { connect: data.categoryIds.map((id) => ({ id })) } : undefined,
         themes: data.themeIds ? { connect: data.themeIds.map((id) => ({ id })) } : undefined,
+        seasons: data.seasonIds
+          ? { connect: data.seasonIds.map((id) => ({ id })) }
+          : undefined,
       },
       include: { images: true, branches: true },
     });
@@ -347,6 +424,9 @@ export class StoryService {
           : undefined,
         themes: data.themeIds
           ? { set: data.themeIds.map((id) => ({ id })) }
+          : undefined,
+        seasons: data.seasonIds
+          ? { set: data.seasonIds.map((id) => ({ id })) }
           : undefined,
       },
       include: { images: true, branches: true },
@@ -736,6 +816,14 @@ export class StoryService {
     }));
   }
 
+  async getSeasons() {
+    const seasons = await this.prisma.season.findMany({
+      where: { isDeleted: false },
+      orderBy: { startDate: 'asc' }
+    });
+    return seasons;
+  }
+
   // ... [Keep daily challenge automation methods] ...
   async assignDailyChallengeToAllKids() {
     const today = new Date();
@@ -842,6 +930,15 @@ export class StoryService {
   }
 
   async generateStoryWithAI(options: GenerateStoryOptions) {
+    // Resolve Season IDs to names if needed for AI context
+    if (options.seasonIds && options.seasonIds.length > 0 && (!options.seasons || options.seasons.length === 0)) {
+      const seasons = await this.prisma.season.findMany({
+        where: { id: { in: options.seasonIds }, isDeleted: false },
+        select: { name: true },
+      });
+      options.seasons = seasons.map((s) => s.name);
+    }
+
     // 1. Generate Story Content
     const generatedStory = await this.geminiService.generateStory(options);
 
@@ -850,7 +947,8 @@ export class StoryService {
       generatedStory,
       options.kidName || 'Hero',
       options.creatorKidId,
-      options.voiceType
+      options.voiceType,
+      options.seasonIds
     );
   }
 
@@ -858,6 +956,7 @@ export class StoryService {
     kidId: string,
     themeNames?: string[],
     categoryNames?: string[],
+    seasonIds?: string[],
     kidName?: string,
   ) {
     const kid = await this.prisma.kid.findUnique({
@@ -917,9 +1016,20 @@ export class StoryService {
       }
     }
 
+    // Resolve Season IDs to Names for AI Context
+    const seasonNames: string[] = [];
+    if (seasonIds && seasonIds.length > 0) {
+      const seasons = await this.prisma.season.findMany({
+        where: { id: { in: seasonIds }, isDeleted: false },
+        select: { name: true },
+      });
+      seasonNames.push(...seasons.map((s) => s.name));
+    }
+
     const options: GenerateStoryOptions = {
       theme: themes,
       category: categories,
+      seasons: seasonNames,
       ageMin,
       ageMax,
       kidName: kidName || kid.name || 'Hero',
@@ -941,7 +1051,8 @@ export class StoryService {
       generatedStory,
       options.kidName!,
       kidId,
-      voiceType
+      voiceType,
+      seasonIds
     );
   }
 
@@ -950,7 +1061,8 @@ export class StoryService {
     generatedStory: any,
     kidName: string,
     creatorKidId?: string,
-    voiceType?: VoiceType
+    voiceType?: VoiceType,
+    seasonIds?: string[]
   ) {
     // 1. Generate Cover Image (Pollinations)
     let coverImageUrl = '';
@@ -998,6 +1110,16 @@ export class StoryService {
 
         categories: { connectOrCreate: categoryConnect },
         themes: { connectOrCreate: themeConnect },
+        seasons:
+          seasonIds && seasonIds.length > 0
+            ? {
+              connect: seasonIds.map((id) => ({ id })),
+            }
+            : generatedStory.seasons
+              ? {
+                connect: generatedStory.seasons.map((s: string) => ({ name: s })),
+              }
+              : undefined,
       },
       include: { images: true, branches: true, categories: true, themes: true },
     });
@@ -1016,7 +1138,7 @@ export class StoryService {
         story = await this.prisma.story.update({
           where: { id: story.id },
           data: { audioUrl },
-          include: { images: true, branches: true, categories: true, themes: true },
+          include: { images: true, branches: true, categories: true, themes: true, seasons: true },
         });
       } catch (error) {
         this.logger.error(`Failed to generate audio for story ${story.id}: ${error.message}`);

@@ -2,27 +2,13 @@ import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import { VOICE_CONFIG } from '../voice/voice.dto';
-import { categories, defaultAgeGroups, systemAvatars, themes, learningExpectations } from '../../prisma/data'; // ADD learningExpectations import
+import { categories, defaultAgeGroups, systemAvatars, themes, learningExpectations, seasons } from '../../prisma/data';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "stories", "_StoryCategories", "_StoryThemes", "Category", "Theme" RESTART IDENTITY CASCADE;',
-  );
-  await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "age_groups" RESTART IDENTITY CASCADE;',
-  );
-  await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "voices" RESTART IDENTITY CASCADE;',
-  );
-  await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "avatars" RESTART IDENTITY CASCADE;',
-  );
-  // ADD THIS LINE - Truncate learning expectations
-  await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "learning_expectations", "user_learning_expectations" RESTART IDENTITY CASCADE;',
-  );
+  // Idempotent seeding: We removed TRUNCATE statements to preserve existing data (Users, Kids, etc.)
+  // Use db:reset if you need to wipe the database.
 
   const storiesPath = path.resolve('src/story/stories.json');
   const getStories = () => {
@@ -65,6 +51,28 @@ async function main() {
     });
   }
   console.log('Learning expectations seeded!');
+
+  // Seed Seasons
+  console.log('Seeding seasons...');
+  for (const season of seasons) {
+    await prisma.season.upsert({
+      where: { name: season.name },
+      update: {
+        description: season.description,
+        startDate: season.startDate,
+        endDate: season.endDate,
+        isActive: true,
+      },
+      create: {
+        name: season.name,
+        description: season.description,
+        startDate: season.startDate,
+        endDate: season.endDate,
+        isActive: true,
+      },
+    });
+  }
+  console.log('Seasons seeded!');
 
   // 6. Seed Stories with "connectOrCreate"
   console.log('Seeding stories...');
@@ -111,6 +119,11 @@ async function main() {
             },
           })),
         },
+        seasons: story['seasons']
+          ? {
+            connect: story['seasons'].map((name: string) => ({ name })),
+          }
+          : undefined,
 
         questions: {
           create: story.questions.map((question: any) => ({

@@ -5522,5 +5522,119 @@
     "difficultyLevel": 3,
     "wordCount": 210,
     "backgroundColor": "#D6B27E"
+  },
+  {
+    "title": "The Christmas Star",
+    "description": "A magical story about a little star finding its place on the Christmas tree.",
+    "language": "English",
+    "seasons": [
+      "Christmas",
+      "Winter"
+    ],
+    "theme": [
+      "Seasonal",
+      "Christmas",
+      "Winter"
+    ],
+    "category": [
+      "Bedtime Stories"
+    ],
+    "content": "High above the sleepy town, a little star named Twinkle shone faintly. \"I want to be special,\" Twinkle sighed. On Christmas Eve, Santa flew by. \"Ho ho ho! I need a bright star for the biggest tree in the town square!\" Santa boomed. Twinkle sparkled with hope. \"I am small, but I can shine bright!\" With a whoosh, Twinkle zoomed down and landed on the very top of the giant pine tree. All the people cheered, \"Look at that beautiful star!\" Twinkle glowed warmer and brighter than ever before, lighting up the snowy night for everyone to see. It was the best Christmas ever.",
+    "questions": [],
+    "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1768675948/storytime/seasonal/q4h2t5jvnjj9b3oodnap.jpg",
+    "isInteractive": false,
+    "ageMin": 3,
+    "ageMax": 7,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": true,
+    "difficultyLevel": 1,
+    "wordCount": 104,
+    "backgroundColor": "#FFFFFF"
+  },
+  {
+    "title": "Benny the Easter Bunny",
+    "description": "Benny learns that sharing eggs is more fun than keeping them all.",
+    "language": "English",
+    "seasons": [
+      "Easter",
+      "Spring"
+    ],
+    "theme": [
+      "Seasonal",
+      "Easter",
+      "Spring"
+    ],
+    "category": [
+      "Bedtime Stories"
+    ],
+    "content": "Benny the Bunny loved painting eggs. He painted red ones, blue ones, and shiny gold ones. \"These are all mine!\" he said, hiding them in his burrow. But on Easter morning, he saw the other bunnies playing and sharing their treats. Benny felt lonely with just his eggs. He picked up his favorite gold egg and hopped over to his friend, Lily. \"Happy Easter, Lily!\" he said, giving her the egg. Lily smiled big. \"Thank you, Benny!\" Benny felt warm inside. He ran back and fetched all his eggs, hiding them for the children to find. Hearing their happy shouts was better than keeping any egg. Benny hopped high with joy.",
+    "questions": [],
+    "coverImageUrl": "https://image.pollinations.ai/prompt/cute%20cartoon%20easter%20bunny%20holding%20a%20painted%20egg%2C%20sunny%20meadow%2C%20flowers%2C%203d%20style",
+    "isInteractive": false,
+    "ageMin": 3,
+    "ageMax": 7,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": true,
+    "difficultyLevel": 1,
+    "wordCount": 111,
+    "backgroundColor": "#FFFFFF"
+  },
+  {
+    "title": "Spooky Pumpkin Patch",
+    "description": "A gentle ghost finds the perfect pumpkin for Halloween.",
+    "language": "English",
+    "seasons": [
+      "Halloween",
+      "Autumn"
+    ],
+    "theme": [
+      "Seasonal",
+      "Halloween",
+      "Autumn"
+    ],
+    "category": [
+      "Bedtime Stories"
+    ],
+    "content": "Casper was a friendly ghost who wanted a pumpkin for his porch. He floated to the pumpkin patch under the full moon. \"Too small,\" he said. \"Too bumpy.\" Then he saw it—a perfectly round, orange pumpkin. But a little spider was sleeping on it. \"Excuse me,\" Casper whispered. The spider woke up. \"Oh, hello! Are you taking my bed?\" asked the spider. Casper smiled. \"We can share! You can live in the spooky jack-o-lantern I make!\" The spider clapped all eight legs. Together, they carved a happy face and put a candle inside. It was the friendliest pumpkin in the whole neighborhood.",
+    "questions": [],
+    "coverImageUrl": "https://res.cloudinary.com/billmal/image/upload/v1768676033/storytime/seasonal/v89qbmmg8q1ywu13ppxf.jpg",
+    "isInteractive": false,
+    "ageMin": 3,
+    "ageMax": 7,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": true,
+    "difficultyLevel": 1,
+    "wordCount": 102,
+    "backgroundColor": "#FFFFFF"
+  },
+  {
+    "title": "Sunny the Sandcrab",
+    "description": "Sunny helps build the biggest sandcastle on the beach.",
+    "language": "English",
+    "seasons": [
+      "Summer"
+    ],
+    "theme": [
+      "Seasonal",
+      "Summer"
+    ],
+    "category": [
+      "Bedtime Stories"
+    ],
+    "content": "The sun was hot and the waves whispered on the shore. Sunny the little crab scuttled sideways. \"I want to build a castle!\" he chirped. He pushed sand into a pile, but a wave washed it away. \"Oh no!\" cried Sunny. A little girl named Maya saw him. \"Need help, little crab?\" she asked. Sunny clicked his claws. Together, they dug a moat and piled up wet sand. They used shells for windows and seaweed for flags. When they finished, it was the biggest castle on the beach! Sunny sat on the highest tower, watching the sunset, feeling like a king.",
+    "questions": [],
+    "coverImageUrl": "https://image.pollinations.ai/prompt/cute%20cartoon%20crab%20on%20a%20beach%20with%20a%20sandcastle%2C%20sunny%20day%2C%203d%20style",
+    "isInteractive": false,
+    "ageMin": 3,
+    "ageMax": 7,
+    "audioUrl": "",
+    "recommended": false,
+    "aiGenerated": true,
+    "difficultyLevel": 1,
+    "wordCount": 101,
+    "backgroundColor": "#FFFFFF"
   }
 ]

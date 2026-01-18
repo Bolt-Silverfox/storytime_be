@@ -90,6 +90,7 @@ export class StoryController {
   })
   @ApiQuery({ name: 'theme', required: false, type: String })
   @ApiQuery({ name: 'category', required: false, type: String })
+  @ApiQuery({ name: 'season', required: false, type: String })
   @ApiQuery({ name: 'recommended', required: false, type: String })
   @ApiQuery({ name: 'kidId', required: false, type: String })
   @ApiQuery({ name: 'age', required: false, type: String })
@@ -117,6 +118,7 @@ export class StoryController {
   async getStories(
     @Query('theme') theme?: string,
     @Query('category') category?: string,
+    @Query('season') season?: string,
     @Query('recommended') recommended?: string,
     @Query('kidId') kidId?: string,
     @Query('age') age?: string,
@@ -131,6 +133,7 @@ export class StoryController {
     return this.storyService.getStories({
       theme,
       category,
+      season,
       recommended: recommended === 'true',
       kidId,
       age: age ? parseInt(age, 10) : undefined,
@@ -146,8 +149,21 @@ export class StoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get parent homepage stories (Recommended, Seasonal, Top Liked)' })
   @ApiResponse({ status: 200, description: 'Homepage stories retrieved successfully.' })
-  async getParentHomepage(@Req() req: AuthenticatedRequest) {
-    return this.storyService.getHomePageStories(req.authUserData.userId);
+  @ApiQuery({ name: 'limitRecommended', required: false, type: Number })
+  @ApiQuery({ name: 'limitSeasonal', required: false, type: Number })
+  @ApiQuery({ name: 'limitTopLiked', required: false, type: Number })
+  async getParentHomepage(
+    @Req() req: AuthenticatedRequest,
+    @Query('limitRecommended', new DefaultValuePipe(5), ParseIntPipe) limitRecommended: number,
+    @Query('limitSeasonal', new DefaultValuePipe(5), ParseIntPipe) limitSeasonal: number,
+    @Query('limitTopLiked', new DefaultValuePipe(5), ParseIntPipe) limitTopLiked: number,
+  ) {
+    return this.storyService.getHomePageStories(
+      req.authUserData.userId,
+      limitRecommended,
+      limitSeasonal,
+      limitTopLiked,
+    );
   }
 
   @Get('categories')
@@ -203,6 +219,17 @@ export class StoryController {
   })
   async getThemes() {
     return this.storyService.getThemes();
+  }
+
+  @Get('seasons')
+  @ApiOperation({ summary: 'Get all seasons' })
+  @ApiOkResponse({
+    description: 'List of seasons',
+    type: ThemeDto, // Using ThemeDto struct or similar since SeasonDto is simple
+    isArray: true,
+  })
+  async getSeasons() {
+    return this.storyService.getSeasons();
   }
 
   @Post()
@@ -836,6 +863,7 @@ export class StoryController {
         body.kidId,
         body.themes,
         body.categories,
+        body.seasonIds,
         body.kidName,
       );
     }
@@ -849,6 +877,7 @@ export class StoryController {
       language: body.language || 'English',
       kidName: body.kidName,
       additionalContext: body.additionalContext,
+      seasonIds: body.seasonIds,
     };
 
     return this.storyService.generateStoryWithAI(options);
