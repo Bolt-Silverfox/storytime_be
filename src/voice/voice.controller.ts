@@ -148,8 +148,8 @@ export class VoiceController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List all available ElevenLabs voices' })
-  async listAvailableVoices(): Promise<any[]> {
-    return this.storyService.fetchAvailableVoices(); // reuse method
+  async listAvailableVoices(): Promise<VoiceResponseDto[]> {
+    return this.voiceService.fetchAvailableVoices();
   }
 
   // --- Text to Speech ---

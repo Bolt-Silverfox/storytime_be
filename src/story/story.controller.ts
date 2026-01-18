@@ -67,6 +67,7 @@ import {
   StoryContentAudioDto,
 } from '../voice/voice.dto';
 import { StoryService } from './story.service';
+import { VoiceService } from '../voice/voice.service';
 import { TextToSpeechService } from './text-to-speech.service';
 
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
@@ -80,6 +81,7 @@ export class StoryController {
   private readonly logger = new Logger(StoryController.name);
   constructor(
     private readonly storyService: StoryService,
+    private readonly voiceService: VoiceService,
     private readonly textToSpeechService: TextToSpeechService,
   ) { }
 
@@ -761,7 +763,7 @@ export class StoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List all available ElevenLabs voices' })
   async listAvailableVoices(): Promise<any[]> {
-    return this.storyService.fetchAvailableVoices();
+    return this.voiceService.fetchAvailableVoices();
   }
 
   // --- Story Path / Choice Tracking ---

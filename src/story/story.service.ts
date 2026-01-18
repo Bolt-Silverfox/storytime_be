@@ -708,7 +708,7 @@ export class StoryService {
       include: { preferredVoice: true },
     });
     if (!user) throw new NotFoundException('User not found');
-    if (!user.preferredVoice) return { id: '', name: '', type: '', url: undefined, elevenLabsVoiceId: undefined };
+    if (!user.preferredVoice) return { id: '', name: '', type: '', previewUrl: undefined, elevenLabsVoiceId: undefined };
     return this.toVoiceResponse(user.preferredVoice);
   }
 
@@ -717,7 +717,8 @@ export class StoryService {
       id: voice.id,
       name: voice.name,
       type: voice.type,
-      url: voice.url ?? undefined,
+      previewUrl: voice.url ?? undefined, // Key Changed
+      voiceAvatar: voice.voiceAvatar ?? undefined,
       elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
     };
   }
@@ -786,10 +787,6 @@ export class StoryService {
   async getStoryPathById(id: string): Promise<StoryPathDto | null> {
     const path = await this.prisma.storyPath.findUnique({ where: { id } });
     return path ? this.toStoryPathDto(path) : null;
-  }
-
-  async fetchAvailableVoices(): Promise<any[]> {
-    return Object.keys(VoiceType).map((key) => ({ voice_id: key, name: key }));
   }
 
   async getCategories(): Promise<CategoryDto[]> {
