@@ -1,19 +1,25 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '../prisma/prisma.service';
+import { firstValueFrom } from 'rxjs';
 import {
   CreateElevenLabsVoiceDto,
   SetPreferredVoiceDto,
   UploadVoiceDto,
   VoiceResponseDto,
   VOICE_CONFIG,
+  VoiceSourceType,
 } from './voice.dto';
 
 @Injectable()
 export class VoiceService {
+  private readonly logger = new Logger(VoiceService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly httpService: HttpService,
   ) { }
 
   // --- Upload a new voice file ---
@@ -26,7 +32,7 @@ export class VoiceService {
       data: {
         userId,
         name: dto.name,
-        type: 'uploaded',
+        type: VoiceSourceType.UPLOADED,
         url: fileUrl,
       },
     });
@@ -42,7 +48,7 @@ export class VoiceService {
       data: {
         userId,
         name: dto.name,
-        type: 'elevenlabs',
+        type: VoiceSourceType.ELEVENLABS,
         elevenLabsVoiceId: dto.elevenLabsVoiceId,
       },
     });
@@ -78,25 +84,46 @@ export class VoiceService {
       include: { preferredVoice: true },
     });
 
-    if (!user || !user.preferredVoice)
+    if (!user || !user.preferredVoice) {
       return {
         id: '',
         name: '',
         type: '',
-        url: undefined,
+        previewUrl: undefined,
+        voiceAvatar: undefined,
         elevenLabsVoiceId: undefined,
       };
+    }
 
     return this.toVoiceResponse(user.preferredVoice);
   }
 
   // --- Helper to map Prisma Voice to VoiceResponseDto ---
   private toVoiceResponse(voice: any): VoiceResponseDto {
+    let previewUrl = voice.url ?? undefined;
+    let voiceAvatar = voice.voiceAvatar ?? undefined; // Assuming DB has this field now, or null
+
+    // If it's an uploaded voice, the 'url' is the preview/audio itself
+    if (voice.type === VoiceSourceType.UPLOADED) {
+      previewUrl = voice.url;
+      // Use a default avatar for uploaded voices if none exists
+      if (!voiceAvatar) {
+        voiceAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${voice.name}`;
+      }
+    } else if (voice.type === VoiceSourceType.ELEVENLABS) {
+      // For ElevenLabs, 'url' might be the preview URL if we saved it
+      previewUrl = voice.url;
+      if (!voiceAvatar) {
+        voiceAvatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${voice.elevenLabsVoiceId}`;
+      }
+    }
+
     return {
       id: voice.id,
       name: voice.name,
       type: voice.type,
-      url: voice.url ?? undefined,
+      previewUrl,
+      voiceAvatar,
       elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
     };
   }
@@ -121,44 +148,41 @@ export class VoiceService {
     let voiceName = 'Imported ElevenLabs Voice';
     let voicePreviewUrl: string | null = null;
 
-    console.log(`Fetching voice ${elevenLabsId} from ElevenLabs API...`);
+    this.logger.log(`Fetching voice ${elevenLabsId} from ElevenLabs API...`);
 
     try {
       const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
-      const response = await fetch(
-        `https://api.elevenlabs.io/v1/voices/${elevenLabsId}`,
-        {
-          method: 'GET',
-          headers: {
-            'xi-api-key': apiKey ?? '',
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `https://api.elevenlabs.io/v1/voices/${elevenLabsId}`,
+          {
+            headers: {
+              'xi-api-key': apiKey ?? '',
+            },
           },
-        },
+        ),
       );
 
-      if (response.ok) {
-        const data = await response.json();
+      if (response.status === 200) {
+        const data = response.data;
         voiceName = data.name; // e.g., "Harry"
         voicePreviewUrl = data.preview_url; // e.g., "https://..."
-      } else {
-        console.warn(
-          `ElevenLabs API returned ${response.status}: ${response.statusText}`,
-        );
       }
     } catch (error) {
-      console.warn(
-        'Failed to fetch voice details from ElevenLabs, using fallback.',
-        error,
+      this.logger.warn(
+        `Failed to fetch voice details from ElevenLabs: ${error.message}`,
       );
     }
 
     // 3. Fallback: If API failed, check if it's a known voice just to fix the name
     if (voiceName === 'Imported ElevenLabs Voice') {
       const knownKey = Object.keys(VOICE_CONFIG).find(
-        (key) => VOICE_CONFIG[key as keyof typeof VOICE_CONFIG].model === elevenLabsId,
+        (key) => VOICE_CONFIG[key as keyof typeof VOICE_CONFIG].elevenLabsId === elevenLabsId, // Changed to match ID not model
       );
       if (knownKey) {
-        voiceName =
-          knownKey.charAt(0).toUpperCase() + knownKey.slice(1).toLowerCase();
+        const config = VOICE_CONFIG[knownKey as keyof typeof VOICE_CONFIG];
+        voiceName = config.name || knownKey.charAt(0).toUpperCase() + knownKey.slice(1).toLowerCase();
+        if (!voicePreviewUrl) voicePreviewUrl = config.previewUrl || null;
       }
     }
 
@@ -167,12 +191,26 @@ export class VoiceService {
       data: {
         userId: userId,
         name: voiceName,
-        type: 'elevenlabs',
+        type: VoiceSourceType.ELEVENLABS,
         elevenLabsVoiceId: elevenLabsId,
         url: voicePreviewUrl,
+        // voiceAvatar could be set here if we fetched it, or let it default in retrieval
       },
     });
 
     return { id: newVoice.id };
+  }
+
+  // Moved from StoryService and updated
+  async fetchAvailableVoices(): Promise<VoiceResponseDto[]> {
+    // Return the system voices defined in configuration
+    return Object.values(VOICE_CONFIG).map((config) => ({
+      id: config.id,
+      name: config.name,
+      type: VoiceSourceType.ELEVENLABS,
+      previewUrl: config.previewUrl,
+      voiceAvatar: config.voiceAvatar,
+      elevenLabsVoiceId: config.elevenLabsId,
+    }));
   }
 }

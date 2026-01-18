@@ -1,6 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
+export enum VoiceSourceType {
+  UPLOADED = 'uploaded',
+  ELEVENLABS = 'elevenlabs',
+}
+
 export class UploadVoiceDto {
   @ApiProperty({ description: 'Voice name', example: 'Dad Voice' })
   @IsString()
@@ -36,11 +41,14 @@ export class VoiceResponseDto {
   @ApiProperty()
   name: string;
 
-  @ApiProperty({ description: "'uploaded' or 'elevenlabs'" })
+  @ApiProperty({ description: "'uploaded' or 'elevenlabs'", enum: VoiceSourceType })
   type: string;
 
   @ApiProperty({ required: false })
-  url?: string;
+  previewUrl?: string; // Was previously 'url'
+
+  @ApiProperty({ required: false })
+  voiceAvatar?: string;
 
   @ApiProperty({ required: false })
   elevenLabsVoiceId?: string;
@@ -57,34 +65,58 @@ export enum VoiceType {
 
 export const VOICE_CONFIG = {
   [VoiceType.MILO]: {
+    id: VoiceType.MILO,
+    name: 'Milo',
     model: 'aura-orion-en',
     gender: 'Male',
     elevenLabsId: 'pNInz6obpgDQGcFmaJgB', // Adam
+    previewUrl: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/pNInz6obpgDQGcFmaJgB/4d05092a-3e4b-4b13-8d00-349f2b5a0378.mp3',
+    voiceAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Milo',
   },
   [VoiceType.BELLA]: {
+    id: VoiceType.BELLA,
+    name: 'Bella',
     model: 'aura-asteria-en',
     gender: 'Female',
     elevenLabsId: '21m00Tcm4TlvDq8ikWAM', // Rachel
+    previewUrl: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/21m00Tcm4TlvDq8ikWAM/6504a520-20f4-41d9-813f-f952c42ab82a.mp3',
+    voiceAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Bella',
   },
   [VoiceType.COSMO]: {
+    id: VoiceType.COSMO,
+    name: 'Cosmo',
     model: 'aura-arcas-en',
     gender: 'Male',
     elevenLabsId: 'ErXwobaYiN019PkySvjV', // Antoni
+    previewUrl: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/ErXwobaYiN019PkySvjV/d9213123-cb20-424a-b51c-6581b2eb5912.mp3',
+    voiceAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Cosmo',
   },
   [VoiceType.NIMBUS]: {
+    id: VoiceType.NIMBUS,
+    name: 'Nimbus',
     model: 'aura-luna-en',
     gender: 'Female',
     elevenLabsId: 'MF3mGyEYCl7XYWbV9V6O', // Elli
+    previewUrl: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/MF3mGyEYCl7XYWbV9V6O/d9ff6042-3765-4d76-bb50-138fa099b2c3.mp3',
+    voiceAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Nimbus',
   },
   [VoiceType.GRANDPA_JO]: {
+    id: VoiceType.GRANDPA_JO,
+    name: 'Grandpa Jo',
     model: 'aura-angus-en',
     gender: 'Male',
     elevenLabsId: 'yoZ06aMxZJJ28mfd3POQ', // Sam
+    previewUrl: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/yoZ06aMxZJJ28mfd3POQ/1c4d417c-45dd-430b-980b-465451cb0d43.mp3',
+    voiceAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=GrandpaJo',
   },
   [VoiceType.CHIP]: {
+    id: VoiceType.CHIP,
+    name: 'Chip',
     model: 'aura-perseus-en',
     gender: 'Male',
     elevenLabsId: 'TxGEqnHWrfWFTfGW9XjX', // Josh
+    previewUrl: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/TxGEqnHWrfWFTfGW9XjX/3e0b379d-640a-48d1-8888-2178ee770178.mp3',
+    voiceAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Chip',
   },
 };
 
