@@ -20,6 +20,8 @@ import {
   RecommendationResponseDto,
   RecommendationsStatsDto,
   RestrictStoryDto,
+  UserStoryProgressDto,
+  UserStoryProgressResponseDto,
 } from './story.dto';
 import {
   UploadVoiceDto,
@@ -536,6 +538,95 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
     if (!story) throw new NotFoundException('Story not found');
     return await this.prisma.storyProgress.findUnique({ where: { kidId_storyId: { kidId, storyId } } });
+  }
+
+  // --- USER STORY PROGRESS (Parent/User - non-kid specific) ---
+
+  async setUserProgress(userId: string, dto: UserStoryProgressDto): Promise<UserStoryProgressResponseDto> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
+    if (!user) throw new NotFoundException('User not found');
+    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    if (!story) throw new NotFoundException('Story not found');
+
+    const existing = await this.prisma.userStoryProgress.findUnique({
+      where: { userId_storyId: { userId, storyId: dto.storyId } },
+    });
+
+    const sessionTime = dto.sessionTime || 0;
+    const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
+
+    const result = await this.prisma.userStoryProgress.upsert({
+      where: { userId_storyId: { userId, storyId: dto.storyId } },
+      update: {
+        progress: dto.progress,
+        completed: dto.completed ?? false,
+        lastAccessed: new Date(),
+        totalTimeSpent: newTotalTime,
+      },
+      create: {
+        userId,
+        storyId: dto.storyId,
+        progress: dto.progress,
+        completed: dto.completed ?? false,
+        totalTimeSpent: sessionTime,
+      },
+    });
+
+    return {
+      id: result.id,
+      storyId: result.storyId,
+      progress: result.progress,
+      completed: result.completed,
+      lastAccessed: result.lastAccessed,
+      totalTimeSpent: result.totalTimeSpent,
+    };
+  }
+
+  async getUserProgress(userId: string, storyId: string): Promise<UserStoryProgressResponseDto | null> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
+    if (!user) throw new NotFoundException('User not found');
+    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
+    if (!story) throw new NotFoundException('Story not found');
+
+    const progress = await this.prisma.userStoryProgress.findUnique({
+      where: { userId_storyId: { userId, storyId } },
+    });
+
+    if (!progress) return null;
+
+    return {
+      id: progress.id,
+      storyId: progress.storyId,
+      progress: progress.progress,
+      completed: progress.completed,
+      lastAccessed: progress.lastAccessed,
+      totalTimeSpent: progress.totalTimeSpent,
+    };
+  }
+
+  async getUserContinueReading(userId: string) {
+    const progressRecords = await this.prisma.userStoryProgress.findMany({
+      where: { userId, progress: { gt: 0 }, completed: false, isDeleted: false },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
+
+    return progressRecords.map((record) => ({
+      ...record.story,
+      progress: record.progress,
+      totalTimeSpent: record.totalTimeSpent,
+      lastAccessed: record.lastAccessed,
+    }));
+  }
+
+  async getUserCompletedStories(userId: string) {
+    const records = await this.prisma.userStoryProgress.findMany({
+      where: { userId, completed: true, isDeleted: false },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
+
+    return records.map((r) => r.story);
   }
 
   async restrictStory(dto: RestrictStoryDto & { userId: string }) {
