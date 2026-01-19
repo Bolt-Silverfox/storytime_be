@@ -236,6 +236,48 @@ export class StoryProgressDto {
   completed?: boolean;
 }
 
+export class UserStoryProgressDto {
+  @ApiProperty()
+  @IsUUID()
+  storyId: string;
+
+  @ApiProperty()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  progress: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  completed?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  sessionTime?: number;
+}
+
+export class UserStoryProgressResponseDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  storyId: string;
+
+  @ApiProperty()
+  progress: number;
+
+  @ApiProperty()
+  completed: boolean;
+
+  @ApiProperty()
+  lastAccessed: Date;
+
+  @ApiProperty()
+  totalTimeSpent: number;
+}
+
 export class DailyChallengeDto {
   @ApiProperty()
   @IsUUID()
