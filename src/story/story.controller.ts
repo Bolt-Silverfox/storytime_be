@@ -57,6 +57,8 @@ import {
   StoryDto,
   StoryWithProgressDto,
   TopPickStoryDto,
+  UserStoryProgressDto,
+  UserStoryProgressResponseDto,
 } from './story.dto';
 import {
   CreateElevenLabsVoiceDto,
@@ -572,6 +574,60 @@ export class StoryController {
     @Param('storyId') storyId: string,
   ) {
     return this.storyService.getProgress(kidId, storyId);
+  }
+
+  // --- USER STORY PROGRESS (Parent/User - non-kid specific) ---
+
+  @Post('user/progress')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Record story progress for authenticated user (parent account)' })
+  @ApiBody({ type: UserStoryProgressDto })
+  @ApiOkResponse({ description: 'Progress recorded', type: UserStoryProgressResponseDto })
+  @ApiResponse({ status: 400, description: 'Bad Request', type: ErrorResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Not Found', type: ErrorResponseDto })
+  async setUserProgress(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: UserStoryProgressDto,
+  ) {
+    return this.storyService.setUserProgress(req.authUserData.userId, body);
+  }
+
+  @Get('user/progress/:storyId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get story progress for authenticated user' })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiOkResponse({ description: 'Progress for story', type: UserStoryProgressResponseDto })
+  @ApiResponse({ status: 400, description: 'Bad Request', type: ErrorResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Not Found', type: ErrorResponseDto })
+  async getUserProgress(
+    @Req() req: AuthenticatedRequest,
+    @Param('storyId') storyId: string,
+  ) {
+    return this.storyService.getUserProgress(req.authUserData.userId, storyId);
+  }
+
+  @Get('user/library/continue-reading')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get in-progress stories for authenticated user' })
+  @ApiOkResponse({ description: 'List of in-progress stories', type: StoryWithProgressDto, isArray: true })
+  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  async getUserContinueReading(@Req() req: AuthenticatedRequest) {
+    return this.storyService.getUserContinueReading(req.authUserData.userId);
+  }
+
+  @Get('user/library/completed')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get completed stories for authenticated user' })
+  @ApiOkResponse({ description: 'List of completed stories', type: StoryDto, isArray: true })
+  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  async getUserCompletedStories(@Req() req: AuthenticatedRequest) {
+    return this.storyService.getUserCompletedStories(req.authUserData.userId);
   }
 
   // --- Daily Challenge ---
