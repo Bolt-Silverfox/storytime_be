@@ -50,6 +50,7 @@ model User {
   Token                   Token[]
   kids                    Kid[]
   parentFavorites         ParentFavorite[]
+  userStoryProgress       UserStoryProgress[]
   voices                  Voice[]
   preferredVoiceId        String?
   preferredVoice          Voice?                   @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
@@ -264,6 +265,7 @@ model Story {
   favorites             Favorite[]
   parentFavorites       ParentFavorite[]
   progresses            StoryProgress[]
+  userProgress          UserStoryProgress[]
   dailyChallenges       DailyChallenge[]
   paths                 StoryPath[]
   categories            Category[]               @relation("StoryCategories")
@@ -366,6 +368,24 @@ model StoryProgress {
   @@unique([kidId, storyId])
   @@index([isDeleted])
   @@map("story_progress")
+}
+
+model UserStoryProgress {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId        String
+  story          Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  progress       Float     @default(0)
+  completed      Boolean   @default(false)
+  lastAccessed   DateTime  @default(now())
+  totalTimeSpent Int       @default(0)
+  isDeleted      Boolean   @default(false)
+  deletedAt      DateTime?
+
+  @@unique([userId, storyId])
+  @@index([isDeleted])
+  @@map("user_story_progress")
 }
 
 // -------------------------
