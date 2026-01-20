@@ -661,7 +661,7 @@ export class StoryService {
 
 
 
-  async getStoryAudioUrl(storyId: string, voiceId: VoiceType | string): Promise<string> {
+  async getStoryAudioUrl(storyId: string, voiceId: VoiceType | string, userId?: string): Promise<string> {
     const story = await this.prisma.story.findUnique({
       where: { id: storyId, isDeleted: false },
       select: { textContent: true },
@@ -678,6 +678,7 @@ export class StoryService {
       storyId,
       story?.textContent ?? '',
       voiceId,
+      userId,
     );
     await this.prisma.storyAudioCache.create({
       data: { storyId, voiceType: voiceId, audioUrl },

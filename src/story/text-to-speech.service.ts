@@ -6,6 +6,9 @@ import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provid
 import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';
 import { PrismaService } from '../prisma/prisma.service';
 
+import { VoiceQuotaService } from '../voice/voice-quota.service';
+import { VOICE_CONFIG_SETTINGS } from '../voice/voice.config';
+
 @Injectable()
 export class TextToSpeechService {
   private readonly logger = new Logger(TextToSpeechService.name);
@@ -15,18 +18,21 @@ export class TextToSpeechService {
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
     private readonly deepgramProvider: DeepgramTTSProvider,
     private readonly prisma: PrismaService,
+    private readonly voiceQuota: VoiceQuotaService,
   ) { }
 
   async textToSpeechCloudUrl(
     storyId: string,
     text: string,
     voicetype?: VoiceType | string, // Allow string (UUID)
+    userId?: string, // Added userId for quota tracking
   ): Promise<string> {
     const type = voicetype ?? DEFAULT_VOICE;
 
     // Resolve ElevenLabs ID
     let elevenLabsId: string | undefined;
     let model = 'aura-asteria-en'; // Default Deepgram model (Asteria)
+    let provider = 'deepgram'; // Default provider
 
     // Check if it's a known System Voice (Enum)
     if (Object.values(VoiceType).includes(type as VoiceType)) {
@@ -53,11 +59,33 @@ export class TextToSpeechService {
       }
     }
 
+    // Determine if we should use ElevenLabs based on ID presence AND Quota
+    let useElevenLabs = !!elevenLabsId;
+
+    if (useElevenLabs && userId) {
+      const allowed = await this.voiceQuota.checkUsage(userId);
+      if (!allowed) {
+        this.logger.log(`User ${userId} quota exceeded. Fallback to Deepgram.`);
+        useElevenLabs = false;
+        // Fallback to Deepgram model
+      }
+    } else if (useElevenLabs && !userId) {
+      this.logger.warn(`Anonymous request for ElevenLabs voice ${type}. Denying.`);
+      useElevenLabs = false;
+    }
+
     // Priority 1: ElevenLabs
-    if (elevenLabsId) {
+    if (useElevenLabs && elevenLabsId) {
       try {
-        this.logger.log(`Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${elevenLabsId})`);
-        const audioBuffer = await this.elevenLabsProvider.generateAudio(text, elevenLabsId);
+        const labsModel = VOICE_CONFIG_SETTINGS.MODELS.TURBO;
+        this.logger.log(`Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${elevenLabsId}) using model ${labsModel}`);
+        const audioBuffer = await this.elevenLabsProvider.generateAudio(text, elevenLabsId, labsModel);
+
+        // Increment usage
+        if (userId) {
+          await this.voiceQuota.incrementUsage(userId);
+        }
+
         return await this.uploadService.uploadAudioBuffer(
           audioBuffer,
           `story_${storyId}_elevenlabs_${Date.now()}.mp3`,
@@ -67,7 +95,11 @@ export class TextToSpeechService {
         // Proceed to fallback
       }
     } else {
-      this.logger.debug(`Skipping ElevenLabs: No ID configured for voice ${type}`);
+      if (elevenLabsId) {
+        this.logger.debug(`Skipping ElevenLabs: Quota exceeded or no user ID for voice ${type}`);
+      } else {
+        this.logger.debug(`Skipping ElevenLabs: No ID configured for voice ${type}`);
+      }
     }
 
     // Priority 2: Deepgram Fallback
