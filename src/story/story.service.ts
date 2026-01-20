@@ -20,13 +20,10 @@ import {
   RecommendationResponseDto,
   RecommendationsStatsDto,
   RestrictStoryDto,
+  UserStoryProgressDto,
+  UserStoryProgressResponseDto,
 } from './story.dto';
-import {
-  UploadVoiceDto,
-  CreateElevenLabsVoiceDto,
-  SetPreferredVoiceDto,
-  VoiceResponseDto,
-} from '../voice/voice.dto';
+
 import { UploadService } from '../upload/upload.service';
 import {
   StoryPath,
@@ -49,6 +46,7 @@ import {
 import { GeminiService, GenerateStoryOptions } from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { VoiceType } from '../voice/voice.dto';
+import { DEFAULT_VOICE } from '../voice/voice.constants';
 
 @Injectable()
 export class StoryService {
@@ -538,6 +536,102 @@ export class StoryService {
     return await this.prisma.storyProgress.findUnique({ where: { kidId_storyId: { kidId, storyId } } });
   }
 
+  // --- USER STORY PROGRESS (Parent/User - non-kid specific) ---
+
+  async setUserProgress(userId: string, dto: UserStoryProgressDto): Promise<UserStoryProgressResponseDto> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
+    if (!user) throw new NotFoundException('User not found');
+    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    if (!story) throw new NotFoundException('Story not found');
+
+    const existing = await this.prisma.userStoryProgress.findUnique({
+      where: { userId_storyId: { userId, storyId: dto.storyId } },
+    });
+
+    const sessionTime = dto.sessionTime || 0;
+    const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
+
+    const result = await this.prisma.userStoryProgress.upsert({
+      where: { userId_storyId: { userId, storyId: dto.storyId } },
+      update: {
+        progress: dto.progress,
+        completed: dto.completed ?? false,
+        lastAccessed: new Date(),
+        totalTimeSpent: newTotalTime,
+      },
+      create: {
+        userId,
+        storyId: dto.storyId,
+        progress: dto.progress,
+        completed: dto.completed ?? false,
+        totalTimeSpent: sessionTime,
+      },
+    });
+
+    return {
+      id: result.id,
+      storyId: result.storyId,
+      progress: result.progress,
+      completed: result.completed,
+      lastAccessed: result.lastAccessed,
+      totalTimeSpent: result.totalTimeSpent,
+    };
+  }
+
+  async getUserProgress(userId: string, storyId: string): Promise<UserStoryProgressResponseDto | null> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
+    if (!user) throw new NotFoundException('User not found');
+    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
+    if (!story) throw new NotFoundException('Story not found');
+
+    const progress = await this.prisma.userStoryProgress.findUnique({
+      where: { userId_storyId: { userId, storyId } },
+    });
+
+    if (!progress) return null;
+
+    return {
+      id: progress.id,
+      storyId: progress.storyId,
+      progress: progress.progress,
+      completed: progress.completed,
+      lastAccessed: progress.lastAccessed,
+      totalTimeSpent: progress.totalTimeSpent,
+    };
+  }
+
+  async getUserContinueReading(userId: string) {
+    const progressRecords = await this.prisma.userStoryProgress.findMany({
+      where: { userId, progress: { gt: 0 }, completed: false, isDeleted: false },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
+
+    return progressRecords.map((record) => ({
+      ...record.story,
+      progress: record.progress,
+      totalTimeSpent: record.totalTimeSpent,
+      lastAccessed: record.lastAccessed,
+    }));
+  }
+
+  async getUserCompletedStories(userId: string) {
+    const records = await this.prisma.userStoryProgress.findMany({
+      where: { userId, completed: true, isDeleted: false },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
+
+    return records.map((r) => r.story);
+  }
+
+  async removeFromUserLibrary(userId: string, storyId: string) {
+    return await this.prisma.$transaction([
+      this.prisma.parentFavorite.deleteMany({ where: { userId, storyId } }),
+      this.prisma.userStoryProgress.deleteMany({ where: { userId, storyId } }),
+    ]);
+  }
+
   async restrictStory(dto: RestrictStoryDto & { userId: string }) {
     const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
     if (!kid) throw new NotFoundException('Kid not found');
@@ -663,84 +757,29 @@ export class StoryService {
     return assignment ? this.toDailyChallengeAssignmentDto(assignment) : null;
   }
 
-  async uploadVoice(userId: string, fileUrl: string, dto: UploadVoiceDto): Promise<VoiceResponseDto> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    const voice = await this.prisma.voice.create({
-      data: { userId, name: dto.name, type: 'uploaded', url: fileUrl },
-    });
-    return this.toVoiceResponse(voice);
-  }
 
-  async createElevenLabsVoice(userId: string, dto: CreateElevenLabsVoiceDto): Promise<VoiceResponseDto> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    const voice = await this.prisma.voice.create({
-      data: { userId, name: dto.name, type: 'elevenlabs', elevenLabsVoiceId: dto.elevenLabsVoiceId },
-    });
-    return this.toVoiceResponse(voice);
-  }
 
-  async listVoices(userId: string): Promise<VoiceResponseDto[]> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    const voices = await this.prisma.voice.findMany({ where: { userId, isDeleted: false } });
-    return voices.map((v: Voice) => this.toVoiceResponse(v));
-  }
-
-  async setPreferredVoice(userId: string, dto: SetPreferredVoiceDto): Promise<any> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    if (dto.voiceId) {
-      const voice = await this.prisma.voice.findUnique({ where: { id: dto.voiceId, isDeleted: false } });
-      if (!voice) throw new NotFoundException('Voice not found');
-    }
-    const result = await this.prisma.user.update({
-      where: { id: userId },
-      data: { preferredVoiceId: dto.voiceId },
-    });
-    return { id: result.id, email: result.email, name: result.name, preferredVoice: result.preferredVoiceId };
-  }
-
-  async getPreferredVoice(userId: string): Promise<VoiceResponseDto | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-      include: { preferredVoice: true },
-    });
-    if (!user) throw new NotFoundException('User not found');
-    if (!user.preferredVoice) return { id: '', name: '', type: '', url: undefined, elevenLabsVoiceId: undefined };
-    return this.toVoiceResponse(user.preferredVoice);
-  }
-
-  private toVoiceResponse(voice: any): VoiceResponseDto {
-    return {
-      id: voice.id,
-      name: voice.name,
-      type: voice.type,
-      url: voice.url ?? undefined,
-      elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
-    };
-  }
-
-  async getStoryAudioUrl(storyId: string, voiceType: VoiceType): Promise<string> {
+  async getStoryAudioUrl(storyId: string, voiceId: VoiceType | string, userId?: string): Promise<string> {
     const story = await this.prisma.story.findUnique({
       where: { id: storyId, isDeleted: false },
       select: { textContent: true },
     });
     if (!story) throw new NotFoundException(`Story with ID ${storyId} not found`);
 
+    // voiceId can be an enum or a uuid string
     const cachedAudio = await this.prisma.storyAudioCache.findFirst({
-      where: { storyId, voiceType },
+      where: { storyId, voiceType: voiceId }, // Schema still calls it voiceType
     });
     if (cachedAudio) return cachedAudio.audioUrl;
 
     const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
       storyId,
       story?.textContent ?? '',
-      voiceType,
+      voiceId,
+      userId,
     );
     await this.prisma.storyAudioCache.create({
-      data: { storyId, voiceType, audioUrl },
+      data: { storyId, voiceType: voiceId, audioUrl },
     });
     return audioUrl;
   }
@@ -786,10 +825,6 @@ export class StoryService {
   async getStoryPathById(id: string): Promise<StoryPathDto | null> {
     const path = await this.prisma.storyPath.findUnique({ where: { id } });
     return path ? this.toStoryPathDto(path) : null;
-  }
-
-  async fetchAvailableVoices(): Promise<any[]> {
-    return Object.keys(VoiceType).map((key) => ({ voice_id: key, name: key }));
   }
 
   async getCategories(): Promise<CategoryDto[]> {
@@ -1131,7 +1166,7 @@ export class StoryService {
         const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
           story.id,
           story.textContent,
-          voiceType ?? VoiceType.MILO
+          voiceType ?? DEFAULT_VOICE
         );
 
         // Update story with audio URL

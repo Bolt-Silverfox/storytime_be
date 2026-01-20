@@ -15,39 +15,59 @@ model User {
   passwordHash            String
   name                    String?
   isEmailVerified         Boolean                   @default(false)
+  role                    Role                      @default(parent)
+
+  // Profile & Settings
+  onboardingStatus        OnboardingStatus          @default(account_created)
+  googleId                String?                   @unique
+  pinHash                 String?
+  biometricsEnabled       Boolean                   @default(false)
+  avatarId                String?
+  preferredVoiceId        String?
+
+  // Timestamps & Soft Delete
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime                  @updatedAt
-  role                    Role                      @default(parent)
-  preferredVoiceId        String?
-  avatarId                String?
-  pinHash                 String?
-  googleId                String?                   @unique
-  deletedAt               DateTime?
   isDeleted               Boolean                   @default(false)
-  onboardingStatus        OnboardingStatus          @default(account_created)
-  biometricsEnabled       Boolean                   @default(false)
-  activityLogs            ActivityLog[]
+  deletedAt               DateTime?
+
+  // Relations
+  avatar                  Avatar?                   @relation(fields: [avatarId], references: [id])
+  profile                 Profile?
+  usage                   UserUsage?
+
+  // Auth
+  auth                    Session[]
+  Token                   Token[]
+
+  // Family & Content
   kids                    Kid[]
-  notificationPreferences NotificationPreference[]
-  notifications           Notification[]
+  voices                  Voice[]
+  preferredVoice          Voice?                    @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
+  badges                  UserBadge[]
+  learningExpectations    UserLearningExpectation[]
+  preferredCategories     Category[]                @relation("UserPreferredCategories")
+  
+  // Activity & Progress
+  activityLogs            ActivityLog[]
+  userIps                 UserIP[]
+  userStoryProgress       UserStoryProgress[]
+
+  // Content Interactions
   parentFavorites         ParentFavorite[]
   parentRecommendations   ParentRecommendation[]
+  restrictedStories       RestrictedStory[]
+
+  // Notifications
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
+
+  // Payment & Support
+  subscriptions           Subscription[]
   paymentMethods          PaymentMethod[]
   paymentTransactions     PaymentTransaction[]
-  profile                 Profile?
-  restrictedStories       RestrictedStory[]
   Reward                  Reward[]
-  auth                    Session[]
-  subscriptions           Subscription[]
   supportTickets          SupportTicket[]
-  Token                   Token[]
-  badges                  UserBadge[]
-  userIps                 UserIP[]
-  learningExpectations    UserLearningExpectation[]
-  avatar                  Avatar?                   @relation(fields: [avatarId], references: [id])
-  preferredVoice          Voice?                    @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
-  voices                  Voice[]
-  preferredCategories     Category[]                @relation("UserPreferredCategories")
 
   @@index([isDeleted])
   @@map("users")
@@ -201,32 +221,45 @@ model Story {
   ageMax                Int
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
+  
+  // Content & Metadata
   recommended           Boolean                @default(false)
   textContent           String?
   aiGenerated           Boolean                @default(false)
   difficultyLevel       Int                    @default(1)
   wordCount             Int                    @default(0)
-  deletedAt             DateTime?
-  isDeleted             Boolean                @default(false)
-  creatorKidId          String?
   backgroundColor       String                 @default("#5E3A54")
   durationSeconds       Int?
+  
+  // Soft Delete
+  deletedAt             DateTime?
+  isDeleted             Boolean                @default(false)
+  
+  // Relationships
+  creatorKidId          String?
+  creatorKid            Kid?                     @relation("CreatedStories", fields: [creatorKidId], references: [id])
+  
+  // Collections/Relations
   StoryThemes           StoryThemes[]
+  categories            Category[]               @relation("StoryCategories")
+  seasons               Season[]                 @relation("StorySeasons")
+  
+  // Interactions & Progress
   dailyChallenges       DailyChallenge[]
   downloads             DownloadedStory[]
   favorites             Favorite[]
   parentFavorites       ParentFavorite[]
+  progresses            StoryProgress[]
+  userProgress          UserStoryProgress[]
   parentRecommendations ParentRecommendation[]
   restrictedStories     RestrictedStory[]
-  creatorKid            Kid?                   @relation("CreatedStories", fields: [creatorKidId], references: [id])
+  
+  // Structure
   storyAudioCaches      StoryAudioCache[]
+  questions             StoryQuestion[]
   branches              StoryBranch[]
   images                StoryImage[]
   paths                 StoryPath[]
-  progresses            StoryProgress[]
-  questions             StoryQuestion[]
-  categories            Category[]             @relation("StoryCategories")
-  seasons               Season[]               @relation("StorySeasons")
 
   @@index([isDeleted])
   @@map("stories")
@@ -311,6 +344,27 @@ model StoryProgress {
   @@map("story_progress")
 }
 
+model UserStoryProgress {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId        String
+  story          Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  progress       Float     @default(0)
+  completed      Boolean   @default(false)
+  lastAccessed   DateTime  @default(now())
+  totalTimeSpent Int       @default(0)
+  isDeleted      Boolean   @default(false)
+  deletedAt      DateTime?
+
+  @@unique([userId, storyId])
+  @@index([isDeleted])
+  @@map("user_story_progress")
+}
+
+// -------------------------
+// PAYMENT MODELS (RESTORED)
+// -------------------------
 model Subscription {
   id        String    @id @default(uuid())
   userId    String
@@ -394,19 +448,21 @@ model DailyChallenge {
 }
 
 model Voice {
-  id                String    @id @default(uuid())
-  userId            String?
-  name              String
-  type              String
-  url               String?
-  elevenLabsVoiceId String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  deletedAt         DateTime?
-  isDeleted         Boolean   @default(false)
-  kidsPreferring    Kid[]     @relation("KidPreferredVoice")
-  usersPreferring   User[]    @relation("PreferredVoice")
-  user              User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String    @id @default(uuid())
+  userId              String?
+  user                User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  type                String
+  url                 String?
+  elevenLabsVoiceId   String?
+  voiceAvatar         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  // SOFT DELETE FIELDS
+  isDeleted           Boolean   @default(false)
+  deletedAt           DateTime?
+  usersPreferring     User[]    @relation("PreferredVoice")
+  kidsPreferring      Kid[]     @relation("KidPreferredVoice")
 
   @@index([name])
   @@index([isDeleted])
@@ -891,4 +947,18 @@ enum OnboardingStatus {
   email_verified
   profile_setup
   pin_setup
+}
+// -------------------------
+// USAGE TRACKING
+// -------------------------
+model UserUsage {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  elevenLabsCount   Int      @default(0)
+  currentMonth      String   // Format: "YYYY-MM" to track resets
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("user_usages")
 }

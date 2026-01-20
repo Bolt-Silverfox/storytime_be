@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { HttpModule } from '@nestjs/axios';
 import { AuthModule } from 'src/auth/auth.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { StoryModule } from '../story/story.module';
@@ -14,10 +15,12 @@ import { DeepgramSTTProvider } from './providers/deepgram-stt.provider';
 import { SSMLFormatter } from './utils/ssml-formatter';
 import { TextChunker } from './utils/text-chunker';
 import { StreamConverter } from './utils/stream-converter';
+import { VoiceQuotaService } from './voice-quota.service';
 
 @Module({
   imports: [
     AuthModule,
+    HttpModule,
     forwardRef(() => StoryModule),
   ],
   controllers: [VoiceController],
@@ -34,6 +37,7 @@ import { StreamConverter } from './utils/stream-converter';
     SSMLFormatter,
     TextChunker,
     StreamConverter,
+    VoiceQuotaService,
   ],
   exports: [
     VoiceService,

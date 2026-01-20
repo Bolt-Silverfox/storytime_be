@@ -2,7 +2,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TextToSpeechService } from './text-to-speech.service';
 import { UploadService } from '../upload/upload.service';
-import { VoiceType, VOICE_CONFIG } from '../voice/voice.dto';
+import { VoiceType } from '../voice/voice.dto';
+import { VOICE_CONFIG } from '../voice/voice.constants';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';
 
@@ -56,7 +57,7 @@ describe('TextToSpeechService', () => {
     describe('textToSpeechCloudUrl', () => {
         const storyId = 'story-123';
         const text = 'Once upon a time';
-        const voiceType = VoiceType.MILO;
+        const voiceType = VoiceType.CHARLIE;
 
         it('should prioritize ElevenLabs and return url on success', async () => {
             mockElevenLabsGenerate.mockResolvedValue(Buffer.from('eleven-audio'));
