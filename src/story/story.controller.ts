@@ -61,14 +61,13 @@ import {
   UserStoryProgressResponseDto,
 } from './story.dto';
 import {
-  CreateElevenLabsVoiceDto,
-  SetPreferredVoiceDto,
-  UploadVoiceDto,
-  VoiceResponseDto,
+
   VoiceType,
   StoryContentAudioDto,
 } from '../voice/voice.dto';
+import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { StoryService } from './story.service';
+import { VoiceService } from '../voice/voice.service';
 import { TextToSpeechService } from './text-to-speech.service';
 
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
@@ -82,6 +81,7 @@ export class StoryController {
   private readonly logger = new Logger(StoryController.name);
   constructor(
     private readonly storyService: StoryService,
+    private readonly voiceService: VoiceService,
     private readonly textToSpeechService: TextToSpeechService,
   ) { }
 
@@ -747,78 +747,7 @@ export class StoryController {
     );
   }
 
-  // --- Voices ---
-  @Post('voices/upload')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @UseInterceptors(FileInterceptor('file'))
-  @ApiOperation({ summary: 'Upload a custom voice (audio file)' })
-  async uploadVoice(
-    @Req() req: AuthenticatedRequest,
-    @UploadedFile() file: Express.Multer.File,
-    @Body() body: UploadVoiceDto,
-  ): Promise<VoiceResponseDto> {
-    // Upload file to Cloudinary
-    const url = await this.storyService.uploadService.uploadFile(file);
-    return this.storyService.uploadVoice(
-      req.authUserData.userId,
-      url.secure_url,
-      body,
-    );
-  }
 
-  @Post('voices/elevenlabs')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Register a custom ElevenLabs voice' })
-  async createElevenLabsVoice(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: CreateElevenLabsVoiceDto,
-  ): Promise<VoiceResponseDto> {
-    return this.storyService.createElevenLabsVoice(
-      req.authUserData.userId,
-      body,
-    );
-  }
-
-  @Get('voices')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all voices for the user' })
-  async listVoices(
-    @Req() req: AuthenticatedRequest,
-  ): Promise<VoiceResponseDto[]> {
-    return this.storyService.listVoices(req.authUserData.userId);
-  }
-
-  @Patch('voices/preferred')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Set preferred voice for the user' })
-  async setPreferredVoice(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: SetPreferredVoiceDto,
-  ): Promise<void> {
-    return this.storyService.setPreferredVoice(req.authUserData.userId, body);
-  }
-
-  @Get('voices/preferred')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get preferred voice for the user' })
-  async getPreferredVoice(
-    @Req() req: AuthenticatedRequest,
-  ): Promise<VoiceResponseDto | null> {
-    return this.storyService.getPreferredVoice(req.authUserData.userId);
-  }
-
-  @Get('voices/available')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all available ElevenLabs voices' })
-  async listAvailableVoices(): Promise<any[]> {
-    return this.storyService.fetchAvailableVoices();
-  }
 
   // --- Story Path / Choice Tracking ---
   @Post('story-path/start')
@@ -854,42 +783,52 @@ export class StoryController {
   }
 
   @Get('story/audio/:id')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get audio for a story path by id' })
   @ApiParam({ name: 'id', type: String })
-  @ApiQuery({ name: 'voiceType', required: false, enum: VoiceType })
+  @ApiQuery({ name: 'voiceId', required: false, type: String, description: 'VoiceType enum value or Voice UUID' })
   @ApiResponse({ status: 200, type: StoryPathDto })
   async getStoryPathAudioById(
     @Param('id') id: string,
-    @Query('voiceType') voiceType?: VoiceType,
+    @Req() req: AuthenticatedRequest,
+    @Query('voiceId') voiceId?: VoiceType | string,
   ) {
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
-      voiceType ?? VoiceType.MILO,
+      voiceId ?? DEFAULT_VOICE,
+      req.authUserData.userId,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceType: voiceType || VoiceType.MILO,
+      voiceId: voiceId || DEFAULT_VOICE,
       statusCode: 200,
     };
   }
 
   @Post('story/audio')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get audio for a content' })
   @ApiResponse({ status: 200, type: StoryPathDto })
   @ApiBody({ type: StoryContentAudioDto })
-  async getContentAudio(@Body() dto: StoryContentAudioDto) {
+  async getContentAudio(
+    @Body() dto: StoryContentAudioDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
       randomUUID().toString(),
       dto.content,
-      dto.voiceType,
+      dto.voiceId,
+      req.authUserData.userId,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceType: dto.voiceType || VoiceType.MILO,
+      voiceId: dto.voiceId || DEFAULT_VOICE,
       statusCode: 200,
     };
   }

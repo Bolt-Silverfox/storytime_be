@@ -1,6 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
+export enum VoiceSourceType {
+  UPLOADED = 'uploaded',
+  ELEVENLABS = 'elevenlabs',
+}
+
 export class UploadVoiceDto {
   @ApiProperty({ description: 'Voice name', example: 'Dad Voice' })
   @IsString()
@@ -36,57 +41,29 @@ export class VoiceResponseDto {
   @ApiProperty()
   name: string;
 
-  @ApiProperty({ description: "'uploaded' or 'elevenlabs'" })
+  @ApiProperty({ description: "'uploaded' or 'elevenlabs'", enum: VoiceSourceType })
   type: string;
 
   @ApiProperty({ required: false })
-  url?: string;
+  previewUrl?: string;
+
+  @ApiProperty({ required: false })
+  voiceAvatar?: string;
 
   @ApiProperty({ required: false })
   elevenLabsVoiceId?: string;
 }
 
 export enum VoiceType {
-  MILO = 'MILO',
-  BELLA = 'BELLA',
-  COSMO = 'COSMO',
-  NIMBUS = 'NIMBUS',
-  GRANDPA_JO = 'GRANDPA_JO',
-  CHIP = 'CHIP',
+  CHARLIE = 'CHARLIE',
+  JESSICA = 'JESSICA',
+  WILL = 'WILL',
+  LILY = 'LILY',
+  BILL = 'BILL',
+  LAURA = 'LAURA',
 }
 
-export const VOICE_CONFIG = {
-  [VoiceType.MILO]: {
-    model: 'aura-orion-en',
-    gender: 'Male',
-    elevenLabsId: 'pNInz6obpgDQGcFmaJgB', // Adam
-  },
-  [VoiceType.BELLA]: {
-    model: 'aura-asteria-en',
-    gender: 'Female',
-    elevenLabsId: '21m00Tcm4TlvDq8ikWAM', // Rachel
-  },
-  [VoiceType.COSMO]: {
-    model: 'aura-arcas-en',
-    gender: 'Male',
-    elevenLabsId: 'ErXwobaYiN019PkySvjV', // Antoni
-  },
-  [VoiceType.NIMBUS]: {
-    model: 'aura-luna-en',
-    gender: 'Female',
-    elevenLabsId: 'MF3mGyEYCl7XYWbV9V6O', // Elli
-  },
-  [VoiceType.GRANDPA_JO]: {
-    model: 'aura-angus-en',
-    gender: 'Male',
-    elevenLabsId: 'yoZ06aMxZJJ28mfd3POQ', // Sam
-  },
-  [VoiceType.CHIP]: {
-    model: 'aura-perseus-en',
-    gender: 'Male',
-    elevenLabsId: 'TxGEqnHWrfWFTfGW9XjX', // Josh
-  },
-};
+
 
 export class StoryContentAudioDto {
   @ApiProperty({
@@ -100,10 +77,9 @@ export class StoryContentAudioDto {
   @ApiProperty({
     required: false,
     example: 'MILO',
-    description: 'Preferred voice to use for TTS',
-    enum: VoiceType,
+    description: 'Preferred voice ID (Enum value or UUID)',
+    type: 'string',
   })
   @IsOptional()
-  @IsEnum(VoiceType)
-  voiceType?: VoiceType;
+  voiceId?: VoiceType | string;
 }
