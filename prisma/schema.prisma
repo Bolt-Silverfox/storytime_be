@@ -59,6 +59,7 @@ model User {
   preferredCategories     Category[]               @relation("UserPreferredCategories")
   activityLogs            ActivityLog[]
   userIps                 UserIP[]
+  usage                   UserUsage? // Relation to usage tracking
   googleId                String?                  @unique
   //PAYMENT MODELS RESTORED
   subscriptions           Subscription[]
@@ -489,6 +490,7 @@ model Voice {
   type                String
   url                 String?
   elevenLabsVoiceId   String?
+  voiceAvatar         String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   // SOFT DELETE FIELDS
@@ -927,4 +929,19 @@ model RestrictedStory {
   @@unique([kidId, storyId])
   @@index([kidId])
   @@map("restricted_stories")
+}
+
+// -------------------------
+// USAGE TRACKING
+// -------------------------
+model UserUsage {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  elevenLabsCount   Int      @default(0)
+  currentMonth      String   // Format: "YYYY-MM" to track resets
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("user_usages")
 }

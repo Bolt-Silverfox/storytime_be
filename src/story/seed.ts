@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
-import { VOICE_CONFIG } from '../voice/voice.dto';
+import { VoiceType } from '../voice/voice.dto';
+import { VOICE_CONFIG } from '../voice/voice.constants';
 import { categories, defaultAgeGroups, systemAvatars, themes, learningExpectations, seasons } from '../../prisma/data';
 
 const prisma = new PrismaClient();
@@ -143,12 +144,25 @@ async function main() {
     const existingVoice = await prisma.voice.findFirst({
       where: { name: key },
     });
-    if (!existingVoice) {
+
+    const voiceData = {
+      elevenLabsVoiceId: config.elevenLabsId,
+      name: key,
+      type: 'elevenlabs',
+      voiceAvatar: config.voiceAvatar,
+      url: config.previewUrl,
+    };
+
+    if (existingVoice) {
+      await prisma.voice.update({
+        where: { id: existingVoice.id },
+        data: voiceData,
+      });
+    } else {
       await prisma.voice.create({
         data: {
-          elevenLabsVoiceId: config.model,
-          name: key,
-          type: 'deepgram',
+          ...voiceData,
+          userId: null,
         },
       });
     }

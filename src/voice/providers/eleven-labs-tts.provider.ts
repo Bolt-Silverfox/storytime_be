@@ -1,4 +1,4 @@
-import { ITextToSpeechProvider } from '../interfaces/speech-provider.interface';
+import { ITextToSpeechProvider, IVoiceCloningProvider } from '../interfaces/speech-provider.interface';
 import { ElevenLabsClient } from 'elevenlabs';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -6,7 +6,7 @@ import { Readable } from 'stream';
 import { StreamConverter } from '../utils/stream-converter';
 
 @Injectable()
-export class ElevenLabsTTSProvider implements ITextToSpeechProvider {
+export class ElevenLabsTTSProvider implements ITextToSpeechProvider, IVoiceCloningProvider {
     private readonly logger = new Logger(ElevenLabsTTSProvider.name);
     private client: ElevenLabsClient;
     public readonly name = 'ElevenLabs';
@@ -43,6 +43,29 @@ export class ElevenLabsTTSProvider implements ITextToSpeechProvider {
             return await this.converter.toBuffer(audioStream);
         } catch (error) {
             this.logger.error(`ElevenLabs generation failed: ${error.message}`);
+            throw error;
+        }
+    }
+
+
+    async addVoice(name: string, fileBuffer: Buffer): Promise<string> {
+        if (!this.client) {
+            throw new Error('ElevenLabs client is not initialized');
+        }
+
+        try {
+            this.logger.log(`Cloning voice "${name}"...`);
+            const blob = new Blob([new Uint8Array(fileBuffer)], { type: 'audio/mpeg' });
+
+            const response = await this.client.voices.add({
+                name,
+                files: [blob as any], // Cast to any because SDK types might be strict about File/Blob
+                description: 'Cloned via StoryTime App',
+            });
+
+            return response.voice_id;
+        } catch (error) {
+            this.logger.error(`ElevenLabs voice cloning failed: ${error.message}`);
             throw error;
         }
     }
