@@ -625,6 +625,13 @@ export class StoryService {
     return records.map((r) => r.story);
   }
 
+  async removeFromUserLibrary(userId: string, storyId: string) {
+    return await this.prisma.$transaction([
+      this.prisma.parentFavorite.deleteMany({ where: { userId, storyId } }),
+      this.prisma.userStoryProgress.deleteMany({ where: { userId, storyId } }),
+    ]);
+  }
+
   async restrictStory(dto: RestrictStoryDto & { userId: string }) {
     const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
     if (!kid) throw new NotFoundException('Kid not found');
