@@ -158,21 +158,21 @@ export class VoiceController {
   @Get('story/audio/:id')
   @ApiOperation({ summary: 'Generate audio for stored text using ID' })
   @ApiParam({ name: 'id', type: String })
-  @ApiQuery({ name: 'voiceType', required: false, enum: VoiceType })
+  @ApiQuery({ name: 'voiceId', required: false, type: String, description: 'VoiceType enum value or Voice UUID' })
   @ApiResponse({ status: 200, description: 'Audio generated successfully' })
   async getTextToSpeechById(
     @Param('id') id: string,
-    @Query('voiceType') voiceType?: VoiceType,
+    @Query('voiceId') voiceId?: VoiceType | string,
   ) {
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
-      voiceType ?? DEFAULT_VOICE,
+      voiceId ?? DEFAULT_VOICE,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceType: voiceType || DEFAULT_VOICE,
+      voiceId: voiceId || DEFAULT_VOICE,
       statusCode: 200,
     };
   }
@@ -185,13 +185,13 @@ export class VoiceController {
     const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
       randomUUID().toString(),
       dto.content,
-      dto.voiceType ?? DEFAULT_VOICE,
+      dto.voiceId ?? DEFAULT_VOICE,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceType: dto.voiceType || DEFAULT_VOICE,
+      voiceId: dto.voiceId || DEFAULT_VOICE,
       statusCode: 200,
     };
   }

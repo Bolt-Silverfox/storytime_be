@@ -77,10 +77,9 @@ export class StoryContentAudioDto {
   @ApiProperty({
     required: false,
     example: 'MILO',
-    description: 'Preferred voice to use for TTS',
-    enum: VoiceType,
+    description: 'Preferred voice ID (Enum value or UUID)',
+    type: 'string',
   })
   @IsOptional()
-  @IsEnum(VoiceType)
-  voiceType?: VoiceType;
+  voiceId?: VoiceType | string;
 }

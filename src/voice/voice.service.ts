@@ -167,7 +167,7 @@ export class VoiceService {
 
     if (existing) {
       return { id: existing.id };
-    }
+    } 
 
     // 2. Fetch details from ElevenLabs to get Name AND Preview URL
     let voiceName = 'Imported ElevenLabs Voice';
