@@ -29,21 +29,16 @@ export class VoiceService {
     userId: string,
     fileUrl: string,
     dto: UploadVoiceDto,
-    fileBuffer?: Buffer, // Pass buffer for cloning
+    fileBuffer?: Buffer,
   ): Promise<VoiceResponseDto> {
     let elevenLabsId = '';
 
-    // If fileBuffer is provided, clone voice with ElevenLabs
     if (fileBuffer) {
       try {
         elevenLabsId = await this.elevenLabsProvider.addVoice(dto.name, fileBuffer);
         this.logger.log(`Cloned voice ${dto.name} with ID ${elevenLabsId}`);
       } catch (error) {
         this.logger.warn(`Failed to clone voice with ElevenLabs: ${error.message}`);
-        // We continue without cloning, or throw? 
-        // Better to throw if cloning was the intent, but for now we might want to just save uploaded file.
-        // The user requested cloning, so we should probably error if it fails?
-        // "we would use the users cloned voice" -> implying cloning is required.
         throw new InternalServerErrorException('Voice cloning failed: ' + error.message);
       }
     }
@@ -52,9 +47,7 @@ export class VoiceService {
       data: {
         userId,
         name: dto.name,
-        type: VoiceSourceType.UPLOADED, // Or maybe we should use ELEVENLABS source type if it was cloned?
-        // Actually, if we cloned it, we should probably mark it as ELEVENLABS or keep UPLOADED but with ID
-        // Let's keep UPLOADED to know source, but store ID
+        type: VoiceSourceType.UPLOADED,
         url: fileUrl,
         elevenLabsVoiceId: elevenLabsId || null,
       },
