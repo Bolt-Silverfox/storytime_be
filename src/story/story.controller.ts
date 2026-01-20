@@ -727,17 +727,21 @@ export class StoryController {
   }
 
   @Get('story/audio/:id')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get audio for a story path by id' })
   @ApiParam({ name: 'id', type: String })
   @ApiQuery({ name: 'voiceId', required: false, type: String, description: 'VoiceType enum value or Voice UUID' })
   @ApiResponse({ status: 200, type: StoryPathDto })
   async getStoryPathAudioById(
     @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
     @Query('voiceId') voiceId?: VoiceType | string,
   ) {
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
       voiceId ?? DEFAULT_VOICE,
+      req.authUserData.userId,
     );
 
     return {
@@ -749,14 +753,20 @@ export class StoryController {
   }
 
   @Post('story/audio')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get audio for a content' })
   @ApiResponse({ status: 200, type: StoryPathDto })
   @ApiBody({ type: StoryContentAudioDto })
-  async getContentAudio(@Body() dto: StoryContentAudioDto) {
+  async getContentAudio(
+    @Body() dto: StoryContentAudioDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
       randomUUID().toString(),
       dto.content,
       dto.voiceId,
+      req.authUserData.userId,
     );
 
     return {

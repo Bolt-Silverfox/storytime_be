@@ -15,6 +15,7 @@ import { DeepgramSTTProvider } from './providers/deepgram-stt.provider';
 import { SSMLFormatter } from './utils/ssml-formatter';
 import { TextChunker } from './utils/text-chunker';
 import { StreamConverter } from './utils/stream-converter';
+import { VoiceQuotaService } from './voice-quota.service';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { StreamConverter } from './utils/stream-converter';
     SSMLFormatter,
     TextChunker,
     StreamConverter,
+    VoiceQuotaService,
   ],
   exports: [
     VoiceService,

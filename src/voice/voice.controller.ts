@@ -156,17 +156,21 @@ export class VoiceController {
 
   // --- Text to Speech ---
   @Get('story/audio/:id')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate audio for stored text using ID' })
   @ApiParam({ name: 'id', type: String })
   @ApiQuery({ name: 'voiceId', required: false, type: String, description: 'VoiceType enum value or Voice UUID' })
   @ApiResponse({ status: 200, description: 'Audio generated successfully' })
   async getTextToSpeechById(
     @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
     @Query('voiceId') voiceId?: VoiceType | string,
   ) {
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
       voiceId ?? DEFAULT_VOICE,
+      req.authUserData.userId,
     );
 
     return {
@@ -178,14 +182,20 @@ export class VoiceController {
   }
 
   @Post('story/audio')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Convert raw text to speech and return audio URL' })
   @ApiResponse({ status: 200, description: 'Audio generated successfully' })
   @ApiBody({ type: StoryContentAudioDto })
-  async textToSpeech(@Body() dto: StoryContentAudioDto) {
+  async textToSpeech(
+    @Body() dto: StoryContentAudioDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
       randomUUID().toString(),
       dto.content,
       dto.voiceId ?? DEFAULT_VOICE,
+      req.authUserData.userId,
     );
 
     return {
