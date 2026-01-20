@@ -3,7 +3,7 @@ import { VoiceType } from './voice.dto';
 export const DEFAULT_VOICE = VoiceType.CHARLIE;
 
 export const VOICE_AVATARS = {
-    [VoiceType.CHARLIE]: 'https://res.cloudinary.com/billmal/image/upload/v1768772687/storytime/voice_avatars/milo.png', // Keeping existing avatars for now unless user provides new ones
+    [VoiceType.CHARLIE]: 'https://res.cloudinary.com/billmal/image/upload/v1768772687/storytime/voice_avatars/milo.png',
     [VoiceType.JESSICA]: 'https://res.cloudinary.com/billmal/image/upload/v1768772688/storytime/voice_avatars/bella.png',
     [VoiceType.WILL]: 'https://res.cloudinary.com/billmal/image/upload/v1768772689/storytime/voice_avatars/cosmo.png',
     [VoiceType.LILY]: 'https://res.cloudinary.com/billmal/image/upload/v1768772690/storytime/voice_avatars/nimbus.png',
