@@ -630,6 +630,21 @@ export class StoryController {
     return this.storyService.getUserCompletedStories(req.authUserData.userId);
   }
 
+  @Delete('user/library/remove/:storyId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Remove story from user library (resets progress and favorites)' })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiOkResponse({ description: 'Story removed from library successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  async removeFromUserLibrary(
+    @Req() req: AuthenticatedRequest,
+    @Param('storyId') storyId: string,
+  ) {
+    await this.storyService.removeFromUserLibrary(req.authUserData.userId, storyId);
+    return { message: 'Story removed from library successfully' };
+  }
+
   // --- Daily Challenge ---
   @Post('daily-challenge')
   @ApiOperation({ summary: 'Set daily challenge' })
