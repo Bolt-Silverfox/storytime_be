@@ -9,7 +9,7 @@ import { EnvConfig } from '../config/env.validation';
 import * as nodemailer from 'nodemailer';
 import { NotificationRegistry, Notifications } from './notification.registry';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationPreference } from '@prisma/client';
+import { NotificationPreference, NotificationCategory as PrismaCategory } from '@prisma/client';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
@@ -58,6 +58,7 @@ export class NotificationService {
   async sendNotification(
     type: Notifications,
     data: Record<string, any>,
+    targetUserId?: string,
   ): Promise<{
     success: boolean;
     messageId?: string;
@@ -76,16 +77,28 @@ export class NotificationService {
 
       const template = await notification.getTemplate(data);
 
-      if (notification.medium !== 'email') {
-        throw new Error(`Medium ${notification.medium} not implemented`);
+      const payload: NotificationPayload = {
+        userId: targetUserId || (data.userId as string),
+        category: notification.category,
+        title: notification.subject,
+        body: template,
+        data: data,
+      };
+
+      // Map legacy medium to new channel
+      let channels: string[] = ['in_app'];
+      if (notification.medium === 'email') {
+        channels = ['email', 'in_app'];
       }
 
-      const resp = await this.sendEmail(
-        data?.email as string,
-        notification.subject,
-        template,
-      );
-      return resp;
+      const results = await this.sendViaProvider(payload, channels);
+
+      const success = results.some(r => r.success);
+      return {
+        success,
+        messageId: results.find(r => r.messageId)?.messageId,
+        error: results.find(r => !r.success)?.error,
+      };
     } catch (error) {
       this.logger.error(
         `Failed to send notification: ${error.message}`,
@@ -327,6 +340,64 @@ export class NotificationService {
    * Restore a soft deleted notification preference
    * @param id Notification preference ID
    */
+  async getInAppNotifications(
+    userId: string,
+    limit: number = 20,
+    offset: number = 0,
+    unreadOnly: boolean = false,
+  ) {
+    const where: any = {
+      userId,
+      isDeleted: false,
+    };
+
+    if (unreadOnly) {
+      where.isRead = false;
+    }
+
+    const [notifications, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where,
+        take: limit,
+        skip: offset,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.notification.count({ where }),
+    ]);
+
+    return {
+      notifications: notifications.map(n => ({
+        ...n,
+        category: n.category as PrismaCategory,
+      })),
+      total,
+    };
+  }
+
+  async markAsRead(userId: string, notificationIds: string[]) {
+    return this.prisma.notification.updateMany({
+      where: {
+        id: { in: notificationIds },
+        userId,
+      },
+      data: {
+        isRead: true,
+      },
+    });
+  }
+
+  async markAllAsRead(userId: string) {
+    return this.prisma.notification.updateMany({
+      where: {
+        userId,
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+      },
+    });
+  }
+
   async undoDelete(id: string): Promise<NotificationPreferenceDto> {
     const pref = await this.prisma.notificationPreference.findUnique({
       where: { id },
