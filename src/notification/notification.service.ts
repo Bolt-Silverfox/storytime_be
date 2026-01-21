@@ -15,16 +15,27 @@ import {
   UpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
 } from './notification.dto';
+import { InAppProvider } from './providers/in-app.provider';
+import { EmailProvider } from './providers/email.provider';
+import {
+  INotificationProvider,
+  NotificationPayload,
+  NotificationResult,
+} from './providers/notification-provider.interface';
 
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
   private transporter: nodemailer.Transporter;
+  private providers: Map<string, INotificationProvider>;
 
   constructor(
     private readonly configService: ConfigService<EnvConfig, true>,
     private readonly prisma: PrismaService,
+    private readonly inAppProvider: InAppProvider,
+    private readonly emailProvider: EmailProvider,
   ) {
+    // Initialize legacy email transporter (for backward compatibility)
     this.transporter = nodemailer.createTransport({
       host: this.configService.get('SMTP_HOST'),
       port: this.configService.get('SMTP_PORT') || 587,
@@ -33,10 +44,15 @@ export class NotificationService {
         user: this.configService.get('SMTP_USER'),
         pass: this.configService.get('SMTP_PASS'),
       },
-       tls: {
-      rejectUnauthorized: false,
-    },
+      tls: {
+        rejectUnauthorized: false,
+      },
     });
+
+    // Initialize provider registry
+    this.providers = new Map<string, INotificationProvider>();
+    this.providers.set('email', this.emailProvider);
+    this.providers.set('in_app', this.inAppProvider);
   }
 
   async sendNotification(
@@ -116,6 +132,47 @@ export class NotificationService {
         error: errorMessage,
       };
     }
+  }
+
+  /**
+   * Send notification via specified provider(s)
+   * This is the new provider-based notification API
+   * @param payload Notification payload
+   * @param channels Array of channels to send through (email, in_app, push)
+   */
+  async sendViaProvider(
+    payload: NotificationPayload,
+    channels: string[] = ['in_app'],
+  ): Promise<NotificationResult[]> {
+    const results: NotificationResult[] = [];
+
+    for (const channel of channels) {
+      const provider = this.providers.get(channel);
+      if (!provider) {
+        this.logger.warn(`Provider for channel '${channel}' not found`);
+        results.push({
+          success: false,
+          error: `Provider for channel '${channel}' not found`,
+        });
+        continue;
+      }
+
+      try {
+        const result = await provider.send(payload);
+        results.push(result);
+      } catch (error) {
+        this.logger.error(
+          `Failed to send via ${channel}: ${error.message}`,
+          error.stack,
+        );
+        results.push({
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return results;
   }
 
   private toNotificationPreferenceDto(
