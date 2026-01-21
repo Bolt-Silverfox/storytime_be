@@ -18,6 +18,40 @@ enum Role {
 enum NotificationType {
   email
   push
+  in_app
+}
+
+enum NotificationCategory {
+  // Auth & Security
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  PASSWORD_RESET_ALERT
+  PASSWORD_CHANGED
+  PIN_RESET
+  NEW_LOGIN
+
+  // Engagement
+  NEW_STORY
+  STORY_FINISHED
+  STORY_RECOMMENDATION
+  WE_MISS_YOU
+
+  // Progress & Rewards
+  ACHIEVEMENT_UNLOCKED
+  BADGE_EARNED
+  STREAK_MILESTONE
+  DAILY_CHALLENGE_REMINDER
+
+  // Parental
+  SCREEN_TIME_LIMIT
+  BEDTIME_REMINDER
+  WEEKLY_REPORT
+
+  // System
+  SYSTEM_ALERT
+  SUBSCRIPTION_ALERT
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
 }
 
 enum OnboardingStatus {
@@ -56,6 +90,7 @@ model User {
   preferredVoice          Voice?                   @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
   Reward                  Reward[]
   notificationPreferences NotificationPreference[]
+  notifications           Notification[]
   preferredCategories     Category[]               @relation("UserPreferredCategories")
   activityLogs            ActivityLog[]
   userIps                 UserIP[]
@@ -558,6 +593,25 @@ model NotificationPreference {
 
   @@index([isDeleted])
   @@map("notification_preferences")
+}
+
+model Notification {
+  id        String               @id @default(uuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  NotificationCategory
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean              @default(false)
+  createdAt DateTime             @default(now())
+  isDeleted Boolean              @default(false)
+  deletedAt DateTime?
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
+  @@index([isDeleted])
+  @@map("notifications")
 }
 
 model RewardRedemption {
