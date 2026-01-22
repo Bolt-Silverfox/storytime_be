@@ -585,6 +585,134 @@ export class AdminController {
     };
   }
 
+  @Get('users/paid')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get paid users',
+    description: 'Returns paginated list of users with active subscriptions.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+    example: 1
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10, max: 100)',
+    example: 10
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for email or name',
+    example: 'john'
+  })
+  @ApiOkResponse({
+    description: 'Paid users retrieved successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'Paid users retrieved successfully',
+        data: [
+          {
+            id: 'user-123',
+            email: 'parent@example.com',
+            name: 'John Doe',
+            isPaidUser: true,
+            activeSubscription: {
+              plan: 'monthly',
+              status: 'active'
+            },
+            createdAt: '2023-10-01T12:00:00Z'
+          }
+        ],
+        meta: {
+          total: 180,
+          page: 1,
+          limit: 10,
+          totalPages: 18
+        }
+      }
+    }
+  })
+  async getPaidUsers(@Query() filters: UserFilterDto) {
+    const modifiedFilters = { ...filters, hasActiveSubscription: true };
+    const result = await this.adminService.getAllUsers(modifiedFilters);
+    return {
+      statusCode: 200,
+      message: 'Paid users retrieved successfully',
+      data: result.data,
+      meta: result.meta
+    };
+  }
+
+  @Get('users/unpaid')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get unpaid users',
+    description: 'Returns paginated list of users without active subscriptions.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+    example: 1
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10, max: 100)',
+    example: 10
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for email or name',
+    example: 'john'
+  })
+  @ApiOkResponse({
+    description: 'Unpaid users retrieved successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'Unpaid users retrieved successfully',
+        data: [
+          {
+            id: 'user-456',
+            email: 'freemium@example.com',
+            name: 'Jane Smith',
+            isPaidUser: false,
+            createdAt: '2023-11-01T10:00:00Z'
+          }
+        ],
+        meta: {
+          total: 1070,
+          page: 1,
+          limit: 10,
+          totalPages: 107
+        }
+      }
+    }
+  })
+  async getUnpaidUsers(@Query() filters: UserFilterDto) {
+    const modifiedFilters = { ...filters, hasActiveSubscription: false };
+    const result = await this.adminService.getAllUsers(modifiedFilters);
+    return {
+      statusCode: 200,
+      message: 'Unpaid users retrieved successfully',
+      data: result.data,
+      meta: result.meta
+    };
+  }
+
   @Get('users/:userId')
   @ApiBearerAuth()
   @ApiOperation({
@@ -692,134 +820,6 @@ export class AdminController {
       statusCode: 200,
       message: 'User details retrieved successfully',
       data
-    };
-  }
-
-  @Get('users/paid')
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get paid users',
-    description: 'Returns paginated list of users with active subscriptions.',
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Page number (default: 1)',
-    example: 1
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Items per page (default: 10, max: 100)',
-    example: 10
-  })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search term for email or name',
-    example: 'john'
-  })
-  @ApiOkResponse({
-    description: 'Paid users retrieved successfully',
-    schema: {
-      example: {
-        statusCode: 200,
-        message: 'Paid users retrieved successfully',
-        data: [
-          {
-            id: 'user-123',
-            email: 'parent@example.com',
-            name: 'John Doe',
-            isPaidUser: true,
-            activeSubscription: {
-              plan: 'monthly',
-              status: 'active'
-            },
-            createdAt: '2023-10-01T12:00:00Z'
-          }
-        ],
-        meta: {
-          total: 180,
-          page: 1,
-          limit: 10,
-          totalPages: 18
-        }
-      }
-    }
-  })
-  async getPaidUsers(@Query() filters: UserFilterDto) {
-    const modifiedFilters = { ...filters, hasActiveSubscription: true };
-    const result = await this.adminService.getAllUsers(modifiedFilters);
-    return {
-      statusCode: 200,
-      message: 'Paid users retrieved successfully',
-      data: result.data,
-      meta: result.meta
-    };
-  }
-
-  @Get('users/unpaid')
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get unpaid users',
-    description: 'Returns paginated list of users without active subscriptions.',
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Page number (default: 1)',
-    example: 1
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Items per page (default: 10, max: 100)',
-    example: 10
-  })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search term for email or name',
-    example: 'john'
-  })
-  @ApiOkResponse({
-    description: 'Unpaid users retrieved successfully',
-    schema: {
-      example: {
-        statusCode: 200,
-        message: 'Unpaid users retrieved successfully',
-        data: [
-          {
-            id: 'user-456',
-            email: 'freemium@example.com',
-            name: 'Jane Smith',
-            isPaidUser: false,
-            createdAt: '2023-10-10T12:00:00Z'
-          }
-        ],
-        meta: {
-          total: 1070,
-          page: 1,
-          limit: 10,
-          totalPages: 107
-        }
-      }
-    }
-  })
-  async getUnpaidUsers(@Query() filters: UserFilterDto) {
-    const modifiedFilters = { ...filters, hasActiveSubscription: false };
-    const result = await this.adminService.getAllUsers(modifiedFilters);
-    return {
-      statusCode: 200,
-      message: 'Unpaid users retrieved successfully',
-      data: result.data,
-      meta: result.meta
     };
   }
 
