@@ -516,6 +516,20 @@ export class AdminService {
           },
           profile: true,
           avatar: true,
+          usage: {
+            select: { elevenLabsCount: true },
+          },
+          kids: {
+            select: {
+              screenTimeSessions: {
+                select: { duration: true },
+              },
+            },
+          },
+          paymentTransactions: {
+            where: { status: 'success' },
+            select: { amount: true },
+          },
           _count: {
             select: {
               kids: true,
@@ -533,10 +547,22 @@ export class AdminService {
     return {
       data: users.map(user => {
         // Sanitize user object
-        const { passwordHash, pinHash, ...safeUser } = user;
+        const { passwordHash, pinHash, kids, paymentTransactions, usage, subscriptions, ...safeUser } = user;
+
+        // Calculate metrics
+        const creditUsed = user.usage?.elevenLabsCount || 0;
+        const activityLength = user.kids.reduce(
+          (total, kid) => total + kid.screenTimeSessions.reduce((sum, s) => sum + (s.duration || 0), 0),
+          0
+        );
+        const amountSpent = user.paymentTransactions.reduce((sum, txn) => sum + txn.amount, 0);
 
         return {
           ...safeUser,
+          registrationDate: user.createdAt,
+          activityLength,
+          creditUsed,
+          amountSpent,
           isPaidUser: user.subscriptions.length > 0,
           activeSubscription: user.subscriptions[0] || null,
           kidsCount: user._count.kids,
@@ -544,8 +570,6 @@ export class AdminService {
           favoritesCount: user._count.parentFavorites,
           subscriptionsCount: user._count.subscriptions,
           transactionsCount: user._count.paymentTransactions,
-          _count: undefined,
-          subscriptions: undefined,
         };
       }),
       meta: {
