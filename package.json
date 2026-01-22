@@ -2,6 +2,10 @@
   "name": "storytime_be",
   "version": "0.0.1",
   "packageManager": "pnpm@10.15.1",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=10.0.0"
+  },
   "description": "Storytime API",
   "author": "",
   "private": true,
