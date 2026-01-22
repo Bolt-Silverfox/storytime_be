@@ -47,10 +47,10 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
+@ApiBearerAuth()
 @Controller('admin')
 @Admin()
 @ApiTags('admin')
-@ApiBearerAuth()
 export class AdminController {
   constructor(private readonly adminService: AdminService) { }
 
@@ -59,6 +59,7 @@ export class AdminController {
   // =====================
 
   @Get('dashboard/stats')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get dashboard metrics',
     description: 'Returns comprehensive platform KPIs including users, stories, subscriptions, and revenue statistics.',
@@ -110,6 +111,7 @@ export class AdminController {
   }
 
   @Get('dashboard/user-growth')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get user growth analytics',
     description: 'Returns day-by-day user growth statistics with paid/unpaid breakdown between optional startDate/endDate.',
@@ -163,6 +165,7 @@ export class AdminController {
   }
 
   @Get('dashboard/subscription-analytics')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get subscription analytics',
     description: 'Returns detailed subscription metrics including growth, revenue, plan breakdown, and churn rate.',
@@ -216,6 +219,7 @@ export class AdminController {
   }
 
   @Get('dashboard/revenue-analytics')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get revenue analytics',
     description: 'Returns detailed revenue breakdown by day, month, year, and top subscription plans.',
@@ -279,6 +283,7 @@ export class AdminController {
   }
 
   @Get('dashboard/story-stats')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get story statistics',
     description: 'Returns comprehensive story metrics including counts, AI-generated stories, recommendations, and engagement.',
@@ -312,6 +317,7 @@ export class AdminController {
   }
 
   @Get('dashboard/content-breakdown')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get content breakdown',
     description: 'Returns content distribution by language, age group, category, and theme.',
@@ -357,6 +363,7 @@ export class AdminController {
   }
 
   @Get('dashboard/system-health')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get system health status',
     description: 'Returns system health metrics including database connectivity, response time, uptime, and memory utilization.',
@@ -394,6 +401,7 @@ export class AdminController {
   }
 
   @Get('dashboard/recent-activity')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get recent activity logs',
     description: 'Returns recent system activity logs with user information.',
@@ -453,6 +461,7 @@ export class AdminController {
   // =====================
 
   @Get('users')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'List all users',
     description: 'Returns paginated list of users with filters for search, role, subscription status, and date ranges.',
@@ -566,7 +575,11 @@ export class AdminController {
       }
     }
   })
-  async getAllUsers(@Query() filters: UserFilterDto) {
+  async getAllUsers(@Query() filters: UserFilterDto, @Query('hasActiveSubscription') rawHasActiveSub?: string) {
+    // Fix for enableImplicitConversion corrupting 'false' string to boolean true
+    if (rawHasActiveSub !== undefined) {
+      filters.hasActiveSubscription = rawHasActiveSub === 'true';
+    }
     const result = await this.adminService.getAllUsers(filters);
     return {
       statusCode: 200,
@@ -576,7 +589,136 @@ export class AdminController {
     };
   }
 
+  @Get('users/paid')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get paid users',
+    description: 'Returns paginated list of users with active subscriptions.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+    example: 1
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10, max: 100)',
+    example: 10
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for email or name',
+    example: 'john'
+  })
+  @ApiOkResponse({
+    description: 'Paid users retrieved successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'Paid users retrieved successfully',
+        data: [
+          {
+            id: 'user-123',
+            email: 'parent@example.com',
+            name: 'John Doe',
+            isPaidUser: true,
+            activeSubscription: {
+              plan: 'monthly',
+              status: 'active'
+            },
+            createdAt: '2023-10-01T12:00:00Z'
+          }
+        ],
+        meta: {
+          total: 180,
+          page: 1,
+          limit: 10,
+          totalPages: 18
+        }
+      }
+    }
+  })
+  async getPaidUsers(@Query() filters: UserFilterDto) {
+    const modifiedFilters = { ...filters, hasActiveSubscription: true };
+    const result = await this.adminService.getAllUsers(modifiedFilters);
+    return {
+      statusCode: 200,
+      message: 'Paid users retrieved successfully',
+      data: result.data,
+      meta: result.meta
+    };
+  }
+
+  @Get('users/unpaid')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get unpaid users',
+    description: 'Returns paginated list of users without active subscriptions.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+    example: 1
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10, max: 100)',
+    example: 10
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for email or name',
+    example: 'john'
+  })
+  @ApiOkResponse({
+    description: 'Unpaid users retrieved successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'Unpaid users retrieved successfully',
+        data: [
+          {
+            id: 'user-456',
+            email: 'freemium@example.com',
+            name: 'Jane Smith',
+            isPaidUser: false,
+            createdAt: '2023-11-01T10:00:00Z'
+          }
+        ],
+        meta: {
+          total: 1070,
+          page: 1,
+          limit: 10,
+          totalPages: 107
+        }
+      }
+    }
+  })
+  async getUnpaidUsers(@Query() filters: UserFilterDto) {
+    const modifiedFilters = { ...filters, hasActiveSubscription: false };
+    const result = await this.adminService.getAllUsers(modifiedFilters);
+    return {
+      statusCode: 200,
+      message: 'Unpaid users retrieved successfully',
+      data: result.data,
+      meta: result.meta
+    };
+  }
+
   @Get('users/:userId')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get user by ID',
     description: 'Returns detailed user information including profile, kids, subscriptions, payment history, and activity statistics.',
@@ -685,134 +827,9 @@ export class AdminController {
     };
   }
 
-  @Get('users/paid')
-  @ApiOperation({
-    summary: 'Get paid users',
-    description: 'Returns paginated list of users with active subscriptions.',
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Page number (default: 1)',
-    example: 1
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Items per page (default: 10, max: 100)',
-    example: 10
-  })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search term for email or name',
-    example: 'john'
-  })
-  @ApiOkResponse({
-    description: 'Paid users retrieved successfully',
-    schema: {
-      example: {
-        statusCode: 200,
-        message: 'Paid users retrieved successfully',
-        data: [
-          {
-            id: 'user-123',
-            email: 'parent@example.com',
-            name: 'John Doe',
-            isPaidUser: true,
-            activeSubscription: {
-              plan: 'monthly',
-              status: 'active'
-            },
-            createdAt: '2023-10-01T12:00:00Z'
-          }
-        ],
-        meta: {
-          total: 180,
-          page: 1,
-          limit: 10,
-          totalPages: 18
-        }
-      }
-    }
-  })
-  async getPaidUsers(@Query() filters: UserFilterDto) {
-    const modifiedFilters = { ...filters, hasActiveSubscription: true };
-    const result = await this.adminService.getAllUsers(modifiedFilters);
-    return {
-      statusCode: 200,
-      message: 'Paid users retrieved successfully',
-      data: result.data,
-      meta: result.meta
-    };
-  }
-
-  @Get('users/unpaid')
-  @ApiOperation({
-    summary: 'Get unpaid users',
-    description: 'Returns paginated list of users without active subscriptions.',
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Page number (default: 1)',
-    example: 1
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Items per page (default: 10, max: 100)',
-    example: 10
-  })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Search term for email or name',
-    example: 'john'
-  })
-  @ApiOkResponse({
-    description: 'Unpaid users retrieved successfully',
-    schema: {
-      example: {
-        statusCode: 200,
-        message: 'Unpaid users retrieved successfully',
-        data: [
-          {
-            id: 'user-456',
-            email: 'freemium@example.com',
-            name: 'Jane Smith',
-            isPaidUser: false,
-            createdAt: '2023-10-10T12:00:00Z'
-          }
-        ],
-        meta: {
-          total: 1070,
-          page: 1,
-          limit: 10,
-          totalPages: 107
-        }
-      }
-    }
-  })
-  async getUnpaidUsers(@Query() filters: UserFilterDto) {
-    const modifiedFilters = { ...filters, hasActiveSubscription: false };
-    const result = await this.adminService.getAllUsers(modifiedFilters);
-    return {
-      statusCode: 200,
-      message: 'Unpaid users retrieved successfully',
-      data: result.data,
-      meta: result.meta
-    };
-  }
-
   @Post('users')
   @HttpCode(HttpStatus.CREATED)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Create admin user',
     description: 'Creates a new admin user with verified email and hashed password.',
@@ -876,6 +893,7 @@ export class AdminController {
   }
 
   @Put('users/:userId')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update user',
     description: 'Updates user information including name, title, role, or email. Enforces unique email validation.',
@@ -952,6 +970,7 @@ export class AdminController {
 
   @Delete('users/:userId')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Delete user',
     description: 'Soft deletes a user by default. Use permanent=true query parameter for permanent deletion.',
@@ -996,6 +1015,7 @@ export class AdminController {
   }
 
   @Patch('users/:userId/restore')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Restore soft-deleted user',
     description: 'Restores a soft-deleted user account.',
@@ -1045,6 +1065,7 @@ export class AdminController {
 
   @Post('users/bulk-action')
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Bulk user actions',
     description: 'Perform bulk actions (delete, restore, verify) on multiple users.',
@@ -1099,6 +1120,7 @@ export class AdminController {
   // =====================
 
   @Get('stories')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'List all stories',
     description: 'Returns paginated list of stories with filters for search, recommendations, AI generation, language, and age range.',
@@ -1215,6 +1237,7 @@ export class AdminController {
   }
 
   @Get('stories/:storyId')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get story by ID',
     description: 'Returns detailed story information including images, categories, themes, branches, questions, and engagement metrics.',
@@ -1312,6 +1335,7 @@ export class AdminController {
   }
 
   @Patch('stories/:storyId/recommend')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Toggle story recommendation',
     description: 'Toggles the recommended flag for a story.',
@@ -1359,6 +1383,7 @@ export class AdminController {
 
   @Delete('stories/:storyId')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Delete story',
     description: 'Soft deletes a story by default. Use permanent=true query parameter for permanent deletion.',
@@ -1406,6 +1431,7 @@ export class AdminController {
   // =====================
 
   @Get('categories')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'List all categories',
     description: 'Returns all categories with story counts and kid preference statistics.',
@@ -1455,6 +1481,7 @@ export class AdminController {
   }
 
   @Get('themes')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'List all themes',
     description: 'Returns all themes with story counts.',
@@ -1506,6 +1533,7 @@ export class AdminController {
   // =====================
 
   @Get('subscriptions')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'List all subscriptions',
     description: 'Returns all subscriptions with user details. Optional status filter.',
@@ -1570,6 +1598,7 @@ export class AdminController {
   // =====================
 
   @Post('seed')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Seed database',
     description: 'Seeds the database with initial categories, themes, avatars, and age groups.',
@@ -1607,6 +1636,7 @@ export class AdminController {
   }
 
   @Get('backup')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Create database backup',
     description: 'Generates a database backup file.',
@@ -1634,6 +1664,7 @@ export class AdminController {
   }
 
   @Get('logs')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get system logs',
     description: 'Returns system activity logs with optional filtering by log level.',
