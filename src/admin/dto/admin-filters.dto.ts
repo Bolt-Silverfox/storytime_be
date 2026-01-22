@@ -7,7 +7,7 @@ import {
   IsDateString,
   IsBoolean,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { Role } from '@prisma/client';
 
 export class PaginationDto {
@@ -42,15 +42,35 @@ export class UserFilterDto extends PaginationDto {
   role?: Role;
 
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return undefined;
+  })
+  @IsBoolean()
   isEmailVerified?: boolean;
 
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return undefined;
+  })
+  @IsBoolean()
   isDeleted?: boolean;
 
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value, obj, key }) => {
+    // Get the raw value from the original object to bypass enableImplicitConversion
+    const rawValue = obj[key];
+    if (rawValue === 'true' || rawValue === true) return true;
+    if (rawValue === 'false' || rawValue === false) return false;
+    // Also check the transformed value in case it wasn't corrupted
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return undefined;
+  })
+  @IsBoolean()
   hasActiveSubscription?: boolean;
 
   @IsOptional()
@@ -72,15 +92,15 @@ export class StoryFilterDto extends PaginationDto {
   search?: string;
 
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => value === 'true' || value === true)
   recommended?: boolean;
 
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => value === 'true' || value === true)
   aiGenerated?: boolean;
 
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => value === 'true' || value === true)
   isDeleted?: boolean;
 
   @IsOptional()
