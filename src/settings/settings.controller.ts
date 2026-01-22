@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Patch, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Put, Patch, Post, Body, Param, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -6,8 +6,10 @@ import {
   ApiParam,
   ApiBody,
   ApiProperty,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
+import { AuthSessionGuard } from '../auth/auth.guard';
 
 class UpdateSettingsDto {
   explicitContent?: boolean;
@@ -26,8 +28,10 @@ class SetKidDailyLimitDto {
 
 @ApiTags('settings')
 @Controller('settings')
+@UseGuards(AuthSessionGuard)
+@ApiBearerAuth()
 export class SettingsController {
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(private readonly settingsService: SettingsService) { }
 
   // ============== PARENT SETTINGS (Existing) ==============
 
