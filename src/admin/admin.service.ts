@@ -462,9 +462,9 @@ export class AdminService {
     }
 
     if (role) where.role = role;
-    if (typeof isEmailVerified === 'boolean')
-      where.isEmailVerified = isEmailVerified;
-    if (typeof isDeleted === 'boolean') where.isDeleted = isDeleted;
+    if (isEmailVerified !== undefined) where.isEmailVerified = isEmailVerified;
+
+    if (isDeleted !== undefined) where.isDeleted = isDeleted;
 
     if (createdAfter || createdBefore) {
       where.createdAt = {};
@@ -473,23 +473,32 @@ export class AdminService {
     }
 
     // Filter by subscription status
-    if (typeof filters.hasActiveSubscription === 'boolean') {
+    const hasActiveSub = filters.hasActiveSubscription;
+    if (hasActiveSub !== undefined && hasActiveSub !== null) {
       const now = new Date();
-      /* 
-       * Logic: 
-       * - Active subscription means status='active' AND (endsAt is null OR endsAt > now)
-       */
-      const subscriptionCondition: Prisma.SubscriptionListRelationFilter = {
-        [filters.hasActiveSubscription ? 'some' : 'none']: {
-          status: 'active',
-          OR: [
-            { endsAt: null },
-            { endsAt: { gt: now } }
-          ]
-        }
+      // Normalize value - handle both boolean and string (query params may come as strings)
+      const wantsActiveSubscription = hasActiveSub === true || String(hasActiveSub) === 'true';
+
+      const activeSubscriptionCriteria = {
+        status: 'active',
+        isDeleted: false,
+        OR: [
+          { endsAt: null },
+          { endsAt: { gt: now } }
+        ]
       };
 
-      where.subscriptions = subscriptionCondition;
+      if (wantsActiveSubscription) {
+        where.subscriptions = {
+          some: activeSubscriptionCriteria
+        };
+      } else {
+        where.NOT = {
+          subscriptions: {
+            some: activeSubscriptionCriteria
+          }
+        };
+      }
     }
 
     const [users, total] = await Promise.all([
@@ -502,6 +511,7 @@ export class AdminService {
           subscriptions: {
             where: {
               status: 'active',
+              isDeleted: false,
               OR: [
                 { endsAt: null },
                 { endsAt: { gt: new Date() } }

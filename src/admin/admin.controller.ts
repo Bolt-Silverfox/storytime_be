@@ -575,7 +575,11 @@ export class AdminController {
       }
     }
   })
-  async getAllUsers(@Query() filters: UserFilterDto) {
+  async getAllUsers(@Query() filters: UserFilterDto, @Query('hasActiveSubscription') rawHasActiveSub?: string) {
+    // Fix for enableImplicitConversion corrupting 'false' string to boolean true
+    if (rawHasActiveSub !== undefined) {
+      filters.hasActiveSubscription = rawHasActiveSub === 'true';
+    }
     const result = await this.adminService.getAllUsers(filters);
     return {
       statusCode: 200,
