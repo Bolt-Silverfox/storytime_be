@@ -190,6 +190,53 @@ export class AdminService {
       _count: true,
     });
 
+    // --- TREND ANALYTICS CALCULATION ---
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0); // End of last month
+
+    // 1. New Users Trend
+    const newUsersLastMonth = await this.prisma.user.count({
+      where: {
+        createdAt: {
+          gte: lastMonthStart,
+          lte: lastMonthEnd,
+        },
+        isDeleted: false,
+      },
+    });
+
+    const calculateTrend = (current: number, previous: number): number => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return parseFloat((((current - previous) / previous) * 100).toFixed(1));
+    };
+
+    const newUsersTrend = calculateTrend(newUsersThisMonth, newUsersLastMonth);
+
+    // 2. Total Users Trend
+    // Total users at start of last month = Total Now (approx) - New This Month
+    const totalUsersLastMonthEnd = totalUsers - newUsersThisMonth;
+    const totalUsersTrend = calculateTrend(totalUsers, totalUsersLastMonthEnd);
+
+    // 3. Active Users Trend (MAU)
+    const activeUsersThisMonthCount = await this.prisma.user.count({
+      where: {
+        updatedAt: { gte: startOfMonth },
+        isDeleted: false,
+      }
+    });
+
+    const activeUsersLastMonthCount = await this.prisma.user.count({
+      where: {
+        updatedAt: {
+          gte: lastMonthStart,
+          lte: lastMonthEnd,
+        },
+        isDeleted: false,
+      }
+    });
+
+    const activeUsersTrend = calculateTrend(activeUsersThisMonthCount, activeUsersLastMonthCount);
+
     return {
       totalUsers,
       totalParents,
@@ -218,6 +265,23 @@ export class AdminService {
       totalRevenue: Number(totalRevenue.toFixed(2)),
       // Calculate conversion rate (paid users / total users)
       conversionRate: totalUsers > 0 ? Number(((paidUsers / totalUsers) * 100).toFixed(2)) : 0,
+      performanceMetrics: {
+        newUsers: {
+          count: newUsersThisMonth,
+          trendPercent: newUsersTrend,
+          timeframe: 'vs last month'
+        },
+        totalUsers: {
+          count: totalUsers,
+          trendPercent: totalUsersTrend,
+          timeframe: 'vs last month'
+        },
+        activeUsers: {
+          count: activeUsersThisMonthCount, // MAU
+          trendPercent: activeUsersTrend,
+          timeframe: 'vs last month'
+        }
+      }
     };
   }
 
