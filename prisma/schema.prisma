@@ -1003,6 +1003,8 @@ model UserUsage {
   userId            String   @unique
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   elevenLabsCount   Int      @default(0)
+  geminiStoryCount  Int      @default(0)
+  geminiImageCount  Int      @default(0)
   currentMonth      String   // Format: "YYYY-MM" to track resets
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

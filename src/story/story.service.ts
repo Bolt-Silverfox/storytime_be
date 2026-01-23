@@ -1061,6 +1061,16 @@ export class StoryService {
       seasonNames.push(...seasons.map((s) => s.name));
     }
 
+    // Resolve userId for tracking
+    let userId: string | undefined;
+    if (kidId) {
+      const kid = await this.prisma.kid.findUnique({
+        where: { id: kidId },
+        select: { parentId: true },
+      });
+      if (kid) userId = kid.parentId;
+    }
+
     const options: GenerateStoryOptions = {
       theme: themes,
       category: categories,
@@ -1072,6 +1082,8 @@ export class StoryService {
       additionalContext: contextString,
       creatorKidId: kidId,
       voiceType,
+      seasonIds: seasonIds,
+      userId, // Pass resolved userId for usage tracking
     };
 
     this.logger.log(
@@ -1099,13 +1111,24 @@ export class StoryService {
     voiceType?: VoiceType,
     seasonIds?: string[]
   ) {
+    // Resolve userId for tracking if creatorKidId is present
+    let userId: string | undefined;
+    if (creatorKidId) {
+      const kid = await this.prisma.kid.findUnique({
+        where: { id: creatorKidId },
+        select: { parentId: true },
+      });
+      if (kid) userId = kid.parentId;
+    }
+
     // 1. Generate Cover Image (Pollinations)
     let coverImageUrl = '';
     try {
       this.logger.log(`Generating cover image for "${generatedStory.title}"`);
       coverImageUrl = await this.geminiService.generateStoryImage(
         generatedStory.title,
-        generatedStory.description || `A story about ${generatedStory.title}`
+        generatedStory.description || `A story about ${generatedStory.title}`,
+        userId // Pass userId for tracking
       );
     } catch (e) {
       this.logger.error(`Failed to generate story image: ${e.message}`);

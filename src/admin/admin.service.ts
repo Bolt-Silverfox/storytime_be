@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AiProviders } from '../common/constants/ai-providers.constants';
 import { Role, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {
@@ -23,6 +24,8 @@ import {
   ThemeDto,
   SubscriptionDto,
   ActivityLogDto,
+  AiCreditAnalyticsDto,
+  UserGrowthMonthlyDto,
 } from './dto/admin-responses.dto';
 import {
   UserFilterDto,
@@ -1386,8 +1389,109 @@ export class AdminService {
   }
 
   // =====================
-  // ACTIVITY MONITORING
+  // AI ANALYTICS
   // =====================
+
+  async getAiCreditAnalytics(): Promise<AiCreditAnalyticsDto> {
+    const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+
+    const logs = await this.prisma.activityLog.findMany({
+      where: {
+        action: 'AI_GENERATION',
+        createdAt: { gte: startOfYear },
+      },
+    });
+
+    // Helper to format month
+    const getMonthKey = (d: Date) => d.toLocaleString('default', { month: 'short' });
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    // Initialize map
+    const dataMap = new Map<string, { elevenLabs: number; gemini: number; total: number }>();
+    months.forEach(m => dataMap.set(m, { elevenLabs: 0, gemini: 0, total: 0 }));
+
+    logs.forEach(log => {
+      const month = getMonthKey(log.createdAt);
+      if (!dataMap.has(month)) return; // Should allow current year only
+
+      let credits = 1;
+      let provider = '';
+      try {
+        const details = JSON.parse(log.details || '{}');
+        credits = details.credits || 1;
+        provider = details.provider || '';
+      } catch (e) {
+        // Fallback
+      }
+
+      const entry = dataMap.get(month)!;
+      if (provider === AiProviders.ElevenLabs) entry.elevenLabs += credits;
+      if (provider === AiProviders.Gemini) entry.gemini += credits;
+      entry.total += credits;
+    });
+
+    const yearly = months.map(m => ({
+      month: m,
+      ...dataMap.get(m)!,
+    }));
+
+    return { yearly };
+  }
+
+  // =====================
+  // CUSTOM USER ANALYTICS
+  // =====================
+
+  async getUserGrowthMonthly(): Promise<UserGrowthMonthlyDto> {
+    const now = new Date();
+    // 12 months ago from 1st of current month
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1); // Go back 11 months + current = 12
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        createdAt: { gte: startDate },
+        isDeleted: false,
+      },
+      select: { createdAt: true, id: true, subscriptions: { where: { status: 'active' } } }
+    });
+
+    const getMonthLabel = (d: Date) => {
+      return d.toLocaleString('default', { month: 'short' });
+    };
+
+    // Generate last 12 month labels
+    const labels: string[] = [];
+    const d = new Date(startDate);
+    while (d <= now) {
+      labels.push(getMonthLabel(d));
+      d.setMonth(d.getMonth() + 1);
+    }
+    // De-dupe labels if 'now' pushes slightly into next month logic or loop edge case
+    const uniqueLabels = [...new Set(labels)];
+
+    // Buckets
+    const freeCounts = new Array(uniqueLabels.length).fill(0);
+    const paidCounts = new Array(uniqueLabels.length).fill(0);
+
+    users.forEach(u => {
+      const label = getMonthLabel(u.createdAt);
+      const index = uniqueLabels.indexOf(label);
+      if (index !== -1) {
+        const isPaid = u.subscriptions.length > 0;
+        if (isPaid) paidCounts[index]++;
+        else freeCounts[index]++;
+      }
+    });
+
+    return {
+      data: {
+        labels: uniqueLabels,
+        freeUsers: freeCounts,
+        paidUsers: paidCounts,
+      }
+    };
+  }
+
 
   async getRecentActivity(limit: number = 50): Promise<ActivityLogDto[]> {
     const activities = await this.prisma.activityLog.findMany({

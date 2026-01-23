@@ -50,6 +50,7 @@ import { VoiceQuotaService } from './voice-quota.service';
     SSMLFormatter,
     TextChunker,
     StreamConverter,
+    VoiceQuotaService,
   ],
 })
 export class VoiceModule { }

@@ -82,7 +82,7 @@ export class DashboardStatsDto {
   @ApiProperty({ description: 'Number of active subscriptions', example: 180 })
   activeSubscriptions: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Subscription plan breakdown',
     example: [
       { plan: 'monthly', count: 120 },
@@ -149,7 +149,7 @@ export class StoryStatsDto {
 }
 
 export class ContentBreakdownDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Breakdown by language',
     example: [
       { language: 'English', count: 250 },
@@ -159,7 +159,7 @@ export class ContentBreakdownDto {
   })
   byLanguage: { language: string; count: number }[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Breakdown by age group',
     example: [
       { ageRange: '3-5', count: 100 },
@@ -169,7 +169,7 @@ export class ContentBreakdownDto {
   })
   byAgeGroup: { ageRange: string; count: number }[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Breakdown by category',
     example: [
       { categoryName: 'Animal Stories', count: 80 },
@@ -179,7 +179,7 @@ export class ContentBreakdownDto {
   })
   byCategory: { categoryName: string; count: number }[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Breakdown by theme',
     example: [
       { themeName: 'Adventure', count: 120 },
@@ -191,13 +191,13 @@ export class ContentBreakdownDto {
 }
 
 export class SystemHealthDto {
-  @ApiProperty({ 
+  @ApiProperty({
     enum: ['healthy', 'degraded', 'down'],
     example: 'healthy'
   })
   status: 'healthy' | 'degraded' | 'down';
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Database connection status',
     example: {
       connected: true,
@@ -212,7 +212,7 @@ export class SystemHealthDto {
   @ApiProperty({ description: 'System uptime in seconds', example: 86400 })
   uptime: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Memory usage statistics',
     example: {
       used: 512,
@@ -234,7 +234,7 @@ export class PaginatedResponseDto<T> {
   @ApiProperty({ description: 'Array of data items' })
   data: T[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Pagination metadata',
     example: {
       total: 1250,
@@ -252,7 +252,7 @@ export class PaginatedResponseDto<T> {
 }
 
 export class SubscriptionAnalyticsDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Subscription growth over time',
     example: [
       { date: '2023-10-01', count: 5 },
@@ -264,7 +264,7 @@ export class SubscriptionAnalyticsDto {
     count: number;
   }>;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Revenue growth over time',
     example: [
       { date: '2023-10-01', amount: 500 },
@@ -276,7 +276,7 @@ export class SubscriptionAnalyticsDto {
     amount: number;
   }>;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Subscription plan breakdown',
     example: [
       { plan: 'monthly', count: 120 },
@@ -294,7 +294,7 @@ export class SubscriptionAnalyticsDto {
 }
 
 export class RevenueAnalyticsDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Daily revenue breakdown',
     example: [
       { date: '2023-10-01', amount: 500 },
@@ -306,7 +306,7 @@ export class RevenueAnalyticsDto {
     amount: number;
   }>;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Monthly revenue breakdown',
     example: [
       { month: '2023-10', total_amount: 12500 },
@@ -318,7 +318,7 @@ export class RevenueAnalyticsDto {
     total_amount: number;
   }>;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Yearly revenue breakdown',
     example: [
       { year: '2023', total_amount: 85000 },
@@ -330,7 +330,7 @@ export class RevenueAnalyticsDto {
     total_amount: number;
   }>;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Top subscription plans by revenue',
     example: [
       {
@@ -386,7 +386,7 @@ export class UserDetailDto {
   @ApiProperty({ description: 'Total amount spent', example: 125.50 })
   totalSpent: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'User profile',
     example: {
       id: 'profile-123',
@@ -400,7 +400,7 @@ export class UserDetailDto {
   })
   profile: any;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'User kids',
     example: [
       {
@@ -418,7 +418,7 @@ export class UserDetailDto {
   })
   kids: any[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'User avatar',
     example: {
       id: 'avatar-123',
@@ -431,7 +431,7 @@ export class UserDetailDto {
   })
   avatar: any;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'User subscriptions',
     example: [
       {
@@ -445,7 +445,7 @@ export class UserDetailDto {
   })
   subscriptions: any[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Payment transactions',
     example: [
       {
@@ -459,7 +459,7 @@ export class UserDetailDto {
   })
   paymentTransactions: any[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'User statistics',
     example: {
       sessionsCount: 5,
@@ -535,7 +535,7 @@ export class StoryDetailDto {
   @ApiProperty({ description: 'Last update timestamp', example: '2023-10-15T10:30:00Z' })
   updatedAt: Date;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Story images',
     example: [
       {
@@ -547,7 +547,7 @@ export class StoryDetailDto {
   })
   images: any[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Story categories',
     example: [
       { id: 'cat-1', name: 'Fantasy & Magic' }
@@ -555,7 +555,7 @@ export class StoryDetailDto {
   })
   categories: any[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Story themes',
     example: [
       { id: 'theme-1', name: 'Adventure' }
@@ -563,7 +563,7 @@ export class StoryDetailDto {
   })
   themes: any[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Story branches',
     example: [
       {
@@ -578,7 +578,7 @@ export class StoryDetailDto {
   })
   branches: any[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Story questions',
     example: [
       {
@@ -591,7 +591,7 @@ export class StoryDetailDto {
   })
   questions: any[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Story statistics',
     example: {
       favoritesCount: 45,
@@ -627,7 +627,7 @@ export class CategoryDto {
   @ApiProperty({ description: 'Deletion timestamp', example: null, required: false })
   deletedAt?: Date | null;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Category statistics',
     example: {
       stories: 80,
@@ -659,7 +659,7 @@ export class ThemeDto {
   @ApiProperty({ description: 'Deletion timestamp', example: null, required: false })
   deletedAt?: Date | null;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Theme statistics',
     example: {
       stories: 120
@@ -692,7 +692,7 @@ export class SubscriptionDto {
   @ApiProperty({ description: 'Deletion timestamp', example: null, required: false })
   deletedAt?: Date | null;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Subscription user',
     example: {
       id: 'user-123',
@@ -743,7 +743,7 @@ export class ActivityLogDto {
   @ApiProperty({ description: 'Deletion timestamp', example: null, required: false })
   deletedAt?: Date | null;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'User information',
     example: {
       id: 'user-123',
@@ -754,7 +754,7 @@ export class ActivityLogDto {
   })
   user?: any | null;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Kid information',
     example: {
       id: 'kid-123',
@@ -763,4 +763,21 @@ export class ActivityLogDto {
     required: false
   })
   kid?: any | null;
+}
+
+export class AiCreditAnalyticsDto {
+  yearly: {
+    month: string;
+    elevenLabs: number;
+    gemini: number;
+    total: number;
+  }[];
+}
+
+export class UserGrowthMonthlyDto {
+  data: {
+    labels: string[]; // ['Jan', 'Feb', ...]
+    freeUsers: number[];
+    paidUsers: number[];
+  };
 }
