@@ -30,17 +30,27 @@ enum NotificationCategory {
   PIN_RESET
   NEW_LOGIN
 
-  // Engagement
+  // Subscription & Billing
+  SUBSCRIPTION_REMINDER
+  SUBSCRIPTION_ALERT
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+
+  // Engagement / Discovery
   NEW_STORY
   STORY_FINISHED
   STORY_RECOMMENDATION
   WE_MISS_YOU
 
+  // Reminders
+  INCOMPLETE_STORY_REMINDER
+  DAILY_LISTENING_REMINDER
+  DAILY_CHALLENGE_REMINDER
+
   // Progress & Rewards
   ACHIEVEMENT_UNLOCKED
   BADGE_EARNED
   STREAK_MILESTONE
-  DAILY_CHALLENGE_REMINDER
 
   // Parental
   SCREEN_TIME_LIMIT
@@ -49,9 +59,6 @@ enum NotificationCategory {
 
   // System
   SYSTEM_ALERT
-  SUBSCRIPTION_ALERT
-  PAYMENT_SUCCESS
-  PAYMENT_FAILED
 }
 
 enum OnboardingStatus {
@@ -578,19 +585,22 @@ model DailyChallengeAssignment {
 }
 
 model NotificationPreference {
-  id        String           @id @default(uuid())
-  type      NotificationType
-  enabled   Boolean          @default(true)
+  id        String               @id @default(uuid())
+  type      NotificationType     // Channel: email, push, in_app
+  category  NotificationCategory // What kind of notification
+  enabled   Boolean              @default(true)
   userId    String?
   kidId     String?
-  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kid       Kid?             @relation(fields: [kidId], references: [id], onDelete: Cascade)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  user      User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kid       Kid?                 @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
   // SOFT DELETE FIELDS
-  isDeleted Boolean          @default(false)
+  isDeleted Boolean              @default(false)
   deletedAt DateTime?
 
+  @@unique([userId, category, type])
+  @@unique([kidId, category, type])
   @@index([isDeleted])
   @@map("notification_preferences")
 }

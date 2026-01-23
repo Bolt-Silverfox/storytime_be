@@ -192,7 +192,14 @@ export class AuthService {
     try {
       await this.sendEmailVerification(user.email);
     } catch (error) {
-      console.error('Email failed but user registered:', error.message);
+      this.logger.error('Email failed but user registered:', error.message);
+    }
+
+    // Seed default notification preferences for the new user
+    try {
+      await this.notificationService.seedDefaultPreferences(user.id);
+    } catch (error) {
+      this.logger.error('Failed to seed notification preferences:', error.message);
     }
 
     const tokenData = await this.createToken(user);
@@ -783,6 +790,13 @@ export class AuthService {
         },
         include: { profile: true, avatar: true },
       });
+
+      // Seed default notification preferences for new Google users
+      try {
+        await this.notificationService.seedDefaultPreferences(user.id);
+      } catch (error) {
+        this.logger.error('Failed to seed notification preferences:', error.message);
+      }
     }
 
     // 4. Handle avatar from Google picture
