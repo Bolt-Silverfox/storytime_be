@@ -22,6 +22,17 @@ export class PaginatedApiResponseDto<T> extends ApiResponseDto<T[]> {
   };
 }
 
+export class AnalyticsMetricDto {
+  @ApiProperty({ example: 2420 })
+  count: number;
+
+  @ApiProperty({ example: 12.5 })
+  trendPercent: number;
+
+  @ApiProperty({ example: 'vs last month' })
+  timeframe: string;
+}
+
 // Dashboard Statistics DTO
 export class DashboardStatsDto {
   @ApiProperty({ description: 'Total number of users', example: 1250 })
@@ -100,6 +111,13 @@ export class DashboardStatsDto {
 
   @ApiProperty({ description: 'Conversion rate (paid users / total users)', example: 14.4 })
   conversionRate: number;
+
+  @ApiProperty({ description: 'Key performance indicators with trends' })
+  performanceMetrics: {
+    newUsers: AnalyticsMetricDto;
+    totalUsers: AnalyticsMetricDto;
+    activeUsers: AnalyticsMetricDto;
+  };
 }
 
 export class UserGrowthDto {
