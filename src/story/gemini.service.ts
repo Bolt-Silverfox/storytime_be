@@ -5,6 +5,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { VoiceType } from '../voice/voice.dto';
+import { VoiceQuotaService } from '../voice/voice-quota.service';
 
 export interface GenerateStoryOptions {
   theme: string[];
@@ -18,6 +19,7 @@ export interface GenerateStoryOptions {
   creatorKidId?: string;
   voiceType?: VoiceType;
   seasonIds?: string[];
+  userId?: string;
 }
 
 export interface GeneratedStory {
@@ -44,7 +46,10 @@ export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
   private genAI: GoogleGenerativeAI;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private readonly voiceQuotaService: VoiceQuotaService,
+  ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
       this.logger.warn(
@@ -79,6 +84,17 @@ export class GeminiService {
       // Validate the response structure
       if (!this.validateStoryStructure(story)) {
         throw new Error('Invalid story structure received from Gemini');
+      }
+
+
+
+
+      // Track usage if userId is provided
+      if (options.userId) {
+        // Run in background to not block response
+        this.voiceQuotaService.trackGeminiStory(options.userId).catch(err =>
+          this.logger.error(`Failed to track Gemini story usage for user ${options.userId}:`, err)
+        );
       }
 
       return {
@@ -193,6 +209,7 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
   async generateStoryImage(
     title: string,
     description: string,
+    userId?: string, // Added userId for tracking
   ): Promise<string> {
     const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
     const encodedPrompt = encodeURIComponent(imagePrompt);
@@ -200,6 +217,13 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&seed=${seed}`;
 
     this.logger.log(`Generated Pollinations Image URL: ${imageUrl}`);
+
+    // Track usage if userId is provided
+    if (userId) {
+      this.voiceQuotaService.trackGeminiImage(userId).catch(err =>
+        this.logger.error(`Failed to track Gemini image usage for user ${userId}:`, err)
+      );
+    }
 
     return imageUrl;
   }
