@@ -11,6 +11,9 @@ export class CreateNotificationPreferenceDto {
   @ApiProperty({ enum: NotificationType })
   type: NotificationType;
 
+  @ApiProperty({ enum: NotificationCategory })
+  category: NotificationCategory;
+
   @ApiProperty()
   enabled: boolean;
 
@@ -38,6 +41,9 @@ export class NotificationPreferenceDto {
 
   @ApiProperty({ enum: NotificationType })
   type: NotificationType;
+
+  @ApiProperty({ enum: NotificationCategory })
+  category: NotificationCategory;
 
   @ApiProperty()
   enabled: boolean;
@@ -84,4 +90,27 @@ export class NotificationDto {
 export class MarkReadDto {
   @ApiProperty({ type: [String] })
   notificationIds: string[];
+}
+
+/**
+ * Grouped preferences response format.
+ * Example: { "NEW_STORY": true, "STORY_FINISHED": false }
+ */
+export class GroupedPreferencesDto {
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: { type: 'boolean' },
+    description: 'Map of category to enabled status',
+    example: { NEW_STORY: true, STORY_FINISHED: false },
+  })
+  preferences: Record<string, boolean>;
+}
+
+/**
+ * Update user preferences (bulk or single category).
+ * Example: { "NEW_STORY": true, "STORY_FINISHED": false }
+ * Sent as plain JSON object in request body.
+ */
+export class UpdateUserPreferencesDto {
+  [category: string]: boolean;
 }

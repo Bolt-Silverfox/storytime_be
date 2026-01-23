@@ -9,7 +9,7 @@ import { EnvConfig } from '../config/env.validation';
 import * as nodemailer from 'nodemailer';
 import { NotificationRegistry, Notifications } from './notification.registry';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationPreference, NotificationCategory as PrismaCategory } from '@prisma/client';
+import { NotificationPreference, NotificationCategory as PrismaCategory, NotificationType as PrismaNotificationType } from '@prisma/client';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
@@ -86,9 +86,27 @@ export class NotificationService {
       };
 
       // Map legacy medium to new channel
-      let channels: string[] = ['in_app'];
+      let channels: string[] = ['in_app', 'push'];
       if (notification.medium === 'email') {
-        channels = ['email', 'in_app'];
+        channels = ['email'];
+      }
+
+      // Filter channels based on user preferences
+      const userId = payload.userId;
+      if (userId) {
+        const enabledChannels = await this.getEnabledChannels(
+          userId,
+          notification.category,
+          channels,
+        );
+        channels = enabledChannels;
+      }
+
+      if (channels.length === 0) {
+        this.logger.log(
+          `Notification ${type} skipped for user ${userId} - all channels disabled`,
+        );
+        return { success: true, messageId: 'skipped' };
       }
 
       const results = await this.sendViaProvider(payload, channels);
@@ -188,12 +206,60 @@ export class NotificationService {
     return results;
   }
 
+  /**
+   * Get enabled channels for a user based on their notification preferences.
+   * Uses opt-out model: if no preference exists, the channel is enabled by default.
+   */
+  private async getEnabledChannels(
+    userId: string,
+    category: PrismaCategory,
+    requestedChannels: string[],
+  ): Promise<string[]> {
+    // Map string channels to NotificationType enum
+    const channelToType: Record<string, PrismaNotificationType> = {
+      email: PrismaNotificationType.email,
+      push: PrismaNotificationType.push,
+      in_app: PrismaNotificationType.in_app,
+    };
+
+    const preferences = await this.prisma.notificationPreference.findMany({
+      where: {
+        userId,
+        category,
+        type: {
+          in: requestedChannels
+            .map((c) => channelToType[c])
+            .filter((t) => t !== undefined),
+        },
+        isDeleted: false,
+      },
+    });
+
+    // Create a map of channel -> enabled status
+    const prefMap = new Map<string, boolean>();
+    for (const pref of preferences) {
+      const channelName = Object.entries(channelToType).find(
+        ([, v]) => v === pref.type,
+      )?.[0];
+      if (channelName) {
+        prefMap.set(channelName, pref.enabled);
+      }
+    }
+
+    // Filter channels: include if preference doesn't exist (opt-out) OR if enabled
+    return requestedChannels.filter((channel) => {
+      const enabled = prefMap.get(channel);
+      return enabled === undefined || enabled === true;
+    });
+  }
+
   private toNotificationPreferenceDto(
     pref: NotificationPreference,
   ): NotificationPreferenceDto {
     return {
       id: pref.id,
       type: pref.type,
+      category: pref.category,
       enabled: pref.enabled,
       userId: pref.userId ?? undefined,
       kidId: pref.kidId ?? undefined,
@@ -229,6 +295,7 @@ export class NotificationService {
     const pref = await this.prisma.notificationPreference.create({
       data: {
         type: dto.type,
+        category: dto.category,
         enabled: dto.enabled,
         userId: dto.userId,
         kidId: dto.kidId,
@@ -302,6 +369,171 @@ export class NotificationService {
     });
     if (!pref) throw new NotFoundException('Notification preference not found');
     return this.toNotificationPreferenceDto(pref);
+  }
+
+  /**
+   * Toggle a category preference for both in_app and push channels.
+   * Used by the settings UI when the user toggles a category on/off.
+   */
+  async toggleCategoryPreference(
+    userId: string,
+    category: PrismaCategory,
+    enabled: boolean,
+  ): Promise<NotificationPreferenceDto[]> {
+    const channels: PrismaNotificationType[] = [
+      PrismaNotificationType.in_app,
+      PrismaNotificationType.push,
+    ];
+
+    const results: NotificationPreferenceDto[] = [];
+
+    for (const type of channels) {
+      const pref = await this.prisma.notificationPreference.upsert({
+        where: {
+          userId_category_type: {
+            userId,
+            category,
+            type,
+          },
+        },
+        create: {
+          userId,
+          category,
+          type,
+          enabled,
+        },
+        update: {
+          enabled,
+          isDeleted: false, // Restore if previously soft deleted
+          deletedAt: null,
+        },
+      });
+      results.push(this.toNotificationPreferenceDto(pref));
+    }
+
+    return results;
+  }
+
+  /**
+   * Get user preferences in grouped format.
+   * Returns a map of category -> {push: bool, in_app: bool}.
+   */
+  async getUserPreferencesGrouped(
+    userId: string,
+  ): Promise<Record<string, { push: boolean; in_app: boolean }>> {
+    const prefs = await this.prisma.notificationPreference.findMany({
+      where: {
+        userId,
+        isDeleted: false,
+      },
+    });
+
+    // Group by category with per-channel status
+    const grouped: Record<string, { push: boolean; in_app: boolean }> = {};
+
+    for (const pref of prefs) {
+      if (!grouped[pref.category]) {
+        grouped[pref.category] = {
+          push: true, // Default to enabled
+          in_app: true, // Default to enabled
+        };
+      }
+
+      if (pref.type === PrismaNotificationType.push) {
+        grouped[pref.category].push = pref.enabled;
+      } else if (pref.type === PrismaNotificationType.in_app) {
+        grouped[pref.category].in_app = pref.enabled;
+      }
+    }
+
+    return grouped;
+  }
+
+  /**
+   * Update user preferences in bulk. Each category update affects both push and in_app channels.
+   * Example: { "NEW_STORY": true, "STORY_FINISHED": false }
+   */
+  async updateUserPreferences(
+    userId: string,
+    preferences: Record<string, boolean>,
+  ): Promise<Record<string, { push: boolean; in_app: boolean }>> {
+    const categories = Object.keys(preferences) as PrismaCategory[];
+    const channels: PrismaNotificationType[] = [
+      PrismaNotificationType.in_app,
+      PrismaNotificationType.push,
+    ];
+
+    // Upsert preferences for each category + channel combination
+    for (const category of categories) {
+      const enabled = preferences[category];
+
+      for (const type of channels) {
+        await this.prisma.notificationPreference.upsert({
+          where: {
+            userId_category_type: {
+              userId,
+              category,
+              type,
+            },
+          },
+          create: {
+            userId,
+            category,
+            type,
+            enabled,
+          },
+          update: {
+            enabled,
+            isDeleted: false,
+            deletedAt: null,
+          },
+        });
+      }
+    }
+
+    return this.getUserPreferencesGrouped(userId);
+  }
+
+  /**
+   * Seed default notification preferences for a new user.
+   * Creates preferences for all user-facing categories with enabled: true.
+   * Called during user registration.
+   */
+  async seedDefaultPreferences(userId: string): Promise<void> {
+    // User-facing categories that should have preferences (excludes auth/system categories)
+    const userFacingCategories: PrismaCategory[] = [
+      // Subscription & Billing
+      PrismaCategory.SUBSCRIPTION_REMINDER,
+      PrismaCategory.SUBSCRIPTION_ALERT,
+      // Engagement / Discovery
+      PrismaCategory.NEW_STORY,
+      PrismaCategory.STORY_FINISHED,
+      // Reminders
+      PrismaCategory.INCOMPLETE_STORY_REMINDER,
+      PrismaCategory.DAILY_LISTENING_REMINDER,
+    ];
+
+    const channels: PrismaNotificationType[] = [
+      PrismaNotificationType.in_app,
+      PrismaNotificationType.push,
+    ];
+
+    const preferences = userFacingCategories.flatMap((category) =>
+      channels.map((type) => ({
+        userId,
+        category,
+        type,
+        enabled: true,
+      })),
+    );
+
+    // Use createMany with skipDuplicates to avoid errors if preferences already exist
+    await this.prisma.notificationPreference.createMany({
+      data: preferences,
+      skipDuplicates: true,
+    });
+
+    this.logger.log(`Seeded ${preferences.length} default preferences for user ${userId}`);
   }
 
   /**

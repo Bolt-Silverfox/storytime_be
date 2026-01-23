@@ -3,13 +3,14 @@ import { HttpModule } from '@nestjs/axios';
 import { NotificationService } from './notification.service';
 import { NotificationController } from './notification.controller';
 import { InAppNotificationController } from './in-app-notification.controller';
+import { UserPreferencesController } from './user-preferences.controller';
 import { InAppProvider } from './providers/in-app.provider';
 import { EmailProvider } from './providers/email.provider';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [HttpModule, forwardRef(() => AuthModule)],
-  controllers: [NotificationController, InAppNotificationController],
+  controllers: [NotificationController, InAppNotificationController, UserPreferencesController],
   providers: [NotificationService, InAppProvider, EmailProvider],
   exports: [NotificationService],
 })
