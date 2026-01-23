@@ -17,7 +17,7 @@ import {
 @ApiTags('notification-preferences')
 @Controller('notification-preferences')
 export class NotificationController {
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(private readonly notificationService: NotificationService) { }
 
   @Post()
   @ApiOperation({ summary: 'Create notification preferences (bulk)' })
@@ -65,16 +65,16 @@ export class NotificationController {
     return this.notificationService.undoDelete(id);
   }
 
-  @Get('user/:userId')
-  @ApiOperation({ summary: 'Get notification preferences for a user' })
+  @Get('users/:userId')
+  @ApiOperation({ summary: 'Get notification preferences for a user (raw records)' })
   @ApiParam({ name: 'userId', type: String })
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
   async getForUser(@Param('userId') userId: string) {
     return this.notificationService.getForUser(userId);
   }
 
-  @Get('kid/:kidId')
-  @ApiOperation({ summary: 'Get notification preferences for a kid' })
+  @Get('kids/:kidId')
+  @ApiOperation({ summary: 'Get notification preferences for a kid (raw records)' })
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
   async getForKid(@Param('kidId') kidId: string) {
