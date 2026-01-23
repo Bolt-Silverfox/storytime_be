@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AiProviders } from '../common/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants';
 
@@ -65,5 +66,43 @@ export class VoiceQuotaService {
                 elevenLabsCount: { increment: 1 },
             },
         });
+        await this.logAiActivity(userId, AiProviders.ElevenLabs, 'voice_cloning', 1);
+    }
+
+    async trackGeminiStory(userId: string): Promise<void> {
+        // Ensure usage record exists (in case it wasn't created by voice check)
+        const currentMonth = this.getCurrentMonth();
+        await this.prisma.userUsage.upsert({
+            where: { userId },
+            create: { userId, currentMonth, geminiStoryCount: 1 },
+            update: { geminiStoryCount: { increment: 1 } }
+        });
+        await this.logAiActivity(userId, AiProviders.Gemini, 'story_generation', 1);
+    }
+
+    async trackGeminiImage(userId: string): Promise<void> {
+        const currentMonth = this.getCurrentMonth();
+        await this.prisma.userUsage.upsert({
+            where: { userId },
+            create: { userId, currentMonth, geminiImageCount: 1 },
+            update: { geminiImageCount: { increment: 1 } }
+        });
+
+        await this.logAiActivity(userId, AiProviders.Gemini, 'image_generation', 1);
+    }
+
+    private async logAiActivity(userId: string, provider: string, type: string, credits: number) {
+        try {
+            await this.prisma.activityLog.create({
+                data: {
+                    userId,
+                    action: 'AI_GENERATION',
+                    status: 'SUCCESS',
+                    details: JSON.stringify({ provider, type, credits }),
+                },
+            });
+        } catch (error) {
+            this.logger.error(`Failed to log AI activity for user ${userId}: ${error.message}`);
+        }
     }
 }

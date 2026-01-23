@@ -456,6 +456,42 @@ export class AdminController {
     };
   }
 
+  @Get('dashboard/ai-credits')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get AI credit analytics',
+    description: 'Returns usage stats for AI services (ElevenLabs, Gemini), grouped by month for the current year',
+  })
+  @ApiOkResponse({
+    description: 'AI credit analytics retrieved successfully',
+  })
+  async getAiCreditStats() {
+    const data = await this.adminService.getAiCreditAnalytics();
+    return {
+      statusCode: 200,
+      message: 'AI credit analytics retrieved successfully',
+      data
+    };
+  }
+
+  @Get('dashboard/user-growth-monthly')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get monthly user growth (Free vs Paid)',
+    description: 'Returns user growth data for the last 12 months, split by subscription status',
+  })
+  @ApiOkResponse({
+    description: 'User growth data retrieved successfully',
+  })
+  async getUserGrowthMonthly() {
+    const data = await this.adminService.getUserGrowthMonthly();
+    return {
+      statusCode: 200,
+      message: 'User growth data retrieved successfully',
+      data: data.data
+    };
+  }
+
   // =====================
   // USER MANAGEMENT
   // =====================
