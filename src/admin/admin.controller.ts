@@ -508,6 +508,60 @@ export class AdminController {
   }
 
   // =====================
+  // SUPPORT MANAGEMENT
+  // =====================
+
+  @Get('support/tickets')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List support tickets' })
+  @ApiQuery({ name: 'status', required: false, enum: ['open', 'in_progress', 'resolved', 'closed'] })
+  @ApiQuery({ name: 'userId', required: false, description: 'Filter by User ID' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  async getSupportTickets(
+    @Query('status') status?: string,
+    @Query('userId') userId?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const result = await this.adminService.getSupportTickets({ status, userId, page, limit });
+    return {
+      statusCode: 200,
+      message: 'Support tickets retrieved successfully',
+      data: result.data,
+      meta: result.meta,
+    };
+  }
+
+  @Get('support/tickets/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get support ticket details' })
+  async getSupportTicket(@Param('id') id: string) {
+    const ticket = await this.adminService.getSupportTicket(id);
+    return {
+      statusCode: 200,
+      message: 'Support ticket retrieved successfully',
+      data: ticket,
+    };
+  }
+
+  @Patch('support/tickets/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update support ticket status' })
+  async updateSupportTicket(
+    @Param('id') id: string,
+    @Body() body: { status?: string, message?: string },
+  ) {
+    const ticket = await this.adminService.updateSupportTicket(id, body);
+    return {
+      statusCode: 200,
+      message: 'Support ticket updated successfully',
+      data: ticket,
+    };
+  }
+
+
+  // =====================
   // USER MANAGEMENT
   // =====================
 

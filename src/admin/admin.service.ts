@@ -26,6 +26,7 @@ import {
   ActivityLogDto,
   AiCreditAnalyticsDto,
   UserGrowthMonthlyDto,
+  SupportTicketDto,
 } from './dto/admin-responses.dto';
 import {
   UserFilterDto,
@@ -259,7 +260,7 @@ export class AdminService {
     const activeSubsMetric = await getCountTrend(this.prisma.subscription, (start, end) => ({
       startedAt: { gte: start, lte: end }
     }));
-  
+
     const paidUsers30dAgo = await this.prisma.subscription.count({
       where: {
         startedAt: { lte: lastMonthEnd },
@@ -1740,5 +1741,117 @@ export class AdminService {
       deletedAt: sub.deletedAt || undefined,
       user: sub.user,
     }));
+  }
+
+  // =====================
+  // SUPPORT TICKET MANAGEMENT
+  // =====================
+
+  async getSupportTickets(filters: { status?: string; userId?: string; page?: number; limit?: number }) {
+    const page = filters.page || 1;
+    const limit = filters.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.SupportTicketWhereInput = {
+      isDeleted: false,
+    };
+
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    if (filters.userId) {
+      where.userId = filters.userId;
+    }
+
+    const [total, tickets] = await Promise.all([
+      this.prisma.supportTicket.count({ where }),
+      this.prisma.supportTicket.findMany({
+        where,
+        take: limit,
+        skip,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data: tickets.map(ticket => ({
+        id: ticket.id,
+        subject: ticket.subject,
+        message: ticket.message,
+        status: ticket.status,
+        createdAt: ticket.createdAt,
+        user: ticket.user,
+      })),
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getSupportTicket(id: string) {
+    const ticket = await this.prisma.supportTicket.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!ticket) throw new NotFoundException('Support ticket not found');
+
+    return {
+      id: ticket.id,
+      subject: ticket.subject,
+      message: ticket.message,
+      status: ticket.status,
+      createdAt: ticket.createdAt,
+      user: ticket.user,
+    };
+  }
+
+  async updateSupportTicket(id: string, data: { status?: string; message?: string }) {
+    const updateData: any = {};
+    if (data.status) updateData.status = data.status;
+
+    const ticket = await this.prisma.supportTicket.update({
+      where: { id },
+      data: updateData,
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    return {
+      id: ticket.id,
+      subject: ticket.subject,
+      message: ticket.message,
+      status: ticket.status,
+      createdAt: ticket.createdAt,
+      user: ticket.user,
+    };
   }
 }

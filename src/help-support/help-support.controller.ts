@@ -1,12 +1,13 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Post, UseGuards, Req } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { HelpSupportService } from './help-support.service';
+import { AuthSessionGuard } from '../auth/auth.guard';
 
 @ApiTags('Help & Support')
 @Controller('help-support')
 export class HelpSupportController {
-  constructor(private readonly service: HelpSupportService) {}
+  constructor(private readonly service: HelpSupportService) { }
 
   // GET /help-support/faqs
   @Get('faqs')
@@ -19,8 +20,11 @@ export class HelpSupportController {
 
   // POST /help-support/feedback
   @Post('feedback')
-  submitFeedback(@Body() dto: CreateFeedbackDto) {
-    return this.service.submitFeedback(dto);
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Submit feedback / support ticket' })
+  submitFeedback(@Req() req: any, @Body() dto: CreateFeedbackDto) {
+    return this.service.submitFeedback(req.authUserData.userId, dto);
   }
 
   // GET /help-support/contact

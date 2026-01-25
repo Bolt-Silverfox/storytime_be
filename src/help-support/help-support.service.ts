@@ -1,9 +1,21 @@
-import { Injectable } from '@nestjs/common';
-
+import { Injectable, Logger } from '@nestjs/common';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
+import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
+import { ConfigService } from '@nestjs/config';
+import { render } from '@react-email/render';
+import { AdminSupportTicketTemplate } from '../notification/templates/admin-support-ticket';
 
 @Injectable()
 export class HelpSupportService {
+  private readonly logger = new Logger(HelpSupportService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+    private readonly configService: ConfigService,
+  ) { }
+
   // --- FAQs List ---
   getFaqs() {
     return [
@@ -30,12 +42,45 @@ export class HelpSupportService {
   }
 
   // --- Store feedback suggestion ---
-  async submitFeedback(dto: CreateFeedbackDto) {
-    // If saving to DB later:
-    // const feedback = await this.prisma.feedback.create({ data: dto });
+  async submitFeedback(userId: string, dto: CreateFeedbackDto) {
+    const subject = dto.subject || 'General Feedback';
+
+    // Save to DB
+    const ticket = await this.prisma.supportTicket.create({
+      data: {
+        userId,
+        subject,
+        message: dto.message,
+        status: 'open',
+      },
+    });
+
+    // Send email notification to support/admin
+    const supportEmail = this.configService.get<string>('SUPPORT_EMAIL') || 'admin@storytime.com';
+    const emailSubject = `[Support/Feedback] ${subject}`;
+
+    try {
+      const emailHtml = await render(
+        AdminSupportTicketTemplate({
+          userId,
+          ticketId: ticket.id,
+          subject,
+          message: dto.message,
+          userEmail: dto.email,
+        })
+      );
+
+      await this.notificationService.sendEmail(supportEmail, emailSubject, emailHtml);
+    } catch (error) {
+      this.logger.error(`Failed to send support email: ${error.message}`);
+    }
+
     return {
-      message: 'Thank you for your feedback!',
-      data: dto,
+      message: 'Thank you for your feedback! We have received your ticket.',
+      data: {
+        ticketId: ticket.id,
+        ...dto
+      },
     };
   }
 

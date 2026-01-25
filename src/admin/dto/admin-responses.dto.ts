@@ -803,3 +803,27 @@ export class UserGrowthMonthlyDto {
     paidUsers: number[];
   };
 }
+
+export class SupportTicketDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  subject: string;
+
+  @ApiProperty()
+  message: string;
+
+  @ApiProperty()
+  status: string;
+
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiProperty()
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+  };
+}
