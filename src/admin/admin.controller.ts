@@ -474,6 +474,21 @@ export class AdminController {
     };
   }
 
+  @Get('dashboard/ai-credits-balance')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get available AI credits (from provider)',
+    description: 'Returns real-time available credits from AI provider (ElevenLabs).',
+  })
+  async getAiCreditBalance() {
+    const data = await this.adminService.getAiCreditBalance();
+    return {
+      statusCode: 200,
+      message: 'AI credit balance retrieved successfully',
+      data
+    };
+  }
+
   @Get('dashboard/user-growth-monthly')
   @ApiBearerAuth()
   @ApiOperation({

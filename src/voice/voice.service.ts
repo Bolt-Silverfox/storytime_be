@@ -160,7 +160,7 @@ export class VoiceService {
 
     if (existing) {
       return { id: existing.id };
-    } 
+    }
 
     // 2. Fetch details from ElevenLabs to get Name AND Preview URL
     let voiceName = 'Imported ElevenLabs Voice';
@@ -219,7 +219,6 @@ export class VoiceService {
     return { id: newVoice.id };
   }
 
-  // Moved from StoryService and updated
   async fetchAvailableVoices(): Promise<VoiceResponseDto[]> {
     // Get the IDs we expect from config
     const systemIds = Object.values(VOICE_CONFIG).map((c) => c.elevenLabsId);
@@ -248,5 +247,9 @@ export class VoiceService {
         elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
       };
     });
+  }
+
+  async getProviderSubscriptionInfo() {
+    return this.elevenLabsProvider.getSubscriptionInfo();
   }
 }

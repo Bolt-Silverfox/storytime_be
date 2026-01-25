@@ -24,6 +24,7 @@ export const envSchema = z.object({
     .default('false'),
   SMTP_USER: z.string().email('SMTP_USER must be a valid email'),
   SMTP_PASS: z.string().min(1, 'SMTP_PASS is required'),
+  SUPPORT_EMAIL: z.string().email('SUPPORT_EMAIL must be a valid email').optional(),
   MAIL_ENCRYPTION: z.enum(['TLS', 'SSL']).optional().default('TLS'),
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   ADMIN_SECRET: z.string().min(1, 'ADMIN_SECRET is required'),

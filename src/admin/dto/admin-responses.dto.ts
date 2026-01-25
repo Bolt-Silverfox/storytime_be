@@ -117,6 +117,10 @@ export class DashboardStatsDto {
     newUsers: AnalyticsMetricDto;
     totalUsers: AnalyticsMetricDto;
     activeUsers: AnalyticsMetricDto;
+    revenue: AnalyticsMetricDto;
+    activeSubscriptions: AnalyticsMetricDto;
+    totalStories: AnalyticsMetricDto;
+    unpaidUsers: AnalyticsMetricDto;
   };
 }
 

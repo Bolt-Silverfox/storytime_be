@@ -39,11 +39,16 @@ import {
 } from './dto/user-management.dto';
 import { categories, themes, defaultAgeGroups, systemAvatars } from '../../prisma/data';
 
+import { VoiceService } from '../voice/voice.service';
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
 
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly voiceService: VoiceService,
+  ) { }
 
   // =====================
   // DASHBOARD STATISTICS
@@ -192,50 +197,101 @@ export class AdminService {
 
     // --- TREND ANALYTICS CALCULATION ---
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0); // End of last month
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    // Helpers for trend calculation
+    const getCountTrend = async (model: any, whereClauseFn: (start: Date, end: Date) => any) => {
+      const current = await model.count({
+        where: whereClauseFn(startOfMonth, now),
+      });
+      const previous = await model.count({
+        where: whereClauseFn(lastMonthStart, lastMonthEnd),
+      });
+      return {
+        count: current,
+        trendPercent: this.calculateTrendPercentage(current, previous),
+        timeframe: 'vs last month',
+      };
+    };
 
     // 1. New Users Trend
+    const newUsersMetric = await getCountTrend(this.prisma.user, (start, end) => ({
+      createdAt: { gte: start, lte: end },
+      isDeleted: false,
+    }));
+
+    // 2. Total Users Trend (Calculated differently as it's a snapshot)
+    // New Users Last Month for calculation
     const newUsersLastMonth = await this.prisma.user.count({
       where: {
-        createdAt: {
-          gte: lastMonthStart,
-          lte: lastMonthEnd,
-        },
+        createdAt: { gte: lastMonthStart, lte: lastMonthEnd },
         isDeleted: false,
       },
     });
-
-    const calculateTrend = (current: number, previous: number): number => {
-      if (previous === 0) return current > 0 ? 100 : 0;
-      return parseFloat((((current - previous) / previous) * 100).toFixed(1));
-    };
-
-    const newUsersTrend = calculateTrend(newUsersThisMonth, newUsersLastMonth);
-
-    // 2. Total Users Trend
-    // Total users at start of last month = Total Now (approx) - New This Month
-    const totalUsersLastMonthEnd = totalUsers - newUsersThisMonth;
-    const totalUsersTrend = calculateTrend(totalUsers, totalUsersLastMonthEnd);
+    const totalUsersLastMonthEnd = totalUsers - newUsersMetric.count;
+    const totalUsersTrend = this.calculateTrendPercentage(totalUsers, totalUsersLastMonthEnd);
 
     // 3. Active Users Trend (MAU)
-    const activeUsersThisMonthCount = await this.prisma.user.count({
+    const activeUsersMetric = await getCountTrend(this.prisma.user, (start, end) => ({
+      updatedAt: { gte: start, lte: end },
+      isDeleted: false,
+    }));
+
+    // 4. Revenue Trend
+    const getRevenue = async (start: Date, end: Date) => {
+      const result = await this.prisma.paymentTransaction.aggregate({
+        where: { createdAt: { gte: start, lte: end }, status: 'success' },
+        _sum: { amount: true },
+      });
+      return result._sum.amount || 0;
+    };
+    const revenueThisMonth = await getRevenue(startOfMonth, now);
+    const revenueLastMonth = await getRevenue(lastMonthStart, lastMonthEnd);
+
+    const revenueMetric = {
+      count: Number(revenueThisMonth.toFixed(2)),
+      trendPercent: this.calculateTrendPercentage(revenueThisMonth, revenueLastMonth),
+      timeframe: 'vs last month',
+    };
+
+    // 5. Active Subscriptions Trend
+    // Using the proxy logic from before: New Subscriptions as activity momentum
+    const activeSubsMetric = await getCountTrend(this.prisma.subscription, (start, end) => ({
+      startedAt: { gte: start, lte: end }
+    }));
+  
+    const paidUsers30dAgo = await this.prisma.subscription.count({
       where: {
-        updatedAt: { gte: startOfMonth },
-        isDeleted: false,
+        startedAt: { lte: lastMonthEnd },
+        OR: [{ endsAt: null }, { endsAt: { gt: lastMonthEnd } }]
       }
     });
 
-    const activeUsersLastMonthCount = await this.prisma.user.count({
-      where: {
-        updatedAt: {
-          gte: lastMonthStart,
-          lte: lastMonthEnd,
-        },
-        isDeleted: false,
-      }
-    });
+    const activeSubscriptionsMetric = {
+      count: activeSubscriptions,
+      trendPercent: this.calculateTrendPercentage(activeSubscriptions, paidUsers30dAgo),
+      timeframe: 'vs last month'
+    };
 
-    const activeUsersTrend = calculateTrend(activeUsersThisMonthCount, activeUsersLastMonthCount);
+    // 6. Total Stories Trend
+    // New Stories Count for trend calculation info
+    const newStoriesThisMonth = await this.prisma.story.count({ where: { createdAt: { gte: startOfMonth } } });
+    const totalStoriesLastMonthEnd = totalStories - newStoriesThisMonth;
+
+    const totalStoriesMetric = {
+      count: totalStories,
+      trendPercent: this.calculateTrendPercentage(totalStories, totalStoriesLastMonthEnd),
+      timeframe: 'vs last month'
+    };
+
+    // 7. Unpaid Users
+    const unpaidUsers30dAgo = totalUsersLastMonthEnd - paidUsers30dAgo;
+
+    const unpaidUsersMetric = {
+      count: unpaidUsers,
+      trendPercent: this.calculateTrendPercentage(unpaidUsers, unpaidUsers30dAgo),
+      timeframe: 'vs last month'
+    };
 
     return {
       totalUsers,
@@ -253,7 +309,6 @@ export class AdminService {
       totalStoryViews: totalStoryProgress,
       totalFavorites,
       averageSessionTime: Math.round(avgSessionTime),
-      // New subscription metrics
       paidUsers,
       unpaidUsers,
       totalSubscriptions,
@@ -263,26 +318,26 @@ export class AdminService {
         count: plan._count,
       })),
       totalRevenue: Number(totalRevenue.toFixed(2)),
-      // Calculate conversion rate (paid users / total users)
       conversionRate: totalUsers > 0 ? Number(((paidUsers / totalUsers) * 100).toFixed(2)) : 0,
       performanceMetrics: {
-        newUsers: {
-          count: newUsersThisMonth,
-          trendPercent: newUsersTrend,
-          timeframe: 'vs last month'
-        },
+        newUsers: newUsersMetric,
         totalUsers: {
           count: totalUsers,
           trendPercent: totalUsersTrend,
-          timeframe: 'vs last month'
+          timeframe: 'vs last month',
         },
-        activeUsers: {
-          count: activeUsersThisMonthCount, // MAU
-          trendPercent: activeUsersTrend,
-          timeframe: 'vs last month'
-        }
+        activeUsers: activeUsersMetric,
+        revenue: revenueMetric,
+        activeSubscriptions: activeSubscriptionsMetric,
+        totalStories: totalStoriesMetric,
+        unpaidUsers: unpaidUsersMetric
       }
     };
+  }
+
+  private calculateTrendPercentage(current: number, previous: number): number {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return parseFloat((((current - previous) / previous) * 100).toFixed(1));
   }
 
   async getUserGrowth(dateRange: DateRangeDto): Promise<UserGrowthDto[]> {
@@ -1500,6 +1555,10 @@ export class AdminService {
     }));
 
     return { yearly };
+  }
+
+  async getAiCreditBalance() {
+    return this.voiceService.getProviderSubscriptionInfo();
   }
 
   // =====================

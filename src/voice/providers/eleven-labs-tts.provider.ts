@@ -59,13 +59,30 @@ export class ElevenLabsTTSProvider implements ITextToSpeechProvider, IVoiceCloni
 
             const response = await this.client.voices.add({
                 name,
-                files: [blob as any], // Cast to any because SDK types might be strict about File/Blob
+                files: [blob as any], // Cast to any because SDK types might be strict about F/Blob
                 description: 'Cloned via StoryTime App',
             });
 
             return response.voice_id;
         } catch (error) {
             this.logger.error(`ElevenLabs voice cloning failed: ${error.message}`);
+            throw error;
+        }
+    }
+
+    async getSubscriptionInfo(): Promise<{ characterCount: number; characterLimit: number }> {
+        if (!this.client) {
+            throw new Error('ElevenLabs client is not initialized');
+        }
+
+        try {
+            const subscription = await this.client.user.getSubscription();
+            return {
+                characterCount: subscription.character_count,
+                characterLimit: subscription.character_limit,
+            };
+        } catch (error) {
+            this.logger.error(`Failed to fetch ElevenLabs subscription: ${error.message}`);
             throw error;
         }
     }
