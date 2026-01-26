@@ -10,7 +10,7 @@ import { UploadService } from '../upload/upload.service';
 import {
   CreateStoryBuddyDto,
   UpdateStoryBuddyDto,
-} from './story-buddy.dto';
+} from './dto/story-buddy.dto';
 
 @Injectable()
 export class StoryBuddyService {

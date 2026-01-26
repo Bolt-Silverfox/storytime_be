@@ -1,6 +1,6 @@
 import { UploadService } from '../upload/upload.service';
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
-import { VoiceType } from '../voice/voice.dto';
+import { VoiceType } from '../voice/dto/voice.dto';
 import { VOICE_CONFIG, DEFAULT_VOICE } from '../voice/voice.constants';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';

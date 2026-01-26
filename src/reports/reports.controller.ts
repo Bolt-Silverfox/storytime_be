@@ -13,8 +13,8 @@ import {
   ScreenTimeSessionDto,
   EndScreenTimeSessionDto,
   DailyLimitDto,
-} from './reports.dto';
-import { QuestionAnswerDto } from '../story/story.dto';
+} from './dto/reports.dto';
+import { QuestionAnswerDto } from '../story/dto/story.dto';
 
 @ApiTags('reports')
 @Controller('reports')

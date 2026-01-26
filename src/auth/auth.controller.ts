@@ -1,6 +1,6 @@
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { Response, Request } from 'express';
-import { GoogleOAuthProfile } from '@/common/types';
+import { GoogleOAuthProfile } from '@/shared/types';
 import {
   Body,
   Controller,
@@ -32,7 +32,7 @@ import {
   SendEmailVerificationDto,
   ChangePasswordDto,
   CompleteProfileDto,
-} from './auth.dto';
+} from './dto/auth.dto';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -40,10 +40,10 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
+import { AuthenticatedRequest, AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
-import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
-import { THROTTLE_LIMITS } from '@/common/constants/throttle.constants';
+import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
+import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 
 @ApiTags('Auth')
 @Controller('auth')

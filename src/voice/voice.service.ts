@@ -9,7 +9,7 @@ import {
   UploadVoiceDto,
   VoiceResponseDto,
   VoiceSourceType,
-} from './voice.dto';
+} from './dto/voice.dto';
 import { VOICE_CONFIG } from './voice.constants';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
 

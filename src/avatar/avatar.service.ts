@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
-import { CreateAvatarDto, UpdateAvatarDto } from './avatar.dto';
+import { CreateAvatarDto, UpdateAvatarDto } from './dto/avatar.dto';
 
 @Injectable()
 export class AvatarService {

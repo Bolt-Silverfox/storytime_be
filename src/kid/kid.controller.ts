@@ -2,7 +2,7 @@ import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Pa
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { KidService } from './kid.service';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
-import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { AnalyticsService } from '../analytics/analytics.service';
 import * as UAParser from 'ua-parser-js';
 

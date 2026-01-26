@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EnvConfig } from '../config/env.validation';
+import { EnvConfig } from '@/shared/config/env.validation';
 import * as nodemailer from 'nodemailer';
 import { NotificationRegistry, Notifications } from './notification.registry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,7 +14,7 @@ import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
-} from './notification.dto';
+} from './dto/notification.dto';
 import { InAppProvider } from './providers/in-app.provider';
 import { EmailProvider } from './providers/email.provider';
 import {
@@ -22,6 +22,7 @@ import {
   NotificationPayload,
   NotificationResult,
 } from './providers/notification-provider.interface';
+import { EmailQueueService, QueuedEmailResult } from './queue/email-queue.service';
 
 @Injectable()
 export class NotificationService {
@@ -34,8 +35,9 @@ export class NotificationService {
     private readonly prisma: PrismaService,
     private readonly inAppProvider: InAppProvider,
     private readonly emailProvider: EmailProvider,
+    private readonly emailQueueService: EmailQueueService,
   ) {
-    // Initialize legacy email transporter (for backward compatibility)
+    // Initialize legacy email transporter (for backward compatibility / sync sends)
     this.transporter = nodemailer.createTransport({
       host: this.configService.get('SMTP_HOST'),
       port: this.configService.get('SMTP_PORT') || 587,
@@ -45,7 +47,7 @@ export class NotificationService {
         pass: this.configService.get('SMTP_PASS'),
       },
       tls: {
-        rejectUnauthorized: false,
+        rejectUnauthorized: this.configService.get('NODE_ENV') === 'production',
       },
     });
 
@@ -129,7 +131,43 @@ export class NotificationService {
     }
   }
 
-  async sendEmail(
+  /**
+   * Queue an email for async delivery with automatic retries.
+   * This is the RECOMMENDED method for sending emails.
+   *
+   * @param email Recipient email address
+   * @param subject Email subject
+   * @param htmlContent Rendered HTML content
+   * @param options Optional: userId, category for tracking and priority
+   */
+  async queueEmail(
+    email: string,
+    subject: string,
+    htmlContent: string,
+    options?: {
+      userId?: string;
+      category?: PrismaCategory;
+      templateName?: string;
+    },
+  ): Promise<QueuedEmailResult> {
+    return this.emailQueueService.queueEmail({
+      userId: options?.userId || 'system',
+      category: options?.category || PrismaCategory.SYSTEM_ALERT,
+      to: email,
+      subject,
+      html: htmlContent,
+      metadata: options?.templateName ? { templateName: options.templateName } : undefined,
+    });
+  }
+
+  /**
+   * Send email synchronously (bypasses queue).
+   * Use sparingly - only when immediate delivery confirmation is required.
+   * For most cases, use queueEmail() instead.
+   *
+   * @deprecated Prefer queueEmail() for reliability with automatic retries
+   */
+  async sendEmailSync(
     email: string,
     subject: string,
     htmlContent: string,
@@ -163,6 +201,38 @@ export class NotificationService {
         error: errorMessage,
       };
     }
+  }
+
+  /**
+   * Send email - now queues by default for reliability.
+   * Returns immediately after queueing (non-blocking).
+   *
+   * @param email Recipient email address
+   * @param subject Email subject
+   * @param htmlContent Rendered HTML content
+   * @param sync Set to true to send synchronously (not recommended)
+   */
+  async sendEmail(
+    email: string,
+    subject: string,
+    htmlContent: string,
+    sync: boolean = false,
+  ): Promise<{
+    success: boolean;
+    messageId?: string;
+    jobId?: string;
+    error?: string;
+  }> {
+    if (sync) {
+      return this.sendEmailSync(email, subject, htmlContent);
+    }
+
+    const result = await this.queueEmail(email, subject, htmlContent);
+    return {
+      success: result.queued,
+      jobId: result.jobId,
+      error: result.error,
+    };
   }
 
   /**

@@ -6,7 +6,7 @@ import {
   RedeemRewardDto,
   UpdateRewardRedemptionStatusDto,
   RewardRedemptionDto,
-} from './reward.dto';
+} from './dto/reward.dto';
 
 const prisma = new PrismaClient();
 

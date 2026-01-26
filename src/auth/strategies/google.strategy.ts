@@ -3,7 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { Strategy } from 'passport-custom';
 import { OAuth2Client } from 'google-auth-library';
-import { GoogleOAuthProfile } from '@/common/types';
+import { GoogleOAuthProfile } from '@/shared/types';
 import { Request } from 'express';
 
 @Injectable()

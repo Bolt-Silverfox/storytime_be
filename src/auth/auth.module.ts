@@ -3,9 +3,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { PrismaService } from '@/prisma/prisma.service';
 import { NotificationModule } from '@/notification/notification.module';
-import { AuthSessionGuard } from './auth.guard';
 import { PassportModule } from '@nestjs/passport';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
@@ -32,13 +30,11 @@ import { GoogleOAuthStrategy } from './strategies/google-oauth.strategy';
 
   providers: [
     AuthService,
-    PrismaService,
-    AuthSessionGuard,
     GoogleStrategy,
     GoogleAuthGuard,
     GoogleOAuthStrategy,
   ],
 
-  exports: [AuthService, JwtModule, PassportModule, AuthSessionGuard],
+  exports: [AuthService, JwtModule, PassportModule],
 })
 export class AuthModule { }

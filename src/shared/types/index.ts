@@ -1,10 +1,10 @@
 /**
  * Shared type definitions for the Storytime API
- * Import from '@/common/types' or 'src/common/types'
+ * Import from '@/shared/types'
  */
 
 // Re-export auth types for convenience
-export { JwtPayload, AuthenticatedRequest } from '@/auth/auth.guard';
+export { JwtPayload, AuthenticatedRequest } from '../guards/auth.guard';
 
 /**
  * Google OAuth profile returned from passport strategy

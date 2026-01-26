@@ -9,6 +9,8 @@ This is a **NestJS 11** backend with **Prisma ORM**, **PostgreSQL**, and **Redis
 - **ORM**: Prisma 6.19.0
 - **Database**: PostgreSQL
 - **Cache**: Redis + In-Memory (two-tier)
+- **Queue**: BullMQ (Redis-backed job queue for emails)
+- **Health Checks**: @nestjs/terminus (DB, Redis, SMTP, Queue, Memory, Disk)
 - **Auth**: JWT + Sessions, Google OAuth
 - **External Services**: ElevenLabs, Deepgram, Google Gemini, Cloudinary
 
@@ -99,16 +101,64 @@ export class CreateStoryDto {
 
 ## Module Structure
 
-Each feature module should follow this structure:
+### Feature Modules
+Each feature module follows this structure:
 ```
 feature/
 ├── dto/
 │   ├── create-feature.dto.ts
 │   └── update-feature.dto.ts
+├── guards/                    # Module-specific guards (e.g., auth/guards/google-auth.guard.ts)
+├── utils/                     # Module-specific utilities
 ├── feature.controller.ts
 ├── feature.service.ts
 ├── feature.module.ts
 └── feature.service.spec.ts
+```
+
+### Shared Module (`src/shared/`)
+Cross-cutting concerns are centralized in the shared module:
+```
+shared/
+├── config/                    # App configuration (env validation, throttle config)
+│   ├── env.validation.ts
+│   └── throttle.config.ts
+├── constants/                 # Shared constants
+│   ├── ai-providers.constants.ts
+│   └── throttle.constants.ts
+├── decorators/                # Custom decorators (@Public, etc.)
+│   └── public.decorator.ts
+├── dtos/                      # Shared DTOs (API response wrapper)
+│   └── api-response.dto.ts
+├── filters/                   # Exception filters
+│   ├── http-exception.filter.ts
+│   ├── prisma-exception.filter.ts
+│   └── throttler-exception.filter.ts
+├── guards/                    # Global guards (auth, admin, throttle)
+│   ├── admin.guard.ts
+│   ├── auth.guard.ts
+│   ├── auth-throttle.guard.ts
+│   └── subscription-throttle.guard.ts
+├── interceptors/              # Response interceptors
+│   └── success-response.interceptor.ts
+├── middleware/                # Global middleware
+│   └── request-logger.middleware.ts
+├── types/                     # TypeScript type definitions
+│   └── index.ts
+└── shared.module.ts           # Exports all shared utilities (marked @Global)
+```
+
+### Import Patterns
+```typescript
+// Shared utilities - use @/shared/
+import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import { Public } from '@/shared/decorators/public.decorator';
+
+// Feature DTOs - use relative ./dto/
+import { CreateStoryDto } from './dto/story.dto';
+
+// Cross-module imports - use @/ alias
+import { UserDto } from '@/auth/dto/auth.dto';
 ```
 
 ## Testing Requirements
@@ -149,6 +199,120 @@ All responses use the standardized wrapper from `SuccessResponseInterceptor`:
 }
 ```
 
+## Email Queue System
+
+The application uses **BullMQ** for reliable async email delivery with automatic retries.
+
+### Architecture
+```
+notification/
+├── queue/
+│   ├── email-queue.constants.ts  # Queue names, retry config
+│   ├── email-job.interface.ts    # Job data types, priorities
+│   ├── email-queue.service.ts    # Queue producer (adds jobs)
+│   ├── email.processor.ts        # Queue consumer (processes jobs)
+│   └── index.ts
+├── providers/
+│   └── email.provider.ts         # Direct SMTP (used by processor)
+└── notification.service.ts       # Public API (queueEmail, sendEmail)
+```
+
+### Usage
+```typescript
+// RECOMMENDED: Queue email for async delivery with retries
+await this.notificationService.queueEmail(
+  'user@example.com',
+  'Subject',
+  '<p>HTML content</p>',
+  { userId: user.id, category: 'EMAIL_VERIFICATION' }
+);
+
+// Legacy: Sync send (only when immediate confirmation needed)
+await this.notificationService.sendEmail(email, subject, html, true);
+```
+
+### Retry Configuration
+- **5 retry attempts** with exponential backoff
+- **Delays**: 30s → 1m → 2m → 4m → 8m
+- **Priority levels**: HIGH (auth emails), NORMAL, LOW (marketing)
+- Failed jobs kept for 7 days for debugging
+
+### Monitoring
+```typescript
+// Get queue statistics
+const stats = await emailQueueService.getQueueStats();
+// { waiting: 5, active: 1, completed: 100, failed: 2, delayed: 0 }
+```
+
+## Health Checks
+
+The application uses **@nestjs/terminus** for comprehensive health monitoring.
+
+### Endpoints
+| Endpoint | Purpose | Checks |
+|----------|---------|--------|
+| `GET /health` | Liveness probe | Service is running |
+| `GET /health/ready` | Readiness probe | Database, Redis, Email Queue |
+| `GET /health/db` | Database health | Prisma connection |
+| `GET /health/redis` | Redis health | Cache connectivity |
+| `GET /health/smtp` | SMTP health | Email server verification |
+| `GET /health/queue` | Queue health | BullMQ email queue metrics |
+| `GET /health/system` | System resources | Memory heap/RSS, Disk space |
+| `GET /health/full` | Complete check | All indicators combined |
+
+### Architecture
+```
+health/
+├── indicators/
+│   ├── prisma.health.ts     # Database connectivity
+│   ├── redis.health.ts      # Redis ping + memory info
+│   ├── smtp.health.ts       # SMTP verification
+│   ├── queue.health.ts      # BullMQ queue statistics
+│   └── index.ts
+├── health.controller.ts
+└── health.module.ts
+```
+
+### Kubernetes Integration
+```yaml
+# Example liveness/readiness probes
+livenessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /api/v1/health/ready
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+```
+
+## Request Logging Middleware
+
+The application logs all HTTP requests with tracing support via `RequestLoggerMiddleware`.
+
+### Features
+- **Request ID generation**: UUID per request (or uses `X-Request-ID` header)
+- **Response timing**: Millisecond precision duration logging
+- **User tracking**: Logs authenticated user ID (first 8 chars)
+- **Status-based log levels**: INFO (2xx/3xx), WARN (4xx), ERROR (5xx)
+- **Smart filtering**: Skips health check endpoints to reduce noise
+
+### Log Format
+```
+→ GET /api/v1/users [a1b2c3d4] from 192.168.1.1      # Incoming request
+← GET /api/v1/users 200 45ms [a1b2c3d4] user:5e6f7g8h # Success response
+⚠ POST /api/v1/auth 401 12ms [a1b2c3d4]              # Client error
+✗ GET /api/v1/stories 500 230ms [a1b2c3d4]           # Server error
+```
+
+### Client Correlation
+The middleware sets `X-Request-ID` response header, allowing clients to trace requests through logs.
+
 ## Security Guidelines
 
 1. **Never commit secrets** - Use environment variables
@@ -164,17 +328,31 @@ All responses use the standardized wrapper from `SuccessResponseInterceptor`:
 - [ ] Increase test coverage (currently ~15%)
 - [ ] Split large services (AuthService: 848 lines)
 - [ ] Resolve circular dependencies (use events instead of forwardRef)
+- [ ] Fix notification service Prisma schema mismatch (`category` field removed)
 
 ### Medium Priority
-- [ ] Standardize import paths to use `@/` alias
-- [ ] Add request logging middleware
-- [ ] Implement retry logic for external services
-- [ ] Add health checks for external dependencies
+- [x] ~~Standardize import paths to use `@/` alias~~ (Completed)
+- [x] ~~Consolidate common utilities into shared module~~ (Completed)
+- [x] ~~Implement retry logic for email service~~ (BullMQ queue with exponential backoff)
+- [x] ~~Add request logging middleware~~ (RequestLoggerMiddleware with tracing)
+- [x] ~~Add health checks for external dependencies~~ (@nestjs/terminus - DB, Redis, SMTP, Queue)
+- [ ] Implement retry logic for other external services (AI, TTS)
 
 ### Low Priority
 - [ ] Fix typo: `generete-token.ts` → `generate-token.ts`
-- [ ] Consolidate `support/` and `help-support/` modules
+- [x] ~~Consolidate `support/` and `help-support/` modules~~ (support/ removed, help-support/ retained)
 - [ ] Add JSDoc comments to public service methods
+
+### Completed Refactoring (January 2026)
+- ✅ Created centralized `shared/` module for cross-cutting concerns
+- ✅ Moved guards, filters, interceptors from `common/` → `shared/`
+- ✅ Moved config and decorators to `shared/`
+- ✅ Standardized DTO locations to `module/dto/` subdirectories
+- ✅ Updated all import paths to use `@/` alias pattern
+- ✅ Implemented BullMQ email queue with retry logic and exponential backoff
+- ✅ Fixed TLS validation (enabled in production, disabled in dev)
+- ✅ Added @nestjs/terminus health checks (DB, Redis, SMTP, Queue, System)
+- ✅ Added request logging middleware with request ID tracing
 
 ## Refactoring Guidelines
 
@@ -187,7 +365,7 @@ When making changes:
 
 ## Environment Variables
 
-Required variables are validated in `src/config/env.validation.ts` using Zod. Key variables:
+Required variables are validated in `src/shared/config/env.validation.ts` using Zod. Key variables:
 - `NODE_ENV`: development | staging | production
 - `DATABASE_URL`: PostgreSQL connection string
 - `REDIS_URL`: Redis connection string (for caching)
@@ -208,3 +386,8 @@ pnpm run test          # Unit tests
 pnpm run test:e2e      # E2E tests
 pnpm run test:cov      # Coverage report
 ```
+
+
+## INSTRUCTIONS
+
+You're a senior developer with 25+ years of experience working on highly scalable and performant applications. 

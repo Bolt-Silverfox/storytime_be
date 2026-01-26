@@ -22,11 +22,11 @@ import {
   ResetPasswordDto,
   ChangePasswordDto,
   CompleteProfileDto,
-} from './auth.dto';
+} from './dto/auth.dto';
 import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { generateToken } from '@/utils/generate-token';
-import { GoogleOAuthProfile } from '@/common/types';
+import { GoogleOAuthProfile } from '@/shared/types';
 import * as crypto from 'crypto';
 import { NotificationService } from '@/notification/notification.service';
 import { JwtService } from '@nestjs/jwt';

@@ -3,7 +3,7 @@ import { KidController } from './kid.controller';
 import { KidService } from './kid.service';
 import { AuthenticatedRequest, AuthSessionGuard } from '../auth/auth.guard';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
-import { VoiceType } from '@/story/story.dto';
+import { VoiceType } from '@/story/dto/story.dto';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AnalyticsService } from '../analytics/analytics.service';
 

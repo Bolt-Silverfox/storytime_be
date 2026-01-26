@@ -16,8 +16,8 @@ import {
     ApiQuery,
 } from '@nestjs/swagger';
 import { NotificationService } from './notification.service';
-import { NotificationDto, MarkReadDto } from './notification.dto';
-import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { NotificationDto, MarkReadDto } from './dto/notification.dto';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 
 @ApiTags('notifications')
 @ApiBearerAuth()

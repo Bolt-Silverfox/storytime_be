@@ -12,7 +12,7 @@ import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
-} from './notification.dto';
+} from './dto/notification.dto';
 
 @ApiTags('notification-preferences')
 @Controller('notification-preferences')
