@@ -1328,7 +1328,7 @@ export class AdminService {
   async seedDatabase(): Promise<{ message: string }> {
     try {
       // Seed categories
-      console.log('📚 Seeding categories...');
+      this.logger.log('Seeding categories...');
       for (const category of categories) {
         const existingCategory = await this.prisma.category.findFirst({
           where: { name: category.name },
@@ -1356,7 +1356,7 @@ export class AdminService {
       }
 
       // Seed themes
-      console.log('🎨 Seeding themes...');
+      this.logger.log('Seeding themes...');
       for (const theme of themes) {
         const existingTheme = await this.prisma.theme.findFirst({
           where: { name: theme.name },
@@ -1384,7 +1384,7 @@ export class AdminService {
       }
 
       // Seed age groups
-      console.log('👶 Seeding age groups...');
+      this.logger.log('Seeding age groups...');
       for (const ageGroup of defaultAgeGroups) {
         const existingAgeGroup = await this.prisma.ageGroup.findFirst({
           where: { name: ageGroup.name },
@@ -1412,7 +1412,7 @@ export class AdminService {
       }
 
       // Seed system avatars
-      console.log('🖼️ Seeding system avatars...');
+      this.logger.log('Seeding system avatars...');
       for (const avatarData of systemAvatars) {
         const existingAvatar = await this.prisma.avatar.findFirst({
           where: {

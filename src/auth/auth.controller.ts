@@ -1,5 +1,6 @@
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { Response, Request } from 'express';
+import { GoogleOAuthProfile } from '@/common/types';
 import {
   Body,
   Controller,
@@ -280,8 +281,8 @@ export class AuthController {
   // ===== GOOGLE OAUTH CALLBACK =====
   @Get('google/oauth/callback')
   @UseGuards(GoogleAuthGuard)
-  async googleCallback(@Req() req: Request, @Res() res: Response) {
-    const payload = (req as any).user;
+  async googleCallback(@Req() req: Request & { user: GoogleOAuthProfile }, @Res() res: Response) {
+    const payload = req.user;
     const result = await this.authService.handleGoogleOAuthPayload(payload);
 
     return res.redirect(
