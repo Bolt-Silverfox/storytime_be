@@ -23,11 +23,12 @@ import {
   ChangePasswordDto,
   CompleteProfileDto,
 } from './auth.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
-import { generateToken } from 'src/utils/generete-token';
+import { generateToken } from '@/utils/generate-token';
+import { GoogleOAuthProfile } from '@/common/types';
 import * as crypto from 'crypto';
-import { NotificationService } from 'src/notification/notification.service';
+import { NotificationService } from '@/notification/notification.service';
 import { JwtService } from '@nestjs/jwt';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
 
@@ -727,8 +728,14 @@ export class AuthService {
     return this._upsertOrReturnUserFromGooglePayload(googlePayload);
   }
 
-  async handleGoogleOAuthPayload(payload: any) {
-    return this._upsertOrReturnUserFromGooglePayload(payload);
+  async handleGoogleOAuthPayload(payload: GoogleOAuthProfile) {
+    return this._upsertOrReturnUserFromGooglePayload({
+      googleId: payload.providerId,
+      email: payload.email,
+      picture: payload.picture,
+      name: `${payload.firstName || ''} ${payload.lastName || ''}`.trim() || undefined,
+      emailVerified: payload.emailVerified,
+    });
   }
 
   // ====================================================

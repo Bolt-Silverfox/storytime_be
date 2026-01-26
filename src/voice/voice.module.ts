@@ -1,6 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
-import { AuthModule } from 'src/auth/auth.module';
+import { AuthModule } from '@/auth/auth.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { StoryModule } from '../story/story.module';
 import { UploadService } from '../upload/upload.service';
