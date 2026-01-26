@@ -32,11 +32,11 @@ import {
   SelectBuddyDto,
   GetBuddyMessageDto,
   StoryBuddyResponseDto,
-} from './story-buddy.dto';
-import { AuthSessionGuard } from '../auth/auth.guard';
-import { AdminGuard } from '../auth/admin.guard';
-import { Public } from '../auth/public.decorator';
-import { SuccessResponse } from '../common/dtos/api-response.dto';
+} from './dto/story-buddy.dto';
+import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import { AdminGuard } from '@/shared/guards/admin.guard';
+import { Public } from '@/shared/decorators/public.decorator';
+import { SuccessResponse } from '@/shared/dtos/api-response.dto';
 
 @Controller('story-buddies')
 @UseGuards(AuthSessionGuard)

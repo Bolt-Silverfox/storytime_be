@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EnvConfig } from '../../config/env.validation';
+import { EnvConfig } from '@/shared/config/env.validation';
 import * as nodemailer from 'nodemailer';
 import {
     INotificationProvider,

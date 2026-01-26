@@ -5,9 +5,9 @@ import {
   KidDetailedReportDto,
   WeeklyReportDto,
   DailyLimitDto,
-} from './reports.dto';
+} from './dto/reports.dto';
 // import { SetDailyLimitDto } from '@/control/control.dto';
-import { QuestionAnswerDto } from '../story/story.dto'; // Import from story module
+import { QuestionAnswerDto } from '../story/dto/story.dto'; // Import from story module
 import { BadgeProgressEngine } from '../achievement-progress/badge-progress.engine';
 
 const prisma = new PrismaClient();

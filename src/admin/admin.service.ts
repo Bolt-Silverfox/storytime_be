@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AiProviders } from '../common/constants/ai-providers.constants';
+import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { Role, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {

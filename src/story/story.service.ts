@@ -22,7 +22,7 @@ import {
   RestrictStoryDto,
   UserStoryProgressDto,
   UserStoryProgressResponseDto,
-} from './story.dto';
+} from './dto/story.dto';
 
 import { UploadService } from '../upload/upload.service';
 import {
@@ -45,7 +45,7 @@ import {
 } from '@nestjs/common';
 import { GeminiService, GenerateStoryOptions } from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
-import { VoiceType } from '../voice/voice.dto';
+import { VoiceType } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 
 @Injectable()

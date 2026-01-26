@@ -3,7 +3,7 @@ import { KidService } from './kid.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { VoiceService } from '../voice/voice.service';
-import { VoiceType } from '@/story/story.dto';
+import { VoiceType } from '@/story/dto/story.dto';
 
 const mockPrismaService = {
     kid: {

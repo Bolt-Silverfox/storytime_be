@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AiProviders } from '../common/constants/ai-providers.constants';
+import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants';
 

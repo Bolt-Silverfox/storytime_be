@@ -11,11 +11,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody, ApiOkResponse, ApiParam, ApiResponse } from '@nestjs/swagger';
-import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { ParentFavoritesService } from './parent-favorites.service';
 import { CreateParentFavoriteDto } from './dto/create-parent-favorite.dto';
 import { ParentFavoriteResponseDto } from './dto/parent-favorite-response.dto';
-import { ErrorResponseDto } from '@/story/story.dto';
+import { ErrorResponseDto } from '@/story/dto/story.dto';
 
 @ApiTags('parent-favorites')
 @Controller('parent-favorites')

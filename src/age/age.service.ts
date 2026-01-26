@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { CreateAgeDto, UpdateAgeDto } from './age.dto';
+import { CreateAgeDto, UpdateAgeDto } from './dto/age.dto';
 
 @Injectable()
 export class AgeService {

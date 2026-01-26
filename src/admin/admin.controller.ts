@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { Admin } from './decorators/admin.decorator';
-import { AuthenticatedRequest } from '../auth/auth.guard';
+import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import {
   UserFilterDto,
   StoryFilterDto,

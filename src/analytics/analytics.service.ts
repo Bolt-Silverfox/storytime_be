@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateActivityLogDto, ActivityLogDto } from './analytics.dto';
+import { CreateActivityLogDto, ActivityLogDto } from './dto/analytics.dto';
 import { ActivityLog } from '@prisma/client';
 
 @Injectable()

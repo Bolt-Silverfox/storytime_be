@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
-import { VoiceType } from '../voice/voice.dto';
+import { VoiceType } from '../voice/dto/voice.dto';
 import { VOICE_CONFIG } from '../voice/voice.constants';
 import { categories, defaultAgeGroups, systemAvatars, themes, learningExpectations, seasons } from '../../prisma/data';
 
@@ -11,7 +11,7 @@ async function main() {
   // Idempotent seeding: We removed TRUNCATE statements to preserve existing data (Users, Kids, etc.)
   // Use db:reset if you need to wipe the database.
 
-  const storiesPath = path.resolve('src/story/stories.json');
+  const storiesPath = path.resolve('prisma/data/stories.json');
   const getStories = () => {
     return JSON.parse(fs.readFileSync(storiesPath, 'utf-8'));
   };

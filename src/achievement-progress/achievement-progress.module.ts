@@ -6,7 +6,6 @@ import { StreakService } from './streak.service';
 import { BadgeService } from './badge.service';
 import { BadgeProgressEngine } from './badge-progress.engine';
 import { BadgeConstants } from './badge.constants';
-import { PrismaService } from '../prisma/prisma.service';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationModule } from '../notification/notification.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -37,7 +36,6 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
         BadgeService,
         BadgeProgressEngine,
         BadgeConstants,
-        PrismaService,
     ],
     exports: [BadgeProgressEngine, BadgeService],
 })

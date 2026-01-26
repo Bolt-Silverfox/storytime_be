@@ -5,26 +5,11 @@ import {
   ApiResponse,
   ApiParam,
   ApiBody,
-  ApiProperty,
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
-import { AuthSessionGuard } from '../auth/auth.guard';
-
-class UpdateSettingsDto {
-  explicitContent?: boolean;
-  maxScreenTimeMins?: number; // Parent's default limit
-  language?: string;
-  country?: string;
-}
-
-class SetKidDailyLimitDto {
-  @ApiProperty({
-    required: false,
-    description: 'Daily limit in minutes, null for no limit',
-  })
-  limitMins?: number;
-}
+import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import { UpdateSettingsDto, SetKidDailyLimitDto } from './dto/settings.dto';
 
 @ApiTags('settings')
 @Controller('settings')
