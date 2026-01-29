@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
-import { CreateStoryDto } from './story.dto';
+import { CreateStoryDto } from './dto/story.dto';
 
 // Mock the Service so we test the Controller in isolation
 const mockStoryService = {

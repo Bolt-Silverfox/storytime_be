@@ -17,7 +17,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-export { VoiceType } from '../voice/voice.dto';
+export { VoiceType } from '@/voice/dto/voice.dto';
 
 export class StoryImageDto {
   @ApiProperty()

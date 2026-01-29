@@ -1,4 +1,4 @@
-import { VoiceType } from './voice.dto';
+import { VoiceType } from './dto/voice.dto';
 
 export const DEFAULT_VOICE = VoiceType.CHARLIE;
 

@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import IHealth, { HealthResponse } from 'src/health/Ihealth.interfaces';
+import IHealth, { HealthResponse } from '@/health/Ihealth.interfaces';
 
 @Injectable()
 export class PrismaService

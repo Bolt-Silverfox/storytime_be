@@ -7,6 +7,7 @@ export const envSchema = z.object({
     .default('development'),
   PORT: z.coerce.number().default(3000),
   CORS_ORIGIN: z.string().url().default('http://localhost:3000'),
+  REDIS_URL: z.string().url().default('redis://localhost:6379'),
   ELEVEN_LABS_KEY: z.string().min(1, 'ELEVEN_LABS_KEY is required'),
   CLOUDINARY_CLOUD_NAME: z.string().min(1, 'CLOUDINARY_CLOUD_NAME is required'),
   CLOUDINARY_API_KEY: z.string().min(1, 'CLOUDINARY_API_KEY is required'),

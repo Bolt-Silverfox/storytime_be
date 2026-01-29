@@ -1,5 +1,6 @@
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { Response, Request } from 'express';
+import { GoogleOAuthProfile } from '@/shared/types';
 import {
   Body,
   Controller,
@@ -31,7 +32,7 @@ import {
   SendEmailVerificationDto,
   ChangePasswordDto,
   CompleteProfileDto,
-} from './auth.dto';
+} from './dto/auth.dto';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -39,10 +40,10 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
+import { AuthenticatedRequest, AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
-import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
-import { THROTTLE_LIMITS } from '@/common/constants/throttle.constants';
+import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
+import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -280,8 +281,8 @@ export class AuthController {
   // ===== GOOGLE OAUTH CALLBACK =====
   @Get('google/oauth/callback')
   @UseGuards(GoogleAuthGuard)
-  async googleCallback(@Req() req: Request, @Res() res: Response) {
-    const payload = (req as any).user;
+  async googleCallback(@Req() req: Request & { user: GoogleOAuthProfile }, @Res() res: Response) {
+    const payload = req.user;
     const result = await this.authService.handleGoogleOAuthPayload(payload);
 
     return res.redirect(

@@ -70,7 +70,7 @@ function findClosestValid(value, validList) {
   return null;
 }
 
-const filePath = path.resolve(__dirname, 'stories.json');
+const filePath = path.resolve(__dirname, '../data/stories.json');
 const stories = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 
 for (const story of stories) {

@@ -7,7 +7,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
-import { CreateActivityLogDto, ActivityLogDto } from './analytics.dto';
+import { CreateActivityLogDto, ActivityLogDto } from './dto/analytics.dto';
 import { UAParser } from 'ua-parser-js';
 import { Request } from 'express';
 

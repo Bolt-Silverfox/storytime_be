@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { Admin } from './decorators/admin.decorator';
-import { AuthenticatedRequest } from '../auth/auth.guard';
+import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import {
   UserFilterDto,
   StoryFilterDto,
@@ -23,6 +23,7 @@ import {
 import {
   CreateAdminDto,
   UpdateUserDto,
+  UpdateUserRoleDto,
   BulkActionDto,
 } from './dto/user-management.dto';
 import {
@@ -1095,6 +1096,78 @@ export class AdminController {
     return {
       statusCode: 200,
       message: 'User restored successfully',
+      data
+    };
+  }
+
+  @Patch('users/:userId/role')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update user role',
+    description: 'Promote or change user role (admin, parent, kid). Prevents self-demotion.',
+  })
+  @ApiParam({
+    name: 'userId',
+    type: String,
+    description: 'User ID',
+    example: 'user-123-uuid'
+  })
+  @ApiBody({
+    description: 'User role update data',
+    schema: { example: { role: 'admin' } }
+  })
+  @ApiOkResponse({
+    description: 'User role updated successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'User role updated successfully',
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          name: 'John Doe',
+          role: 'admin',
+          isEmailVerified: true,
+          updatedAt: '2023-10-15T10:30:00Z'
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request - self-demotion attempt',
+    schema: {
+      example: {
+        statusCode: 400,
+        message: 'You cannot demote yourself from admin status.',
+        error: 'Bad Request'
+      }
+    }
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'User not found',
+    schema: {
+      example: {
+        statusCode: 404,
+        message: 'User with ID user-123 not found',
+        error: 'Not Found'
+      }
+    }
+  })
+  async updateUserRole(
+    @Req() req: AuthenticatedRequest,
+    @Param('userId') userId: string,
+    @Body() updateUserRoleDto: UpdateUserRoleDto,
+  ) {
+    const data = await this.adminService.updateUser(
+      userId,
+      { role: updateUserRoleDto.role },
+      req.authUserData.userId
+    );
+    return {
+      statusCode: 200,
+      message: 'User role updated successfully',
       data
     };
   }

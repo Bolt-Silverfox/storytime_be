@@ -8,7 +8,7 @@ import {
     InjectThrottlerStorage
 } from '@nestjs/throttler';
 import { Reflector } from '@nestjs/core';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 import { THROTTLE_LIMITS } from '../constants/throttle.constants';
 
