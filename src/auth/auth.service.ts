@@ -480,7 +480,7 @@ export class AuthService {
   }
 
   async handleGoogleOAuthPayload(payload: GoogleOAuthProfile) {
-    return this._upsertOrReturnUserFromGooglePayload({
+    return this._upsertOrReturnUserFromOAuthPayload({
       googleId: payload.providerId,
       email: payload.email,
       picture: payload.picture,
@@ -521,7 +521,7 @@ export class AuthService {
 
 
   // ====================================================
-  // INTERNAL: Unified Google upsert logic
+  // INTERNAL: Unified OAuth upsert logic
   // ====================================================
   private async _upsertOrReturnUserFromOAuthPayload(payload: {
     googleId?: string;
