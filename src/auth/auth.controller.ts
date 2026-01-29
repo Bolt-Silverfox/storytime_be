@@ -200,6 +200,23 @@ export class AuthController {
     return this.authService.loginWithGoogleIdToken(idToken);
   }
 
+  // ===== APPLE AUTH (MOBILE / WEB id_token) =====
+  @Post('apple')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Apple sign-in (id_token) — mobile/web' })
+  @ApiBody({
+    description: 'Apple id_token and optional user info',
+    schema: { example: { id_token: '...', firstName: 'John', lastName: 'Doe' } },
+  })
+  async appleIdToken(@Body() body: { id_token: string; firstName?: string; lastName?: string }) {
+    if (!body.id_token) {
+      throw new BadRequestException('id_token is required');
+    }
+
+    return this.authService.loginWithAppleIdToken(body.id_token, body.firstName, body.lastName);
+  }
+
+
   // ===== GOOGLE OAUTH (web redirect flow) =====
   @Get('google/oauth')
   @UseGuards(GoogleAuthGuard)
