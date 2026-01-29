@@ -30,6 +30,7 @@ import { NotificationService } from '@/notification/notification.service';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
+import appleSigninAuth from 'apple-signin-auth';
 
 @Injectable()
 export class AuthService {
@@ -475,7 +476,7 @@ export class AuthService {
       emailVerified: payload.email_verified === true,
     };
 
-    return this._upsertOrReturnUserFromGooglePayload(googlePayload);
+    return this._upsertOrReturnUserFromOAuthPayload(googlePayload);
   }
 
   async handleGoogleOAuthPayload(payload: GoogleOAuthProfile) {
@@ -488,23 +489,61 @@ export class AuthService {
     });
   }
 
-  // ==================== INTERNAL HELPERS ====================
+  // ===============================
+  // APPLE AUTH
+  // ===============================
+  async loginWithAppleIdToken(idToken: string, firstName?: string, lastName?: string) {
+    if (!idToken) {
+      throw new BadRequestException('id_token is required');
+    }
 
-  private async _upsertOrReturnUserFromGooglePayload(payload: {
+    try {
+      const { sub: appleId, email, email_verified } = await appleSigninAuth.verifyIdToken(idToken, {
+        audience: [process.env.APPLE_CLIENT_ID, process.env.APPLE_SERVICE_ID],
+        nonce: 'NONCE',
+        ignoreExpiration: false
+      });
+
+      const name = firstName && lastName ? `${firstName} ${lastName}` : undefined;
+
+      return this._upsertOrReturnUserFromOAuthPayload({
+        appleId,
+        email,
+        emailVerified: email_verified === 'true' || email_verified === true,
+        name,
+      });
+
+    } catch (err) {
+      this.logger.error('Apple id_token verification failed', err);
+      throw new UnauthorizedException('Invalid Apple id_token');
+    }
+  }
+
+
+  // ====================================================
+  // INTERNAL: Unified Google upsert logic
+  // ====================================================
+  private async _upsertOrReturnUserFromOAuthPayload(payload: {
     googleId?: string;
+    appleId?: string;
     email: string;
     picture?: string | null;
     name?: string | null;
     emailVerified?: boolean;
   }) {
-    const { googleId, email, picture, name, emailVerified } = payload;
+    const { googleId, appleId, email, picture, name, emailVerified } = payload;
 
     let user = null;
 
-    // 1. Try find by googleId
+    // 1. Try find by googleId or appleId
     if (googleId) {
       user = await this.prisma.user.findFirst({
         where: { googleId },
+        include: { profile: true, avatar: true },
+      });
+    } else if (appleId) {
+      user = await this.prisma.user.findFirst({
+        where: { appleId },
         include: { profile: true, avatar: true },
       });
     }
@@ -519,6 +558,7 @@ export class AuthService {
           data: {
             isEmailVerified: emailVerified ? true : existing.isEmailVerified,
             googleId: googleId || existing.googleId,
+            appleId: appleId || existing.appleId,
           },
           include: { profile: true, avatar: true },
         });
@@ -532,11 +572,12 @@ export class AuthService {
 
       user = await this.prisma.user.create({
         data: {
-          name: name || email || 'Google User',
+          name: name || email || 'User',
           email,
           passwordHash: hashedPassword,
           isEmailVerified: emailVerified === true,
           googleId: googleId || null,
+          appleId: appleId || null,
           role: 'parent',
           profile: {
             create: {
