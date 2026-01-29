@@ -1,11 +1,23 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { render } from '@react-email/render';
 import { PrismaService } from '@/prisma/prisma.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
+import { EmailQueueService } from '../notification/queue/email-queue.service';
+import { EnvConfig } from '@/shared/config/env.validation';
+import { NotificationCategory } from '@prisma/client';
+import { UserFeedbackTemplate } from '../notification/templates/user-feedback';
 
 @Injectable()
 export class HelpSupportService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(HelpSupportService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly emailQueueService: EmailQueueService,
+  ) { }
   // --- FAQs List ---
   getFaqs() {
     return [
@@ -35,6 +47,34 @@ export class HelpSupportService {
   async submitFeedback(dto: CreateFeedbackDto) {
     // If saving to DB later:
     // const feedback = await this.prisma.feedback.create({ data: dto });
+
+    const supportEmail = this.configService.get('SUPPORT_EMAIL', { infer: true });
+
+    if (supportEmail) {
+      try {
+        const html = await render(
+          UserFeedbackTemplate({
+            userEmail: dto.email,
+            category: dto.category,
+            message: dto.message,
+            timestamp: new Date().toLocaleString(),
+          }),
+        );
+
+        await this.emailQueueService.queueEmail({
+          userId: 'system',
+          category: NotificationCategory.FEEDBACK,
+          to: supportEmail,
+          subject: `New Feedback: ${dto.category}`,
+          html,
+        });
+
+        this.logger.log(`Feedback email queued to ${supportEmail}`);
+      } catch (error) {
+        this.logger.error('Failed to queue feedback email', error);
+      }
+    }
+
     return {
       message: 'Thank you for your feedback!',
       data: dto,

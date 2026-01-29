@@ -33,6 +33,20 @@ export class AnalyticsMetricDto {
   timeframe: string;
 }
 
+export class MetricWithTrendDto {
+  @ApiProperty({ description: 'Current value' })
+  value: number;
+
+  @ApiProperty({ description: 'Trend percentage vs previous period' })
+  trend: number;
+
+  @ApiProperty({ description: 'Trend direction', enum: ['up', 'down', 'neutral'] })
+  direction: 'up' | 'down' | 'neutral';
+
+  @ApiProperty({ description: 'Timeframe comparison label', example: 'vs last month' })
+  timeframe: string;
+}
+
 // Dashboard Statistics DTO
 export class DashboardStatsDto {
   @ApiProperty({ description: 'Total number of users', example: 1250 })
@@ -114,9 +128,33 @@ export class DashboardStatsDto {
 
   @ApiProperty({ description: 'Key performance indicators with trends' })
   performanceMetrics: {
-    newUsers: AnalyticsMetricDto;
-    totalUsers: AnalyticsMetricDto;
-    activeUsers: AnalyticsMetricDto;
+    // User Metrics
+    totalUsers: MetricWithTrendDto;
+    totalParents: MetricWithTrendDto;
+    totalKids: MetricWithTrendDto;
+    totalAdmins: MetricWithTrendDto;
+
+    // Engagement Metrics
+    activeUsers24h: MetricWithTrendDto;
+    activeUsers7d: MetricWithTrendDto;
+    activeUsers30d: MetricWithTrendDto;
+    newUsers: MetricWithTrendDto; // This month
+    averageSessionTime: MetricWithTrendDto;
+    totalStoryViews: MetricWithTrendDto;
+    totalFavorites: MetricWithTrendDto;
+
+    // Content Metrics
+    totalStories: MetricWithTrendDto;
+    totalCategories: MetricWithTrendDto;
+    totalThemes: MetricWithTrendDto;
+
+    // Revenue & Subscription Metrics
+    totalRevenue: MetricWithTrendDto;
+    totalSubscriptions: MetricWithTrendDto;
+    activeSubscriptions: MetricWithTrendDto;
+    paidUsers: MetricWithTrendDto;
+    unpaidUsers: MetricWithTrendDto;
+    conversionRate: MetricWithTrendDto;
   };
 }
 
