@@ -1832,4 +1832,62 @@ export class AdminController {
       data
     };
   }
+
+
+
+  // =====================
+  // INTEGRATIONS
+  // =====================
+
+  @Get('integrations/elevenlabs/balance')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get ElevenLabs credit balance' })
+  async getElevenLabsBalance() {
+    const data = await this.adminService.getElevenLabsBalance();
+    return {
+      statusCode: 200,
+      message: 'ElevenLabs balance retrieved',
+      data
+    };
+  }
+
+  // =====================
+  // SUPPORT TICKETS
+  // =====================
+
+  @Get('support/tickets')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List all support tickets' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  async getAllSupportTickets(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+  ) {
+    const result = await this.adminService.getAllSupportTickets(Number(page) || 1, Number(limit) || 10, status);
+    return {
+      statusCode: 200,
+      message: 'Support tickets retrieved',
+      data: result.data,
+      meta: result.meta
+    };
+  }
+
+  @Patch('support/tickets/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update support ticket status' })
+  @ApiBody({ schema: { type: 'object', properties: { status: { type: 'string', example: 'resolved' } } } })
+  async updateSupportTicket(
+    @Param('id') id: string,
+    @Body('status') status: string,
+  ) {
+    const result = await this.adminService.updateSupportTicket(id, status);
+    return {
+      statusCode: 200,
+      message: 'Support ticket updated',
+      data: result
+    };
+  }
 }

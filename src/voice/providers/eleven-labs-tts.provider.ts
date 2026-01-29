@@ -69,4 +69,17 @@ export class ElevenLabsTTSProvider implements ITextToSpeechProvider, IVoiceCloni
             throw error;
         }
     }
+
+    async getSubscriptionInfo(): Promise<any> {
+        if (!this.client) {
+            throw new Error('ElevenLabs client is not initialized');
+        }
+
+        try {
+            return await this.client.user.getSubscription();
+        } catch (error) {
+            this.logger.error(`Failed to fetch ElevenLabs subscription info: ${error.message}`);
+            throw error;
+        }
+    }
 }

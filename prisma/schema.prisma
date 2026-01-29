@@ -38,6 +38,7 @@ enum NotificationCategory {
 
   // Engagement / Discovery
   NEW_STORY
+  FEEDBACK
   STORY_FINISHED
   STORY_RECOMMENDATION
   WE_MISS_YOU
