@@ -2,7 +2,7 @@
 // import { Injectable, InternalServerErrorException } from '@nestjs/common';
 // import { ConfigService } from '@nestjs/config';
 // import axios from 'axios';
-// import { VOICEID, VoiceType } from './voice.dto';
+// import { VOICEID, VoiceType } from './dto/voice.dto';
 
 // @Injectable()
 // export class TextToSpeechService {

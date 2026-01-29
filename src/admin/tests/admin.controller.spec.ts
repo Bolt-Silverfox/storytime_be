@@ -2,8 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AdminController } from '../admin.controller';
 import { AdminService } from '../admin.service';
 import { DateRangeDto, UserFilterDto } from '../dto/admin-filters.dto';
-import { AuthSessionGuard } from '../../auth/auth.guard';
-import { AdminGuard } from '../../auth/admin.guard';
+import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import { AdminGuard } from '@/shared/guards/admin.guard';
 
 // Mock Admin Service
 const mockAdminService = {

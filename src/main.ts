@@ -4,9 +4,10 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
-import { SuccessResponseInterceptor } from './common/interceptors/success-response.interceptor';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
+import { SuccessResponseInterceptor } from './shared/interceptors/success-response.interceptor';
+import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
+import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter';
+import { requestLogger } from './shared/middleware/request-logger.middleware';
 
 async function bootstrap() {
   const logger = new Logger('Main');
@@ -21,6 +22,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
   app.use(helmet());
+  app.use(requestLogger);
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Allow requests with no origin (mobile apps, curl, etc.)

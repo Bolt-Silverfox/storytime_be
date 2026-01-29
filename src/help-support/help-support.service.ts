@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
-
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '@/prisma/prisma.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
+import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
 
 @Injectable()
 export class HelpSupportService {
+  constructor(private readonly prisma: PrismaService) {}
   // --- FAQs List ---
   getFaqs() {
     return [
@@ -96,5 +98,31 @@ export class HelpSupportService {
       title: 'Privacy Policy',
       content: `This Privacy Policy describes how StoryTime collects, uses, and protects your information... (fill in your real content).`,
     };
+  }
+
+  // --- Support Tickets ---
+  async createTicket(userId: string, dto: CreateSupportTicketDto) {
+    return this.prisma.supportTicket.create({
+      data: {
+        userId,
+        subject: dto.subject,
+        message: dto.message,
+      },
+    });
+  }
+
+  async listMyTickets(userId: string) {
+    return this.prisma.supportTicket.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getTicket(userId: string, id: string) {
+    const ticket = await this.prisma.supportTicket.findUnique({ where: { id } });
+    if (!ticket || ticket.userId !== userId) {
+      throw new NotFoundException('Ticket not found');
+    }
+    return ticket;
   }
 }

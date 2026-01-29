@@ -1,9 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
-import { AuthModule } from 'src/auth/auth.module';
-import { PrismaService } from '../prisma/prisma.service';
+import { AuthModule } from '@/auth/auth.module';
 import { StoryModule } from '../story/story.module';
-import { UploadService } from '../upload/upload.service';
+import { UploadModule } from '../upload/upload.module';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
@@ -21,13 +20,12 @@ import { VoiceQuotaService } from './voice-quota.service';
   imports: [
     AuthModule,
     HttpModule,
+    UploadModule,
     forwardRef(() => StoryModule),
   ],
   controllers: [VoiceController],
   providers: [
     VoiceService,
-    UploadService,
-    PrismaService,
     TextToSpeechService,
     SpeechToTextService,
     ElevenLabsTTSProvider,

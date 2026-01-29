@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
 import { AgeModule } from './age/age.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { AvatarModule } from './avatar/avatar.module';
-import { CommonModule } from './common/common.module';
-import { validateEnv } from './config/env.validation';
+import { SharedModule } from './shared/shared.module';
+import { validateEnv, EnvConfig } from './shared/config/env.validation';
 import { HelpSupportModule } from './help-support/help-support.module';
 import { KidModule } from './kid/kid.module';
 import { NotificationModule } from './notification/notification.module';
@@ -31,8 +32,9 @@ import { AchievementProgressModule } from './achievement-progress/achievement-pr
 import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
-import { throttleConfig } from './common/config/throttle.config';
+import { throttleConfig } from './shared/config/throttle.config';
 import { AdminModule } from './admin/admin.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -77,7 +79,21 @@ import { AdminModule } from './admin/admin.module';
         };
       },
     }),
-    CommonModule,
+    // BullMQ for background job processing (email queue, etc.)
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<EnvConfig, true>) => ({
+        connection: {
+          url: config.get('REDIS_URL'),
+        },
+        defaultJobOptions: {
+          removeOnComplete: { age: 24 * 3600, count: 1000 },
+          removeOnFail: { age: 7 * 24 * 3600 },
+        },
+      }),
+    }),
+    SharedModule,
     AuthModule,
     UserModule,
     KidModule,
@@ -100,6 +116,7 @@ import { AdminModule } from './admin/admin.module';
     AchievementProgressModule,
     ParentFavoriteModule,
     AdminModule,
+    HealthModule,
   ],
   providers: [
     {

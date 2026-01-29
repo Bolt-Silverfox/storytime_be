@@ -1,6 +1,6 @@
 import { applyDecorators, UseGuards } from '@nestjs/common';
-import { AuthSessionGuard } from '../../auth/auth.guard';
-import { AdminGuard } from '../../auth/admin.guard';
+import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import { AdminGuard } from '@/shared/guards/admin.guard';
 
 /**
  * Admin decorator that combines authentication and admin authorization guards

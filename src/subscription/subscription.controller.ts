@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, UseGuards, Req, Delete } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { SubscriptionService } from './subscription.service';
-import { AuthSessionGuard } from '../auth/auth.guard';
+import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { SubscribeDto } from './dto/subscribe.dto';
 
 @ApiTags('subscription')

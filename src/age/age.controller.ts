@@ -19,8 +19,8 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AgeService } from './age.service';
-import { CreateAgeDto, UpdateAgeDto } from './age.dto';
-import { AdminGuard } from '../auth/admin.guard';
+import { CreateAgeDto, UpdateAgeDto } from './dto/age.dto';
+import { AdminGuard } from '@/shared/guards/admin.guard';
 
 @ApiTags('Age Groups')
 @Controller('age-group')

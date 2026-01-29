@@ -27,7 +27,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { randomUUID } from 'crypto';
-import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 
 import {
   AssignDailyChallengeDto,
@@ -59,21 +59,21 @@ import {
   TopPickStoryDto,
   UserStoryProgressDto,
   UserStoryProgressResponseDto,
-} from './story.dto';
+} from './dto/story.dto';
 import {
 
   VoiceType,
   StoryContentAudioDto,
-} from '../voice/voice.dto';
+} from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { StoryService } from './story.service';
 import { VoiceService } from '../voice/voice.service';
 import { TextToSpeechService } from './text-to-speech.service';
 
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
-import { SubscriptionThrottleGuard } from '@/common/guards/subscription-throttle.guard';
+import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
 import { Throttle } from '@nestjs/throttler';
-import { THROTTLE_LIMITS } from '@/common/constants/throttle.constants';
+import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 
 @ApiTags('stories')
 @Controller('stories')
