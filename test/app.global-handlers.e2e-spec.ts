@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
-import * as request from 'supertest';
+import request from 'supertest';
 import { SuccessResponseInterceptor } from '../src/shared/interceptors/success-response.interceptor';
 import { HttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from '../src/shared/filters/prisma-exception.filter';
