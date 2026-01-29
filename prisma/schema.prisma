@@ -101,6 +101,7 @@ model User {
   preferredCategories     Category[]               @relation("UserPreferredCategories")
   activityLogs            ActivityLog[]
   userIps                 UserIP[]
+
   usage                   UserUsage? // Relation to usage tracking
   googleId                String?                  @unique
   appleId                 String?                  @unique
