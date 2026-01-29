@@ -26,7 +26,10 @@ import {
   ActivityLogDto,
   AiCreditAnalyticsDto,
   UserGrowthMonthlyDto,
+  MetricWithTrendDto,
 } from './dto/admin-responses.dto';
+import { CreateSupportTicketDto } from '../help-support/dto/create-support-ticket.dto';
+import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import {
   UserFilterDto,
   StoryFilterDto,
@@ -38,12 +41,20 @@ import {
   BulkActionDto,
 } from './dto/user-management.dto';
 import { categories, themes, defaultAgeGroups, systemAvatars } from '../../prisma/data';
+import { DateUtil } from '@/shared/utils/date.util';
+import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';
+import { DashboardUtil } from './utils/dashboard.util';
 
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
 
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly elevenLabsProvider: ElevenLabsTTSProvider,
+  ) { }
+
+
 
   // =====================
   // DASHBOARD STATISTICS
@@ -51,194 +62,150 @@ export class AdminService {
 
   async getDashboardStats(): Promise<DashboardStatsDto> {
     const now = new Date();
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const startOfToday = new Date(now.setHours(0, 0, 0, 0));
-    const startOfWeek = new Date(
-      now.getTime() - now.getDay() * 24 * 60 * 60 * 1000,
-    );
-    startOfWeek.setHours(0, 0, 0, 0);
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // Get all users first
-    const allUsers = await this.prisma.user.findMany({
-      where: { isDeleted: false },
-      include: {
-        subscriptions: {
-          where: {
-            status: 'active',
-            endsAt: { gt: now }, // Subscription hasn't expired
-          },
-        },
-      },
+    // Timeframes
+    const range24h = DateUtil.getRange(Timeframe.LAST_24_HOURS, now);
+    const range7d = DateUtil.getRange(Timeframe.LAST_7_DAYS, now);
+    const range30d = DateUtil.getRange(Timeframe.LAST_30_DAYS, now);
+    const rangeToday = DateUtil.getRange(Timeframe.TODAY, now);
+    const rangeThisMonth = DateUtil.getRange(Timeframe.THIS_MONTH, now);
+    const rangeLastMonth = DateUtil.getRange(Timeframe.LAST_MONTH, now);
+
+    // Comparative Periods
+    const prevRange24h = DateUtil.getPreviousPeriod(range24h);
+    const prevRange7d = DateUtil.getPreviousPeriod(range7d);
+    const prevRange30d = DateUtil.getPreviousPeriod(range30d);
+
+    const rangeYesterday = DateUtil.getRange(Timeframe.YESTERDAY, now); // For "New Users Today" comparison
+
+    // Helper to count between dates
+    const countBetween = (model: any, start: Date, end: Date) => model.count({
+      where: { createdAt: { gte: start, lte: end }, isDeleted: false }
     });
 
-    // Calculate paid users (users with active subscriptions)
-    const paidUsers = allUsers.filter(user =>
-      user.subscriptions.length > 0 &&
-      user.subscriptions.some(sub => sub.status === 'active' && (!sub.endsAt || sub.endsAt > now))
-    ).length;
-
-    // Calculate unpaid users
-    const totalUsers = allUsers.length;
-    const unpaidUsers = totalUsers - paidUsers;
-
+    // 1. Fetch Current Metrics
     const [
-      totalParents,
-      totalKids,
-      totalAdmins,
-      totalStories,
-      totalCategories,
-      totalThemes,
-      activeUsers24h,
-      activeUsers7d,
-      newUsersToday,
-      newUsersThisWeek,
-      newUsersThisMonth,
-      totalStoryProgress,
-      totalFavorites,
-      totalSubscriptions,
-      activeSubscriptions,
-      totalRevenue,
+      totalParents, totalKids, totalAdmins, totalStories, totalCategories, totalThemes,
+      activeUsers24h, activeUsers7d, activeUsers30d,
+      newUsersToday, newUsersThisMonth,
+      totalStoryProgress, totalFavorites,
+      totalSubscriptions, activeSubscriptionsCount,
+      totalRevenueResult
     ] = await Promise.all([
-      this.prisma.user.count({
-        where: { role: Role.parent, isDeleted: false },
-      }),
+      this.prisma.user.count({ where: { role: Role.parent, isDeleted: false } }),
       this.prisma.kid.count({ where: { isDeleted: false } }),
       this.prisma.user.count({ where: { role: Role.admin, isDeleted: false } }),
       this.prisma.story.count({ where: { isDeleted: false } }),
       this.prisma.category.count({ where: { isDeleted: false } }),
       this.prisma.theme.count({ where: { isDeleted: false } }),
-      this.prisma.user.count({
-        where: {
-          updatedAt: { gte: twentyFourHoursAgo },
-          isDeleted: false,
-        },
-      }),
-      this.prisma.user.count({
-        where: {
-          updatedAt: { gte: sevenDaysAgo },
-          isDeleted: false,
-        },
-      }),
-      this.prisma.user.count({
-        where: {
-          createdAt: { gte: startOfToday },
-          isDeleted: false,
-        },
-      }),
-      this.prisma.user.count({
-        where: {
-          createdAt: { gte: startOfWeek },
-          isDeleted: false,
-        },
-      }),
-      this.prisma.user.count({
-        where: {
-          createdAt: { gte: startOfMonth },
-          isDeleted: false,
-        },
-      }),
-      this.prisma.storyProgress.count(),
-      this.prisma.favorite.count(),
+
+      // Active Users
+      this.prisma.user.count({ where: { updatedAt: { gte: range24h.start }, isDeleted: false } }),
+      this.prisma.user.count({ where: { updatedAt: { gte: range7d.start }, isDeleted: false } }),
+      this.prisma.user.count({ where: { updatedAt: { gte: range30d.start }, isDeleted: false } }),
+
+      // New Users
+      countBetween(this.prisma.user, rangeToday.start, rangeToday.end),
+      countBetween(this.prisma.user, rangeThisMonth.start, rangeThisMonth.end),
+
+      // Engagement
+      this.prisma.storyProgress.count(), // Total views (cumulative)
+      this.prisma.favorite.count(), // Total favorites (cumulative)
+
+      // Subs
       this.prisma.subscription.count(),
       this.prisma.subscription.count({
         where: {
           status: 'active',
-          OR: [
-            { endsAt: null },
-            { endsAt: { gt: now } }
-          ],
-        },
+          OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+        }
       }),
-      // Calculate total revenue from successful payment transactions
+
+      // Revenue
       this.prisma.paymentTransaction.aggregate({
-        where: {
-          status: 'success',
-        },
-        _sum: {
-          amount: true,
-        },
-      }).then(result => result._sum.amount || 0),
+        where: { status: 'success' },
+        _sum: { amount: true },
+      }),
     ]);
 
-    // Calculate average session time
-    const recentSessions = await this.prisma.screenTimeSession.findMany({
-      where: {
-        endTime: { not: null },
-        startTime: { gte: sevenDaysAgo },
-      },
-      select: {
-        duration: true,
-      },
-    });
+    const totalUsersCount = await this.prisma.user.count({ where: { isDeleted: false } });
+    const totalRevenue = totalRevenueResult._sum.amount || 0;
 
-    const avgSessionTime = recentSessions.length > 0
-      ? recentSessions.reduce((sum, session) => sum + (session.duration || 0), 0) / recentSessions.length
-      : 0;
+    // 2. Fetch Previous Period Metrics for Trends
+    // Trends for "Total" metrics (Growth vs Last Month)
+    // We compare [Current Total] vs [Total at end of Last Month]
+    const lastMonthEnd = rangeLastMonth.end;
 
-    // Get subscription plan breakdown
+    const [
+      prevTotalUsers, prevTotalParents, prevTotalKids, prevTotalAdmins,
+      prevTotalStories, prevTotalCategories, prevTotalThemes,
+      prevTotalStoryProgress, prevTotalFavorites,
+      prevTotalSubscriptions, prevActiveSubscriptionsCount,
+      prevTotalRevenueResult
+    ] = await Promise.all([
+      this.prisma.user.count({ where: { createdAt: { lte: lastMonthEnd }, isDeleted: false } }),
+      this.prisma.user.count({ where: { role: Role.parent, createdAt: { lte: lastMonthEnd }, isDeleted: false } }),
+      this.prisma.kid.count({ where: { createdAt: { lte: lastMonthEnd }, isDeleted: false } }),
+      this.prisma.user.count({ where: { role: Role.admin, createdAt: { lte: lastMonthEnd }, isDeleted: false } }),
+      this.prisma.story.count({ where: { createdAt: { lte: lastMonthEnd }, isDeleted: false } }),
+      this.prisma.category.count({ where: { isDeleted: false } }),
+      this.prisma.theme.count({ where: { isDeleted: false } }),
+
+      this.prisma.storyProgress.count({ where: { lastAccessed: { lte: lastMonthEnd } } }),
+      this.prisma.favorite.count({ where: { createdAt: { lte: lastMonthEnd } } }),
+      this.prisma.subscription.count({ where: { startedAt: { lte: lastMonthEnd } } }),
+
+      // Active Subs History (Approximate)
+      this.prisma.subscription.count({
+        where: {
+          status: 'active',
+          startedAt: { lte: lastMonthEnd },
+          OR: [{ endsAt: null }, { endsAt: { gt: lastMonthEnd } }],
+        }
+      }),
+
+      this.prisma.paymentTransaction.aggregate({
+        where: { status: 'success', createdAt: { lte: lastMonthEnd } },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const prevTotalRevenue = prevTotalRevenueResult._sum.amount || 0;
+
+    // Trends for "Active" & "New" metrics (Time shifting)
+    const [
+      prevActiveUsers24h, prevActiveUsers7d, prevActiveUsers30d,
+      prevNewUsersToday, prevNewUsersThisMonth
+    ] = await Promise.all([
+      this.prisma.user.count({ where: { updatedAt: { gte: prevRange24h.start, lt: prevRange24h.end }, isDeleted: false } }),
+      this.prisma.user.count({ where: { updatedAt: { gte: prevRange7d.start, lt: prevRange7d.end }, isDeleted: false } }),
+      this.prisma.user.count({ where: { updatedAt: { gte: prevRange30d.start, lt: prevRange30d.end }, isDeleted: false } }),
+
+      // New Users Today vs Yesterday
+      countBetween(this.prisma.user, rangeYesterday.start, rangeYesterday.end),
+      // New Users This Month vs Last Month
+      countBetween(this.prisma.user, rangeLastMonth.start, rangeLastMonth.end),
+    ]);
+
+    // Subscription breakdown
     const subscriptionPlans = await this.prisma.subscription.groupBy({
       by: ['plan'],
       where: {
         status: 'active',
-        OR: [
-          { endsAt: null },
-          { endsAt: { gt: now } }
-        ],
+        OR: [{ endsAt: null }, { endsAt: { gt: now } }],
       },
       _count: true,
     });
 
-    // --- TREND ANALYTICS CALCULATION ---
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0); // End of last month
+    const avgSessionTime = 0; // Placeholder
+    const paidUsers = activeSubscriptionsCount;
+    const unpaidUsers = totalUsersCount - paidUsers;
+    const prevPaidUsers = prevActiveSubscriptionsCount;
+    const prevUnpaidUsers = prevTotalUsers - prevPaidUsers;
 
-    // 1. New Users Trend
-    const newUsersLastMonth = await this.prisma.user.count({
-      where: {
-        createdAt: {
-          gte: lastMonthStart,
-          lte: lastMonthEnd,
-        },
-        isDeleted: false,
-      },
-    });
-
-    const calculateTrend = (current: number, previous: number): number => {
-      if (previous === 0) return current > 0 ? 100 : 0;
-      return parseFloat((((current - previous) / previous) * 100).toFixed(1));
-    };
-
-    const newUsersTrend = calculateTrend(newUsersThisMonth, newUsersLastMonth);
-
-    // 2. Total Users Trend
-    // Total users at start of last month = Total Now (approx) - New This Month
-    const totalUsersLastMonthEnd = totalUsers - newUsersThisMonth;
-    const totalUsersTrend = calculateTrend(totalUsers, totalUsersLastMonthEnd);
-
-    // 3. Active Users Trend (MAU)
-    const activeUsersThisMonthCount = await this.prisma.user.count({
-      where: {
-        updatedAt: { gte: startOfMonth },
-        isDeleted: false,
-      }
-    });
-
-    const activeUsersLastMonthCount = await this.prisma.user.count({
-      where: {
-        updatedAt: {
-          gte: lastMonthStart,
-          lte: lastMonthEnd,
-        },
-        isDeleted: false,
-      }
-    });
-
-    const activeUsersTrend = calculateTrend(activeUsersThisMonthCount, activeUsersLastMonthCount);
 
     return {
-      totalUsers,
+      totalUsers: totalUsersCount,
       totalParents,
       totalKids,
       totalAdmins,
@@ -248,39 +215,52 @@ export class AdminService {
       activeUsers24h,
       activeUsers7d,
       newUsersToday,
-      newUsersThisWeek,
+      newUsersThisWeek: 0,
       newUsersThisMonth,
       totalStoryViews: totalStoryProgress,
       totalFavorites,
       averageSessionTime: Math.round(avgSessionTime),
-      // New subscription metrics
       paidUsers,
       unpaidUsers,
       totalSubscriptions,
-      activeSubscriptions,
-      subscriptionPlans: subscriptionPlans.map(plan => ({
-        plan: plan.plan,
-        count: plan._count,
-      })),
+      activeSubscriptions: activeSubscriptionsCount,
+      subscriptionPlans: subscriptionPlans.map(p => ({ plan: p.plan, count: p._count })),
       totalRevenue: Number(totalRevenue.toFixed(2)),
-      // Calculate conversion rate (paid users / total users)
-      conversionRate: totalUsers > 0 ? Number(((paidUsers / totalUsers) * 100).toFixed(2)) : 0,
+      conversionRate: totalUsersCount > 0 ? Number(((paidUsers / totalUsersCount) * 100).toFixed(2)) : 0,
+
       performanceMetrics: {
-        newUsers: {
-          count: newUsersThisMonth,
-          trendPercent: newUsersTrend,
-          timeframe: 'vs last month'
-        },
-        totalUsers: {
-          count: totalUsers,
-          trendPercent: totalUsersTrend,
-          timeframe: 'vs last month'
-        },
-        activeUsers: {
-          count: activeUsersThisMonthCount, // MAU
-          trendPercent: activeUsersTrend,
-          timeframe: 'vs last month'
-        }
+        // User Metrics
+        totalUsers: DashboardUtil.calculateTrend(totalUsersCount, prevTotalUsers, TrendLabel.VS_LAST_MONTH),
+        totalParents: DashboardUtil.calculateTrend(totalParents, prevTotalParents, TrendLabel.VS_LAST_MONTH),
+        totalKids: DashboardUtil.calculateTrend(totalKids, prevTotalKids, TrendLabel.VS_LAST_MONTH),
+        totalAdmins: DashboardUtil.calculateTrend(totalAdmins, prevTotalAdmins, TrendLabel.VS_LAST_MONTH),
+
+        // Engagement
+        activeUsers24h: DashboardUtil.calculateTrend(activeUsers24h, prevActiveUsers24h, TrendLabel.VS_PREV_24H),
+        activeUsers7d: DashboardUtil.calculateTrend(activeUsers7d, prevActiveUsers7d, TrendLabel.VS_PREV_7D),
+        activeUsers30d: DashboardUtil.calculateTrend(activeUsers30d, prevActiveUsers30d, TrendLabel.VS_PREV_30D),
+        newUsers: DashboardUtil.calculateTrend(newUsersThisMonth, prevNewUsersThisMonth, TrendLabel.VS_LAST_MONTH), // Monthly Trend
+
+        averageSessionTime: DashboardUtil.calculateTrend(avgSessionTime, 0, TrendLabel.VS_LAST_MONTH),
+        totalStoryViews: DashboardUtil.calculateTrend(totalStoryProgress, prevTotalStoryProgress, TrendLabel.VS_LAST_MONTH),
+        totalFavorites: DashboardUtil.calculateTrend(totalFavorites, prevTotalFavorites, TrendLabel.VS_LAST_MONTH),
+
+        // Content
+        totalStories: DashboardUtil.calculateTrend(totalStories, prevTotalStories, TrendLabel.VS_LAST_MONTH),
+        totalCategories: DashboardUtil.calculateTrend(totalCategories, prevTotalCategories, TrendLabel.VS_LAST_MONTH),
+        totalThemes: DashboardUtil.calculateTrend(totalThemes, prevTotalThemes, TrendLabel.VS_LAST_MONTH),
+
+        // Revenue & Subs
+        totalRevenue: DashboardUtil.calculateTrend(totalRevenue, prevTotalRevenue, TrendLabel.VS_LAST_MONTH),
+        totalSubscriptions: DashboardUtil.calculateTrend(totalSubscriptions, prevTotalSubscriptions, TrendLabel.VS_LAST_MONTH),
+        activeSubscriptions: DashboardUtil.calculateTrend(activeSubscriptionsCount, prevActiveSubscriptionsCount, TrendLabel.VS_LAST_MONTH),
+        paidUsers: DashboardUtil.calculateTrend(paidUsers, prevPaidUsers, TrendLabel.VS_LAST_MONTH),
+        unpaidUsers: DashboardUtil.calculateTrend(unpaidUsers, prevUnpaidUsers, TrendLabel.VS_LAST_MONTH),
+        conversionRate: DashboardUtil.calculateTrend(
+          totalUsersCount > 0 ? Number(((paidUsers / totalUsersCount) * 100).toFixed(2)) : 0,
+          prevTotalUsers > 0 ? Number(((prevPaidUsers / prevTotalUsers) * 100).toFixed(2)) : 0,
+          TrendLabel.VS_LAST_MONTH
+        ),
       }
     };
   }
@@ -1681,5 +1661,51 @@ export class AdminService {
       deletedAt: sub.deletedAt || undefined,
       user: sub.user,
     }));
+  }
+
+  // =====================
+  // INTEGRATIONS & SUPPORT
+  // =====================
+
+  async getElevenLabsBalance() {
+    return this.elevenLabsProvider.getSubscriptionInfo();
+  }
+
+  async getAllSupportTickets(page: number = 1, limit: number = 10, status?: string) {
+    const skip = (page - 1) * limit;
+    const where: any = {};
+    if (status) where.status = status;
+
+    const [tickets, total] = await Promise.all([
+      this.prisma.supportTicket.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      }),
+      this.prisma.supportTicket.count({ where }),
+    ]);
+
+    return {
+      data: tickets,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async updateSupportTicket(id: string, status: string) {
+    return this.prisma.supportTicket.update({
+      where: { id },
+      data: { status },
+    });
   }
 }
