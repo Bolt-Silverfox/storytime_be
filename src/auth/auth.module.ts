@@ -8,6 +8,8 @@ import { PassportModule } from '@nestjs/passport';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GoogleOAuthStrategy } from './strategies/google-oauth.strategy';
+import { TokenService } from './services/token.service';
+import { PasswordService } from './services/password.service';
 
 @Module({
   imports: [
@@ -30,11 +32,13 @@ import { GoogleOAuthStrategy } from './strategies/google-oauth.strategy';
 
   providers: [
     AuthService,
+    TokenService,
+    PasswordService,
     GoogleStrategy,
     GoogleAuthGuard,
     GoogleOAuthStrategy,
   ],
 
-  exports: [AuthService, JwtModule, PassportModule],
+  exports: [AuthService, TokenService, JwtModule, PassportModule],
 })
-export class AuthModule { }
+export class AuthModule {}
