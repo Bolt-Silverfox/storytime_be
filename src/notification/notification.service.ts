@@ -1,38 +1,64 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EnvConfig } from '../config/env.validation';
 import * as nodemailer from 'nodemailer';
 import { NotificationRegistry, Notifications } from './notification.registry';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationPreference } from '@prisma/client';
+import { NotificationPreference, NotificationCategory as PrismaCategory, NotificationType as PrismaNotificationType } from '@prisma/client';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
 } from './notification.dto';
+import { InAppProvider } from './providers/in-app.provider';
+import { EmailProvider } from './providers/email.provider';
+import {
+  INotificationProvider,
+  NotificationPayload,
+  NotificationResult,
+} from './providers/notification-provider.interface';
 
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
   private transporter: nodemailer.Transporter;
+  private providers: Map<string, INotificationProvider>;
 
   constructor(
-    private readonly configService: ConfigService,
+    private readonly configService: ConfigService<EnvConfig, true>,
     private readonly prisma: PrismaService,
+    private readonly inAppProvider: InAppProvider,
+    private readonly emailProvider: EmailProvider,
   ) {
+    // Initialize legacy email transporter (for backward compatibility)
     this.transporter = nodemailer.createTransport({
-      host: this.configService.get<string>('SMTP_HOST'),
-      port: this.configService.get<number>('SMTP_PORT') || 587,
-      secure: false,
+      host: this.configService.get('SMTP_HOST'),
+      port: this.configService.get('SMTP_PORT') || 587,
+      secure: this.configService.get('SMTP_SECURE'),
       auth: {
-        user: this.configService.get<string>('SMTP_USER'),
-        pass: this.configService.get<string>('SMTP_PASS'),
+        user: this.configService.get('SMTP_USER'),
+        pass: this.configService.get('SMTP_PASS'),
+      },
+      tls: {
+        rejectUnauthorized: false,
       },
     });
+
+    // Initialize provider registry
+    this.providers = new Map<string, INotificationProvider>();
+    this.providers.set('email', this.emailProvider);
+    this.providers.set('in_app', this.inAppProvider);
   }
 
   async sendNotification(
     type: Notifications,
     data: Record<string, any>,
+    targetUserId?: string,
   ): Promise<{
     success: boolean;
     messageId?: string;
@@ -51,16 +77,46 @@ export class NotificationService {
 
       const template = await notification.getTemplate(data);
 
-      if (notification.medium !== 'email') {
-        throw new Error(`Medium ${notification.medium} not implemented`);
+      const payload: NotificationPayload = {
+        userId: targetUserId || (data.userId as string),
+        category: notification.category,
+        title: notification.subject,
+        body: template,
+        data: data,
+      };
+
+      // Map legacy medium to new channel
+      let channels: string[] = ['in_app', 'push'];
+      if (notification.medium === 'email') {
+        channels = ['email'];
       }
 
-      const resp = await this.sendEmail(
-        data?.email as string,
-        notification.subject,
-        template,
-      );
-      return resp;
+      // Filter channels based on user preferences
+      const userId = payload.userId;
+      if (userId) {
+        const enabledChannels = await this.getEnabledChannels(
+          userId,
+          notification.category,
+          channels,
+        );
+        channels = enabledChannels;
+      }
+
+      if (channels.length === 0) {
+        this.logger.log(
+          `Notification ${type} skipped for user ${userId} - all channels disabled`,
+        );
+        return { success: true, messageId: 'skipped' };
+      }
+
+      const results = await this.sendViaProvider(payload, channels);
+
+      const success = results.some(r => r.success);
+      return {
+        success,
+        messageId: results.find(r => r.messageId)?.messageId,
+        error: results.find(r => !r.success)?.error,
+      };
     } catch (error) {
       this.logger.error(
         `Failed to send notification: ${error.message}`,
@@ -85,14 +141,13 @@ export class NotificationService {
     try {
       const mailOptions = {
         from: {
-          name: this.configService.get<string>('DEFAULT_SENDER_NAME')!,
-          address: this.configService.get<string>('DEFAULT_SENDER_EMAIL')!,
+          name: this.configService.get('DEFAULT_SENDER_NAME'),
+          address: this.configService.get('DEFAULT_SENDER_EMAIL'),
         },
         to: email,
         subject: subject,
         html: htmlContent,
       };
-
       const info = await this.transporter.sendMail(mailOptions);
       this.logger.log(`Email sent successfully to ${email}: ${info.messageId}`);
       return {
@@ -110,12 +165,101 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Send notification via specified provider(s)
+   * This is the new provider-based notification API
+   * @param payload Notification payload
+   * @param channels Array of channels to send through (email, in_app, push)
+   */
+  async sendViaProvider(
+    payload: NotificationPayload,
+    channels: string[] = ['in_app'],
+  ): Promise<NotificationResult[]> {
+    const results: NotificationResult[] = [];
+
+    for (const channel of channels) {
+      const provider = this.providers.get(channel);
+      if (!provider) {
+        this.logger.warn(`Provider for channel '${channel}' not found`);
+        results.push({
+          success: false,
+          error: `Provider for channel '${channel}' not found`,
+        });
+        continue;
+      }
+
+      try {
+        const result = await provider.send(payload);
+        results.push(result);
+      } catch (error) {
+        this.logger.error(
+          `Failed to send via ${channel}: ${error.message}`,
+          error.stack,
+        );
+        results.push({
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Get enabled channels for a user based on their notification preferences.
+   * Uses opt-out model: if no preference exists, the channel is enabled by default.
+   */
+  private async getEnabledChannels(
+    userId: string,
+    category: PrismaCategory,
+    requestedChannels: string[],
+  ): Promise<string[]> {
+    // Map string channels to NotificationType enum
+    const channelToType: Record<string, PrismaNotificationType> = {
+      email: PrismaNotificationType.email,
+      push: PrismaNotificationType.push,
+      in_app: PrismaNotificationType.in_app,
+    };
+
+    const preferences = await this.prisma.notificationPreference.findMany({
+      where: {
+        userId,
+        category,
+        type: {
+          in: requestedChannels
+            .map((c) => channelToType[c])
+            .filter((t) => t !== undefined),
+        },
+        isDeleted: false,
+      },
+    });
+
+    // Create a map of channel -> enabled status
+    const prefMap = new Map<string, boolean>();
+    for (const pref of preferences) {
+      const channelName = Object.entries(channelToType).find(
+        ([, v]) => v === pref.type,
+      )?.[0];
+      if (channelName) {
+        prefMap.set(channelName, pref.enabled);
+      }
+    }
+
+    // Filter channels: include if preference doesn't exist (opt-out) OR if enabled
+    return requestedChannels.filter((channel) => {
+      const enabled = prefMap.get(channel);
+      return enabled === undefined || enabled === true;
+    });
+  }
+
   private toNotificationPreferenceDto(
     pref: NotificationPreference,
   ): NotificationPreferenceDto {
     return {
       id: pref.id,
       type: pref.type,
+      category: pref.category,
       enabled: pref.enabled,
       userId: pref.userId ?? undefined,
       kidId: pref.kidId ?? undefined,
@@ -130,20 +274,20 @@ export class NotificationService {
     // Verify user or kid exists and is not soft deleted
     if (dto.userId) {
       const user = await this.prisma.user.findUnique({
-        where: { 
+        where: {
           id: dto.userId,
-          isDeleted: false // CANNOT CREATE PREFERENCES FOR SOFT DELETED USERS
-        }
+          isDeleted: false, // CANNOT CREATE PREFERENCES FOR SOFT DELETED USERS
+        },
       });
       if (!user) throw new NotFoundException('User not found');
     }
 
     if (dto.kidId) {
       const kid = await this.prisma.kid.findUnique({
-        where: { 
+        where: {
           id: dto.kidId,
-          isDeleted: false // CANNOT CREATE PREFERENCES FOR SOFT DELETED KIDS
-        }
+          isDeleted: false, // CANNOT CREATE PREFERENCES FOR SOFT DELETED KIDS
+        },
       });
       if (!kid) throw new NotFoundException('Kid not found');
     }
@@ -151,6 +295,7 @@ export class NotificationService {
     const pref = await this.prisma.notificationPreference.create({
       data: {
         type: dto.type,
+        category: dto.category,
         enabled: dto.enabled,
         userId: dto.userId,
         kidId: dto.kidId,
@@ -164,9 +309,9 @@ export class NotificationService {
     dto: UpdateNotificationPreferenceDto,
   ): Promise<NotificationPreferenceDto> {
     const pref = await this.prisma.notificationPreference.update({
-      where: { 
+      where: {
         id,
-        isDeleted: false // CANNOT UPDATE SOFT DELETED PREFERENCES
+        isDeleted: false, // CANNOT UPDATE SOFT DELETED PREFERENCES
       },
       data: dto,
     });
@@ -175,20 +320,20 @@ export class NotificationService {
 
   async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {
     const user = await this.prisma.user.findUnique({
-      where: { 
+      where: {
         id: userId,
-        isDeleted: false // CANNOT GET PREFERENCES FOR SOFT DELETED USERS
-      }
+        isDeleted: false, // CANNOT GET PREFERENCES FOR SOFT DELETED USERS
+      },
     });
-    
+
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
     const prefs = await this.prisma.notificationPreference.findMany({
-      where: { 
+      where: {
         userId,
-        isDeleted: false // EXCLUDE SOFT DELETED PREFERENCES
+        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
       },
     });
     return prefs.map((p) => this.toNotificationPreferenceDto(p));
@@ -196,20 +341,20 @@ export class NotificationService {
 
   async getForKid(kidId: string): Promise<NotificationPreferenceDto[]> {
     const kid = await this.prisma.kid.findUnique({
-      where: { 
+      where: {
         id: kidId,
-        isDeleted: false // CANNOT GET PREFERENCES FOR SOFT DELETED KIDS
-      }
+        isDeleted: false, // CANNOT GET PREFERENCES FOR SOFT DELETED KIDS
+      },
     });
-    
+
     if (!kid) {
       throw new NotFoundException('Kid not found');
     }
 
     const prefs = await this.prisma.notificationPreference.findMany({
-      where: { 
+      where: {
         kidId,
-        isDeleted: false // EXCLUDE SOFT DELETED PREFERENCES
+        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
       },
     });
     return prefs.map((p) => this.toNotificationPreferenceDto(p));
@@ -217,13 +362,178 @@ export class NotificationService {
 
   async getById(id: string): Promise<NotificationPreferenceDto> {
     const pref = await this.prisma.notificationPreference.findUnique({
-      where: { 
+      where: {
         id,
-        isDeleted: false // EXCLUDE SOFT DELETED PREFERENCES
+        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
       },
     });
     if (!pref) throw new NotFoundException('Notification preference not found');
     return this.toNotificationPreferenceDto(pref);
+  }
+
+  /**
+   * Toggle a category preference for both in_app and push channels.
+   * Used by the settings UI when the user toggles a category on/off.
+   */
+  async toggleCategoryPreference(
+    userId: string,
+    category: PrismaCategory,
+    enabled: boolean,
+  ): Promise<NotificationPreferenceDto[]> {
+    const channels: PrismaNotificationType[] = [
+      PrismaNotificationType.in_app,
+      PrismaNotificationType.push,
+    ];
+
+    const results: NotificationPreferenceDto[] = [];
+
+    for (const type of channels) {
+      const pref = await this.prisma.notificationPreference.upsert({
+        where: {
+          userId_category_type: {
+            userId,
+            category,
+            type,
+          },
+        },
+        create: {
+          userId,
+          category,
+          type,
+          enabled,
+        },
+        update: {
+          enabled,
+          isDeleted: false, // Restore if previously soft deleted
+          deletedAt: null,
+        },
+      });
+      results.push(this.toNotificationPreferenceDto(pref));
+    }
+
+    return results;
+  }
+
+  /**
+   * Get user preferences in grouped format.
+   * Returns a map of category -> {push: bool, in_app: bool}.
+   */
+  async getUserPreferencesGrouped(
+    userId: string,
+  ): Promise<Record<string, { push: boolean; in_app: boolean }>> {
+    const prefs = await this.prisma.notificationPreference.findMany({
+      where: {
+        userId,
+        isDeleted: false,
+      },
+    });
+
+    // Group by category with per-channel status
+    const grouped: Record<string, { push: boolean; in_app: boolean }> = {};
+
+    for (const pref of prefs) {
+      if (!grouped[pref.category]) {
+        grouped[pref.category] = {
+          push: true, // Default to enabled
+          in_app: true, // Default to enabled
+        };
+      }
+
+      if (pref.type === PrismaNotificationType.push) {
+        grouped[pref.category].push = pref.enabled;
+      } else if (pref.type === PrismaNotificationType.in_app) {
+        grouped[pref.category].in_app = pref.enabled;
+      }
+    }
+
+    return grouped;
+  }
+
+  /**
+   * Update user preferences in bulk. Each category update affects both push and in_app channels.
+   * Example: { "NEW_STORY": true, "STORY_FINISHED": false }
+   */
+  async updateUserPreferences(
+    userId: string,
+    preferences: Record<string, boolean>,
+  ): Promise<Record<string, { push: boolean; in_app: boolean }>> {
+    const categories = Object.keys(preferences) as PrismaCategory[];
+    const channels: PrismaNotificationType[] = [
+      PrismaNotificationType.in_app,
+      PrismaNotificationType.push,
+    ];
+
+    // Upsert preferences for each category + channel combination
+    for (const category of categories) {
+      const enabled = preferences[category];
+
+      for (const type of channels) {
+        await this.prisma.notificationPreference.upsert({
+          where: {
+            userId_category_type: {
+              userId,
+              category,
+              type,
+            },
+          },
+          create: {
+            userId,
+            category,
+            type,
+            enabled,
+          },
+          update: {
+            enabled,
+            isDeleted: false,
+            deletedAt: null,
+          },
+        });
+      }
+    }
+
+    return this.getUserPreferencesGrouped(userId);
+  }
+
+  /**
+   * Seed default notification preferences for a new user.
+   * Creates preferences for all user-facing categories with enabled: true.
+   * Called during user registration.
+   */
+  async seedDefaultPreferences(userId: string): Promise<void> {
+    // User-facing categories that should have preferences (excludes auth/system categories)
+    const userFacingCategories: PrismaCategory[] = [
+      // Subscription & Billing
+      PrismaCategory.SUBSCRIPTION_REMINDER,
+      PrismaCategory.SUBSCRIPTION_ALERT,
+      // Engagement / Discovery
+      PrismaCategory.NEW_STORY,
+      PrismaCategory.STORY_FINISHED,
+      // Reminders
+      PrismaCategory.INCOMPLETE_STORY_REMINDER,
+      PrismaCategory.DAILY_LISTENING_REMINDER,
+    ];
+
+    const channels: PrismaNotificationType[] = [
+      PrismaNotificationType.in_app,
+      PrismaNotificationType.push,
+    ];
+
+    const preferences = userFacingCategories.flatMap((category) =>
+      channels.map((type) => ({
+        userId,
+        category,
+        type,
+        enabled: true,
+      })),
+    );
+
+    // Use createMany with skipDuplicates to avoid errors if preferences already exist
+    await this.prisma.notificationPreference.createMany({
+      data: preferences,
+      skipDuplicates: true,
+    });
+
+    this.logger.log(`Seeded ${preferences.length} default preferences for user ${userId}`);
   }
 
   /**
@@ -233,12 +543,12 @@ export class NotificationService {
    */
   async delete(id: string, permanent: boolean = false): Promise<void> {
     const pref = await this.prisma.notificationPreference.findUnique({
-      where: { 
+      where: {
         id,
-        isDeleted: false // CANNOT DELETE ALREADY DELETED PREFERENCES
-      }
+        isDeleted: false, // CANNOT DELETE ALREADY DELETED PREFERENCES
+      },
     });
-    
+
     if (!pref) {
       throw new NotFoundException('Notification preference not found');
     }
@@ -250,9 +560,9 @@ export class NotificationService {
     } else {
       await this.prisma.notificationPreference.update({
         where: { id },
-        data: { 
-          isDeleted: true, 
-          deletedAt: new Date() 
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
         },
       });
     }
@@ -262,27 +572,85 @@ export class NotificationService {
    * Restore a soft deleted notification preference
    * @param id Notification preference ID
    */
+  async getInAppNotifications(
+    userId: string,
+    limit: number = 20,
+    offset: number = 0,
+    unreadOnly: boolean = false,
+  ) {
+    const where: any = {
+      userId,
+      isDeleted: false,
+    };
+
+    if (unreadOnly) {
+      where.isRead = false;
+    }
+
+    const [notifications, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where,
+        take: limit,
+        skip: offset,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.notification.count({ where }),
+    ]);
+
+    return {
+      notifications: notifications.map(n => ({
+        ...n,
+        category: n.category as PrismaCategory,
+      })),
+      total,
+    };
+  }
+
+  async markAsRead(userId: string, notificationIds: string[]) {
+    return this.prisma.notification.updateMany({
+      where: {
+        id: { in: notificationIds },
+        userId,
+      },
+      data: {
+        isRead: true,
+      },
+    });
+  }
+
+  async markAllAsRead(userId: string) {
+    return this.prisma.notification.updateMany({
+      where: {
+        userId,
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+      },
+    });
+  }
+
   async undoDelete(id: string): Promise<NotificationPreferenceDto> {
     const pref = await this.prisma.notificationPreference.findUnique({
       where: { id },
     });
-    
+
     if (!pref) {
       throw new NotFoundException('Notification preference not found');
     }
-    
+
     if (!pref.isDeleted) {
       throw new BadRequestException('Notification preference is not deleted');
     }
 
     const restored = await this.prisma.notificationPreference.update({
       where: { id },
-      data: { 
-        isDeleted: false, 
-        deletedAt: null 
+      data: {
+        isDeleted: false,
+        deletedAt: null,
       },
     });
-    
+
     return this.toNotificationPreferenceDto(restored);
   }
 }

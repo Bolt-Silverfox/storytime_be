@@ -12,7 +12,9 @@ export class SettingsService {
   async getSettings(userId: string): Promise<any> {
     let profile = await prisma.profile.findUnique({ where: { userId } });
     if (!profile) {
-      profile = await prisma.profile.create({ data: { userId } });
+      profile = await prisma.profile.create({ data: { userId, language: 'en',    country: 'NG',  
+
+ } });
     }
     return profile;
   }
@@ -23,7 +25,8 @@ export class SettingsService {
   async updateSettings(userId: string, body: any): Promise<any> {
     let profile = await prisma.profile.findUnique({ where: { userId } });
     if (!profile) {
-      profile = await prisma.profile.create({ data: { userId } });
+      profile = await prisma.profile.create({ data: { userId, language: 'en', country: 'NG',
+ } });
     }
 
     // Validation

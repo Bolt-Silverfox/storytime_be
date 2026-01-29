@@ -80,6 +80,12 @@ export class CreateStoryDto {
   @IsString({ each: true })
   categoryIds: string[];
 
+  @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  seasonIds?: string[];
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
@@ -89,6 +95,11 @@ export class CreateStoryDto {
   @IsOptional()
   @IsString()
   audioUrl?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  textContent?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -147,6 +158,12 @@ export class UpdateStoryDto {
   @IsArray()
   @IsString({ each: true })
   categoryIds?: string[];
+
+  @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  seasonIds?: string[];
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -217,6 +234,48 @@ export class StoryProgressDto {
   @IsOptional()
   @IsBoolean()
   completed?: boolean;
+}
+
+export class UserStoryProgressDto {
+  @ApiProperty()
+  @IsUUID()
+  storyId: string;
+
+  @ApiProperty()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  progress: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  completed?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  sessionTime?: number;
+}
+
+export class UserStoryProgressResponseDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  storyId: string;
+
+  @ApiProperty()
+  progress: number;
+
+  @ApiProperty()
+  completed: boolean;
+
+  @ApiProperty()
+  lastAccessed: Date;
+
+  @ApiProperty()
+  totalTimeSpent: number;
 }
 
 export class DailyChallengeDto {
@@ -347,6 +406,19 @@ export class CategoryDto {
   sortOrder?: number;
 }
 
+export class SeasonDto {
+  @ApiProperty()
+  id: string;
+  @ApiProperty()
+  name: string;
+  @ApiProperty({ required: false })
+  description?: string;
+  @ApiProperty({ required: false })
+  startDate?: string;
+  @ApiProperty({ required: false })
+  endDate?: string;
+}
+
 export class ThemeDto {
   @ApiProperty()
   id: string;
@@ -374,11 +446,18 @@ export class GenerateStoryDto {
   @IsString({ each: true })
   themes?: string[];
 
+
   @ApiProperty({ type: [String], required: false })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   categories?: string[];
+
+  @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  seasonIds?: string[];
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -478,6 +557,11 @@ export class StoryDto extends CreateStoryDto {
   @IsString()
   id: string;
 
+  @ApiPropertyOptional({ description: 'Estimated reading time in seconds' })
+  @IsOptional()
+  @IsNumber()
+  durationSeconds?: number;
+
   @ApiProperty()
   createdAt: Date;
 
@@ -559,6 +643,26 @@ export class RecommendationsStatsDto {
   totalCount: number;
 }
 
+export class TopPickStoryDto extends StoryDto {
+  @ApiProperty({ description: 'Number of times this story has been recommended by parents' })
+  @IsNumber()
+  recommendationCount: number;
+
+  @ApiPropertyOptional({ description: 'Story themes' })
+  @IsOptional()
+  themes?: ThemeDto[];
+
+  @ApiPropertyOptional({ description: 'Story categories' })
+  @IsOptional()
+  categories?: CategoryDto[];
+
+  @ApiPropertyOptional({ description: 'Story seasons' })
+  @IsOptional()
+  seasons?: SeasonDto[];
+
+  // images is inherited from StoryDto -> CreateStoryDto
+}
+
 export class QuestionAnswerDto {
   @ApiProperty()
   id: string;
@@ -580,4 +684,19 @@ export class QuestionAnswerDto {
 
   @ApiProperty()
   answeredAt: Date;
+}
+
+export class RestrictStoryDto {
+  @ApiProperty()
+  @IsUUID()
+  kidId: string;
+
+  @ApiProperty()
+  @IsUUID()
+  storyId: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }

@@ -1,85 +1,91 @@
-name: Deploy to EC2 for develop branch
+name: Dev CI/CD Pipeline
 
 on:
-  push:
-    branches: [ 'develop-v*.*.*' ]
   pull_request:
-    branches: [ 'develop-v*.*.*' ]
+    branches: ['develop-v*.*.*']
+    types: [opened, synchronize, closed]
 
 jobs:
-  build-and-deploy:
+  build-and-test:
     runs-on: ubuntu-latest
     environment: development
     env:
-      DATABASE_URL: ${{ vars.DATABASE_URL }}
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '22'
-    
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v2
-      with:
-        version: 10 
-    
-    - name: Get pnpm store directory
-      shell: bash
-      run: |
-        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-    
-    - name: Setup pnpm cache
-      uses: actions/cache@v3
-      with:
-        path: ${{ env.STORE_PATH }}
-        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-        restore-keys: |
-          ${{ runner.os }}-pnpm-store-
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
-    
-    - name: Build
-      run: pnpm generate && pnpm build && npx prisma migrate deploy
-    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Create .env file
+        run: echo "${{ secrets.ENV_FILE }}" > .env
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm generate && pnpm build
+
     # - name: Run tests
     #   run: pnpm test
-    
-    - name: Deploy to EC2
-      if: startsWith(github.ref, 'refs/heads/develop-v')
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USERNAME }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          mkdir -p /home/ubuntu/storytime/storytime-api
-          exit 0
 
-    - name: Write SSH key to file
-      if: startsWith(github.ref, 'refs/heads/develop-v')
-      run: |
-        echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
-        chmod 600 /tmp/ssh_key
+  deploy:
+    needs: build-and-test
+    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    environment: development
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-    - name: Rsync files to EC2
-      if: startsWith(github.ref, 'refs/heads/develop-v')
-      run: |
-        rsync -avz --exclude='.git' --exclude='.github' --exclude='.env' \
-          -e "ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no" \
-          ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/storytime-api/
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: restart app
-      if: startsWith(github.ref, 'refs/heads/develop-v')
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USERNAME }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          cd /home/ubuntu/storytime/storytime-api
-          /home/ubuntu/.local/share/pnpm/pnpm install --frozen-lockfile
-          /home/ubuntu/.local/share/pnpm/pnpm deploy:dev
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Create .env file
+        run: echo "${{ secrets.ENV_FILE }}" > .env
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm generate && pnpm build && npx prisma migrate deploy
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            mkdir -p /home/ubuntu/storytime/development/storytime-api
+            exit 0
+
+      - name: Sync files and restart app
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
+          chmod 600 /tmp/ssh_key
+
+          rsync -avz --exclude='.git' --exclude='.github' --exclude='node_modules' \
+            -e "ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no" \
+            ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/development/storytime-api/
+
+          ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no \
+            ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
+            'bash -l -c "source ~/.nvm/nvm.sh && cd /home/ubuntu/storytime/development/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:dev"'
+
+          rm -f /tmp/ssh_key

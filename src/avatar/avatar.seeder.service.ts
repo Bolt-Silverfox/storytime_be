@@ -28,7 +28,9 @@ export class AvatarSeederService implements OnModuleInit {
             },
           });
           if (!existingAvatar) {
-            this.logger.log(`Seeding missing system avatar: ${avatarData.name}`);
+            this.logger.log(
+              `Seeding missing system avatar: ${avatarData.name}`,
+            );
             await this.prisma.avatar.create({
               data: {
                 name: avatarData.name,
@@ -51,8 +53,10 @@ export class AvatarSeederService implements OnModuleInit {
       // 3. Populate avatars
       this.logger.log(`Seeding ${systemAvatars.length} system avatars...`);
       for (const avatarData of systemAvatars) {
-        await this.prisma.avatar.create({
-          data: {
+        await this.prisma.avatar.upsert({
+          where: { name: avatarData.name },
+          update: { url: avatarData.url },
+          create: {
             name: avatarData.name,
             url: avatarData.url,
             isSystemAvatar: true,
@@ -60,9 +64,8 @@ export class AvatarSeederService implements OnModuleInit {
             deletedAt: null,
           },
         });
-        this.logger.log(`Created system avatar: ${avatarData.name}`);
+        this.logger.log(`Upserted system avatar: ${avatarData.name}`);
       }
-
       this.logger.log('System avatar seeding completed!');
     } catch (error) {
       this.logger.error('Error seeding system avatars:', error);

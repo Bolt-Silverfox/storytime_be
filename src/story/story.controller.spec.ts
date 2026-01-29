@@ -12,6 +12,7 @@ const mockStoryService = {
     addDownload: jest.fn(),
     removeDownload: jest.fn(),
     removeFromLibrary: jest.fn(),
+    getTopPicksFromParents: jest.fn(),
 };
 
 const mockTextToSpeechService = {}; // Mock dependency
@@ -90,6 +91,35 @@ describe('StoryController', () => {
         it('removeFromLibrary: should call removeFromLibrary service method', async () => {
             await controller.removeFromLibrary(kidId, storyId);
             expect(service.removeFromLibrary).toHaveBeenCalledWith(kidId, storyId);
+        });
+    });
+
+    // --- 3. TOP PICKS ENDPOINT ---
+    describe('getTopPicksFromParents', () => {
+        it('should call service with capped limit of 50 when exceeding max', async () => {
+            await controller.getTopPicksFromParents(100);
+            expect(service.getTopPicksFromParents).toHaveBeenCalledWith(50);
+        });
+
+        it('should call service with provided limit when within bounds', async () => {
+            await controller.getTopPicksFromParents(25);
+            expect(service.getTopPicksFromParents).toHaveBeenCalledWith(25);
+        });
+
+        it('should use default limit of 10', async () => {
+            await controller.getTopPicksFromParents(10);
+            expect(service.getTopPicksFromParents).toHaveBeenCalledWith(10);
+        });
+
+        it('should return the result from the service', async () => {
+            const mockResult = [
+                { id: 'story-1', title: 'Top Story', recommendationCount: 5 },
+            ];
+            service.getTopPicksFromParents.mockResolvedValue(mockResult);
+
+            const result = await controller.getTopPicksFromParents(10);
+
+            expect(result).toEqual(mockResult);
         });
     });
 });
