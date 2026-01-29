@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 
 export const envSchema = z.object({
   NODE_ENV: z
-    .enum(['development', 'production', 'test'])
+    .enum(['development', 'production', 'staging'])
     .default('development'),
   PORT: z.coerce.number().default(3000),
   CORS_ORIGIN: z.string().url().default('http://localhost:3000'),
@@ -18,7 +18,10 @@ export const envSchema = z.object({
   // SMTP Configuration (replaces Brevo)
   SMTP_HOST: z.string().min(1, 'SMTP_HOST is required'),
   SMTP_PORT: z.coerce.number().default(587),
-  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_SECURE: z
+    .string()
+    .transform((val) => val === 'true')
+    .default('false'),
   SMTP_USER: z.string().email('SMTP_USER must be a valid email'),
   SMTP_PASS: z.string().min(1, 'SMTP_PASS is required'),
   MAIL_ENCRYPTION: z.enum(['TLS', 'SSL']).optional().default('TLS'),

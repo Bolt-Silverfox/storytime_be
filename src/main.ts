@@ -22,15 +22,24 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1');
   app.use(helmet());
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://localhost:3001',
-      'http://localhost:4200',
-      'http://localhost:8080',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:5173',
-    ],
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      // Allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // Allow storytimeapp.me and all subdomains
+      const storytimePattern = /^https?:\/\/([a-z0-9-]+\.)*storytimeapp\.me$/;
+
+      // Allow localhost for development
+      const localhostPattern = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/;
+
+      if (storytimePattern.test(origin) || localhostPattern.test(origin)) {
+        return callback(null, true);
+      }
+
+      callback(new Error('Not allowed by CORS'));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
@@ -50,8 +59,8 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
       transform: true,
       transformOptions: {
-      enableImplicitConversion: true,
-    },
+        enableImplicitConversion: true,
+      },
     }),
   );
 

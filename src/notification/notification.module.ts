@@ -1,12 +1,17 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { NotificationService } from './notification.service';
 import { NotificationController } from './notification.controller';
+import { InAppNotificationController } from './in-app-notification.controller';
+import { UserPreferencesController } from './user-preferences.controller';
+import { InAppProvider } from './providers/in-app.provider';
+import { EmailProvider } from './providers/email.provider';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [HttpModule],
-  controllers: [NotificationController],
-  providers: [NotificationService],
+  imports: [HttpModule, forwardRef(() => AuthModule)],
+  controllers: [NotificationController, InAppNotificationController, UserPreferencesController],
+  providers: [NotificationService, InAppProvider, EmailProvider],
   exports: [NotificationService],
 })
-export class NotificationModule {}
+export class NotificationModule { }

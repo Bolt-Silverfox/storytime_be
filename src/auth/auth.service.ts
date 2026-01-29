@@ -21,6 +21,7 @@ import {
   ValidateResetTokenDto,
   ResetPasswordDto,
   ChangePasswordDto,
+  CompleteProfileDto,
 } from './auth.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
@@ -158,8 +159,8 @@ export class AuthService {
     }
   }
 
+  // ==================== REGISTRATION (UPDATED) ====================
   async register(data: RegisterDto): Promise<LoginResponseDto | null> {
-    const hashedPassword = await bcrypt.hash(data.password, 10);
     const existingUser = await this.prisma.user.findUnique({
       where: { email: data.email },
     });
@@ -173,16 +174,15 @@ export class AuthService {
       role = 'admin';
     }
 
+    const hashedPassword = await bcrypt.hash(data.password, 10);
+
     const user = await this.prisma.user.create({
       data: {
         name: data.fullName,
         email: data.email,
         passwordHash: hashedPassword,
-        title: data.title,
         role: role as any,
-        profile: {
-          create: {},
-        },
+        onboardingStatus: 'account_created',
       },
       include: {
         profile: true,
@@ -190,7 +190,18 @@ export class AuthService {
       },
     });
 
-    await this.sendEmailVerification(user.email);
+    try {
+      await this.sendEmailVerification(user.email);
+    } catch (error) {
+      this.logger.error('Email failed but user registered:', error.message);
+    }
+
+    // Seed default notification preferences for the new user
+    try {
+      await this.notificationService.seedDefaultPreferences(user.id);
+    } catch (error) {
+      this.logger.error('Failed to seed notification preferences:', error.message);
+    }
 
     const tokenData = await this.createToken(user);
     const numberOfKids = 0;
@@ -201,7 +212,126 @@ export class AuthService {
       refreshToken: tokenData.refreshToken,
     };
   }
+  // ==================== COMPLETE PROFILE =====================
+  async completeProfile(userId: string, data: CompleteProfileDto) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId },
+      include: { profile: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.onboardingStatus === 'pin_setup') {
+      throw new BadRequestException('Onboarding already completed');
+    }
 
+    if (data.learningExpectationIds && data.learningExpectationIds.length > 0) {
+      const existingExpectations = await this.prisma.learningExpectation.findMany({
+        where: {
+          id: { in: data.learningExpectationIds },
+          isActive: true,
+          isDeleted: false,
+        },
+      });
+
+      if (existingExpectations.length !== data.learningExpectationIds.length) {
+        throw new BadRequestException('Some selected learning expectations do not exist or are inactive');
+      }
+
+      await this.prisma.userLearningExpectation.createMany({
+        data: existingExpectations.map(exp => ({
+          userId,
+          learningExpectationId: exp.id,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    // Handle preferred categories
+    if (data.preferredCategories && data.preferredCategories.length > 0) {
+      // We assume these are IDs. If they are names, we would need to look them up.
+      // Given the pattern with learningExpectations, let's just use connect.
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          preferredCategories: {
+            set: data.preferredCategories.map(id => ({ id })),
+          },
+        },
+      });
+    }
+    const profile = await this.prisma.profile.update({
+      where: { userId },
+      data: {
+        language: data.language,
+        languageCode: data.languageCode,
+      },
+    });
+    if (data.profileImageUrl) {
+      let avatar = await this.prisma.avatar.findFirst({
+        where: { url: data.profileImageUrl },
+      });
+
+      if (!avatar) {
+        avatar = await this.prisma.avatar.create({
+          data: {
+            url: data.profileImageUrl,
+            name: `user_${userId}`,
+            isSystemAvatar: false,
+          },
+        });
+      }
+
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { avatarId: avatar.id },
+      });
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { onboardingStatus: 'profile_setup' },
+    });
+    const updatedUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        profile: true,
+        avatar: true,
+        learningExpectations: {
+          include: {
+            learningExpectation: true,
+          },
+        },
+      },
+    });
+    if (!updatedUser) throw new NotFoundException('User not found');
+
+    const numberOfKids = await this.prisma.kid.count({
+      where: { parentId: userId },
+    });
+
+    return new UserDto({
+      ...updatedUser,
+      numberOfKids,
+      profile,
+    });
+  }
+
+  async getLearningExpectations() {
+    return this.prisma.learningExpectation.findMany({
+      where: {
+        isActive: true,
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        category: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+  }
   async sendEmailVerification(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) throw new NotFoundException('User not found');
@@ -253,13 +383,16 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: verificationToken.userId },
-      data: { isEmailVerified: true },
+      data: {
+        isEmailVerified: true, onboardingStatus: 'email_verified',
+      },
     });
     await this.prisma.token.delete({ where: { id: verificationToken.id } });
 
     return { message: 'Email verified successfully' };
   }
 
+  // ==================== UPDATE PROFILE (UPDATED) ====================
   async updateProfile(userId: string, data: updateProfileDto) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId },
@@ -270,26 +403,43 @@ export class AuthService {
     const updateData: Partial<any> = {};
     if (data.country !== undefined) updateData.country = data.country;
     if (data.language !== undefined) updateData.language = data.language;
-    if (data.explicitContent !== undefined)
-      updateData.explicitContent = data.explicitContent;
-    if (data.maxScreenTimeMins !== undefined)
-      updateData.maxScreenTimeMins = data.maxScreenTimeMins;
+    if (data.languageCode !== undefined) updateData.languageCode = data.languageCode;
+    if (data.explicitContent !== undefined) updateData.explicitContent = data.explicitContent;
+    if (data.maxScreenTimeMins !== undefined) updateData.maxScreenTimeMins = data.maxScreenTimeMins;
 
-    if (Object.keys(updateData).length === 0) {
-      if (!user.profile)
-        return this.prisma.profile.create({ data: { userId } });
-      return user.profile;
+
+    // Update profile
+    if (Object.keys(updateData).length === 0 && !user.profile) {
+      return this.prisma.profile.create({
+        data: {
+          userId,
+          country: 'NG',
+        },
+      });
     }
 
     const profile = await this.prisma.profile.upsert({
       where: { userId },
       update: updateData,
-      create: { userId, ...updateData },
+      create: {
+        userId,
+        country: data.country || 'NG',
+        language: data.language,
+        languageCode: data.languageCode,
+        ...updateData,
+      },
     });
 
     const userWithKids = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { profile: true },
+      include: {
+        profile: true,
+        learningExpectations: {
+          include: {
+            learningExpectation: true,
+          },
+        },
+      },
     });
     if (!userWithKids) throw new NotFoundException('User not found');
 
@@ -474,7 +624,11 @@ export class AuthService {
     return { message: 'Password has been reset successfully' };
   }
 
-  async changePassword(userId: string, data: ChangePasswordDto) {
+  async changePassword(
+    userId: string,
+    data: ChangePasswordDto,
+    currentSessionId: string,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -498,9 +652,21 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(data.newPassword, 10);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash: hashedPassword },
+
+    // Use transaction to update password and cleanup sessions atomicity
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash: hashedPassword },
+      });
+
+      // Delete all sessions for this user EXCEPT the current one
+      await tx.session.deleteMany({
+        where: {
+          userId: userId,
+          id: { not: currentSessionId },
+        },
+      });
     });
 
     await this.notificationService.sendNotification('PasswordChanged', {
@@ -520,7 +686,7 @@ export class AuthService {
   }
 
   // ===============================
-  // GOOGLE AUTH
+  // GOOGLE AUTH (UPDATED)
   // ===============================
 
   async loginWithGoogleIdToken(idToken: string) {
@@ -576,7 +742,7 @@ export class AuthService {
 
     try {
       const { sub: appleId, email, email_verified } = await appleSigninAuth.verifyIdToken(idToken, {
-        audience: [process.env.APPLE_CLIENT_ID, process.env.APPLE_SERVICE_ID], 
+        audience: [process.env.APPLE_CLIENT_ID, process.env.APPLE_SERVICE_ID],
         nonce: 'NONCE',
         ignoreExpiration: false
       });
@@ -655,10 +821,21 @@ export class AuthService {
           googleId: googleId || null,
           appleId: appleId || null,
           role: 'parent',
-          profile: { create: {} },
+          profile: {
+            create: {
+              country: 'NG',
+            },
+          },
         },
         include: { profile: true, avatar: true },
       });
+
+      // Seed default notification preferences for new Google users
+      try {
+        await this.notificationService.seedDefaultPreferences(user.id);
+      } catch (error) {
+        this.logger.error('Failed to seed notification preferences:', error.message);
+      }
     }
 
     // 4. Handle avatar from Google picture

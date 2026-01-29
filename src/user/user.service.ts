@@ -15,7 +15,7 @@ const prisma = new PrismaClient();
 
 @Injectable()
 export class UserService {
-  constructor(private notificationService: NotificationService) {}
+  constructor(private notificationService: NotificationService) { }
 
   async getUser(id: string): Promise<any> {
     const user = await prisma.user.findUnique({
@@ -23,7 +23,7 @@ export class UserService {
         id,
         isDeleted: false,
       },
-      include: { profile: true, kids: true, avatar: true },
+      include: { profile: true, kids: true, avatar: true, subscriptions: true },
     });
     if (!user) return null;
 
@@ -36,7 +36,7 @@ export class UserService {
   async getUserIncludingDeleted(id: string): Promise<any> {
     const user = await prisma.user.findUnique({
       where: { id },
-      include: { profile: true, kids: true, avatar: true },
+      include: { profile: true, kids: true, avatar: true, subscriptions: true },
     });
 
     if (user) {
@@ -49,12 +49,17 @@ export class UserService {
    * Get all users (admin only) - includes both active and soft deleted users
    */
   async getAllUsers(): Promise<any[]> {
-    return prisma.user.findMany({
+    const users = await prisma.user.findMany({
       include: {
         profile: true,
         avatar: true,
       },
       orderBy: { createdAt: 'desc' },
+    });
+
+    return users.map(user => {
+      const { passwordHash, pinHash, ...safeUser } = user;
+      return safeUser;
     });
   }
 
@@ -62,11 +67,16 @@ export class UserService {
    * Get only active users (non-admin)
    */
   async getActiveUsers(): Promise<any[]> {
-    return prisma.user.findMany({
+    const users = await prisma.user.findMany({
       where: {
         isDeleted: false,
       },
       include: { profile: true, avatar: true },
+    });
+
+    return users.map(user => {
+      const { passwordHash, pinHash, ...safeUser } = user;
+      return safeUser;
     });
   }
 
@@ -124,7 +134,7 @@ export class UserService {
           // Foreign key constraint - cascade delete not properly set up
           throw new BadRequestException(
             'Cannot permanently delete account with associated data. ' +
-              'Please use soft delete (deactivation) or contact support to delete all associated data first.',
+            'Please use soft delete (deactivation) or contact support to delete all associated data first.',
           );
         }
       }
@@ -330,8 +340,8 @@ export class UserService {
     const profileUpdate: any = {};
 
     // -------- USER FIELDS --------
-    if (data.title !== undefined) updateData.title = data.title;
     if (data.name !== undefined) updateData.name = data.name;
+    if (data.biometricsEnabled !== undefined) updateData.biometricsEnabled = data.biometricsEnabled;
 
     // Avatar logic
     if (data.avatarId !== undefined) {
@@ -426,8 +436,26 @@ export class UserService {
 
     if (data.name !== undefined) updateUser.name = data.name;
     if (data.title !== undefined) updateUser.title = data.title;
+    if (data.biometricsEnabled !== undefined) updateUser.biometricsEnabled = data.biometricsEnabled;
     if (data.language !== undefined) updateProfile.language = data.language;
     if (data.country !== undefined) updateProfile.country = data.country;
+
+    // Handle preferred categories if provided
+    if (data.preferredCategories) {
+      updateUser.preferredCategories = {
+        set: data.preferredCategories.map((id: string) => ({ id })),
+      };
+    }
+
+    // Handle learning expectations if provided (explicit M-N)
+    if (data.learningExpectationIds) {
+      updateUser.learningExpectations = {
+        deleteMany: {},
+        create: data.learningExpectationIds.map((id: string) => ({
+          learningExpectationId: id,
+        })),
+      };
+    }
 
     return prisma.user.update({
       where: { id: userId },
@@ -442,7 +470,7 @@ export class UserService {
           },
         }),
       },
-      include: { profile: true, avatar: true },
+      include: { profile: true, avatar: true, preferredCategories: true },
     });
   }
 
@@ -463,6 +491,17 @@ export class UserService {
     if (!/^\d{6}$/.test(pin))
       throw new BadRequestException('PIN must be exactly 6 digits');
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+    if (user.onboardingStatus !== 'profile_setup') {
+      throw new BadRequestException(
+        'Complete profile setup before setting PIN',
+      );
+    }
+
     const hash = await hashPin(pin);
 
     await prisma.user.update({
@@ -470,7 +509,7 @@ export class UserService {
         id: userId,
         isDeleted: false,
       },
-      data: { pinHash: hash },
+      data: { pinHash: hash, onboardingStatus: 'pin_setup' },
     });
 
     return { success: true, message: 'PIN set successfully' };
