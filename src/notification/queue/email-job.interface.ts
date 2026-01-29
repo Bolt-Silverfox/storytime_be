@@ -63,6 +63,7 @@ export const CATEGORY_PRIORITY_MAP: Partial<Record<NotificationCategory, EmailPr
   PIN_RESET: EmailPriority.HIGH,
   NEW_LOGIN: EmailPriority.HIGH,
   PAYMENT_FAILED: EmailPriority.HIGH,
+  FEEDBACK: EmailPriority.NORMAL,
   SUBSCRIPTION_ALERT: EmailPriority.NORMAL,
   PAYMENT_SUCCESS: EmailPriority.NORMAL,
   NEW_STORY: EmailPriority.LOW,
