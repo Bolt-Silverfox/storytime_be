@@ -24,8 +24,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let message: string | string[];
     let error: string;
 
-    this.logger.error('HTTP Exception caught by filter:', exception);
-
     if (typeof exceptionResponse === 'string') {
       // Standard HttpException response is a string
       message = exceptionResponse;
