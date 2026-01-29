@@ -103,6 +103,8 @@ model User {
   userIps                 UserIP[]
   usage                   UserUsage? // Relation to usage tracking
   googleId                String?                  @unique
+  appleId                 String?                  @unique
+
   //PAYMENT MODELS RESTORED
   subscriptions           Subscription[]
   supportTickets          SupportTicket[]
