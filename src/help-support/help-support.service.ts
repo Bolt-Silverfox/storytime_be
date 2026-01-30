@@ -1,23 +1,25 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { render } from '@react-email/render';
 import { PrismaService } from '@/prisma/prisma.service';
+import { NotificationService } from '@/notification/notification.service';
+import { FeedbackNotificationTemplate } from '@/notification/templates/feedback-notification';
+import { EnvConfig } from '@/shared/config/env.validation';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
-import { EmailQueueService } from '../notification/queue/email-queue.service';
-import { EnvConfig } from '@/shared/config/env.validation';
-import { NotificationCategory } from '@prisma/client';
-import { UserFeedbackTemplate } from '../notification/templates/user-feedback';
 
 @Injectable()
 export class HelpSupportService {
   private readonly logger = new Logger(HelpSupportService.name);
+  private readonly feedbackRecipientEmail: string;
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
     private readonly configService: ConfigService<EnvConfig, true>,
-    private readonly emailQueueService: EmailQueueService,
-  ) { }
+  ) {
+    this.feedbackRecipientEmail = this.configService.get('DEFAULT_SENDER_EMAIL', { infer: true });
+  }
   // --- FAQs List ---
   getFaqs() {
     return [
@@ -45,46 +47,46 @@ export class HelpSupportService {
 
   // --- Store feedback suggestion ---
   async submitFeedback(dto: CreateFeedbackDto) {
-    // If saving to DB later:
-    // const feedback = await this.prisma.feedback.create({ data: dto });
+    const { fullname, email, message } = dto;
+    const submittedAt = new Date().toISOString();
 
-    const supportEmail = this.configService.get('SUPPORT_EMAIL', { infer: true });
+    // Render the feedback notification email template
+    const feedbackHtml = await render(
+      FeedbackNotificationTemplate({
+        fullname,
+        email,
+        message,
+        submittedAt,
+      }),
+    );
 
-    if (supportEmail) {
-      try {
-        const html = await render(
-          UserFeedbackTemplate({
-            userEmail: dto.email,
-            category: dto.category,
-            message: dto.message,
-            timestamp: new Date().toLocaleString(),
-          }),
-        );
+    try {
+      // Queue email to team
+      await this.notificationService.queueEmail(
+        this.feedbackRecipientEmail,
+        `New Feedback from ${fullname}`,
+        feedbackHtml,
+        { templateName: 'feedback-notification' },
+      );
 
-        await this.emailQueueService.queueEmail({
-          userId: 'system',
-          category: NotificationCategory.FEEDBACK,
-          to: supportEmail,
-          subject: `New Feedback: ${dto.category}`,
-          html,
-        });
+      this.logger.log(`Feedback submitted by ${email}`);
 
-        this.logger.log(`Feedback email queued to ${supportEmail}`);
-      } catch (error) {
-        this.logger.error('Failed to queue feedback email', error);
-      }
+      return {
+        message: 'Thank you for your feedback! We appreciate you taking the time to help us improve.',
+      };
+    } catch (error) {
+      this.logger.error(`Failed to process feedback from ${email}`, error instanceof Error ? error.stack : String(error));
+      // Still return success to user - feedback was received even if email failed
+      return {
+        message: 'Thank you for your feedback!',
+      };
     }
-
-    return {
-      message: 'Thank you for your feedback!',
-      data: dto,
-    };
   }
 
   // --- Contact Info ---
   getContactInfo() {
     return {
-      email: 'support@storytime.app',
+      email: 'team@storytime.app',
       phone: '+234 801 234 5678',
     };
   }
@@ -100,7 +102,7 @@ export class HelpSupportService {
       {
         title: 'The Service & Age Restrictions',
         content:
-          'StoryTime4Kids provides access to a curated digital library of audio and video content designed to enhance children’s literacy and imagination. The Service is intended for use by adults for children under 18. Users must be 18 years of age or older to create an account, make payments, and agree to these Terms.',
+          "StoryTime4Kids provides access to a curated digital library of audio and video content designed to enhance children's literacy and imagination. The Service is intended for use by adults for children under 18. Users must be 18 years of age or older to create an account, make payments, and agree to these Terms.",
       },
       {
         title: 'Subscription, Payments, and Free Trial',
