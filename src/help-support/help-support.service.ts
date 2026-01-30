@@ -1,7 +1,9 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { render } from '@react-email/render';
 import { PrismaService } from '@/prisma/prisma.service';
 import { NotificationService } from '@/notification/notification.service';
+import { FeedbackNotificationTemplate } from '@/notification/templates/feedback-notification';
 import { EnvConfig } from '@/shared/config/env.validation';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
@@ -46,24 +48,17 @@ export class HelpSupportService {
   // --- Store feedback suggestion ---
   async submitFeedback(dto: CreateFeedbackDto) {
     const { fullname, email, message } = dto;
+    const submittedAt = new Date().toISOString();
 
-    // Build feedback notification email for the team
-    const feedbackHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #333;">New Feedback Received</h2>
-        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <p><strong>From:</strong> ${fullname}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Message:</strong></p>
-          <div style="background-color: #fff; padding: 15px; border-left: 4px solid #4A90A4; margin-top: 10px;">
-            ${message.replace(/\n/g, '<br>')}
-          </div>
-        </div>
-        <p style="color: #666; font-size: 12px;">
-          Submitted at: ${new Date().toISOString()}
-        </p>
-      </div>
-    `;
+    // Render the feedback notification email template
+    const feedbackHtml = await render(
+      FeedbackNotificationTemplate({
+        fullname,
+        email,
+        message,
+        submittedAt,
+      }),
+    );
 
     try {
       // Queue email to team
