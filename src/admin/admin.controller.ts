@@ -26,6 +26,7 @@ import {
   UpdateUserRoleDto,
   BulkActionDto,
 } from './dto/user-management.dto';
+import { DeletionRequestDto } from './dto/admin-deletion-request.dto';
 import {
   DashboardStatsDto,
   StoryStatsDto,
@@ -749,6 +750,70 @@ export class AdminController {
     return {
       statusCode: 200,
       message: 'Unpaid users retrieved successfully',
+      data: result.data,
+      meta: result.meta
+    };
+  }
+
+  @Get('users/deletion-requests')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'List account deletion requests',
+    description: 'Returns parsed list of account deletion requests including reasons and notes.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+    example: 1
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10, max: 100)',
+    example: 10
+  })
+  @ApiOkResponse({
+    description: 'Deletion requests retrieved successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'Deletion requests retrieved successfully',
+        data: [
+          {
+            id: 'ticket-1',
+            userId: 'user-1',
+            userEmail: 'user@example.com',
+            userName: 'John Doe',
+            reasons: ['Too expensive'],
+            notes: 'I prefer another app',
+            createdAt: '2023-10-01T12:00:00Z',
+            status: 'open',
+            isPermanent: false
+          }
+        ],
+        meta: {
+          total: 5,
+          page: 1,
+          limit: 10,
+          totalPages: 1
+        }
+      }
+    }
+  })
+  async getDeletionRequests(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const result = await this.adminService.getDeletionRequests(
+      Number(page) || 1,
+      Number(limit) || 10,
+    );
+    return {
+      statusCode: 200,
+      message: 'Deletion requests retrieved successfully',
       data: result.data,
       meta: result.meta
     };

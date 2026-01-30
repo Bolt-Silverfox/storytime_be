@@ -1708,4 +1708,67 @@ export class AdminService {
       data: { status },
     });
   }
+
+  async getDeletionRequests(page: number = 1, limit: number = 10) {
+    const skip = (page - 1) * limit;
+
+    // Filter for tickets with specific subject
+    const where: any = {
+      subject: 'Delete Account Request',
+      isDeleted: false
+    };
+
+    const [tickets, total] = await Promise.all([
+      this.prisma.supportTicket.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      }),
+      this.prisma.supportTicket.count({ where }),
+    ]);
+
+    const parsedTickets = tickets.map(ticket => {
+      const message = ticket.message || '';
+
+      // Extract reasons
+      const reasonsMatch = message.match(/Reasons: (.*?)(\n|$)/);
+      const reasonsString = reasonsMatch ? reasonsMatch[1] : '';
+      const reasons = reasonsString ? reasonsString.split(',').map(r => r.trim()).filter(Boolean) : [];
+
+      // Extract notes
+      const notesMatch = message.match(/Notes: (.*?)(\n|$)/);
+      const notes = notesMatch ? notesMatch[1].trim() : '';
+
+      // Check if permanent
+      const isPermanent = message.includes('Permanent deletion requested');
+
+      return {
+        id: ticket.id,
+        userId: ticket.userId,
+        userEmail: ticket.user.email,
+        userName: ticket.user.name,
+        reasons,
+        notes,
+        createdAt: ticket.createdAt,
+        status: ticket.status,
+        isPermanent
+      };
+    });
+
+    return {
+      data: parsedTickets,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
 }
