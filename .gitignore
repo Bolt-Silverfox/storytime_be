@@ -61,4 +61,4 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 pnpm-workspace.yaml
 .vscode
 CLAUDE.md
-CLAUDE.md
+.claude
