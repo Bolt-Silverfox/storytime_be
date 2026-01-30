@@ -45,6 +45,8 @@ import { DateUtil } from '@/shared/utils/date.util';
 import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 
+const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
@@ -1713,7 +1715,7 @@ export class AdminService {
     const skip = (page - 1) * limit;
 
     // Filter for tickets with specific subject
-    const where: any = {
+    const where: Prisma.SupportTicketWhereInput = {
       subject: 'Delete Account Request',
       isDeleted: false
     };
@@ -1746,7 +1748,7 @@ export class AdminService {
       const notes = notesMatch ? notesMatch[1].trim() : '';
 
       // Check if permanent
-      const isPermanent = message.includes('Permanent deletion requested');
+      const isPermanent = message.includes(PERMANENT_DELETION_MSG);
 
       return {
         id: ticket.id,
