@@ -6,7 +6,6 @@ import {
   Text,
   Heading,
   Section,
-  Link,
   Hr,
 } from '@react-email/components';
 import { Tailwind } from '@react-email/tailwind';
