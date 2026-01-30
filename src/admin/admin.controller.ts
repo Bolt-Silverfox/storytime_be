@@ -26,6 +26,7 @@ import {
   UpdateUserRoleDto,
   BulkActionDto,
 } from './dto/user-management.dto';
+import { PaginationUtil } from '../shared/utils/pagination.util';
 import { DeletionRequestDto } from './dto/admin-deletion-request.dto';
 import {
   DashboardStatsDto,
@@ -450,7 +451,8 @@ export class AdminController {
     }
   })
   async getRecentActivity(@Query('limit') limit?: number) {
-    const data = await this.adminService.getRecentActivity(limit || 50);
+    const { limit: l } = PaginationUtil.sanitize(1, limit, 100);
+    const data = await this.adminService.getRecentActivity(l);
     return {
       statusCode: 200,
       message: 'Recent activity logs retrieved successfully',
@@ -618,6 +620,10 @@ export class AdminController {
     if (rawHasActiveSub !== undefined) {
       filters.hasActiveSubscription = rawHasActiveSub === 'true';
     }
+    const { page, limit } = PaginationUtil.sanitize(filters.page, filters.limit);
+    filters.page = page;
+    filters.limit = limit;
+
     const result = await this.adminService.getAllUsers(filters);
     return {
       statusCode: 200,
@@ -683,6 +689,10 @@ export class AdminController {
     }
   })
   async getPaidUsers(@Query() filters: UserFilterDto) {
+    const { page, limit } = PaginationUtil.sanitize(filters.page, filters.limit);
+    filters.page = page;
+    filters.limit = limit;
+
     const modifiedFilters = { ...filters, hasActiveSubscription: true };
     const result = await this.adminService.getAllUsers(modifiedFilters);
     return {
@@ -745,6 +755,10 @@ export class AdminController {
     }
   })
   async getUnpaidUsers(@Query() filters: UserFilterDto) {
+    const { page, limit } = PaginationUtil.sanitize(filters.page, filters.limit);
+    filters.page = page;
+    filters.limit = limit;
+
     const modifiedFilters = { ...filters, hasActiveSubscription: false };
     const result = await this.adminService.getAllUsers(modifiedFilters);
     return {
@@ -807,10 +821,8 @@ export class AdminController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    const result = await this.adminService.getDeletionRequests(
-      Number(page) || 1,
-      Number(limit) || 10,
-    );
+    const { page: p, limit: l } = PaginationUtil.sanitize(page, limit);
+    const result = await this.adminService.getDeletionRequests(p, l);
     return {
       statusCode: 200,
       message: 'Deletion requests retrieved successfully',
@@ -1890,7 +1902,8 @@ export class AdminController {
     @Query('level') level?: string,
     @Query('limit') limit?: number,
   ) {
-    const data = await this.adminService.getSystemLogs(level, limit || 100);
+    const { limit: l } = PaginationUtil.sanitize(1, limit, 500);
+    const data = await this.adminService.getSystemLogs(level, l);
     return {
       statusCode: 200,
       message: 'System logs retrieved successfully',
@@ -1931,7 +1944,8 @@ export class AdminController {
     @Query('limit') limit?: number,
     @Query('status') status?: string,
   ) {
-    const result = await this.adminService.getAllSupportTickets(Number(page) || 1, Number(limit) || 10, status);
+    const { page: p, limit: l } = PaginationUtil.sanitize(page, limit);
+    const result = await this.adminService.getAllSupportTickets(p, l, status);
     return {
       statusCode: 200,
       message: 'Support tickets retrieved',
