@@ -154,16 +154,29 @@ export class PaymentService {
         },
       });
 
-      return this.upsertSubscription(userId, plan, tx);
-
     } catch (error) {
       this.logger.error('IAP Verification Error', error);
+      // Handle Prisma unique constraint error just in case race condition happened between find and create
+      if (error.code === 'P2002') {
+        throw new BadRequestException('Transaction already processed');
+      }
       if (error instanceof BadRequestException) throw error;
       throw new BadRequestException('Purchase verification failed');
     }
   }
 
-  private async upsertSubscription(userId: string, plan: string, transaction: any) {
+  private hashReceipt(receipt: string): string {
+    // Basic hash to keep reference length reasonable and safe
+    let hash = 0;
+    for (let i = 0; i < receipt.length; i++) {
+      const char = receipt.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16);
+  }
+
+  private async upsertSubscription(userId: string, plan: string, transaction: any, tx: any = prisma) {
     const planDef = PAYMENT_CONSTANTS.PLANS[plan];
     const now = new Date();
     const endsAt = new Date(now.getTime() + planDef.days * PAYMENT_CONSTANTS.MILLISECONDS_PER_DAY);
