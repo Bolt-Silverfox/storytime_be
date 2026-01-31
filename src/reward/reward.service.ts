@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaClient, RewardRedemption } from '@prisma/client';
+import { RewardRedemption } from '@prisma/client';
+import { PrismaService } from '@/prisma/prisma.service';
 import {
   CreateRewardDto,
   UpdateRewardDto,
@@ -8,12 +9,12 @@ import {
   RewardRedemptionDto,
 } from './dto/reward.dto';
 
-const prisma = new PrismaClient();
-
 @Injectable()
 export class RewardService {
+  constructor(private readonly prisma: PrismaService) {}
+
   async create(dto: CreateRewardDto) {
-    return await prisma.reward.create({
+    return await this.prisma.reward.create({
       data: {
         name: dto.name,
         description: dto.description,
@@ -24,21 +25,25 @@ export class RewardService {
     });
   }
   async findAll() {
-    return await prisma.reward.findMany();
+    return await this.prisma.reward.findMany();
   }
+
   async findOne(id: string) {
-    const reward = await prisma.reward.findUnique({ where: { id } });
+    const reward = await this.prisma.reward.findUnique({ where: { id } });
     if (!reward) throw new NotFoundException('Reward not found');
     return reward;
   }
+
   async update(id: string, dto: UpdateRewardDto) {
-    return await prisma.reward.update({ where: { id }, data: dto });
+    return await this.prisma.reward.update({ where: { id }, data: dto });
   }
+
   async delete(id: string) {
-    return await prisma.reward.delete({ where: { id } });
+    return await this.prisma.reward.delete({ where: { id } });
   }
+
   async findByKid(kidId: string) {
-    return await prisma.reward.findMany({ where: { kidId } });
+    return await this.prisma.reward.findMany({ where: { kidId } });
   }
 
   private toRewardRedemptionDto(
@@ -54,7 +59,7 @@ export class RewardService {
   }
 
   async redeemReward(dto: RedeemRewardDto): Promise<RewardRedemptionDto> {
-    const redemption = await prisma.rewardRedemption.create({
+    const redemption = await this.prisma.rewardRedemption.create({
       data: {
         rewardId: dto.rewardId,
         kidId: dto.kidId,
@@ -67,7 +72,7 @@ export class RewardService {
   async updateRedemptionStatus(
     dto: UpdateRewardRedemptionStatusDto,
   ): Promise<RewardRedemptionDto> {
-    const redemption = await prisma.rewardRedemption.update({
+    const redemption = await this.prisma.rewardRedemption.update({
       where: { id: dto.redemptionId },
       data: { status: dto.status },
     });
@@ -75,7 +80,7 @@ export class RewardService {
   }
 
   async getRedemptionsForKid(kidId: string): Promise<RewardRedemptionDto[]> {
-    const redemptions = await prisma.rewardRedemption.findMany({
+    const redemptions = await this.prisma.rewardRedemption.findMany({
       where: { kidId },
     });
     return redemptions.map((r: RewardRedemption) =>
@@ -84,7 +89,7 @@ export class RewardService {
   }
 
   async getRedemptionById(id: string): Promise<RewardRedemptionDto | null> {
-    const redemption = await prisma.rewardRedemption.findUnique({
+    const redemption = await this.prisma.rewardRedemption.findUnique({
       where: { id },
     });
     return redemption ? this.toRewardRedemptionDto(redemption) : null;
