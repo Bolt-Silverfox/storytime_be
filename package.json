@@ -30,7 +30,7 @@
     "migrate": "npx prisma migrate deploy",
     "make-migration": "npx prisma migrate dev",
     "db:reset": "npx prisma migrate reset",
-    "db:seed": "ts-node src/story/seed.ts",
+    "db:seed": "npx ts-node prisma/seeds/index.ts",
     "deploy:dev": "pnpm make-migration && pnpm generate && pnpm start:pm2:dev",
     "deploy:staging": "pnpm make-migration && pnpm generate && pnpm start:pm2:staging",
     "deploy:prod": "pnpm make-migration && pnpm generate && pnpm start:pm2:prod"
