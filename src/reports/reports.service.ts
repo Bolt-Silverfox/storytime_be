@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '@/prisma/prisma.service';
 import {
   KidOverviewStatsDto,
   KidDetailedReportDto,
@@ -10,17 +10,18 @@ import {
 import { QuestionAnswerDto } from '../story/dto/story.dto'; // Import from story module
 import { BadgeProgressEngine } from '../achievement-progress/badge-progress.engine';
 
-const prisma = new PrismaClient();
-
 @Injectable()
 export class ReportsService {
-  constructor(private badgeProgressEngine: BadgeProgressEngine) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly badgeProgressEngine: BadgeProgressEngine,
+  ) {}
   /**
    * Start a screen time session for a kid
    */
   async startScreenTimeSession(kidId: string) {
     // Check if there's an active session
-    const activeSession = await prisma.screenTimeSession.findFirst({
+    const activeSession = await this.prisma.screenTimeSession.findFirst({
       where: {
         kidId,
         endTime: null,
@@ -31,7 +32,7 @@ export class ReportsService {
       return { sessionId: activeSession.id };
     }
 
-    const session = await prisma.screenTimeSession.create({
+    const session = await this.prisma.screenTimeSession.create({
       data: {
         kidId,
         date: new Date(),
@@ -45,7 +46,7 @@ export class ReportsService {
    * End a screen time session
    */
   async endScreenTimeSession(sessionId: string) {
-    const session = await prisma.screenTimeSession.findUnique({
+    const session = await this.prisma.screenTimeSession.findUnique({
       where: { id: sessionId },
     });
 
@@ -58,7 +59,7 @@ export class ReportsService {
       (endTime.getTime() - session.startTime.getTime()) / 1000,
     );
 
-    await prisma.screenTimeSession.update({
+    await this.prisma.screenTimeSession.update({
       where: { id: sessionId },
       data: {
         endTime,
@@ -73,7 +74,7 @@ export class ReportsService {
    * Record a question answer
    */
   async recordAnswer(dto: QuestionAnswerDto) {
-    const question = await prisma.storyQuestion.findUnique({
+    const question = await this.prisma.storyQuestion.findUnique({
       where: { id: dto.questionId },
       select: {
         id: true,
@@ -95,7 +96,7 @@ export class ReportsService {
 
     const isCorrect = question.correctOption === dto.selectedOption;
 
-    const answer = await prisma.questionAnswer.create({
+    const answer = await this.prisma.questionAnswer.create({
       data: {
         kidId: dto.kidId,
         questionId: dto.questionId,
@@ -110,7 +111,7 @@ export class ReportsService {
     });
 
     // Trigger badge progress for quiz answered
-    const kid = await prisma.kid.findUnique({
+    const kid = await this.prisma.kid.findUnique({
       where: { id: dto.kidId },
       select: { parentId: true },
     });
@@ -139,7 +140,7 @@ export class ReportsService {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const sessions = await prisma.screenTimeSession.findMany({
+    const sessions = await this.prisma.screenTimeSession.findMany({
       where: {
         kidId,
         date: {
@@ -175,7 +176,7 @@ export class ReportsService {
     startDate: Date,
     endDate: Date,
   ): Promise<number> {
-    const sessions = await prisma.screenTimeSession.findMany({
+    const sessions = await this.prisma.screenTimeSession.findMany({
       where: {
         kidId,
         date: {
@@ -197,7 +198,7 @@ export class ReportsService {
   //    * Set daily screen time limit for a kid
   //    */
   //   async setDailyLimit(dto: SetDailyLimitDto) {
-  //     await prisma.kid.update({
+  //     await this.prisma.kid.update({
   //       where: { id: dto.kidId },
   //       data: {
   //         dailyScreenTimeLimitMins: dto.limitMins,
@@ -212,7 +213,7 @@ export class ReportsService {
    * Priority: Kid's specific limit > Parent's default > No limit
    */
   private async getEffectiveDailyLimit(kidId: string): Promise<number | null> {
-    const kid = await prisma.kid.findUnique({
+    const kid = await this.prisma.kid.findUnique({
       where: { id: kidId },
       include: {
         parent: {
@@ -248,7 +249,7 @@ export class ReportsService {
    * Get daily limit status
    */
   async getDailyLimitStatus(kidId: string): Promise<DailyLimitDto> {
-    const kid = await prisma.kid.findUnique({
+    const kid = await this.prisma.kid.findUnique({
       where: { id: kidId },
     });
 
@@ -280,7 +281,7 @@ export class ReportsService {
    * Get weekly overview for all kids of a parent
    */
   async getWeeklyOverview(parentId: string): Promise<WeeklyReportDto> {
-    const kids = await prisma.kid.findMany({
+    const kids = await this.prisma.kid.findMany({
       where: { parentId },
       include: {
         avatar: true,
@@ -301,7 +302,7 @@ export class ReportsService {
     const kidStats: KidOverviewStatsDto[] = await Promise.all(
       kids.map(async (kid, index) => {
         // Stories completed this week
-        const storiesCompleted = await prisma.storyProgress.count({
+        const storiesCompleted = await this.prisma.storyProgress.count({
           where: {
             kidId: kid.id,
             completed: true,
@@ -320,7 +321,7 @@ export class ReportsService {
         );
 
         // Stars earned (assuming daily challenge completions)
-        const starsEarned = await prisma.dailyChallengeAssignment.count({
+        const starsEarned = await this.prisma.dailyChallengeAssignment.count({
           where: {
             kidId: kid.id,
             completed: true,
@@ -332,7 +333,7 @@ export class ReportsService {
         });
 
         // Badges earned (reward redemptions)
-        const badgesEarned = await prisma.rewardRedemption.count({
+        const badgesEarned = await this.prisma.rewardRedemption.count({
           where: {
             kidId: kid.id,
             redeemedAt: {
@@ -383,7 +384,7 @@ export class ReportsService {
    * Mark a story as completed
    */
   async completeStory(kidId: string, storyId: string) {
-    const kid = await prisma.kid.findUnique({
+    const kid = await this.prisma.kid.findUnique({
       where: { id: kidId },
       select: { parentId: true },
     });
@@ -393,7 +394,7 @@ export class ReportsService {
     }
 
     // Update or create progress record
-    const progress = await prisma.storyProgress.upsert({
+    const progress = await this.prisma.storyProgress.upsert({
       where: {
         kidId_storyId: {
           kidId,
@@ -429,7 +430,7 @@ export class ReportsService {
    * Get detailed report for a specific kid
    */
   async getKidDetailedReport(kidId: string): Promise<KidDetailedReportDto> {
-    const kid = await prisma.kid.findUnique({
+    const kid = await this.prisma.kid.findUnique({
       where: { id: kidId },
       include: {
         avatar: true,
@@ -461,7 +462,7 @@ export class ReportsService {
         : undefined;
 
     // Stories this week
-    const storiesCompleted = await prisma.storyProgress.count({
+    const storiesCompleted = await this.prisma.storyProgress.count({
       where: {
         kidId,
         completed: true,
@@ -469,7 +470,7 @@ export class ReportsService {
       },
     });
 
-    const storiesInProgress = await prisma.storyProgress.count({
+    const storiesInProgress = await this.prisma.storyProgress.count({
       where: {
         kidId,
         completed: false,
@@ -477,7 +478,7 @@ export class ReportsService {
     });
 
     // Quiz performance this week
-    const answers = await prisma.questionAnswer.findMany({
+    const answers = await this.prisma.questionAnswer.findMany({
       where: {
         kidId,
         answeredAt: { gte: weekStart },
@@ -490,7 +491,7 @@ export class ReportsService {
       totalAnswers > 0 ? Math.round((rightAnswers / totalAnswers) * 100) : 0;
 
     // Stars earned this week
-    const starsEarned = await prisma.dailyChallengeAssignment.count({
+    const starsEarned = await this.prisma.dailyChallengeAssignment.count({
       where: {
         kidId,
         completed: true,
@@ -499,7 +500,7 @@ export class ReportsService {
     });
 
     // Badges earned this week
-    const badgesEarned = await prisma.rewardRedemption.count({
+    const badgesEarned = await this.prisma.rewardRedemption.count({
       where: {
         kidId,
         redeemedAt: { gte: weekStart },
@@ -507,7 +508,7 @@ export class ReportsService {
     });
 
     // Favorites count
-    const favoritesCount = await prisma.favorite.count({
+    const favoritesCount = await this.prisma.favorite.count({
       where: { kidId },
     });
 
