@@ -2,23 +2,17 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '@/prisma/prisma.service';
 import { PaymentService } from '../payment/payment.service';
 import { SUBSCRIPTION_STATUS } from './subscription.constants';
+import { PAYMENT_CONSTANTS } from '../payment/payment.constants';
 
-/**
- * Simple plan catalog 
- */
-export const PLANS: Record<string, { display: string; amount: number; days: number }> = {
-  free: { display: 'Free', amount: 0, days: 365 * 100 },
-  weekly: { display: 'Weekly', amount: 1.5, days: 7 },
-  monthly: { display: 'Monthly', amount: 4.99, days: 30 },
-  yearly: { display: 'Yearly', amount: 47.99, days: 365 },
-};
+// Re-export specific plans if needed or just use constants
+export const PLANS = PAYMENT_CONSTANTS.PLANS;
 
 @Injectable()
 export class SubscriptionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentService?: PaymentService,
-  ) {}
+  ) { }
 
   getPlans() {
     return PLANS;

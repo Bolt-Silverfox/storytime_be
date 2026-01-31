@@ -1,20 +1,20 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { IapPlatform, VerifyPurchaseDto } from './dto/verify-purchase.dto';
+import { IapVerifierFactory } from './strategies/iap-verifier.factory';
+import { PAYMENT_CONSTANTS } from './payment.constants';
 
-/**
- * Plan definitions: amount and duration in days
- */
-const PLANS: Record<string, { amount: number; days: number }> = {
-  free: { amount: 0, days: 365 * 100 }, // effectively permanent free
-  weekly: { amount: 1.5, days: 7 },
-  monthly: { amount: 4.99, days: 30 },
-  yearly: { amount: 47.99, days: 365 },
-};
+import { PrismaService } from '@/prisma/prisma.service';
 
 @Injectable()
 export class PaymentService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(PaymentService.name);
+
+  constructor(
+    private readonly iapVerifierFactory: IapVerifierFactory,
+    private readonly prisma: PrismaService,
+  ) { }
 
   /**
    * Add a payment method for a user (simple store)
@@ -58,7 +58,7 @@ export class PaymentService {
    */
   async chargeSubscription(userId: string, body: { plan: string; paymentMethodId?: string; transactionPin?: string }) {
     const { plan, paymentMethodId, transactionPin } = body;
-    const planDef = PLANS[plan];
+    const planDef = PAYMENT_CONSTANTS.PLANS[plan];
     if (!planDef) throw new BadRequestException('Invalid plan');
 
     // validate user
@@ -85,51 +85,22 @@ export class PaymentService {
         userId,
         paymentMethodId: paymentMethodId ?? null,
         amount: planDef.amount,
-        currency: 'USD',
-        status: 'pending',
+        currency: PAYMENT_CONSTANTS.CURRENCY,
+        status: PAYMENT_CONSTANTS.TRANSACTION_STATUS.PENDING,
       },
     });
 
     // Simulate processing...
+    // In a real scenario, this is where we'd call Stripe/etc.
     const updatedTx = await this.prisma.paymentTransaction.update({
       where: { id: tx.id },
       data: {
-        status: 'success',
+        status: PAYMENT_CONSTANTS.TRANSACTION_STATUS.SUCCESS,
         reference: `sim-${Date.now()}`,
       },
     });
 
-    // Upsert subscription: start now, endsAt = now + planDef.days
-    const now = new Date();
-    const endsAt = new Date(now.getTime() + planDef.days * 24 * 60 * 60 * 1000);
-
-    const existingSub = await this.prisma.subscription.findFirst({ where: { userId } });
-    if (existingSub) {
-      await this.prisma.subscription.update({
-        where: { id: existingSub.id },
-        data: {
-          plan,
-          status: 'active',
-          startedAt: now,
-          endsAt,
-        },
-      });
-    } else {
-      await this.prisma.subscription.create({
-        data: {
-          userId,
-          plan,
-          status: 'active',
-          startedAt: now,
-          endsAt,
-        },
-      });
-    }
-
-    return {
-      transaction: updatedTx,
-      subscription: { plan, status: 'active', startedAt: now, endsAt },
-    };
+    return this.upsertSubscription(userId, plan, updatedTx);
   }
 
   async getSubscription(userId: string) {
@@ -154,5 +125,93 @@ export class PaymentService {
 
   async resubscribe(userId: string, paymentMethodId: string, plan: string, transactionPin?: string) {
     return this.chargeSubscription(userId, { plan, paymentMethodId, transactionPin });
+  }
+
+  /**
+   * IAP Verification
+   */
+  async verifyPurchase(userId: string, dto: VerifyPurchaseDto) {
+    try {
+      const verifier = this.iapVerifierFactory.getVerifier(dto.platform);
+      const isValid = await verifier.verify(dto.productId, dto.receipt);
+
+      if (!isValid) {
+        throw new BadRequestException('Invalid purchase receipt');
+      }
+
+      const plan = this.mapProductIdToPlan(dto.productId);
+      const planDef = PAYMENT_CONSTANTS.PLANS[plan];
+
+      // Record the transaction
+      const tx = await this.prisma.paymentTransaction.create({
+        data: {
+          userId,
+          paymentMethodId: null, // IAP doesn't use our internal payment methods
+          amount: planDef.amount,
+          currency: PAYMENT_CONSTANTS.CURRENCY,
+          status: PAYMENT_CONSTANTS.TRANSACTION_STATUS.SUCCESS,
+          reference: `iap-${dto.platform}-${Date.now()}`,
+        },
+      });
+
+      return this.upsertSubscription(userId, plan, tx);
+
+    } catch (error) {
+      this.logger.error('IAP Verification Error', error);
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException('Purchase verification failed');
+    }
+  }
+
+  private async upsertSubscription(userId: string, plan: string, transaction: any) {
+    const planDef = PAYMENT_CONSTANTS.PLANS[plan];
+    const now = new Date();
+    const endsAt = new Date(now.getTime() + planDef.days * PAYMENT_CONSTANTS.MILLISECONDS_PER_DAY);
+
+    const existingSub = await this.prisma.subscription.findFirst({ where: { userId } });
+
+    let subscription;
+    if (existingSub) {
+      subscription = await this.prisma.subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          plan,
+          status: 'active',
+          startedAt: now,
+          endsAt,
+        },
+      });
+    } else {
+      subscription = await this.prisma.subscription.create({
+        data: {
+          userId,
+          plan,
+          status: 'active',
+          startedAt: now,
+          endsAt,
+        },
+      });
+    }
+
+    return {
+      success: true,
+      transaction,
+      subscription: { plan, status: 'active', startedAt: now, endsAt },
+    };
+  }
+
+  private mapProductIdToPlan(productId: string): string {
+    // Determine plan from productId (simple mapping)
+    // Assuming productId matches one of our plan keys or follows a pattern
+    // For now, we trust the frontend to send the correct plan or mapped productId
+    // In production, you'd map productId -> plan
+    if (PAYMENT_CONSTANTS.PLANS[productId]) return productId;
+
+    if (productId.includes('yearly')) return 'yearly';
+    if (productId.includes('weekly')) return 'weekly';
+
+    // Default fallback
+    this.logger.warn(`Could not map productId ${productId} to a plan. Defaulting to monthly.`);
+    return 'monthly';
   }
 }
