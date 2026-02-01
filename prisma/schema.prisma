@@ -497,7 +497,7 @@ model PaymentTransaction {
   paymentMethodId String?
   paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
   currency        String?
-  reference       String?
+  reference       String?        @unique
   amount          Float
   status          String
   createdAt       DateTime       @default(now())
