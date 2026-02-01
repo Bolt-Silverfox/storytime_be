@@ -2,15 +2,21 @@ import { Module, forwardRef } from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { PaymentController } from './payment.controller';
 import { AuthModule } from '../auth/auth.module';
-import { PrismaModule } from '@/prisma/prisma.module';
+import { GooglePlayVerifier } from './strategies/google-play.verifier';
+import { AppStoreVerifier } from './strategies/app-store.verifier';
+import { IapVerifierFactory } from './strategies/iap-verifier.factory';
 
 @Module({
   imports: [
-    PrismaModule,
     forwardRef(() => AuthModule),
   ],
-  providers: [PaymentService],
+  providers: [
+    PaymentService,
+    GooglePlayVerifier,
+    AppStoreVerifier,
+    IapVerifierFactory,
+  ],
   controllers: [PaymentController],
   exports: [PaymentService],
 })
-export class PaymentModule {}
+export class PaymentModule { }
