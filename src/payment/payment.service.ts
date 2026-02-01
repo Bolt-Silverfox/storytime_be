@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
 import { IapVerifierFactory } from './strategies/iap-verifier.factory';
 import { PAYMENT_CONSTANTS } from './payment.constants';
+import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants';
 
 
 @Injectable()
@@ -106,22 +108,6 @@ export class PaymentService {
     return this.prisma.subscription.findFirst({ where: { userId } });
   }
 
-  async cancelSubscription(userId: string) {
-    const existing = await this.prisma.subscription.findFirst({ where: { userId } });
-    if (!existing) throw new NotFoundException('No subscription to cancel');
-
-    // Allow current period to run out
-    const now = new Date();
-    const endsAt = existing.endsAt && existing.endsAt > now ? existing.endsAt : now;
-
-    const cancelled = await this.prisma.subscription.update({
-      where: { id: existing.id },
-      data: { status: 'cancelled', endsAt },
-    });
-
-    return cancelled;
-  }
-
   async resubscribe(userId: string, paymentMethodId: string, plan: string, transactionPin?: string) {
     return this.chargeSubscription(userId, { plan, paymentMethodId, transactionPin });
   }
@@ -165,18 +151,10 @@ export class PaymentService {
   }
 
   private hashReceipt(receipt: string): string {
-    // Basic hash to keep reference length reasonable and safe
-    let hash = 0;
-    for (let i = 0; i < receipt.length; i++) {
-      const char = receipt.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return Math.abs(hash).toString(16);
+    return createHash('sha256').update(receipt).digest('hex').substring(0, 16);
   }
 
-  private async upsertSubscription(userId: string, plan: string, transaction: any, txArg?: any) {
-    const tx = txArg ?? this.prisma;
+  private async upsertSubscription(userId: string, plan: string, transaction: any) {
     const planDef = PAYMENT_CONSTANTS.PLANS[plan];
     const now = new Date();
     const endsAt = new Date(now.getTime() + planDef.days * PAYMENT_CONSTANTS.MILLISECONDS_PER_DAY);
@@ -189,7 +167,7 @@ export class PaymentService {
         where: { id: existingSub.id },
         data: {
           plan,
-          status: 'active',
+          status: SUBSCRIPTION_STATUS.ACTIVE,
           startedAt: now,
           endsAt,
         },
@@ -199,7 +177,7 @@ export class PaymentService {
         data: {
           userId,
           plan,
-          status: 'active',
+          status: SUBSCRIPTION_STATUS.ACTIVE,
           startedAt: now,
           endsAt,
         },
@@ -209,7 +187,7 @@ export class PaymentService {
     return {
       success: true,
       transaction,
-      subscription: { plan, status: 'active', startedAt: now, endsAt },
+      subscription: { plan, status: SUBSCRIPTION_STATUS.ACTIVE, startedAt: now, endsAt },
     };
   }
 

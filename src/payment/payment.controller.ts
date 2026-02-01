@@ -64,20 +64,6 @@ export class PaymentController {
     return this.paymentService.resubscribe(req.authUserData.userId, body.paymentMethodId, body.plan, body.transactionPin);
   }
 
-  @Post('cancel')
-  @UseGuards(AuthSessionGuard)
-  @Throttle({
-    default: {
-      limit: THROTTLE_LIMITS.PAYMENT.CANCEL.LIMIT,
-      ttl: THROTTLE_LIMITS.PAYMENT.CANCEL.TTL,
-    },
-  })
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Cancel subscription (keeps access until endsAt)' })
-  async cancel(@Req() req: any) {
-    return this.paymentService.cancelSubscription(req.authUserData.userId);
-  }
-
   @Get('status')
   @UseGuards(AuthSessionGuard)
   @Throttle({
