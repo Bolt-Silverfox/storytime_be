@@ -77,9 +77,16 @@ export class TextToSpeechService {
     // Priority 1: ElevenLabs
     if (useElevenLabs && elevenLabsId) {
       try {
-        const labsModel = VOICE_CONFIG_SETTINGS.MODELS.TURBO;
+        const labsModel = VOICE_CONFIG_SETTINGS.MODELS.DEFAULT;
+        const voiceSettings = {
+          stability: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.STABILITY,
+          similarity_boost: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.SIMILARITY_BOOST,
+          style: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.STYLE,
+          use_speaker_boost: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.USE_SPEAKER_BOOST,
+        };
+
         this.logger.log(`Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${elevenLabsId}) using model ${labsModel}`);
-        const audioBuffer = await this.elevenLabsProvider.generateAudio(text, elevenLabsId, labsModel);
+        const audioBuffer = await this.elevenLabsProvider.generateAudio(text, elevenLabsId, labsModel, voiceSettings);
 
         // Increment usage
         if (userId) {
@@ -105,7 +112,12 @@ export class TextToSpeechService {
     // Priority 2: Deepgram Fallback
     try {
       this.logger.log(`Attempting Deepgram generation for story ${storyId} with voice ${type}`);
-      const audioBuffer = await this.deepgramProvider.generateAudio(text, undefined, model);
+
+      const deepgramSettings = {
+        speed: VOICE_CONFIG_SETTINGS.DEEPGRAM.DEFAULT_SPEED, // Slower pace for storytelling
+      };
+
+      const audioBuffer = await this.deepgramProvider.generateAudio(text, undefined, model, deepgramSettings);
       return await this.uploadService.uploadAudioBuffer(
         audioBuffer,
         `story_${storyId}_deepgram_${Date.now()}.wav`,

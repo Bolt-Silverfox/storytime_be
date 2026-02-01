@@ -27,18 +27,25 @@ export class ElevenLabsTTSProvider implements ITextToSpeechProvider, IVoiceCloni
         }
     }
 
-    async generateAudio(text: string, voiceId: string, modelId: string = 'eleven_multilingual_v2'): Promise<Buffer> {
+    async generateAudio(text: string, voiceId: string, modelId: string = 'eleven_multilingual_v2', options?: any): Promise<Buffer> {
         if (!this.client) {
             throw new Error('ElevenLabs client is not initialized');
         }
 
         try {
-            this.logger.log(`Generating audio with voice ${voiceId}`);
-            const audioStream = await this.client.textToSpeech.convert(voiceId, {
+            this.logger.log(`Generating audio with voice ${voiceId} and model ${modelId}`);
+
+            const convertOptions: any = {
                 text,
                 model_id: modelId,
                 output_format: 'mp3_44100_128',
-            });
+            };
+
+            if (options) {
+                convertOptions.voice_settings = options;
+            }
+
+            const audioStream = await this.client.textToSpeech.convert(voiceId, convertOptions);
 
             return await this.converter.toBuffer(audioStream);
         } catch (error) {

@@ -27,13 +27,13 @@ export class DeepgramTTSProvider implements ITextToSpeechProvider {
         }
     }
 
-    async generateAudio(text: string, _voiceId?: string, model: string = 'aura-asteria-en'): Promise<Buffer> {
+    async generateAudio(text: string, _voiceId?: string, model: string = 'aura-asteria-en', options?: any): Promise<Buffer> {
         if (!this.deepgram) {
             throw new Error('Deepgram client is not initialized');
         }
 
         // 1. Transform raw text into "Storyteller Mode" (SSML)
-        const ssmlText = this.formatter.format(text);
+        const ssmlText = this.formatter.format(text, options);
 
         // Deepgram has a 2000 char limit. Split text into chunks.
         const MAX_CHARS = 1900; // Safety margin
