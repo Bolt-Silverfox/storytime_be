@@ -1,11 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { IapPlatform, VerifyPurchaseDto } from './dto/verify-purchase.dto';
 import { IapVerifierFactory } from './strategies/iap-verifier.factory';
 import { PAYMENT_CONSTANTS } from './payment.constants';
 
-import { PrismaService } from '@/prisma/prisma.service';
 
 @Injectable()
 export class PaymentService {
@@ -176,7 +175,8 @@ export class PaymentService {
     return Math.abs(hash).toString(16);
   }
 
-  private async upsertSubscription(userId: string, plan: string, transaction: any, tx: any = prisma) {
+  private async upsertSubscription(userId: string, plan: string, transaction: any, txArg?: any) {
+    const tx = txArg ?? this.prisma;
     const planDef = PAYMENT_CONSTANTS.PLANS[plan];
     const now = new Date();
     const endsAt = new Date(now.getTime() + planDef.days * PAYMENT_CONSTANTS.MILLISECONDS_PER_DAY);
