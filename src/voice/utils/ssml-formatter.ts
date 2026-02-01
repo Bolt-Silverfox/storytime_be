@@ -5,7 +5,7 @@ export class SSMLFormatter {
     /**
      * Adds "Breathing Room" to the story by formatting text to SSML
      */
-    format(rawText: string): string {
+    format(rawText: string, options?: { speed?: string }): string {
         // 1. Handle paragraph breaks (double newlines) BEFORE cleaning whitespace
         // Using a unique placeholder that isn't likely to be in the text
         const PARAGRAPH_MARKER = '___PARAGRAPH_BREAK___';
@@ -32,7 +32,12 @@ export class SSMLFormatter {
         // Restore paragraph breaks with long pause
         text = text.replace(new RegExp(PARAGRAPH_MARKER, 'g'), '<break time="1500ms"/>');
 
-        // 4. Wrap in <speak> tags
+        // 5. Apply prosody (speed/rate) if requested
+        if (options?.speed) {
+            text = `<prosody rate="${options.speed}">${text}</prosody>`;
+        }
+
+        // 6. Wrap in <speak> tags
         return `<speak>${text}</speak>`;
     }
 }

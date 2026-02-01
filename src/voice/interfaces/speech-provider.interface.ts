@@ -6,7 +6,7 @@ export interface ISpeechToTextProvider {
 
 export interface ITextToSpeechProvider {
     name: string;
-    generateAudio(text: string, voiceId?: string, model?: string): Promise<Buffer>;
+    generateAudio(text: string, voiceId?: string, model?: string, options?: any): Promise<Buffer>;
 }
 
 export interface IVoiceCloningProvider {
