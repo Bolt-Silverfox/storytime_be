@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
-import { IapPlatform, VerifyPurchaseDto } from './dto/verify-purchase.dto';
+import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
 import { IapVerifierFactory } from './strategies/iap-verifier.factory';
 import { PAYMENT_CONSTANTS } from './payment.constants';
 
