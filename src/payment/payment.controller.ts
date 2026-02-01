@@ -9,7 +9,9 @@ import {
   Delete,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { PaymentService } from './payment.service';
+import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { ChargeSubscriptionDto } from './dto/charge-subscription.dto';
@@ -64,6 +66,12 @@ export class PaymentController {
 
   @Post('cancel')
   @UseGuards(AuthSessionGuard)
+  @Throttle({
+    default: {
+      limit: THROTTLE_LIMITS.PAYMENT.CANCEL.LIMIT,
+      ttl: THROTTLE_LIMITS.PAYMENT.CANCEL.TTL,
+    },
+  })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cancel subscription (keeps access until endsAt)' })
   async cancel(@Req() req: any) {
@@ -72,13 +80,26 @@ export class PaymentController {
 
   @Get('status')
   @UseGuards(AuthSessionGuard)
+  @Throttle({
+    default: {
+      limit: THROTTLE_LIMITS.PAYMENT.STATUS.LIMIT,
+      ttl: THROTTLE_LIMITS.PAYMENT.STATUS.TTL,
+    },
+  })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current subscription (helper endpoint)' })
   async status(@Req() req: any) {
     return this.paymentService.getSubscription(req.authUserData.userId);
   }
+
   @Post('verify-iap')
   @UseGuards(AuthSessionGuard)
+  @Throttle({
+    default: {
+      limit: THROTTLE_LIMITS.PAYMENT.VERIFY.LIMIT,
+      ttl: THROTTLE_LIMITS.PAYMENT.VERIFY.TTL,
+    },
+  })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Verify IAP Receipt (Apple/Google)' })
   @ApiBody({ type: VerifyPurchaseDto })
