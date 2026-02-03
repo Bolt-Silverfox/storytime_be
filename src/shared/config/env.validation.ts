@@ -37,10 +37,6 @@ export const envSchema = z.object({
   DEEPGRAM_API_KEY: z.string().min(1, 'GOOGLE_TTS_API_KEY is required'),
   APPLE_CLIENT_ID: z.string().min(1, 'APPLE_CLIENT_ID is required'),
   APPLE_SERVICE_ID: z.string().min(1, 'APPLE_SERVICE_ID is required'),
-  GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL: z.string().email(),
-  GOOGLE_PLAY_PRIVATE_KEY: z.string().min(1),
-  GOOGLE_PACKAGE_NAME: z.string().min(1),
-  APPLE_SHARED_SECRET: z.string().min(1),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

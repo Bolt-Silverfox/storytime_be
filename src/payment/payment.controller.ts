@@ -9,18 +9,15 @@ import {
   Delete,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
 import { PaymentService } from './payment.service';
-import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { ChargeSubscriptionDto } from './dto/charge-subscription.dto';
-import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
 
 @ApiTags('payment')
 @Controller('payment')
 export class PaymentController {
-  constructor(private readonly paymentService: PaymentService) { }
+  constructor(private readonly paymentService: PaymentService) {}
 
   @Post('methods')
   @UseGuards(AuthSessionGuard)
@@ -64,32 +61,19 @@ export class PaymentController {
     return this.paymentService.resubscribe(req.authUserData.userId, body.paymentMethodId, body.plan, body.transactionPin);
   }
 
+  @Post('cancel')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancel subscription (keeps access until endsAt)' })
+  async cancel(@Req() req: any) {
+    return this.paymentService.cancelSubscription(req.authUserData.userId);
+  }
+
   @Get('status')
   @UseGuards(AuthSessionGuard)
-  @Throttle({
-    default: {
-      limit: THROTTLE_LIMITS.PAYMENT.STATUS.LIMIT,
-      ttl: THROTTLE_LIMITS.PAYMENT.STATUS.TTL,
-    },
-  })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current subscription (helper endpoint)' })
   async status(@Req() req: any) {
     return this.paymentService.getSubscription(req.authUserData.userId);
-  }
-
-  @Post('verify-iap')
-  @UseGuards(AuthSessionGuard)
-  @Throttle({
-    default: {
-      limit: THROTTLE_LIMITS.PAYMENT.VERIFY.LIMIT,
-      ttl: THROTTLE_LIMITS.PAYMENT.VERIFY.TTL,
-    },
-  })
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Verify IAP Receipt (Apple/Google)' })
-  @ApiBody({ type: VerifyPurchaseDto })
-  async verifyIap(@Req() req: any, @Body() body: VerifyPurchaseDto) {
-    return this.paymentService.verifyPurchase(req.authUserData.userId, body);
   }
 }
