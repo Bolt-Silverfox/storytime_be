@@ -1,10 +1,8 @@
-import { Controller, Get, Post, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Req, Delete } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
 import { SubscriptionService } from './subscription.service';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { SubscribeDto } from './dto/subscribe.dto';
-import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 
 @ApiTags('subscription')
 @Controller('subscription')
@@ -19,12 +17,6 @@ export class SubscriptionController {
 
   @Get('me')
   @UseGuards(AuthSessionGuard)
-  @Throttle({
-    default: {
-      limit: THROTTLE_LIMITS.SUBSCRIPTION.STATUS.LIMIT,
-      ttl: THROTTLE_LIMITS.SUBSCRIPTION.STATUS.TTL,
-    },
-  })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user subscription' })
   async getMySubscription(@Req() req: any) {
@@ -33,12 +25,6 @@ export class SubscriptionController {
 
   @Post('subscribe')
   @UseGuards(AuthSessionGuard)
-  @Throttle({
-    default: {
-      limit: THROTTLE_LIMITS.SUBSCRIPTION.SUBSCRIBE.LIMIT,
-      ttl: THROTTLE_LIMITS.SUBSCRIPTION.SUBSCRIBE.TTL,
-    },
-  })
   @ApiBearerAuth()
   @ApiBody({ type: SubscribeDto })
   @ApiOperation({ summary: 'Subscribe / change plan (optionally perform charge)' })
@@ -48,12 +34,6 @@ export class SubscriptionController {
 
   @Post('cancel')
   @UseGuards(AuthSessionGuard)
-  @Throttle({
-    default: {
-      limit: THROTTLE_LIMITS.SUBSCRIPTION.CANCEL.LIMIT,
-      ttl: THROTTLE_LIMITS.SUBSCRIPTION.CANCEL.TTL,
-    },
-  })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cancel subscription (keeps access until endsAt)' })
   async cancel(@Req() req: any) {
@@ -62,12 +42,6 @@ export class SubscriptionController {
 
   @Post('reactivate')
   @UseGuards(AuthSessionGuard)
-  @Throttle({
-    default: {
-      limit: THROTTLE_LIMITS.SUBSCRIPTION.SUBSCRIBE.LIMIT,
-      ttl: THROTTLE_LIMITS.SUBSCRIPTION.SUBSCRIBE.TTL,
-    },
-  })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Reactivate / resubscribe' })
   @ApiBody({ type: SubscribeDto })
@@ -77,12 +51,6 @@ export class SubscriptionController {
 
   @Get('history')
   @UseGuards(AuthSessionGuard)
-  @Throttle({
-    default: {
-      limit: THROTTLE_LIMITS.SUBSCRIPTION.HISTORY.LIMIT,
-      ttl: THROTTLE_LIMITS.SUBSCRIPTION.HISTORY.TTL,
-    },
-  })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List payment transactions for user' })
   async history(@Req() req: any) {
