@@ -25,8 +25,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
-import { AuthSessionGuard } from '../auth/auth.guard';
-import { UserDto } from '../auth/auth.dto';
+import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import { UserDto } from '@/auth/dto/auth.dto';
 import { UpdateUserDto } from './dto/user.dto';
 
 import { UpdateParentProfileDto } from './dto/update-parent-profile.dto';

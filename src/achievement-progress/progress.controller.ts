@@ -10,7 +10,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { ProgressService } from './progress.service';
 import { StreakService } from './streak.service';
 import { BadgeService } from './badge.service';
-import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { ProgressHomeResponseDto } from './dto/progress-response.dto';
 import { ProgressOverviewResponseDto } from './dto/progress-response.dto';
 import { StreakResponseDto } from './dto/streak-response.dto';

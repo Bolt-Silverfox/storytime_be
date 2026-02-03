@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
 import { AgeModule } from './age/age.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { AvatarModule } from './avatar/avatar.module';
-import { CommonModule } from './common/common.module';
-import { validateEnv } from './config/env.validation';
+import { SharedModule } from './shared/shared.module';
+import { validateEnv, EnvConfig } from './shared/config/env.validation';
 import { HelpSupportModule } from './help-support/help-support.module';
 import { KidModule } from './kid/kid.module';
 import { NotificationModule } from './notification/notification.module';
@@ -29,10 +30,11 @@ import { VoiceModule } from './voice/voice.module';
 import { PaymentModule } from './payment/payment.module';
 import { AchievementProgressModule } from './achievement-progress/achievement-progress.module';
 import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module';
-import { BiometricsModule } from './biometrics/biometrics.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
-import { throttleConfig } from './common/config/throttle.config';
+import { throttleConfig } from './shared/config/throttle.config';
+import { AdminModule } from './admin/admin.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -62,8 +64,36 @@ import { throttleConfig } from './common/config/throttle.config';
         ],
       }),
     }),
-    ThrottlerModule.forRoot(throttleConfig),
-    CommonModule,
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const isDev = config.get('NODE_ENV') === 'development';
+        const multiplier = isDev ? 100 : 1; // 100x limit in dev
+
+        return {
+          throttlers: (throttleConfig as any).throttlers.map((t: any) => ({
+            ...t,
+            limit: t.limit * multiplier,
+          })),
+        };
+      },
+    }),
+    // BullMQ for background job processing (email queue, etc.)
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<EnvConfig, true>) => ({
+        connection: {
+          url: config.get('REDIS_URL'),
+        },
+        defaultJobOptions: {
+          removeOnComplete: { age: 24 * 3600, count: 1000 },
+          removeOnFail: { age: 7 * 24 * 3600 },
+        },
+      }),
+    }),
+    SharedModule,
     AuthModule,
     UserModule,
     KidModule,
@@ -85,7 +115,8 @@ import { throttleConfig } from './common/config/throttle.config';
     HelpSupportModule,
     AchievementProgressModule,
     ParentFavoriteModule,
-    BiometricsModule,
+    AdminModule,
+    HealthModule,
   ],
   providers: [
     {

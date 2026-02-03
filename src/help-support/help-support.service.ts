@@ -1,9 +1,25 @@
-import { Injectable } from '@nestjs/common';
-
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { render } from '@react-email/render';
+import { PrismaService } from '@/prisma/prisma.service';
+import { NotificationService } from '@/notification/notification.service';
+import { FeedbackNotificationTemplate } from '@/notification/templates/feedback-notification';
+import { EnvConfig } from '@/shared/config/env.validation';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
+import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
 
 @Injectable()
 export class HelpSupportService {
+  private readonly logger = new Logger(HelpSupportService.name);
+  private readonly feedbackRecipientEmail: string;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+    private readonly configService: ConfigService<EnvConfig, true>,
+  ) {
+    this.feedbackRecipientEmail = this.configService.get('DEFAULT_SENDER_EMAIL', { infer: true });
+  }
   // --- FAQs List ---
   getFaqs() {
     return [
@@ -31,18 +47,46 @@ export class HelpSupportService {
 
   // --- Store feedback suggestion ---
   async submitFeedback(dto: CreateFeedbackDto) {
-    // If saving to DB later:
-    // const feedback = await this.prisma.feedback.create({ data: dto });
-    return {
-      message: 'Thank you for your feedback!',
-      data: dto,
-    };
+    const { fullname, email, message } = dto;
+    const submittedAt = new Date().toISOString();
+
+    // Render the feedback notification email template
+    const feedbackHtml = await render(
+      FeedbackNotificationTemplate({
+        fullname,
+        email,
+        message,
+        submittedAt,
+      }),
+    );
+
+    try {
+      // Queue email to team
+      await this.notificationService.queueEmail(
+        this.feedbackRecipientEmail,
+        `New Feedback from ${fullname}`,
+        feedbackHtml,
+        { templateName: 'feedback-notification' },
+      );
+
+      this.logger.log(`Feedback submitted by ${email}`);
+
+      return {
+        message: 'Thank you for your feedback! We appreciate you taking the time to help us improve.',
+      };
+    } catch (error) {
+      this.logger.error(`Failed to process feedback from ${email}`, error instanceof Error ? error.stack : String(error));
+      // Still return success to user - feedback was received even if email failed
+      return {
+        message: 'Thank you for your feedback!',
+      };
+    }
   }
 
   // --- Contact Info ---
   getContactInfo() {
     return {
-      email: 'support@storytime.app',
+      email: 'team@storytime.app',
       phone: '+234 801 234 5678',
     };
   }
@@ -58,7 +102,7 @@ export class HelpSupportService {
       {
         title: 'The Service & Age Restrictions',
         content:
-          'StoryTime4Kids provides access to a curated digital library of audio and video content designed to enhance children’s literacy and imagination. The Service is intended for use by adults for children under 18. Users must be 18 years of age or older to create an account, make payments, and agree to these Terms.',
+          "StoryTime4Kids provides access to a curated digital library of audio and video content designed to enhance children's literacy and imagination. The Service is intended for use by adults for children under 18. Users must be 18 years of age or older to create an account, make payments, and agree to these Terms.",
       },
       {
         title: 'Subscription, Payments, and Free Trial',
@@ -96,5 +140,31 @@ export class HelpSupportService {
       title: 'Privacy Policy',
       content: `This Privacy Policy describes how StoryTime collects, uses, and protects your information... (fill in your real content).`,
     };
+  }
+
+  // --- Support Tickets ---
+  async createTicket(userId: string, dto: CreateSupportTicketDto) {
+    return this.prisma.supportTicket.create({
+      data: {
+        userId,
+        subject: dto.subject,
+        message: dto.message,
+      },
+    });
+  }
+
+  async listMyTickets(userId: string) {
+    return this.prisma.supportTicket.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getTicket(userId: string, id: string) {
+    const ticket = await this.prisma.supportTicket.findUnique({ where: { id } });
+    if (!ticket || ticket.userId !== userId) {
+      throw new NotFoundException('Ticket not found');
+    }
+    return ticket;
   }
 }

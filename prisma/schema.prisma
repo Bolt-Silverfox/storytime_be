@@ -18,6 +18,48 @@ enum Role {
 enum NotificationType {
   email
   push
+  in_app
+}
+
+enum NotificationCategory {
+  // Auth & Security
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  PASSWORD_RESET_ALERT
+  PASSWORD_CHANGED
+  PIN_RESET
+  NEW_LOGIN
+
+  // Subscription & Billing
+  SUBSCRIPTION_REMINDER
+  SUBSCRIPTION_ALERT
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+
+  // Engagement / Discovery
+  NEW_STORY
+  FEEDBACK
+  STORY_FINISHED
+  STORY_RECOMMENDATION
+  WE_MISS_YOU
+
+  // Reminders
+  INCOMPLETE_STORY_REMINDER
+  DAILY_LISTENING_REMINDER
+  DAILY_CHALLENGE_REMINDER
+
+  // Progress & Rewards
+  ACHIEVEMENT_UNLOCKED
+  BADGE_EARNED
+  STREAK_MILESTONE
+
+  // Parental
+  SCREEN_TIME_LIMIT
+  BEDTIME_REMINDER
+  WEEKLY_REPORT
+
+  // System
+  SYSTEM_ALERT
 }
 
 enum OnboardingStatus {
@@ -41,7 +83,7 @@ model User {
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   pinHash                 String?
-  deviceAuths             DeviceAuth[]
+  biometricsEnabled       Boolean                  @default(false)
   // SOFT DELETE FIELDS
   isDeleted               Boolean                  @default(false)
   deletedAt               DateTime?
@@ -50,14 +92,21 @@ model User {
   Token                   Token[]
   kids                    Kid[]
   parentFavorites         ParentFavorite[]
+  userStoryProgress       UserStoryProgress[]
   voices                  Voice[]
   preferredVoiceId        String?
   preferredVoice          Voice?                   @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
   Reward                  Reward[]
   notificationPreferences NotificationPreference[]
+  notifications           Notification[]
+  preferredCategories     Category[]               @relation("UserPreferredCategories")
   activityLogs            ActivityLog[]
   userIps                 UserIP[]
+
+  usage                   UserUsage? // Relation to usage tracking
   googleId                String?                  @unique
+  appleId                 String?                  @unique
+
   //PAYMENT MODELS RESTORED
   subscriptions           Subscription[]
   supportTickets          SupportTicket[]
@@ -65,6 +114,8 @@ model User {
   paymentTransactions     PaymentTransaction[]
   // ADDED: Parent recommendations
   parentRecommendations   ParentRecommendation[]
+  // ADDED: Restricted stories
+  restrictedStories       RestrictedStory[]
   // NEW: Learning expectations (marketing data)
   learningExpectations    UserLearningExpectation[]
 
@@ -72,20 +123,7 @@ model User {
   @@map("users")
 }
 
-//-------------------------- 
-//Biometric enabled
-//-------------------------
-model DeviceAuth {
-  id            String   @id @default(uuid())
-  userId        String
-  deviceId      String
-  biometricsOn  Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, deviceId])
-}
 
 // -------------------------
 // KID MODEL
@@ -138,6 +176,8 @@ model Kid {
   userBadges              UserBadge[]
   // ADDED: Parent recommendations
   parentRecommendations   ParentRecommendation[]
+  // ADDED: Restricted stories
+  restrictedStories       RestrictedStory[]
 
   @@index([isDeleted])
   @@map("kids")
@@ -261,6 +301,7 @@ model Story {
   aiGenerated           Boolean                  @default(false)
   difficultyLevel       Int                      @default(1)
   wordCount             Int                      @default(0)
+  durationSeconds       Int?                     // Estimated reading time in seconds
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
   // SOFT DELETE FIELDS
@@ -271,12 +312,14 @@ model Story {
   favorites             Favorite[]
   parentFavorites       ParentFavorite[]
   progresses            StoryProgress[]
+  userProgress          UserStoryProgress[]
   dailyChallenges       DailyChallenge[]
   paths                 StoryPath[]
   categories            Category[]               @relation("StoryCategories")
   themes                Theme[]                  @relation("StoryThemes")
   storyAudioCaches      StoryAudioCache[]
   questions             StoryQuestion[]
+  seasons               Season[]                 @relation("StorySeasons")
   // Add this field to track who created it (for AI generation)
   creatorKidId          String?
   creatorKid            Kid?                     @relation("CreatedStories", fields: [creatorKidId], references: [id])
@@ -284,6 +327,8 @@ model Story {
   downloads             DownloadedStory[]
   // ADDED: Parent recommendations
   parentRecommendations ParentRecommendation[]
+  // ADDED: Restricted stories
+  restrictedStories     RestrictedStory[]
 
   @@index([isDeleted])
   @@map("stories")
@@ -370,6 +415,24 @@ model StoryProgress {
   @@unique([kidId, storyId])
   @@index([isDeleted])
   @@map("story_progress")
+}
+
+model UserStoryProgress {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId        String
+  story          Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  progress       Float     @default(0)
+  completed      Boolean   @default(false)
+  lastAccessed   DateTime  @default(now())
+  totalTimeSpent Int       @default(0)
+  isDeleted      Boolean   @default(false)
+  deletedAt      DateTime?
+
+  @@unique([userId, storyId])
+  @@index([isDeleted])
+  @@map("user_story_progress")
 }
 
 // -------------------------
@@ -473,6 +536,7 @@ model Voice {
   type                String
   url                 String?
   elevenLabsVoiceId   String?
+  voiceAvatar         String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   // SOFT DELETE FIELDS
@@ -525,21 +589,43 @@ model DailyChallengeAssignment {
 }
 
 model NotificationPreference {
-  id        String           @id @default(uuid())
-  type      NotificationType
-  enabled   Boolean          @default(true)
+  id        String               @id @default(uuid())
+  type      NotificationType     // Channel: email, push, in_app
+  category  NotificationCategory // What kind of notification
+  enabled   Boolean              @default(true)
   userId    String?
   kidId     String?
-  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kid       Kid?             @relation(fields: [kidId], references: [id], onDelete: Cascade)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  user      User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kid       Kid?                 @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
   // SOFT DELETE FIELDS
-  isDeleted Boolean          @default(false)
+  isDeleted Boolean              @default(false)
   deletedAt DateTime?
 
+  @@unique([userId, category, type])
+  @@unique([kidId, category, type])
   @@index([isDeleted])
   @@map("notification_preferences")
+}
+
+model Notification {
+  id        String               @id @default(uuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  NotificationCategory
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean              @default(false)
+  createdAt DateTime             @default(now())
+  isDeleted Boolean              @default(false)
+  deletedAt DateTime?
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
+  @@index([isDeleted])
+  @@map("notifications")
 }
 
 model RewardRedemption {
@@ -604,6 +690,7 @@ model Category {
   description     String?
   stories         Story[]   @relation("StoryCategories")
   preferredByKids Kid[]     @relation("KidPreferredCategories")
+  preferredByUsers User[]   @relation("UserPreferredCategories")
   // SOFT DELETE FIELDS
   isDeleted       Boolean   @default(false)
   deletedAt       DateTime?
@@ -836,6 +923,25 @@ model UserBadge {
   @@map("user_badges")
 }
 
+model Season {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  iconUrl     String?
+  startDate   String?   // "MM-DD" generic start (approx)
+  endDate     String?   // "MM-DD" generic end (approx)
+  stories     Story[]   @relation("StorySeasons")
+  isActive    Boolean   @default(true) 
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  // SOFT DELETE FIELDS
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+
+  @@index([isDeleted])
+  @@map("seasons")
+}
+
 model DownloadedStory {
   id           String   @id @default(uuid())
   kidId        String
@@ -872,4 +978,40 @@ model ParentRecommendation {
   @@index([kidId])
   @@index([userId, kidId])
   @@map("parent_recommendations")
+}
+
+// -------------------------
+// RESTRICTED STORIES
+// -------------------------
+model RestrictedStory {
+  id        String   @id @default(uuid())
+  kidId     String
+  kid       Kid      @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@unique([kidId, storyId])
+  @@index([kidId])
+  @@map("restricted_stories")
+}
+
+// -------------------------
+// USAGE TRACKING
+// -------------------------
+model UserUsage {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  elevenLabsCount   Int      @default(0)
+  geminiStoryCount  Int      @default(0)
+  geminiImageCount  Int      @default(0)
+  currentMonth      String   // Format: "YYYY-MM" to track resets
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("user_usages")
 }

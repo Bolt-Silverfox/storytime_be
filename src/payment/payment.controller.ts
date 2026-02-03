@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { PaymentService } from './payment.service';
-import { AuthSessionGuard } from '../auth/auth.guard';
+import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { ChargeSubscriptionDto } from './dto/charge-subscription.dto';
 

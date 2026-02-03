@@ -1,15 +1,18 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, ParseArrayPipe, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, ParseArrayPipe, Query, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { KidService } from './kid.service';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
-import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { AnalyticsService } from '../analytics/analytics.service';
+import * as UAParser from 'ua-parser-js';
 
 @ApiTags('Kids Management')
 @ApiBearerAuth()
 @UseGuards(AuthSessionGuard)
 @Controller()
 export class KidController {
+    private readonly logger = new Logger(KidController.name);
+
     constructor(
         private readonly kidService: KidService,
         private readonly analyticsService: AnalyticsService
@@ -45,8 +48,7 @@ export class KidController {
         const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
         
         // Parse User-Agent to get device details
-        const UAParser = require('ua-parser-js');
-        const parser = new UAParser(req.headers['user-agent'] as string);
+        const parser = new UAParser.UAParser(req.headers['user-agent'] as string);
         const ua = parser.getResult();
         
         // Log the activity with full device information
@@ -63,7 +65,7 @@ export class KidController {
             os: `${ua.os.name || 'unknown'} ${ua.os.version || ''}`.trim(),
         }).catch(err => {
             // Silently catch errors so logging failures don't affect user experience
-            console.error('Failed to log activity:', err);
+            this.logger.error('Failed to log activity:', err);
         });
         
         return kid;

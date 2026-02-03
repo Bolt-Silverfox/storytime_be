@@ -1,33 +1,22 @@
-import { Controller, Get, Put, Patch, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Put, Patch, Post, Body, Param, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
   ApiBody,
-  ApiProperty,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
-
-class UpdateSettingsDto {
-  explicitContent?: boolean;
-  maxScreenTimeMins?: number; // Parent's default limit
-  language?: string;
-  country?: string;
-}
-
-class SetKidDailyLimitDto {
-  @ApiProperty({
-    required: false,
-    description: 'Daily limit in minutes, null for no limit',
-  })
-  limitMins?: number;
-}
+import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import { UpdateSettingsDto, SetKidDailyLimitDto } from './dto/settings.dto';
 
 @ApiTags('settings')
 @Controller('settings')
+@UseGuards(AuthSessionGuard)
+@ApiBearerAuth()
 export class SettingsController {
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(private readonly settingsService: SettingsService) { }
 
   // ============== PARENT SETTINGS (Existing) ==============
 

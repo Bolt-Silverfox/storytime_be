@@ -1,21 +1,33 @@
+const baseConfig = {
+  script: 'dist/src/main.js',
+  instances: 'max',
+  exec_mode: 'cluster',
+  autorestart: true,
+  watch: false,
+  max_memory_restart: '1G',
+};
+
 module.exports = {
   apps: [
     {
-      name: `storytime-api-${process.env.NODE_ENV || 'development'}`,
-      script: 'dist/src/main.js',
-      instances: 'max',
-      exec_mode: 'cluster',
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '1G',
+      ...baseConfig,
+      name: 'storytime-api-development',
       env: {
         NODE_ENV: 'development',
       },
-      env_production: {
-        NODE_ENV: 'production',
-      },
-      env_staging: {
+    },
+    {
+      ...baseConfig,
+      name: 'storytime-api-staging',
+      env: {
         NODE_ENV: 'staging',
+      },
+    },
+    {
+      ...baseConfig,
+      name: 'storytime-api-production',
+      env: {
+        NODE_ENV: 'production',
       },
     },
   ],

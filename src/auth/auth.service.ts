@@ -8,31 +8,29 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import {
-  kidDto,
   LoginDto,
   LoginResponseDto,
   RefreshResponseDto,
   RegisterDto,
   TokenType,
-  updateKidDto,
-  updateProfileDto,
   UserDto,
   RequestResetDto,
   ValidateResetTokenDto,
   ResetPasswordDto,
   ChangePasswordDto,
-  CompleteProfileDto, 
-} from './auth.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
+  CompleteProfileDto,
+  updateProfileDto,
+} from './dto/auth.dto';
+import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
-import { generateToken } from 'src/utils/generete-token';
+import { generateToken } from '@/utils/generate-token';
+import { GoogleOAuthProfile } from '@/shared/types';
 import * as crypto from 'crypto';
-import { NotificationService } from 'src/notification/notification.service';
-import { JwtService } from '@nestjs/jwt';
+import { NotificationService } from '@/notification/notification.service';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
-
-const JWT_EXPIRES_IN = '1h';
-const REFRESH_TOKEN_EXPIRES_IN = 7;
+import { TokenService } from './services/token.service';
+import { PasswordService } from './services/password.service';
+import appleSigninAuth from 'apple-signin-auth';
 
 @Injectable()
 export class AuthService {
@@ -40,9 +38,10 @@ export class AuthService {
   private googleClient: OAuth2Client;
 
   constructor(
-    private jwtService: JwtService,
-    private prisma: PrismaService,
-    private notificationService: NotificationService,
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+    private readonly tokenService: TokenService,
+    private readonly passwordService: PasswordService,
   ) {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (clientId) {
@@ -50,7 +49,8 @@ export class AuthService {
     }
   }
 
-  // ==================== AUTH ====================
+  // ==================== AUTHENTICATION ====================
+
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
@@ -71,8 +71,8 @@ export class AuthService {
       );
     }
 
-    const tokenData = await this.createToken(user);
-    const numberOfKids = await this.prisma?.kid.count({
+    const tokenData = await this.tokenService.createTokenPair(user);
+    const numberOfKids = await this.prisma.kid.count({
       where: { parentId: user.id },
     });
 
@@ -84,235 +84,91 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string): Promise<RefreshResponseDto | null> {
-    const session = await this.prisma.session.findUnique({
-      where: { token: this.hashToken(refreshToken) },
-      include: { user: true },
-    });
+    const session = await this.tokenService.findSessionByRefreshToken(refreshToken);
 
-    if (!session) throw new UnauthorizedException('Invalid token');
-    const jwt = this.generateJwt(new UserDto(session.user), session.id);
+    if (!session) {
+      throw new UnauthorizedException('Invalid token');
+    }
 
+    const jwt = this.tokenService.generateJwt(new UserDto(session.user), session.id);
     const numberOfKids = await this.prisma.kid.count({
       where: { parentId: session.user.id },
     });
+
     return { user: new UserDto({ ...session.user, numberOfKids }), jwt };
   }
 
   async logout(sessionId: string): Promise<boolean> {
-    try {
-      const session = await this.prisma.session.findUnique({
-        where: { id: sessionId },
-      });
-      if (!session) return false;
-      await this.prisma.session.delete({ where: { id: sessionId } });
-      return true;
-    } catch (error) {
-      this.logger.error('Error during logout:', error);
-      return false;
-    }
+    return this.tokenService.deleteSession(sessionId);
   }
 
   async logoutAllDevices(userId: string): Promise<boolean> {
+    return this.tokenService.deleteAllUserSessions(userId);
+  }
+
+  // ==================== REGISTRATION ====================
+
+  async register(data: RegisterDto): Promise<LoginResponseDto | null> {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: data.email },
+    });
+    if (existingUser) {
+      throw new BadRequestException('Email already exists');
+    }
+
+    let role = 'parent';
+    if (data.role === 'admin') {
+      if (data.adminSecret !== process.env.ADMIN_SECRET) {
+        throw new ForbiddenException('Invalid admin secret');
+      }
+      role = 'admin';
+    }
+
+    const hashedPassword = await this.passwordService.hashPassword(data.password);
+
+    const user = await this.prisma.user.create({
+      data: {
+        name: data.fullName,
+        email: data.email,
+        passwordHash: hashedPassword,
+        role: role as any,
+        onboardingStatus: 'account_created',
+      },
+      include: {
+        profile: true,
+        avatar: true,
+      },
+    });
+
     try {
-      await this.prisma.session.deleteMany({ where: { userId } });
-      return true;
+      await this.sendEmailVerification(user.email);
     } catch (error) {
-      this.logger.error('Error during logout all devices:', error);
-      return false;
+      this.logger.error('Email failed but user registered:', error.message);
     }
-  }
 
-  async createToken(
-    user: UserDto,
-  ): Promise<{ jwt: string; refreshToken: string }> {
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRES_IN);
-    const refreshToken = this.generateRefreshToken();
-
-    const session = await this.prisma.session.create({
-      data: { userId: user.id, token: this.hashToken(refreshToken), expiresAt },
-    });
-
-    const jwt = this.generateJwt(new UserDto(user), session.id);
-    return { jwt, refreshToken };
-  }
-
-  generateJwt(user: UserDto, sessionId: string): string {
-    const expiresIn = 3600;
-    const issuedAt = Math.floor(Date.now() / 1000);
-    const expiryTimestamp = issuedAt + expiresIn;
+    // Seed default notification preferences for the new user
     try {
-      return this.jwtService.sign({
-        id: user.id,
-        userId: user.id,
-        email: user.email,
-        userRole: user.role,
-        expiry: expiryTimestamp,
-        authSessionId: sessionId,
-      });
-    } catch (error: unknown) {
-      if (error instanceof Error)
-        throw new Error(`Error signing token: ${error.message}`);
-      this.logger.log(error);
-      throw new Error('Unknown error occurred while signing token');
-    }
-  }
-
-  // ==================== REGISTRATION (UPDATED) ====================
- async register(data: RegisterDto): Promise<LoginResponseDto | null> {
-  const hashedPassword = await bcrypt.hash(data.password, 10);
-  const existingUser = await this.prisma.user.findUnique({
-    where: { email: data.email },
-  });
-  if (existingUser) throw new BadRequestException('Email already exists');
-
-  let role = 'parent';
-  if (data.role === 'admin') {
-    if (data.adminSecret !== process.env.ADMIN_SECRET) {
-      throw new ForbiddenException('Invalid admin secret');
-    }
-    role = 'admin';
-  }
-
-  const user = await this.prisma.user.create({
-    data: {
-      name: data.fullName,
-      email: data.email,
-      passwordHash: hashedPassword,
-      role: role as any,
-      onboardingStatus: 'account_created',
-      profile: {
-        create: {
-          country: data.nationality,
-        },
-      },
-    },
-    include: {
-      profile: true,
-      avatar: true,
-    },
-  });
-
-  await this.sendEmailVerification(user.email);
-
-  const tokenData = await this.createToken(user);
-  const numberOfKids = 0;
-
-  return {
-    user: new UserDto({ ...user, numberOfKids }),
-    jwt: tokenData.jwt,
-    refreshToken: tokenData.refreshToken,
-  };
-}
-  // ==================== COMPLETE PROFILE ====================
-async completeProfile(userId: string, data: CompleteProfileDto) {
-  const user = await this.prisma.user.findFirst({
-    where: { id: userId },
-    include: { profile: true },
-  });
-  if (!user) throw new NotFoundException('User not found');
-   if (user.onboardingStatus === 'pin_setup') {
-      throw new BadRequestException('Onboarding already completed');
+      await this.notificationService.seedDefaultPreferences(user.id);
+    } catch (error) {
+      this.logger.error('Failed to seed notification preferences:', error.message);
     }
 
-  if (data.learningExpectations && data.learningExpectations.length > 0) {
-    const existingExpectations = await this.prisma.learningExpectation.findMany({
-      where: { 
-        name: { in: data.learningExpectations },
-        isActive: true,
-        isDeleted: false,
-      },
-    });
-    
-    if (existingExpectations.length !== data.learningExpectations.length) {
-      throw new BadRequestException('Some selected learning expectations do not exist or are inactive');
-    }
+    const tokenData = await this.tokenService.createTokenPair(user);
 
-    await this.prisma.userLearningExpectation.createMany({
-      data: existingExpectations.map(exp => ({
-        userId,
-        learningExpectationId: exp.id,
-      })),
-      skipDuplicates: true,
-    });
-  }
-  const profile = await this.prisma.profile.update({
-    where: { userId },
-    data: {
-      language: data.language,
-      languageCode: data.languageCode, 
-    },
-  });
-  if (data.profileImageUrl) {
-    let avatar = await this.prisma.avatar.findFirst({
-      where: { url: data.profileImageUrl },
-    });
-
-    if (!avatar) {
-      avatar = await this.prisma.avatar.create({
-        data: {
-          url: data.profileImageUrl,
-          name: `user_${userId}`,
-          isSystemAvatar: false,
-        },
-      });
-    }
-
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { avatarId: avatar.id },
-    });
+    return {
+      user: new UserDto({ ...user, numberOfKids: 0 }),
+      jwt: tokenData.jwt,
+      refreshToken: tokenData.refreshToken,
+    };
   }
 
-  await this.prisma.user.update({
-    where: { id: userId },
-    data: { onboardingStatus: 'profile_setup' },
-  });
-  const updatedUser = await this.prisma.user.findUnique({
-    where: { id: userId },
-    include: { 
-      profile: true, 
-      avatar: true,
-      learningExpectations: {
-        include: {
-          learningExpectation: true,
-        },
-      },
-    },
-  });
-  if (!updatedUser) throw new NotFoundException('User not found');
+  // ==================== EMAIL VERIFICATION ====================
 
-  const numberOfKids = await this.prisma.kid.count({
-    where: { parentId: userId },
-  });
-
-  return new UserDto({
-    ...updatedUser,
-    numberOfKids,
-    profile,
-  });
-}
-
-async getLearningExpectations() {
-    return this.prisma.learningExpectation.findMany({
-      where: { 
-        isActive: true,
-        isDeleted: false,
-      },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        category: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    });
-  }
   async sendEmailVerification(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
 
     await this.prisma.token.deleteMany({
       where: { userId: user.id, type: TokenType.VERIFICATION },
@@ -323,7 +179,7 @@ async getLearningExpectations() {
     await this.prisma.token.create({
       data: {
         userId: user.id,
-        token: this.hashToken(token),
+        token: this.tokenService.hashToken(token),
         expiresAt,
         type: TokenType.VERIFICATION,
       },
@@ -344,7 +200,7 @@ async getLearningExpectations() {
   }
 
   async verifyEmail(token: string) {
-    const hashedToken = this.hashToken(token);
+    const hashedToken = this.tokenService.hashToken(token);
     const verificationToken = await this.prisma.token.findUnique({
       where: { token: hashedToken, type: TokenType.VERIFICATION },
       include: { user: true },
@@ -361,294 +217,228 @@ async getLearningExpectations() {
 
     await this.prisma.user.update({
       where: { id: verificationToken.userId },
-      data: { isEmailVerified: true, onboardingStatus: 'email_verified',
- },
+      data: {
+        isEmailVerified: true,
+        onboardingStatus: 'email_verified',
+      },
     });
     await this.prisma.token.delete({ where: { id: verificationToken.id } });
 
     return { message: 'Email verified successfully' };
   }
 
-  // ==================== UPDATE PROFILE (UPDATED) ====================
-async updateProfile(userId: string, data: updateProfileDto) {
-  const user = await this.prisma.user.findFirst({
-    where: { id: userId },
-    include: { profile: true },
-  });
-  if (!user) throw new NotFoundException('User not found');
+  // ==================== PROFILE MANAGEMENT ====================
 
-  const updateData: Partial<any> = {};
-  if (data.country !== undefined) updateData.country = data.country;
-  if (data.language !== undefined) updateData.language = data.language;
-  if (data.languageCode !== undefined) updateData.languageCode = data.languageCode;
-  if (data.explicitContent !== undefined) updateData.explicitContent = data.explicitContent;
-  if (data.maxScreenTimeMins !== undefined) updateData.maxScreenTimeMins = data.maxScreenTimeMins;
- 
-
-  // Update profile
-  if (Object.keys(updateData).length === 0 && !user.profile) {
-    return this.prisma.profile.create({
-      data: {
-        userId,
-        country: 'NG',
-      },
+  async completeProfile(userId: string, data: CompleteProfileDto) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId },
+      include: { profile: true },
     });
-  }
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (user.onboardingStatus === 'pin_setup') {
+      throw new BadRequestException('Onboarding already completed');
+    }
 
-  const profile = await this.prisma.profile.upsert({
-    where: { userId },
-    update: updateData,
-    create: {
-      userId,
-      country: data.country || 'NG',
-      language: data.language,
-      languageCode: data.languageCode, 
-      ...updateData,
-    },
-  });
-
-  const userWithKids = await this.prisma.user.findUnique({
-    where: { id: userId },
-    include: { 
-      profile: true,
-      learningExpectations: {
-        include: {
-          learningExpectation: true,
+    if (data.learningExpectationIds && data.learningExpectationIds.length > 0) {
+      const existingExpectations = await this.prisma.learningExpectation.findMany({
+        where: {
+          id: { in: data.learningExpectationIds },
+          isActive: true,
+          isDeleted: false,
         },
-      },
-    },
-  });
-  if (!userWithKids) throw new NotFoundException('User not found');
-
-  const numberOfKids = await this.prisma.kid.count({
-    where: { parentId: userId },
-  });
-
-  return new UserDto({
-    ...userWithKids,
-    numberOfKids,
-    profile,
-  });
-}
-
-  // ==================== KIDS ====================
-  async addKids(userId: string, kids: kidDto[]) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
-
-    return this.prisma.$transaction(
-      kids.map((kid) =>
-        this.prisma.kid.create({
-          data: {
-            name: kid.name,
-            avatarId: kid.avatarId,
-            parentId: userId,
-            ageRange: kid.ageRange,
-          },
-          include: {
-            avatar: true,
-          },
-        }),
-      ),
-    );
-  }
-
-  async getKids(userId: string) {
-    return await this.prisma.kid.findMany({
-      where: { parentId: userId },
-      include: {
-        avatar: true,
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-  }
-
-  async updateKids(userId: string, updates: updateKidDto[]) {
-    const results = [];
-    for (const update of updates) {
-      const kid = await this.prisma.kid.findFirst({
-        where: { id: update.id, parentId: userId },
       });
-      if (!kid)
-        throw new NotFoundException(
-          `Kid with ID ${update.id} not found or does not belong to user`,
+
+      if (existingExpectations.length !== data.learningExpectationIds.length) {
+        throw new BadRequestException(
+          'Some selected learning expectations do not exist or are inactive',
         );
+      }
 
-      const updateData: any = {};
-      if (update.name !== undefined) updateData.name = update.name;
-      if (update.avatarId !== undefined) updateData.avatarId = update.avatarId;
-      if (update.ageRange !== undefined) updateData.ageRange = update.ageRange;
+      await this.prisma.userLearningExpectation.createMany({
+        data: existingExpectations.map((exp) => ({
+          userId,
+          learningExpectationId: exp.id,
+        })),
+        skipDuplicates: true,
+      });
+    }
 
-      if (Object.keys(updateData).length > 0) {
-        const updated = await this.prisma.kid.update({
-          where: { id: update.id },
-          data: updateData,
-          include: {
-            avatar: true,
+    // Handle preferred categories
+    if (data.preferredCategories && data.preferredCategories.length > 0) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          preferredCategories: {
+            set: data.preferredCategories.map((id) => ({ id })),
+          },
+        },
+      });
+    }
+
+    const profile = await this.prisma.profile.update({
+      where: { userId },
+      data: {
+        language: data.language,
+        languageCode: data.languageCode,
+      },
+    });
+
+    if (data.profileImageUrl) {
+      let avatar = await this.prisma.avatar.findFirst({
+        where: { url: data.profileImageUrl },
+      });
+
+      if (!avatar) {
+        avatar = await this.prisma.avatar.create({
+          data: {
+            url: data.profileImageUrl,
+            name: `user_${userId}`,
+            isSystemAvatar: false,
           },
         });
-        results.push(updated);
-      } else {
-        results.push(kid);
       }
-    }
-    return results;
-  }
 
-  async deleteKids(userId: string, kidIds: string[]) {
-    const deleted = [];
-    for (const id of kidIds) {
-      const kid = await this.prisma.kid.findFirst({
-        where: { id, parentId: userId },
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { avatarId: avatar.id },
       });
-      if (!kid)
-        throw new NotFoundException(
-          `Kid with ID ${id} not found or does not belong to user`,
-        );
-      deleted.push(await this.prisma.kid.delete({ where: { id } }));
-    }
-    return deleted;
-  }
-
-  // ==================== PASSWORD RESET ====================
-  async requestPasswordReset(
-    data: RequestResetDto,
-    ip?: string,
-    userAgent?: string,
-  ) {
-    const { email } = data;
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) throw new NotFoundException('User not found');
-
-    await this.prisma.token.deleteMany({
-      where: { userId: user.id, type: TokenType.PASSWORD_RESET },
-    });
-
-    const { token, expiresAt } = generateToken(24);
-    await this.prisma.token.create({
-      data: {
-        userId: user.id,
-        token: this.hashToken(token),
-        expiresAt,
-        type: TokenType.PASSWORD_RESET,
-      },
-    });
-
-    const resp = await this.notificationService.sendNotification(
-      'PasswordReset',
-      {
-        email: user.email,
-        resetToken: token,
-      },
-    );
-
-    if (!resp.success) {
-      throw new ServiceUnavailableException(
-        resp.error || 'Failed to send password reset email',
-      );
     }
 
-    return { message: 'Password reset token sent' };
-  }
-
-  async validateResetToken(
-    token: string,
-    email: string,
-    data: ValidateResetTokenDto,
-  ) {
-    const hashedToken = this.hashToken(token);
-    const resetToken = await this.prisma.token.findUnique({
-      where: { token: hashedToken, type: TokenType.PASSWORD_RESET },
-      include: { user: true },
-    });
-    if (!resetToken) throw new NotFoundException('Invalid reset token');
-    if (resetToken.expiresAt < new Date()) {
-      await this.prisma.token.delete({ where: { id: resetToken.id } });
-      throw new UnauthorizedException('Reset token has expired');
-    }
-    if (resetToken.user.email !== email)
-      throw new UnauthorizedException('Invalid reset token');
-    return { message: 'Valid reset token' };
-  }
-
-  async resetPassword(
-    token: string,
-    email: string,
-    newPassword: string,
-    data: ResetPasswordDto,
-  ) {
-    const hashedToken = this.hashToken(token);
-    const resetToken = await this.prisma.token.findUnique({
-      where: { token: hashedToken, type: TokenType.PASSWORD_RESET },
-      include: { user: true },
-    });
-    if (!resetToken) throw new NotFoundException('Invalid reset token');
-    if (resetToken.expiresAt < new Date()) {
-      await this.prisma.token.delete({ where: { id: resetToken.id } });
-      throw new UnauthorizedException('Reset token has expired');
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await this.prisma.user.update({
-      where: { id: resetToken.userId },
-      data: { passwordHash: hashedPassword },
-    });
-    await this.prisma.token.delete({ where: { id: resetToken.id } });
-    await this.prisma.session.deleteMany({
-      where: { userId: resetToken.userId },
-    });
-
-    return { message: 'Password has been reset successfully' };
-  }
-
-  async changePassword(userId: string, data: ChangePasswordDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
-
-    const isPasswordValid = await bcrypt.compare(
-      data.oldPassword,
-      user.passwordHash,
-    );
-    if (!isPasswordValid) {
-      throw new BadRequestException('Invalid old password');
-    }
-
-    // Check if new password is same as old password
-    const isSameAsOld = await bcrypt.compare(
-      data.newPassword,
-      user.passwordHash,
-    );
-    if (isSameAsOld) {
-      throw new BadRequestException(
-        'New password cannot be the same as old password',
-      );
-    }
-
-    const hashedPassword = await bcrypt.hash(data.newPassword, 10);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash: hashedPassword },
+      data: { onboardingStatus: 'profile_setup' },
     });
 
-    await this.notificationService.sendNotification('PasswordChanged', {
-      email: user.email,
-      userName: user.name,
+    const updatedUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        profile: true,
+        avatar: true,
+        learningExpectations: {
+          include: {
+            learningExpectation: true,
+          },
+        },
+      },
+    });
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    const numberOfKids = await this.prisma.kid.count({
+      where: { parentId: userId },
     });
 
-    return { message: 'Password changed successfully' };
+    return new UserDto({
+      ...updatedUser,
+      numberOfKids,
+      profile,
+    });
   }
 
-  generateRefreshToken(): string {
-    return crypto.randomBytes(64).toString('hex');
+  async getLearningExpectations() {
+    return this.prisma.learningExpectation.findMany({
+      where: {
+        isActive: true,
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        category: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
   }
 
-  hashToken(token: string): string {
-    return crypto.createHash('sha256').update(token).digest('hex');
+  async updateProfile(userId: string, data: updateProfileDto) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId },
+      include: { profile: true },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (data.country !== undefined) updateData.country = data.country;
+    if (data.language !== undefined) updateData.language = data.language;
+    if (data.languageCode !== undefined) updateData.languageCode = data.languageCode;
+    if (data.explicitContent !== undefined) updateData.explicitContent = data.explicitContent;
+    if (data.maxScreenTimeMins !== undefined) updateData.maxScreenTimeMins = data.maxScreenTimeMins;
+
+    // Update profile
+    if (Object.keys(updateData).length === 0 && !user.profile) {
+      return this.prisma.profile.create({
+        data: {
+          userId,
+          country: 'NG',
+        },
+      });
+    }
+
+    const profile = await this.prisma.profile.upsert({
+      where: { userId },
+      update: updateData,
+      create: {
+        userId,
+        country: data.country || 'NG',
+        language: data.language,
+        languageCode: data.languageCode,
+        ...updateData,
+      },
+    });
+
+    const userWithKids = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        profile: true,
+        learningExpectations: {
+          include: {
+            learningExpectation: true,
+          },
+        },
+      },
+    });
+    if (!userWithKids) {
+      throw new NotFoundException('User not found');
+    }
+
+    const numberOfKids = await this.prisma.kid.count({
+      where: { parentId: userId },
+    });
+
+    return new UserDto({
+      ...userWithKids,
+      numberOfKids,
+      profile,
+    });
   }
 
-  // ===============================
-  // GOOGLE AUTH (UPDATED)
-  // ===============================
+  // ==================== PASSWORD OPERATIONS (Delegated) ====================
+
+  async requestPasswordReset(data: RequestResetDto, ip?: string, userAgent?: string) {
+    return this.passwordService.requestPasswordReset(data, ip, userAgent);
+  }
+
+  async validateResetToken(token: string, email: string, data: ValidateResetTokenDto) {
+    return this.passwordService.validateResetToken(token, email, data);
+  }
+
+  async resetPassword(token: string, email: string, newPassword: string, data: ResetPasswordDto) {
+    return this.passwordService.resetPassword(token, email, newPassword, data);
+  }
+
+  async changePassword(userId: string, data: ChangePasswordDto, currentSessionId: string) {
+    return this.passwordService.changePassword(userId, data, currentSessionId);
+  }
+
+  // ==================== GOOGLE OAUTH ====================
 
   async loginWithGoogleIdToken(idToken: string) {
     if (!idToken) {
@@ -686,118 +476,170 @@ async updateProfile(userId: string, data: updateProfileDto) {
       emailVerified: payload.email_verified === true,
     };
 
-    return this._upsertOrReturnUserFromGooglePayload(googlePayload);
+    return this._upsertOrReturnUserFromOAuthPayload(googlePayload);
   }
 
-  async handleGoogleOAuthPayload(payload: any) {
-    return this._upsertOrReturnUserFromGooglePayload(payload);
-  }
-
-  // ====================================================
-  // INTERNAL: Unified Google upsert logic (UPDATED)
-  // ====================================================
- private async _upsertOrReturnUserFromGooglePayload(payload: {
-  googleId?: string;
-  email: string;
-  picture?: string | null;
-  name?: string | null;
-  emailVerified?: boolean;
-}) {
-  const { googleId, email, picture, name, emailVerified } = payload;
-
-  let user = null;
-
-  // 1. Try find by googleId
-  if (googleId) {
-    user = await this.prisma.user.findFirst({
-      where: { googleId },
-      include: { profile: true, avatar: true },
+  async handleGoogleOAuthPayload(payload: GoogleOAuthProfile) {
+    return this._upsertOrReturnUserFromOAuthPayload({
+      googleId: payload.providerId,
+      email: payload.email,
+      picture: payload.picture,
+      name: `${payload.firstName || ''} ${payload.lastName || ''}`.trim() || undefined,
+      emailVerified: payload.emailVerified,
     });
   }
 
-  // 2. Try find by email
-  if (!user) {
-    const existing = await this.prisma.user.findUnique({ where: { email } });
+  // ===============================
+  // APPLE AUTH
+  // ===============================
+  async loginWithAppleIdToken(idToken: string, firstName?: string, lastName?: string) {
+    if (!idToken) {
+      throw new BadRequestException('id_token is required');
+    }
 
-    if (existing) {
-      user = await this.prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          isEmailVerified: emailVerified ? true : existing.isEmailVerified,
-          googleId: googleId || existing.googleId,
-        },
-        include: { profile: true, avatar: true },
+    try {
+      const { sub: appleId, email, email_verified } = await appleSigninAuth.verifyIdToken(idToken, {
+        audience: [process.env.APPLE_CLIENT_ID, process.env.APPLE_SERVICE_ID],
+        nonce: 'NONCE',
+        ignoreExpiration: false
       });
+
+      const name = firstName && lastName ? `${firstName} ${lastName}` : undefined;
+
+      return this._upsertOrReturnUserFromOAuthPayload({
+        appleId,
+        email,
+        emailVerified: email_verified === 'true' || email_verified === true,
+        name,
+      });
+
+    } catch (err) {
+      this.logger.error('Apple id_token verification failed', err);
+      throw new UnauthorizedException('Invalid Apple id_token');
     }
   }
 
-  // 3. Create new user
-  if (!user) {
-    const randomPassword = crypto.randomBytes(16).toString('hex');
-    const hashedPassword = await bcrypt.hash(randomPassword, 10);
 
-    user = await this.prisma.user.create({
-      data: {
-        name: name || email || 'Google User',
-        email,
-        passwordHash: hashedPassword,
-        isEmailVerified: emailVerified === true,
-        googleId: googleId || null,
-        role: 'parent',
-        profile: {
-          create: {
-            country: 'NG',
+  // ====================================================
+  // INTERNAL: Unified OAuth upsert logic
+  // ====================================================
+  private async _upsertOrReturnUserFromOAuthPayload(payload: {
+    googleId?: string;
+    appleId?: string;
+    email: string;
+    picture?: string | null;
+    name?: string | null;
+    emailVerified?: boolean;
+  }) {
+    const { googleId, appleId, email, picture, name, emailVerified } = payload;
+
+    let user = null;
+
+    // 1. Try find by googleId or appleId
+    if (googleId) {
+      user = await this.prisma.user.findFirst({
+        where: { googleId },
+        include: { profile: true, avatar: true },
+      });
+    } else if (appleId) {
+      user = await this.prisma.user.findFirst({
+        where: { appleId },
+        include: { profile: true, avatar: true },
+      });
+    }
+
+    // 2. Try find by email
+    if (!user) {
+      const existing = await this.prisma.user.findUnique({ where: { email } });
+
+      if (existing) {
+        user = await this.prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            isEmailVerified: emailVerified ? true : existing.isEmailVerified,
+            googleId: googleId || existing.googleId,
+            appleId: appleId || existing.appleId,
+          },
+          include: { profile: true, avatar: true },
+        });
+      }
+    }
+
+    // 3. Create new user
+    if (!user) {
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      const hashedPassword = await this.passwordService.hashPassword(randomPassword);
+
+      user = await this.prisma.user.create({
+        data: {
+          name: name || email || 'User',
+          email,
+          passwordHash: hashedPassword,
+          isEmailVerified: emailVerified === true,
+          googleId: googleId || null,
+          appleId: appleId || null,
+          role: 'parent',
+          profile: {
+            create: {
+              country: 'NG',
+            },
           },
         },
-      },
-      include: { profile: true, avatar: true },
-    });
-  }
-
-  // 4. Handle avatar from Google picture
-  if (picture) {
-    let avatar = await this.prisma.avatar.findFirst({
-      where: { url: picture },
-    });
-
-    if (!avatar) {
-      avatar = await this.prisma.avatar.create({
-        data: {
-          url: picture,
-          name: `google_${googleId || user.id}`,
-          isSystemAvatar: false,
-        },
-      });
-    }
-
-    if (user.avatarId !== avatar.id) {
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: { avatarId: avatar.id },
         include: { profile: true, avatar: true },
       });
+
+      // Seed default notification preferences for new Google users
+      try {
+        await this.notificationService.seedDefaultPreferences(user.id);
+      } catch (error) {
+        this.logger.error('Failed to seed notification preferences:', error.message);
+      }
     }
+
+    // 4. Handle avatar from Google picture
+    if (picture) {
+      let avatar = await this.prisma.avatar.findFirst({
+        where: { url: picture },
+      });
+
+      if (!avatar) {
+        avatar = await this.prisma.avatar.create({
+          data: {
+            url: picture,
+            name: `google_${googleId || user.id}`,
+            isSystemAvatar: false,
+          },
+        });
+      }
+
+      if (user.avatarId !== avatar.id) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { avatarId: avatar.id },
+          include: { profile: true, avatar: true },
+        });
+      }
+    }
+
+    // 5. Must be verified
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
+
+    // 6. Build response
+    const numberOfKids = await this.prisma.kid.count({
+      where: { parentId: user.id },
+    });
+
+    const userDto = new UserDto({ ...user, numberOfKids });
+    const tokenData = await this.tokenService.createTokenPair(userDto);
+
+    return {
+      user: userDto,
+      jwt: tokenData.jwt,
+      refreshToken: tokenData.refreshToken,
+    };
   }
-
-  // 5. Must be verified
-  if (!user.isEmailVerified) {
-    throw new BadRequestException(
-      'Email not verified. Please check your inbox.',
-    );
-  }
-
-  // 6. Build response
-  const numberOfKids = await this.prisma.kid.count({
-    where: { parentId: user.id },
-  });
-
-  const userDto = new UserDto({ ...user, numberOfKids });
-  const tokenData = await this.createToken(userDto);
-
-  return {
-    user: userDto,
-    jwt: tokenData.jwt,
-    refreshToken: tokenData.refreshToken,
-  };
-}
 }

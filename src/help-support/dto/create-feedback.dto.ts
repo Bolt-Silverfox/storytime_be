@@ -11,6 +11,11 @@ export class CreateFeedbackDto {
   @IsEmail()
   email: string;
 
+  @ApiProperty({ example: 'Bug Report' })
+  @IsNotEmpty()
+  @IsString()
+  category: string;
+
   @ApiProperty({ example: 'I love the app! But add dark mode.' })
   @IsNotEmpty()
   @IsString()

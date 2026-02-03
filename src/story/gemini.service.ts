@@ -4,11 +4,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { VoiceType } from '../voice/voice.dto';
+import { VoiceType } from '../voice/dto/voice.dto';
+import { VoiceQuotaService } from '../voice/voice-quota.service';
 
 export interface GenerateStoryOptions {
   theme: string[];
   category: string[];
+  seasons?: string[];
   ageMin: number;
   ageMax: number;
   language?: string;
@@ -16,6 +18,8 @@ export interface GenerateStoryOptions {
   additionalContext?: string;
   creatorKidId?: string;
   voiceType?: VoiceType;
+  seasonIds?: string[];
+  userId?: string;
 }
 
 export interface GeneratedStory {
@@ -29,6 +33,7 @@ export interface GeneratedStory {
   }>;
   theme: string[];
   category: string[];
+  seasons?: string[];
   ageMin: number;
   ageMax: number;
   language: string;
@@ -41,7 +46,10 @@ export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
   private genAI: GoogleGenerativeAI;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private readonly voiceQuotaService: VoiceQuotaService,
+  ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
       this.logger.warn(
@@ -78,10 +86,22 @@ export class GeminiService {
         throw new Error('Invalid story structure received from Gemini');
       }
 
+
+
+
+      // Track usage if userId is provided
+      if (options.userId) {
+        // Run in background to not block response
+        this.voiceQuotaService.trackGeminiStory(options.userId).catch(err =>
+          this.logger.error(`Failed to track Gemini story usage for user ${options.userId}:`, err)
+        );
+      }
+
       return {
         ...story,
         theme: options.theme,
         category: options.category,
+        seasons: options.seasons,
         ageMin: options.ageMin,
         ageMax: options.ageMax,
         language: options.language || 'English',
@@ -122,6 +142,7 @@ export class GeminiService {
 
 Theme(s): ${options.theme.join(', ')}
 Category(s): ${options.category.join(', ')}
+${options.seasons && options.seasons.length > 0 ? `Season(s): ${options.seasons.join(', ')}` : ''}
 Age range: ${options.ageMin} to ${options.ageMax} years old
 Language: ${options.language || 'English'}
 ${kidNamePart}
@@ -188,6 +209,7 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
   async generateStoryImage(
     title: string,
     description: string,
+    userId?: string, // Added userId for tracking
   ): Promise<string> {
     const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
     const encodedPrompt = encodeURIComponent(imagePrompt);
@@ -195,6 +217,13 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&seed=${seed}`;
 
     this.logger.log(`Generated Pollinations Image URL: ${imageUrl}`);
+
+    // Track usage if userId is provided
+    if (userId) {
+      this.voiceQuotaService.trackGeminiImage(userId).catch(err =>
+        this.logger.error(`Failed to track Gemini image usage for user ${userId}:`, err)
+      );
+    }
 
     return imageUrl;
   }

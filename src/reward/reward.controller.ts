@@ -22,7 +22,7 @@ import {
   RedeemRewardDto,
   UpdateRewardRedemptionStatusDto,
   RewardRedemptionDto,
-} from './reward.dto';
+} from './dto/reward.dto';
 
 @ApiTags('rewards')
 @Controller('rewards')

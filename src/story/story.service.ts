@@ -19,13 +19,11 @@ import {
   ParentRecommendationDto,
   RecommendationResponseDto,
   RecommendationsStatsDto,
-} from './story.dto';
-import {
-  UploadVoiceDto,
-  CreateElevenLabsVoiceDto,
-  SetPreferredVoiceDto,
-  VoiceResponseDto,
-} from '../voice/voice.dto';
+  RestrictStoryDto,
+  UserStoryProgressDto,
+  UserStoryProgressResponseDto,
+} from './dto/story.dto';
+
 import { UploadService } from '../upload/upload.service';
 import {
   StoryPath,
@@ -47,11 +45,15 @@ import {
 } from '@nestjs/common';
 import { GeminiService, GenerateStoryOptions } from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
-import { VoiceType } from '../voice/voice.dto';
+import { VoiceType } from '../voice/dto/voice.dto';
+import { DEFAULT_VOICE } from '../voice/voice.constants';
 
 @Injectable()
 export class StoryService {
   private readonly logger = new Logger(StoryService.name);
+  // Average reading speed for children: ~150 words per minute
+  private readonly WORDS_PER_MINUTE = 150;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
@@ -60,11 +62,28 @@ export class StoryService {
     private readonly geminiService: GeminiService,
   ) { }
 
+  /**
+   * Calculate estimated reading duration in seconds based on text content or word count
+   */
+  calculateDurationSeconds(textOrWordCount: string | number): number {
+    const wordCount = typeof textOrWordCount === 'string'
+      ? textOrWordCount.split(/\s+/).filter(word => word.length > 0).length
+      : textOrWordCount;
+
+    if (wordCount <= 0) return 0;
+
+    // Convert words per minute to seconds: (wordCount / wordsPerMinute) * 60
+    return Math.ceil((wordCount / this.WORDS_PER_MINUTE) * 60);
+  }
+
   async getStories(filter: {
     theme?: string;
     category?: string;
+    season?: string;
     recommended?: boolean;
     age?: number;
+    minAge?: number;
+    maxAge?: number;
     kidId?: string;
     page?: number;
     limit?: number;
@@ -80,6 +99,9 @@ export class StoryService {
     if (filter.theme) where.themes = { some: { id: filter.theme } };
     if (filter.category) {
       where.categories = { some: { id: filter.category } };
+    }
+    if (filter.season) {
+      where.seasons = { some: { id: filter.season } };
     }
     if (filter.recommended !== undefined && !filter.kidId) {
       where.recommended = filter.recommended;
@@ -126,6 +148,17 @@ export class StoryService {
       where.ageMax = { gte: filter.age };
     }
 
+    // Add minAge and maxAge filter logic
+    if ((filter.minAge !== undefined || filter.maxAge !== undefined) && !targetLevel) {
+      // Overlap logic: story.ageMin <= filter.maxAge AND story.ageMax >= filter.minAge
+      if (filter.minAge !== undefined) {
+        where.ageMax = { ...where.ageMax, gte: filter.minAge };
+      }
+      if (filter.maxAge !== undefined) {
+        where.ageMin = { ...where.ageMin, lte: filter.maxAge };
+      }
+    }
+
     let recommendedStoryIds: string[] = [];
     if (filter.kidId && filter.recommended !== false) {
       const recommendations = await this.prisma.parentRecommendation.findMany({
@@ -140,6 +173,18 @@ export class StoryService {
         { ...where },
         { id: { in: recommendedStoryIds } },
       ];
+    }
+
+    // Exclude restricted stories if kidId is provided
+    if (filter.kidId) {
+      const restrictedStories = await this.prisma.restrictedStory.findMany({
+        where: { kidId: filter.kidId },
+        select: { storyId: true },
+      });
+      const restrictedStoryIds = restrictedStories.map((r) => r.storyId);
+      if (restrictedStoryIds.length > 0) {
+        where.id = { notIn: restrictedStoryIds, ...where.id };
+      }
     }
 
     if (filter.recommended === true && filter.kidId) {
@@ -158,6 +203,7 @@ export class StoryService {
         branches: true,
         categories: true,
         themes: true,
+        seasons: true,
         questions: true,
       },
     });
@@ -170,6 +216,147 @@ export class StoryService {
         pageSize: limit,
         totalCount,
       },
+    };
+  }
+
+  async getHomePageStories(
+    userId: string,
+    limitRecommended: number = 5,
+    limitSeasonal: number = 5,
+    limitTopLiked: number = 5,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+      include: { preferredCategories: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // 1. Recommended Stories (based on preferred categories)
+    let recommended: any[] = [];
+    if (user.preferredCategories.length > 0) {
+      recommended = await this.prisma.story.findMany({
+        where: {
+          isDeleted: false,
+          categories: {
+            some: {
+              id: { in: user.preferredCategories.map((c: Category) => c.id) },
+            },
+          },
+        },
+        take: limitRecommended,
+        include: { images: true, categories: true },
+      });
+    } else {
+      // Fallback if no preferences: just fresh stories
+      recommended = await this.prisma.story.findMany({
+        where: { isDeleted: false },
+        orderBy: { createdAt: 'desc' },
+        take: limitRecommended,
+        include: { images: true, categories: true },
+      });
+    }
+
+    // 2. Seasonal Stories (Logic: find active season based on today's date)
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    const currentDay = today.getDate(); // 1-31
+    const currentDateStr = `${currentMonth
+      .toString()
+      .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
+
+    // Find seasons that cover today
+    const allSeasons = await this.prisma.season.findMany({
+      where: { isDeleted: false }, // Fetch all to sort into active/past
+    });
+
+    const activeSeasons = allSeasons.filter((s) => {
+      if (!s.isActive) return false;
+      if (!s.startDate || !s.endDate) return false;
+      // Handle year wrap for winter (e.g. 12-01 to 02-28)
+      if (s.startDate > s.endDate) {
+        return currentDateStr >= s.startDate || currentDateStr <= s.endDate;
+      }
+      return currentDateStr >= s.startDate && currentDateStr <= s.endDate;
+    });
+
+    let seasonal: any[] = [];
+    let seasonalCount = 0;
+
+    if (activeSeasons.length > 0) {
+      seasonal = await this.prisma.story.findMany({
+        where: {
+          isDeleted: false,
+          seasons: {
+            some: {
+              id: { in: activeSeasons.map((s) => s.id) },
+            },
+          },
+        },
+        take: limitSeasonal,
+        include: { images: true, themes: true, seasons: true },
+      });
+      seasonalCount = seasonal.length;
+    }
+
+    // Backfill if needed
+    if (seasonalCount < limitSeasonal) {
+      const needed = limitSeasonal - seasonalCount;
+      const existingIds = new Set(seasonal.map((s) => s.id));
+
+      // Strategy: Find "previous" seasons.
+      // We can define "previous" roughly by checking seasons that are NOT active
+      // and maybe have endDate < today? Or simply all non-active seasons.
+      // Let's take all inactive seasons and perhaps just pick random or recent ones?
+      // A simple heuristic for "previous" season: seasons that ended recently.
+
+      const previousSeasons = allSeasons.filter((s) => {
+        if (activeSeasons.find(active => active.id === s.id)) return false; // Skip active
+        // For simplistic "previous", we just take everything else that has dates.
+        return !!s.startDate && !!s.endDate;
+      });
+
+      // Sort by endDate descending (pseudo-code since endDate is MM-DD string without year)
+      // Since we don't have years, sorting by MM-DD descending is a decent proxy for "latest in the year"
+
+      if (previousSeasons.length > 0) {
+        const backfillStories = await this.prisma.story.findMany({
+          where: {
+            isDeleted: false,
+            seasons: {
+              some: {
+                id: { in: previousSeasons.map(s => s.id) }
+              }
+            },
+            id: { notIn: Array.from(existingIds) }
+          },
+          take: needed,
+          include: { images: true, themes: true, seasons: true },
+          orderBy: { createdAt: 'desc' } // Fresh content from old seasons?
+        });
+
+        seasonal = [...seasonal, ...backfillStories];
+      }
+    }
+
+    // 3. Top Liked by Parents
+    const topLiked = await this.prisma.story.findMany({
+      where: { isDeleted: false },
+      orderBy: {
+        parentFavorites: {
+          _count: 'desc',
+        },
+      },
+      take: limitTopLiked,
+      include: { images: true },
+    });
+
+    return {
+      recommended,
+      seasonal,
+      topLiked,
     };
   }
 
@@ -199,6 +386,9 @@ export class StoryService {
         branches: data.branches ? { create: data.branches } : undefined,
         categories: data.categoryIds ? { connect: data.categoryIds.map((id) => ({ id })) } : undefined,
         themes: data.themeIds ? { connect: data.themeIds.map((id) => ({ id })) } : undefined,
+        seasons: data.seasonIds
+          ? { connect: data.seasonIds.map((id) => ({ id })) }
+          : undefined,
       },
       include: { images: true, branches: true },
     });
@@ -232,6 +422,9 @@ export class StoryService {
           : undefined,
         themes: data.themeIds
           ? { set: data.themeIds.map((id) => ({ id })) }
+          : undefined,
+        seasons: data.seasonIds
+          ? { set: data.seasonIds.map((id) => ({ id })) }
           : undefined,
       },
       include: { images: true, branches: true },
@@ -343,6 +536,169 @@ export class StoryService {
     return await this.prisma.storyProgress.findUnique({ where: { kidId_storyId: { kidId, storyId } } });
   }
 
+  // --- USER STORY PROGRESS (Parent/User - non-kid specific) ---
+
+  async setUserProgress(userId: string, dto: UserStoryProgressDto): Promise<UserStoryProgressResponseDto> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
+    if (!user) throw new NotFoundException('User not found');
+    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    if (!story) throw new NotFoundException('Story not found');
+
+    const existing = await this.prisma.userStoryProgress.findUnique({
+      where: { userId_storyId: { userId, storyId: dto.storyId } },
+    });
+
+    const sessionTime = dto.sessionTime || 0;
+    const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
+
+    const result = await this.prisma.userStoryProgress.upsert({
+      where: { userId_storyId: { userId, storyId: dto.storyId } },
+      update: {
+        progress: dto.progress,
+        completed: dto.completed ?? false,
+        lastAccessed: new Date(),
+        totalTimeSpent: newTotalTime,
+      },
+      create: {
+        userId,
+        storyId: dto.storyId,
+        progress: dto.progress,
+        completed: dto.completed ?? false,
+        totalTimeSpent: sessionTime,
+      },
+    });
+
+    return {
+      id: result.id,
+      storyId: result.storyId,
+      progress: result.progress,
+      completed: result.completed,
+      lastAccessed: result.lastAccessed,
+      totalTimeSpent: result.totalTimeSpent,
+    };
+  }
+
+  async getUserProgress(userId: string, storyId: string): Promise<UserStoryProgressResponseDto | null> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
+    if (!user) throw new NotFoundException('User not found');
+    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
+    if (!story) throw new NotFoundException('Story not found');
+
+    const progress = await this.prisma.userStoryProgress.findUnique({
+      where: { userId_storyId: { userId, storyId } },
+    });
+
+    if (!progress) return null;
+
+    return {
+      id: progress.id,
+      storyId: progress.storyId,
+      progress: progress.progress,
+      completed: progress.completed,
+      lastAccessed: progress.lastAccessed,
+      totalTimeSpent: progress.totalTimeSpent,
+    };
+  }
+
+  async getUserContinueReading(userId: string) {
+    const progressRecords = await this.prisma.userStoryProgress.findMany({
+      where: { userId, progress: { gt: 0 }, completed: false, isDeleted: false },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
+
+    return progressRecords.map((record) => ({
+      ...record.story,
+      progress: record.progress,
+      totalTimeSpent: record.totalTimeSpent,
+      lastAccessed: record.lastAccessed,
+    }));
+  }
+
+  async getUserCompletedStories(userId: string) {
+    const records = await this.prisma.userStoryProgress.findMany({
+      where: { userId, completed: true, isDeleted: false },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
+
+    return records.map((r) => r.story);
+  }
+
+  async removeFromUserLibrary(userId: string, storyId: string) {
+    return await this.prisma.$transaction([
+      this.prisma.parentFavorite.deleteMany({ where: { userId, storyId } }),
+      this.prisma.userStoryProgress.deleteMany({ where: { userId, storyId } }),
+    ]);
+  }
+
+  async restrictStory(dto: RestrictStoryDto & { userId: string }) {
+    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+    if (!kid) throw new NotFoundException('Kid not found');
+
+    // Ensure parent owns the kid
+    if (kid.parentId !== dto.userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
+    }
+
+    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    if (!story) throw new NotFoundException('Story not found');
+
+    return await this.prisma.restrictedStory.upsert({
+      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
+      create: {
+        kidId: dto.kidId,
+        storyId: dto.storyId,
+        userId: dto.userId,
+        reason: dto.reason,
+      },
+      update: {
+        reason: dto.reason,
+      },
+    });
+  }
+
+  async unrestrictStory(kidId: string, storyId: string, userId: string) {
+    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    if (!kid) throw new NotFoundException('Kid not found');
+
+    if (kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
+    }
+
+    const restriction = await this.prisma.restrictedStory.findUnique({
+      where: { kidId_storyId: { kidId, storyId } },
+    });
+
+    if (!restriction) {
+      throw new NotFoundException('Story is not restricted for this kid');
+    }
+
+    return await this.prisma.restrictedStory.delete({
+      where: { kidId_storyId: { kidId, storyId } },
+    });
+  }
+
+  async getRestrictedStories(kidId: string, userId: string) {
+    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    if (!kid) throw new NotFoundException('Kid not found');
+
+    if (kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
+    }
+
+    const restricted = await this.prisma.restrictedStory.findMany({
+      where: { kidId },
+      include: { story: true },
+    });
+
+    return restricted.map((r) => ({
+      ...r.story,
+      restrictionReason: r.reason,
+      restrictedAt: r.createdAt,
+    }));
+  }
+
   async setDailyChallenge(dto: DailyChallengeDto) {
     const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
     if (!story) throw new NotFoundException('Story not found');
@@ -401,84 +757,29 @@ export class StoryService {
     return assignment ? this.toDailyChallengeAssignmentDto(assignment) : null;
   }
 
-  async uploadVoice(userId: string, fileUrl: string, dto: UploadVoiceDto): Promise<VoiceResponseDto> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    const voice = await this.prisma.voice.create({
-      data: { userId, name: dto.name, type: 'uploaded', url: fileUrl },
-    });
-    return this.toVoiceResponse(voice);
-  }
 
-  async createElevenLabsVoice(userId: string, dto: CreateElevenLabsVoiceDto): Promise<VoiceResponseDto> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    const voice = await this.prisma.voice.create({
-      data: { userId, name: dto.name, type: 'elevenlabs', elevenLabsVoiceId: dto.elevenLabsVoiceId },
-    });
-    return this.toVoiceResponse(voice);
-  }
 
-  async listVoices(userId: string): Promise<VoiceResponseDto[]> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    const voices = await this.prisma.voice.findMany({ where: { userId, isDeleted: false } });
-    return voices.map((v: Voice) => this.toVoiceResponse(v));
-  }
-
-  async setPreferredVoice(userId: string, dto: SetPreferredVoiceDto): Promise<any> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
-    if (!user) throw new NotFoundException('User not found');
-    if (dto.voiceId) {
-      const voice = await this.prisma.voice.findUnique({ where: { id: dto.voiceId, isDeleted: false } });
-      if (!voice) throw new NotFoundException('Voice not found');
-    }
-    const result = await this.prisma.user.update({
-      where: { id: userId },
-      data: { preferredVoiceId: dto.voiceId },
-    });
-    return { id: result.id, email: result.email, name: result.name, preferredVoice: result.preferredVoiceId };
-  }
-
-  async getPreferredVoice(userId: string): Promise<VoiceResponseDto | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-      include: { preferredVoice: true },
-    });
-    if (!user) throw new NotFoundException('User not found');
-    if (!user.preferredVoice) return { id: '', name: '', type: '', url: undefined, elevenLabsVoiceId: undefined };
-    return this.toVoiceResponse(user.preferredVoice);
-  }
-
-  private toVoiceResponse(voice: any): VoiceResponseDto {
-    return {
-      id: voice.id,
-      name: voice.name,
-      type: voice.type,
-      url: voice.url ?? undefined,
-      elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
-    };
-  }
-
-  async getStoryAudioUrl(storyId: string, voiceType: VoiceType): Promise<string> {
+  async getStoryAudioUrl(storyId: string, voiceId: VoiceType | string, userId?: string): Promise<string> {
     const story = await this.prisma.story.findUnique({
       where: { id: storyId, isDeleted: false },
       select: { textContent: true },
     });
     if (!story) throw new NotFoundException(`Story with ID ${storyId} not found`);
 
+    // voiceId can be an enum or a uuid string
     const cachedAudio = await this.prisma.storyAudioCache.findFirst({
-      where: { storyId, voiceType },
+      where: { storyId, voiceType: voiceId }, // Schema still calls it voiceType
     });
     if (cachedAudio) return cachedAudio.audioUrl;
 
     const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
       storyId,
       story?.textContent ?? '',
-      voiceType,
+      voiceId,
+      userId,
     );
     await this.prisma.storyAudioCache.create({
-      data: { storyId, voiceType, audioUrl },
+      data: { storyId, voiceType: voiceId, audioUrl },
     });
     return audioUrl;
   }
@@ -526,10 +827,6 @@ export class StoryService {
     return path ? this.toStoryPathDto(path) : null;
   }
 
-  async fetchAvailableVoices(): Promise<any[]> {
-    return Object.keys(VoiceType).map((key) => ({ voice_id: key, name: key }));
-  }
-
   async getCategories(): Promise<CategoryDto[]> {
     this.logger.log('Fetching categories with story counts from database');
     const categories = await this.prisma.category.findMany({
@@ -552,6 +849,14 @@ export class StoryService {
       image: t.image ?? undefined,
       description: t.description ?? undefined,
     }));
+  }
+
+  async getSeasons() {
+    const seasons = await this.prisma.season.findMany({
+      where: { isDeleted: false },
+      orderBy: { startDate: 'asc' }
+    });
+    return seasons;
   }
 
   // ... [Keep daily challenge automation methods] ...
@@ -660,6 +965,15 @@ export class StoryService {
   }
 
   async generateStoryWithAI(options: GenerateStoryOptions) {
+    // Resolve Season IDs to names if needed for AI context
+    if (options.seasonIds && options.seasonIds.length > 0 && (!options.seasons || options.seasons.length === 0)) {
+      const seasons = await this.prisma.season.findMany({
+        where: { id: { in: options.seasonIds }, isDeleted: false },
+        select: { name: true },
+      });
+      options.seasons = seasons.map((s) => s.name);
+    }
+
     // 1. Generate Story Content
     const generatedStory = await this.geminiService.generateStory(options);
 
@@ -668,7 +982,8 @@ export class StoryService {
       generatedStory,
       options.kidName || 'Hero',
       options.creatorKidId,
-      options.voiceType
+      options.voiceType,
+      options.seasonIds
     );
   }
 
@@ -676,6 +991,7 @@ export class StoryService {
     kidId: string,
     themeNames?: string[],
     categoryNames?: string[],
+    seasonIds?: string[],
     kidName?: string,
   ) {
     const kid = await this.prisma.kid.findUnique({
@@ -735,9 +1051,30 @@ export class StoryService {
       }
     }
 
+    // Resolve Season IDs to Names for AI Context
+    const seasonNames: string[] = [];
+    if (seasonIds && seasonIds.length > 0) {
+      const seasons = await this.prisma.season.findMany({
+        where: { id: { in: seasonIds }, isDeleted: false },
+        select: { name: true },
+      });
+      seasonNames.push(...seasons.map((s) => s.name));
+    }
+
+    // Resolve userId for tracking
+    let userId: string | undefined;
+    if (kidId) {
+      const kid = await this.prisma.kid.findUnique({
+        where: { id: kidId },
+        select: { parentId: true },
+      });
+      if (kid) userId = kid.parentId;
+    }
+
     const options: GenerateStoryOptions = {
       theme: themes,
       category: categories,
+      seasons: seasonNames,
       ageMin,
       ageMax,
       kidName: kidName || kid.name || 'Hero',
@@ -745,6 +1082,8 @@ export class StoryService {
       additionalContext: contextString,
       creatorKidId: kidId,
       voiceType,
+      seasonIds: seasonIds,
+      userId, // Pass resolved userId for usage tracking
     };
 
     this.logger.log(
@@ -759,7 +1098,8 @@ export class StoryService {
       generatedStory,
       options.kidName!,
       kidId,
-      voiceType
+      voiceType,
+      seasonIds
     );
   }
 
@@ -768,15 +1108,27 @@ export class StoryService {
     generatedStory: any,
     kidName: string,
     creatorKidId?: string,
-    voiceType?: VoiceType
+    voiceType?: VoiceType,
+    seasonIds?: string[]
   ) {
+    // Resolve userId for tracking if creatorKidId is present
+    let userId: string | undefined;
+    if (creatorKidId) {
+      const kid = await this.prisma.kid.findUnique({
+        where: { id: creatorKidId },
+        select: { parentId: true },
+      });
+      if (kid) userId = kid.parentId;
+    }
+
     // 1. Generate Cover Image (Pollinations)
     let coverImageUrl = '';
     try {
       this.logger.log(`Generating cover image for "${generatedStory.title}"`);
       coverImageUrl = await this.geminiService.generateStoryImage(
         generatedStory.title,
-        generatedStory.description || `A story about ${generatedStory.title}`
+        generatedStory.description || `A story about ${generatedStory.title}`,
+        userId // Pass userId for tracking
       );
     } catch (e) {
       this.logger.error(`Failed to generate story image: ${e.message}`);
@@ -794,6 +1146,8 @@ export class StoryService {
     })) || [];
 
     const textContent = generatedStory.content || generatedStory.textContent || generatedStory.description || '';
+    const wordCount = textContent.split(/\s+/).filter((word: string) => word.length > 0).length;
+    const durationSeconds = this.calculateDurationSeconds(wordCount);
 
     // 3. Create Story Record
     let story = await this.prisma.story.create({
@@ -806,12 +1160,24 @@ export class StoryService {
         isInteractive: false,
         coverImageUrl: coverImageUrl,
         textContent: textContent,
+        wordCount: wordCount,
+        durationSeconds: durationSeconds,
         audioUrl: '', // Will update momentarily
         creatorKidId: creatorKidId || null, // Allow null for orphan stories
         aiGenerated: true,
 
         categories: { connectOrCreate: categoryConnect },
         themes: { connectOrCreate: themeConnect },
+        seasons:
+          seasonIds && seasonIds.length > 0
+            ? {
+              connect: seasonIds.map((id) => ({ id })),
+            }
+            : generatedStory.seasons
+              ? {
+                connect: generatedStory.seasons.map((s: string) => ({ name: s })),
+              }
+              : undefined,
       },
       include: { images: true, branches: true, categories: true, themes: true },
     });
@@ -823,14 +1189,14 @@ export class StoryService {
         const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
           story.id,
           story.textContent,
-          voiceType ?? VoiceType.MILO
+          voiceType ?? DEFAULT_VOICE
         );
 
         // Update story with audio URL
         story = await this.prisma.story.update({
           where: { id: story.id },
           data: { audioUrl },
-          include: { images: true, branches: true, categories: true, themes: true },
+          include: { images: true, branches: true, categories: true, themes: true, seasons: true },
         });
       } catch (error) {
         this.logger.error(`Failed to generate audio for story ${story.id}: ${error.message}`);
@@ -931,6 +1297,17 @@ export class StoryService {
     if (!kid) throw new NotFoundException('Kid not found or access denied');
     const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
     if (!story) throw new NotFoundException('Story not found');
+
+    const isRestricted = await this.prisma.restrictedStory.findUnique({
+      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
+    });
+
+    if (isRestricted) {
+      throw new BadRequestException(
+        'This story is currently restricted for this kid. Please unrestrict it first.',
+      );
+    }
+
     const existing = await this.prisma.parentRecommendation.findUnique({
       where: { userId_kidId_storyId: { userId, kidId: dto.kidId, storyId: dto.storyId } },
     });
@@ -943,7 +1320,7 @@ export class StoryService {
         });
         return this.toRecommendationResponse(restored);
       }
-      throw new BadRequestException('You have already recommended this story');
+      throw new BadRequestException(`You have already recommended this story to ${kid.name}`);
     }
     const recommendation = await this.prisma.parentRecommendation.create({
       data: { userId, kidId: dto.kidId, storyId: dto.storyId, message: dto.message },
@@ -996,5 +1373,37 @@ export class StoryService {
       user: recommendation.user,
       kid: recommendation.kid,
     };
+  }
+
+  async getTopPicksFromParents(limit: number = 10): Promise<any[]> {
+    const topStories = await this.prisma.parentRecommendation.groupBy({
+      by: ['storyId'],
+      where: { isDeleted: false },
+      _count: { storyId: true },
+      orderBy: { _count: { storyId: 'desc' } },
+      take: limit,
+    });
+
+    if (topStories.length === 0) {
+      return [];
+    }
+
+    const storyIds = topStories.map((s) => s.storyId);
+    const stories = await this.prisma.story.findMany({
+      where: { id: { in: storyIds }, isDeleted: false },
+      include: {
+        themes: true,
+        categories: true,
+        images: true,
+      },
+    });
+
+    const countMap = new Map(topStories.map((s) => [s.storyId, s._count.storyId]));
+    return stories
+      .map((story) => ({
+        ...story,
+        recommendationCount: countMap.get(story.id) || 0,
+      }))
+      .sort((a, b) => b.recommendationCount - a.recommendationCount);
   }
 }

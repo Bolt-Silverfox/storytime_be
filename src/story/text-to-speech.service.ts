@@ -1,159 +1,130 @@
 import { UploadService } from '../upload/upload.service';
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { createClient } from '@deepgram/sdk';
-import { VoiceType, VOICE_CONFIG } from '../voice/voice.dto';
+import { VoiceType } from '../voice/dto/voice.dto';
+import { VOICE_CONFIG, DEFAULT_VOICE } from '../voice/voice.constants';
+import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
+import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';
+import { PrismaService } from '../prisma/prisma.service';
+
+import { VoiceQuotaService } from '../voice/voice-quota.service';
+import { VOICE_CONFIG_SETTINGS } from '../voice/voice.config';
 
 @Injectable()
 export class TextToSpeechService {
   private readonly logger = new Logger(TextToSpeechService.name);
-  private deepgramApiKey: string;
 
   constructor(
-    private readonly configService: ConfigService,
     private readonly uploadService: UploadService,
-  ) {
-    this.deepgramApiKey = this.configService.get<string>('DEEPGRAM_API_KEY') ?? '';
-    if (!this.deepgramApiKey) {
-      this.logger.warn('DEEPGRAM_API_KEY is not set');
-    }
-  }
+    private readonly elevenLabsProvider: ElevenLabsTTSProvider,
+    private readonly deepgramProvider: DeepgramTTSProvider,
+    private readonly prisma: PrismaService,
+    private readonly voiceQuota: VoiceQuotaService,
+  ) { }
 
   async textToSpeechCloudUrl(
     storyId: string,
     text: string,
-    voicetype?: VoiceType,
+    voicetype?: VoiceType | string, // Allow string (UUID)
+    userId?: string, // Added userId for quota tracking
   ): Promise<string> {
-    if (!this.deepgramApiKey) {
-      throw new InternalServerErrorException('Deepgram API key is missing');
+    const type = voicetype ?? DEFAULT_VOICE;
+
+    // Resolve ElevenLabs ID
+    let elevenLabsId: string | undefined;
+    let model = 'aura-asteria-en'; // Default Deepgram model (Asteria)
+    let provider = 'deepgram'; // Default provider
+
+    // Check if it's a known System Voice (Enum)
+    if (Object.values(VoiceType).includes(type as VoiceType)) {
+      const config = VOICE_CONFIG[type as VoiceType];
+      elevenLabsId = config.elevenLabsId;
+      model = config.model;
+    } else {
+      // Assume dynamic UUID (Custom Voice)
+      // Look up in DB
+      const voice = await this.prisma.voice.findUnique({ where: { id: type } });
+      if (voice && voice.elevenLabsVoiceId) {
+        elevenLabsId = voice.elevenLabsVoiceId;
+        // No deepgram model for custom ElevenLabs voices usually, so deepgram fallback might just use default
+      } else if (voice?.type === 'deepgram') {
+        // If we ever support custom deepgram voices
+        // model = voice.externalId ...
+      } else {
+        // Unrecognized ID, fallback to default? Or error?
+        // Fallback to default
+        const defaultConfig = VOICE_CONFIG[DEFAULT_VOICE];
+        elevenLabsId = defaultConfig.elevenLabsId;
+        model = defaultConfig.model;
+        this.logger.warn(`Voice ID ${type} not found. Falling back to default.`);
+      }
     }
 
-    const voiceConfig = VOICE_CONFIG[voicetype ?? VoiceType.MILO];
-    const deepgram = createClient(this.deepgramApiKey);
+    // Determine if we should use ElevenLabs based on ID presence AND Quota
+    let useElevenLabs = !!elevenLabsId;
 
-    // 1. Transform raw text into "Storyteller Mode" (SSML)
-    const ssmlText = this.formatTextToSSML(text);
-
-    try {
-      this.logger.log(`Generating Audio with Model: ${voiceConfig.model}`);
-
-      // Deepgram has a 2000 char limit. Split text into chunks.
-      const MAX_CHARS = 1900; // Safety margin
-      const chunks = this.chunkText(ssmlText, MAX_CHARS);
-      const audioBuffers: Buffer[] = [];
-
-      this.logger.log(`Splitting text into ${chunks.length} chunks`);
-
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        // Ensure each chunk is wrapped in <speak> tags if not already
-        const chunkSSML = chunk.startsWith('<speak>') ? chunk : `<speak>${chunk}</speak>`;
-
-        this.logger.log(`Processing chunk ${i + 1}/${chunks.length} (Length: ${chunkSSML.length})`);
-
-        try {
-          const response = await deepgram.speak.request(
-            { text: chunkSSML },
-            {
-              model: voiceConfig.model,
-              encoding: 'linear16',
-              container: 'wav',
-            },
-          );
-
-          const stream = await response.getStream();
-          if (!stream) {
-            throw new Error('No audio stream returned from Deepgram');
-          }
-          audioBuffers.push(await this.getAudioBuffer(stream));
-        } catch (innerError) {
-          this.logger.error(`Failed on chunk ${i + 1}: ${innerError.message}`);
-          throw innerError;
-        }
+    if (useElevenLabs && userId) {
+      const allowed = await this.voiceQuota.checkUsage(userId);
+      if (!allowed) {
+        this.logger.log(`User ${userId} quota exceeded. Fallback to Deepgram.`);
+        useElevenLabs = false;
+        // Fallback to Deepgram model
       }
+    } else if (useElevenLabs && !userId) {
+      this.logger.warn(`Anonymous request for ElevenLabs voice ${type}. Denying.`);
+      useElevenLabs = false;
+    }
 
-      const combinedBuffer = Buffer.concat(audioBuffers);
+    // Priority 1: ElevenLabs
+    if (useElevenLabs && elevenLabsId) {
+      try {
+        const labsModel = VOICE_CONFIG_SETTINGS.MODELS.DEFAULT;
+        const voiceSettings = {
+          stability: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.STABILITY,
+          similarity_boost: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.SIMILARITY_BOOST,
+          style: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.STYLE,
+          use_speaker_boost: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.USE_SPEAKER_BOOST,
+        };
 
+        this.logger.log(`Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${elevenLabsId}) using model ${labsModel}`);
+        const audioBuffer = await this.elevenLabsProvider.generateAudio(text, elevenLabsId, labsModel, voiceSettings);
+
+        // Increment usage
+        if (userId) {
+          await this.voiceQuota.incrementUsage(userId);
+        }
+
+        return await this.uploadService.uploadAudioBuffer(
+          audioBuffer,
+          `story_${storyId}_elevenlabs_${Date.now()}.mp3`,
+        );
+      } catch (error) {
+        this.logger.warn(`ElevenLabs generation failed for story ${storyId}: ${error.message}. Falling back to Deepgram.`);
+        // Proceed to fallback
+      }
+    } else {
+      if (elevenLabsId) {
+        this.logger.debug(`Skipping ElevenLabs: Quota exceeded or no user ID for voice ${type}`);
+      } else {
+        this.logger.debug(`Skipping ElevenLabs: No ID configured for voice ${type}`);
+      }
+    }
+
+    // Priority 2: Deepgram Fallback
+    try {
+      this.logger.log(`Attempting Deepgram generation for story ${storyId} with voice ${type}`);
+
+      const deepgramSettings = {
+        speed: VOICE_CONFIG_SETTINGS.DEEPGRAM.DEFAULT_SPEED, // Slower pace for storytelling
+      };
+
+      const audioBuffer = await this.deepgramProvider.generateAudio(text, undefined, model, deepgramSettings);
       return await this.uploadService.uploadAudioBuffer(
-        combinedBuffer,
+        audioBuffer,
         `story_${storyId}_deepgram_${Date.now()}.wav`,
       );
-
     } catch (error) {
-      this.logger.error(`Deepgram TTS failed for story ${storyId}: ${error.message}`);
-      throw new InternalServerErrorException('Deepgram TTS failed');
+      this.logger.error(`Deepgram fallback failed for story ${storyId}: ${error.message}`);
+      throw new InternalServerErrorException('Voice generation failed on both providers');
     }
-  }
-
-  // --- Helper: Adds "Breathing Room" to the story ---
-  private formatTextToSSML(rawText: string): string {
-    // 1. Clean up weird spacing
-    let text = rawText.replace(/\s+/g, ' ').trim();
-
-    // 2. Escape special XML characters to prevent errors
-    text = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
-
-    // 3. Add pauses for dramatic effect
-    // Pause after commas (short breath)
-    text = text.replace(/,/g, ', <break time="300ms"/>');
-
-    // Pause after sentences (medium breath)
-    text = text.replace(/([.!?])\s/g, '$1 <break time="800ms"/> ');
-
-    // Long pause between paragraphs/ideas (if you have double newlines in raw text)
-    // text = text.replace(/\n\n/g, '<break time="1500ms"/>'); 
-
-    // 4. Wrap in <speak> tags
-    return `<speak>${text}</speak>`;
-  }
-
-  private chunkText(text: string, maxLength: number): string[] {
-    // Remove outer <speak> tags for splitting, we'll add them back to chunks
-    let cleanText = text.replace(/^<speak>/, '').replace(/<\/speak>$/, '');
-
-    const chunks: string[] = [];
-    while (cleanText.length > maxLength) {
-      let splitIndex = cleanText.lastIndexOf(' ', maxLength);
-      // Try to split at a sentence end if possible
-      const sentenceEnd = cleanText.lastIndexOf('. ', maxLength);
-      if (sentenceEnd > maxLength * 0.5) {
-        splitIndex = sentenceEnd + 1;
-      }
-
-      if (splitIndex === -1) splitIndex = maxLength;
-
-      chunks.push(cleanText.substring(0, splitIndex).trim());
-      cleanText = cleanText.substring(splitIndex).trim();
-    }
-    if (cleanText.length > 0) {
-      chunks.push(cleanText);
-    }
-    return chunks;
-  }
-
-  private async getAudioBuffer(stream: ReadableStream<Uint8Array>): Promise<Buffer> {
-    const reader = stream.getReader();
-    const chunks: Uint8Array[] = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-    }
-
-    const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-    const result = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-      result.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    return Buffer.from(result.buffer);
   }
 }

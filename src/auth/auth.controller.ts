@@ -1,5 +1,6 @@
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { Response, Request } from 'express';
+import { GoogleOAuthProfile } from '@/shared/types';
 import {
   Body,
   Controller,
@@ -31,7 +32,7 @@ import {
   SendEmailVerificationDto,
   ChangePasswordDto,
   CompleteProfileDto,
-} from './auth.dto';
+} from './dto/auth.dto';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -39,10 +40,10 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { AuthenticatedRequest, AuthSessionGuard } from './auth.guard';
+import { AuthenticatedRequest, AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
-import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
-import { THROTTLE_LIMITS } from '@/common/constants/throttle.constants';
+import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
+import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -84,7 +85,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',
-    description: 'Default role: parent. Language and preferred themes set in complete-profile step.',
+    description: 'Register with just full name, email, and password. Default role: parent.',
   })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
@@ -100,7 +101,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Complete user profile after registration',
     description:
-      'Set language, preferred learning themes (empathy, kindness, etc.), and profile image. Must be called after email verification.',
+      'Set language, preferred learning expectations (IDs), preferred categories (IDs), and profile image. Must be called after email verification.',
   })
   @ApiBody({ type: CompleteProfileDto })
   @ApiResponse({
@@ -205,7 +206,11 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() body: ChangePasswordDto,
   ) {
-    return this.authService.changePassword(req.authUserData['userId'], body);
+    return this.authService.changePassword(
+      req.authUserData['userId'],
+      body,
+      req.authUserData['authSessionId']!,
+    );
   }
 
   // ===== PASSWORD RESET =====
@@ -266,6 +271,23 @@ export class AuthController {
     return this.authService.loginWithGoogleIdToken(idToken);
   }
 
+  // ===== APPLE AUTH (MOBILE / WEB id_token) =====
+  @Post('apple')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Apple sign-in (id_token) — mobile/web' })
+  @ApiBody({
+    description: 'Apple id_token and optional user info',
+    schema: { example: { id_token: '...', firstName: 'John', lastName: 'Doe' } },
+  })
+  async appleIdToken(@Body() body: { id_token: string; firstName?: string; lastName?: string }) {
+    if (!body.id_token) {
+      throw new BadRequestException('id_token is required');
+    }
+
+    return this.authService.loginWithAppleIdToken(body.id_token, body.firstName, body.lastName);
+  }
+
+
   // ===== GOOGLE OAUTH (web redirect flow) =====
   @Get('google/oauth')
   @UseGuards(GoogleAuthGuard)
@@ -276,8 +298,8 @@ export class AuthController {
   // ===== GOOGLE OAUTH CALLBACK =====
   @Get('google/oauth/callback')
   @UseGuards(GoogleAuthGuard)
-  async googleCallback(@Req() req: Request, @Res() res: Response) {
-    const payload = (req as any).user;
+  async googleCallback(@Req() req: Request & { user: GoogleOAuthProfile }, @Res() res: Response) {
+    const payload = req.user;
     const result = await this.authService.handleGoogleOAuthPayload(payload);
 
     return res.redirect(
