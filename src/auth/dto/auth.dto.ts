@@ -34,13 +34,19 @@ export class RegisterDto {
 
   @IsNotEmpty()
   @ApiProperty({ example: 'testPassword1#' })
-  @IsStrongPassword({
-    minLength: 8,
-    minLowercase: 1,
-    minUppercase: 1,
-    minNumbers: 1,
-    minSymbols: 1,
-  })
+  @IsStrongPassword(
+    {
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1,
+    },
+    {
+      message:
+        'Password must be at least 8 characters long and contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 symbol',
+    },
+  )
   @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   password: string;
   @ApiProperty({ example: 'firstname lastname' })
@@ -371,13 +377,19 @@ export class ResetPasswordDto {
   email: string;
 
   @ApiProperty({ example: 'NewStrongPassword1#' })
-  @IsStrongPassword({
-    minLength: 8,
-    minLowercase: 1,
-    minUppercase: 1,
-    minNumbers: 1,
-    minSymbols: 1,
-  })
+  @IsStrongPassword(
+    {
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1,
+    },
+    {
+      message:
+        'Password must be at least 8 characters long and contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 symbol',
+    },
+  )
   @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   newPassword: string;
 }
@@ -409,13 +421,19 @@ export class ChangePasswordDto {
   oldPassword: string;
 
   @ApiProperty({ example: 'NewStrongPassword1#' })
-  @IsStrongPassword({
-    minLength: 8,
-    minLowercase: 1,
-    minUppercase: 1,
-    minNumbers: 1,
-    minSymbols: 1,
-  })
+  @IsStrongPassword(
+    {
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1,
+    },
+    {
+      message:
+        'Password must be at least 8 characters long and contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 symbol',
+    },
+  )
   @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   newPassword: string;
 }
