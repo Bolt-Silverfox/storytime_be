@@ -217,12 +217,13 @@ export class StoryService {
       where.id = { in: recommendedStoryIds };
     }
 
-    const orderBy: any = {};
-    if (filter.isMostLiked) {
-      orderBy.parentFavorites = { _count: 'desc' };
-    } else {
-      orderBy.createdAt = 'desc';
-    }
+    const orderBy = filter.isMostLiked
+      ? [
+        { parentFavorites: { _count: 'desc' as const } },
+        { createdAt: 'desc' as const },
+        { id: 'asc' as const },
+      ]
+      : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
     const totalCount = await this.prisma.story.count({ where });
     const totalPages = Math.ceil(totalCount / limit);
@@ -336,12 +337,13 @@ export class StoryService {
         },
         take: limitRecommended,
         include: { images: true, categories: true },
+        orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
       });
     } else {
       // Fallback if no preferences: just fresh stories
       recommended = await this.prisma.story.findMany({
         where: { isDeleted: false },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
         take: limitRecommended,
         include: { images: true, categories: true },
       });
