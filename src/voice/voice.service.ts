@@ -1,6 +1,13 @@
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+  Inject,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -13,6 +20,11 @@ import {
 import { VOICE_CONFIG } from './voice.constants';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
 
+/** Cache key for available voices */
+const AVAILABLE_VOICES_CACHE_KEY = 'available-voices';
+/** Cache TTL: 5 minutes (voices rarely change) */
+const VOICES_CACHE_TTL_MS = 5 * 60 * 1000;
+
 @Injectable()
 export class VoiceService {
   private readonly logger = new Logger(VoiceService.name);
@@ -22,7 +34,8 @@ export class VoiceService {
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
-  ) { }
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   // --- Upload a new voice file ---
   async uploadVoice(
@@ -219,8 +232,19 @@ export class VoiceService {
     return { id: newVoice.id };
   }
 
-  // Moved from StoryService and updated
+  /**
+   * Fetch available system voices with caching
+   * Cached for 5 minutes since voices rarely change
+   */
   async fetchAvailableVoices(): Promise<VoiceResponseDto[]> {
+    // Check cache first
+    const cached =
+      await this.cacheManager.get<VoiceResponseDto[]>(AVAILABLE_VOICES_CACHE_KEY);
+    if (cached) {
+      this.logger.debug('Returning cached available voices');
+      return cached;
+    }
+
     // Get the IDs we expect from config
     const systemIds = Object.values(VOICE_CONFIG).map((c) => c.elevenLabsId);
 
@@ -232,15 +256,14 @@ export class VoiceService {
     });
 
     // Map DB voices to response, enriching with config data (avatar, preview) if needed
-    // Note: seed.ts might have populated avatar/preview, but config is reliable for statics
-    return dbVoices.map((voice) => {
+    const voices = dbVoices.map((voice) => {
       // Find matching config to get extra metadata if missing in DB
       const config = Object.values(VOICE_CONFIG).find(
         (c) => c.elevenLabsId === voice.elevenLabsVoiceId,
       );
 
       return {
-        id: voice.id, // THE REAL UUID
+        id: voice.id,
         name: voice.name,
         type: voice.type,
         previewUrl: voice.url || config?.previewUrl,
@@ -248,5 +271,14 @@ export class VoiceService {
         elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
       };
     });
+
+    // Cache the result
+    await this.cacheManager.set(
+      AVAILABLE_VOICES_CACHE_KEY,
+      voices,
+      VOICES_CACHE_TTL_MS,
+    );
+
+    return voices;
   }
 }

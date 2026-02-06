@@ -331,6 +331,7 @@ model Story {
   restrictedStories     RestrictedStory[]
 
   @@index([isDeleted])
+  @@index([createdAt])
   @@map("stories")
 }
 
@@ -414,6 +415,7 @@ model StoryProgress {
 
   @@unique([kidId, storyId])
   @@index([isDeleted])
+  @@index([kidId, completed])
   @@map("story_progress")
 }
 
