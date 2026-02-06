@@ -209,7 +209,7 @@ export class GoogleVerificationService {
       }
 
       this.logger.error(
-        `Google verification failed for package ${packageName} product ${productId}: ${this.errorMessage(error)}`,
+        `Google verification failed for package ${this.sanitizeForLog(packageName)} product ${this.sanitizeForLog(productId)}: ${this.errorMessage(error)}`,
       );
       throw new HttpException(
         'Failed to verify Google Play purchase',

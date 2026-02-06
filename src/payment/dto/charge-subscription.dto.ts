@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsIn,
   Length,
+  Matches,
 } from 'class-validator';
 
 export class ChargeSubscriptionDto {
@@ -35,5 +36,6 @@ export class ChargeSubscriptionDto {
   @IsString()
   @IsOptional()
   @Length(4, 8)
+  @Matches(/^\d+$/, { message: 'Transaction PIN must contain only digits' })
   transactionPin?: string;
 }
