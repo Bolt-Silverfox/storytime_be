@@ -118,7 +118,7 @@ export class StoryService {
           },
         };
       } else {
-        where.seasons = { some: { id: 'non-existent-id' } }; 
+        where.seasons = { some: { id: 'non-existent-id' } };
       }
     }
 
@@ -246,6 +246,9 @@ export class StoryService {
     };
   }
 
+  // Threshold in days to consider a past season as "recent" for backfill
+  private readonly RECENT_SEASON_THRESHOLD_DAYS = 45;
+
   private async getRelevantSeasons() {
     const today = new Date();
     const currentMonth = today.getMonth() + 1; // 1-12
@@ -268,11 +271,30 @@ export class StoryService {
       return currentDateStr >= s.startDate && currentDateStr <= s.endDate;
     });
 
-    // Backfill logic (from homepage implementation)
-    // Find "previous" seasons (inactive or recent past) to handle gaps or low content
     const backfillSeasons = allSeasons.filter((s) => {
       if (activeSeasons.find(active => active.id === s.id)) return false;
-      return !!s.startDate && !!s.endDate;
+      if (!s.startDate || !s.endDate) return false;
+
+      const [endMonth, endDay] = s.endDate.split('-').map(Number);
+
+      let seasonEndDate = new Date(today.getFullYear(), endMonth - 1, endDay);
+
+      const diffTime = today.getTime() - seasonEndDate.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays >= 0 && diffDays <= this.RECENT_SEASON_THRESHOLD_DAYS) {
+        return true;
+      }
+
+      if (diffDays < 0) {
+        const lastYearEnd = new Date(today.getFullYear() - 1, endMonth - 1, endDay);
+        const diffLastYear = Math.ceil((today.getTime() - lastYearEnd.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffLastYear >= 0 && diffLastYear <= this.RECENT_SEASON_THRESHOLD_DAYS) {
+          return true;
+        }
+      }
+
+      return false;
     });
 
     return { activeSeasons, backfillSeasons };
@@ -357,7 +379,7 @@ export class StoryService {
         },
         take: needed,
         include: { images: true, themes: true, seasons: true },
-        orderBy: { createdAt: 'desc' } 
+        orderBy: { createdAt: 'desc' }
       });
 
       seasonal = [...seasonal, ...backfillStories];
