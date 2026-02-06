@@ -1,134 +1,280 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import * as bcrypt from 'bcrypt';
+import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
+import { GoogleVerificationService } from './google-verification.service';
+import { AppleVerificationService } from './apple-verification.service';
+import { createHash } from 'crypto';
 
-/**
- * Plan definitions: amount and duration in days
- */
+/** Plan definitions: amount and duration in days */
 const PLANS: Record<string, { amount: number; days: number }> = {
-  free: { amount: 0, days: 365 * 100 }, // effectively permanent free
+  free: { amount: 0, days: 365 * 100 },
   weekly: { amount: 1.5, days: 7 },
   monthly: { amount: 4.99, days: 30 },
   yearly: { amount: 47.99, days: 365 },
 };
 
+/** Product ID to plan mapping for IAP */
+const PRODUCT_ID_TO_PLAN: Record<string, string> = {
+  'com.storytime.weekly': 'weekly',
+  'com.storytime.monthly': 'monthly',
+  'com.storytime.yearly': 'yearly',
+  weekly_subscription: 'weekly',
+  monthly_subscription: 'monthly',
+  yearly_subscription: 'yearly',
+};
+
+/** Transaction result from payment processing */
+export interface TransactionRecord {
+  id: string;
+  userId: string;
+  amount: number;
+  currency: string | null;
+  status: string;
+  reference: string | null;
+}
+
 @Injectable()
 export class PaymentService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(PaymentService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly googleVerificationService: GoogleVerificationService,
+    private readonly appleVerificationService: AppleVerificationService,
+  ) {}
 
   /**
-   * Add a payment method for a user (simple store)
+   * Verify an In-App Purchase from Google Play or App Store
    */
-  async addPaymentMethod(userId: string, payload: any) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
+  async verifyPurchase(userId: string, dto: VerifyPurchaseDto) {
+    this.logger.log(
+      `Verifying ${dto.platform} purchase for user ${userId.substring(0, 8)}`,
+    );
 
-    const pm = await this.prisma.paymentMethod.create({
-      data: {
-        userId,
-        type: payload.type,
-        details: payload.details,
-        provider: payload.provider ?? null,
-        last4: payload.last4 ?? null,
-        expiry: payload.expiry ?? null,
-        meta: payload.meta ?? null,
-      },
+    try {
+      if (dto.platform === 'google') {
+        return this.verifyGooglePurchase(userId, dto);
+      } else if (dto.platform === 'apple') {
+        return this.verifyApplePurchase(userId, dto);
+      } else {
+        throw new BadRequestException(`Unsupported platform: ${dto.platform}`);
+      }
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      this.logger.error(
+        `Purchase verification failed: ${this.getErrorMessage(error)}`,
+      );
+      throw new BadRequestException('Purchase verification failed');
+    }
+  }
+
+  private async verifyGooglePurchase(userId: string, dto: VerifyPurchaseDto) {
+    const result = await this.googleVerificationService.verify({
+      purchaseToken: dto.purchaseToken,
+      productId: dto.productId,
+      packageName: dto.packageName,
     });
 
-    return pm;
-  }
+    if (!result.success) {
+      throw new BadRequestException('Google Play purchase verification failed');
+    }
 
-
-  async listPaymentMethods(userId: string) {
-    return this.prisma.paymentMethod.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
-  }
-
-  async removePaymentMethod(userId: string, id: string) {
-    const existing = await this.prisma.paymentMethod.findUnique({ where: { id } });
-    if (!existing || existing.userId !== userId) throw new NotFoundException('Payment method not found');
-    return this.prisma.paymentMethod.delete({ where: { id } });
-  }
-
-  /**
-   * Simulated charge flow:
-   * - validate plan
-   * - optionally validate transactionPin
-   * - create a PaymentTransaction record with status
-   * - if success: upsert subscription (starts now, endsAt based on plan.days)
-   */
-  async chargeSubscription(userId: string, body: { plan: string; paymentMethodId?: string; transactionPin?: string }) {
-    const { plan, paymentMethodId, transactionPin } = body;
+    const plan = this.mapProductIdToPlan(dto.productId);
     const planDef = PLANS[plan];
-    if (!planDef) throw new BadRequestException('Invalid plan');
 
-    // validate user
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
+    // Check for duplicate receipt
+    const receiptHash = this.hashReceipt(dto.purchaseToken);
+    const existingTx = await this.prisma.paymentTransaction.findFirst({
+      where: { reference: receiptHash },
+    });
 
-    // if transactionPin provided, verify against user's pinHash
-    if (transactionPin) {
-      if (!user.pinHash) throw new BadRequestException('No PIN set for user');
-      const ok = await bcrypt.compare(transactionPin, user.pinHash);
-      if (!ok) throw new BadRequestException('Invalid transaction PIN');
+    if (existingTx) {
+      // Idempotent: return existing transaction and subscription
+      const existingSub = await this.prisma.subscription.findFirst({
+        where: { userId },
+      });
+      return {
+        success: true,
+        alreadyProcessed: true,
+        transaction: existingTx,
+        subscription: existingSub
+          ? {
+              plan: existingSub.plan,
+              status: existingSub.status,
+              startedAt: existingSub.startedAt,
+              endsAt: existingSub.endsAt,
+            }
+          : null,
+      };
     }
 
-    // basic payment method validation if non-free
-    if (planDef.amount > 0) {
-      if (!paymentMethodId) throw new BadRequestException('Payment method required for paid plans');
-      const pm = await this.prisma.paymentMethod.findUnique({ where: { id: paymentMethodId } });
-      if (!pm || pm.userId !== userId) throw new NotFoundException('Payment method not found');
-    }
-
-    // create transaction (simulate pending -> success)
+    // Record the transaction
     const tx = await this.prisma.paymentTransaction.create({
       data: {
         userId,
-        paymentMethodId: paymentMethodId ?? null,
-        amount: planDef.amount,
-        currency: 'USD',
-        status: 'pending',
-      },
-    });
-
-    // Simulate processing...
-    const updatedTx = await this.prisma.paymentTransaction.update({
-      where: { id: tx.id },
-      data: {
+        paymentMethodId: null,
+        amount: result.amount ?? planDef.amount,
+        currency: result.currency ?? 'USD',
         status: 'success',
-        reference: `sim-${Date.now()}`,
+        reference: receiptHash,
       },
     });
 
-    // Upsert subscription: start now, endsAt = now + planDef.days
+    // For subscriptions, use the expiration time from Google
+    if (result.isSubscription && result.expirationTime) {
+      return this.upsertSubscriptionWithExpiry(
+        userId,
+        plan,
+        tx,
+        result.expirationTime,
+      );
+    }
+
+    return this.upsertSubscription(userId, plan, tx);
+  }
+
+  private async verifyApplePurchase(userId: string, dto: VerifyPurchaseDto) {
+    const result = await this.appleVerificationService.verify({
+      transactionId: dto.purchaseToken,
+      productId: dto.productId,
+    });
+
+    if (!result.success) {
+      throw new BadRequestException(
+        'Apple App Store purchase verification failed',
+      );
+    }
+
+    const plan = this.mapProductIdToPlan(dto.productId);
+    const planDef = PLANS[plan];
+
+    // Check for duplicate using original transaction ID
+    const receiptHash = this.hashReceipt(
+      result.originalTxId || dto.purchaseToken,
+    );
+    const existingTx = await this.prisma.paymentTransaction.findFirst({
+      where: { reference: receiptHash },
+    });
+
+    if (existingTx) {
+      const existingSub = await this.prisma.subscription.findFirst({
+        where: { userId },
+      });
+      return {
+        success: true,
+        alreadyProcessed: true,
+        transaction: existingTx,
+        subscription: existingSub
+          ? {
+              plan: existingSub.plan,
+              status: existingSub.status,
+              startedAt: existingSub.startedAt,
+              endsAt: existingSub.endsAt,
+            }
+          : null,
+      };
+    }
+
+    const tx = await this.prisma.paymentTransaction.create({
+      data: {
+        userId,
+        paymentMethodId: null,
+        amount: result.amount ?? planDef.amount,
+        currency: result.currency ?? 'USD',
+        status: 'success',
+        reference: receiptHash,
+      },
+    });
+
+    if (result.isSubscription && result.expirationTime) {
+      return this.upsertSubscriptionWithExpiry(
+        userId,
+        plan,
+        tx,
+        result.expirationTime,
+      );
+    }
+
+    return this.upsertSubscription(userId, plan, tx);
+  }
+
+  private mapProductIdToPlan(productId: string): string {
+    const plan = PRODUCT_ID_TO_PLAN[productId];
+    if (!plan) {
+      this.logger.error(`Unknown product ID: ${productId}`);
+      throw new BadRequestException(
+        `Unknown product ID: ${productId}. Valid IDs: ${Object.keys(PRODUCT_ID_TO_PLAN).join(', ')}`,
+      );
+    }
+    return plan;
+  }
+
+  private hashReceipt(receipt: string): string {
+    return createHash('sha256').update(receipt).digest('hex').substring(0, 32);
+  }
+
+  private async upsertSubscription(
+    userId: string,
+    plan: string,
+    transaction: TransactionRecord,
+  ) {
+    const planDef = PLANS[plan];
     const now = new Date();
     const endsAt = new Date(now.getTime() + planDef.days * 24 * 60 * 60 * 1000);
 
-    const existingSub = await this.prisma.subscription.findFirst({ where: { userId } });
-    if (existingSub) {
-      await this.prisma.subscription.update({
-        where: { id: existingSub.id },
-        data: {
-          plan,
-          status: 'active',
-          startedAt: now,
-          endsAt,
-        },
-      });
-    } else {
-      await this.prisma.subscription.create({
-        data: {
-          userId,
-          plan,
-          status: 'active',
-          startedAt: now,
-          endsAt,
-        },
-      });
-    }
+    return this.upsertSubscriptionWithExpiry(userId, plan, transaction, endsAt);
+  }
+
+  private async upsertSubscriptionWithExpiry(
+    userId: string,
+    plan: string,
+    transaction: TransactionRecord,
+    endsAt: Date,
+  ) {
+    const now = new Date();
+    const existingSub = await this.prisma.subscription.findFirst({
+      where: { userId },
+    });
+
+    const subscription = existingSub
+      ? await this.prisma.subscription.update({
+          where: { id: existingSub.id },
+          data: {
+            plan,
+            status: 'active',
+            startedAt: now,
+            endsAt,
+          },
+        })
+      : await this.prisma.subscription.create({
+          data: {
+            userId,
+            plan,
+            status: 'active',
+            startedAt: now,
+            endsAt,
+          },
+        });
 
     return {
-      transaction: updatedTx,
-      subscription: { plan, status: 'active', startedAt: now, endsAt },
+      success: true,
+      transaction,
+      subscription: {
+        plan: subscription.plan,
+        status: subscription.status,
+        startedAt: subscription.startedAt,
+        endsAt: subscription.endsAt,
+      },
     };
   }
 
@@ -137,22 +283,23 @@ export class PaymentService {
   }
 
   async cancelSubscription(userId: string) {
-    const existing = await this.prisma.subscription.findFirst({ where: { userId } });
+    const existing = await this.prisma.subscription.findFirst({
+      where: { userId },
+    });
     if (!existing) throw new NotFoundException('No subscription to cancel');
 
-    // Allow current period to run out
     const now = new Date();
-    const endsAt = existing.endsAt && existing.endsAt > now ? existing.endsAt : now;
+    const endsAt =
+      existing.endsAt && existing.endsAt > now ? existing.endsAt : now;
 
-    const cancelled = await this.prisma.subscription.update({
+    return this.prisma.subscription.update({
       where: { id: existing.id },
       data: { status: 'cancelled', endsAt },
     });
-
-    return cancelled;
   }
 
-  async resubscribe(userId: string, paymentMethodId: string, plan: string, transactionPin?: string) {
-    return this.chargeSubscription(userId, { plan, paymentMethodId, transactionPin });
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    return String(error);
   }
 }

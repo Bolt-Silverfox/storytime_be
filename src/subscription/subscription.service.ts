@@ -1,12 +1,18 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { PaymentService } from '../payment/payment.service';
 import { SUBSCRIPTION_STATUS } from './subscription.constants';
 
 /**
- * Simple plan catalog 
+ * Simple plan catalog
  */
-export const PLANS: Record<string, { display: string; amount: number; days: number }> = {
+export const PLANS: Record<
+  string,
+  { display: string; amount: number; days: number }
+> = {
   free: { display: 'Free', amount: 0, days: 365 * 100 },
   weekly: { display: 'Weekly', amount: 1.5, days: 7 },
   monthly: { display: 'Monthly', amount: 4.99, days: 30 },
@@ -15,10 +21,7 @@ export const PLANS: Record<string, { display: string; amount: number; days: numb
 
 @Injectable()
 export class SubscriptionService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly paymentService?: PaymentService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   getPlans() {
     return PLANS;
@@ -29,48 +32,38 @@ export class SubscriptionService {
   }
 
   /**
-   * Subscribe (if amount > 0, expect the frontend to handle payment or provide paymentMethodId)
-   * If PaymentService is present and you pass charge = true, it will attempt a charge using paymentService.chargeSubscription
+   * Subscribe to a plan.
+   * For paid plans, use the PaymentService.verifyPurchase endpoint after completing IAP.
+   * This method only handles free plan subscriptions directly.
    */
-  async subscribe(
-    userId: string,
-    planKey: string,
-    options?: { paymentMethodId?: string; transactionPin?: string; charge?: boolean },
-  ) {
+  async subscribe(userId: string, planKey: string) {
     const plan = PLANS[planKey];
     if (!plan) throw new BadRequestException('Invalid plan');
 
-    // If paid plan and charge requested, require paymentMethodId and optionally use PaymentService
-    if (plan.amount > 0 && options?.charge) {
-      if (!options.paymentMethodId) {
-        throw new BadRequestException('paymentMethodId required for paid plan when charge=true');
-      }
-      if (!this.paymentService) {
-        throw new BadRequestException('PaymentService not configured on server');
-      }
-      // Delegate to payment service; it will upsert subscription on success
-      const result = await this.paymentService.chargeSubscription(userId, {
-        plan: planKey,
-        paymentMethodId: options.paymentMethodId,
-        transactionPin: options.transactionPin,
-      });
-      return {
-        plan: planKey,
-        subscription: await this.getSubscriptionForUser(userId),
-        transaction: result.transaction,
-      };
+    // Paid plans must go through IAP verification
+    if (plan.amount > 0) {
+      throw new BadRequestException(
+        'Paid plans require In-App Purchase. Use /payment/verify-purchase after completing purchase.',
+      );
     }
 
-    // For free plan or charge=false: just create/activate subscription
+    // For free plan: just create/activate subscription
     const now = new Date();
     const endsAt = new Date(now.getTime() + plan.days * 24 * 60 * 60 * 1000);
 
-    const existing = await this.prisma.subscription.findFirst({ where: { userId } });
+    const existing = await this.prisma.subscription.findFirst({
+      where: { userId },
+    });
 
     if (existing) {
       const updated = await this.prisma.subscription.update({
         where: { id: existing.id },
-        data: { plan: planKey, status: SUBSCRIPTION_STATUS.ACTIVE, startedAt: now, endsAt },
+        data: {
+          plan: planKey,
+          status: SUBSCRIPTION_STATUS.ACTIVE,
+          startedAt: now,
+          endsAt,
+        },
       });
       return { subscription: updated };
     }
@@ -89,12 +82,15 @@ export class SubscriptionService {
   }
 
   async cancel(userId: string) {
-    const existing = await this.prisma.subscription.findFirst({ where: { userId } });
+    const existing = await this.prisma.subscription.findFirst({
+      where: { userId },
+    });
     if (!existing) throw new NotFoundException('No active subscription');
 
     const now = new Date();
     // keep existing.endsAt if in future, else set endsAt = now
-    const endsAt = existing.endsAt && existing.endsAt > now ? existing.endsAt : now;
+    const endsAt =
+      existing.endsAt && existing.endsAt > now ? existing.endsAt : now;
 
     const cancelled = await this.prisma.subscription.update({
       where: { id: existing.id },
@@ -102,11 +98,6 @@ export class SubscriptionService {
     });
 
     return cancelled;
-  }
-
-  async reactivate(userId: string, planKey: string, options?: { paymentMethodId?: string; charge?: boolean; transactionPin?: string }) {
-    // reuse subscribe logic to create/update
-    return this.subscribe(userId, planKey, { paymentMethodId: options?.paymentMethodId, charge: options?.charge, transactionPin: options?.transactionPin });
   }
 
   async listHistory(userId: string) {
