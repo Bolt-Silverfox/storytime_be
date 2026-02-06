@@ -86,7 +86,8 @@ export class GoogleVerificationService {
   private readonly scriptPath: string;
 
   constructor(private readonly configService: ConfigService) {
-    const scriptsDir = path.resolve(__dirname, '../../../scripts');
+    // Use process.cwd() for robustness - works regardless of dist/ structure
+    const scriptsDir = path.join(process.cwd(), 'scripts');
 
     this.pythonPath =
       this.configService.get<string>('PYTHON_PATH') ||
