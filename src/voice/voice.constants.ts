@@ -1,6 +1,6 @@
 import { VoiceType } from './dto/voice.dto';
 
-export const DEFAULT_VOICE = VoiceType.CHARLIE;
+export const DEFAULT_VOICE = VoiceType.LILY;
 
 export const VOICE_AVATARS = {
     [VoiceType.CHARLIE]: 'https://res.cloudinary.com/billmal/image/upload/v1768772687/storytime/voice_avatars/milo.png',
@@ -20,6 +20,14 @@ export const VOICE_PREVIEWS = {
     [VoiceType.LAURA]: 'https://storage.googleapis.com/eleven-public-prod/premade/voices/FGY2WhTYpPnrIDTdsKH5/67341759-ad08-41a5-be6e-de12fe448618.mp3',
 };
 
+/** Per-voice ElevenLabs settings tuned for natural storytelling */
+export interface VoiceSettings {
+    stability: number;
+    similarity_boost: number;
+    style: number;
+    use_speaker_boost: boolean;
+}
+
 export const VOICE_CONFIG = {
     [VoiceType.CHARLIE]: {
         id: VoiceType.CHARLIE,
@@ -29,6 +37,13 @@ export const VOICE_CONFIG = {
         elevenLabsId: 'IKne3meq5aSn9XLyUdCD',
         previewUrl: VOICE_PREVIEWS[VoiceType.CHARLIE],
         voiceAvatar: VOICE_AVATARS[VoiceType.CHARLIE],
+        // Charlie: warm, friendly male - needs more expressiveness for storytelling
+        voiceSettings: {
+            stability: 0.30,
+            similarity_boost: 0.85,
+            style: 0.65,
+            use_speaker_boost: true,
+        } as VoiceSettings,
     },
     [VoiceType.JESSICA]: {
         id: VoiceType.JESSICA,
@@ -38,6 +53,13 @@ export const VOICE_CONFIG = {
         elevenLabsId: 'cgSgspJ2msm6clMCkdW9',
         previewUrl: VOICE_PREVIEWS[VoiceType.JESSICA],
         voiceAvatar: VOICE_AVATARS[VoiceType.JESSICA],
+        // Jessica: young, energetic female - balance expressiveness with clarity
+        voiceSettings: {
+            stability: 0.35,
+            similarity_boost: 0.80,
+            style: 0.60,
+            use_speaker_boost: true,
+        } as VoiceSettings,
     },
     [VoiceType.WILL]: {
         id: VoiceType.WILL,
@@ -47,6 +69,13 @@ export const VOICE_CONFIG = {
         elevenLabsId: 'bIHbv24MWmeRgasZH58o',
         previewUrl: VOICE_PREVIEWS[VoiceType.WILL],
         voiceAvatar: VOICE_AVATARS[VoiceType.WILL],
+        // Will: young male - more dynamic for engaging storytelling
+        voiceSettings: {
+            stability: 0.30,
+            similarity_boost: 0.85,
+            style: 0.70,
+            use_speaker_boost: true,
+        } as VoiceSettings,
     },
     [VoiceType.LILY]: {
         id: VoiceType.LILY,
@@ -56,6 +85,13 @@ export const VOICE_CONFIG = {
         elevenLabsId: 'pFZP5JQG7iQjIQuC4Bku',
         previewUrl: VOICE_PREVIEWS[VoiceType.LILY],
         voiceAvatar: VOICE_AVATARS[VoiceType.LILY],
+        // Lily: narrative female - already reads naturally, optimized for storytelling
+        voiceSettings: {
+            stability: 0.35,
+            similarity_boost: 0.80,
+            style: 0.55,
+            use_speaker_boost: true,
+        } as VoiceSettings,
     },
     [VoiceType.BILL]: {
         id: VoiceType.BILL,
@@ -65,6 +101,13 @@ export const VOICE_CONFIG = {
         elevenLabsId: 'pqHfZKP75CvOlQylNhV4',
         previewUrl: VOICE_PREVIEWS[VoiceType.BILL],
         voiceAvatar: VOICE_AVATARS[VoiceType.BILL],
+        // Bill: older, grandfatherly male - warm and expressive for bedtime stories
+        voiceSettings: {
+            stability: 0.40,
+            similarity_boost: 0.75,
+            style: 0.50,
+            use_speaker_boost: true,
+        } as VoiceSettings,
     },
     [VoiceType.LAURA]: {
         id: VoiceType.LAURA,
@@ -74,5 +117,12 @@ export const VOICE_CONFIG = {
         elevenLabsId: 'FGY2WhTYpPnrIDTdsKH5',
         previewUrl: VOICE_PREVIEWS[VoiceType.LAURA],
         voiceAvatar: VOICE_AVATARS[VoiceType.LAURA],
+        // Laura: mature female - expressive with good pacing for narration
+        voiceSettings: {
+            stability: 0.35,
+            similarity_boost: 0.80,
+            style: 0.60,
+            use_speaker_boost: true,
+        } as VoiceSettings,
     },
 };
