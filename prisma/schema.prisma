@@ -505,6 +505,7 @@ model PaymentTransaction {
   isDeleted       Boolean        @default(false)
   deletedAt       DateTime?
 
+  @@unique([reference])
   @@index([isDeleted])
   @@map("payment_transactions")
 }

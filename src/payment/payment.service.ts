@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
 import { GoogleVerificationService } from './google-verification.service';
@@ -74,28 +75,24 @@ export class PaymentService {
 
     const plan = this.mapProductIdToPlan(dto.productId);
     const planDef = PLANS[plan];
-
-    // Check for duplicate receipt
     const receiptHash = this.hashReceipt(dto.purchaseToken);
-    const existingTx = await this.prisma.paymentTransaction.findFirst({
-      where: { reference: receiptHash },
-    });
 
-    if (existingTx) {
-      // Verify the existing transaction belongs to the current user
-      if (existingTx.userId !== userId) {
-        throw new BadRequestException(
-          'This purchase receipt has already been used by another account',
-        );
-      }
-      // Idempotent: return existing transaction and subscription
+    // Atomic create-or-get: try to create, handle unique constraint violation
+    const { tx, alreadyProcessed } = await this.createTransactionAtomic(
+      userId,
+      receiptHash,
+      result.amount ?? planDef.amount,
+      result.currency ?? 'USD',
+    );
+
+    if (alreadyProcessed) {
       const existingSub = await this.prisma.subscription.findFirst({
         where: { userId },
       });
       return {
         success: true,
         alreadyProcessed: true,
-        transaction: existingTx,
+        transaction: tx,
         subscription: existingSub
           ? {
               plan: existingSub.plan,
@@ -106,18 +103,6 @@ export class PaymentService {
           : null,
       };
     }
-
-    // Record the transaction
-    const tx = await this.prisma.paymentTransaction.create({
-      data: {
-        userId,
-        paymentMethodId: null,
-        amount: result.amount ?? planDef.amount,
-        currency: result.currency ?? 'USD',
-        status: 'success',
-        reference: receiptHash,
-      },
-    });
 
     // For subscriptions, use the expiration time from Google
     if (result.isSubscription && result.expirationTime) {
@@ -146,28 +131,24 @@ export class PaymentService {
 
     const plan = this.mapProductIdToPlan(dto.productId);
     const planDef = PLANS[plan];
-
-    // Check for duplicate using purchaseToken (unique per transaction)
-    // Note: originalTxId is constant across renewals, so we use purchaseToken for dedupe
     const receiptHash = this.hashReceipt(dto.purchaseToken);
-    const existingTx = await this.prisma.paymentTransaction.findFirst({
-      where: { reference: receiptHash },
-    });
 
-    if (existingTx) {
-      // Verify the existing transaction belongs to the current user
-      if (existingTx.userId !== userId) {
-        throw new BadRequestException(
-          'This purchase receipt has already been used by another account',
-        );
-      }
+    // Atomic create-or-get: try to create, handle unique constraint violation
+    const { tx, alreadyProcessed } = await this.createTransactionAtomic(
+      userId,
+      receiptHash,
+      result.amount ?? planDef.amount,
+      result.currency ?? 'USD',
+    );
+
+    if (alreadyProcessed) {
       const existingSub = await this.prisma.subscription.findFirst({
         where: { userId },
       });
       return {
         success: true,
         alreadyProcessed: true,
-        transaction: existingTx,
+        transaction: tx,
         subscription: existingSub
           ? {
               plan: existingSub.plan,
@@ -178,17 +159,6 @@ export class PaymentService {
           : null,
       };
     }
-
-    const tx = await this.prisma.paymentTransaction.create({
-      data: {
-        userId,
-        paymentMethodId: null,
-        amount: result.amount ?? planDef.amount,
-        currency: result.currency ?? 'USD',
-        status: 'success',
-        reference: receiptHash,
-      },
-    });
 
     if (result.isSubscription && result.expirationTime) {
       return this.upsertSubscriptionWithExpiry(
@@ -295,5 +265,57 @@ export class PaymentService {
   private getErrorMessage(error: unknown): string {
     if (error instanceof Error) return error.message;
     return String(error);
+  }
+
+  /**
+   * Atomically create a transaction or detect if one already exists.
+   * Uses the DB unique constraint on `reference` for race-condition-safe duplicate detection.
+   */
+  private async createTransactionAtomic(
+    userId: string,
+    reference: string,
+    amount: number,
+    currency: string,
+  ): Promise<{ tx: TransactionRecord; alreadyProcessed: boolean }> {
+    try {
+      const tx = await this.prisma.paymentTransaction.create({
+        data: {
+          userId,
+          paymentMethodId: null,
+          amount,
+          currency,
+          status: 'success',
+          reference,
+        },
+      });
+      return { tx, alreadyProcessed: false };
+    } catch (error) {
+      // Handle unique constraint violation (P2002)
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const existingTx = await this.prisma.paymentTransaction.findFirst({
+          where: { reference },
+        });
+
+        if (!existingTx) {
+          // Should not happen, but handle gracefully
+          throw new BadRequestException(
+            'Transaction conflict detected. Please retry.',
+          );
+        }
+
+        // Verify the existing transaction belongs to the current user
+        if (existingTx.userId !== userId) {
+          throw new BadRequestException(
+            'This purchase receipt has already been used by another account',
+          );
+        }
+
+        return { tx: existingTx, alreadyProcessed: true };
+      }
+      throw error;
+    }
   }
 }
