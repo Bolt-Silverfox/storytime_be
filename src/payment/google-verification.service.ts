@@ -230,7 +230,7 @@ export class GoogleVerificationService {
     const paymentOk =
       paymentState === 1 || paymentState === 2 || paymentState === 3;
 
-    return Boolean(paymentOk && !cancelReason && !expired);
+    return Boolean(paymentOk && cancelReason == null && !expired);
   }
 
   private isProductActive(data: GoogleProductPurchase): boolean {
@@ -255,7 +255,8 @@ export class GoogleVerificationService {
 
   /** Sanitize value for safe logging (truncate, remove control characters) */
   private sanitizeForLog(value: string, maxLen = 32): string {
-    const sanitized = value.replace(/[\x00-\x1f\x7f]/g, '').substring(0, maxLen);
+    // Remove control characters using Unicode property escape and limit length
+    const sanitized = value.replace(/\p{Cc}/gu, '').substring(0, maxLen);
     return value.length > maxLen ? `${sanitized}...` : sanitized;
   }
 }

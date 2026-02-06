@@ -222,7 +222,7 @@ export class AppleVerificationService {
                 // The signedTransactionInfo is a JWS, decode the payload
                 const decoded = this.decodeJWS(response.signedTransactionInfo);
                 resolve(decoded as AppleTransactionInfo);
-              } catch (e) {
+              } catch {
                 reject(new Error('Failed to parse Apple response'));
               }
             } else if (res.statusCode === 404) {
@@ -313,8 +313,8 @@ export class AppleVerificationService {
 
   /** Sanitize value for safe logging (truncate, remove control characters) */
   private sanitizeForLog(value: string, maxLen = 32): string {
-    // Remove control characters and limit length
-    const sanitized = value.replace(/[\x00-\x1f\x7f]/g, '').substring(0, maxLen);
+    // Remove control characters using Unicode property escape and limit length
+    const sanitized = value.replace(/\p{Cc}/gu, '').substring(0, maxLen);
     return value.length > maxLen ? `${sanitized}...` : sanitized;
   }
 }

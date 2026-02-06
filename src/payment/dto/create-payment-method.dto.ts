@@ -35,5 +35,5 @@ export class CreatePaymentMethodDto {
   })
   @IsObject()
   @IsOptional()
-  meta?: Prisma.InputJsonValue;
+  meta?: Prisma.InputJsonObject;
 }

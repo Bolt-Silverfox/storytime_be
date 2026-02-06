@@ -67,7 +67,8 @@ def verify_purchase(package_name, product_id, purchase_token):
             headers={
                 "Authorization": f"Bearer {credentials.token}",
                 "Content-Type": "application/json"
-            }
+            },
+            timeout=10
         )
 
         if response.status_code == 200:
@@ -85,7 +86,8 @@ def verify_purchase(package_name, product_id, purchase_token):
                 headers={
                     "Authorization": f"Bearer {credentials.token}",
                     "Content-Type": "application/json"
-                }
+                },
+                timeout=10
             )
             if response.status_code == 200:
                 data = response.json()

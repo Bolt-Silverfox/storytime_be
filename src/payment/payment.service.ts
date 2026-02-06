@@ -9,24 +9,7 @@ import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
 import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
 import { createHash } from 'crypto';
-
-/** Plan definitions: amount and duration in days */
-const PLANS: Record<string, { amount: number; days: number }> = {
-  free: { amount: 0, days: 365 * 100 },
-  weekly: { amount: 1.5, days: 7 },
-  monthly: { amount: 4.99, days: 30 },
-  yearly: { amount: 47.99, days: 365 },
-};
-
-/** Product ID to plan mapping for IAP */
-const PRODUCT_ID_TO_PLAN: Record<string, string> = {
-  'com.storytime.weekly': 'weekly',
-  'com.storytime.monthly': 'monthly',
-  'com.storytime.yearly': 'yearly',
-  weekly_subscription: 'weekly',
-  monthly_subscription: 'monthly',
-  yearly_subscription: 'yearly',
-};
+import { PLANS, PRODUCT_ID_TO_PLAN } from '@/subscription/subscription.constants';
 
 /** Transaction result from payment processing */
 export interface TransactionRecord {
@@ -58,9 +41,9 @@ export class PaymentService {
 
     try {
       if (dto.platform === 'google') {
-        return this.verifyGooglePurchase(userId, dto);
+        return await this.verifyGooglePurchase(userId, dto);
       } else if (dto.platform === 'apple') {
-        return this.verifyApplePurchase(userId, dto);
+        return await this.verifyApplePurchase(userId, dto);
       } else {
         throw new BadRequestException(`Unsupported platform: ${dto.platform}`);
       }
@@ -99,6 +82,12 @@ export class PaymentService {
     });
 
     if (existingTx) {
+      // Verify the existing transaction belongs to the current user
+      if (existingTx.userId !== userId) {
+        throw new BadRequestException(
+          'This purchase receipt has already been used by another account',
+        );
+      }
       // Idempotent: return existing transaction and subscription
       const existingSub = await this.prisma.subscription.findFirst({
         where: { userId },
@@ -158,15 +147,20 @@ export class PaymentService {
     const plan = this.mapProductIdToPlan(dto.productId);
     const planDef = PLANS[plan];
 
-    // Check for duplicate using original transaction ID
-    const receiptHash = this.hashReceipt(
-      result.originalTxId || dto.purchaseToken,
-    );
+    // Check for duplicate using purchaseToken (unique per transaction)
+    // Note: originalTxId is constant across renewals, so we use purchaseToken for dedupe
+    const receiptHash = this.hashReceipt(dto.purchaseToken);
     const existingTx = await this.prisma.paymentTransaction.findFirst({
       where: { reference: receiptHash },
     });
 
     if (existingTx) {
+      // Verify the existing transaction belongs to the current user
+      if (existingTx.userId !== userId) {
+        throw new BadRequestException(
+          'This purchase receipt has already been used by another account',
+        );
+      }
       const existingSub = await this.prisma.subscription.findFirst({
         where: { userId },
       });

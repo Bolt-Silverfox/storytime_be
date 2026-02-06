@@ -165,6 +165,7 @@ describe('PaymentService', () => {
 
       mockPrisma.paymentTransaction.findFirst.mockResolvedValue({
         id: 'tx-existing',
+        userId: 'user-1',
         status: 'success',
         reference: 'existing-hash',
       });
@@ -183,6 +184,32 @@ describe('PaymentService', () => {
       expect(result.success).toBe(true);
       expect((result as { alreadyProcessed?: boolean }).alreadyProcessed).toBe(
         true,
+      );
+    });
+
+    it('should reject receipt reuse from different user', async () => {
+      const userId = 'user-2';
+      const dto = {
+        platform: 'google' as const,
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'reused-token',
+      };
+
+      mockGoogleVerification.verify.mockResolvedValue({
+        success: true,
+        isSubscription: true,
+      });
+
+      // Existing transaction belongs to a different user
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({
+        id: 'tx-existing',
+        userId: 'user-1',
+        status: 'success',
+        reference: 'existing-hash',
+      });
+
+      await expect(service.verifyPurchase(userId, dto)).rejects.toThrow(
+        'This purchase receipt has already been used by another account',
       );
     });
 
