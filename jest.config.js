@@ -12,5 +12,6 @@ module.exports = {
     moduleNameMapper: {
       '^@/(.*)$': '<rootDir>/src/$1',
       '^src/(.*)$': '<rootDir>/src/$1',
+      '^googleapis$': '<rootDir>/__mocks__/googleapis.ts',
     },
   };
