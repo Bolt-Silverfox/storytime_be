@@ -81,6 +81,8 @@ export class StoryService {
     category?: string;
     season?: string;
     recommended?: boolean;
+    isMostLiked?: boolean;
+    isSeasonal?: boolean;
     age?: number;
     minAge?: number;
     maxAge?: number;
@@ -100,9 +102,26 @@ export class StoryService {
     if (filter.category) {
       where.categories = { some: { id: filter.category } };
     }
-    if (filter.season) {
-      where.seasons = { some: { id: filter.season } };
+    // Seasonal Filter (Dynamic based on date)
+    if (filter.isSeasonal) {
+      const { activeSeasons, backfillSeasons } = await this.getRelevantSeasons();
+      const seasonIds = [...activeSeasons.map(s => s.id)];
+
+      if (backfillSeasons.length > 0) {
+        seasonIds.push(...backfillSeasons.map(s => s.id));
+      }
+
+      if (seasonIds.length > 0) {
+        where.seasons = {
+          some: {
+            id: { in: seasonIds },
+          },
+        };
+      } else {
+        where.seasons = { some: { id: 'non-existent-id' } }; 
+      }
     }
+
     if (filter.recommended !== undefined && !filter.kidId) {
       where.recommended = filter.recommended;
     }
@@ -191,6 +210,13 @@ export class StoryService {
       where.id = { in: recommendedStoryIds };
     }
 
+    const orderBy: any = {};
+    if (filter.isMostLiked) {
+      orderBy.parentFavorites = { _count: 'desc' };
+    } else {
+      orderBy.createdAt = 'desc';
+    }
+
     const totalCount = await this.prisma.story.count({ where });
     const totalPages = Math.ceil(totalCount / limit);
 
@@ -198,6 +224,7 @@ export class StoryService {
       where,
       skip,
       take: limit,
+      orderBy,
       include: {
         images: true,
         branches: true,
@@ -217,6 +244,38 @@ export class StoryService {
         totalCount,
       },
     };
+  }
+
+  private async getRelevantSeasons() {
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    const currentDay = today.getDate(); // 1-31
+    const currentDateStr = `${currentMonth
+      .toString()
+      .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
+
+    const allSeasons = await this.prisma.season.findMany({
+      where: { isDeleted: false },
+    });
+
+    const activeSeasons = allSeasons.filter((s) => {
+      if (!s.isActive) return false;
+      if (!s.startDate || !s.endDate) return false;
+
+      if (s.startDate > s.endDate) {
+        return currentDateStr >= s.startDate || currentDateStr <= s.endDate;
+      }
+      return currentDateStr >= s.startDate && currentDateStr <= s.endDate;
+    });
+
+    // Backfill logic (from homepage implementation)
+    // Find "previous" seasons (inactive or recent past) to handle gaps or low content
+    const backfillSeasons = allSeasons.filter((s) => {
+      if (activeSeasons.find(active => active.id === s.id)) return false;
+      return !!s.startDate && !!s.endDate;
+    });
+
+    return { activeSeasons, backfillSeasons };
   }
 
   async getHomePageStories(
@@ -260,27 +319,7 @@ export class StoryService {
     }
 
     // 2. Seasonal Stories (Logic: find active season based on today's date)
-    const today = new Date();
-    const currentMonth = today.getMonth() + 1; // 1-12
-    const currentDay = today.getDate(); // 1-31
-    const currentDateStr = `${currentMonth
-      .toString()
-      .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
-
-    // Find seasons that cover today
-    const allSeasons = await this.prisma.season.findMany({
-      where: { isDeleted: false }, // Fetch all to sort into active/past
-    });
-
-    const activeSeasons = allSeasons.filter((s) => {
-      if (!s.isActive) return false;
-      if (!s.startDate || !s.endDate) return false;
-      // Handle year wrap for winter (e.g. 12-01 to 02-28)
-      if (s.startDate > s.endDate) {
-        return currentDateStr >= s.startDate || currentDateStr <= s.endDate;
-      }
-      return currentDateStr >= s.startDate && currentDateStr <= s.endDate;
-    });
+    const { activeSeasons, backfillSeasons } = await this.getRelevantSeasons();
 
     let seasonal: any[] = [];
     let seasonalCount = 0;
@@ -302,43 +341,26 @@ export class StoryService {
     }
 
     // Backfill if needed
-    if (seasonalCount < limitSeasonal) {
+    if (seasonalCount < limitSeasonal && backfillSeasons.length > 0) {
       const needed = limitSeasonal - seasonalCount;
       const existingIds = new Set(seasonal.map((s) => s.id));
 
-      // Strategy: Find "previous" seasons.
-      // We can define "previous" roughly by checking seasons that are NOT active
-      // and maybe have endDate < today? Or simply all non-active seasons.
-      // Let's take all inactive seasons and perhaps just pick random or recent ones?
-      // A simple heuristic for "previous" season: seasons that ended recently.
-
-      const previousSeasons = allSeasons.filter((s) => {
-        if (activeSeasons.find(active => active.id === s.id)) return false; // Skip active
-        // For simplistic "previous", we just take everything else that has dates.
-        return !!s.startDate && !!s.endDate;
+      const backfillStories = await this.prisma.story.findMany({
+        where: {
+          isDeleted: false,
+          seasons: {
+            some: {
+              id: { in: backfillSeasons.map(s => s.id) }
+            }
+          },
+          id: { notIn: Array.from(existingIds) }
+        },
+        take: needed,
+        include: { images: true, themes: true, seasons: true },
+        orderBy: { createdAt: 'desc' } 
       });
 
-      // Sort by endDate descending (pseudo-code since endDate is MM-DD string without year)
-      // Since we don't have years, sorting by MM-DD descending is a decent proxy for "latest in the year"
-
-      if (previousSeasons.length > 0) {
-        const backfillStories = await this.prisma.story.findMany({
-          where: {
-            isDeleted: false,
-            seasons: {
-              some: {
-                id: { in: previousSeasons.map(s => s.id) }
-              }
-            },
-            id: { notIn: Array.from(existingIds) }
-          },
-          take: needed,
-          include: { images: true, themes: true, seasons: true },
-          orderBy: { createdAt: 'desc' } // Fresh content from old seasons?
-        });
-
-        seasonal = [...seasonal, ...backfillStories];
-      }
+      seasonal = [...seasonal, ...backfillStories];
     }
 
     // 3. Top Liked by Parents

@@ -94,8 +94,12 @@ export class StoryController {
   @ApiQuery({ name: 'category', required: false, type: String })
   @ApiQuery({ name: 'season', required: false, type: String })
   @ApiQuery({ name: 'recommended', required: false, type: String })
+  @ApiQuery({ name: 'isMostLiked', required: false, type: String })
+  @ApiQuery({ name: 'isSeasonal', required: false, type: String })
   @ApiQuery({ name: 'kidId', required: false, type: String })
   @ApiQuery({ name: 'age', required: false, type: String })
+  @ApiQuery({ name: 'minAge', required: false, type: String })
+  @ApiQuery({ name: 'maxAge', required: false, type: String })
   @ApiOkResponse({
     description: 'List of stories',
     type: CreateStoryDto,
@@ -122,6 +126,8 @@ export class StoryController {
     @Query('category') category?: string,
     @Query('season') season?: string,
     @Query('recommended') recommended?: string,
+    @Query('isMostLiked') isMostLiked?: string,
+    @Query('isSeasonal') isSeasonal?: string,
     @Query('kidId') kidId?: string,
     @Query('age') age?: string,
     @Query('minAge') minAge?: string,
@@ -137,6 +143,8 @@ export class StoryController {
       category,
       season,
       recommended: recommended === 'true',
+      isMostLiked: isMostLiked === 'true',
+      isSeasonal: isSeasonal === 'true',
       kidId,
       age: age ? parseInt(age, 10) : undefined,
       minAge: minAge ? parseInt(minAge, 10) : undefined,
