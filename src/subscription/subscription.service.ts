@@ -4,20 +4,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { SUBSCRIPTION_STATUS } from './subscription.constants';
+import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
 
-/**
- * Simple plan catalog
- */
-export const PLANS: Record<
-  string,
-  { display: string; amount: number; days: number }
-> = {
-  free: { display: 'Free', amount: 0, days: 365 * 100 },
-  weekly: { display: 'Weekly', amount: 1.5, days: 7 },
-  monthly: { display: 'Monthly', amount: 4.99, days: 30 },
-  yearly: { display: 'Yearly', amount: 47.99, days: 365 },
-};
+// Re-export PLANS for backward compatibility
+export { PLANS } from './subscription.constants';
 
 @Injectable()
 export class SubscriptionService {
