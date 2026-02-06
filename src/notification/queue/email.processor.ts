@@ -11,7 +11,7 @@ import { EmailJobData, EmailJobResult } from './email-job.interface';
  * Email Queue Processor
  * Handles email sending jobs with retry support
  */
-@Processor(EMAIL_QUEUE_NAME)
+@Processor(EMAIL_QUEUE_NAME, { concurrency: 10 })
 export class EmailProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailProcessor.name);
   private transporter: nodemailer.Transporter;

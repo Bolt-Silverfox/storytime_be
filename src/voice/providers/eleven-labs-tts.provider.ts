@@ -1,92 +1,192 @@
-import { ITextToSpeechProvider, IVoiceCloningProvider } from '../interfaces/speech-provider.interface';
+import {
+  ITextToSpeechProvider,
+  IVoiceCloningProvider,
+} from '../interfaces/speech-provider.interface';
 import { ElevenLabsClient } from 'elevenlabs';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Readable } from 'stream';
 import { StreamConverter } from '../utils/stream-converter';
 
+/** Configuration for retry behavior */
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelayMs: 1000,
+  maxDelayMs: 10000,
+};
+
 @Injectable()
-export class ElevenLabsTTSProvider implements ITextToSpeechProvider, IVoiceCloningProvider {
-    private readonly logger = new Logger(ElevenLabsTTSProvider.name);
-    private client: ElevenLabsClient;
-    public readonly name = 'ElevenLabs';
+export class ElevenLabsTTSProvider
+  implements ITextToSpeechProvider, IVoiceCloningProvider
+{
+  private readonly logger = new Logger(ElevenLabsTTSProvider.name);
+  private client: ElevenLabsClient;
+  public readonly name = 'ElevenLabs';
 
-    constructor(
-        private readonly configService: ConfigService,
-        private readonly converter: StreamConverter,
-    ) {
-        const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
-        if (apiKey) {
-            try {
-                this.client = new ElevenLabsClient({ apiKey });
-            } catch (err) {
-                this.logger.error(`Failed to initialize ElevenLabs client: ${err.message}`);
-            }
-        } else {
-            this.logger.warn('ELEVEN_LABS_KEY is not set');
-        }
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly converter: StreamConverter,
+  ) {
+    const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
+    if (apiKey) {
+      try {
+        this.client = new ElevenLabsClient({ apiKey });
+      } catch (err) {
+        this.logger.error(
+          `Failed to initialize ElevenLabs client: ${(err as Error).message}`,
+        );
+      }
+    } else {
+      this.logger.warn('ELEVEN_LABS_KEY is not set');
+    }
+  }
+
+  async generateAudio(
+    text: string,
+    voiceId: string,
+    modelId: string = 'eleven_multilingual_v2',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    options?: any,
+  ): Promise<Buffer> {
+    if (!this.client) {
+      throw new Error('ElevenLabs client is not initialized');
     }
 
-    async generateAudio(text: string, voiceId: string, modelId: string = 'eleven_multilingual_v2', options?: any): Promise<Buffer> {
-        if (!this.client) {
-            throw new Error('ElevenLabs client is not initialized');
+    return this.withRetry(async () => {
+      this.logger.log(
+        `Generating audio with voice ${voiceId} and model ${modelId}`,
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const convertOptions: any = {
+        text,
+        model_id: modelId,
+        output_format: 'mp3_44100_128',
+      };
+
+      if (options) {
+        convertOptions.voice_settings = options;
+      }
+
+      const audioStream = await this.client.textToSpeech.convert(
+        voiceId,
+        convertOptions,
+      );
+
+      return await this.converter.toBuffer(audioStream);
+    }, 'generateAudio');
+  }
+
+  /**
+   * Retry wrapper with exponential backoff
+   * Handles rate limits (429) and transient failures
+   */
+  private async withRetry<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+  ): Promise<T> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 1; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error as Error;
+        const isRateLimit = this.isRateLimitError(error);
+        const isRetryable = isRateLimit || this.isTransientError(error);
+
+        if (!isRetryable || attempt === RETRY_CONFIG.maxRetries) {
+          this.logger.error(
+            `ElevenLabs ${operationName} failed after ${attempt} attempts: ${lastError.message}`,
+          );
+          throw lastError;
         }
 
-        try {
-            this.logger.log(`Generating audio with voice ${voiceId} and model ${modelId}`);
+        const delay = this.calculateBackoff(attempt, isRateLimit);
+        this.logger.warn(
+          `ElevenLabs ${operationName} attempt ${attempt} failed (${isRateLimit ? 'rate limited' : 'transient error'}), retrying in ${delay}ms`,
+        );
 
-            const convertOptions: any = {
-                text,
-                model_id: modelId,
-                output_format: 'mp3_44100_128',
-            };
-
-            if (options) {
-                convertOptions.voice_settings = options;
-            }
-
-            const audioStream = await this.client.textToSpeech.convert(voiceId, convertOptions);
-
-            return await this.converter.toBuffer(audioStream);
-        } catch (error) {
-            this.logger.error(`ElevenLabs generation failed: ${error.message}`);
-            throw error;
-        }
+        await this.sleep(delay);
+      }
     }
 
+    throw lastError;
+  }
 
-    async addVoice(name: string, fileBuffer: Buffer): Promise<string> {
-        if (!this.client) {
-            throw new Error('ElevenLabs client is not initialized');
-        }
+  private isRateLimitError(error: unknown): boolean {
+    if (error && typeof error === 'object') {
+      const err = error as Record<string, unknown>;
+      return err.status === 429 || err.statusCode === 429;
+    }
+    return false;
+  }
 
-        try {
-            this.logger.log(`Cloning voice "${name}"...`);
-            const blob = new Blob([new Uint8Array(fileBuffer)], { type: 'audio/mpeg' });
+  private isTransientError(error: unknown): boolean {
+    if (error && typeof error === 'object') {
+      const err = error as Record<string, unknown>;
+      const status = (err.status || err.statusCode) as number | undefined;
+      // Retry on 5xx errors and network timeouts
+      return (status && status >= 500) || err.code === 'ETIMEDOUT';
+    }
+    return false;
+  }
 
-            const response = await this.client.voices.add({
-                name,
-                files: [blob as any], // Cast to any because SDK types might be strict about File/Blob
-                description: 'Cloned via StoryTime App',
-            });
+  private calculateBackoff(attempt: number, isRateLimit: boolean): number {
+    // Use longer delays for rate limits
+    const multiplier = isRateLimit ? 2 : 1;
+    const delay = Math.min(
+      RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt - 1) * multiplier,
+      RETRY_CONFIG.maxDelayMs,
+    );
+    // Add jitter to prevent thundering herd
+    return delay + Math.random() * 500;
+  }
 
-            return response.voice_id;
-        } catch (error) {
-            this.logger.error(`ElevenLabs voice cloning failed: ${error.message}`);
-            throw error;
-        }
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+
+  async addVoice(name: string, fileBuffer: Buffer): Promise<string> {
+    if (!this.client) {
+      throw new Error('ElevenLabs client is not initialized');
     }
 
-    async getSubscriptionInfo(): Promise<any> {
-        if (!this.client) {
-            throw new Error('ElevenLabs client is not initialized');
-        }
+    try {
+      this.logger.log(`Cloning voice "${name}"...`);
+      const blob = new Blob([new Uint8Array(fileBuffer)], {
+        type: 'audio/mpeg',
+      });
 
-        try {
-            return await this.client.user.getSubscription();
-        } catch (error) {
-            this.logger.error(`Failed to fetch ElevenLabs subscription info: ${error.message}`);
-            throw error;
-        }
+      const response = await this.client.voices.add({
+        name,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        files: [blob as any],
+        description: 'Cloned via StoryTime App',
+      });
+
+      return response.voice_id;
+    } catch (error) {
+      this.logger.error(
+        `ElevenLabs voice cloning failed: ${(error as Error).message}`,
+      );
+      throw error;
     }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async getSubscriptionInfo(): Promise<any> {
+    if (!this.client) {
+      throw new Error('ElevenLabs client is not initialized');
+    }
+
+    try {
+      return await this.client.user.getSubscription();
+    } catch (error) {
+      this.logger.error(
+        `Failed to fetch ElevenLabs subscription info: ${(error as Error).message}`,
+      );
+      throw error;
+    }
+  }
 }
