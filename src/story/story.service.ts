@@ -188,9 +188,16 @@ export class StoryService {
     }
 
     if (recommendedStoryIds.length > 0 && filter.recommended === undefined) {
+      const recommendedClause: any = { id: { in: recommendedStoryIds } };
+
+      // If seasonal filter is active, enforce it on recommended stories too
+      if (filter.isSeasonal && where.seasons) {
+        recommendedClause.seasons = where.seasons;
+      }
+
       where.OR = [
         { ...where },
-        { id: { in: recommendedStoryIds } },
+        recommendedClause,
       ];
     }
 
