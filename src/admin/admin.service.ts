@@ -1237,7 +1237,11 @@ export class AdminService {
     });
 
     // Invalidate story stats cache for immediate dashboard accuracy
-    await this.cacheManager.del(CACHE_KEYS.STORY_STATS);
+    try {
+      await this.cacheManager.del(CACHE_KEYS.STORY_STATS);
+    } catch (error) {
+      this.logger.warn(`Failed to invalidate story stats cache: ${error.message}`);
+    }
 
     return result;
   }
@@ -1265,9 +1269,13 @@ export class AdminService {
     }
 
     // Invalidate dashboard caches for immediate accuracy
-    await Promise.all(
-      STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
-    );
+    try {
+      await Promise.all(
+        STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
+      );
+    } catch (error) {
+      this.logger.warn(`Failed to invalidate dashboard caches: ${error.message}`);
+    }
 
     return result;
   }
@@ -1706,9 +1714,13 @@ export class AdminService {
       }
 
       // Invalidate caches after seeding
-      await Promise.all(
-        STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
-      );
+      try {
+        await Promise.all(
+          STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
+        );
+      } catch (cacheError) {
+        this.logger.warn(`Failed to invalidate caches after seeding: ${cacheError.message}`);
+      }
 
       this.logger.log('✅ Database seeded successfully!');
       return { message: 'Database seeded successfully' };
