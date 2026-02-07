@@ -51,7 +51,7 @@ import {
 } from '../../prisma/data';
 import { DateUtil } from '@/shared/utils/date.util';
 import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';
-import { CACHE_KEYS, CACHE_TTL_MS } from '@/shared/constants/cache-keys.constants';
+import { CACHE_KEYS, CACHE_TTL_MS, STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
@@ -1265,11 +1265,9 @@ export class AdminService {
     }
 
     // Invalidate dashboard caches for immediate accuracy
-    await Promise.all([
-      this.cacheManager.del(CACHE_KEYS.DASHBOARD_STATS),
-      this.cacheManager.del(CACHE_KEYS.STORY_STATS),
-      this.cacheManager.del(CACHE_KEYS.CONTENT_BREAKDOWN),
-    ]);
+    await Promise.all(
+      STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
+    );
 
     return result;
   }
@@ -1708,12 +1706,9 @@ export class AdminService {
       }
 
       // Invalidate caches after seeding
-      await Promise.all([
-        this.cacheManager.del(CACHE_KEYS.DASHBOARD_STATS),
-        this.cacheManager.del(CACHE_KEYS.STORY_STATS),
-        this.cacheManager.del(CACHE_KEYS.CONTENT_BREAKDOWN),
-        this.cacheManager.del(CACHE_KEYS.CATEGORIES_ALL),
-      ]);
+      await Promise.all(
+        STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
+      );
 
       this.logger.log('✅ Database seeded successfully!');
       return { message: 'Database seeded successfully' };
