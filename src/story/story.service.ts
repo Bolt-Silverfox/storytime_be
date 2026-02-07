@@ -227,23 +227,26 @@ export class StoryService {
       ]
       : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
-    const totalCount = await this.prisma.story.count({ where });
-    const totalPages = Math.ceil(totalCount / limit);
+    // Run count and findMany in parallel to reduce latency by ~50%
+    const [totalCount, stories] = await Promise.all([
+      this.prisma.story.count({ where }),
+      this.prisma.story.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy,
+        include: {
+          images: true,
+          branches: true,
+          categories: true,
+          themes: true,
+          seasons: true,
+          questions: true,
+        },
+      }),
+    ]);
 
-    const stories = await this.prisma.story.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy,
-      include: {
-        images: true,
-        branches: true,
-        categories: true,
-        themes: true,
-        seasons: true,
-        questions: true,
-      },
-    });
+    const totalPages = Math.ceil(totalCount / limit);
 
     return {
       data: stories,
