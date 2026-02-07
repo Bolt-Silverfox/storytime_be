@@ -1760,9 +1760,9 @@ export class AdminService {
       string,
       { elevenLabs: number; gemini: number; total: number }
     >();
-    months.forEach((m) =>
-      dataMap.set(m, { elevenLabs: 0, gemini: 0, total: 0 }),
-    );
+    months.forEach((m) => {
+      dataMap.set(m, { elevenLabs: 0, gemini: 0, total: 0 });
+    });
 
     logs.forEach((log) => {
       const month = getMonthKey(log.createdAt);
