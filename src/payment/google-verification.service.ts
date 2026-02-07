@@ -131,7 +131,7 @@ export class GoogleVerificationService {
         this.pythonPath,
         [this.scriptPath, packageName, productId, purchaseToken],
         {
-          timeout: 30000, // 30 second timeout
+          timeout: 10000, // 10 second timeout (reduced from 30s)
           encoding: 'utf8',
         },
       );
