@@ -48,11 +48,24 @@ import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 
+/** Cache keys to invalidate when stories change */
+const STORY_CACHE_KEYS = [
+  'categories:all',
+  'admin:dashboard:stats',
+  'admin:story:stats',
+  'admin:content:breakdown',
+] as const;
+
 @Injectable()
 export class StoryService {
   private readonly logger = new Logger(StoryService.name);
   // Average reading speed for children: ~150 words per minute
   private readonly WORDS_PER_MINUTE = 150;
+
+  /** Invalidate all story-related caches */
+  private async invalidateStoryCaches(): Promise<void> {
+    await Promise.all(STORY_CACHE_KEYS.map(key => this.cacheManager.del(key)));
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -451,7 +464,7 @@ export class StoryService {
       include: { images: true, branches: true },
     });
 
-    await this.cacheManager.del('categories:all');
+    await this.invalidateStoryCaches();
     return story;
   }
 
@@ -488,7 +501,7 @@ export class StoryService {
       include: { images: true, branches: true },
     });
 
-    await this.cacheManager.del('categories:all');
+    await this.invalidateStoryCaches();
     return updatedStory;
   }
 
@@ -496,14 +509,18 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({ where: { id, isDeleted: false } });
     if (!story) throw new NotFoundException('Story not found');
 
+    let result;
     if (permanent) {
-      return await this.prisma.story.delete({ where: { id } });
+      result = await this.prisma.story.delete({ where: { id } });
     } else {
-      return await this.prisma.story.update({
+      result = await this.prisma.story.update({
         where: { id },
         data: { isDeleted: true, deletedAt: new Date() },
       });
     }
+
+    await this.invalidateStoryCaches();
+    return result;
   }
 
   async undoDeleteStory(id: string) {
@@ -511,10 +528,13 @@ export class StoryService {
     if (!story) throw new NotFoundException('Story not found');
     if (!story.isDeleted) throw new BadRequestException('Story is not deleted');
 
-    return await this.prisma.story.update({
+    const result = await this.prisma.story.update({
       where: { id },
       data: { isDeleted: false, deletedAt: null },
     });
+
+    await this.invalidateStoryCaches();
+    return result;
   }
 
 

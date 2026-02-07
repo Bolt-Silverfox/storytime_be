@@ -1477,6 +1477,14 @@ export class AdminService {
         }
       }
 
+      // Invalidate caches after seeding
+      await Promise.all([
+        this.cacheManager.del(CACHE_KEYS.DASHBOARD_STATS),
+        this.cacheManager.del(CACHE_KEYS.STORY_STATS),
+        this.cacheManager.del(CACHE_KEYS.CONTENT_BREAKDOWN),
+        this.cacheManager.del('categories:all'),
+      ]);
+
       this.logger.log('✅ Database seeded successfully!');
       return { message: 'Database seeded successfully' };
     } catch (error) {
