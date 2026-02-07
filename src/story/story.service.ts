@@ -27,7 +27,6 @@ import {
 import { UploadService } from '../upload/upload.service';
 import {
   StoryPath,
-  Voice,
   DailyChallengeAssignment,
   Category,
   Theme,
@@ -57,7 +56,9 @@ export class StoryService {
 
   /** Invalidate all story-related caches */
   private async invalidateStoryCaches(): Promise<void> {
-    await Promise.all(STORY_INVALIDATION_KEYS.map(key => this.cacheManager.del(key)));
+    await Promise.all(
+      STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
+    );
   }
 
   constructor(
@@ -66,15 +67,16 @@ export class StoryService {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
-  ) { }
+  ) {}
 
   /**
    * Calculate estimated reading duration in seconds based on text content or word count
    */
   calculateDurationSeconds(textOrWordCount: string | number): number {
-    const wordCount = typeof textOrWordCount === 'string'
-      ? textOrWordCount.split(/\s+/).filter(word => word.length > 0).length
-      : textOrWordCount;
+    const wordCount =
+      typeof textOrWordCount === 'string'
+        ? textOrWordCount.split(/\s+/).filter((word) => word.length > 0).length
+        : textOrWordCount;
 
     if (wordCount <= 0) return 0;
 
@@ -110,11 +112,12 @@ export class StoryService {
     }
     // Seasonal Filter (Dynamic based on date)
     if (filter.isSeasonal) {
-      const { activeSeasons, backfillSeasons } = await this.getRelevantSeasons();
-      const seasonIds = [...activeSeasons.map(s => s.id)];
+      const { activeSeasons, backfillSeasons } =
+        await this.getRelevantSeasons();
+      const seasonIds = [...activeSeasons.map((s) => s.id)];
 
       if (backfillSeasons.length > 0) {
-        seasonIds.push(...backfillSeasons.map(s => s.id));
+        seasonIds.push(...backfillSeasons.map((s) => s.id));
       }
 
       if (seasonIds.length > 0) {
@@ -156,7 +159,9 @@ export class StoryService {
 
       if (kid) {
         // Extract recommended and restricted story IDs from the batch query
-        recommendedStoryIds = kid.parentRecommendations.map((rec) => rec.storyId);
+        recommendedStoryIds = kid.parentRecommendations.map(
+          (rec) => rec.storyId,
+        );
         restrictedStoryIds = kid.restrictedStories.map((r) => r.storyId);
 
         if (kid.currentReadingLevel > 0) {
@@ -192,7 +197,10 @@ export class StoryService {
     }
 
     // Add minAge and maxAge filter logic
-    if ((filter.minAge !== undefined || filter.maxAge !== undefined) && !targetLevel) {
+    if (
+      (filter.minAge !== undefined || filter.maxAge !== undefined) &&
+      !targetLevel
+    ) {
       // Overlap logic: story.ageMin <= filter.maxAge AND story.ageMax >= filter.minAge
       if (filter.minAge !== undefined) {
         where.ageMax = { ...where.ageMax, gte: filter.minAge };
@@ -210,10 +218,7 @@ export class StoryService {
         recommendedClause.seasons = where.seasons;
       }
 
-      where.OR = [
-        { ...where },
-        recommendedClause,
-      ];
+      where.OR = [{ ...where }, recommendedClause];
     }
 
     // Exclude restricted stories (already fetched in batch query above)
@@ -227,10 +232,10 @@ export class StoryService {
 
     const orderBy = filter.isMostLiked
       ? [
-        { parentFavorites: { _count: 'desc' as const } },
-        { createdAt: 'desc' as const },
-        { id: 'asc' as const },
-      ]
+          { parentFavorites: { _count: 'desc' as const } },
+          { createdAt: 'desc' as const },
+          { id: 'asc' as const },
+        ]
       : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
     // Run count and findMany in parallel to reduce latency by ~50%
@@ -291,12 +296,12 @@ export class StoryService {
     });
 
     const backfillSeasons = allSeasons.filter((s) => {
-      if (activeSeasons.find(active => active.id === s.id)) return false;
+      if (activeSeasons.find((active) => active.id === s.id)) return false;
       if (!s.startDate || !s.endDate) return false;
 
       const [endMonth, endDay] = s.endDate.split('-').map(Number);
 
-      let seasonEndDate = new Date(today.getFullYear(), endMonth - 1, endDay);
+      const seasonEndDate = new Date(today.getFullYear(), endMonth - 1, endDay);
 
       const diffTime = today.getTime() - seasonEndDate.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -306,9 +311,18 @@ export class StoryService {
       }
 
       if (diffDays < 0) {
-        const lastYearEnd = new Date(today.getFullYear() - 1, endMonth - 1, endDay);
-        const diffLastYear = Math.ceil((today.getTime() - lastYearEnd.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffLastYear >= 0 && diffLastYear <= this.RECENT_SEASON_THRESHOLD_DAYS) {
+        const lastYearEnd = new Date(
+          today.getFullYear() - 1,
+          endMonth - 1,
+          endDay,
+        );
+        const diffLastYear = Math.ceil(
+          (today.getTime() - lastYearEnd.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        if (
+          diffLastYear >= 0 &&
+          diffLastYear <= this.RECENT_SEASON_THRESHOLD_DAYS
+        ) {
           return true;
         }
       }
@@ -392,14 +406,14 @@ export class StoryService {
           isDeleted: false,
           seasons: {
             some: {
-              id: { in: backfillSeasons.map(s => s.id) }
-            }
+              id: { in: backfillSeasons.map((s) => s.id) },
+            },
           },
-          id: { notIn: Array.from(existingIds) }
+          id: { notIn: Array.from(existingIds) },
         },
         take: needed,
         include: { images: true, themes: true, seasons: true },
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
       });
 
       seasonal = [...seasonal, ...backfillStories];
@@ -434,7 +448,7 @@ export class StoryService {
       }
     }
 
-    let audioUrl = data.audioUrl;
+    const audioUrl = data.audioUrl;
 
     const story = await this.prisma.story.create({
       data: {
@@ -448,8 +462,12 @@ export class StoryService {
         ageMax: data.ageMax ?? 9,
         images: data.images ? { create: data.images } : undefined,
         branches: data.branches ? { create: data.branches } : undefined,
-        categories: data.categoryIds ? { connect: data.categoryIds.map((id) => ({ id })) } : undefined,
-        themes: data.themeIds ? { connect: data.themeIds.map((id) => ({ id })) } : undefined,
+        categories: data.categoryIds
+          ? { connect: data.categoryIds.map((id) => ({ id })) }
+          : undefined,
+        themes: data.themeIds
+          ? { connect: data.themeIds.map((id) => ({ id })) }
+          : undefined,
         seasons: data.seasonIds
           ? { connect: data.seasonIds.map((id) => ({ id })) }
           : undefined,
@@ -499,7 +517,9 @@ export class StoryService {
   }
 
   async deleteStory(id: string, permanent: boolean = false) {
-    const story = await this.prisma.story.findUnique({ where: { id, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     let result;
@@ -530,25 +550,36 @@ export class StoryService {
     return result;
   }
 
-
   async addImage(storyId: string, image: StoryImageDto) {
-    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
     return await this.prisma.storyImage.create({ data: { ...image, storyId } });
   }
 
   async addBranch(storyId: string, branch: StoryBranchDto) {
-    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.storyBranch.create({ data: { ...branch, storyId } });
+    return await this.prisma.storyBranch.create({
+      data: { ...branch, storyId },
+    });
   }
 
   async addFavorite(dto: FavoriteDto) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.favorite.create({ data: { kidId: dto.kidId, storyId: dto.storyId } });
+    return await this.prisma.favorite.create({
+      data: { kidId: dto.kidId, storyId: dto.storyId },
+    });
   }
 
   async removeFavorite(kidId: string, storyId: string) {
@@ -556,15 +587,24 @@ export class StoryService {
   }
 
   async getFavorites(kidId: string) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    return await this.prisma.favorite.findMany({ where: { kidId }, include: { story: true } });
+    return await this.prisma.favorite.findMany({
+      where: { kidId },
+      include: { story: true },
+    });
   }
 
   async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     const existing = await this.prisma.storyProgress.findUnique({
@@ -600,19 +640,32 @@ export class StoryService {
   }
 
   async getProgress(kidId: string, storyId: string) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.storyProgress.findUnique({ where: { kidId_storyId: { kidId, storyId } } });
+    return await this.prisma.storyProgress.findUnique({
+      where: { kidId_storyId: { kidId, storyId } },
+    });
   }
 
   // --- USER STORY PROGRESS (Parent/User - non-kid specific) ---
 
-  async setUserProgress(userId: string, dto: UserStoryProgressDto): Promise<UserStoryProgressResponseDto> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
+  async setUserProgress(
+    userId: string,
+    dto: UserStoryProgressDto,
+  ): Promise<UserStoryProgressResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+    });
     if (!user) throw new NotFoundException('User not found');
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     const existing = await this.prisma.userStoryProgress.findUnique({
@@ -649,10 +702,17 @@ export class StoryService {
     };
   }
 
-  async getUserProgress(userId: string, storyId: string): Promise<UserStoryProgressResponseDto | null> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
+  async getUserProgress(
+    userId: string,
+    storyId: string,
+  ): Promise<UserStoryProgressResponseDto | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+    });
     if (!user) throw new NotFoundException('User not found');
-    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     const progress = await this.prisma.userStoryProgress.findUnique({
@@ -673,7 +733,12 @@ export class StoryService {
 
   async getUserContinueReading(userId: string) {
     const progressRecords = await this.prisma.userStoryProgress.findMany({
-      where: { userId, progress: { gt: 0 }, completed: false, isDeleted: false },
+      where: {
+        userId,
+        progress: { gt: 0 },
+        completed: false,
+        isDeleted: false,
+      },
       orderBy: { lastAccessed: 'desc' },
       include: { story: true },
     });
@@ -704,7 +769,9 @@ export class StoryService {
   }
 
   async restrictStory(dto: RestrictStoryDto & { userId: string }) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
 
     // Ensure parent owns the kid
@@ -712,7 +779,9 @@ export class StoryService {
       throw new ForbiddenException('You are not the parent of this kid');
     }
 
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     return await this.prisma.restrictedStory.upsert({
@@ -730,7 +799,9 @@ export class StoryService {
   }
 
   async unrestrictStory(kidId: string, storyId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
 
     if (kid.parentId !== userId) {
@@ -751,7 +822,9 @@ export class StoryService {
   }
 
   async getRestrictedStories(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
 
     if (kid.parentId !== userId) {
@@ -771,7 +844,9 @@ export class StoryService {
   }
 
   async setDailyChallenge(dto: DailyChallengeDto) {
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
     return await this.prisma.dailyChallenge.create({ data: dto });
   }
@@ -785,7 +860,9 @@ export class StoryService {
 
   // ... [Keep Assignment, Voice, and StoryPath methods] ...
 
-  private toDailyChallengeAssignmentDto(assignment: any): DailyChallengeAssignmentDto {
+  private toDailyChallengeAssignmentDto(
+    assignment: any,
+  ): DailyChallengeAssignmentDto {
     return {
       id: assignment.id,
       kidId: assignment.kidId,
@@ -796,10 +873,16 @@ export class StoryService {
     };
   }
 
-  async assignDailyChallenge(dto: AssignDailyChallengeDto): Promise<DailyChallengeAssignmentDto> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+  async assignDailyChallenge(
+    dto: AssignDailyChallengeDto,
+  ): Promise<DailyChallengeAssignmentDto> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const challenge = await this.prisma.dailyChallenge.findUnique({ where: { id: dto.challengeId, isDeleted: false } });
+    const challenge = await this.prisma.dailyChallenge.findUnique({
+      where: { id: dto.challengeId, isDeleted: false },
+    });
     if (!challenge) throw new NotFoundException('Daily challenge not found');
 
     const assignment = await this.prisma.dailyChallengeAssignment.create({
@@ -808,7 +891,9 @@ export class StoryService {
     return this.toDailyChallengeAssignmentDto(assignment);
   }
 
-  async completeDailyChallenge(dto: CompleteDailyChallengeDto): Promise<DailyChallengeAssignmentDto> {
+  async completeDailyChallenge(
+    dto: CompleteDailyChallengeDto,
+  ): Promise<DailyChallengeAssignmentDto> {
     const assignment = await this.prisma.dailyChallengeAssignment.update({
       where: { id: dto.assignmentId },
       data: { completed: true, completedAt: new Date() },
@@ -816,26 +901,41 @@ export class StoryService {
     return this.toDailyChallengeAssignmentDto(assignment);
   }
 
-  async getAssignmentsForKid(kidId: string): Promise<DailyChallengeAssignmentDto[]> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+  async getAssignmentsForKid(
+    kidId: string,
+  ): Promise<DailyChallengeAssignmentDto[]> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const assignments = await this.prisma.dailyChallengeAssignment.findMany({ where: { kidId } });
-    return assignments.map((a: DailyChallengeAssignment) => this.toDailyChallengeAssignmentDto(a));
+    const assignments = await this.prisma.dailyChallengeAssignment.findMany({
+      where: { kidId },
+    });
+    return assignments.map((a: DailyChallengeAssignment) =>
+      this.toDailyChallengeAssignmentDto(a),
+    );
   }
 
-  async getAssignmentById(id: string): Promise<DailyChallengeAssignmentDto | null> {
-    const assignment = await this.prisma.dailyChallengeAssignment.findUnique({ where: { id } });
+  async getAssignmentById(
+    id: string,
+  ): Promise<DailyChallengeAssignmentDto | null> {
+    const assignment = await this.prisma.dailyChallengeAssignment.findUnique({
+      where: { id },
+    });
     return assignment ? this.toDailyChallengeAssignmentDto(assignment) : null;
   }
 
-
-
-  async getStoryAudioUrl(storyId: string, voiceId: VoiceType | string, userId?: string): Promise<string> {
+  async getStoryAudioUrl(
+    storyId: string,
+    voiceId: VoiceType | string,
+    userId?: string,
+  ): Promise<string> {
     const story = await this.prisma.story.findUnique({
       where: { id: storyId, isDeleted: false },
       select: { textContent: true },
     });
-    if (!story) throw new NotFoundException(`Story with ID ${storyId} not found`);
+    if (!story)
+      throw new NotFoundException(`Story with ID ${storyId} not found`);
 
     // voiceId can be an enum or a uuid string
     const cachedAudio = await this.prisma.storyAudioCache.findFirst({
@@ -867,9 +967,13 @@ export class StoryService {
   }
 
   async startStoryPath(dto: StartStoryPathDto): Promise<StoryPathDto> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     const storyPath = await this.prisma.storyPath.create({
@@ -887,7 +991,9 @@ export class StoryService {
   }
 
   async getStoryPathsForKid(kidId: string): Promise<StoryPathDto[]> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
     const paths = await this.prisma.storyPath.findMany({ where: { kidId } });
     return paths.map((p: StoryPath) => this.toStoryPathDto(p));
@@ -914,7 +1020,9 @@ export class StoryService {
   }
 
   async getThemes(): Promise<ThemeDto[]> {
-    const themes = await this.prisma.theme.findMany({ where: { isDeleted: false } });
+    const themes = await this.prisma.theme.findMany({
+      where: { isDeleted: false },
+    });
     return themes.map((t: Theme) => ({
       ...t,
       image: t.image ?? undefined,
@@ -925,7 +1033,7 @@ export class StoryService {
   async getSeasons() {
     const seasons = await this.prisma.season.findMany({
       where: { isDeleted: false },
-      orderBy: { startDate: 'asc' }
+      orderBy: { startDate: 'asc' },
     });
     return seasons;
   }
@@ -934,7 +1042,9 @@ export class StoryService {
   async assignDailyChallengeToAllKids() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const kids = await this.prisma.kid.findMany({ where: { isDeleted: false } });
+    const kids = await this.prisma.kid.findMany({
+      where: { isDeleted: false },
+    });
     let totalAssigned = 0;
     for (const kid of kids) {
       let kidAge = 0;
@@ -943,41 +1053,62 @@ export class StoryService {
         if (match) kidAge = parseInt(match[1], 10);
       }
       const stories = await this.prisma.story.findMany({
-        where: { ageMin: { lte: kidAge }, ageMax: { gte: kidAge }, isDeleted: false },
+        where: {
+          ageMin: { lte: kidAge },
+          ageMax: { gte: kidAge },
+          isDeleted: false,
+        },
       });
       if (stories.length === 0) continue;
-      const pastAssignments = await this.prisma.dailyChallengeAssignment.findMany({
-        where: { kidId: kid.id },
-        include: { challenge: true },
-      });
+      const pastAssignments =
+        await this.prisma.dailyChallengeAssignment.findMany({
+          where: { kidId: kid.id },
+          include: { challenge: true },
+        });
       const usedStoryIds = new Set(
-        pastAssignments.map((a: DailyChallengeAssignment & { challenge: DailyChallenge }) => a.challenge.storyId),
+        pastAssignments.map(
+          (a: DailyChallengeAssignment & { challenge: DailyChallenge }) =>
+            a.challenge.storyId,
+        ),
       );
-      const availableStories = stories.filter((s: any) => !usedStoryIds.has(s.id));
-      const storyPool = availableStories.length > 0 ? availableStories : stories;
+      const availableStories = stories.filter((s) => !usedStoryIds.has(s.id));
+      const storyPool =
+        availableStories.length > 0 ? availableStories : stories;
       const story = storyPool[Math.floor(Math.random() * storyPool.length)];
       const wordOfTheDay = story.title;
-      const meaning = story.description.split('. ')[0] + (story.description.includes('.') ? '.' : '');
+      const meaning =
+        story.description.split('. ')[0] +
+        (story.description.includes('.') ? '.' : '');
       let challenge = await this.prisma.dailyChallenge.findFirst({
         where: { storyId: story.id, challengeDate: today, isDeleted: false },
       });
       if (!challenge) {
         challenge = await this.prisma.dailyChallenge.create({
-          data: { storyId: story.id, challengeDate: today, wordOfTheDay, meaning },
+          data: {
+            storyId: story.id,
+            challengeDate: today,
+            wordOfTheDay,
+            meaning,
+          },
         });
       }
-      const existingAssignment = await this.prisma.dailyChallengeAssignment.findFirst({
-        where: { kidId: kid.id, challengeId: challenge.id },
-      });
+      const existingAssignment =
+        await this.prisma.dailyChallengeAssignment.findFirst({
+          where: { kidId: kid.id, challengeId: challenge.id },
+        });
       if (!existingAssignment) {
         await this.prisma.dailyChallengeAssignment.create({
           data: { kidId: kid.id, challengeId: challenge.id },
         });
-        this.logger.log(`Assigned story '${story.title}' to kid '${kid.name ?? kid.id}' for daily challenge.`);
+        this.logger.log(
+          `Assigned story '${story.title}' to kid '${kid.name ?? kid.id}' for daily challenge.`,
+        );
         totalAssigned++;
       }
     }
-    this.logger.log(`Daily challenge assignment complete. Total assignments: ${totalAssigned}`);
+    this.logger.log(
+      `Daily challenge assignment complete. Total assignments: ${totalAssigned}`,
+    );
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
@@ -987,7 +1118,9 @@ export class StoryService {
   }
 
   async getTodaysDailyChallengeAssignment(kidId: string) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -996,23 +1129,34 @@ export class StoryService {
     const assignment = await this.prisma.dailyChallengeAssignment.findFirst({
       where: {
         kidId,
-        challenge: { challengeDate: { gte: today, lt: tomorrow }, isDeleted: false },
+        challenge: {
+          challengeDate: { gte: today, lt: tomorrow },
+          isDeleted: false,
+        },
       },
       include: { challenge: { include: { story: true } } },
     });
-    if (!assignment) throw new NotFoundException('No daily challenge assignment found for today');
+    if (!assignment)
+      throw new NotFoundException(
+        'No daily challenge assignment found for today',
+      );
     return assignment;
   }
 
   async getWeeklyDailyChallengeAssignments(kidId: string, weekStart: Date) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 7);
     const assignments = await this.prisma.dailyChallengeAssignment.findMany({
       where: {
         kidId,
-        challenge: { challengeDate: { gte: weekStart, lt: weekEnd }, isDeleted: false },
+        challenge: {
+          challengeDate: { gte: weekStart, lt: weekEnd },
+          isDeleted: false,
+        },
       },
       include: { challenge: { include: { story: true } } },
       orderBy: { assignedAt: 'asc' },
@@ -1037,7 +1181,11 @@ export class StoryService {
 
   async generateStoryWithAI(options: GenerateStoryOptions) {
     // Resolve Season IDs to names if needed for AI context
-    if (options.seasonIds && options.seasonIds.length > 0 && (!options.seasons || options.seasons.length === 0)) {
+    if (
+      options.seasonIds &&
+      options.seasonIds.length > 0 &&
+      (!options.seasons || options.seasons.length === 0)
+    ) {
       const seasons = await this.prisma.season.findMany({
         where: { id: { in: options.seasonIds }, isDeleted: false },
         select: { name: true },
@@ -1054,7 +1202,7 @@ export class StoryService {
       options.kidName || 'Hero',
       options.creatorKidId,
       options.voiceType,
-      options.seasonIds
+      options.seasonIds,
     );
   }
 
@@ -1087,8 +1235,11 @@ export class StoryService {
 
     let themes = themeNames || [];
     if (themes.length === 0) {
-      const availableThemes = await this.prisma.theme.findMany({ where: { isDeleted: false } });
-      const randomTheme = availableThemes[Math.floor(Math.random() * availableThemes.length)];
+      const availableThemes = await this.prisma.theme.findMany({
+        where: { isDeleted: false },
+      });
+      const randomTheme =
+        availableThemes[Math.floor(Math.random() * availableThemes.length)];
       themes = [randomTheme.name];
     }
 
@@ -1098,8 +1249,13 @@ export class StoryService {
       categories = [...new Set([...categories, ...prefCategoryNames])];
     }
     if (categories.length === 0) {
-      const availableCategories = await this.prisma.category.findMany({ where: { isDeleted: false } });
-      const randomCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
+      const availableCategories = await this.prisma.category.findMany({
+        where: { isDeleted: false },
+      });
+      const randomCategory =
+        availableCategories[
+          Math.floor(Math.random() * availableCategories.length)
+        ];
       categories = [randomCategory.name];
     }
 
@@ -1158,7 +1314,7 @@ export class StoryService {
     };
 
     this.logger.log(
-      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}].`
+      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}].`,
     );
 
     // 2. Generate Content via AI
@@ -1170,17 +1326,18 @@ export class StoryService {
       options.kidName!,
       kidId,
       voiceType,
-      seasonIds
+      seasonIds,
     );
   }
 
   // --- PRIVATE HELPER: PERSIST STORY (Includes Image & Audio Gen) ---
+
   private async persistGeneratedStory(
     generatedStory: any,
-    kidName: string,
+    _kidName: string,
     creatorKidId?: string,
     voiceType?: VoiceType,
-    seasonIds?: string[]
+    seasonIds?: string[],
   ) {
     // Resolve userId for tracking if creatorKidId is present
     let userId: string | undefined;
@@ -1196,28 +1353,36 @@ export class StoryService {
     let coverImageUrl = '';
     try {
       this.logger.log(`Generating cover image for "${generatedStory.title}"`);
-      coverImageUrl = await this.geminiService.generateStoryImage(
+      coverImageUrl = this.geminiService.generateStoryImage(
         generatedStory.title,
         generatedStory.description || `A story about ${generatedStory.title}`,
-        userId // Pass userId for tracking
+        userId, // Pass userId for tracking
       );
     } catch (e) {
       this.logger.error(`Failed to generate story image: ${e.message}`);
     }
 
     // 2. Prepare Relations (Categories/Themes)
-    const categoryConnect = generatedStory.category?.map((c: string) => ({
-      where: { name: c },
-      create: { name: c, description: 'Auto-generated category' },
-    })) || [];
+    const categoryConnect =
+      generatedStory.category?.map((c: string) => ({
+        where: { name: c },
+        create: { name: c, description: 'Auto-generated category' },
+      })) || [];
 
-    const themeConnect = generatedStory.theme?.map((t: string) => ({
-      where: { name: t },
-      create: { name: t, description: 'Auto-generated theme' },
-    })) || [];
+    const themeConnect =
+      generatedStory.theme?.map((t: string) => ({
+        where: { name: t },
+        create: { name: t, description: 'Auto-generated theme' },
+      })) || [];
 
-    const textContent = generatedStory.content || generatedStory.textContent || generatedStory.description || '';
-    const wordCount = textContent.split(/\s+/).filter((word: string) => word.length > 0).length;
+    const textContent =
+      generatedStory.content ||
+      generatedStory.textContent ||
+      generatedStory.description ||
+      '';
+    const wordCount = textContent
+      .split(/\s+/)
+      .filter((word: string) => word.length > 0).length;
     const durationSeconds = this.calculateDurationSeconds(wordCount);
 
     // 3. Create Story Record
@@ -1242,12 +1407,14 @@ export class StoryService {
         seasons:
           seasonIds && seasonIds.length > 0
             ? {
-              connect: seasonIds.map((id) => ({ id })),
-            }
+                connect: seasonIds.map((id) => ({ id })),
+              }
             : generatedStory.seasons
               ? {
-                connect: generatedStory.seasons.map((s: string) => ({ name: s })),
-              }
+                  connect: generatedStory.seasons.map((s: string) => ({
+                    name: s,
+                  })),
+                }
               : undefined,
       },
       include: { images: true, branches: true, categories: true, themes: true },
@@ -1260,17 +1427,25 @@ export class StoryService {
         const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
           story.id,
           story.textContent,
-          voiceType ?? DEFAULT_VOICE
+          voiceType ?? DEFAULT_VOICE,
         );
 
         // Update story with audio URL
         story = await this.prisma.story.update({
           where: { id: story.id },
           data: { audioUrl },
-          include: { images: true, branches: true, categories: true, themes: true, seasons: true },
+          include: {
+            images: true,
+            branches: true,
+            categories: true,
+            themes: true,
+            seasons: true,
+          },
         });
       } catch (error) {
-        this.logger.error(`Failed to generate audio for story ${story.id}: ${error.message}`);
+        this.logger.error(
+          `Failed to generate audio for story ${story.id}: ${error.message}`,
+        );
       }
     }
 
@@ -1279,21 +1454,31 @@ export class StoryService {
     return story;
   }
 
-  private async adjustReadingLevel(kidId: string, storyId: string, totalTimeSeconds: number) {
-    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+  private async adjustReadingLevel(
+    kidId: string,
+    storyId: string,
+    totalTimeSeconds: number,
+  ) {
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!story || !kid || story.wordCount === 0) return;
     const minutes = totalTimeSeconds / 60;
     const wpm = minutes > 0 ? story.wordCount / minutes : 0;
     let newLevel = kid.currentReadingLevel;
     if (wpm > 120 && story.difficultyLevel >= kid.currentReadingLevel) {
       newLevel = Math.min(10, kid.currentReadingLevel + 1);
-    }
-    else if (wpm < 40 && story.difficultyLevel >= kid.currentReadingLevel) {
+    } else if (wpm < 40 && story.difficultyLevel >= kid.currentReadingLevel) {
       newLevel = Math.max(1, kid.currentReadingLevel - 1);
     }
     if (newLevel !== kid.currentReadingLevel) {
-      await this.prisma.kid.update({ where: { id: kidId }, data: { currentReadingLevel: newLevel } });
+      await this.prisma.kid.update({
+        where: { id: kidId },
+        data: { currentReadingLevel: newLevel },
+      });
       this.logger.log(`Adjusted Kid ${kidId} reading level to ${newLevel}`);
     }
   }
@@ -1318,7 +1503,7 @@ export class StoryService {
       orderBy: { lastAccessed: 'desc' },
       include: { story: true },
     });
-    return records.map(r => r.story);
+    return records.map((r) => r.story);
   }
 
   async getCreatedStories(kidId: string) {
@@ -1338,7 +1523,9 @@ export class StoryService {
   }
 
   async addDownload(kidId: string, storyId: string) {
-    const story = await this.prisma.story.findUnique({ where: { id: storyId } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId },
+    });
     if (!story) throw new NotFoundException('Story not found');
     return await this.prisma.downloadedStory.upsert({
       where: { kidId_storyId: { kidId, storyId } },
@@ -1349,8 +1536,10 @@ export class StoryService {
 
   async removeDownload(kidId: string, storyId: string) {
     try {
-      return await this.prisma.downloadedStory.delete({ where: { kidId_storyId: { kidId, storyId } } });
-    } catch (error) {
+      return await this.prisma.downloadedStory.delete({
+        where: { kidId_storyId: { kidId, storyId } },
+      });
+    } catch {
       return { message: 'Download removed' };
     }
   }
@@ -1363,10 +1552,17 @@ export class StoryService {
     ]);
   }
 
-  async recommendStoryToKid(userId: string, dto: ParentRecommendationDto): Promise<RecommendationResponseDto> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, parentId: userId, isDeleted: false } });
+  async recommendStoryToKid(
+    userId: string,
+    dto: ParentRecommendationDto,
+  ): Promise<RecommendationResponseDto> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, parentId: userId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found or access denied');
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     const isRestricted = await this.prisma.restrictedStory.findUnique({
@@ -1380,43 +1576,83 @@ export class StoryService {
     }
 
     const existing = await this.prisma.parentRecommendation.findUnique({
-      where: { userId_kidId_storyId: { userId, kidId: dto.kidId, storyId: dto.storyId } },
+      where: {
+        userId_kidId_storyId: {
+          userId,
+          kidId: dto.kidId,
+          storyId: dto.storyId,
+        },
+      },
     });
     if (existing) {
       if (existing.isDeleted) {
         const restored = await this.prisma.parentRecommendation.update({
           where: { id: existing.id },
           data: { isDeleted: false, deletedAt: null, message: dto.message },
-          include: { story: true, user: { select: { id: true, name: true, email: true } }, kid: { select: { id: true, name: true } } },
+          include: {
+            story: true,
+            user: { select: { id: true, name: true, email: true } },
+            kid: { select: { id: true, name: true } },
+          },
         });
         return this.toRecommendationResponse(restored);
       }
-      throw new BadRequestException(`You have already recommended this story to ${kid.name}`);
+      throw new BadRequestException(
+        `You have already recommended this story to ${kid.name}`,
+      );
     }
     const recommendation = await this.prisma.parentRecommendation.create({
-      data: { userId, kidId: dto.kidId, storyId: dto.storyId, message: dto.message },
-      include: { story: true, user: { select: { id: true, name: true, email: true } }, kid: { select: { id: true, name: true } } },
+      data: {
+        userId,
+        kidId: dto.kidId,
+        storyId: dto.storyId,
+        message: dto.message,
+      },
+      include: {
+        story: true,
+        user: { select: { id: true, name: true, email: true } },
+        kid: { select: { id: true, name: true } },
+      },
     });
     return this.toRecommendationResponse(recommendation);
   }
 
-  async getKidRecommendations(kidId: string, userId: string): Promise<RecommendationResponseDto[]> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, parentId: userId, isDeleted: false } });
+  async getKidRecommendations(
+    kidId: string,
+    userId: string,
+  ): Promise<RecommendationResponseDto[]> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, parentId: userId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found or access denied');
     const recommendations = await this.prisma.parentRecommendation.findMany({
       where: { kidId, isDeleted: false },
-      include: { story: true, user: { select: { id: true, name: true, email: true } }, kid: { select: { id: true, name: true } } },
+      include: {
+        story: true,
+        user: { select: { id: true, name: true, email: true } },
+        kid: { select: { id: true, name: true } },
+      },
       orderBy: { recommendedAt: 'desc' },
     });
     return recommendations.map((rec) => this.toRecommendationResponse(rec));
   }
 
-  async deleteRecommendation(recommendationId: string, userId: string, permanent: boolean = false) {
-    const recommendation = await this.prisma.parentRecommendation.findUnique({ where: { id: recommendationId } });
-    if (!recommendation) throw new NotFoundException('Recommendation not found');
-    if (recommendation.userId !== userId) throw new ForbiddenException('Access denied');
+  async deleteRecommendation(
+    recommendationId: string,
+    userId: string,
+    permanent: boolean = false,
+  ) {
+    const recommendation = await this.prisma.parentRecommendation.findUnique({
+      where: { id: recommendationId },
+    });
+    if (!recommendation)
+      throw new NotFoundException('Recommendation not found');
+    if (recommendation.userId !== userId)
+      throw new ForbiddenException('Access denied');
     if (permanent) {
-      return this.prisma.parentRecommendation.delete({ where: { id: recommendationId } });
+      return this.prisma.parentRecommendation.delete({
+        where: { id: recommendationId },
+      });
     } else {
       return this.prisma.parentRecommendation.update({
         where: { id: recommendationId },
@@ -1425,14 +1661,23 @@ export class StoryService {
     }
   }
 
-  async getRecommendationStats(kidId: string, userId: string): Promise<RecommendationsStatsDto> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, parentId: userId, isDeleted: false } });
+  async getRecommendationStats(
+    kidId: string,
+    userId: string,
+  ): Promise<RecommendationsStatsDto> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, parentId: userId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found or access denied');
-    const totalCount = await this.prisma.parentRecommendation.count({ where: { kidId, isDeleted: false } });
+    const totalCount = await this.prisma.parentRecommendation.count({
+      where: { kidId, isDeleted: false },
+    });
     return { totalCount };
   }
 
-  private toRecommendationResponse(recommendation: any): RecommendationResponseDto {
+  private toRecommendationResponse(
+    recommendation: any,
+  ): RecommendationResponseDto {
     return {
       id: recommendation.id,
       userId: recommendation.userId,
@@ -1469,7 +1714,9 @@ export class StoryService {
       },
     });
 
-    const countMap = new Map(topStories.map((s) => [s.storyId, s._count.storyId]));
+    const countMap = new Map(
+      topStories.map((s) => [s.storyId, s._count.storyId]),
+    );
     return stories
       .map((story) => ({
         ...story,

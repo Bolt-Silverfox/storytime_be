@@ -13,21 +13,37 @@ export class AnalyticsStatsDto {
 }
 
 export class CreateActivityLogDto {
- @ApiProperty({required: false, description: 'Kid ID for the activity', example: '1f8951d0-bbed-42ca-b091-2565c77c316f'})
+  @ApiProperty({
+    required: false,
+    description: 'Kid ID for the activity',
+    example: '1f8951d0-bbed-42ca-b091-2565c77c316f',
+  })
   @IsOptional()
   @IsUUID('4', { message: 'userId must be a valid UUID' })
   userId?: string;
 
-  @ApiProperty({ required: false, description: 'Kid ID for the activity', example: 'c182daa8-723c-4020-bcd4-ad01cb026b90' })
+  @ApiProperty({
+    required: false,
+    description: 'Kid ID for the activity',
+    example: 'c182daa8-723c-4020-bcd4-ad01cb026b90',
+  })
   @IsOptional()
   @IsUUID('4', { message: 'kidId must be a valid UUID' })
   kidId?: string;
 
-  @ApiProperty({ required: true, description: 'Action performed', example: 'START_STORY' })
+  @ApiProperty({
+    required: true,
+    description: 'Action performed',
+    example: 'START_STORY',
+  })
   @IsString({ message: 'action must be a string' })
   action: string;
 
-  @ApiProperty({ required: true, description: 'Status of the action', example: 'SUCCESS' })
+  @ApiProperty({
+    required: true,
+    description: 'Status of the action',
+    example: 'SUCCESS',
+  })
   @IsString({ message: 'status must be a string' })
   status: string;
 
@@ -41,7 +57,7 @@ export class CreateActivityLogDto {
   @IsString()
   deviceModel?: string;
 
-  @ApiHideProperty() 
+  @ApiHideProperty()
   @IsOptional()
   @IsString()
   os?: string;
@@ -51,7 +67,11 @@ export class CreateActivityLogDto {
   @IsString()
   ipAddress?: string;
 
-  @ApiProperty({ required: false, description: 'Additional details (optional)', example: 'Started story from bedtime reading' })
+  @ApiProperty({
+    required: false,
+    description: 'Additional details (optional)',
+    example: 'Started story from bedtime reading',
+  })
   @IsOptional()
   @IsString()
   details?: string;
@@ -88,7 +108,10 @@ export class ActivityLogDto {
   @ApiProperty({ required: false, description: 'IP address of the device' })
   ipAddress?: string;
 
-  @ApiProperty({ required: false, description: 'Additional details (optional)' })
+  @ApiProperty({
+    required: false,
+    description: 'Additional details (optional)',
+  })
   details?: string;
 
   @ApiProperty()

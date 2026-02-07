@@ -68,7 +68,9 @@ import { HealthModule } from './health/health.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const nodeEnv = (config.get('NODE_ENV') ?? 'production').toLowerCase();
+        const nodeEnv: string = (
+          config.get<string>('NODE_ENV') ?? 'production'
+        ).toLowerCase();
         const nonProdEnvs = ['development', 'staging', 'test', 'local'];
         const isNonProd = nonProdEnvs.includes(nodeEnv);
 
@@ -130,4 +132,4 @@ import { HealthModule } from './health/health.module';
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}
