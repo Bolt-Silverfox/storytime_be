@@ -6,13 +6,9 @@ import { VoiceModule } from '../voice/voice.module';
 import { AnalyticsModule } from '@/analytics/analytics.module';
 
 @Module({
-    imports: [
-        AuthModule,
-        VoiceModule,
-        AnalyticsModule,
-    ],
-    controllers: [KidController],
-    providers: [KidService],
-    exports: [KidService],
+  imports: [AuthModule, VoiceModule, AnalyticsModule],
+  controllers: [KidController],
+  providers: [KidService],
+  exports: [KidService],
 })
-export class KidModule { }
+export class KidModule {}

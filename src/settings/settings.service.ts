@@ -11,9 +11,9 @@ export class SettingsService {
   async getSettings(userId: string): Promise<any> {
     let profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (!profile) {
-      profile = await this.prisma.profile.create({ data: { userId, language: 'en',    country: 'NG',  
-
- } });
+      profile = await this.prisma.profile.create({
+        data: { userId, language: 'en', country: 'NG' },
+      });
     }
     return profile;
   }
@@ -24,8 +24,9 @@ export class SettingsService {
   async updateSettings(userId: string, body: any): Promise<any> {
     let profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (!profile) {
-      profile = await this.prisma.profile.create({ data: { userId, language: 'en', country: 'NG',
- } });
+      profile = await this.prisma.profile.create({
+        data: { userId, language: 'en', country: 'NG' },
+      });
     }
 
     // Validation

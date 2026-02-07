@@ -11,7 +11,6 @@ export class CreateAvatarDto {
   @IsString()
   @IsOptional()
   url?: string;
-
 }
 
 export class UpdateAvatarDto {

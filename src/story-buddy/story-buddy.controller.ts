@@ -90,7 +90,8 @@ export class StoryBuddyController {
   @Get(':id')
   @ApiOperation({
     summary: 'Get story buddy by ID',
-    description: 'Retrieve a single story buddy by ID. Does not require authentication.',
+    description:
+      'Retrieve a single story buddy by ID. Does not require authentication.',
   })
   @ApiParam({
     name: 'id',
@@ -129,7 +130,11 @@ export class StoryBuddyController {
   })
   async getBuddyById(@Param('id') id: string) {
     const buddy = await this.storyBuddyService.getBuddyById(id);
-    return new SuccessResponse(200, buddy, 'Story buddy retrieved successfully');
+    return new SuccessResponse(
+      200,
+      buddy,
+      'Story buddy retrieved successfully',
+    );
   }
 
   // KID ENDPOINTS
@@ -182,12 +187,16 @@ export class StoryBuddyController {
       kidId,
       selectBuddyDto.buddyId,
     );
-    return new SuccessResponse(200, result, 'Story buddy selected successfully');
+    return new SuccessResponse(
+      200,
+      result,
+      'Story buddy selected successfully',
+    );
   }
 
   @Get('kids/:kidId/buddy')
   @ApiOperation({
-    summary: 'Get kid\'s current buddy',
+    summary: "Get kid's current buddy",
     description: 'Retrieve the current story buddy assigned to a kid.',
   })
   @ApiParam({
@@ -197,11 +206,11 @@ export class StoryBuddyController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Kid\'s buddy retrieved successfully',
+    description: "Kid's buddy retrieved successfully",
     schema: {
       example: {
         statusCode: 200,
-        message: 'Kid\'s buddy retrieved successfully',
+        message: "Kid's buddy retrieved successfully",
         data: {
           id: 'buddy-123-uuid',
           name: 'lumina',
@@ -219,13 +228,18 @@ export class StoryBuddyController {
   })
   async getKidCurrentBuddy(@Param('kidId') kidId: string) {
     const buddy = await this.storyBuddyService.getKidCurrentBuddy(kidId);
-    return new SuccessResponse(200, buddy, 'Kid\'s buddy retrieved successfully');
+    return new SuccessResponse(
+      200,
+      buddy,
+      "Kid's buddy retrieved successfully",
+    );
   }
 
   @Get('kids/:kidId/welcome')
   @ApiOperation({
-    summary: 'Get welcome message from kid\'s buddy',
-    description: 'Retrieve a personalized welcome message from the kid\'s story buddy.',
+    summary: "Get welcome message from kid's buddy",
+    description:
+      "Retrieve a personalized welcome message from the kid's story buddy.",
   })
   @ApiParam({
     name: 'kidId',
@@ -268,7 +282,7 @@ export class StoryBuddyController {
   @ApiOperation({
     summary: 'Get contextual message from buddy',
     description:
-      'Retrieve a contextual message from the kid\'s story buddy. Messages are handled by frontend.',
+      "Retrieve a contextual message from the kid's story buddy. Messages are handled by frontend.",
   })
   @ApiParam({
     name: 'kidId',
@@ -321,7 +335,7 @@ export class StoryBuddyController {
 
   @Put('kids/:kidId/buddy')
   @ApiOperation({
-    summary: 'Change kid\'s story buddy',
+    summary: "Change kid's story buddy",
     description: 'Change the story buddy assigned to a kid.',
   })
   @ApiParam({
@@ -637,7 +651,8 @@ export class StoryBuddyController {
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the story buddy (default: false - soft delete)'
+    description:
+      'Permanently delete the story buddy (default: false - soft delete)',
   })
   @ApiResponse({
     status: 200,
@@ -668,7 +683,7 @@ export class StoryBuddyController {
   })
   async deleteBuddy(
     @Param('id') id: string,
-    @Query('permanent') permanent: boolean = false
+    @Query('permanent') permanent: boolean = false,
   ) {
     await this.storyBuddyService.deleteBuddy(id, permanent);
     return new SuccessResponse(200, null, 'Story buddy deleted successfully');
@@ -724,7 +739,8 @@ export class StoryBuddyController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Get buddy statistics (Admin)',
-    description: 'Get statistics about story buddies usage. Admin access required.',
+    description:
+      'Get statistics about story buddies usage. Admin access required.',
   })
   @ApiResponse({
     status: 200,
@@ -753,6 +769,10 @@ export class StoryBuddyController {
   })
   async getBuddyStats() {
     const stats = await this.storyBuddyService.getBuddyStats();
-    return new SuccessResponse(200, stats, 'Buddy statistics retrieved successfully');
+    return new SuccessResponse(
+      200,
+      stats,
+      'Buddy statistics retrieved successfully',
+    );
   }
 }
