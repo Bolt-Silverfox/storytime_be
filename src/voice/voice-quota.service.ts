@@ -16,40 +16,37 @@ export class VoiceQuotaService {
     }
 
     async checkUsage(userId: string): Promise<boolean> {
-        // 1. Get User Subscription Status
-        // Quick check on user's role or plan
+        const currentMonth = this.getCurrentMonth();
+
+        // Single query: Get user with subscriptions AND usage in one call
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
-            include: { subscriptions: true }, // Restore payment models usage
+            include: {
+                subscriptions: {
+                    where: {
+                        status: SUBSCRIPTION_STATUS.ACTIVE,
+                        endsAt: { gt: new Date() },
+                    },
+                    take: 1, // Only need to know if one exists
+                },
+                usage: true,
+            },
         });
 
         if (!user) return false;
 
-        // Determine plan
-        const activeSubscription = user.subscriptions.find(
-            (s) => s.status === SUBSCRIPTION_STATUS.ACTIVE && s.endsAt && s.endsAt > new Date()
-        );
-        const isPremium = !!activeSubscription;
-
+        // Determine plan from included subscription
+        const isPremium = user.subscriptions.length > 0;
         const limit = isPremium ? VOICE_CONFIG_SETTINGS.QUOTAS.PREMIUM : VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
 
-        // 2. Get/Init Usage Record
-        const currentMonth = this.getCurrentMonth();
-        let usage = await this.prisma.userUsage.findUnique({
+        // Get or initialize usage with upsert (single query instead of find + create/update)
+        const usage = await this.prisma.userUsage.upsert({
             where: { userId },
+            create: { userId, currentMonth, elevenLabsCount: 0 },
+            update: user.usage?.currentMonth !== currentMonth
+                ? { currentMonth, elevenLabsCount: 0 } // Reset for new month
+                : {}, // No update needed
         });
-
-        // Reset if new month
-        if (usage && usage.currentMonth !== currentMonth) {
-            usage = await this.prisma.userUsage.update({
-                where: { userId },
-                data: { currentMonth, elevenLabsCount: 0 },
-            });
-        } else if (!usage) {
-            usage = await this.prisma.userUsage.create({
-                data: { userId, currentMonth },
-            });
-        }
 
         if (usage.elevenLabsCount >= limit) {
             this.logger.log(`User ${userId} exceeded ElevenLabs quota (${usage.elevenLabsCount}/${limit}).`);
