@@ -127,14 +127,32 @@ export class StoryService {
     }
 
     let targetLevel: number | undefined;
+    let recommendedStoryIds: string[] = [];
+    let restrictedStoryIds: string[] = [];
 
+    // Batch kid-related queries into a single call to avoid N+1
     if (filter.kidId) {
       const kid = await this.prisma.kid.findUnique({
         where: { id: filter.kidId, isDeleted: false },
-        include: { preferredCategories: true },
+        include: {
+          preferredCategories: true,
+          // Fetch parent recommendations in the same query
+          parentRecommendations: {
+            where: { isDeleted: false },
+            select: { storyId: true },
+          },
+          // Fetch restricted stories in the same query
+          restrictedStories: {
+            select: { storyId: true },
+          },
+        },
       });
 
       if (kid) {
+        // Extract recommended and restricted story IDs from the batch query
+        recommendedStoryIds = kid.parentRecommendations.map((rec) => rec.storyId);
+        restrictedStoryIds = kid.restrictedStories.map((r) => r.storyId);
+
         if (kid.currentReadingLevel > 0) {
           targetLevel = kid.currentReadingLevel;
           where.difficultyLevel = {
@@ -178,15 +196,6 @@ export class StoryService {
       }
     }
 
-    let recommendedStoryIds: string[] = [];
-    if (filter.kidId && filter.recommended !== false) {
-      const recommendations = await this.prisma.parentRecommendation.findMany({
-        where: { kidId: filter.kidId, isDeleted: false },
-        select: { storyId: true },
-      });
-      recommendedStoryIds = recommendations.map((rec) => rec.storyId);
-    }
-
     if (recommendedStoryIds.length > 0 && filter.recommended === undefined) {
       const recommendedClause: any = { id: { in: recommendedStoryIds } };
 
@@ -201,16 +210,9 @@ export class StoryService {
       ];
     }
 
-    // Exclude restricted stories if kidId is provided
-    if (filter.kidId) {
-      const restrictedStories = await this.prisma.restrictedStory.findMany({
-        where: { kidId: filter.kidId },
-        select: { storyId: true },
-      });
-      const restrictedStoryIds = restrictedStories.map((r) => r.storyId);
-      if (restrictedStoryIds.length > 0) {
-        where.id = { notIn: restrictedStoryIds, ...where.id };
-      }
+    // Exclude restricted stories (already fetched in batch query above)
+    if (restrictedStoryIds.length > 0) {
+      where.id = { notIn: restrictedStoryIds, ...where.id };
     }
 
     if (filter.recommended === true && filter.kidId) {
