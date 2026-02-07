@@ -57,7 +57,11 @@ export class StoryService {
 
   /** Invalidate all story-related caches */
   private async invalidateStoryCaches(): Promise<void> {
-    await Promise.all(STORY_INVALIDATION_KEYS.map(key => this.cacheManager.del(key)));
+    try {
+      await Promise.all(STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)));
+    } catch (error) {
+      this.logger.warn(`Failed to invalidate story caches: ${error.message}`);
+    }
   }
 
   constructor(
@@ -1274,7 +1278,11 @@ export class StoryService {
       }
     }
 
-    await this.cacheManager.del('categories:all');
+    try {
+      await this.cacheManager.del('categories:all');
+    } catch (error) {
+      this.logger.warn(`Failed to invalidate categories cache: ${error.message}`);
+    }
 
     return story;
   }
