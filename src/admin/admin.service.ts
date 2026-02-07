@@ -4,7 +4,10 @@ import {
   BadRequestException,
   ConflictException,
   Logger,
+  Inject,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { Role, Prisma } from '@prisma/client';
@@ -47,6 +50,16 @@ import { DashboardUtil } from './utils/dashboard.util';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
 
+/** Cache keys for admin dashboard */
+const CACHE_KEYS = {
+  DASHBOARD_STATS: 'admin:dashboard:stats',
+  STORY_STATS: 'admin:story:stats',
+  CONTENT_BREAKDOWN: 'admin:content:breakdown',
+} as const;
+
+/** Cache TTL: 5 minutes for dashboard metrics */
+const DASHBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
@@ -54,6 +67,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) { }
 
 
@@ -63,6 +77,13 @@ export class AdminService {
   // =====================
 
   async getDashboardStats(): Promise<DashboardStatsDto> {
+    // Check cache first
+    const cached = await this.cacheManager.get<DashboardStatsDto>(CACHE_KEYS.DASHBOARD_STATS);
+    if (cached) {
+      this.logger.debug('Returning cached dashboard stats');
+      return cached;
+    }
+
     const now = new Date();
 
     // Timeframes
@@ -206,7 +227,7 @@ export class AdminService {
     const prevUnpaidUsers = prevTotalUsers - prevPaidUsers;
 
 
-    return {
+    const result: DashboardStatsDto = {
       totalUsers: totalUsersCount,
       totalParents,
       totalKids,
@@ -265,6 +286,12 @@ export class AdminService {
         ),
       }
     };
+
+    // Cache the result for 5 minutes
+    await this.cacheManager.set(CACHE_KEYS.DASHBOARD_STATS, result, DASHBOARD_CACHE_TTL_MS);
+    this.logger.debug('Dashboard stats cached for 5 minutes');
+
+    return result;
   }
 
   async getUserGrowth(dateRange: DateRangeDto): Promise<UserGrowthDto[]> {
@@ -343,6 +370,13 @@ export class AdminService {
   }
 
   async getStoryStats(): Promise<StoryStatsDto> {
+    // Check cache first
+    const cached = await this.cacheManager.get<StoryStatsDto>(CACHE_KEYS.STORY_STATS);
+    if (cached) {
+      this.logger.debug('Returning cached story stats');
+      return cached;
+    }
+
     const [
       totalStories,
       publishedStories,
@@ -365,7 +399,7 @@ export class AdminService {
       this.prisma.favorite.count(),
     ]);
 
-    return {
+    const result: StoryStatsDto = {
       totalStories,
       publishedStories,
       draftStories: 0,
@@ -375,9 +409,21 @@ export class AdminService {
       totalViews,
       totalFavorites,
     };
+
+    // Cache the result for 5 minutes
+    await this.cacheManager.set(CACHE_KEYS.STORY_STATS, result, DASHBOARD_CACHE_TTL_MS);
+
+    return result;
   }
 
   async getContentBreakdown(): Promise<ContentBreakdownDto> {
+    // Check cache first
+    const cached = await this.cacheManager.get<ContentBreakdownDto>(CACHE_KEYS.CONTENT_BREAKDOWN);
+    if (cached) {
+      this.logger.debug('Returning cached content breakdown');
+      return cached;
+    }
+
     const [languageStats, categoryStats, themeStats] = await Promise.all([
       this.prisma.story.groupBy({
         by: ['language'],
@@ -419,7 +465,7 @@ export class AdminService {
       {} as Record<string, number>,
     );
 
-    return {
+    const result: ContentBreakdownDto = {
       byLanguage: languageStats.map((stat) => ({
         language: stat.language,
         count: stat._count,
@@ -437,6 +483,11 @@ export class AdminService {
         count: theme._count.stories,
       })),
     };
+
+    // Cache the result for 5 minutes
+    await this.cacheManager.set(CACHE_KEYS.CONTENT_BREAKDOWN, result, DASHBOARD_CACHE_TTL_MS);
+
+    return result;
   }
 
   async getSystemHealth(): Promise<SystemHealthDto> {
