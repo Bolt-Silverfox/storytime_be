@@ -21,10 +21,10 @@ export class DeleteAccountDto {
   @IsString({ each: true }) // Add this to ensure array elements are strings
   reasons?: string[];
 
-  @ApiProperty({
-    required: false,
+  @ApiProperty({ 
+    required: false, 
     example: 'Additional details',
-    type: String, // Explicitly specify type
+    type: String // Explicitly specify type
   })
   @IsOptional()
   @IsString()

@@ -28,11 +28,7 @@ export function AdminUserList() {
     ApiQuery({ name: 'page', required: false, type: Number }),
     ApiQuery({ name: 'limit', required: false, type: Number }),
     ApiQuery({ name: 'search', required: false, type: String }),
-    ApiQuery({
-      name: 'role',
-      required: false,
-      enum: ['admin', 'parent', 'kid'],
-    }),
+    ApiQuery({ name: 'role', required: false, enum: ['admin', 'parent', 'kid'] }),
     ApiResponse({ status: 200, description: 'Paginated users' }),
     ApiBearerAuth(),
   );

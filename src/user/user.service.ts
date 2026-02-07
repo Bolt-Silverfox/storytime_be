@@ -59,7 +59,7 @@ export class UserService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return users.map((user) => {
+    return users.map(user => {
       const { passwordHash, pinHash, ...safeUser } = user;
       return safeUser;
     });
@@ -76,7 +76,7 @@ export class UserService {
       include: { profile: true, avatar: true },
     });
 
-    return users.map((user) => {
+    return users.map(user => {
       const { passwordHash, pinHash, ...safeUser } = user;
       return safeUser;
     });
@@ -136,7 +136,7 @@ export class UserService {
           // Foreign key constraint - cascade delete not properly set up
           throw new BadRequestException(
             'Cannot permanently delete account with associated data. ' +
-              'Please use soft delete (deactivation) or contact support to delete all associated data first.',
+            'Please use soft delete (deactivation) or contact support to delete all associated data first.',
           );
         }
       }
@@ -343,8 +343,7 @@ export class UserService {
 
     // -------- USER FIELDS --------
     if (data.name !== undefined) updateData.name = data.name;
-    if (data.biometricsEnabled !== undefined)
-      updateData.biometricsEnabled = data.biometricsEnabled;
+    if (data.biometricsEnabled !== undefined) updateData.biometricsEnabled = data.biometricsEnabled;
 
     // Avatar logic
     if (data.avatarId !== undefined) {
@@ -439,8 +438,7 @@ export class UserService {
 
     if (data.name !== undefined) updateUser.name = data.name;
     if (data.title !== undefined) updateUser.title = data.title;
-    if (data.biometricsEnabled !== undefined)
-      updateUser.biometricsEnabled = data.biometricsEnabled;
+    if (data.biometricsEnabled !== undefined) updateUser.biometricsEnabled = data.biometricsEnabled;
     if (data.language !== undefined) updateProfile.language = data.language;
     if (data.country !== undefined) updateProfile.country = data.country;
 

@@ -25,10 +25,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { randomUUID } from 'crypto';
-import {
-  AuthSessionGuard,
-  AuthenticatedRequest,
-} from '@/shared/guards/auth.guard';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { StoryService } from '../story/story.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
@@ -53,7 +50,7 @@ export class VoiceController {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly speechToTextService: SpeechToTextService,
-  ) {}
+  ) { }
 
   @Post('upload')
   @UseGuards(AuthSessionGuard)
@@ -163,12 +160,7 @@ export class VoiceController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate audio for stored text using ID' })
   @ApiParam({ name: 'id', type: String })
-  @ApiQuery({
-    name: 'voiceId',
-    required: false,
-    type: String,
-    description: 'VoiceType enum value or Voice UUID',
-  })
+  @ApiQuery({ name: 'voiceId', required: false, type: String, description: 'VoiceType enum value or Voice UUID' })
   @ApiResponse({ status: 200, description: 'Audio generated successfully' })
   async getTextToSpeechById(
     @Param('id') id: string,
@@ -234,8 +226,7 @@ export class VoiceController {
     @UploadedFile(
       new ParseFilePipeBuilder()
         .addFileTypeValidator({
-          fileType:
-            /(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/ogg|audio\/webm)/,
+          fileType: /(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/ogg|audio\/webm)/,
         })
         .addMaxSizeValidator({
           maxSize: 50 * 1024 * 1024, // 50MB

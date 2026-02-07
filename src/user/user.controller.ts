@@ -131,6 +131,7 @@ export class UserController {
     );
   }
 
+ 
   @Post('me/pin')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()

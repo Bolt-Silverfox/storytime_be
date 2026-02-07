@@ -35,13 +35,9 @@ async function backfillDuration() {
       let durationSeconds = 0;
 
       if (story.wordCount && story.wordCount > 0) {
-        durationSeconds = storyService.calculateDurationSeconds(
-          story.wordCount,
-        );
+        durationSeconds = storyService.calculateDurationSeconds(story.wordCount);
       } else if (story.textContent) {
-        durationSeconds = storyService.calculateDurationSeconds(
-          story.textContent,
-        );
+        durationSeconds = storyService.calculateDurationSeconds(story.textContent);
       }
 
       if (durationSeconds > 0) {

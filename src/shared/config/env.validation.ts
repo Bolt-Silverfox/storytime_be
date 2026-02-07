@@ -16,10 +16,7 @@ export const envSchema = z.object({
     .string()
     .email('DEFAULT_SENDER_EMAIL must be a valid email'),
   DEFAULT_SENDER_NAME: z.string().min(1, 'DEFAULT_SENDER_NAME is required'),
-  SUPPORT_EMAIL: z
-    .string()
-    .email('SUPPORT_EMAIL must be a valid email')
-    .optional(),
+  SUPPORT_EMAIL: z.string().email('SUPPORT_EMAIL must be a valid email').optional(),
   // SMTP Configuration (replaces Brevo)
   SMTP_HOST: z.string().min(1, 'SMTP_HOST is required'),
   SMTP_PORT: z.coerce.number().default(587),

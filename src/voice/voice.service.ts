@@ -48,18 +48,11 @@ export class VoiceService {
 
     if (fileBuffer) {
       try {
-        elevenLabsId = await this.elevenLabsProvider.addVoice(
-          dto.name,
-          fileBuffer,
-        );
+        elevenLabsId = await this.elevenLabsProvider.addVoice(dto.name, fileBuffer);
         this.logger.log(`Cloned voice ${dto.name} with ID ${elevenLabsId}`);
       } catch (error) {
-        this.logger.warn(
-          `Failed to clone voice with ElevenLabs: ${error.message}`,
-        );
-        throw new InternalServerErrorException(
-          'Voice cloning failed: ' + error.message,
-        );
+        this.logger.warn(`Failed to clone voice with ElevenLabs: ${error.message}`);
+        throw new InternalServerErrorException('Voice cloning failed: ' + error.message);
       }
     }
 
@@ -180,7 +173,7 @@ export class VoiceService {
 
     if (existing) {
       return { id: existing.id };
-    }
+    } 
 
     // 2. Fetch details from ElevenLabs to get Name AND Preview URL
     let voiceName = 'Imported ElevenLabs Voice';
@@ -215,15 +208,11 @@ export class VoiceService {
     // 3. Fallback: If API failed, check if it's a known voice just to fix the name
     if (voiceName === 'Imported ElevenLabs Voice') {
       const knownKey = Object.keys(VOICE_CONFIG).find(
-        (key) =>
-          VOICE_CONFIG[key as keyof typeof VOICE_CONFIG].elevenLabsId ===
-          elevenLabsId, // Changed to match ID not model
+        (key) => VOICE_CONFIG[key as keyof typeof VOICE_CONFIG].elevenLabsId === elevenLabsId, // Changed to match ID not model
       );
       if (knownKey) {
         const config = VOICE_CONFIG[knownKey as keyof typeof VOICE_CONFIG];
-        voiceName =
-          config.name ||
-          knownKey.charAt(0).toUpperCase() + knownKey.slice(1).toLowerCase();
+        voiceName = config.name || knownKey.charAt(0).toUpperCase() + knownKey.slice(1).toLowerCase();
         if (!voicePreviewUrl) voicePreviewUrl = config.previewUrl || null;
       }
     }
@@ -249,9 +238,8 @@ export class VoiceService {
    */
   async fetchAvailableVoices(): Promise<VoiceResponseDto[]> {
     // Check cache first
-    const cached = await this.cacheManager.get<VoiceResponseDto[]>(
-      AVAILABLE_VOICES_CACHE_KEY,
-    );
+    const cached =
+      await this.cacheManager.get<VoiceResponseDto[]>(AVAILABLE_VOICES_CACHE_KEY);
     if (cached) {
       this.logger.debug('Returning cached available voices');
       return cached;

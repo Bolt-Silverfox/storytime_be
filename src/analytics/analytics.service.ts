@@ -5,7 +5,7 @@ import { ActivityLog } from '@prisma/client';
 
 @Injectable()
 export class AnalyticsService {
-  constructor(private prisma: PrismaService) {} // Using PrismaService correctly
+  constructor(private prisma: PrismaService) {}  // Using PrismaService correctly
 
   // Map Prisma model to DTO
   private toActivityLogDto(log: ActivityLog): ActivityLogDto {

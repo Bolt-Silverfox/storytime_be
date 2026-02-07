@@ -121,7 +121,7 @@ export class ReportsService {
         kid.parentId,
         'quiz_answered',
         dto.kidId,
-        { questionId: dto.questionId, isCorrect },
+        { questionId: dto.questionId, isCorrect }
       );
     }
 
@@ -420,7 +420,7 @@ export class ReportsService {
       kid.parentId,
       'story_read',
       kidId,
-      { storyId, duration: progress.totalTimeSpent },
+      { storyId, duration: progress.totalTimeSpent }
     );
 
     return progress;

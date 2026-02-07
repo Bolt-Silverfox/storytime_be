@@ -37,10 +37,7 @@ export class SubscriptionController {
     description:
       'For paid plans, complete the In-App Purchase first then use /payment/verify-purchase',
   })
-  async subscribe(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: SubscribeDto,
-  ) {
+  async subscribe(@Req() req: AuthenticatedRequest, @Body() body: SubscribeDto) {
     return this.subscriptionService.subscribe(
       req.authUserData.userId,
       body.plan,

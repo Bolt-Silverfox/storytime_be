@@ -134,9 +134,7 @@ export class AuthService {
       role = 'admin';
     }
 
-    const hashedPassword = await this.passwordService.hashPassword(
-      data.password,
-    );
+    const hashedPassword = await this.passwordService.hashPassword(data.password);
 
     const user = await this.prisma.user.create({
       data: {
@@ -162,10 +160,7 @@ export class AuthService {
     try {
       await this.notificationService.seedDefaultPreferences(user.id);
     } catch (error) {
-      this.logger.error(
-        'Failed to seed notification preferences:',
-        error.message,
-      );
+      this.logger.error('Failed to seed notification preferences:', error.message);
     }
 
     const tokenData = await this.tokenService.createTokenPair(user);
@@ -257,14 +252,13 @@ export class AuthService {
     }
 
     if (data.learningExpectationIds && data.learningExpectationIds.length > 0) {
-      const existingExpectations =
-        await this.prisma.learningExpectation.findMany({
-          where: {
-            id: { in: data.learningExpectationIds },
-            isActive: true,
-            isDeleted: false,
-          },
-        });
+      const existingExpectations = await this.prisma.learningExpectation.findMany({
+        where: {
+          id: { in: data.learningExpectationIds },
+          isActive: true,
+          isDeleted: false,
+        },
+      });
 
       if (existingExpectations.length !== data.learningExpectationIds.length) {
         throw new BadRequestException(
@@ -384,12 +378,9 @@ export class AuthService {
     const updateData: Record<string, unknown> = {};
     if (data.country !== undefined) updateData.country = data.country;
     if (data.language !== undefined) updateData.language = data.language;
-    if (data.languageCode !== undefined)
-      updateData.languageCode = data.languageCode;
-    if (data.explicitContent !== undefined)
-      updateData.explicitContent = data.explicitContent;
-    if (data.maxScreenTimeMins !== undefined)
-      updateData.maxScreenTimeMins = data.maxScreenTimeMins;
+    if (data.languageCode !== undefined) updateData.languageCode = data.languageCode;
+    if (data.explicitContent !== undefined) updateData.explicitContent = data.explicitContent;
+    if (data.maxScreenTimeMins !== undefined) updateData.maxScreenTimeMins = data.maxScreenTimeMins;
 
     // Update profile
     if (Object.keys(updateData).length === 0 && !user.profile) {
@@ -441,36 +432,19 @@ export class AuthService {
 
   // ==================== PASSWORD OPERATIONS (Delegated) ====================
 
-  async requestPasswordReset(
-    data: RequestResetDto,
-    ip?: string,
-    userAgent?: string,
-  ) {
+  async requestPasswordReset(data: RequestResetDto, ip?: string, userAgent?: string) {
     return this.passwordService.requestPasswordReset(data, ip, userAgent);
   }
 
-  async validateResetToken(
-    token: string,
-    email: string,
-    data: ValidateResetTokenDto,
-  ) {
+  async validateResetToken(token: string, email: string, data: ValidateResetTokenDto) {
     return this.passwordService.validateResetToken(token, email, data);
   }
 
-  async resetPassword(
-    token: string,
-    email: string,
-    newPassword: string,
-    data: ResetPasswordDto,
-  ) {
+  async resetPassword(token: string, email: string, newPassword: string, data: ResetPasswordDto) {
     return this.passwordService.resetPassword(token, email, newPassword, data);
   }
 
-  async changePassword(
-    userId: string,
-    data: ChangePasswordDto,
-    currentSessionId: string,
-  ) {
+  async changePassword(userId: string, data: ChangePasswordDto, currentSessionId: string) {
     return this.passwordService.changePassword(userId, data, currentSessionId);
   }
 
@@ -496,7 +470,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid Google id_token');
     }
 
-    const payload = ticket.getPayload();
+    const payload = ticket.getPayload() as TokenPayload | undefined;
     if (!payload || !payload.email) {
       throw new UnauthorizedException('Invalid Google token payload');
     }
@@ -520,9 +494,7 @@ export class AuthService {
       googleId: payload.providerId,
       email: payload.email,
       picture: payload.picture,
-      name:
-        `${payload.firstName || ''} ${payload.lastName || ''}`.trim() ||
-        undefined,
+      name: `${payload.firstName || ''} ${payload.lastName || ''}`.trim() || undefined,
       emailVerified: payload.emailVerified,
     });
   }
@@ -530,28 +502,19 @@ export class AuthService {
   // ===============================
   // APPLE AUTH
   // ===============================
-  async loginWithAppleIdToken(
-    idToken: string,
-    firstName?: string,
-    lastName?: string,
-  ) {
+  async loginWithAppleIdToken(idToken: string, firstName?: string, lastName?: string) {
     if (!idToken) {
       throw new BadRequestException('id_token is required');
     }
 
     try {
-      const {
-        sub: appleId,
-        email,
-        email_verified,
-      } = await appleSigninAuth.verifyIdToken(idToken, {
+      const { sub: appleId, email, email_verified } = await appleSigninAuth.verifyIdToken(idToken, {
         audience: [process.env.APPLE_CLIENT_ID, process.env.APPLE_SERVICE_ID],
         nonce: 'NONCE',
-        ignoreExpiration: false,
+        ignoreExpiration: false
       });
 
-      const name =
-        firstName && lastName ? `${firstName} ${lastName}` : undefined;
+      const name = firstName && lastName ? `${firstName} ${lastName}` : undefined;
 
       return this._upsertOrReturnUserFromOAuthPayload({
         appleId,
@@ -559,11 +522,13 @@ export class AuthService {
         emailVerified: email_verified === 'true' || email_verified === true,
         name,
       });
+
     } catch (err) {
       this.logger.error('Apple id_token verification failed', err);
       throw new UnauthorizedException('Invalid Apple id_token');
     }
   }
+
 
   // ====================================================
   // INTERNAL: Unified OAuth upsert logic
@@ -613,8 +578,7 @@ export class AuthService {
     // 3. Create new user
     if (!user) {
       const randomPassword = crypto.randomBytes(16).toString('hex');
-      const hashedPassword =
-        await this.passwordService.hashPassword(randomPassword);
+      const hashedPassword = await this.passwordService.hashPassword(randomPassword);
 
       user = await this.prisma.user.create({
         data: {
@@ -638,10 +602,7 @@ export class AuthService {
       try {
         await this.notificationService.seedDefaultPreferences(user.id);
       } catch (error) {
-        this.logger.error(
-          'Failed to seed notification preferences:',
-          error.message,
-        );
+        this.logger.error('Failed to seed notification preferences:', error.message);
       }
     }
 

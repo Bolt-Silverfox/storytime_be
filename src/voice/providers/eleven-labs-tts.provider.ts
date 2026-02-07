@@ -44,7 +44,7 @@ export class ElevenLabsTTSProvider
     text: string,
     voiceId: string,
     modelId: string = 'eleven_multilingual_v2',
-
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     options?: any,
   ): Promise<Buffer> {
     if (!this.client) {
@@ -56,6 +56,7 @@ export class ElevenLabsTTSProvider
         `Generating audio with voice ${voiceId} and model ${modelId}`,
       );
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const convertOptions: any = {
         text,
         model_id: modelId,
@@ -145,6 +146,7 @@ export class ElevenLabsTTSProvider
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+
   async addVoice(name: string, fileBuffer: Buffer): Promise<string> {
     if (!this.client) {
       throw new Error('ElevenLabs client is not initialized');
@@ -158,7 +160,7 @@ export class ElevenLabsTTSProvider
 
       const response = await this.client.voices.add({
         name,
-
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         files: [blob as any],
         description: 'Cloned via StoryTime App',
       });
@@ -172,6 +174,7 @@ export class ElevenLabsTTSProvider
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async getSubscriptionInfo(): Promise<any> {
     if (!this.client) {
       throw new Error('ElevenLabs client is not initialized');

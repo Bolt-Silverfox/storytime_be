@@ -9,11 +9,7 @@ import { AppleVerificationService } from './apple-verification.service';
 
 @Module({
   imports: [PrismaModule, ConfigModule, forwardRef(() => AuthModule)],
-  providers: [
-    PaymentService,
-    GoogleVerificationService,
-    AppleVerificationService,
-  ],
+  providers: [PaymentService, GoogleVerificationService, AppleVerificationService],
   controllers: [PaymentController],
   exports: [PaymentService],
 })

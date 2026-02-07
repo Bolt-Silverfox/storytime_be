@@ -17,7 +17,10 @@ import { VoiceModule } from '../voice/voice.module';
     forwardRef(() => VoiceModule),
   ],
   controllers: [StoryController],
-  providers: [StoryService, GeminiService],
+  providers: [
+    StoryService,
+    GeminiService,
+  ],
   exports: [StoryService],
 })
-export class StoryModule {}
+export class StoryModule { }

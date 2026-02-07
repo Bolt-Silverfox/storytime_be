@@ -6,81 +6,72 @@ import { HttpService } from '@nestjs/axios';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
 
 const mockPrismaService = {
-  voice: {
-    findMany: jest.fn(),
-    create: jest.fn(),
-  },
-  user: {
-    update: jest.fn(),
-    findUnique: jest.fn(),
-  },
+    voice: {
+        findMany: jest.fn(),
+        create: jest.fn(),
+    },
+    user: {
+        update: jest.fn(),
+        findUnique: jest.fn(),
+    },
 };
 
 const mockConfigService = {
-  get: jest.fn(),
+    get: jest.fn(),
 };
 
 const mockHttpService = {
-  get: jest.fn(),
+    get: jest.fn(),
 };
 
 const mockElevenLabsProvider = {
-  addVoice: jest.fn(),
-  getVoices: jest.fn(),
+    addVoice: jest.fn(),
+    getVoices: jest.fn(),
 };
 
 describe('VoiceService', () => {
-  let service: VoiceService;
-  let prisma: typeof mockPrismaService;
+    let service: VoiceService;
+    let prisma: typeof mockPrismaService;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        VoiceService,
-        { provide: PrismaService, useValue: mockPrismaService },
-        { provide: ConfigService, useValue: mockConfigService },
-        { provide: HttpService, useValue: mockHttpService },
-        { provide: ElevenLabsTTSProvider, useValue: mockElevenLabsProvider },
-      ],
-    }).compile();
+    beforeEach(async () => {
+        const module: TestingModule = await Test.createTestingModule({
+            providers: [
+                VoiceService,
+                { provide: PrismaService, useValue: mockPrismaService },
+                { provide: ConfigService, useValue: mockConfigService },
+                { provide: HttpService, useValue: mockHttpService },
+                { provide: ElevenLabsTTSProvider, useValue: mockElevenLabsProvider },
+            ],
+        }).compile();
 
-    service = module.get<VoiceService>(VoiceService);
-    prisma = module.get(PrismaService);
-    jest.clearAllMocks();
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
-  describe('listVoices', () => {
-    it('should return all voices for a user', async () => {
-      const userId = 'user-1';
-      const userVoices = [
-        {
-          id: 'voice-1',
-          name: 'Custom Voice',
-          type: 'uploaded',
-          url: 'http://url',
-          elevenLabsVoiceId: null,
-          userId,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ];
-      prisma.voice.findMany.mockResolvedValue(userVoices);
-
-      const result = await service.listVoices(userId);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({
-        id: 'voice-1',
-        name: 'Custom Voice',
-      });
-
-      expect(prisma.voice.findMany).toHaveBeenCalledWith({
-        where: { userId },
-      });
+        service = module.get<VoiceService>(VoiceService);
+        prisma = module.get(PrismaService);
+        jest.clearAllMocks();
     });
-  });
+
+    it('should be defined', () => {
+        expect(service).toBeDefined();
+    });
+
+    describe('listVoices', () => {
+        it('should return all voices for a user', async () => {
+            const userId = 'user-1';
+            const userVoices = [
+                { id: 'voice-1', name: 'Custom Voice', type: 'uploaded', url: 'http://url', elevenLabsVoiceId: null, userId, createdAt: new Date(), updatedAt: new Date() },
+            ];
+            prisma.voice.findMany.mockResolvedValue(userVoices);
+
+            const result = await service.listVoices(userId);
+
+            expect(result).toHaveLength(1);
+            expect(result[0]).toMatchObject({
+                id: 'voice-1',
+                name: 'Custom Voice',
+            });
+
+            expect(prisma.voice.findMany).toHaveBeenCalledWith({
+                where: { userId },
+            });
+        });
+    });
 });
