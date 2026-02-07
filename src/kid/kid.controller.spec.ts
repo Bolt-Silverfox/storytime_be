@@ -1,111 +1,107 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { KidController } from './kid.controller';
 import { KidService } from './kid.service';
-import {
-  AuthenticatedRequest,
-  AuthSessionGuard,
-} from '@/shared/guards/auth.guard';
+import { AuthenticatedRequest, AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { AnalyticsService } from '../analytics/analytics.service';
 
 const mockKidService = {
-  findAllByUser: jest.fn(),
-  createKids: jest.fn(),
-  findOne: jest.fn(),
-  updateKid: jest.fn(),
-  deleteKid: jest.fn(),
+    findAllByUser: jest.fn(),
+    createKids: jest.fn(),
+    findOne: jest.fn(),
+    updateKid: jest.fn(),
+    deleteKid: jest.fn(),
 };
 
 describe('KidController', () => {
-  let controller: KidController;
-  let service: typeof mockKidService;
+    let controller: KidController;
+    let service: typeof mockKidService;
 
-  const mockRequest = {
-    authUserData: { userId: 'user-1' },
-    headers: { 'user-agent': 'Jest Test' },
-  } as unknown as AuthenticatedRequest;
+    const mockRequest = {
+        authUserData: { userId: 'user-1' },
+        headers: { 'user-agent': 'Jest Test' },
+    } as unknown as AuthenticatedRequest;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [KidController],
-      providers: [
-        { provide: KidService, useValue: mockKidService },
-        {
-          provide: AnalyticsService,
-          useValue: { logActivity: jest.fn().mockResolvedValue({}) },
-        }, // Mock AnalyticsService
-      ],
-    })
-      .overrideGuard(AuthSessionGuard)
-      .useValue({ canActivate: () => true })
-      .compile();
+    beforeEach(async () => {
+        const module: TestingModule = await Test.createTestingModule({
+            controllers: [KidController],
+            providers: [
+                { provide: KidService, useValue: mockKidService },
+                { provide: AnalyticsService, useValue: { logActivity: jest.fn().mockResolvedValue({}) } }, // Mock AnalyticsService
+            ],
+        })
+            .overrideGuard(AuthSessionGuard)
+            .useValue({ canActivate: () => true })
+            .compile();
 
-    controller = module.get<KidController>(KidController);
-    service = module.get(KidService);
-    jest.clearAllMocks();
-  });
-
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
-
-  describe('getMyKids', () => {
-    it('should return kids', async () => {
-      const expectedResult = [{ id: 'kid-1' }];
-      service.findAllByUser.mockResolvedValue(expectedResult);
-
-      const result = await controller.getMyKids(mockRequest);
-      expect(result).toEqual(expectedResult);
-      expect(service.findAllByUser).toHaveBeenCalledWith('user-1');
+        controller = module.get<KidController>(KidController);
+        service = module.get(KidService);
+        jest.clearAllMocks();
     });
-  });
 
-  describe('createKids', () => {
-    it('should create kids', async () => {
-      const dtos: CreateKidDto[] = [{ name: 'Alex', ageRange: '5-8' }];
-      const expectedResult = [{ id: 'kid-1', ...dtos[0] }];
-      service.createKids.mockResolvedValue(expectedResult);
-
-      const result = await controller.createKids(mockRequest, dtos);
-      expect(result).toEqual(expectedResult);
-      expect(service.createKids).toHaveBeenCalledWith('user-1', dtos);
+    it('should be defined', () => {
+        expect(controller).toBeDefined();
     });
-  });
 
-  describe('getKid', () => {
-    it('should return a kid', async () => {
-      const kidId = 'kid-1';
-      const expectedResult = { id: kidId };
-      service.findOne.mockResolvedValue(expectedResult);
+    describe('getMyKids', () => {
+        it('should return kids', async () => {
+            const expectedResult = [{ id: 'kid-1' }];
+            service.findAllByUser.mockResolvedValue(expectedResult);
 
-      const result = await controller.getKid(mockRequest, kidId);
-      expect(result).toEqual(expectedResult);
-      expect(service.findOne).toHaveBeenCalledWith(kidId, 'user-1');
+            const result = await controller.getMyKids(mockRequest);
+            expect(result).toEqual(expectedResult);
+            expect(service.findAllByUser).toHaveBeenCalledWith('user-1');
+        });
     });
-  });
 
-  describe('updateKid', () => {
-    it('should update a kid', async () => {
-      const kidId = 'kid-1';
-      const dto: UpdateKidDto = { name: 'Alex Updated' };
-      const expectedResult = { id: kidId, ...dto };
-      service.updateKid.mockResolvedValue(expectedResult);
+    describe('createKids', () => {
+        it('should create kids', async () => {
+            const dtos: CreateKidDto[] = [{ name: 'Alex', ageRange: '5-8' }];
+            const expectedResult = [{ id: 'kid-1', ...dtos[0] }];
+            service.createKids.mockResolvedValue(expectedResult);
 
-      const result = await controller.updateKid(mockRequest, kidId, dto);
-      expect(result).toEqual(expectedResult);
-      expect(service.updateKid).toHaveBeenCalledWith(kidId, 'user-1', dto);
+            const result = await controller.createKids(mockRequest, dtos);
+            expect(result).toEqual(expectedResult);
+            expect(service.createKids).toHaveBeenCalledWith('user-1', dtos);
+        });
     });
-  });
 
-  describe('deleteKid', () => {
-    it('should delete a kid', async () => {
-      const kidId = 'kid-1';
-      const expectedResult = { id: kidId };
-      service.deleteKid.mockResolvedValue(expectedResult);
+    describe('getKid', () => {
+        it('should return a kid', async () => {
+            const kidId = 'kid-1';
+            const expectedResult = { id: kidId };
+            service.findOne.mockResolvedValue(expectedResult);
 
-      const result = await controller.deleteKid(mockRequest, kidId);
-      expect(result).toEqual(expectedResult);
-      expect(service.deleteKid).toHaveBeenCalledWith(kidId, 'user-1', false);
+            const result = await controller.getKid(mockRequest, kidId);
+            expect(result).toEqual(expectedResult);
+            expect(service.findOne).toHaveBeenCalledWith(kidId, 'user-1');
+        });
     });
-  });
+
+    describe('updateKid', () => {
+        it('should update a kid', async () => {
+            const kidId = 'kid-1';
+            const dto: UpdateKidDto = { name: 'Alex Updated' };
+            const expectedResult = { id: kidId, ...dto };
+            service.updateKid.mockResolvedValue(expectedResult);
+
+            const result = await controller.updateKid(mockRequest, kidId, dto);
+            expect(result).toEqual(expectedResult);
+            expect(service.updateKid).toHaveBeenCalledWith(kidId, 'user-1', dto);
+        });
+    });
+
+    describe('deleteKid', () => {
+        it('should delete a kid', async () => {
+            const kidId = 'kid-1';
+            const expectedResult = { id: kidId };
+            service.deleteKid.mockResolvedValue(expectedResult);
+
+            const result = await controller.deleteKid(mockRequest, kidId);
+            expect(result).toEqual(expectedResult);
+            expect(service.deleteKid).toHaveBeenCalledWith(kidId, 'user-1', false);
+        });
+    });
+
+
 });

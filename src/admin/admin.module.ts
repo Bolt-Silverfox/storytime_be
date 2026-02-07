@@ -11,4 +11,4 @@ import { VoiceModule } from '../voice/voice.module';
   providers: [AdminService],
   exports: [AdminService],
 })
-export class AdminModule {}
+export class AdminModule { }

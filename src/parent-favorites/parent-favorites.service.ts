@@ -6,12 +6,9 @@ import { ParentFavoriteResponseDto } from './dto/parent-favorite-response.dto';
 
 @Injectable()
 export class ParentFavoritesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
-  async addFavorite(
-    userId: string,
-    dto: CreateParentFavoriteDto,
-  ): Promise<ParentFavoriteResponseDto> {
+  async addFavorite(userId: string, dto: CreateParentFavoriteDto): Promise<ParentFavoriteResponseDto> {
     const favorite = await this.prisma.parentFavorite.create({
       data: {
         userId,
@@ -80,4 +77,5 @@ export class ParentFavoritesService {
 
     return 'Favorite removed successfully';
   }
+
 }

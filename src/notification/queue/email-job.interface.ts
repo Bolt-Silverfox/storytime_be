@@ -55,9 +55,7 @@ export enum EmailPriority {
 /**
  * Map notification categories to priority
  */
-export const CATEGORY_PRIORITY_MAP: Partial<
-  Record<NotificationCategory, EmailPriority>
-> = {
+export const CATEGORY_PRIORITY_MAP: Partial<Record<NotificationCategory, EmailPriority>> = {
   EMAIL_VERIFICATION: EmailPriority.HIGH,
   PASSWORD_RESET: EmailPriority.HIGH,
   PASSWORD_RESET_ALERT: EmailPriority.HIGH,

@@ -41,10 +41,7 @@ describe('PaymentService', () => {
       providers: [
         PaymentService,
         { provide: PrismaService, useValue: mockPrisma },
-        {
-          provide: GoogleVerificationService,
-          useValue: mockGoogleVerification,
-        },
+        { provide: GoogleVerificationService, useValue: mockGoogleVerification },
         { provide: AppleVerificationService, useValue: mockAppleVerification },
       ],
     }).compile();

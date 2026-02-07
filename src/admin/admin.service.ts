@@ -21,13 +21,17 @@ import {
   PaginatedResponseDto,
   SubscriptionAnalyticsDto,
   RevenueAnalyticsDto,
+  UserDetailDto,
+  StoryDetailDto,
   CategoryDto,
   ThemeDto,
   SubscriptionDto,
   ActivityLogDto,
   AiCreditAnalyticsDto,
   UserGrowthMonthlyDto,
+  MetricWithTrendDto,
 } from './dto/admin-responses.dto';
+import { CreateSupportTicketDto } from '../help-support/dto/create-support-ticket.dto';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import {
   UserFilterDto,
@@ -47,11 +51,7 @@ import {
 } from '../../prisma/data';
 import { DateUtil } from '@/shared/utils/date.util';
 import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';
-import {
-  CACHE_KEYS,
-  CACHE_TTL_MS,
-  STORY_INVALIDATION_KEYS,
-} from '@/shared/constants/cache-keys.constants';
+import { CACHE_KEYS, CACHE_TTL_MS, STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
@@ -94,6 +94,8 @@ export class AdminService {
     const prevRange24h = DateUtil.getPreviousPeriod(range24h);
     const prevRange7d = DateUtil.getPreviousPeriod(range7d);
     const prevRange30d = DateUtil.getPreviousPeriod(range30d);
+
+    const rangeYesterday = DateUtil.getRange(Timeframe.YESTERDAY, now); // For "New Users Today" comparison
 
     // Helper to count between dates
     const countBetween = (model: any, start: Date, end: Date) =>
@@ -246,6 +248,7 @@ export class AdminService {
       prevActiveUsers24h,
       prevActiveUsers7d,
       prevActiveUsers30d,
+      prevNewUsersToday,
       prevNewUsersThisMonth,
     ] = await Promise.all([
       this.prisma.user.count({
@@ -266,6 +269,9 @@ export class AdminService {
           isDeleted: false,
         },
       }),
+
+      // New Users Today vs Yesterday
+      countBetween(this.prisma.user, rangeYesterday.start, rangeYesterday.end),
       // New Users This Month vs Last Month
       countBetween(this.prisma.user, rangeLastMonth.start, rangeLastMonth.end),
     ]);
@@ -812,14 +818,14 @@ export class AdminService {
 
     return {
       data: users.map((user) => {
-        // Sanitize user object - exclude sensitive fields
+        // Sanitize user object
         const {
-          passwordHash: _passwordHash,
-          pinHash: _pinHash,
-          kids: _kids,
-          paymentTransactions: _paymentTransactions,
-          usage: _usage,
-          subscriptions: _subscriptions,
+          passwordHash,
+          pinHash,
+          kids,
+          paymentTransactions,
+          usage,
+          subscriptions,
           ...safeUser
         } = user;
 
@@ -919,11 +925,7 @@ export class AdminService {
       },
     });
 
-    const {
-      passwordHash: _passwordHash,
-      pinHash: _pinHash,
-      ...safeUser
-    } = user;
+    const { passwordHash, pinHash, ...safeUser } = user;
 
     return {
       ...safeUser,
@@ -1071,7 +1073,7 @@ export class AdminService {
     const { userIds, action } = data;
 
     switch (action) {
-      case 'delete': {
+      case 'delete':
         const deleteResult = await this.prisma.user.updateMany({
           where: { id: { in: userIds } },
           data: {
@@ -1080,9 +1082,8 @@ export class AdminService {
           },
         });
         return { count: deleteResult.count };
-      }
 
-      case 'restore': {
+      case 'restore':
         const restoreResult = await this.prisma.user.updateMany({
           where: { id: { in: userIds } },
           data: {
@@ -1091,9 +1092,8 @@ export class AdminService {
           },
         });
         return { count: restoreResult.count };
-      }
 
-      case 'verify': {
+      case 'verify':
         const verifyResult = await this.prisma.user.updateMany({
           where: { id: { in: userIds } },
           data: {
@@ -1101,7 +1101,6 @@ export class AdminService {
           },
         });
         return { count: verifyResult.count };
-      }
 
       default:
         throw new BadRequestException('Invalid action');
@@ -1765,22 +1764,18 @@ export class AdminService {
       if (!dataMap.has(month)) return; // Should allow current year only
 
       let credits = 1;
-      let provider: string = '';
+      let provider = '';
       try {
-        const details = JSON.parse(log.details || '{}') as {
-          credits?: number;
-          provider?: string;
-        };
+        const details = JSON.parse(log.details || '{}');
         credits = details.credits || 1;
         provider = details.provider || '';
-      } catch {
-        // Fallback - use default values
+      } catch (e) {
+        // Fallback
       }
 
       const entry = dataMap.get(month)!;
-      if (provider === (AiProviders.ElevenLabs as string))
-        entry.elevenLabs += credits;
-      if (provider === (AiProviders.Gemini as string)) entry.gemini += credits;
+      if (provider === AiProviders.ElevenLabs) entry.elevenLabs += credits;
+      if (provider === AiProviders.Gemini) entry.gemini += credits;
       entry.total += credits;
     });
 
@@ -1896,8 +1891,8 @@ export class AdminService {
   // SYSTEM MANAGEMENT
   // =====================
 
-  createBackup(): { message: string; timestamp: Date } {
-    // TODO: Implement backup logic based on your database
+  async createBackup(): Promise<{ message: string; timestamp: Date }> {
+    // Implement backup logic based on your database
     return { message: 'Backup created successfully', timestamp: new Date() };
   }
 

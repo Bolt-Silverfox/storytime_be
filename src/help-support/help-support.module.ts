@@ -8,4 +8,4 @@ import { NotificationModule } from '@/notification/notification.module';
   controllers: [HelpSupportController],
   providers: [HelpSupportService],
 })
-export class HelpSupportModule {}
+export class HelpSupportModule { }

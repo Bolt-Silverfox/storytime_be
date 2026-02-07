@@ -39,9 +39,7 @@ export class GoogleStrategy extends PassportStrategy(
       if (!payload) throw new UnauthorizedException('Invalid Google token');
 
       if (!payload.email || !payload.sub) {
-        throw new UnauthorizedException(
-          'Invalid Google token: missing email or sub',
-        );
+        throw new UnauthorizedException('Invalid Google token: missing email or sub');
       }
 
       return {

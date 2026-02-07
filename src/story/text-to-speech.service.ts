@@ -1,9 +1,5 @@
 import { UploadService } from '../upload/upload.service';
-import {
-  Injectable,
-  InternalServerErrorException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { VOICE_CONFIG, DEFAULT_VOICE } from '../voice/voice.constants';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
@@ -23,7 +19,7 @@ export class TextToSpeechService {
     private readonly deepgramProvider: DeepgramTTSProvider,
     private readonly prisma: PrismaService,
     private readonly voiceQuota: VoiceQuotaService,
-  ) {}
+  ) { }
 
   async textToSpeechCloudUrl(
     storyId: string,
@@ -36,7 +32,7 @@ export class TextToSpeechService {
     // Resolve ElevenLabs ID
     let elevenLabsId: string | undefined;
     let model = 'aura-asteria-en'; // Default Deepgram model (Asteria)
-    const provider = 'deepgram'; // Default provider
+    let provider = 'deepgram'; // Default provider
 
     // Check if it's a known System Voice (Enum)
     if (Object.values(VoiceType).includes(type as VoiceType)) {
@@ -59,9 +55,7 @@ export class TextToSpeechService {
         const defaultConfig = VOICE_CONFIG[DEFAULT_VOICE];
         elevenLabsId = defaultConfig.elevenLabsId;
         model = defaultConfig.model;
-        this.logger.warn(
-          `Voice ID ${type} not found. Falling back to default.`,
-        );
+        this.logger.warn(`Voice ID ${type} not found. Falling back to default.`);
       }
     }
 
@@ -76,9 +70,7 @@ export class TextToSpeechService {
         // Fallback to Deepgram model
       }
     } else if (useElevenLabs && !userId) {
-      this.logger.warn(
-        `Anonymous request for ElevenLabs voice ${type}. Denying.`,
-      );
+      this.logger.warn(`Anonymous request for ElevenLabs voice ${type}. Denying.`);
       useElevenLabs = false;
     }
 
@@ -87,25 +79,14 @@ export class TextToSpeechService {
       try {
         const labsModel = VOICE_CONFIG_SETTINGS.MODELS.DEFAULT;
         const voiceSettings = {
-          stability:
-            VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.STABILITY,
-          similarity_boost:
-            VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.SIMILARITY_BOOST,
+          stability: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.STABILITY,
+          similarity_boost: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.SIMILARITY_BOOST,
           style: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.STYLE,
-          use_speaker_boost:
-            VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS
-              .USE_SPEAKER_BOOST,
+          use_speaker_boost: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.USE_SPEAKER_BOOST,
         };
 
-        this.logger.log(
-          `Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${elevenLabsId}) using model ${labsModel}`,
-        );
-        const audioBuffer = await this.elevenLabsProvider.generateAudio(
-          text,
-          elevenLabsId,
-          labsModel,
-          voiceSettings,
-        );
+        this.logger.log(`Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${elevenLabsId}) using model ${labsModel}`);
+        const audioBuffer = await this.elevenLabsProvider.generateAudio(text, elevenLabsId, labsModel, voiceSettings);
 
         // Increment usage
         if (userId) {
@@ -117,50 +98,33 @@ export class TextToSpeechService {
           `story_${storyId}_elevenlabs_${Date.now()}.mp3`,
         );
       } catch (error) {
-        this.logger.warn(
-          `ElevenLabs generation failed for story ${storyId}: ${error.message}. Falling back to Deepgram.`,
-        );
+        this.logger.warn(`ElevenLabs generation failed for story ${storyId}: ${error.message}. Falling back to Deepgram.`);
         // Proceed to fallback
       }
     } else {
       if (elevenLabsId) {
-        this.logger.debug(
-          `Skipping ElevenLabs: Quota exceeded or no user ID for voice ${type}`,
-        );
+        this.logger.debug(`Skipping ElevenLabs: Quota exceeded or no user ID for voice ${type}`);
       } else {
-        this.logger.debug(
-          `Skipping ElevenLabs: No ID configured for voice ${type}`,
-        );
+        this.logger.debug(`Skipping ElevenLabs: No ID configured for voice ${type}`);
       }
     }
 
     // Priority 2: Deepgram Fallback
     try {
-      this.logger.log(
-        `Attempting Deepgram generation for story ${storyId} with voice ${type}`,
-      );
+      this.logger.log(`Attempting Deepgram generation for story ${storyId} with voice ${type}`);
 
       const deepgramSettings = {
         speed: VOICE_CONFIG_SETTINGS.DEEPGRAM.DEFAULT_SPEED, // Slower pace for storytelling
       };
 
-      const audioBuffer = await this.deepgramProvider.generateAudio(
-        text,
-        undefined,
-        model,
-        deepgramSettings,
-      );
+      const audioBuffer = await this.deepgramProvider.generateAudio(text, undefined, model, deepgramSettings);
       return await this.uploadService.uploadAudioBuffer(
         audioBuffer,
         `story_${storyId}_deepgram_${Date.now()}.wav`,
       );
     } catch (error) {
-      this.logger.error(
-        `Deepgram fallback failed for story ${storyId}: ${error.message}`,
-      );
-      throw new InternalServerErrorException(
-        'Voice generation failed on both providers',
-      );
+      this.logger.error(`Deepgram fallback failed for story ${storyId}: ${error.message}`);
+      throw new InternalServerErrorException('Voice generation failed on both providers');
     }
   }
 }

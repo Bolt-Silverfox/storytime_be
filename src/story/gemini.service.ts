@@ -1,8 +1,6 @@
 import {
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-  InternalServerErrorException,
+  Injectable, Logger, ServiceUnavailableException,
+  InternalServerErrorException
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -11,16 +9,16 @@ import { VoiceQuotaService } from '../voice/voice-quota.service';
 
 /** Circuit breaker states */
 enum CircuitState {
-  CLOSED = 'CLOSED', // Normal operation
-  OPEN = 'OPEN', // Failing fast, not calling API
-  HALF_OPEN = 'HALF_OPEN', // Testing if service recovered
+  CLOSED = 'CLOSED',     // Normal operation
+  OPEN = 'OPEN',         // Failing fast, not calling API
+  HALF_OPEN = 'HALF_OPEN' // Testing if service recovered
 }
 
 /** Circuit breaker configuration */
 const CIRCUIT_CONFIG = {
-  failureThreshold: 5, // Open circuit after 5 consecutive failures
-  resetTimeoutMs: 60000, // Try again after 1 minute
-  halfOpenMaxAttempts: 1, // Allow 1 test request in half-open state
+  failureThreshold: 5,      // Open circuit after 5 consecutive failures
+  resetTimeoutMs: 60000,    // Try again after 1 minute
+  halfOpenMaxAttempts: 1,   // Allow 1 test request in half-open state
 };
 
 export interface GenerateStoryOptions {
@@ -142,7 +140,7 @@ export class GeminiService {
       this.circuitState = CircuitState.OPEN;
       this.logger.warn(
         `Circuit breaker OPEN after ${this.failureCount} consecutive failures. ` +
-          `Will retry in ${CIRCUIT_CONFIG.resetTimeoutMs / 1000}s`,
+        `Will retry in ${CIRCUIT_CONFIG.resetTimeoutMs / 1000}s`
       );
     }
   }
@@ -158,7 +156,7 @@ export class GeminiService {
     if (!this.canMakeRequest()) {
       this.logger.warn('Circuit breaker is OPEN - failing fast');
       throw new ServiceUnavailableException(
-        'The AI storyteller is temporarily unavailable. Please try again in a minute.',
+        'The AI storyteller is temporarily unavailable. Please try again in a minute.'
       );
     }
 
@@ -181,17 +179,15 @@ export class GeminiService {
         throw new Error('Invalid story structure received from Gemini');
       }
 
+
+
+
       // Track usage if userId is provided
       if (options.userId) {
         // Run in background to not block response
-        this.voiceQuotaService
-          .trackGeminiStory(options.userId)
-          .catch((err) =>
-            this.logger.error(
-              `Failed to track Gemini story usage for user ${options.userId}:`,
-              err,
-            ),
-          );
+        this.voiceQuotaService.trackGeminiStory(options.userId).catch(err =>
+          this.logger.error(`Failed to track Gemini story usage for user ${options.userId}:`, err)
+        );
       }
 
       // Record success for circuit breaker
@@ -222,20 +218,16 @@ export class GeminiService {
       }
 
       // 1. Check for Network/Fetch errors
-      if (
-        error.message &&
-        (error.message.includes('fetch failed') ||
-          error.message.includes('ETIMEDOUT'))
-      ) {
+      if (error.message && (error.message.includes('fetch failed') || error.message.includes('ETIMEDOUT'))) {
         throw new ServiceUnavailableException(
-          'We are having trouble connecting to the AI service right now. Please check your internet connection or try again in a moment.',
+          'We are having trouble connecting to the AI service right now. Please check your internet connection or try again in a moment.'
         );
       }
 
       // 2. Check for API Overload/Rate Limits
       if (error.status === 429 || error.status === 503) {
         throw new ServiceUnavailableException(
-          'The AI storyteller is a bit busy right now. Please try again in 1 minute.',
+          'The AI storyteller is a bit busy right now. Please try again in 1 minute.'
         );
       }
 
@@ -322,11 +314,11 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     return true;
   }
 
-  generateStoryImage(
+  async generateStoryImage(
     title: string,
     description: string,
     userId?: string, // Added userId for tracking
-  ): string {
+  ): Promise<string> {
     const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
     const encodedPrompt = encodeURIComponent(imagePrompt);
     const seed = Math.floor(Math.random() * 100000);
@@ -334,16 +326,11 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
 
     this.logger.log(`Generated Pollinations Image URL: ${imageUrl}`);
 
-    // Track usage if userId is provided (fire-and-forget)
+    // Track usage if userId is provided
     if (userId) {
-      void this.voiceQuotaService
-        .trackGeminiImage(userId)
-        .catch((err) =>
-          this.logger.error(
-            `Failed to track Gemini image usage for user ${userId}:`,
-            err,
-          ),
-        );
+      this.voiceQuotaService.trackGeminiImage(userId).catch(err =>
+        this.logger.error(`Failed to track Gemini image usage for user ${userId}:`, err)
+      );
     }
 
     return imageUrl;

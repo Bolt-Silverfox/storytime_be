@@ -82,8 +82,7 @@ export class EmailQueueService {
 
       return { queued: true, jobId };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to queue email ${jobId}: ${errorMessage}`);
 
       return {

@@ -21,11 +21,7 @@ import { EmailProcessor } from './queue/email.processor';
       name: EMAIL_QUEUE_NAME,
     }),
   ],
-  controllers: [
-    NotificationController,
-    InAppNotificationController,
-    UserPreferencesController,
-  ],
+  controllers: [NotificationController, InAppNotificationController, UserPreferencesController],
   providers: [
     NotificationService,
     InAppProvider,

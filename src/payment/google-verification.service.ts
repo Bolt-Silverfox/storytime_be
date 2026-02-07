@@ -137,9 +137,7 @@ export class GoogleVerificationService {
       );
 
       if (stderr) {
-        this.logger.warn(
-          `Python script stderr received (len=${stderr.length})`,
-        );
+        this.logger.warn(`Python script stderr received (len=${stderr.length})`);
       }
 
       // Parse JSON response from Python script

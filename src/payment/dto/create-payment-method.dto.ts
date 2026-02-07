@@ -3,10 +3,7 @@ import { IsString, IsNotEmpty, IsOptional, IsObject } from 'class-validator';
 import { Prisma } from '@prisma/client';
 
 export class CreatePaymentMethodDto {
-  @ApiProperty({
-    example: 'card',
-    description: 'Payment method type (card, bank, etc.)',
-  })
+  @ApiProperty({ example: 'card', description: 'Payment method type (card, bank, etc.)' })
   @IsString()
   @IsNotEmpty()
   type: string;
@@ -16,29 +13,17 @@ export class CreatePaymentMethodDto {
   @IsNotEmpty()
   details: string;
 
-  @ApiProperty({
-    required: false,
-    example: 'visa',
-    description: 'Payment provider name',
-  })
+  @ApiProperty({ required: false, example: 'visa', description: 'Payment provider name' })
   @IsString()
   @IsOptional()
   provider?: string;
 
-  @ApiProperty({
-    required: false,
-    example: '4242',
-    description: 'Last 4 digits of card',
-  })
+  @ApiProperty({ required: false, example: '4242', description: 'Last 4 digits of card' })
   @IsString()
   @IsOptional()
   last4?: string;
 
-  @ApiProperty({
-    required: false,
-    example: '06/27',
-    description: 'Card expiry date',
-  })
+  @ApiProperty({ required: false, example: '06/27', description: 'Card expiry date' })
   @IsString()
   @IsOptional()
   expiry?: string;

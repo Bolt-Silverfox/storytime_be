@@ -10,19 +10,8 @@ import {
   UseGuards,
   Logger,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiBearerAuth,
-  ApiOperation,
-  ApiBody,
-  ApiOkResponse,
-  ApiParam,
-  ApiResponse,
-} from '@nestjs/swagger';
-import {
-  AuthSessionGuard,
-  AuthenticatedRequest,
-} from '@/shared/guards/auth.guard';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody, ApiOkResponse, ApiParam, ApiResponse } from '@nestjs/swagger';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { ParentFavoritesService } from './parent-favorites.service';
 import { CreateParentFavoriteDto } from './dto/create-parent-favorite.dto';
 import { ParentFavoriteResponseDto } from './dto/parent-favorite-response.dto';
@@ -33,17 +22,14 @@ import { ErrorResponseDto } from '@/story/dto/story.dto';
 export class ParentFavoritesController {
   private readonly logger = new Logger(ParentFavoritesController.name);
 
-  constructor(
-    private readonly parentFavoritesService: ParentFavoritesService,
-  ) {}
+  constructor(private readonly parentFavoritesService: ParentFavoritesService) { }
 
   @Post()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Add a story to parent favorites',
-    description:
-      "Adds a story to the authenticated parent's list of favorites.",
+    description: 'Adds a story to the authenticated parent\'s list of favorites.',
   })
   @ApiBody({
     type: CreateParentFavoriteDto,
@@ -109,8 +95,7 @@ export class ParentFavoritesController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Remove a story from parent favorites',
-    description:
-      "Removes a specific story from the authenticated parent's favorites.",
+    description: 'Removes a specific story from the authenticated parent\'s favorites.',
   })
   @ApiParam({
     name: 'storyId',

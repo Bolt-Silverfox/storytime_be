@@ -31,10 +31,7 @@ import {
   UpdateAvatarDto,
   AssignAvatarDto,
 } from './dto/avatar.dto';
-import {
-  AuthSessionGuard,
-  AuthenticatedRequest,
-} from '@/shared/guards/auth.guard';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { AdminGuard } from '@/shared/guards/admin.guard';
 import { Public } from '@/shared/decorators/public.decorator';
 import { SuccessResponse } from '@/shared/dtos/api-response.dto';
@@ -42,7 +39,7 @@ import { SuccessResponse } from '@/shared/dtos/api-response.dto';
 @Controller('avatars')
 @UseGuards(AuthSessionGuard)
 export class AvatarController {
-  constructor(private readonly avatarService: AvatarService) {}
+  constructor(private readonly avatarService: AvatarService) { }
 
   @Get('system')
   @ApiOperation({

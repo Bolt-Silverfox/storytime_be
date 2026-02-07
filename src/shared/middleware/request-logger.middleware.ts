@@ -169,16 +169,11 @@ export function requestLogger(
   const { method, originalUrl, ip } = req;
 
   // Skip health checks
-  if (
-    originalUrl.startsWith('/health') ||
-    originalUrl.startsWith('/api/v1/health')
-  ) {
+  if (originalUrl.startsWith('/health') || originalUrl.startsWith('/api/v1/health')) {
     return next();
   }
 
-  logger.log(
-    `→ ${method} ${originalUrl} [${requestId.slice(0, 8)}] from ${ip}`,
-  );
+  logger.log(`→ ${method} ${originalUrl} [${requestId.slice(0, 8)}] from ${ip}`);
 
   res.on('finish', () => {
     const duration = Date.now() - startTime;

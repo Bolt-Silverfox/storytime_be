@@ -18,10 +18,7 @@ export class HelpSupportService {
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService<EnvConfig, true>,
   ) {
-    this.feedbackRecipientEmail = this.configService.get(
-      'DEFAULT_SENDER_EMAIL',
-      { infer: true },
-    );
+    this.feedbackRecipientEmail = this.configService.get('DEFAULT_SENDER_EMAIL', { infer: true });
   }
   // --- FAQs List ---
   getFaqs() {
@@ -75,14 +72,10 @@ export class HelpSupportService {
       this.logger.log(`Feedback submitted by ${email}`);
 
       return {
-        message:
-          'Thank you for your feedback! We appreciate you taking the time to help us improve.',
+        message: 'Thank you for your feedback! We appreciate you taking the time to help us improve.',
       };
     } catch (error) {
-      this.logger.error(
-        `Failed to process feedback from ${email}`,
-        error instanceof Error ? error.stack : String(error),
-      );
+      this.logger.error(`Failed to process feedback from ${email}`, error instanceof Error ? error.stack : String(error));
       // Still return success to user - feedback was received even if email failed
       return {
         message: 'Thank you for your feedback!',
@@ -168,9 +161,7 @@ export class HelpSupportService {
   }
 
   async getTicket(userId: string, id: string) {
-    const ticket = await this.prisma.supportTicket.findUnique({
-      where: { id },
-    });
+    const ticket = await this.prisma.supportTicket.findUnique({ where: { id } });
     if (!ticket || ticket.userId !== userId) {
       throw new NotFoundException('Ticket not found');
     }

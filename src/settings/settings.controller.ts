@@ -1,13 +1,4 @@
-import {
-  Controller,
-  Get,
-  Put,
-  Patch,
-  Post,
-  Body,
-  Param,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Put, Patch, Post, Body, Param, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -25,7 +16,7 @@ import { UpdateSettingsDto, SetKidDailyLimitDto } from './dto/settings.dto';
 @UseGuards(AuthSessionGuard)
 @ApiBearerAuth()
 export class SettingsController {
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(private readonly settingsService: SettingsService) { }
 
   // ============== PARENT SETTINGS (Existing) ==============
 

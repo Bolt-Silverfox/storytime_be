@@ -83,8 +83,7 @@ export class EmailProcessor extends WorkerHost {
         attemptsMade,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       this.logger.error(
         `Email job ${jobId} failed (attempt ${attemptsMade}): ${errorMessage}`,

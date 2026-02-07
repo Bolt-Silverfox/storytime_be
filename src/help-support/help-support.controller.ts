@@ -1,17 +1,6 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  Param,
-  UseGuards,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Param, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import {
-  AuthSessionGuard,
-  AuthenticatedRequest,
-} from '@/shared/guards/auth.guard';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
 import { HelpSupportService } from './help-support.service';
