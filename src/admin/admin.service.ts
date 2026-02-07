@@ -55,6 +55,7 @@ const CACHE_KEYS = {
   DASHBOARD_STATS: 'admin:dashboard:stats',
   STORY_STATS: 'admin:story:stats',
   CONTENT_BREAKDOWN: 'admin:content:breakdown',
+  CATEGORIES_ALL: 'categories:all'
 } as const;
 
 /** Cache TTL: 5 minutes for dashboard metrics */
@@ -1482,7 +1483,7 @@ export class AdminService {
         this.cacheManager.del(CACHE_KEYS.DASHBOARD_STATS),
         this.cacheManager.del(CACHE_KEYS.STORY_STATS),
         this.cacheManager.del(CACHE_KEYS.CONTENT_BREAKDOWN),
-        this.cacheManager.del('categories:all'),
+        this.cacheManager.del(CACHE_KEYS.CATEGORIES_ALL),
       ]);
 
       this.logger.log('✅ Database seeded successfully!');
