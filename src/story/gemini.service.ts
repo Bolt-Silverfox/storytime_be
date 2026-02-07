@@ -203,10 +203,19 @@ export class GeminiService {
         language: options.language || 'English',
       };
     } catch (error) {
-      // Record failure for circuit breaker
-      this.recordFailure();
-
       this.logger.error('Failed to generate story with Gemini:', error);
+
+      // Only count transient API errors toward circuit breaker
+      // Parse errors and validation errors are not API instability
+      const isTransientError =
+        error.status === 429 ||
+        error.status === 503 ||
+        error.message?.includes('fetch failed') ||
+        error.message?.includes('ETIMEDOUT');
+
+      if (isTransientError) {
+        this.recordFailure();
+      }
 
       // 1. Check for Network/Fetch errors
       if (error.message && (error.message.includes('fetch failed') || error.message.includes('ETIMEDOUT'))) {
@@ -222,7 +231,7 @@ export class GeminiService {
         );
       }
 
-      // 3. Fallback for other code errors
+      // 3. Fallback for other errors (parse errors, validation, etc.)
       throw new InternalServerErrorException(
         'Something went wrong generating the story. Please try again.',
       );
