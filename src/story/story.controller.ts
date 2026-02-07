@@ -74,6 +74,7 @@ import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
+import { CACHE_KEYS, CACHE_TTL_MS } from '@/shared/constants/cache-keys.constants';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -1176,5 +1177,22 @@ export class StoryController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
   ): Promise<TopPickStoryDto[]> {
     return this.storyService.getTopPicksFromParents(Math.min(limit, 50));
+  }
+
+  @Get('top-picks-from-us')
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey(CACHE_KEYS.TOP_PICKS_FROM_US)
+  @CacheTTL(CACHE_TTL_MS.TOP_PICKS_FROM_US)
+  @ApiOperation({ summary: 'Get curated random stories (refreshes every 24 hours)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of stories to return (default: 10)' })
+  @ApiOkResponse({
+    description: 'List of random curated stories',
+    type: StoryDto,
+    isArray: true,
+  })
+  async getTopPicksFromUs(
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ): Promise<StoryDto[]> {
+    return this.storyService.getTopPicksFromUs(Math.min(limit, 20)) as Promise<StoryDto[]>;
   }
 }

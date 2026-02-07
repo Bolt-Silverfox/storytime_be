@@ -1485,4 +1485,32 @@ export class StoryService {
       }))
       .sort((a, b) => b.recommendationCount - a.recommendationCount);
   }
+
+  /**
+   * Get random stories for "Top Picks from Us" homepage section.
+   * Results are cached for 24 hours.
+   */
+  async getTopPicksFromUs(limit: number = 10): Promise<any[]> {
+    // Get random story IDs using raw SQL for efficiency
+    const randomIds = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "Story"
+      WHERE "isDeleted" = false
+      ORDER BY RANDOM()
+      LIMIT ${limit}
+    `;
+
+    if (randomIds.length === 0) {
+      return [];
+    }
+
+    // Fetch full story objects with relations
+    return this.prisma.story.findMany({
+      where: { id: { in: randomIds.map((r) => r.id) } },
+      include: {
+        themes: true,
+        categories: true,
+        images: true,
+      },
+    });
+  }
 }
