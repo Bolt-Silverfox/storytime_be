@@ -237,7 +237,7 @@ export class AppleVerificationService {
       );
 
       req.on('error', reject);
-      req.setTimeout(10000, () => { // 10 second timeout (reduced from 30s)
+      req.setTimeout(15000, () => { // 15 second timeout (Apple recommended range)
         req.destroy();
         reject(new Error('Apple API request timeout'));
       });

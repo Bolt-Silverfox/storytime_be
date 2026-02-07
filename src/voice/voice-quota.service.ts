@@ -25,7 +25,11 @@ export class VoiceQuotaService {
                 subscriptions: {
                     where: {
                         status: SUBSCRIPTION_STATUS.ACTIVE,
-                        endsAt: { gt: new Date() },
+                        // Include lifetime subscriptions (null endsAt) and active ones
+                        OR: [
+                            { endsAt: { gt: new Date() } },
+                            { endsAt: null },
+                        ],
                     },
                     take: 1, // Only need to know if one exists
                 },
@@ -37,15 +41,23 @@ export class VoiceQuotaService {
 
         // Determine plan from included subscription
         const isPremium = user.subscriptions.length > 0;
-        const limit = isPremium ? VOICE_CONFIG_SETTINGS.QUOTAS.PREMIUM : VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
+        const limit = isPremium
+            ? VOICE_CONFIG_SETTINGS.QUOTAS.PREMIUM
+            : VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
 
-        // Get or initialize usage with upsert (single query instead of find + create/update)
-        const usage = await this.prisma.userUsage.upsert({
-            where: { userId },
-            create: { userId, currentMonth, elevenLabsCount: 0 },
-            update: user.usage?.currentMonth !== currentMonth
-                ? { currentMonth, elevenLabsCount: 0 } // Reset for new month
-                : {}, // No update needed
+        // Atomic month reset and upsert using transaction
+        const usage = await this.prisma.$transaction(async (tx) => {
+            // Reset count if month changed (atomic conditional update)
+            await tx.userUsage.updateMany({
+                where: { userId, currentMonth: { not: currentMonth } },
+                data: { currentMonth, elevenLabsCount: 0 },
+            });
+            // Upsert with non-empty update to ensure atomic behavior
+            return tx.userUsage.upsert({
+                where: { userId },
+                create: { userId, currentMonth, elevenLabsCount: 0 },
+                update: { currentMonth }, // Non-empty update for atomicity
+            });
         });
 
         if (usage.elevenLabsCount >= limit) {

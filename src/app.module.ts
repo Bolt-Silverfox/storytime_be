@@ -68,12 +68,13 @@ import { HealthModule } from './health/health.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const nodeEnv = config.get('NODE_ENV');
-        const isProduction = nodeEnv === 'production';
+        const nodeEnv = (config.get('NODE_ENV') ?? 'production').toLowerCase();
+        const nonProdEnvs = ['development', 'staging', 'test', 'local'];
+        const isNonProd = nonProdEnvs.includes(nodeEnv);
 
-        // Only apply strict rate limits in production
-        // Dev/staging get 100x multiplier for easier testing
-        const multiplier = isProduction ? 1 : 100;
+        // Only relax rate limits for explicit non-prod environments
+        // Unknown or missing NODE_ENV defaults to strict (production) limits
+        const multiplier = isNonProd ? 100 : 1;
 
         return {
           throttlers: (throttleConfig as any).throttlers.map((t: any) => ({
