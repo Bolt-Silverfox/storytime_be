@@ -47,12 +47,22 @@ import { GeminiService, GenerateStoryOptions } from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
+import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
 
 @Injectable()
 export class StoryService {
   private readonly logger = new Logger(StoryService.name);
   // Average reading speed for children: ~150 words per minute
   private readonly WORDS_PER_MINUTE = 150;
+
+  /** Invalidate all story-related caches */
+  private async invalidateStoryCaches(): Promise<void> {
+    try {
+      await Promise.all(STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)));
+    } catch (error) {
+      this.logger.warn(`Failed to invalidate story caches: ${error.message}`);
+    }
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -127,14 +137,32 @@ export class StoryService {
     }
 
     let targetLevel: number | undefined;
+    let recommendedStoryIds: string[] = [];
+    let restrictedStoryIds: string[] = [];
 
+    // Batch kid-related queries into a single call to avoid N+1
     if (filter.kidId) {
       const kid = await this.prisma.kid.findUnique({
         where: { id: filter.kidId, isDeleted: false },
-        include: { preferredCategories: true },
+        include: {
+          preferredCategories: true,
+          // Fetch parent recommendations in the same query
+          parentRecommendations: {
+            where: { isDeleted: false },
+            select: { storyId: true },
+          },
+          // Fetch restricted stories in the same query
+          restrictedStories: {
+            select: { storyId: true },
+          },
+        },
       });
 
       if (kid) {
+        // Extract recommended and restricted story IDs from the batch query
+        recommendedStoryIds = kid.parentRecommendations.map((rec) => rec.storyId);
+        restrictedStoryIds = kid.restrictedStories.map((r) => r.storyId);
+
         if (kid.currentReadingLevel > 0) {
           targetLevel = kid.currentReadingLevel;
           where.difficultyLevel = {
@@ -178,15 +206,6 @@ export class StoryService {
       }
     }
 
-    let recommendedStoryIds: string[] = [];
-    if (filter.kidId && filter.recommended !== false) {
-      const recommendations = await this.prisma.parentRecommendation.findMany({
-        where: { kidId: filter.kidId, isDeleted: false },
-        select: { storyId: true },
-      });
-      recommendedStoryIds = recommendations.map((rec) => rec.storyId);
-    }
-
     if (recommendedStoryIds.length > 0 && filter.recommended === undefined) {
       const recommendedClause: any = { id: { in: recommendedStoryIds } };
 
@@ -201,16 +220,9 @@ export class StoryService {
       ];
     }
 
-    // Exclude restricted stories if kidId is provided
-    if (filter.kidId) {
-      const restrictedStories = await this.prisma.restrictedStory.findMany({
-        where: { kidId: filter.kidId },
-        select: { storyId: true },
-      });
-      const restrictedStoryIds = restrictedStories.map((r) => r.storyId);
-      if (restrictedStoryIds.length > 0) {
-        where.id = { notIn: restrictedStoryIds, ...where.id };
-      }
+    // Exclude restricted stories (already fetched in batch query above)
+    if (restrictedStoryIds.length > 0) {
+      where.id = { notIn: restrictedStoryIds, ...where.id };
     }
 
     if (filter.recommended === true && filter.kidId) {
@@ -225,23 +237,26 @@ export class StoryService {
       ]
       : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
-    const totalCount = await this.prisma.story.count({ where });
-    const totalPages = Math.ceil(totalCount / limit);
+    // Run count and findMany in parallel to reduce latency by ~50%
+    const [totalCount, stories] = await Promise.all([
+      this.prisma.story.count({ where }),
+      this.prisma.story.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy,
+        include: {
+          images: true,
+          branches: true,
+          categories: true,
+          themes: true,
+          seasons: true,
+          questions: true,
+        },
+      }),
+    ]);
 
-    const stories = await this.prisma.story.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy,
-      include: {
-        images: true,
-        branches: true,
-        categories: true,
-        themes: true,
-        seasons: true,
-        questions: true,
-      },
-    });
+    const totalPages = Math.ceil(totalCount / limit);
 
     return {
       data: stories,
@@ -446,7 +461,7 @@ export class StoryService {
       include: { images: true, branches: true },
     });
 
-    await this.cacheManager.del('categories:all');
+    await this.invalidateStoryCaches();
     return story;
   }
 
@@ -483,7 +498,7 @@ export class StoryService {
       include: { images: true, branches: true },
     });
 
-    await this.cacheManager.del('categories:all');
+    await this.invalidateStoryCaches();
     return updatedStory;
   }
 
@@ -491,14 +506,18 @@ export class StoryService {
     const story = await this.prisma.story.findUnique({ where: { id, isDeleted: false } });
     if (!story) throw new NotFoundException('Story not found');
 
+    let result;
     if (permanent) {
-      return await this.prisma.story.delete({ where: { id } });
+      result = await this.prisma.story.delete({ where: { id } });
     } else {
-      return await this.prisma.story.update({
+      result = await this.prisma.story.update({
         where: { id },
         data: { isDeleted: true, deletedAt: new Date() },
       });
     }
+
+    await this.invalidateStoryCaches();
+    return result;
   }
 
   async undoDeleteStory(id: string) {
@@ -506,10 +525,13 @@ export class StoryService {
     if (!story) throw new NotFoundException('Story not found');
     if (!story.isDeleted) throw new BadRequestException('Story is not deleted');
 
-    return await this.prisma.story.update({
+    const result = await this.prisma.story.update({
       where: { id },
       data: { isDeleted: false, deletedAt: null },
     });
+
+    await this.invalidateStoryCaches();
+    return result;
   }
 
 
@@ -1256,7 +1278,7 @@ export class StoryService {
       }
     }
 
-    await this.cacheManager.del('categories:all');
+    await this.invalidateStoryCaches();
 
     return story;
   }

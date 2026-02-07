@@ -7,6 +7,20 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 
+/** Circuit breaker states */
+enum CircuitState {
+  CLOSED = 'CLOSED',     // Normal operation
+  OPEN = 'OPEN',         // Failing fast, not calling API
+  HALF_OPEN = 'HALF_OPEN' // Testing if service recovered
+}
+
+/** Circuit breaker configuration */
+const CIRCUIT_CONFIG = {
+  failureThreshold: 5,      // Open circuit after 5 consecutive failures
+  resetTimeoutMs: 60000,    // Try again after 1 minute
+  halfOpenMaxAttempts: 1,   // Allow 1 test request in half-open state
+};
+
 export interface GenerateStoryOptions {
   theme: string[];
   category: string[];
@@ -46,6 +60,12 @@ export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
   private genAI: GoogleGenerativeAI;
 
+  // Circuit breaker state
+  private circuitState: CircuitState = CircuitState.CLOSED;
+  private failureCount = 0;
+  private lastFailureTime = 0;
+  private halfOpenAttempts = 0;
+
   constructor(
     private configService: ConfigService,
     private readonly voiceQuotaService: VoiceQuotaService,
@@ -60,10 +80,83 @@ export class GeminiService {
     this.genAI = new GoogleGenerativeAI(apiKey);
   }
 
+  /**
+   * Check if circuit allows requests
+   * Returns true if request should proceed, false if should fail fast
+   */
+  private canMakeRequest(): boolean {
+    const now = Date.now();
+
+    switch (this.circuitState) {
+      case CircuitState.CLOSED:
+        return true;
+
+      case CircuitState.OPEN:
+        // Check if enough time has passed to try again
+        if (now - this.lastFailureTime >= CIRCUIT_CONFIG.resetTimeoutMs) {
+          this.circuitState = CircuitState.HALF_OPEN;
+          this.halfOpenAttempts = 0;
+          this.logger.log('Circuit breaker transitioning to HALF_OPEN state');
+          return true;
+        }
+        return false;
+
+      case CircuitState.HALF_OPEN:
+        // Allow limited test requests
+        if (this.halfOpenAttempts < CIRCUIT_CONFIG.halfOpenMaxAttempts) {
+          this.halfOpenAttempts++;
+          return true;
+        }
+        return false;
+
+      default:
+        return true;
+    }
+  }
+
+  /**
+   * Record a successful request - reset circuit breaker
+   */
+  private recordSuccess(): void {
+    if (this.circuitState === CircuitState.HALF_OPEN) {
+      this.logger.log('Circuit breaker closing after successful request');
+    }
+    this.failureCount = 0;
+    this.circuitState = CircuitState.CLOSED;
+  }
+
+  /**
+   * Record a failed request - potentially open circuit
+   */
+  private recordFailure(): void {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+
+    if (this.circuitState === CircuitState.HALF_OPEN) {
+      // Failed during test, go back to open
+      this.circuitState = CircuitState.OPEN;
+      this.logger.warn('Circuit breaker re-opening after failed test request');
+    } else if (this.failureCount >= CIRCUIT_CONFIG.failureThreshold) {
+      this.circuitState = CircuitState.OPEN;
+      this.logger.warn(
+        `Circuit breaker OPEN after ${this.failureCount} consecutive failures. ` +
+        `Will retry in ${CIRCUIT_CONFIG.resetTimeoutMs / 1000}s`
+      );
+    }
+  }
+
   async generateStory(options: GenerateStoryOptions): Promise<GeneratedStory> {
     if (!this.genAI) {
       throw new Error(
         'Gemini API is not configured. Please set GEMINI_API_KEY environment variable.',
+      );
+    }
+
+    // Circuit breaker check - fail fast if circuit is open
+    if (!this.canMakeRequest()) {
+      this.logger.warn('Circuit breaker is OPEN - failing fast');
+      throw new ServiceUnavailableException(
+        'The AI storyteller is temporarily unavailable. Please try again in a minute.'
       );
     }
 
@@ -74,7 +167,7 @@ export class GeminiService {
 
     try {
       const result = await model.generateContent(prompt);
-      const response = await result.response;
+      const response = result.response;
       const text = response.text();
 
       // Parse the JSON response
@@ -97,6 +190,9 @@ export class GeminiService {
         );
       }
 
+      // Record success for circuit breaker
+      this.recordSuccess();
+
       return {
         ...story,
         theme: options.theme,
@@ -108,6 +204,18 @@ export class GeminiService {
       };
     } catch (error) {
       this.logger.error('Failed to generate story with Gemini:', error);
+
+      // Only count transient API errors toward circuit breaker
+      // Parse errors and validation errors are not API instability
+      const isTransientError =
+        error.status === 429 ||
+        error.status === 503 ||
+        error.message?.includes('fetch failed') ||
+        error.message?.includes('ETIMEDOUT');
+
+      if (isTransientError) {
+        this.recordFailure();
+      }
 
       // 1. Check for Network/Fetch errors
       if (error.message && (error.message.includes('fetch failed') || error.message.includes('ETIMEDOUT'))) {
@@ -123,7 +231,7 @@ export class GeminiService {
         );
       }
 
-      // 3. Fallback for other code errors
+      // 3. Fallback for other errors (parse errors, validation, etc.)
       throw new InternalServerErrorException(
         'Something went wrong generating the story. Please try again.',
       );

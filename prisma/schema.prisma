@@ -120,6 +120,7 @@ model User {
   learningExpectations    UserLearningExpectation[]
 
   @@index([isDeleted])
+  @@index([email, isDeleted])
   @@map("users")
 }
 
@@ -331,6 +332,7 @@ model Story {
   restrictedStories     RestrictedStory[]
 
   @@index([isDeleted])
+  @@index([createdAt])
   @@map("stories")
 }
 
@@ -414,6 +416,7 @@ model StoryProgress {
 
   @@unique([kidId, storyId])
   @@index([isDeleted])
+  @@index([kidId, completed])
   @@map("story_progress")
 }
 
@@ -664,6 +667,7 @@ model ActivityLog {
   deletedAt   DateTime?
 
   @@index([isDeleted])
+  @@index([kidId, createdAt])
   @@map("activity_logs")
 }
 
