@@ -105,11 +105,18 @@ export class TokenService {
 
   /**
    * Find a session by hashed refresh token
+   * Includes user with kid count to avoid separate query
    */
   async findSessionByRefreshToken(refreshToken: string) {
     return this.prisma.session.findUnique({
       where: { token: this.hashToken(refreshToken) },
-      include: { user: true },
+      include: {
+        user: {
+          include: {
+            _count: { select: { kids: true } },
+          },
+        },
+      },
     });
   }
 

@@ -52,9 +52,14 @@ export class AuthService {
   // ==================== AUTHENTICATION ====================
 
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
+    // Single query: fetch user with profile, avatar, and kid count
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
-      include: { profile: true, avatar: true },
+      include: {
+        profile: true,
+        avatar: true,
+        _count: { select: { kids: true } },
+      },
     });
 
     if (!user) {
@@ -72,30 +77,35 @@ export class AuthService {
     }
 
     const tokenData = await this.tokenService.createTokenPair(user);
-    const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: user.id },
-    });
 
     return {
-      user: new UserDto({ ...user, numberOfKids }),
+      user: new UserDto({ ...user, numberOfKids: user._count.kids }),
       jwt: tokenData.jwt,
       refreshToken: tokenData.refreshToken,
     };
   }
 
   async refresh(refreshToken: string): Promise<RefreshResponseDto | null> {
-    const session = await this.tokenService.findSessionByRefreshToken(refreshToken);
+    // Session query now includes user with kid count
+    const session =
+      await this.tokenService.findSessionByRefreshToken(refreshToken);
 
     if (!session) {
       throw new UnauthorizedException('Invalid token');
     }
 
-    const jwt = this.tokenService.generateJwt(new UserDto(session.user), session.id);
-    const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: session.user.id },
-    });
+    const jwt = this.tokenService.generateJwt(
+      new UserDto(session.user),
+      session.id,
+    );
 
-    return { user: new UserDto({ ...session.user, numberOfKids }), jwt };
+    return {
+      user: new UserDto({
+        ...session.user,
+        numberOfKids: session.user._count.kids,
+      }),
+      jwt,
+    };
   }
 
   async logout(sessionId: string): Promise<boolean> {
