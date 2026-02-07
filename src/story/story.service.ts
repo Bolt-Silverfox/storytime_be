@@ -47,14 +47,7 @@ import { GeminiService, GenerateStoryOptions } from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
-
-/** Cache keys to invalidate when stories change */
-const STORY_CACHE_KEYS = [
-  'categories:all',
-  'admin:dashboard:stats',
-  'admin:story:stats',
-  'admin:content:breakdown',
-] as const;
+import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
 
 @Injectable()
 export class StoryService {
@@ -64,7 +57,7 @@ export class StoryService {
 
   /** Invalidate all story-related caches */
   private async invalidateStoryCaches(): Promise<void> {
-    await Promise.all(STORY_CACHE_KEYS.map(key => this.cacheManager.del(key)));
+    await Promise.all(STORY_INVALIDATION_KEYS.map(key => this.cacheManager.del(key)));
   }
 
   constructor(
