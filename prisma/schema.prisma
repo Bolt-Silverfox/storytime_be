@@ -120,6 +120,7 @@ model User {
   learningExpectations    UserLearningExpectation[]
 
   @@index([isDeleted])
+  @@index([email, isDeleted])
   @@map("users")
 }
 
@@ -666,6 +667,7 @@ model ActivityLog {
   deletedAt   DateTime?
 
   @@index([isDeleted])
+  @@index([kidId, createdAt])
   @@map("activity_logs")
 }
 
