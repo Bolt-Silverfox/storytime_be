@@ -51,20 +51,10 @@ import {
 } from '../../prisma/data';
 import { DateUtil } from '@/shared/utils/date.util';
 import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';
+import { CACHE_KEYS, CACHE_TTL_MS } from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
-
-/** Cache keys for admin dashboard */
-const CACHE_KEYS = {
-  DASHBOARD_STATS: 'admin:dashboard:stats',
-  STORY_STATS: 'admin:story:stats',
-  CONTENT_BREAKDOWN: 'admin:content:breakdown',
-  CATEGORIES_ALL: 'categories:all',
-} as const;
-
-/** Cache TTL: 5 minutes for dashboard metrics */
-const DASHBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
 
 @Injectable()
 export class AdminService {
@@ -452,7 +442,7 @@ export class AdminService {
     await this.cacheManager.set(
       CACHE_KEYS.DASHBOARD_STATS,
       result,
-      DASHBOARD_CACHE_TTL_MS,
+      CACHE_TTL_MS.DASHBOARD,
     );
     this.logger.debug('Dashboard stats cached for 5 minutes');
 
@@ -581,7 +571,7 @@ export class AdminService {
     await this.cacheManager.set(
       CACHE_KEYS.STORY_STATS,
       result,
-      DASHBOARD_CACHE_TTL_MS,
+      CACHE_TTL_MS.DASHBOARD,
     );
 
     return result;
@@ -661,7 +651,7 @@ export class AdminService {
     await this.cacheManager.set(
       CACHE_KEYS.CONTENT_BREAKDOWN,
       result,
-      DASHBOARD_CACHE_TTL_MS,
+      CACHE_TTL_MS.DASHBOARD,
     );
 
     return result;
