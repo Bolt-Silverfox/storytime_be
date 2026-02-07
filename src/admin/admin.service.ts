@@ -1231,10 +1231,15 @@ export class AdminService {
       throw new NotFoundException(`Story with ID ${storyId} not found`);
     }
 
-    return this.prisma.story.update({
+    const result = await this.prisma.story.update({
       where: { id: storyId },
       data: { recommended: !story.recommended },
     });
+
+    // Invalidate story stats cache for immediate dashboard accuracy
+    await this.cacheManager.del(CACHE_KEYS.STORY_STATS);
+
+    return result;
   }
 
   async deleteStory(storyId: string, permanent: boolean = false): Promise<any> {
@@ -1246,10 +1251,11 @@ export class AdminService {
       throw new NotFoundException(`Story with ID ${storyId} not found`);
     }
 
+    let result;
     if (permanent) {
-      return this.prisma.story.delete({ where: { id: storyId } });
+      result = await this.prisma.story.delete({ where: { id: storyId } });
     } else {
-      return this.prisma.story.update({
+      result = await this.prisma.story.update({
         where: { id: storyId },
         data: {
           isDeleted: true,
@@ -1257,6 +1263,15 @@ export class AdminService {
         },
       });
     }
+
+    // Invalidate dashboard caches for immediate accuracy
+    await Promise.all([
+      this.cacheManager.del(CACHE_KEYS.DASHBOARD_STATS),
+      this.cacheManager.del(CACHE_KEYS.STORY_STATS),
+      this.cacheManager.del(CACHE_KEYS.CONTENT_BREAKDOWN),
+    ]);
+
+    return result;
   }
 
   // =====================
