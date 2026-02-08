@@ -4,8 +4,8 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { SubscriptionService } from '@/subscription/subscription.service';
 import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
 import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
@@ -31,6 +31,7 @@ export class PaymentService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly subscriptionService: SubscriptionService,
     private readonly googleVerificationService: GoogleVerificationService,
     private readonly appleVerificationService: AppleVerificationService,
   ) {}
@@ -82,44 +83,32 @@ export class PaymentService {
     const planDef = PLANS[plan];
     const receiptHash = this.hashReceipt(dto.purchaseToken);
 
-    // Atomic create-or-get: try to create, handle unique constraint violation
-    const { tx, alreadyProcessed } = await this.createTransactionAtomic(
-      userId,
-      receiptHash,
-      result.amount ?? planDef.amount,
-      result.currency ?? 'USD',
-    );
-
-    if (alreadyProcessed) {
-      const existingSub = await this.prisma.subscription.findFirst({
-        where: { userId },
-      });
-      return {
-        success: true,
-        alreadyProcessed: true,
-        transaction: tx,
-        subscription: existingSub
-          ? {
-              plan: existingSub.plan,
-              status: existingSub.status,
-              startedAt: existingSub.startedAt,
-              endsAt: existingSub.endsAt,
-            }
-          : null,
-      };
-    }
-
-    // For subscriptions, use the expiration time from Google
+    // Calculate subscription end date
+    let endsAt: Date;
     if (result.isSubscription && result.expirationTime) {
-      return this.upsertSubscriptionWithExpiry(
-        userId,
-        plan,
-        tx,
-        result.expirationTime,
-      );
+      endsAt = result.expirationTime;
+    } else {
+      const now = new Date();
+      endsAt = new Date(now.getTime() + planDef.days * 24 * 60 * 60 * 1000);
     }
 
-    return this.upsertSubscription(userId, plan, tx);
+    // Atomically process payment and subscription together
+    const { tx, subscription, alreadyProcessed } =
+      await this.processPaymentAndSubscriptionAtomic(
+        userId,
+        receiptHash,
+        result.amount ?? planDef.amount,
+        result.currency ?? 'USD',
+        plan,
+        endsAt,
+      );
+
+    return {
+      success: true,
+      alreadyProcessed,
+      transaction: tx,
+      subscription,
+    };
   }
 
   private async verifyApplePurchase(userId: string, dto: VerifyPurchaseDto) {
@@ -138,43 +127,32 @@ export class PaymentService {
     const planDef = PLANS[plan];
     const receiptHash = this.hashReceipt(dto.purchaseToken);
 
-    // Atomic create-or-get: try to create, handle unique constraint violation
-    const { tx, alreadyProcessed } = await this.createTransactionAtomic(
-      userId,
-      receiptHash,
-      result.amount ?? planDef.amount,
-      result.currency ?? 'USD',
-    );
-
-    if (alreadyProcessed) {
-      const existingSub = await this.prisma.subscription.findFirst({
-        where: { userId },
-      });
-      return {
-        success: true,
-        alreadyProcessed: true,
-        transaction: tx,
-        subscription: existingSub
-          ? {
-              plan: existingSub.plan,
-              status: existingSub.status,
-              startedAt: existingSub.startedAt,
-              endsAt: existingSub.endsAt,
-            }
-          : null,
-      };
-    }
-
+    // Calculate subscription end date
+    let endsAt: Date;
     if (result.isSubscription && result.expirationTime) {
-      return this.upsertSubscriptionWithExpiry(
-        userId,
-        plan,
-        tx,
-        result.expirationTime,
-      );
+      endsAt = result.expirationTime;
+    } else {
+      const now = new Date();
+      endsAt = new Date(now.getTime() + planDef.days * 24 * 60 * 60 * 1000);
     }
 
-    return this.upsertSubscription(userId, plan, tx);
+    // Atomically process payment and subscription together
+    const { tx, subscription, alreadyProcessed } =
+      await this.processPaymentAndSubscriptionAtomic(
+        userId,
+        receiptHash,
+        result.amount ?? planDef.amount,
+        result.currency ?? 'USD',
+        plan,
+        endsAt,
+      );
+
+    return {
+      success: true,
+      alreadyProcessed,
+      transaction: tx,
+      subscription,
+    };
   }
 
   private mapProductIdToPlan(productId: string): string {
@@ -192,67 +170,6 @@ export class PaymentService {
     return createHash('sha256').update(receipt).digest('hex').substring(0, 32);
   }
 
-  private async upsertSubscription(
-    userId: string,
-    plan: string,
-    transaction: TransactionRecord,
-  ) {
-    const planDef = PLANS[plan];
-    const now = new Date();
-    const endsAt = new Date(now.getTime() + planDef.days * 24 * 60 * 60 * 1000);
-
-    return this.upsertSubscriptionWithExpiry(userId, plan, transaction, endsAt);
-  }
-
-  private async upsertSubscriptionWithExpiry(
-    userId: string,
-    plan: string,
-    transaction: TransactionRecord,
-    endsAt: Date,
-  ) {
-    const now = new Date();
-
-    // Use transaction to ensure atomicity between finding and updating/creating
-    const subscription = await this.prisma.$transaction(async (tx) => {
-      const existingSub = await tx.subscription.findFirst({
-        where: { userId },
-      });
-
-      if (existingSub) {
-        return tx.subscription.update({
-          where: { id: existingSub.id },
-          data: {
-            plan,
-            status: 'active',
-            startedAt: now,
-            endsAt,
-          },
-        });
-      }
-
-      return tx.subscription.create({
-        data: {
-          userId,
-          plan,
-          status: 'active',
-          startedAt: now,
-          endsAt,
-        },
-      });
-    });
-
-    return {
-      success: true,
-      transaction,
-      subscription: {
-        plan: subscription.plan,
-        status: subscription.status,
-        startedAt: subscription.startedAt,
-        endsAt: subscription.endsAt,
-      },
-    };
-  }
-
   async getSubscription(userId: string) {
     return this.prisma.subscription.findFirst({ where: { userId } });
   }
@@ -267,10 +184,15 @@ export class PaymentService {
     const endsAt =
       existing.endsAt && existing.endsAt > now ? existing.endsAt : now;
 
-    return this.prisma.subscription.update({
+    const cancelled = await this.prisma.subscription.update({
       where: { id: existing.id },
       data: { status: 'cancelled', endsAt },
     });
+
+    // Invalidate subscription cache after cancellation
+    await this.subscriptionService.invalidateCache(userId);
+
+    return cancelled;
   }
 
   private getErrorMessage(error: unknown): string {
@@ -279,17 +201,66 @@ export class PaymentService {
   }
 
   /**
-   * Atomically create a transaction or detect if one already exists.
-   * Uses the DB unique constraint on `reference` for race-condition-safe duplicate detection.
+   * Atomically process payment and subscription in a single transaction.
+   * Uses DB unique constraint on `reference` for race-condition-safe duplicate detection.
+   *
+   * This ensures that payment records and subscription updates are never out of sync.
    */
-  private async createTransactionAtomic(
+  private async processPaymentAndSubscriptionAtomic(
     userId: string,
     reference: string,
     amount: number,
     currency: string,
-  ): Promise<{ tx: TransactionRecord; alreadyProcessed: boolean }> {
-    try {
-      const tx = await this.prisma.paymentTransaction.create({
+    plan: string,
+    endsAt: Date,
+  ): Promise<{
+    tx: TransactionRecord;
+    subscription: {
+      plan: string;
+      status: string;
+      startedAt: Date;
+      endsAt: Date | null;
+    };
+    alreadyProcessed: boolean;
+  }> {
+    // First check if this transaction was already processed (idempotency check)
+    const existingTx = await this.prisma.paymentTransaction.findFirst({
+      where: { reference },
+    });
+
+    if (existingTx) {
+      // Verify the existing transaction belongs to the current user
+      if (existingTx.userId !== userId) {
+        throw new BadRequestException(
+          'This purchase receipt has already been used by another account',
+        );
+      }
+
+      // Return existing data without cache invalidation (no state change)
+      const existingSub = await this.prisma.subscription.findFirst({
+        where: { userId },
+      });
+
+      return {
+        tx: existingTx,
+        subscription: existingSub
+          ? {
+              plan: existingSub.plan,
+              status: existingSub.status,
+              startedAt: existingSub.startedAt,
+              endsAt: existingSub.endsAt,
+            }
+          : { plan, status: 'active', startedAt: new Date(), endsAt },
+        alreadyProcessed: true,
+      };
+    }
+
+    // Process new payment + subscription atomically
+    const now = new Date();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Create payment transaction
+      const paymentTx = await tx.paymentTransaction.create({
         data: {
           userId,
           paymentMethodId: null,
@@ -299,34 +270,50 @@ export class PaymentService {
           reference,
         },
       });
-      return { tx, alreadyProcessed: false };
-    } catch (error) {
-      // Handle unique constraint violation (P2002)
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        const existingTx = await this.prisma.paymentTransaction.findFirst({
-          where: { reference },
+
+      // Upsert subscription
+      const existingSub = await tx.subscription.findFirst({
+        where: { userId },
+      });
+
+      let subscription;
+      if (existingSub) {
+        subscription = await tx.subscription.update({
+          where: { id: existingSub.id },
+          data: {
+            plan,
+            status: 'active',
+            startedAt: now,
+            endsAt,
+          },
         });
-
-        if (!existingTx) {
-          // Should not happen, but handle gracefully
-          throw new BadRequestException(
-            'Transaction conflict detected. Please retry.',
-          );
-        }
-
-        // Verify the existing transaction belongs to the current user
-        if (existingTx.userId !== userId) {
-          throw new BadRequestException(
-            'This purchase receipt has already been used by another account',
-          );
-        }
-
-        return { tx: existingTx, alreadyProcessed: true };
+      } else {
+        subscription = await tx.subscription.create({
+          data: {
+            userId,
+            plan,
+            status: 'active',
+            startedAt: now,
+            endsAt,
+          },
+        });
       }
-      throw error;
-    }
+
+      return { paymentTx, subscription };
+    });
+
+    // Invalidate subscription cache after successful update
+    await this.subscriptionService.invalidateCache(userId);
+
+    return {
+      tx: result.paymentTx,
+      subscription: {
+        plan: result.subscription.plan,
+        status: result.subscription.status,
+        startedAt: result.subscription.startedAt,
+        endsAt: result.subscription.endsAt,
+      },
+      alreadyProcessed: false,
+    };
   }
 }
