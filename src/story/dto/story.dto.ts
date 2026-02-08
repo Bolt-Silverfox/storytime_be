@@ -433,7 +433,7 @@ export class ErrorResponseDto {
   @ApiProperty({ example: 400, required: false })
   statusCode?: number;
   @ApiProperty({ required: false, description: 'Additional error details' })
-  details?: any;
+  details?: Record<string, unknown>;
 }
 
 export class GenerateStoryDto {
@@ -525,7 +525,7 @@ export class PaginatedStoriesDto {
     isArray: true,
   })
   @IsArray()
-  data: any[];
+  data: Record<string, unknown>[];
 
   @ApiProperty({
     description: 'Pagination metadata',
@@ -628,10 +628,10 @@ export class RecommendationResponseDto {
   story?: CreateStoryDto;
 
   @ApiProperty({ required: false })
-  user?: any;
+  user?: { id: string; name?: string | null; email?: string };
 
   @ApiProperty({ required: false })
-  kid?: any;
+  kid?: { id: string; name?: string | null };
 }
 
 export class RecommendationsStatsDto {

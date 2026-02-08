@@ -31,7 +31,7 @@ export class DeepgramTTSProvider implements ITextToSpeechProvider {
     text: string,
     _voiceId?: string,
     model: string = 'aura-asteria-en',
-    options?: any,
+    options?: { speed?: string },
   ): Promise<Buffer> {
     if (!this.deepgram) {
       throw new Error('Deepgram client is not initialized');

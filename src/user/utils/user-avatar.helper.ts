@@ -3,7 +3,18 @@
  * Keep logic centralized: if avatar row exists return url, otherwise null or placeholder.
  */
 
-export function getAvatarUrlFromUser(user: any): string | null {
+export interface UserWithAvatar {
+  avatar?: {
+    id: string;
+    url: string;
+    isSystemAvatar?: boolean;
+  } | null;
+  avatarUrl?: string | null;
+}
+
+export function getAvatarUrlFromUser(
+  user: UserWithAvatar | null,
+): string | null {
   if (!user) return null;
   if (user.avatar && typeof user.avatar.url === 'string') {
     return user.avatar.url;
@@ -16,7 +27,7 @@ export function getAvatarUrlFromUser(user: any): string | null {
 /**
  * Build a minimal avatar info object for responses
  */
-export function buildAvatarInfo(user: any) {
+export function buildAvatarInfo(user: UserWithAvatar | null) {
   if (!user) return null;
   if (user.avatar) {
     return {

@@ -1364,7 +1364,7 @@ export class StoryController {
   })
   async getTopPicksFromParents(
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-  ): Promise<TopPickStoryDto[]> {
+  ) {
     return this.storyService.getTopPicksFromParents(Math.min(limit, 50));
   }
 
@@ -1388,9 +1388,7 @@ export class StoryController {
   })
   async getTopPicksFromUs(
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-  ): Promise<StoryDto[]> {
-    return this.storyService.getTopPicksFromUs(Math.min(limit, 20)) as Promise<
-      StoryDto[]
-    >;
+  ) {
+    return this.storyService.getTopPicksFromUs(Math.min(limit, 20));
   }
 }

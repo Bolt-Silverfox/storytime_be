@@ -659,7 +659,7 @@ export class NotificationService {
     offset: number = 0,
     unreadOnly: boolean = false,
   ) {
-    const where: any = {
+    const where: { userId: string; isDeleted: boolean; isRead?: boolean } = {
       userId,
       isDeleted: false,
     };

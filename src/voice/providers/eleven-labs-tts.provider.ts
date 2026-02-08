@@ -45,7 +45,12 @@ export class ElevenLabsTTSProvider
     voiceId: string,
     modelId: string = 'eleven_multilingual_v2',
 
-    options?: any,
+    options?: {
+      stability?: number;
+      similarity_boost?: number;
+      style?: number;
+      use_speaker_boost?: boolean;
+    },
   ): Promise<Buffer> {
     if (!this.client) {
       throw new Error('ElevenLabs client is not initialized');
@@ -56,15 +61,14 @@ export class ElevenLabsTTSProvider
         `Generating audio with voice ${voiceId} and model ${modelId}`,
       );
 
-      const convertOptions: any = {
+      const convertOptions: Parameters<
+        typeof this.client.textToSpeech.convert
+      >[1] = {
         text,
         model_id: modelId,
         output_format: 'mp3_44100_128',
+        ...(options && { voice_settings: options }),
       };
-
-      if (options) {
-        convertOptions.voice_settings = options;
-      }
 
       const audioStream = await this.client.textToSpeech.convert(
         voiceId,

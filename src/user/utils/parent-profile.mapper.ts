@@ -1,7 +1,32 @@
 import { Subscription } from '@prisma/client';
 import { SUBSCRIPTION_STATUS } from '../../subscription/subscription.constants';
 
-export function mapParentProfile(user: any) {
+export interface UserWithRelations {
+  id: string;
+  email: string;
+  title?: string | null;
+  name?: string | null;
+  avatar?: {
+    id: string;
+    url: string;
+    isSystemAvatar?: boolean;
+  } | null;
+  profile?: {
+    explicitContent?: boolean;
+    maxScreenTimeMins?: number | null;
+    language?: string | null;
+    country?: string;
+  } | null;
+  role: string;
+  kids?: { id: string }[];
+  pinHash?: string | null;
+  biometricsEnabled?: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  subscriptions?: Subscription[];
+}
+
+export function mapParentProfile(user: UserWithRelations | null) {
   if (!user) return null;
   return {
     id: user.id,
@@ -29,7 +54,7 @@ export function mapParentProfile(user: any) {
     biometricsEnabled: !!user.biometricsEnabled,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
-    subscriptionStatus: getSubscriptionStatus(user.subscriptions),
+    subscriptionStatus: getSubscriptionStatus(user.subscriptions ?? []),
   };
 }
 

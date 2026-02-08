@@ -257,7 +257,11 @@ export class UserDto {
   numberOfKids?: number;
 
   constructor(
-    user: Partial<UserDto> & { profile?: any; avatar?: any; kids?: any[] },
+    user: Partial<UserDto> & {
+      profile?: Partial<ProfileDto> | null;
+      avatar?: Partial<AvatarDto> | null;
+      kids?: { id: string }[];
+    },
   ) {
     this.profile = user.profile ? new ProfileDto(user.profile) : null;
 

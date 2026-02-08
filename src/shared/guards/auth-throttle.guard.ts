@@ -1,6 +1,11 @@
 import { Injectable, ExecutionContext } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 
+interface RequestBody {
+  email?: string;
+  [key: string]: unknown;
+}
+
 /**
  * Custom throttle guard for authentication endpoints
  * Tracks rate limits by email/username instead of IP address
@@ -19,7 +24,7 @@ export class AuthThrottleGuard extends ThrottlerGuard {
   ): string {
     const request = context
       .switchToHttp()
-      .getRequest<Request & { body?: any }>();
+      .getRequest<Request & { body?: RequestBody }>();
 
     // For login/signup, use email from request body
     // Ensure body exists and email is a string before normalizing
@@ -44,8 +49,9 @@ export class AuthThrottleGuard extends ThrottlerGuard {
   /**
    * Get the tracker string for error messages
    */
-  protected getTracker(req: Record<string, any>): Promise<string> {
-    const email = req.body?.email;
-    return Promise.resolve(email || req.ip);
+  protected getTracker(req: Record<string, unknown>): Promise<string> {
+    const body = req.body as RequestBody | undefined;
+    const email = body?.email;
+    return Promise.resolve(email || (req.ip as string));
   }
 }

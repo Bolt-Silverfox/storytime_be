@@ -12,8 +12,12 @@ export class StreamConverter {
     return this.nodeStreamToBuffer(stream);
   }
 
-  private isWebStream(stream: any): stream is ReadableStream<Uint8Array> {
-    return typeof stream.getReader === 'function';
+  private isWebStream(
+    stream: ReadableStream<Uint8Array> | Readable,
+  ): stream is ReadableStream<Uint8Array> {
+    return (
+      typeof (stream as ReadableStream<Uint8Array>).getReader === 'function'
+    );
   }
 
   private async webStreamToBuffer(
@@ -42,7 +46,7 @@ export class StreamConverter {
   private async nodeStreamToBuffer(stream: Readable): Promise<Buffer> {
     const chunks: Buffer[] = [];
     for await (const chunk of stream) {
-      chunks.push(Buffer.from(chunk));
+      chunks.push(Buffer.from(chunk as Uint8Array));
     }
     return Buffer.concat(chunks);
   }

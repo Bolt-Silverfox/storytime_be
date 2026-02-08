@@ -295,25 +295,27 @@ Include exactly 5 comprehension questions that test understanding of the story. 
 Important: Return ONLY the JSON object, no additional text or markdown formatting.`;
   }
 
-  private validateStoryStructure(story: any): boolean {
+  private validateStoryStructure(story: unknown): story is GeneratedStory {
     if (!story || typeof story !== 'object') return false;
 
+    const storyObj = story as Record<string, unknown>;
     const requiredFields = ['title', 'description', 'content', 'questions'];
     for (const field of requiredFields) {
-      if (!story[field]) return false;
+      if (!storyObj[field]) return false;
     }
 
-    if (!Array.isArray(story.questions) || story.questions.length < 1)
-      return false;
+    const questions = storyObj.questions;
+    if (!Array.isArray(questions) || questions.length < 1) return false;
 
-    for (const question of story.questions) {
+    for (const question of questions) {
+      const q = question as Record<string, unknown>;
       if (
-        !question.question ||
-        !Array.isArray(question.options) ||
-        question.options.length !== 4 ||
-        typeof question.answer !== 'number' ||
-        question.answer < 0 ||
-        question.answer > 3
+        !q.question ||
+        !Array.isArray(q.options) ||
+        q.options.length !== 4 ||
+        typeof q.answer !== 'number' ||
+        q.answer < 0 ||
+        q.answer > 3
       ) {
         return false;
       }

@@ -98,7 +98,11 @@ export class AdminService {
     const rangeYesterday = DateUtil.getRange(Timeframe.YESTERDAY, now); // For "New Users Today" comparison
 
     // Helper to count between dates
-    const countBetween = (model: any, start: Date, end: Date) =>
+    const countBetween = (
+      model: { count: (args: { where: object }) => Promise<number> },
+      start: Date,
+      end: Date,
+    ): Promise<number> =>
       model.count({
         where: { createdAt: { gte: start, lte: end }, isDeleted: false },
       });
@@ -2011,7 +2015,7 @@ export class AdminService {
     status?: string,
   ) {
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.SupportTicketWhereInput = {};
     if (status) where.status = status;
 
     const [tickets, total] = await Promise.all([

@@ -117,7 +117,7 @@ export class AvatarService {
     isSystemAvatar: boolean = false,
     createdByUserId?: string,
   ) {
-    let uploadResult: any;
+    let uploadResult: { secure_url: string; public_id: string } | undefined;
 
     if (file) {
       try {
@@ -145,10 +145,16 @@ export class AvatarService {
         ? 'System Avatar'
         : `Custom Avatar - ${new Date().toISOString()}`);
 
+    // URL is guaranteed by validation above (file upload or provided URL)
+    const avatarUrl = uploadResult?.secure_url || createAvatarDto.url;
+    if (!avatarUrl) {
+      throw new BadRequestException('Avatar URL is required');
+    }
+
     return this.prisma.avatar.create({
       data: {
         name: avatarName,
-        url: uploadResult?.secure_url || createAvatarDto.url,
+        url: avatarUrl,
         publicId: uploadResult?.public_id || null,
         isSystemAvatar: isSystemAvatar,
         isDeleted: false,
@@ -174,8 +180,10 @@ export class AvatarService {
       throw new NotFoundException('Avatar not found');
     }
 
-    let uploadResult: any;
-    const data: any = { ...updateAvatarDto };
+    let uploadResult: { secure_url: string; public_id: string } | undefined;
+    const data: { name?: string; url?: string; publicId?: string } = {
+      ...updateAvatarDto,
+    };
 
     if (file) {
       if (avatar.publicId) {

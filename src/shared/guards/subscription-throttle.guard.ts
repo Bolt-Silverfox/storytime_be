@@ -34,7 +34,9 @@ export class SubscriptionThrottleGuard extends ThrottlerGuard {
     const user = request.authUserData;
 
     // Check if user has active premium subscription
-    const isPremium = await this.checkPremiumStatus(user?.userId);
+    const isPremium = await this.checkPremiumStatus(
+      (user as { userId?: string } | undefined)?.userId,
+    );
 
     // Adjust limits based on subscription
     const adjustedLimit = isPremium

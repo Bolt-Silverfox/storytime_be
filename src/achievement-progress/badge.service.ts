@@ -1,12 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { BadgeConstants } from './badge.constants';
+import {
+  BadgeConstants,
+  BadgeDefinition,
+  BadgeMetadata,
+} from './badge.constants';
 import {
   BadgePreviewDto,
   BadgeDetailDto,
   FullBadgeListResponseDto,
 } from './dto/badge-response.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma, UserBadge } from '@prisma/client';
 
 @Injectable()
 export class BadgeService {
@@ -34,7 +39,7 @@ export class BadgeService {
       select: { id: true },
     });
 
-    const txOps = [] as any[];
+    const txOps: Prisma.PrismaPromise<UserBadge>[] = [];
 
     for (const badge of badges) {
       // Parent-level (kidId omitted)
@@ -82,10 +87,11 @@ export class BadgeService {
     kidId?: string,
   ): Promise<BadgePreviewDto[]> {
     try {
-      const where: any = { userId };
-      if (typeof kidId === 'undefined') {
-        where.kidId = null;
-      } else {
+      const where: { userId: string; kidId: string | null } = {
+        userId,
+        kidId: null,
+      };
+      if (typeof kidId !== 'undefined') {
         where.kidId = kidId;
       }
 
@@ -104,16 +110,17 @@ export class BadgeService {
 
       // If less than 3, fill with locked badges
       if (userBadges.length < 3) {
-        const where2: any = {
+        const where2: {
+          userId: string;
+          unlocked: boolean;
+          id: { notIn: string[] };
+          kidId: string | null;
+        } = {
           userId,
           unlocked: false,
           id: { notIn: userBadges.map((ub) => ub.id) },
+          kidId: typeof kidId === 'undefined' ? null : kidId,
         };
-        if (typeof kidId === 'undefined') {
-          where2.kidId = null;
-        } else {
-          where2.kidId = kidId;
-        }
 
         const remaining = await this.prisma.userBadge.findMany({
           where: where2,
@@ -146,12 +153,10 @@ export class BadgeService {
     userId: string,
     kidId?: string,
   ): Promise<FullBadgeListResponseDto> {
-    const whereAll: any = { userId };
-    if (typeof kidId === 'undefined') {
-      whereAll.kidId = null;
-    } else {
-      whereAll.kidId = kidId;
-    }
+    const whereAll: { userId: string; kidId: string | null } = {
+      userId,
+      kidId: typeof kidId === 'undefined' ? null : kidId,
+    };
 
     const userBadges = await this.prisma.userBadge.findMany({
       where: whereAll,
@@ -178,14 +183,14 @@ export class BadgeService {
   // Get a specific user badge
 
   async getUserBadge(userId: string, badgeId: string, kidId?: string) {
-    const composite: any = {
+    const composite = {
       userId,
       kidId: typeof kidId === 'undefined' ? null : kidId,
       badgeId,
     };
 
     return this.prisma.userBadge.findUnique({
-      where: { userId_kidId_badgeId: composite },
+      where: { userId_kidId_badgeId: composite as any },
       include: { badge: true },
     });
   }
@@ -196,7 +201,7 @@ export class BadgeService {
     userId: string,
     badgeType: string,
     increment: number = 1,
-    metadata?: any,
+    metadata?: BadgeMetadata,
     kidId?: string,
   ): Promise<void> {
     const relevantBadges =
@@ -218,13 +223,19 @@ export class BadgeService {
       }
 
       await this.prisma.$transaction(async (tx) => {
-        const compositeKey: any = {
+        const compositeKey = {
           userId,
           kidId: typeof kidId === 'undefined' ? null : kidId,
           badgeId: badge.id,
         };
         const userBadge = await tx.userBadge.findUnique({
-          where: { userId_kidId_badgeId: compositeKey },
+          where: { userId_kidId_badgeId: compositeKey } as {
+            userId_kidId_badgeId: {
+              userId: string;
+              kidId: string;
+              badgeId: string;
+            };
+          },
         });
 
         if (!userBadge) {
@@ -267,7 +278,10 @@ export class BadgeService {
     }
   }
 
-  private shouldSkipBadge(badgeDef: any, metadata?: any): boolean {
+  private shouldSkipBadge(
+    badgeDef: BadgeDefinition,
+    metadata?: BadgeMetadata,
+  ): boolean {
     if (badgeDef.badgeType === 'special' && badgeDef.metadata?.timeConstraint) {
       const hour = new Date().getHours();
       const constraint = badgeDef.metadata.timeConstraint;
