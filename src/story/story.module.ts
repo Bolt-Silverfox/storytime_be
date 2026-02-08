@@ -6,7 +6,9 @@ import { UploadModule } from '../upload/upload.module';
 import { GeminiService } from './gemini.service';
 import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
+import { StoryQuotaService } from './story-quota.service';
 import { VoiceModule } from '../voice/voice.module';
+import { StoryAccessGuard } from '@/shared/guards/story-access.guard';
 
 @Module({
   imports: [
@@ -20,7 +22,9 @@ import { VoiceModule } from '../voice/voice.module';
   providers: [
     StoryService,
     GeminiService,
+    StoryQuotaService,
+    StoryAccessGuard,
   ],
-  exports: [StoryService],
+  exports: [StoryService, StoryQuotaService],
 })
 export class StoryModule { }

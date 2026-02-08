@@ -1455,13 +1455,7 @@ export class StoryService {
       }
     }
 
-    try {
-      await this.cacheManager.del('categories:all');
-    } catch (error) {
-      this.logger.warn(
-        `Failed to invalidate categories cache: ${error.message}`,
-      );
-    }
+    await this.invalidateStoryCaches();
 
     return story;
   }
