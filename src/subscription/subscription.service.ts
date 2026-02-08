@@ -37,38 +37,39 @@ export class SubscriptionService {
       );
     }
 
-    // For free plan: just create/activate subscription
+    // For free plan: use transaction to ensure atomic find-and-update/create
     const now = new Date();
     const endsAt = new Date(now.getTime() + plan.days * 24 * 60 * 60 * 1000);
 
-    const existing = await this.prisma.subscription.findFirst({
-      where: { userId },
-    });
+    const subscription = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.subscription.findFirst({
+        where: { userId },
+      });
 
-    if (existing) {
-      const updated = await this.prisma.subscription.update({
-        where: { id: existing.id },
+      if (existing) {
+        return tx.subscription.update({
+          where: { id: existing.id },
+          data: {
+            plan: planKey,
+            status: SUBSCRIPTION_STATUS.ACTIVE,
+            startedAt: now,
+            endsAt,
+          },
+        });
+      }
+
+      return tx.subscription.create({
         data: {
+          userId,
           plan: planKey,
           status: SUBSCRIPTION_STATUS.ACTIVE,
           startedAt: now,
           endsAt,
         },
       });
-      return { subscription: updated };
-    }
-
-    const sub = await this.prisma.subscription.create({
-      data: {
-        userId,
-        plan: planKey,
-        status: SUBSCRIPTION_STATUS.ACTIVE,
-        startedAt: now,
-        endsAt,
-      },
     });
 
-    return { subscription: sub };
+    return { subscription };
   }
 
   async cancel(userId: string) {
