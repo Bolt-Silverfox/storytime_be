@@ -606,12 +606,24 @@ export class StoryController {
     @Req() req: RequestWithStoryAccess,
     @Body() body: UserStoryProgressDto,
   ) {
-    // Record access if this is a new story for the user
-    if (req.authUserData?.userId && req.storyAccessResult?.reason !== 'already_read') {
-      await this.storyQuotaService.recordNewStoryAccess(req.authUserData.userId, body.storyId);
+    // Execute the operation first, then record quota on success
+    const result = await this.storyService.setUserProgress(
+      req.authUserData!.userId,
+      body,
+    );
+
+    // Record access only after successful operation to avoid consuming quota on failures
+    if (
+      req.authUserData?.userId &&
+      req.storyAccessResult?.reason !== 'already_read'
+    ) {
+      await this.storyQuotaService.recordNewStoryAccess(
+        req.authUserData.userId,
+        body.storyId,
+      );
     }
 
-    return this.storyService.setUserProgress(req.authUserData!.userId, body);
+    return result;
   }
 
   @Get('user/progress/:storyId')
@@ -855,16 +867,23 @@ export class StoryController {
     @Req() req: RequestWithStoryAccess,
     @Query('voiceId') voiceId?: VoiceType | string,
   ) {
-    // Record access if this is a new story for the user
-    if (req.authUserData?.userId && req.storyAccessResult?.reason !== 'already_read') {
-      await this.storyQuotaService.recordNewStoryAccess(req.authUserData.userId, id);
-    }
-
+    // Execute the operation first to ensure it succeeds
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
       voiceId ?? DEFAULT_VOICE,
       req.authUserData!.userId,
     );
+
+    // Record access only after successful operation to avoid consuming quota on failures
+    if (
+      req.authUserData?.userId &&
+      req.storyAccessResult?.reason !== 'already_read'
+    ) {
+      await this.storyQuotaService.recordNewStoryAccess(
+        req.authUserData.userId,
+        id,
+      );
+    }
 
     return {
       message: 'Audio generated successfully',
