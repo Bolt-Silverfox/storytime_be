@@ -144,6 +144,24 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - 178 unit tests passing, build passing
 
+**Additional Work (Type Safety Phase)**:
+- `src/admin/admin.service.ts` - Eliminated 10 `any` types:
+  - `getAllUsers()` → `PaginatedResponseDto<UserListItemDto>`
+  - `getUserById()` → Proper inline type with `Omit<User, ...>`
+  - `createAdmin()` → `AdminCreatedDto`
+  - `updateUser()` → `UserUpdatedDto`
+  - `deleteUser()` / `restoreUser()` → Explicit return types with `select`
+  - `getAllStories()` → `PaginatedResponseDto<StoryListItemDto>`
+  - `getStoryById()` → `StoryDetailDto`
+  - `toggleStoryRecommendation()` / `deleteStory()` → `Story` type
+  - Fixed security issue: `deleteUser`/`restoreUser` now use `select` to exclude `passwordHash`/`pinHash`
+- `src/admin/admin.controller.ts` - Fixed 4 `as any` casts with `ApiResponseDto<T>`
+- `src/admin/dto/admin-responses.dto.ts` - Added new DTOs: `UserListItemDto`, `StoryListItemDto`, `AdminCreatedDto`, `UserUpdatedDto`
+- `src/notification/*.ts` - Changed `Record<string, any>` to `Record<string, unknown>`
+- `src/achievement-progress/badge.service.ts` - Fixed Prisma compound key type assertion
+- `src/voice/providers/eleven-labs-tts.provider.ts` - Fixed SDK type compatibility (`blob as unknown as File`)
+- `src/notification/providers/in-app.provider.ts` - Fixed Prisma JSON type with proper cast
+
 ### Instance 5 - ✅ Completed
 **Focus**: Type safety improvements & N+1 query optimization
 **Timestamp**: 2026-02-08
@@ -210,6 +228,13 @@ Files currently being modified by other instances - avoid editing these:
 | `src/story/story-progress.service.ts` | Instance 6 | ✅ Done |
 | `src/story/daily-challenge.service.ts` | Instance 6 | ✅ Done |
 | `src/admin/admin-analytics.service.ts` | Instance 6 | ✅ Done |
+| `src/admin/admin.service.ts` | Instance 4 | ✅ Done |
+| `src/admin/admin.controller.ts` | Instance 4 | ✅ Done |
+| `src/admin/dto/admin-responses.dto.ts` | Instance 4 | ✅ Done |
+| `src/notification/notification.service.ts` | Instance 4 | ✅ Done |
+| `src/notification/notification.registry.ts` | Instance 4 | ✅ Done |
+| `src/notification/providers/*` | Instance 4 | ✅ Done |
+| `src/achievement-progress/badge.service.ts` | Instance 4 | ✅ Done |
 
 ---
 
@@ -231,7 +256,7 @@ Available tasks from the roadmaps:
 - [x] Add unit tests for SubscriptionService *(Instance 4)*
 - [x] Add unit tests for NotificationService *(Instance 4)*
 - [ ] Add E2E tests for authentication flows
-- [~] Replace remaining `any` types (~22 files) *(Instance 5 - partial: auth, user, voice services done)*
+- [x] Replace remaining `any` types (~22 files) *(Instance 4 & 5 - production code complete, only test mocks remain)*
 
 ### God Service Extractions (see QA_IMPROVEMENTS.md section 2.3 for details)
 

@@ -66,7 +66,7 @@ export class NotificationService {
 
   async sendNotification(
     type: Notifications,
-    data: Record<string, any>,
+    data: Record<string, unknown>,
     targetUserId?: string,
   ): Promise<{
     success: boolean;
