@@ -122,7 +122,7 @@ git push origin integration/refactor-2026-02
 **Status**: All work complete and merged into integration branch.
 
 ### Instance 4 - ✅ Completed
-**Focus**: Unit tests for critical untested services + StoryService transactions
+**Focus**: Unit tests + StoryService transactions + N+1 query fixes
 **Timestamp**: 2026-02-08
 **Branch**: `fix/bug-fixes`
 
@@ -137,8 +137,12 @@ git push origin integration/refactor-2026-02
   - `createStory()`: Transaction with validation for categories, themes, seasons
   - `updateStory()`: Transaction with validation for categories, themes, seasons
   - `persistGeneratedStory()`: Refactored to generate audio first with pre-generated UUID, then create story atomically with all data
+- `src/story/story.service.ts` - Fixed N+1 query patterns:
+  - Batched 10+ sequential validation queries using `Promise.all()` (addFavorite, setProgress, getProgress, setUserProgress, getUserProgress, restrictStory, assignDailyChallenge, startStoryPath, adjustReadingLevel, recommendStoryToKid)
+  - `assignDailyChallengeToAllKids()`: Refactored from O(n*queries) to 4 upfront queries + batch creates
+  - `generateStoryForKid()`: Removed duplicate kid query, batched themes/categories fetch
 
-**Status**: Complete - 125 unit tests passing, build passing
+**Status**: Complete - 178 unit tests passing, build passing
 
 ### Instance 5 - 🔄 In Progress
 **Focus**: [Describe your work area]
@@ -180,7 +184,7 @@ Available tasks from the roadmaps:
 - [x] Add transactions to SubscriptionService for plan changes *(Instance 1)*
 - [x] Add transactions to PaymentService for atomic payment + subscription *(Instance 3)*
 - [x] Add transactions to StoryService for story creation *(Instance 4)*
-- [ ] Batch sequential queries (N+1 fixes in story.service.ts)
+- [x] Batch sequential queries (N+1 fixes in story.service.ts) *(Instance 4)*
 - [x] Add retry logic to AI provider calls (GeminiService) *(Instance 3)*
 - [x] Implement circuit breaker for external services *(already existed in GeminiService)*
 
