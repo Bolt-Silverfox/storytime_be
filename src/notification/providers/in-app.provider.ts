@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   INotificationProvider,
@@ -22,7 +23,7 @@ export class InAppProvider implements INotificationProvider {
           category: payload.category,
           title: payload.title,
           body: payload.body,
-          data: payload.data || {},
+          data: (payload.data ?? {}) as unknown as Prisma.InputJsonValue,
           isRead: false,
         },
       });
