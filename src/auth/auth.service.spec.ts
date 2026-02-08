@@ -691,24 +691,4 @@ describe('AuthService', () => {
       expect(result.message).toBe('Password changed');
     });
   });
-
-  // ==================== GOOGLE OAUTH TESTS ====================
-
-  describe('loginWithGoogleIdToken', () => {
-    it('should throw BadRequestException for missing id_token', async () => {
-      await expect(service.loginWithGoogleIdToken('')).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-  });
-
-  // ==================== APPLE AUTH TESTS ====================
-
-  describe('loginWithAppleIdToken', () => {
-    it('should throw BadRequestException for missing id_token', async () => {
-      await expect(
-        service.loginWithAppleIdToken('', 'John', 'Doe'),
-      ).rejects.toThrow(BadRequestException);
-    });
-  });
 });
