@@ -496,6 +496,130 @@ describe('AuthService', () => {
     });
   });
 
+  // ==================== PROFILE MANAGEMENT TESTS ====================
+
+  describe('completeProfile', () => {
+    it('should complete profile successfully', async () => {
+      const user = {
+        ...mockUser,
+        onboardingStatus: 'email_verified',
+        profile: { userId: 'user-1' },
+      };
+      mockPrisma.user.findFirst.mockResolvedValue(user);
+      mockPrisma.profile.update.mockResolvedValue({ userId: 'user-1' });
+      mockPrisma.user.update.mockResolvedValue({
+        ...user,
+        onboardingStatus: 'profile_setup',
+      });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...user,
+        onboardingStatus: 'profile_setup',
+        learningExpectations: [],
+      });
+      mockPrisma.kid.count.mockResolvedValue(2);
+
+      const result = await service.completeProfile('user-1', {
+        language: 'en',
+        languageCode: 'en-US',
+      });
+
+      expect(result).toBeDefined();
+      expect(mockPrisma.profile.update).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException for non-existent user', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.completeProfile('nonexistent', { language: 'en' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if onboarding already completed', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue({
+        ...mockUser,
+        onboardingStatus: 'pin_setup',
+      });
+
+      await expect(
+        service.completeProfile('user-1', { language: 'en' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should validate learning expectations exist', async () => {
+      const user = {
+        ...mockUser,
+        onboardingStatus: 'email_verified',
+        profile: { userId: 'user-1' },
+      };
+      mockPrisma.user.findFirst.mockResolvedValue(user);
+      mockPrisma.learningExpectation.findMany.mockResolvedValue([
+        { id: 'exp-1' },
+      ]);
+
+      await expect(
+        service.completeProfile('user-1', {
+          learningExpectationIds: ['exp-1', 'exp-2'],
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getLearningExpectations', () => {
+    it('should return active learning expectations', async () => {
+      const expectations = [
+        {
+          id: 'exp-1',
+          name: 'Reading',
+          description: 'Reading skills',
+          category: 'literacy',
+        },
+      ];
+      mockPrisma.learningExpectation.findMany.mockResolvedValue(expectations);
+
+      const result = await service.getLearningExpectations();
+
+      expect(result).toEqual(expectations);
+      expect(mockPrisma.learningExpectation.findMany).toHaveBeenCalledWith({
+        where: { isActive: true, isDeleted: false },
+        select: { id: true, name: true, description: true, category: true },
+        orderBy: { name: 'asc' },
+      });
+    });
+  });
+
+  describe('updateProfile', () => {
+    it('should update profile successfully', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(mockUser);
+      mockPrisma.profile.upsert.mockResolvedValue({
+        userId: 'user-1',
+        country: 'US',
+        language: 'en',
+      });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        learningExpectations: [],
+      });
+      mockPrisma.kid.count.mockResolvedValue(2);
+
+      const result = await service.updateProfile('user-1', {
+        country: 'US',
+        language: 'en',
+      });
+
+      expect(result).toBeDefined();
+      expect(mockPrisma.profile.upsert).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException for non-existent user', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateProfile('nonexistent', { country: 'US' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   // ==================== PASSWORD DELEGATION TESTS ====================
 
   describe('requestPasswordReset', () => {
@@ -565,6 +689,26 @@ describe('AuthService', () => {
       );
 
       expect(result.message).toBe('Password changed');
+    });
+  });
+
+  // ==================== GOOGLE OAUTH TESTS ====================
+
+  describe('loginWithGoogleIdToken', () => {
+    it('should throw BadRequestException for missing id_token', async () => {
+      await expect(service.loginWithGoogleIdToken('')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  // ==================== APPLE AUTH TESTS ====================
+
+  describe('loginWithAppleIdToken', () => {
+    it('should throw BadRequestException for missing id_token', async () => {
+      await expect(
+        service.loginWithAppleIdToken('', 'John', 'Doe'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });
