@@ -83,7 +83,7 @@ export class StoryService {
         ? textOrWordCount.split(/\s+/).filter((word) => word.length > 0).length
         : textOrWordCount;
 
-    if (wordCount <= 0) return 0;
+    if (!Number.isFinite(wordCount) || wordCount <= 0) return 0;
 
     // Convert words per minute to seconds: (wordCount / wordsPerMinute) * 60
     return Math.ceil((wordCount / this.WORDS_PER_MINUTE) * 60);
@@ -1083,9 +1083,10 @@ export class StoryService {
         availableStories.length > 0 ? availableStories : stories;
       const story = storyPool[Math.floor(Math.random() * storyPool.length)];
       const wordOfTheDay = story.title;
-      const meaning =
-        story.description.split('. ')[0] +
-        (story.description.includes('.') ? '.' : '');
+      const description = story.description ?? '';
+      const meaning = description
+        ? description.split('. ')[0] + (description.includes('.') ? '.' : '')
+        : '';
       let challenge = await this.prisma.dailyChallenge.findFirst({
         where: { storyId: story.id, challengeDate: today, isDeleted: false },
       });
@@ -1530,7 +1531,7 @@ export class StoryService {
 
   async addDownload(kidId: string, storyId: string) {
     const story = await this.prisma.story.findUnique({
-      where: { id: storyId },
+      where: { id: storyId, isDeleted: false },
     });
     if (!story) throw new NotFoundException('Story not found');
     return await this.prisma.downloadedStory.upsert({
