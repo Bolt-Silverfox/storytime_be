@@ -69,14 +69,30 @@ export class StoryQuotaService {
    * Should be called after user successfully accesses a story for the first time
    */
   async recordNewStoryAccess(userId: string, storyId: string): Promise<void> {
-    // Only increment if this is truly a new story (no existing progress)
-    const existing = await this.prisma.userStoryProgress.findUnique({
-      where: { userId_storyId: { userId, storyId } },
-    });
+    const currentMonth = this.getCurrentMonth();
 
-    if (!existing) {
-      const currentMonth = this.getCurrentMonth();
-      await this.prisma.userUsage.upsert({
+    // Use interactive transaction to handle race condition atomically
+    await this.prisma.$transaction(async (tx) => {
+      // Check inside transaction to prevent race conditions
+      const existing = await tx.userStoryProgress.findUnique({
+        where: { userId_storyId: { userId, storyId } },
+      });
+
+      if (existing) {
+        return; // Already recorded, nothing to do
+      }
+
+      // Create UserStoryProgress record to mark story as "read"
+      await tx.userStoryProgress.create({
+        data: {
+          userId,
+          storyId,
+          progress: 0,
+        },
+      });
+
+      // Increment the unique stories count
+      await tx.userUsage.upsert({
         where: { userId },
         create: {
           userId,
@@ -88,8 +104,11 @@ export class StoryQuotaService {
           uniqueStoriesRead: { increment: 1 },
         },
       });
-      this.logger.debug(`Recorded new story access for user ${userId}, story ${storyId}`);
-    }
+
+      this.logger.debug(
+        `Recorded new story access for user ${userId}, story ${storyId}`,
+      );
+    });
   }
 
   /**
@@ -135,6 +154,16 @@ export class StoryQuotaService {
             bonusStories: 0,
             lastBonusGrantedAt: now,
           },
+        });
+        return usage;
+      }
+
+      // Initialize lastBonusGrantedAt for existing users who don't have it set
+      // This enables bonus accrual for migrated users without granting retroactive bonuses
+      if (!usage.lastBonusGrantedAt) {
+        usage = await tx.userUsage.update({
+          where: { userId },
+          data: { lastBonusGrantedAt: now },
         });
         return usage;
       }

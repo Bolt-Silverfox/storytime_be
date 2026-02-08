@@ -1,6 +1,6 @@
 import { VoiceType } from './dto/voice.dto';
 
-export const DEFAULT_VOICE = VoiceType.LILY;
+export const DEFAULT_VOICE = VoiceType.CHARLIE;
 
 export const VOICE_AVATARS = {
   [VoiceType.CHARLIE]:
