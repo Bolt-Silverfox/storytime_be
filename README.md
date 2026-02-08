@@ -90,7 +90,7 @@ pnpm start:prod
 
 Or use PM2 for process management:
 ```bash
-pnpm start:pm2
+pnpm start:pm2:prod
 ```
 
 ### Deployment
@@ -136,8 +136,12 @@ src/
 ### Production
 - `pnpm build` - Build the application
 - `pnpm start:prod` - Start production server
-- `pnpm start:pm2` - Start/restart with PM2
+- `pnpm start:pm2:dev` - Start/restart with PM2 (development)
+- `pnpm start:pm2:staging` - Start/restart with PM2 (staging)
+- `pnpm start:pm2:prod` - Start/restart with PM2 (production)
 - `pnpm deploy:dev` - Deploy to dev environment
+- `pnpm deploy:staging` - Deploy to staging environment
+- `pnpm deploy:prod` - Deploy to production environment
 
 ### Code Quality
 - `pnpm lint` - Lint and fix code
@@ -170,12 +174,12 @@ Important migration steps (run locally):
 
 1. Create a migration to update the database schema:
 ```powershell
-pnpm prisma migrate dev --name add-userbadge-kidid
+pnpm db:migrate:dev --name add-userbadge-kidid
 ```
 
 2. Generate the Prisma client:
 ```powershell
-pnpm prisma generate
+pnpm db:generate
 ```
 
 3. Initialize badges for existing users (optional): the `BadgeService.initializeUserBadges(userId)` will create both parent-level and per-kid badge records for each user. You can call this from a seed script or an admin endpoint.
