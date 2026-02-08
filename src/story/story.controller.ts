@@ -64,6 +64,7 @@ import { VoiceType, StoryContentAudioDto } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { StoryService } from './story.service';
 import { StoryProgressService } from './story-progress.service';
+import { DailyChallengeService } from './daily-challenge.service';
 import { VoiceService } from '../voice/voice.service';
 import { TextToSpeechService } from './text-to-speech.service';
 
@@ -89,6 +90,7 @@ export class StoryController {
   constructor(
     private readonly storyService: StoryService,
     private readonly storyProgressService: StoryProgressService,
+    private readonly dailyChallengeService: DailyChallengeService,
     private readonly voiceService: VoiceService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly storyQuotaService: StoryQuotaService,
@@ -784,14 +786,14 @@ export class StoryController {
   @ApiOperation({ summary: 'Set daily challenge' })
   @ApiBody({ type: DailyChallengeDto })
   async setDailyChallenge(@Body() body: DailyChallengeDto) {
-    return this.storyService.setDailyChallenge(body);
+    return this.dailyChallengeService.setDailyChallenge(body);
   }
 
   @Get('daily-challenge')
   @ApiOperation({ summary: 'Get daily challenge for a date' })
   @ApiQuery({ name: 'date', required: true, type: String })
   async getDailyChallenge(@Query('date') date: string) {
-    return this.storyService.getDailyChallenge(date);
+    return this.dailyChallengeService.getDailyChallenge(date);
   }
 
   // --- Daily Challenge Assignment ---
@@ -800,7 +802,7 @@ export class StoryController {
   @ApiBody({ type: AssignDailyChallengeDto })
   @ApiResponse({ status: 201, type: DailyChallengeAssignmentDto })
   async assignDailyChallenge(@Body() dto: AssignDailyChallengeDto) {
-    return this.storyService.assignDailyChallenge(dto);
+    return this.dailyChallengeService.assignDailyChallenge(dto);
   }
 
   @Post('daily-challenge/complete')
@@ -808,7 +810,7 @@ export class StoryController {
   @ApiBody({ type: CompleteDailyChallengeDto })
   @ApiResponse({ status: 200, type: DailyChallengeAssignmentDto })
   async completeDailyChallenge(@Body() dto: CompleteDailyChallengeDto) {
-    return this.storyService.completeDailyChallenge(dto);
+    return this.dailyChallengeService.completeDailyChallenge(dto);
   }
 
   @Get('daily-challenge/kid/:kidId')
@@ -816,7 +818,7 @@ export class StoryController {
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [DailyChallengeAssignmentDto] })
   async getAssignmentsForKid(@Param('kidId') kidId: string) {
-    return this.storyService.getAssignmentsForKid(kidId);
+    return this.dailyChallengeService.getAssignmentsForKid(kidId);
   }
 
   @Get('daily-challenge/assignment/:id')
@@ -824,7 +826,7 @@ export class StoryController {
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: DailyChallengeAssignmentDto })
   async getAssignmentById(@Param('id') id: string) {
-    return this.storyService.getAssignmentById(id);
+    return this.dailyChallengeService.getAssignmentById(id);
   }
 
   @Post('daily-challenge/assign-all')
@@ -833,7 +835,7 @@ export class StoryController {
   })
   @ApiOkResponse({ description: 'Daily challenges assigned to all kids.' })
   async assignDailyChallengeToAllKids() {
-    await this.storyService.assignDailyChallengeToAllKids();
+    await this.dailyChallengeService.assignDailyChallengeToAllKids();
     return { message: 'Daily challenges assigned to all kids.' };
   }
 
@@ -853,7 +855,7 @@ export class StoryController {
     this.logger.log(
       `Getting today's daily challenge assignment for kid ${kidId}`,
     );
-    return await this.storyService.getTodaysDailyChallengeAssignment(kidId);
+    return await this.dailyChallengeService.getTodaysDailyChallengeAssignment(kidId);
   }
 
   @Get('daily-challenge/kid/:kidId/week')
@@ -890,7 +892,7 @@ export class StoryController {
   ) {
     const weekStartDate = new Date(weekStart);
     weekStartDate.setHours(0, 0, 0, 0);
-    return this.storyService.getWeeklyDailyChallengeAssignments(
+    return this.dailyChallengeService.getWeeklyDailyChallengeAssignments(
       kidId,
       weekStartDate,
     );
