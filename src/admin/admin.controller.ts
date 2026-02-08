@@ -33,6 +33,7 @@ import {
   StoryStatsDto,
   ContentBreakdownDto,
   SystemHealthDto,
+  ApiResponseDto,
 } from './dto/admin-responses.dto';
 import {
   ApiBearerAuth,
@@ -105,13 +106,13 @@ export class AdminController {
       },
     },
   })
-  async getDashboardStats(): Promise<DashboardStatsDto> {
+  async getDashboardStats(): Promise<ApiResponseDto<DashboardStatsDto>> {
     const stats = await this.adminAnalyticsService.getDashboardStats();
     return {
       statusCode: 200,
       message: 'Dashboard metrics retrieved successfully',
       data: stats,
-    } as any;
+    };
   }
 
   @Get('dashboard/user-growth')
@@ -315,13 +316,13 @@ export class AdminController {
       },
     },
   })
-  async getStoryStats(): Promise<StoryStatsDto> {
+  async getStoryStats(): Promise<ApiResponseDto<StoryStatsDto>> {
     const stats = await this.adminAnalyticsService.getStoryStats();
     return {
       statusCode: 200,
       message: 'Story statistics retrieved successfully',
       data: stats,
-    } as any;
+    };
   }
 
   @Get('dashboard/content-breakdown')
@@ -362,13 +363,13 @@ export class AdminController {
       },
     },
   })
-  async getContentBreakdown(): Promise<ContentBreakdownDto> {
+  async getContentBreakdown(): Promise<ApiResponseDto<ContentBreakdownDto>> {
     const breakdown = await this.adminAnalyticsService.getContentBreakdown();
     return {
       statusCode: 200,
       message: 'Content breakdown retrieved successfully',
       data: breakdown,
-    } as any;
+    };
   }
 
   @Get('dashboard/system-health')
@@ -401,13 +402,13 @@ export class AdminController {
       },
     },
   })
-  async getSystemHealth(): Promise<SystemHealthDto> {
+  async getSystemHealth(): Promise<ApiResponseDto<SystemHealthDto>> {
     const health = await this.adminAnalyticsService.getSystemHealth();
     return {
       statusCode: 200,
       message: 'System health status retrieved successfully',
       data: health,
-    } as any;
+    };
   }
 
   @Get('dashboard/recent-activity')

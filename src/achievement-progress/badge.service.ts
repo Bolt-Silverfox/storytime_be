@@ -183,14 +183,16 @@ export class BadgeService {
   // Get a specific user badge
 
   async getUserBadge(userId: string, badgeId: string, kidId?: string) {
-    const composite = {
-      userId,
-      kidId: typeof kidId === 'undefined' ? null : kidId,
-      badgeId,
-    };
-
+    // Prisma compound key with nullable field requires type assertion
+    // kidId is optional in the schema (String?) but compound key typing can be strict
     return this.prisma.userBadge.findUnique({
-      where: { userId_kidId_badgeId: composite as any },
+      where: {
+        userId_kidId_badgeId: {
+          userId,
+          kidId: (kidId ?? null) as string,
+          badgeId,
+        },
+      },
       include: { badge: true },
     });
   }

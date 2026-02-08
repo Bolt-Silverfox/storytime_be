@@ -122,7 +122,7 @@ git push origin integration/refactor-2026-02
 **Status**: All work complete and merged into integration branch.
 
 ### Instance 4 - ✅ Completed
-**Focus**: Unit tests for critical untested services + StoryService transactions
+**Focus**: Unit tests + StoryService transactions + N+1 query fixes
 **Timestamp**: 2026-02-08
 **Branch**: `fix/bug-fixes`
 
@@ -137,8 +137,30 @@ git push origin integration/refactor-2026-02
   - `createStory()`: Transaction with validation for categories, themes, seasons
   - `updateStory()`: Transaction with validation for categories, themes, seasons
   - `persistGeneratedStory()`: Refactored to generate audio first with pre-generated UUID, then create story atomically with all data
+- `src/story/story.service.ts` - Fixed N+1 query patterns:
+  - Batched 10+ sequential validation queries using `Promise.all()` (addFavorite, setProgress, getProgress, setUserProgress, getUserProgress, restrictStory, assignDailyChallenge, startStoryPath, adjustReadingLevel, recommendStoryToKid)
+  - `assignDailyChallengeToAllKids()`: Refactored from O(n*queries) to 4 upfront queries + batch creates
+  - `generateStoryForKid()`: Removed duplicate kid query, batched themes/categories fetch
 
-**Status**: Complete - 125 unit tests passing, build passing
+**Status**: Complete - 178 unit tests passing, build passing
+
+**Additional Work (Type Safety Phase)**:
+- `src/admin/admin.service.ts` - Eliminated 10 `any` types:
+  - `getAllUsers()` → `PaginatedResponseDto<UserListItemDto>`
+  - `getUserById()` → Proper inline type with `Omit<User, ...>`
+  - `createAdmin()` → `AdminCreatedDto`
+  - `updateUser()` → `UserUpdatedDto`
+  - `deleteUser()` / `restoreUser()` → Explicit return types with `select`
+  - `getAllStories()` → `PaginatedResponseDto<StoryListItemDto>`
+  - `getStoryById()` → `StoryDetailDto`
+  - `toggleStoryRecommendation()` / `deleteStory()` → `Story` type
+  - Fixed security issue: `deleteUser`/`restoreUser` now use `select` to exclude `passwordHash`/`pinHash`
+- `src/admin/admin.controller.ts` - Fixed 4 `as any` casts with `ApiResponseDto<T>`
+- `src/admin/dto/admin-responses.dto.ts` - Added new DTOs: `UserListItemDto`, `StoryListItemDto`, `AdminCreatedDto`, `UserUpdatedDto`
+- `src/notification/*.ts` - Changed `Record<string, any>` to `Record<string, unknown>`
+- `src/achievement-progress/badge.service.ts` - Fixed Prisma compound key type assertion
+- `src/voice/providers/eleven-labs-tts.provider.ts` - Fixed SDK type compatibility (`blob as unknown as File`)
+- `src/notification/providers/in-app.provider.ts` - Fixed Prisma JSON type with proper cast
 
 ### Instance 5 - ✅ Completed
 **Focus**: Type safety improvements & N+1 query optimization
@@ -206,6 +228,13 @@ Files currently being modified by other instances - avoid editing these:
 | `src/story/story-progress.service.ts` | Instance 6 | ✅ Done |
 | `src/story/daily-challenge.service.ts` | Instance 6 | ✅ Done |
 | `src/admin/admin-analytics.service.ts` | Instance 6 | ✅ Done |
+| `src/admin/admin.service.ts` | Instance 4 | ✅ Done |
+| `src/admin/admin.controller.ts` | Instance 4 | ✅ Done |
+| `src/admin/dto/admin-responses.dto.ts` | Instance 4 | ✅ Done |
+| `src/notification/notification.service.ts` | Instance 4 | ✅ Done |
+| `src/notification/notification.registry.ts` | Instance 4 | ✅ Done |
+| `src/notification/providers/*` | Instance 4 | ✅ Done |
+| `src/achievement-progress/badge.service.ts` | Instance 4 | ✅ Done |
 
 ---
 
@@ -217,7 +246,7 @@ Available tasks from the roadmaps:
 - [x] Add transactions to SubscriptionService for plan changes *(Instance 1)*
 - [x] Add transactions to PaymentService for atomic payment + subscription *(Instance 3)*
 - [x] Add transactions to StoryService for story creation *(Instance 4)*
-- [x] Batch sequential queries (N+1 fixes in story.service.ts) *(Instance 5)*
+- [x] Batch sequential queries (N+1 fixes in story.service.ts) *(Instance 4 & 5)*
 - [x] Add retry logic to AI provider calls (GeminiService) *(Instance 3)*
 - [x] Implement circuit breaker for external services *(already existed in GeminiService)*
 
@@ -227,7 +256,7 @@ Available tasks from the roadmaps:
 - [x] Add unit tests for SubscriptionService *(Instance 4)*
 - [x] Add unit tests for NotificationService *(Instance 4)*
 - [ ] Add E2E tests for authentication flows
-- [~] Replace remaining `any` types (~22 files) *(Instance 5 - partial: auth, user, voice services done)*
+- [x] Replace remaining `any` types (~22 files) *(Instance 4 & 5 - production code complete, only test mocks remain)*
 
 ### God Service Extractions (see QA_IMPROVEMENTS.md section 2.3 for details)
 
