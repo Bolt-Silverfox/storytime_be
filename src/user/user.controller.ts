@@ -25,6 +25,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
+import { UserDeletionService } from './services/user-deletion.service';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -59,7 +60,10 @@ class UpdateUserRoleDto {
 @ApiTags('user')
 @Controller('user')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly userDeletionService: UserDeletionService,
+  ) {}
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
   // ============================================================
@@ -328,7 +332,7 @@ export class UserController {
     @Req() req: AuthenticatedRequest,
     @Query('permanent') permanent: boolean = false,
   ) {
-    const result = await this.userService.deleteUserAccount(
+    const result = await this.userDeletionService.deleteUserAccount(
       req.authUserData.userId,
       permanent,
     );
@@ -390,7 +394,7 @@ export class UserController {
     @Query('permanent') permanent: boolean = false,
   ) {
     // Verify password and create support ticket
-    await this.userService.verifyPasswordAndLogDeletion(
+    await this.userDeletionService.verifyPasswordAndLogDeletion(
       req.authUserData.userId,
       body.password,
       body.reasons,
@@ -459,7 +463,7 @@ export class UserController {
     },
   })
   async undoDeleteMyAccount(@Req() req: AuthenticatedRequest) {
-    const restoredUser = await this.userService.undoDeleteMyAccount(
+    const restoredUser = await this.userDeletionService.undoDeleteMyAccount(
       req.authUserData.userId,
     );
 
@@ -538,7 +542,7 @@ export class UserController {
     @Param('id') id: string,
     @Query('permanent') permanent: boolean = false,
   ) {
-    return await this.userService.deleteUserAccount(id, permanent);
+    return await this.userDeletionService.deleteUserAccount(id, permanent);
   }
 
   @Post(':id/undo-delete')
@@ -571,7 +575,7 @@ export class UserController {
       throw new ForbiddenException('Admins only');
     }
 
-    const restoredUser = await this.userService.undoDeleteUser(id);
+    const restoredUser = await this.userDeletionService.undoDeleteUser(id);
 
     return {
       statusCode: 200,
