@@ -24,6 +24,10 @@ interface StoryData {
   theme: string | string[];
   seasons?: string[];
   questions: StoryQuestion[];
+  wordCount?: number;
+  durationSeconds?: number;
+  difficultyLevel?: number;
+  aiGenerated?: boolean;
 }
 
 export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
@@ -43,7 +47,9 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       };
     }
 
-    const stories: StoryData[] = JSON.parse(fs.readFileSync(storiesPath, 'utf-8'));
+    const stories: StoryData[] = JSON.parse(
+      fs.readFileSync(storiesPath, 'utf-8'),
+    );
 
     let count = 0;
     for (const story of stories) {
@@ -51,10 +57,14 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       const storyCategories = Array.isArray(story.category)
         ? story.category
         : [story.category];
-      const cleanCategories = storyCategories.filter((c: string) => c && c.length > 0);
+      const cleanCategories = storyCategories.filter(
+        (c: string) => c && c.length > 0,
+      );
 
       // Handle both string and array formats for themes
-      const storyThemes = Array.isArray(story.theme) ? story.theme : [story.theme];
+      const storyThemes = Array.isArray(story.theme)
+        ? story.theme
+        : [story.theme];
       const cleanThemes = storyThemes.filter((t: string) => t && t.length > 0);
 
       await prisma.story.create({
@@ -70,6 +80,10 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
           textContent: story.content,
           recommended: story.recommended ?? false,
           backgroundColor: story.backgroundColor || '#5E3A54',
+          wordCount: story.wordCount ?? 0,
+          durationSeconds: story.durationSeconds ?? null,
+          difficultyLevel: story.difficultyLevel ?? 1,
+          aiGenerated: story.aiGenerated ?? false,
           categories: {
             connectOrCreate: cleanCategories.map((name: string) => ({
               where: { name },
