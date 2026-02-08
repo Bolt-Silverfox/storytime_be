@@ -99,7 +99,7 @@ export class BadgeProgressEngine implements OnModuleInit {
   }
 
   @OnEvent('user.login')
-  async handleUserLogin(event: BadgeEvent) {
+  handleUserLogin(event: BadgeEvent) {
     this.logger.log(`User login event: ${event.userId}`);
     // Could track login streak badges here
   }
