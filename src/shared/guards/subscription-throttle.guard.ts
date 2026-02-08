@@ -8,7 +8,7 @@ import {
   InjectThrottlerStorage,
 } from '@nestjs/throttler';
 import { Reflector } from '@nestjs/core';
-import { PrismaService } from '../../prisma/prisma.service';
+import { SubscriptionService } from '../../subscription/subscription.service';
 
 import { THROTTLE_LIMITS } from '../constants/throttle.constants';
 
@@ -22,7 +22,7 @@ export class SubscriptionThrottleGuard extends ThrottlerGuard {
     @InjectThrottlerOptions() options: ThrottlerModuleOptions,
     @InjectThrottlerStorage() storageService: ThrottlerStorage,
     reflector: Reflector,
-    private readonly prisma: PrismaService,
+    private readonly subscriptionService: SubscriptionService,
   ) {
     super(options, storageService, reflector);
   }
@@ -33,10 +33,11 @@ export class SubscriptionThrottleGuard extends ThrottlerGuard {
     const request = context.switchToHttp().getRequest();
     const user = request.authUserData;
 
-    // Check if user has active premium subscription
-    const isPremium = await this.checkPremiumStatus(
-      (user as { userId?: string } | undefined)?.userId,
-    );
+    // Check if user has active premium subscription (cached)
+    const userId = (user as { userId?: string } | undefined)?.userId;
+    const isPremium = userId
+      ? await this.subscriptionService.isPremiumUser(userId)
+      : false;
 
     // Adjust limits based on subscription
     const adjustedLimit = isPremium
@@ -50,26 +51,8 @@ export class SubscriptionThrottleGuard extends ThrottlerGuard {
     });
   }
 
-  protected getTracker(req: Record<string, any>): Promise<string> {
-    return Promise.resolve(req?.authUserData?.userId || req.ip);
-  }
-
-  private async checkPremiumStatus(userId?: string): Promise<boolean> {
-    if (!userId) return false;
-
-    try {
-      const subscription = await this.prisma.subscription.findFirst({
-        where: {
-          userId,
-          status: 'active',
-          endsAt: { gt: new Date() },
-        },
-      });
-
-      return !!subscription;
-    } catch {
-      // If there's an error checking subscription, default to free tier
-      return false;
-    }
+  protected getTracker(req: Record<string, unknown>): Promise<string> {
+    const authData = req?.authUserData as { userId?: string } | undefined;
+    return Promise.resolve(authData?.userId || (req.ip as string));
   }
 }
