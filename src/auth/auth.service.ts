@@ -27,7 +27,7 @@ import { generateToken } from '@/utils/generate-token';
 import { GoogleOAuthProfile } from '@/shared/types';
 import * as crypto from 'crypto';
 import { NotificationService } from '@/notification/notification.service';
-import { OAuth2Client, TokenPayload } from 'google-auth-library';
+import { OAuth2Client } from 'google-auth-library';
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
 import appleSigninAuth from 'apple-signin-auth';

@@ -248,7 +248,7 @@ export class AdminService {
       prevActiveUsers24h,
       prevActiveUsers7d,
       prevActiveUsers30d,
-      _prevNewUsersToday,
+      _unused, // eslint-disable-line @typescript-eslint/no-unused-vars
       prevNewUsersThisMonth,
     ] = await Promise.all([
       this.prisma.user.count({
@@ -820,12 +820,12 @@ export class AdminService {
       data: users.map((user) => {
         // Sanitize user object - exclude sensitive fields
         const {
-          passwordHash: _passwordHash,
-          pinHash: _pinHash,
-          kids: _kids,
-          paymentTransactions: _paymentTransactions,
-          usage: _usage,
-          subscriptions: _subscriptions,
+          passwordHash, // eslint-disable-line @typescript-eslint/no-unused-vars
+          pinHash, // eslint-disable-line @typescript-eslint/no-unused-vars
+          kids, // eslint-disable-line @typescript-eslint/no-unused-vars
+          paymentTransactions, // eslint-disable-line @typescript-eslint/no-unused-vars
+          usage, // eslint-disable-line @typescript-eslint/no-unused-vars
+          subscriptions, // eslint-disable-line @typescript-eslint/no-unused-vars
           ...safeUser
         } = user;
 
@@ -925,11 +925,8 @@ export class AdminService {
       },
     });
 
-    const {
-      passwordHash: _passwordHash,
-      pinHash: _pinHash,
-      ...safeUser
-    } = user;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash, pinHash, ...safeUser } = user;
 
     return {
       ...safeUser,

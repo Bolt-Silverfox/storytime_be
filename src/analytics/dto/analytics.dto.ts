@@ -1,5 +1,5 @@
 import { ApiProperty, ApiHideProperty } from '@nestjs/swagger';
-import { IsString, IsUUID, IsOptional, IsObject } from 'class-validator';
+import { IsString, IsUUID, IsOptional } from 'class-validator';
 
 export class AnalyticsStatsDto {
   @ApiProperty()

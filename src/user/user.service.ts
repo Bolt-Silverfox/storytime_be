@@ -60,6 +60,7 @@ export class UserService {
     });
 
     return users.map((user) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { passwordHash, pinHash, ...safeUser } = user;
       return safeUser;
     });
@@ -77,6 +78,7 @@ export class UserService {
     });
 
     return users.map((user) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { passwordHash, pinHash, ...safeUser } = user;
       return safeUser;
     });

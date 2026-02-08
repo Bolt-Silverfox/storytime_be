@@ -109,7 +109,7 @@ export class ElevenLabsTTSProvider
       }
     }
 
-    throw lastError;
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
   private isRateLimitError(error: unknown): boolean {

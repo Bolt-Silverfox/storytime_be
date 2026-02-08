@@ -1,5 +1,5 @@
 import { Injectable, ExecutionContext } from '@nestjs/common';
-import { ThrottlerGuard, ThrottlerRequest } from '@nestjs/throttler';
+import { ThrottlerGuard } from '@nestjs/throttler';
 
 /**
  * Custom throttle guard for authentication endpoints
@@ -44,8 +44,8 @@ export class AuthThrottleGuard extends ThrottlerGuard {
   /**
    * Get the tracker string for error messages
    */
-  protected async getTracker(req: Record<string, any>): Promise<string> {
+  protected getTracker(req: Record<string, any>): Promise<string> {
     const email = req.body?.email;
-    return email || req.ip;
+    return Promise.resolve(email || req.ip);
   }
 }

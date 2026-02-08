@@ -4,7 +4,6 @@ import { GoogleOAuthProfile } from '@/shared/types';
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Post,
   Put,
@@ -18,12 +17,10 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
-  kidDto,
   LoginDto,
   LoginResponseDto,
   RefreshResponseDto,
   RegisterDto,
-  updateKidDto,
   updateProfileDto,
   RequestResetDto,
   ValidateResetTokenDto,

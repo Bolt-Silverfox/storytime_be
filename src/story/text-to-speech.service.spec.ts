@@ -8,8 +8,11 @@ import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';
 
 describe('TextToSpeechService', () => {
   let service: TextToSpeechService;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let uploadService: UploadService;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let elevenLabsProvider: ElevenLabsTTSProvider;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let deepgramProvider: DeepgramTTSProvider;
 
   const mockUploadAudio = jest.fn();

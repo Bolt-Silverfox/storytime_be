@@ -31,7 +31,6 @@ import { UpdateUserDto } from './dto/user.dto';
 
 import { UpdateParentProfileDto } from './dto/update-parent-profile.dto';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
-import { EnableBiometricsDto } from './dto/enable-biometrics.dto';
 import { SetPinDto } from './dto/set-pin.dto';
 import { ParentProfileResponseDto } from './dto/parent-profile-response.dto';
 import { mapParentProfile } from './utils/parent-profile.mapper';
@@ -374,7 +373,7 @@ export class UserController {
     @Query('permanent') permanent: boolean = false,
   ) {
     // Verify password and create support ticket
-    const result = await this.userService.verifyPasswordAndLogDeletion(
+    await this.userService.verifyPasswordAndLogDeletion(
       req.authUserData.userId,
       body.password,
       body.reasons,

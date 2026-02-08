@@ -62,4 +62,4 @@ async function backfillDuration() {
   }
 }
 
-backfillDuration();
+void backfillDuration();

@@ -13,7 +13,7 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
-  ParseIntPipe,
+  Request,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -24,6 +24,7 @@ import {
   ApiBody,
   ApiQuery,
   ApiParam,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { StoryBuddyService } from './story-buddy.service';
 import {
@@ -31,9 +32,11 @@ import {
   UpdateStoryBuddyDto,
   SelectBuddyDto,
   GetBuddyMessageDto,
-  StoryBuddyResponseDto,
 } from './dto/story-buddy.dto';
-import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import { AdminGuard } from '@/shared/guards/admin.guard';
 import { Public } from '@/shared/decorators/public.decorator';
 import { SuccessResponse } from '@/shared/dtos/api-response.dto';

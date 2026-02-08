@@ -14,16 +14,13 @@ import {
   MaxFileSizeValidator,
   FileTypeValidator,
   BadRequestException,
-  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  ApiTags,
   ApiOperation,
   ApiResponse,
   ApiConsumes,
   ApiBody,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { AvatarService } from './avatar.service';
 import {

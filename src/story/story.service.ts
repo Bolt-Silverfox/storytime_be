@@ -1360,7 +1360,7 @@ export class StoryService {
     let coverImageUrl = '';
     try {
       this.logger.log(`Generating cover image for "${generatedStory.title}"`);
-      coverImageUrl = await this.geminiService.generateStoryImage(
+      coverImageUrl = this.geminiService.generateStoryImage(
         generatedStory.title,
         generatedStory.description || `A story about ${generatedStory.title}`,
         userId, // Pass userId for tracking

@@ -48,8 +48,8 @@ export class SubscriptionThrottleGuard extends ThrottlerGuard {
     });
   }
 
-  protected async getTracker(req: Record<string, any>): Promise<string> {
-    return req?.authUserData?.userId || req.ip;
+  protected getTracker(req: Record<string, any>): Promise<string> {
+    return Promise.resolve(req?.authUserData?.userId || req.ip);
   }
 
   private async checkPremiumStatus(userId?: string): Promise<boolean> {
@@ -65,7 +65,7 @@ export class SubscriptionThrottleGuard extends ThrottlerGuard {
       });
 
       return !!subscription;
-    } catch (error) {
+    } catch {
       // If there's an error checking subscription, default to free tier
       return false;
     }
