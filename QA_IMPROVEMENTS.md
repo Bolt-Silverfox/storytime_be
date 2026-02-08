@@ -3,6 +3,7 @@
 This document tracks quality assurance issues, testing gaps, and code quality improvements needed in the Storytime backend.
 
 > **Generated**: February 2026
+> **Last Updated**: February 2026
 > **Priority Scale**: P0 (Critical) | P1 (High) | P2 (Medium) | P3 (Low)
 
 ---
@@ -14,6 +15,9 @@ This document tracks quality assurance issues, testing gaps, and code quality im
 3. [Error Handling](#3-error-handling)
 4. [Security Issues](#4-security-issues)
 5. [Architecture Issues](#5-architecture-issues)
+6. [Testing Strategy](#6-testing-strategy)
+7. [CI/CD Integration](#7-cicd-integration)
+8. [Code Review Standards](#8-code-review-standards)
 
 ---
 
@@ -479,9 +483,370 @@ handleUserRegistered(payload: UserRegisteredEvent) {
 
 ---
 
+## 6. Testing Strategy
+
+### 6.1 Testing Pyramid (P0 - Critical)
+
+Based on NestJS best practices, implement the testing pyramid:
+
+```
+        /\
+       /  \  E2E Tests (10%)
+      /----\  - Critical user flows
+     /      \ - Auth, payments, subscriptions
+    /--------\
+   /          \ Integration Tests (30%)
+  /            \ - API endpoints
+ /--------------\ - Service + Repository
+/                \
+/------------------\ Unit Tests (60%)
+                    - Pure business logic
+                    - Services in isolation
+```
+
+**Test File Naming Convention:**
+- Unit tests: `*.spec.ts`
+- E2E tests: `*.e2e-spec.ts`
+- Integration tests: `*.integration-spec.ts`
+
+### 6.2 NestJS Testing Patterns (P1 - High)
+
+**Mock Pattern for Services:**
+```typescript
+// ✅ Recommended mock pattern
+const mockPrismaService = {
+  user: { findUnique: jest.fn(), create: jest.fn() },
+  story: { findMany: jest.fn(), findUnique: jest.fn() },
+  $transaction: jest.fn((cb) => cb(mockPrismaService)),
+};
+
+beforeEach(async () => {
+  const module = await Test.createTestingModule({
+    providers: [
+      UserService,
+      { provide: PrismaService, useValue: mockPrismaService },
+      { provide: CacheService, useValue: mockCacheService },
+    ],
+  }).compile();
+});
+```
+
+**Testing Guards:**
+```typescript
+describe('AuthSessionGuard', () => {
+  it('should allow authenticated requests', async () => {
+    const mockContext = createMockExecutionContext({
+      user: { id: 'user-123', email: 'test@example.com' },
+    });
+
+    const result = await guard.canActivate(mockContext);
+    expect(result).toBe(true);
+  });
+});
+```
+
+**Testing Interceptors:**
+```typescript
+describe('SuccessResponseInterceptor', () => {
+  it('should wrap response in standard format', async () => {
+    const interceptor = new SuccessResponseInterceptor();
+    const mockHandler = { handle: () => of({ data: 'test' }) };
+
+    const result = await interceptor.intercept(context, mockHandler);
+    expect(result.success).toBe(true);
+  });
+});
+```
+
+### 6.3 Test Coverage Targets (P1 - High)
+
+| Component | Current | Target | Priority |
+|-----------|---------|--------|----------|
+| Services | ~9% | 80% | P0 |
+| Guards | ~0% | 100% | P0 |
+| Controllers | ~5% | 70% | P1 |
+| Utils/Helpers | ~10% | 90% | P2 |
+| DTOs (validation) | ~0% | 60% | P2 |
+
+**Action Items:**
+- [ ] Set up coverage reporting in CI/CD
+- [ ] Configure Jest coverage thresholds
+- [ ] Add coverage badges to README
+
+### 6.4 E2E Testing Setup (P1 - High)
+
+**Test Database Strategy:**
+```typescript
+// test/setup.ts
+beforeAll(async () => {
+  // Use test database
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+
+  // Run migrations
+  await execSync('pnpm prisma migrate deploy');
+
+  // Seed test data
+  await seedTestData();
+});
+
+afterAll(async () => {
+  // Clean up
+  await prisma.$disconnect();
+});
+```
+
+**E2E Test Template:**
+```typescript
+describe('Auth E2E', () => {
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+  });
+
+  it('POST /auth/register should create user', () => {
+    return request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email: 'test@example.com', password: 'password123' })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.data.email).toBe('test@example.com');
+      });
+  });
+});
+```
+
+---
+
+## 7. CI/CD Integration
+
+### 7.1 GitHub Actions Workflow (P0 - Critical)
+
+**Recommended CI Pipeline:**
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [develop-v0.0.1, main]
+  pull_request:
+    branches: [develop-v0.0.1]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run build
+
+  test:
+    runs-on: ubuntu-latest
+    needs: quality
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: storytime_test
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/storytime_test
+
+      - run: pnpm test:cov
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/storytime_test
+          REDIS_URL: redis://localhost:6379
+
+      - uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test
+    # Similar setup with full E2E tests
+```
+
+### 7.2 Pre-commit Hooks (P2 - Medium)
+
+```json
+// package.json
+{
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "pre-push": "pnpm test"
+    }
+  },
+  "lint-staged": {
+    "*.ts": ["eslint --fix", "prettier --write"]
+  }
+}
+```
+
+### 7.3 Quality Gates (P1 - High)
+
+| Gate | Threshold | Blocking |
+|------|-----------|----------|
+| Build | Pass | Yes |
+| Lint | 0 errors | Yes |
+| Unit Tests | Pass | Yes |
+| Coverage | 70% | No (warn) |
+| E2E Tests | Pass | Yes (main only) |
+| Security Scan | 0 critical | Yes |
+
+---
+
+## 8. Code Review Standards
+
+### 8.1 Review Checklist (P1 - High)
+
+**For Every PR:**
+- [ ] **Logic**: Does the code do what it's supposed to?
+- [ ] **Types**: Are all types properly defined (no `any`)?
+- [ ] **Tests**: Are there tests for new functionality?
+- [ ] **Error Handling**: Are errors properly caught and typed?
+- [ ] **Security**: Input validation, auth checks, no secrets?
+- [ ] **Performance**: N+1 queries, unnecessary loops?
+- [ ] **NestJS Patterns**: Guards, interceptors, DTOs used correctly?
+
+**NestJS-Specific Checks:**
+- [ ] Services use `@Injectable()` decorator
+- [ ] Dependencies injected via constructor
+- [ ] No circular dependencies (avoid `forwardRef`)
+- [ ] Proper use of exception classes (not `throw new Error()`)
+- [ ] DTOs have `class-validator` decorators
+- [ ] Controllers use proper HTTP status codes
+
+### 8.2 Review Severity Labels (P2 - Medium)
+
+Use these labels in PR comments:
+
+| Label | Meaning | Blocking |
+|-------|---------|----------|
+| 🔴 `[blocking]` | Must fix before merge | Yes |
+| 🟡 `[important]` | Should fix, discuss if disagree | Discuss |
+| 🟢 `[nit]` | Nice to have, not blocking | No |
+| 💡 `[suggestion]` | Alternative approach | No |
+| 🎉 `[praise]` | Good work! | No |
+
+**Example:**
+```markdown
+🔴 [blocking] This guard doesn't validate session expiry.
+The user could have a revoked session token.
+
+🟢 [nit] Consider renaming `data` to `subscriptionData` for clarity.
+
+🎉 [praise] Great use of the repository pattern here!
+```
+
+### 8.3 Security Review Checklist (P0 - Critical)
+
+**Authentication & Authorization:**
+- [ ] JWT validation includes signature and expiry
+- [ ] Guards protect all sensitive endpoints
+- [ ] Role checks before data access
+- [ ] Session validation on state-changing operations
+
+**Input Validation:**
+- [ ] All user inputs validated via DTOs
+- [ ] File uploads restricted (type, size)
+- [ ] SQL injection prevented (Prisma handles this)
+- [ ] XSS protection (sanitize output)
+
+**Data Protection:**
+- [ ] Passwords hashed with bcrypt
+- [ ] Sensitive data not logged
+- [ ] PII handled according to policy
+- [ ] Secrets not in code or logs
+
+### 8.4 Dependency Injection Review (P1 - High)
+
+**Check for:**
+- [ ] Circular dependencies resolved without `forwardRef`
+- [ ] Request-scoped providers only where necessary
+- [ ] Proper module boundaries (services exported)
+- [ ] Injection tokens for interfaces
+
+**Anti-patterns to Flag:**
+```typescript
+// ❌ Bad: Service locator pattern
+const service = ModuleRef.get(UserService);
+
+// ✅ Good: Constructor injection
+constructor(private readonly userService: UserService) {}
+
+// ❌ Bad: Circular dependency
+@Inject(forwardRef(() => AuthService))
+
+// ✅ Good: Event-driven decoupling
+this.eventEmitter.emit('user.created', payload);
+```
+
+---
+
+## Progress Tracking
+
+### Completed ✅
+- [x] Initial codebase analysis
+- [x] Document all issues
+- [x] Add testing strategy section
+- [x] Add CI/CD integration section
+- [x] Add code review standards
+
+### In Progress 🔄
+- [ ] Test coverage improvements
+- [ ] CI/CD pipeline setup
+
+### Pending 📋
+- [ ] Refactor god services
+- [ ] Fix error handling
+- [ ] Remove circular dependencies
+- [ ] Security audit implementation
+
+---
+
 ## References
 
 - [NestJS Testing Documentation](https://docs.nestjs.com/fundamentals/testing)
 - [NestJS Exception Filters](https://docs.nestjs.com/exception-filters)
+- [NestJS Dependency Injection](https://docs.nestjs.com/fundamentals/custom-providers)
+- [GitHub Actions for Node.js](https://docs.github.com/en/actions/guides/building-and-testing-nodejs)
+- [Jest Testing Best Practices](https://github.com/goldbergyoni/javascript-testing-best-practices)
 - [SOLID Principles](https://en.wikipedia.org/wiki/SOLID)
 - Project guidelines: `.claude/CLAUDE.md`
