@@ -17,6 +17,7 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { OAuthService } from './services/oauth.service';
+import { OnboardingService } from './services/onboarding.service';
 import {
   LoginDto,
   LoginResponseDto,
@@ -53,6 +54,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly oAuthService: OAuthService,
+    private readonly onboardingService: OnboardingService,
   ) {}
 
   @Post('login')
@@ -126,7 +128,7 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() data: CompleteProfileDto,
   ) {
-    return this.authService.completeProfile(req.authUserData['userId'], data);
+    return this.onboardingService.completeProfile(req.authUserData['userId'], data);
   }
   // ==================== GET LEARNING EXPECTATIONS ====================
   @Get('learning-expectations')
@@ -141,7 +143,7 @@ export class AuthController {
     description: 'List of available learning expectations',
   })
   async getLearningExpectations() {
-    return this.authService.getLearningExpectations();
+    return this.onboardingService.getLearningExpectations();
   }
 
   @Post('logout')
@@ -197,7 +199,7 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() data: updateProfileDto,
   ) {
-    return this.authService.updateProfile(req.authUserData['userId'], data);
+    return this.onboardingService.updateProfile(req.authUserData['userId'], data);
   }
 
   @Post('change-password')
