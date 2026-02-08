@@ -57,12 +57,12 @@ CLOUDINARY_API_SECRET="your-cloudinary-api-secret"
 
 3. Run database migrations:
 ```bash
-pnpm migrate
+pnpm db:migrate:deploy
 ```
 
 4. Generate Prisma client:
 ```bash
-pnpm generate
+pnpm db:generate
 ```
 5. (Optional) Seed the database with initial stories:
 ```bash
@@ -127,9 +127,9 @@ src/
 - `pnpm start:debug` - Start with debugger
 
 ### Database
-- `pnpm generate` - Generate Prisma client
-- `pnpm migrate` - Run migrations (production)
-- `pnpm make-migration` - Create new migration (development)
+- `pnpm db:generate` - Generate Prisma client
+- `pnpm db:migrate:deploy` - Run migrations (production)
+- `pnpm db:migrate:dev` - Create new migration (development)
 - `pnpm db:reset` - Reset database
 - `pnpm db:seed` - Seed database with stories
 
