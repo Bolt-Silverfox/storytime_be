@@ -202,6 +202,27 @@ git push origin integration/refactor-2026-02
 
 **Status**: Phase 1 complete. All three high-impact extractions done.
 
+### Instance 7 - ✅ Completed
+**Focus**: Phase 2 God Service Extractions (Auth & User Domain)
+**Timestamp**: 2026-02-09
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/auth/services/oauth.service.ts` (NEW ~250 lines) - Extracted from AuthService
+  - Methods: loginWithGoogleIdToken, handleGoogleOAuthPayload, loginWithAppleIdToken, upsertOrReturnUserFromOAuthPayload
+- `src/auth/services/onboarding.service.ts` (NEW ~190 lines) - Extracted from AuthService
+  - Methods: completeProfile, getLearningExpectations, updateProfile
+- `src/user/services/user-deletion.service.ts` (NEW ~280 lines) - Extracted from UserService
+  - Methods: deleteUser, terminateUserSessions, deleteUserAccount, verifyPasswordAndLogDeletion, undoDeleteUser, undoDeleteMyAccount
+- `src/user/services/user-pin.service.ts` (NEW ~200 lines) - Extracted from UserService
+  - Methods: setPin, verifyPin, requestPinResetOtp, validatePinResetOtp, resetPinWithOtp
+- Updated AuthModule, AuthController, UserModule, UserController to use new services
+- Updated test files to remove tests for moved methods
+- AuthService reduced from ~694 lines to ~264 lines
+- UserService reduced from ~448 lines to ~256 lines
+
+**Status**: Phase 2 complete. All four Auth & User domain extractions done.
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
@@ -235,6 +256,14 @@ Files currently being modified by other instances - avoid editing these:
 | `src/notification/notification.registry.ts` | Instance 4 | ✅ Done |
 | `src/notification/providers/*` | Instance 4 | ✅ Done |
 | `src/achievement-progress/badge.service.ts` | Instance 4 | ✅ Done |
+| `src/auth/services/oauth.service.ts` | Instance 7 | ✅ Done |
+| `src/auth/services/onboarding.service.ts` | Instance 7 | ✅ Done |
+| `src/user/services/user-deletion.service.ts` | Instance 7 | ✅ Done |
+| `src/user/services/user-pin.service.ts` | Instance 7 | ✅ Done |
+| `src/auth/auth.module.ts` | Instance 7 | ✅ Done |
+| `src/auth/auth.controller.ts` | Instance 7 | ✅ Done |
+| `src/user/user.module.ts` | Instance 7 | ✅ Done |
+| `src/user/user.controller.ts` | Instance 7 | ✅ Done |
 
 ---
 
@@ -265,11 +294,11 @@ Available tasks from the roadmaps:
 - [x] Extract `DailyChallengeService` from `StoryService`
 - [x] Extract `AdminAnalyticsService` from `AdminService`
 
-**Phase 2: Auth & User Domain**
-- [ ] Extract `OAuthService` from `AuthService`
-- [ ] Extract `OnboardingService` from `AuthService`
-- [ ] Extract `UserDeletionService` from `UserService`
-- [ ] Extract `UserPinService` from `UserService`
+**Phase 2: Auth & User Domain** ✅ COMPLETE *(Instance 7)*
+- [x] Extract `OAuthService` from `AuthService`
+- [x] Extract `OnboardingService` from `AuthService`
+- [x] Extract `UserDeletionService` from `UserService`
+- [x] Extract `UserPinService` from `UserService`
 
 **Phase 3: Notification & Reports**
 - [ ] Extract `NotificationPreferenceService` from `NotificationService`
