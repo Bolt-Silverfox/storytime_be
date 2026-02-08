@@ -9,7 +9,7 @@ export class PaginationUtil {
    * Sanitizes page and limit query parameters.
    * Default limit is 10. Max limit is enforced (default 100).
    */
-  static sanitize(page: any, limit: any, maxLimit = 100) {
+  static sanitize(page: unknown, limit: unknown, maxLimit = 100) {
     const pageNumber = Math.max(1, Number(page) || 1);
     let limitNumber = Number(limit) || 10;
 

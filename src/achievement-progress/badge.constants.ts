@@ -1,5 +1,12 @@
 import { Injectable } from '@nestjs/common';
 
+export interface BadgeMetadata {
+  eventType?: string;
+  timeConstraint?: string;
+  correctOnly?: boolean;
+  [key: string]: string | boolean | number | undefined;
+}
+
 export interface BadgeDefinition {
   title: string;
   description: string;
@@ -8,7 +15,7 @@ export interface BadgeDefinition {
   badgeType: 'count' | 'streak' | 'time' | 'special';
   requiredAmount: number;
   priority: number;
-  metadata?: any;
+  metadata?: BadgeMetadata;
 }
 
 @Injectable()

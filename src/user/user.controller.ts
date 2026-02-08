@@ -25,15 +25,21 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
-import { AuthSessionGuard } from '@/shared/guards/auth.guard';
-import { UserDto } from '@/auth/dto/auth.dto';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
+import { UserDto, ProfileDto, AvatarDto } from '@/auth/dto/auth.dto';
 import { UpdateUserDto } from './dto/user.dto';
 
 import { UpdateParentProfileDto } from './dto/update-parent-profile.dto';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
 import { SetPinDto } from './dto/set-pin.dto';
 import { ParentProfileResponseDto } from './dto/parent-profile-response.dto';
-import { mapParentProfile } from './utils/parent-profile.mapper';
+import {
+  mapParentProfile,
+  UserWithRelations,
+} from './utils/parent-profile.mapper';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import {
   ResetPinWithOtpDto,
@@ -81,8 +87,10 @@ export class UserController {
       },
     },
   })
-  async getMe(@Req() req: any) {
-    const raw = await this.userService.getUser(req.authUserData.userId);
+  async getMe(@Req() req: AuthenticatedRequest) {
+    const raw = (await this.userService.getUser(
+      req.authUserData.userId,
+    )) as UserWithRelations | null;
 
     // If user is not found (likely because isDeleted: true filter), check if user exists but is deleted
     if (!raw) {
@@ -115,7 +123,10 @@ export class UserController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update parent profile' })
-  async updateMyProfile(@Req() req: any, @Body() body: UpdateParentProfileDto) {
+  async updateMyProfile(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: UpdateParentProfileDto,
+  ) {
     return this.userService.updateParentProfile(req.authUserData.userId, body);
   }
 
@@ -123,7 +134,10 @@ export class UserController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update parent avatar' })
-  async updateAvatar(@Req() req: any, @Body() body: UpdateAvatarDto) {
+  async updateAvatar(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: UpdateAvatarDto,
+  ) {
     return this.userService.updateAvatarForParent(
       req.authUserData.userId,
       body,
@@ -134,7 +148,7 @@ export class UserController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Set or update PIN' })
-  async setPin(@Req() req: any, @Body() body: SetPinDto) {
+  async setPin(@Req() req: AuthenticatedRequest, @Body() body: SetPinDto) {
     return this.userService.setPin(req.authUserData.userId, body.pin);
   }
 
@@ -164,7 +178,7 @@ export class UserController {
       },
     },
   })
-  async verifyPin(@Req() req: any, @Body() body: SetPinDto) {
+  async verifyPin(@Req() req: AuthenticatedRequest, @Body() body: SetPinDto) {
     return this.userService.verifyPin(req.authUserData.userId, body.pin);
   }
 
@@ -185,7 +199,7 @@ export class UserController {
       },
     },
   })
-  async requestPinResetOtp(@Req() req: any) {
+  async requestPinResetOtp(@Req() req: AuthenticatedRequest) {
     return this.userService.requestPinResetOtp(req.authUserData.userId);
   }
 
@@ -208,7 +222,7 @@ export class UserController {
     description: 'Invalid or expired OTP',
   })
   async validatePinResetOtp(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Body() body: ValidatePinResetOtpDto,
   ) {
     return this.userService.validatePinResetOtp(
@@ -238,7 +252,10 @@ export class UserController {
     status: 400,
     description: 'Invalid OTP or PIN mismatch',
   })
-  async resetPinWithOtp(@Req() req: any, @Body() body: ResetPinWithOtpDto) {
+  async resetPinWithOtp(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: ResetPinWithOtpDto,
+  ) {
     if (body.newPin !== body.confirmNewPin) {
       throw new BadRequestException('New PIN and confirmation do not match');
     }
@@ -308,7 +325,7 @@ export class UserController {
     },
   })
   async deleteMe(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('permanent') permanent: boolean = false,
   ) {
     const result = await this.userService.deleteUserAccount(
@@ -368,7 +385,7 @@ export class UserController {
     },
   })
   async deleteAccountWithConfirmation(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Body() body: DeleteAccountDto,
     @Query('permanent') permanent: boolean = false,
   ) {
@@ -441,7 +458,7 @@ export class UserController {
       },
     },
   })
-  async undoDeleteMyAccount(@Req() req: any) {
+  async undoDeleteMyAccount(@Req() req: AuthenticatedRequest) {
     const restoredUser = await this.userService.undoDeleteMyAccount(
       req.authUserData.userId,
     );
@@ -465,7 +482,7 @@ export class UserController {
     description:
       'Admins can see all users including both active and soft deleted users',
   })
-  async getAllUsers(@Req() req: any) {
+  async getAllUsers(@Req() req: AuthenticatedRequest) {
     if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
     }
@@ -479,7 +496,7 @@ export class UserController {
     summary: 'List only active users (admin only)',
     description: 'Get only active (non-deleted) users',
   })
-  async getActiveUsers(@Req() req: any) {
+  async getActiveUsers(@Req() req: AuthenticatedRequest) {
     if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
     }
@@ -491,7 +508,14 @@ export class UserController {
   @ApiParam({ name: 'id', type: String })
   async getUser(@Param('id') id: string) {
     const user = await this.userService.getUser(id);
-    return user ? new UserDto(user) : null;
+    if (!user) return null;
+    return new UserDto(
+      user as Partial<UserDto> & {
+        profile?: Partial<ProfileDto> | null;
+        avatar?: Partial<AvatarDto> | null;
+        kids?: { id: string }[];
+      },
+    );
   }
 
   @Put(':id')
@@ -539,7 +563,10 @@ export class UserController {
       },
     },
   })
-  async undoDeleteUser(@Param('id') id: string, @Req() req: any) {
+  async undoDeleteUser(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
     }
@@ -557,7 +584,7 @@ export class UserController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get user role (admin only)' })
-  async getUserRole(@Param('id') id: string, @Req() req: any) {
+  async getUserRole(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
     }
@@ -573,9 +600,9 @@ export class UserController {
   async updateUserRole(
     @Param('id') id: string,
     @Body('role') role: UserRole,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
-    if (req.authUserData.userRole !== UserRole.ADMIN) {
+    if (req.authUserData.userRole !== 'admin') {
       throw new ForbiddenException('Admins only');
     }
     if (!Object.values(UserRole).includes(role)) {

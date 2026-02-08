@@ -19,6 +19,7 @@ import {
 } from './dto/voice.dto';
 import { VOICE_CONFIG } from './voice.constants';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
+import type { Voice } from '@prisma/client';
 
 /** Cache key for available voices */
 const AVAILABLE_VOICES_CACHE_KEY = 'available-voices';
@@ -137,20 +138,20 @@ export class VoiceService {
   }
 
   // --- Helper to map Prisma Voice to VoiceResponseDto ---
-  private toVoiceResponse(voice: any): VoiceResponseDto {
+  private toVoiceResponse(voice: Voice): VoiceResponseDto {
     let previewUrl = voice.url ?? undefined;
-    let voiceAvatar = voice.voiceAvatar ?? undefined; // Assuming DB has this field now, or null
+    let voiceAvatar = voice.voiceAvatar ?? undefined;
 
     // If it's an uploaded voice, the 'url' is the preview/audio itself
-    if (voice.type === VoiceSourceType.UPLOADED) {
-      previewUrl = voice.url;
+    if (voice.type === (VoiceSourceType.UPLOADED as string)) {
+      previewUrl = voice.url ?? undefined;
       // Use a default avatar for uploaded voices if none exists
       if (!voiceAvatar) {
         voiceAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${voice.name}`;
       }
-    } else if (voice.type === VoiceSourceType.ELEVENLABS) {
+    } else if (voice.type === (VoiceSourceType.ELEVENLABS as string)) {
       // For ElevenLabs, 'url' might be the preview URL if we saved it
-      previewUrl = voice.url;
+      previewUrl = voice.url ?? undefined;
       if (!voiceAvatar) {
         voiceAvatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${voice.elevenLabsVoiceId}`;
       }

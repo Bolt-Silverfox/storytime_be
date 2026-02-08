@@ -1,11 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
-import request from 'supertest';
+import request, { Response } from 'supertest';
 import { SuccessResponseInterceptor } from '../src/shared/interceptors/success-response.interceptor';
 import { HttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from '../src/shared/filters/prisma-exception.filter';
 import { AppModule } from '../src/app.module';
+import { Server } from 'http';
 
 // --- Mocking for Testing ---
 // Note: In a real environment, you'd mock Prisma to simulate P2002/P2025 errors.
@@ -13,6 +14,7 @@ import { AppModule } from '../src/app.module';
 
 describe('Global Handlers (e2e)', () => {
   let app: INestApplication;
+  let server: Server;
 
   beforeAll(async () => {
     // We recreate the app setup here to ensure the global handlers are registered correctly,
@@ -45,6 +47,7 @@ describe('Global Handlers (e2e)', () => {
     app.setGlobalPrefix('api/v1');
 
     await app.init();
+    server = app.getHttpServer() as Server;
   });
 
   afterAll(async () => {
@@ -79,9 +82,7 @@ describe('Global Handlers (e2e)', () => {
     it('should wrap successful GET request data into the standard success format', async () => {
       // This endpoint must exist in your AuthController for this test to pass.
       // If it does not, this test will be skipped.
-      const res = await request(app.getHttpServer()).get(
-        '/api/v1/auth/test-success',
-      );
+      const res = await request(server).get('/api/v1/auth/test-success');
       if (res.status === 200) {
         expectSuccessFormat(res, 200);
       } else {
@@ -97,9 +98,7 @@ describe('Global Handlers (e2e)', () => {
   // --- TEST SUITE: HttpExceptionFilter (Standard Errors) ---
   describe('HttpExceptionFilter', () => {
     it('should catch unhandled 404s and format them correctly', async () => {
-      const res = await request(app.getHttpServer()).get(
-        '/api/v1/a-non-existent-route-999',
-      );
+      const res = await request(server).get('/api/v1/a-non-existent-route-999');
 
       expectErrorFormat(res, 404, 'Not Found');
       expect(res.body.message).toEqual(
@@ -132,7 +131,7 @@ describe('Global Handlers (e2e)', () => {
         {
           status: mockConflictResponse.status,
           body: mockConflictResponse.body,
-        } as any,
+        } as Response,
         409,
         'Conflict',
       );
@@ -144,9 +143,7 @@ describe('Global Handlers (e2e)', () => {
     it('should catch DTO validation errors and format them as 400 Bad Request', async () => {
       // Assuming you have a POST endpoint, e.g., /auth/login, with validation rules.
       // We send a body that violates DTO rules (e.g., empty object).
-      const res = await request(app.getHttpServer())
-        .post('/api/v1/auth/login')
-        .send({}); // Invalid body (missing fields)
+      const res = await request(server).post('/api/v1/auth/login').send({}); // Invalid body (missing fields)
 
       // The ValidationPipe throws a BadRequestException, caught by HttpExceptionFilter.
       expectErrorFormat(res, 400, 'Bad Request');

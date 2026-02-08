@@ -3,6 +3,15 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 
+/** ElevenLabs API voice object */
+interface ElevenLabsVoice {
+  voice_id: string;
+  name: string;
+  category?: string;
+  preview_url?: string;
+  labels?: Record<string, string>;
+}
+
 @Injectable()
 export class ElevenLabsService {
   private readonly logger = new Logger(ElevenLabsService.name);
@@ -48,7 +57,7 @@ export class ElevenLabsService {
     }
   }
 
-  async fetchAvailableVoices(): Promise<any[]> {
+  async fetchAvailableVoices(): Promise<ElevenLabsVoice[]> {
     const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
     const response = await firstValueFrom(
       this.httpService.get('https://api.elevenlabs.io/v1/voices', {

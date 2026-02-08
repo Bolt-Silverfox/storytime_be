@@ -7,12 +7,13 @@ import {
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { BadgeService } from './badge.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { BadgeMetadata } from './badge.constants';
 
 interface BadgeEvent {
   userId: string;
   kidId?: string;
   timestamp: Date;
-  metadata?: any;
+  metadata?: BadgeMetadata;
 }
 
 @Injectable()
@@ -35,7 +36,7 @@ export class BadgeProgressEngine implements OnModuleInit {
     userId: string,
     action: string,
     kidId?: string,
-    metadata?: any,
+    metadata?: BadgeMetadata,
   ): Promise<void> {
     try {
       // Log activity
@@ -108,7 +109,7 @@ export class BadgeProgressEngine implements OnModuleInit {
     userId: string,
     action: string,
     kidId?: string,
-    metadata?: any,
+    metadata?: BadgeMetadata,
   ): Promise<void> {
     // Map action to badge event types
     const eventMap: Record<string, string> = {

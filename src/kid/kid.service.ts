@@ -7,6 +7,25 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { VoiceService } from '../voice/voice.service';
+import type {
+  Kid,
+  Avatar,
+  Category,
+  Voice,
+  User,
+  NotificationPreference,
+  ActivityLog,
+} from '@prisma/client';
+
+/** Kid with loaded relations from Prisma queries */
+interface KidWithRelations extends Kid {
+  avatar?: Avatar | null;
+  preferredCategories?: Category[];
+  preferredVoice?: Voice | null;
+  parent?: Pick<User, 'id' | 'name' | 'email'>;
+  notificationPreferences?: NotificationPreference[];
+  activityLogs?: ActivityLog[];
+}
 
 @Injectable()
 export class KidService {
@@ -17,7 +36,7 @@ export class KidService {
 
   // --- HELPER: Transforms the DB response for the Frontend ---
   // This ensures preferredVoiceId is ALWAYS the ElevenLabs ID (if available) (frontend specified smh)
-  private transformKid(kid: any) {
+  private transformKid(kid: KidWithRelations | null) {
     if (!kid) return null;
 
     let finalVoiceId = kid.preferredVoiceId;

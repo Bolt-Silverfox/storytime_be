@@ -81,7 +81,7 @@ export class NotificationDto {
   body: string;
 
   @ApiProperty()
-  data: any;
+  data: Record<string, unknown> | null;
 
   @ApiProperty()
   isRead: boolean;

@@ -1,6 +1,14 @@
 // settings.service.ts - Enhanced version
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
+import { Profile } from '@prisma/client';
+
+export interface UpdateSettingsBody {
+  explicitContent?: boolean;
+  maxScreenTimeMins?: number;
+  language?: string;
+  country?: string;
+}
 
 @Injectable()
 export class SettingsService {
@@ -8,7 +16,7 @@ export class SettingsService {
   /**
    * Get user profile settings (parent-level)
    */
-  async getSettings(userId: string): Promise<any> {
+  async getSettings(userId: string): Promise<Profile> {
     let profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (!profile) {
       profile = await this.prisma.profile.create({
@@ -21,7 +29,10 @@ export class SettingsService {
   /**
    * Update user profile settings (parent-level)
    */
-  async updateSettings(userId: string, body: any): Promise<any> {
+  async updateSettings(
+    userId: string,
+    body: UpdateSettingsBody,
+  ): Promise<Profile> {
     let profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (!profile) {
       profile = await this.prisma.profile.create({
@@ -30,7 +41,7 @@ export class SettingsService {
     }
 
     // Validation
-    const updateData: any = {};
+    const updateData: Record<string, boolean | number | string> = {};
     if (body.explicitContent !== undefined) {
       if (typeof body.explicitContent !== 'boolean') {
         throw new BadRequestException('explicitContent must be a boolean');
@@ -75,7 +86,10 @@ export class SettingsService {
    * Set daily limit for a specific kid
    * This overrides the parent's default maxScreenTimeMins
    */
-  async setKidDailyLimit(kidId: string, limitMins?: number): Promise<any> {
+  async setKidDailyLimit(
+    kidId: string,
+    limitMins?: number,
+  ): Promise<{ success: boolean; kidId: string; limitMins?: number }> {
     const kid = await this.prisma.kid.findUnique({
       where: { id: kidId },
     });
@@ -158,7 +172,9 @@ export class SettingsService {
    * Apply parent's default screen time to all kids
    * Useful when parent changes their default and wants to apply to all kids
    */
-  async applyDefaultToAllKids(userId: string): Promise<any> {
+  async applyDefaultToAllKids(
+    userId: string,
+  ): Promise<{ success: boolean; appliedLimit: number; kidsUpdated: number }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -199,7 +215,16 @@ export class SettingsService {
   /**
    * Get all kids with their screen time settings
    */
-  async getKidsScreenTimeSettings(parentId: string): Promise<any[]> {
+  async getKidsScreenTimeSettings(parentId: string): Promise<
+    {
+      kidId: string;
+      kidName: string | null;
+      avatarUrl: string | undefined;
+      customLimit: number | null;
+      effectiveLimit: number | null;
+      isCustom: boolean;
+    }[]
+  > {
     const kids = await this.prisma.kid.findMany({
       where: { parentId },
       include: {

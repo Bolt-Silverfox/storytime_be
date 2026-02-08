@@ -227,7 +227,9 @@ export class AppleVerificationService {
           res.on('end', () => {
             if (res.statusCode === 200) {
               try {
-                const response = JSON.parse(data);
+                const response = JSON.parse(data) as {
+                  signedTransactionInfo: string;
+                };
                 // The signedTransactionInfo is a JWS, decode the payload
                 const decoded = this.decodeJWS(response.signedTransactionInfo);
                 resolve(decoded as AppleTransactionInfo);

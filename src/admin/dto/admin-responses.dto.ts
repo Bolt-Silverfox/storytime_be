@@ -1,5 +1,87 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+// Nested type definitions for DTOs
+export interface ProfileInfo {
+  id: string;
+  explicitContent?: boolean;
+  maxScreenTimeMins?: number | null;
+  language?: string | null;
+  country?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AvatarInfo {
+  id: string;
+  name?: string | null;
+  url: string;
+  isSystemAvatar?: boolean;
+  publicId?: string | null;
+  createdAt?: Date;
+}
+
+export interface KidInfo {
+  id: string;
+  name: string | null;
+  ageRange?: string | null;
+  createdAt: Date;
+  avatar?: AvatarInfo | null;
+}
+
+export interface SubscriptionInfo {
+  id: string;
+  plan: string;
+  status: string;
+  startedAt: Date;
+  endsAt?: Date | null;
+}
+
+export interface PaymentTransactionInfo {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  createdAt: Date;
+}
+
+export interface StoryImageInfo {
+  id: string;
+  url: string;
+  caption?: string | null;
+}
+
+export interface CategoryInfo {
+  id: string;
+  name: string;
+}
+
+export interface ThemeInfo {
+  id: string;
+  name: string;
+}
+
+export interface StoryBranchInfo {
+  id: string;
+  prompt?: string | null;
+  optionA?: string | null;
+  optionB?: string | null;
+  nextA?: string | null;
+  nextB?: string | null;
+}
+
+export interface StoryQuestionInfo {
+  id: string;
+  question: string;
+  options: string[];
+  correctOption: number;
+}
+
+export interface UserBasicInfo {
+  id: string;
+  email: string;
+  name?: string | null;
+}
+
 // Base response interface
 export class ApiResponseDto<T> {
   @ApiProperty({ description: 'HTTP status code', example: 200 })
@@ -491,7 +573,7 @@ export class UserDetailDto {
       updatedAt: '2023-10-15T10:30:00Z',
     },
   })
-  profile: any;
+  profile: ProfileInfo | null;
 
   @ApiProperty({
     description: 'User kids',
@@ -509,7 +591,7 @@ export class UserDetailDto {
       },
     ],
   })
-  kids: any[];
+  kids: KidInfo[];
 
   @ApiProperty({
     description: 'User avatar',
@@ -522,7 +604,7 @@ export class UserDetailDto {
       createdAt: '2023-10-01T12:00:00Z',
     },
   })
-  avatar: any;
+  avatar: AvatarInfo | null;
 
   @ApiProperty({
     description: 'User subscriptions',
@@ -536,7 +618,7 @@ export class UserDetailDto {
       },
     ],
   })
-  subscriptions: any[];
+  subscriptions: SubscriptionInfo[];
 
   @ApiProperty({
     description: 'Payment transactions',
@@ -550,7 +632,7 @@ export class UserDetailDto {
       },
     ],
   })
-  paymentTransactions: any[];
+  paymentTransactions: PaymentTransactionInfo[];
 
   @ApiProperty({
     description: 'User statistics',
@@ -658,19 +740,19 @@ export class StoryDetailDto {
       },
     ],
   })
-  images: any[];
+  images: StoryImageInfo[];
 
   @ApiProperty({
     description: 'Story categories',
     example: [{ id: 'cat-1', name: 'Fantasy & Magic' }],
   })
-  categories: any[];
+  categories: CategoryInfo[];
 
   @ApiProperty({
     description: 'Story themes',
     example: [{ id: 'theme-1', name: 'Adventure' }],
   })
-  themes: any[];
+  themes: ThemeInfo[];
 
   @ApiProperty({
     description: 'Story branches',
@@ -685,7 +767,7 @@ export class StoryDetailDto {
       },
     ],
   })
-  branches: any[];
+  branches: StoryBranchInfo[];
 
   @ApiProperty({
     description: 'Story questions',
@@ -698,7 +780,7 @@ export class StoryDetailDto {
       },
     ],
   })
-  questions: any[];
+  questions: StoryQuestionInfo[];
 
   @ApiProperty({
     description: 'Story statistics',
@@ -844,7 +926,7 @@ export class SubscriptionDto {
       name: 'John Doe',
     },
   })
-  user: any;
+  user: UserBasicInfo;
 }
 
 export class ActivityLogDto {
