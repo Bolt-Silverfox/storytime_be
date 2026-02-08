@@ -96,24 +96,38 @@ export class VoiceQuotaService {
   }
 
   async trackGeminiStory(userId: string): Promise<void> {
-    // Ensure usage record exists (in case it wasn't created by voice check)
     const currentMonth = this.getCurrentMonth();
-    await this.prisma.userUsage.upsert({
-      where: { userId },
-      create: { userId, currentMonth, geminiStoryCount: 1 },
-      update: { geminiStoryCount: { increment: 1 } },
+    // Use transaction to handle monthly rollover for Gemini counters
+    await this.prisma.$transaction(async (tx) => {
+      // Reset Gemini counters if month changed
+      await tx.userUsage.updateMany({
+        where: { userId, currentMonth: { not: currentMonth } },
+        data: { currentMonth, geminiStoryCount: 0, geminiImageCount: 0 },
+      });
+      await tx.userUsage.upsert({
+        where: { userId },
+        create: { userId, currentMonth, geminiStoryCount: 1 },
+        update: { currentMonth, geminiStoryCount: { increment: 1 } },
+      });
     });
     await this.logAiActivity(userId, AiProviders.Gemini, 'story_generation', 1);
   }
 
   async trackGeminiImage(userId: string): Promise<void> {
     const currentMonth = this.getCurrentMonth();
-    await this.prisma.userUsage.upsert({
-      where: { userId },
-      create: { userId, currentMonth, geminiImageCount: 1 },
-      update: { geminiImageCount: { increment: 1 } },
+    // Use transaction to handle monthly rollover for Gemini counters
+    await this.prisma.$transaction(async (tx) => {
+      // Reset Gemini counters if month changed
+      await tx.userUsage.updateMany({
+        where: { userId, currentMonth: { not: currentMonth } },
+        data: { currentMonth, geminiStoryCount: 0, geminiImageCount: 0 },
+      });
+      await tx.userUsage.upsert({
+        where: { userId },
+        create: { userId, currentMonth, geminiImageCount: 1 },
+        update: { currentMonth, geminiImageCount: { increment: 1 } },
+      });
     });
-
     await this.logAiActivity(userId, AiProviders.Gemini, 'image_generation', 1);
   }
 
@@ -133,8 +147,10 @@ export class VoiceQuotaService {
         },
       });
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to log AI activity for user ${userId}: ${error.message}`,
+        `Failed to log AI activity for user ${userId}: ${errorMessage}`,
       );
     }
   }
@@ -157,6 +173,16 @@ export class VoiceQuotaService {
     const defaultVoiceConfig = VOICE_CONFIG[defaultVoiceType];
     if (defaultVoiceConfig && voiceId === defaultVoiceConfig.elevenLabsId)
       return true;
+
+    // Check if voiceId is a UUID that matches the default voice in the database
+    if (defaultVoiceConfig) {
+      const voiceRecord = await this.prisma.voice.findUnique({
+        where: { id: voiceId },
+      });
+      if (voiceRecord?.elevenLabsVoiceId === defaultVoiceConfig.elevenLabsId) {
+        return true;
+      }
+    }
 
     // Check if it's their selected second voice
     const usage = await this.prisma.userUsage.findUnique({
