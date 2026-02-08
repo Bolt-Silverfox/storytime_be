@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -291,8 +292,11 @@ export class StoryBuddyService {
 
   /**
    * Select a story buddy for a kid
+   * @param kidId - The kid's ID
+   * @param buddyId - The story buddy's ID
+   * @param userId - The authenticated user's ID (parent)
    */
-  async selectBuddyForKid(kidId: string, buddyId: string) {
+  async selectBuddyForKid(kidId: string, buddyId: string, userId: string) {
     // Verify kid exists and is not soft deleted
     const kid = await this.prisma.kid.findUnique({
       where: {
@@ -303,6 +307,11 @@ export class StoryBuddyService {
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
+    }
+
+    // Verify parent ownership
+    if (kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
     }
 
     // Verify buddy exists, is active, and not soft deleted
@@ -358,8 +367,10 @@ export class StoryBuddyService {
 
   /**
    * Get welcome message from kid's buddy
+   * @param kidId - The kid's ID
+   * @param userId - The authenticated user's ID (parent)
    */
-  async getBuddyWelcome(kidId: string) {
+  async getBuddyWelcome(kidId: string, userId: string) {
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: kidId,
@@ -381,6 +392,11 @@ export class StoryBuddyService {
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
+    }
+
+    // Verify parent ownership
+    if (kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
     }
 
     if (!kid.storyBuddy) {
@@ -412,12 +428,18 @@ export class StoryBuddyService {
 
   /**
    * Get buddy message for specific context
+   * @param kidId - The kid's ID
+   * @param context - The message context (e.g., 'greeting', 'challenge')
+   * @param contextId - Optional context ID (e.g., story ID, challenge ID)
+   * @param message - Optional custom message from frontend
+   * @param userId - The authenticated user's ID (parent)
    */
   async getBuddyMessage(
     kidId: string,
     context: string,
     contextId?: string,
     message?: string,
+    userId?: string,
   ) {
     const kid = await this.prisma.kid.findUnique({
       where: {
@@ -440,6 +462,11 @@ export class StoryBuddyService {
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
+    }
+
+    // Verify parent ownership
+    if (userId && kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
     }
 
     if (!kid.storyBuddy) {
@@ -536,8 +563,10 @@ export class StoryBuddyService {
 
   /**
    * Get kid's current buddy
+   * @param kidId - The kid's ID
+   * @param userId - The authenticated user's ID (parent)
    */
-  async getKidCurrentBuddy(kidId: string) {
+  async getKidCurrentBuddy(kidId: string, userId: string) {
     const kid = await this.prisma.kid.findUnique({
       where: {
         id: kidId,
@@ -561,6 +590,11 @@ export class StoryBuddyService {
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
+    }
+
+    // Verify parent ownership
+    if (kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
     }
 
     if (!kid.storyBuddy) {
