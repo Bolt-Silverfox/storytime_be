@@ -13,6 +13,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
+import { AdminAnalyticsService } from './admin-analytics.service';
 import { Admin } from './decorators/admin.decorator';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import {
@@ -51,7 +52,10 @@ import {
 @Admin()
 @ApiTags('admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly adminAnalyticsService: AdminAnalyticsService,
+  ) {}
 
   // =====================
   // DASHBOARD & ANALYTICS
@@ -102,7 +106,7 @@ export class AdminController {
     },
   })
   async getDashboardStats(): Promise<DashboardStatsDto> {
-    const stats = await this.adminService.getDashboardStats();
+    const stats = await this.adminAnalyticsService.getDashboardStats();
     return {
       statusCode: 200,
       message: 'Dashboard metrics retrieved successfully',
@@ -157,7 +161,7 @@ export class AdminController {
     },
   })
   async getUserGrowth(@Query() dateRange: DateRangeDto) {
-    const data = await this.adminService.getUserGrowth(dateRange);
+    const data = await this.adminAnalyticsService.getUserGrowth(dateRange);
     return {
       statusCode: 200,
       message: 'User growth analytics retrieved successfully',
@@ -212,7 +216,7 @@ export class AdminController {
     },
   })
   async getSubscriptionAnalytics(@Query() dateRange: DateRangeDto) {
-    const data = await this.adminService.getSubscriptionAnalytics(dateRange);
+    const data = await this.adminAnalyticsService.getSubscriptionAnalytics(dateRange);
     return {
       statusCode: 200,
       message: 'Subscription analytics retrieved successfully',
@@ -277,7 +281,7 @@ export class AdminController {
     },
   })
   async getRevenueAnalytics(@Query() dateRange: DateRangeDto) {
-    const data = await this.adminService.getRevenueAnalytics(dateRange);
+    const data = await this.adminAnalyticsService.getRevenueAnalytics(dateRange);
     return {
       statusCode: 200,
       message: 'Revenue analytics retrieved successfully',
@@ -312,7 +316,7 @@ export class AdminController {
     },
   })
   async getStoryStats(): Promise<StoryStatsDto> {
-    const stats = await this.adminService.getStoryStats();
+    const stats = await this.adminAnalyticsService.getStoryStats();
     return {
       statusCode: 200,
       message: 'Story statistics retrieved successfully',
@@ -359,7 +363,7 @@ export class AdminController {
     },
   })
   async getContentBreakdown(): Promise<ContentBreakdownDto> {
-    const breakdown = await this.adminService.getContentBreakdown();
+    const breakdown = await this.adminAnalyticsService.getContentBreakdown();
     return {
       statusCode: 200,
       message: 'Content breakdown retrieved successfully',
@@ -398,7 +402,7 @@ export class AdminController {
     },
   })
   async getSystemHealth(): Promise<SystemHealthDto> {
-    const health = await this.adminService.getSystemHealth();
+    const health = await this.adminAnalyticsService.getSystemHealth();
     return {
       statusCode: 200,
       message: 'System health status retrieved successfully',
@@ -474,7 +478,7 @@ export class AdminController {
     description: 'AI credit analytics retrieved successfully',
   })
   async getAiCreditStats() {
-    const data = await this.adminService.getAiCreditAnalytics();
+    const data = await this.adminAnalyticsService.getAiCreditAnalytics();
     return {
       statusCode: 200,
       message: 'AI credit analytics retrieved successfully',
@@ -493,7 +497,7 @@ export class AdminController {
     description: 'User growth data retrieved successfully',
   })
   async getUserGrowthMonthly() {
-    const data = await this.adminService.getUserGrowthMonthly();
+    const data = await this.adminAnalyticsService.getUserGrowthMonthly();
     return {
       statusCode: 200,
       message: 'User growth data retrieved successfully',

@@ -144,14 +144,45 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - 178 unit tests passing, build passing
 
-### Instance 5 - 🔄 In Progress
-**Focus**: [Describe your work area]
-**Timestamp**:
+### Instance 5 - ✅ Completed
+**Focus**: Type safety improvements & N+1 query optimization
+**Timestamp**: 2026-02-08
+**Branch**: `perf/resilience-improvements`
+**PR**: #219
 
 **Changes Made**:
-- [List files being modified]
+- `src/auth/auth.service.ts` - Use Prisma `Role` enum instead of `as any` cast
+- `src/user/user.service.ts` - Use `Prisma.UserUncheckedUpdateInput` for type safety
+- `src/voice/providers/eleven-labs-tts.provider.ts` - Use `Promise<unknown>` instead of `Promise<any>`
+- `src/story/story.service.ts` - Optimized `assignDailyChallengeToAllKids()`:
+  - Before: O(N×5) queries where N = number of kids
+  - After: O(4 + M) queries where M = unique stories selected
+  - Used `Promise.all` for parallel data fetching
+  - In-memory processing with `Map` for O(1) lookups
+  - Batch `createMany` for assignments
 
-**Status**:
+**Status**: Complete. PR #219 open to integration branch.
+
+### Instance 6 - ✅ Completed
+**Focus**: Phase 1 God Service Extractions
+**Timestamp**: 2026-02-08
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/story/story-progress.service.ts` (NEW ~300 lines) - Extracted from StoryService
+  - Methods: setProgress, getProgress, getContinueReading, getCompletedStories, getCreatedStories,
+    setUserProgress, getUserProgress, getUserContinueReading, getUserCompletedStories,
+    removeFromUserLibrary, getDownloads, addDownload, removeDownload, removeFromLibrary
+- `src/story/daily-challenge.service.ts` (NEW ~260 lines) - Extracted from StoryService
+  - Methods: setDailyChallenge, getDailyChallenge, assignDailyChallenge, completeDailyChallenge,
+    getAssignmentsForKid, getAssignmentById, assignDailyChallengeToAllKids,
+    handleDailyChallengeAssignment (cron), getTodaysDailyChallengeAssignment, getWeeklyDailyChallengeAssignments
+- `src/admin/admin-analytics.service.ts` (NEW ~600 lines) - Extracted from AdminService
+  - Methods: getDashboardStats, getUserGrowth, getStoryStats, getContentBreakdown, getSystemHealth,
+    getSubscriptionAnalytics, getRevenueAnalytics, getAiCreditAnalytics, getUserGrowthMonthly, calculateChurnRate
+- Updated controllers and modules to use new services
+
+**Status**: Phase 1 complete. All three high-impact extractions done.
 
 ---
 
@@ -172,7 +203,13 @@ Files currently being modified by other instances - avoid editing these:
 | `src/subscription/subscription.service.spec.ts` | Instance 4 | ✅ Done |
 | `src/notification/notification.service.spec.ts` | Instance 4 | ✅ Done |
 | `jest.config.js` | Instance 4 | ✅ Done |
-| `src/story/story.service.ts` | Instance 4 | ✅ Done |
+| `src/story/story.service.ts` | Instance 4 & 5 | ✅ Done |
+| `src/auth/auth.service.ts` | Instance 5 | ✅ Done |
+| `src/user/user.service.ts` | Instance 5 | ✅ Done |
+| `src/voice/providers/eleven-labs-tts.provider.ts` | Instance 5 | ✅ Done |
+| `src/story/story-progress.service.ts` | Instance 6 | ✅ Done |
+| `src/story/daily-challenge.service.ts` | Instance 6 | ✅ Done |
+| `src/admin/admin-analytics.service.ts` | Instance 6 | ✅ Done |
 
 ---
 
@@ -184,7 +221,7 @@ Available tasks from the roadmaps:
 - [x] Add transactions to SubscriptionService for plan changes *(Instance 1)*
 - [x] Add transactions to PaymentService for atomic payment + subscription *(Instance 3)*
 - [x] Add transactions to StoryService for story creation *(Instance 4)*
-- [x] Batch sequential queries (N+1 fixes in story.service.ts) *(Instance 4)*
+- [x] Batch sequential queries (N+1 fixes in story.service.ts) *(Instance 4 & 5)*
 - [x] Add retry logic to AI provider calls (GeminiService) *(Instance 3)*
 - [x] Implement circuit breaker for external services *(already existed in GeminiService)*
 
@@ -194,14 +231,14 @@ Available tasks from the roadmaps:
 - [x] Add unit tests for SubscriptionService *(Instance 4)*
 - [x] Add unit tests for NotificationService *(Instance 4)*
 - [ ] Add E2E tests for authentication flows
-- [ ] Replace remaining `any` types (~22 files)
+- [~] Replace remaining `any` types (~22 files) *(Instance 5 - partial: auth, user, voice services done)*
 
 ### God Service Extractions (see QA_IMPROVEMENTS.md section 2.3 for details)
 
-**Phase 1: High-Impact Extractions**
-- [ ] Extract `StoryProgressService` from `StoryService`
-- [ ] Extract `DailyChallengeService` from `StoryService`
-- [ ] Extract `AdminAnalyticsService` from `AdminService`
+**Phase 1: High-Impact Extractions** ✅ COMPLETE *(Instance 6)*
+- [x] Extract `StoryProgressService` from `StoryService`
+- [x] Extract `DailyChallengeService` from `StoryService`
+- [x] Extract `AdminAnalyticsService` from `AdminService`
 
 **Phase 2: Auth & User Domain**
 - [ ] Extract `OAuthService` from `AuthService`
@@ -230,9 +267,10 @@ Available tasks from the roadmaps:
 develop-v0.0.1 (base)
     └── integration/refactor-2026-02 (shared integration)
             ├── fix/format-and-lint (merged ✅)
-            ├── perf/improvements (Instance 2)
+            ├── perf/improvements (Instance 2 & 6)
             ├── feat/gemini-retry-logic (merged ✅)
-            └── fix/bug-fixes (Instance 4)
+            ├── fix/bug-fixes (Instance 4)
+            └── perf/resilience-improvements (Instance 5 - PR #219)
 ```
 
 When all instances complete their work:
