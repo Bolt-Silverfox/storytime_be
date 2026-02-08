@@ -149,7 +149,7 @@ export class GeminiService {
 
   async generateStory(options: GenerateStoryOptions): Promise<GeneratedStory> {
     if (!this.genAI) {
-      throw new Error(
+      throw new ServiceUnavailableException(
         'Gemini API is not configured. Please set GEMINI_API_KEY environment variable.',
       );
     }
@@ -178,7 +178,9 @@ export class GeminiService {
 
       // Validate the response structure
       if (!this.validateStoryStructure(story)) {
-        throw new Error('Invalid story structure received from Gemini');
+        throw new InternalServerErrorException(
+          'Invalid story structure received from Gemini',
+        );
       }
 
       // Track usage if userId is provided

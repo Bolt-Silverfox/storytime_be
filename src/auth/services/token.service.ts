@@ -1,4 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '@/prisma/prisma.service';
 import { UserDto } from '../dto/auth.dto';
@@ -68,10 +72,14 @@ export class TokenService {
       });
     } catch (error: unknown) {
       if (error instanceof Error) {
-        throw new Error(`Error signing token: ${error.message}`);
+        throw new InternalServerErrorException(
+          `Error signing token: ${error.message}`,
+        );
       }
       this.logger.error('Unknown error signing token', error);
-      throw new Error('Unknown error occurred while signing token');
+      throw new InternalServerErrorException(
+        'Unknown error occurred while signing token',
+      );
     }
   }
 
