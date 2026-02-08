@@ -26,6 +26,7 @@ import {
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { UserDeletionService } from './services/user-deletion.service';
+import { UserPinService } from './services/user-pin.service';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -63,6 +64,7 @@ export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly userDeletionService: UserDeletionService,
+    private readonly userPinService: UserPinService,
   ) {}
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
@@ -153,7 +155,7 @@ export class UserController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Set or update PIN' })
   async setPin(@Req() req: AuthenticatedRequest, @Body() body: SetPinDto) {
-    return this.userService.setPin(req.authUserData.userId, body.pin);
+    return this.userPinService.setPin(req.authUserData.userId, body.pin);
   }
 
   @Post('me/pin/verify')
@@ -183,7 +185,7 @@ export class UserController {
     },
   })
   async verifyPin(@Req() req: AuthenticatedRequest, @Body() body: SetPinDto) {
-    return this.userService.verifyPin(req.authUserData.userId, body.pin);
+    return this.userPinService.verifyPin(req.authUserData.userId, body.pin);
   }
 
   @Post('me/pin/request-reset')
@@ -204,7 +206,7 @@ export class UserController {
     },
   })
   async requestPinResetOtp(@Req() req: AuthenticatedRequest) {
-    return this.userService.requestPinResetOtp(req.authUserData.userId);
+    return this.userPinService.requestPinResetOtp(req.authUserData.userId);
   }
 
   @Post('me/pin/validate-otp')
@@ -229,7 +231,7 @@ export class UserController {
     @Req() req: AuthenticatedRequest,
     @Body() body: ValidatePinResetOtpDto,
   ) {
-    return this.userService.validatePinResetOtp(
+    return this.userPinService.validatePinResetOtp(
       req.authUserData.userId,
       body.otp,
     );
@@ -263,7 +265,7 @@ export class UserController {
     if (body.newPin !== body.confirmNewPin) {
       throw new BadRequestException('New PIN and confirmation do not match');
     }
-    return this.userService.resetPinWithOtp(
+    return this.userPinService.resetPinWithOtp(
       req.authUserData.userId,
       body.otp,
       body.newPin,
