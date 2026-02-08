@@ -3,7 +3,11 @@ import {
   IVoiceCloningProvider,
 } from '../interfaces/speech-provider.interface';
 import { ElevenLabsClient } from 'elevenlabs';
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { StreamConverter } from '../utils/stream-converter';
 
@@ -53,7 +57,9 @@ export class ElevenLabsTTSProvider
     },
   ): Promise<Buffer> {
     if (!this.client) {
-      throw new Error('ElevenLabs client is not initialized');
+      throw new ServiceUnavailableException(
+        'ElevenLabs client is not initialized',
+      );
     }
 
     return this.withRetry(async () => {
@@ -151,7 +157,9 @@ export class ElevenLabsTTSProvider
 
   async addVoice(name: string, fileBuffer: Buffer): Promise<string> {
     if (!this.client) {
-      throw new Error('ElevenLabs client is not initialized');
+      throw new ServiceUnavailableException(
+        'ElevenLabs client is not initialized',
+      );
     }
 
     try {
@@ -178,7 +186,9 @@ export class ElevenLabsTTSProvider
 
   async getSubscriptionInfo(): Promise<any> {
     if (!this.client) {
-      throw new Error('ElevenLabs client is not initialized');
+      throw new ServiceUnavailableException(
+        'ElevenLabs client is not initialized',
+      );
     }
 
     try {

@@ -1,4 +1,10 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import * as https from 'https';
@@ -260,7 +266,7 @@ export class AppleVerificationService {
   private decodeJWS(jws: string): unknown {
     const parts = jws.split('.');
     if (parts.length !== 3) {
-      throw new Error('Invalid JWS format');
+      throw new BadRequestException('Invalid JWS format');
     }
     const payload = Buffer.from(parts[1], 'base64url').toString('utf8');
     return JSON.parse(payload);

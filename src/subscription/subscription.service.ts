@@ -2,16 +2,30 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
+  Logger,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
 
 // Re-export PLANS for backward compatibility
 export { PLANS } from './subscription.constants';
 
+/** Cache key prefix for subscription status */
+const SUBSCRIPTION_CACHE_PREFIX = 'subscription:status:';
+/** Cache TTL: 1 minute (balance between freshness and performance) */
+const SUBSCRIPTION_CACHE_TTL_MS = 60 * 1000;
+
 @Injectable()
 export class SubscriptionService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(SubscriptionService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   getPlans() {
     return PLANS;
@@ -37,38 +51,42 @@ export class SubscriptionService {
       );
     }
 
-    // For free plan: just create/activate subscription
+    // For free plan: use transaction to ensure atomic find-and-update/create
     const now = new Date();
     const endsAt = new Date(now.getTime() + plan.days * 24 * 60 * 60 * 1000);
 
-    const existing = await this.prisma.subscription.findFirst({
-      where: { userId },
-    });
+    const subscription = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.subscription.findFirst({
+        where: { userId },
+      });
 
-    if (existing) {
-      const updated = await this.prisma.subscription.update({
-        where: { id: existing.id },
+      if (existing) {
+        return tx.subscription.update({
+          where: { id: existing.id },
+          data: {
+            plan: planKey,
+            status: SUBSCRIPTION_STATUS.ACTIVE,
+            startedAt: now,
+            endsAt,
+          },
+        });
+      }
+
+      return tx.subscription.create({
         data: {
+          userId,
           plan: planKey,
           status: SUBSCRIPTION_STATUS.ACTIVE,
           startedAt: now,
           endsAt,
         },
       });
-      return { subscription: updated };
-    }
-
-    const sub = await this.prisma.subscription.create({
-      data: {
-        userId,
-        plan: planKey,
-        status: SUBSCRIPTION_STATUS.ACTIVE,
-        startedAt: now,
-        endsAt,
-      },
     });
 
-    return { subscription: sub };
+    // Invalidate cache after subscription change
+    await this.invalidateCache(userId);
+
+    return { subscription };
   }
 
   async cancel(userId: string) {
@@ -87,6 +105,9 @@ export class SubscriptionService {
       data: { status: SUBSCRIPTION_STATUS.CANCELLED, endsAt },
     });
 
+    // Invalidate cache after subscription cancellation
+    await this.invalidateCache(userId);
+
     return cancelled;
   }
 
@@ -95,5 +116,57 @@ export class SubscriptionService {
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Check if a user has an active premium subscription.
+   * Results are cached for 1 minute to reduce database load.
+   */
+  async isPremiumUser(userId: string): Promise<boolean> {
+    const cacheKey = `${SUBSCRIPTION_CACHE_PREFIX}${userId}`;
+
+    // Try to get from cache first
+    const cached = await this.cacheManager.get<boolean>(cacheKey);
+    if (cached !== undefined && cached !== null) {
+      return cached;
+    }
+
+    // Query database
+    const subscription = await this.prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: SUBSCRIPTION_STATUS.ACTIVE,
+        OR: [{ endsAt: { gt: new Date() } }, { endsAt: null }],
+      },
+      select: { id: true }, // Only need to know if it exists
+    });
+
+    const isPremium = !!subscription;
+
+    // Cache the result
+    try {
+      await this.cacheManager.set(
+        cacheKey,
+        isPremium,
+        SUBSCRIPTION_CACHE_TTL_MS,
+      );
+    } catch {
+      this.logger.warn(`Failed to cache subscription status for ${userId}`);
+    }
+
+    return isPremium;
+  }
+
+  /**
+   * Invalidate the subscription cache for a user.
+   * Should be called when subscription status changes.
+   */
+  async invalidateCache(userId: string): Promise<void> {
+    const cacheKey = `${SUBSCRIPTION_CACHE_PREFIX}${userId}`;
+    try {
+      await this.cacheManager.del(cacheKey);
+    } catch {
+      this.logger.warn(`Failed to invalidate subscription cache for ${userId}`);
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
 import * as nodemailer from 'nodemailer';
@@ -37,7 +37,9 @@ export class EmailProvider implements INotificationProvider {
       // Email must be provided in the data object
       const email = payload.data?.email as string;
       if (!email) {
-        throw new Error('Email address is required for email notifications');
+        throw new BadRequestException(
+          'Email address is required for email notifications',
+        );
       }
 
       const mailOptions = {
