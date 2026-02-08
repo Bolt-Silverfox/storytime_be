@@ -184,7 +184,7 @@ export class ElevenLabsTTSProvider
     }
   }
 
-  async getSubscriptionInfo(): Promise<any> {
+  async getSubscriptionInfo(): Promise<unknown> {
     if (!this.client) {
       throw new ServiceUnavailableException(
         'ElevenLabs client is not initialized',
