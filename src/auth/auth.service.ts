@@ -22,6 +22,7 @@ import {
   updateProfileDto,
 } from './dto/auth.dto';
 import { PrismaService } from '@/prisma/prisma.service';
+import { Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { generateToken } from '@/utils/generate-token';
 import { GoogleOAuthProfile } from '@/shared/types';
@@ -126,12 +127,12 @@ export class AuthService {
       throw new BadRequestException('Email already exists');
     }
 
-    let role = 'parent';
+    let role: Role = Role.parent;
     if (data.role === 'admin') {
       if (data.adminSecret !== process.env.ADMIN_SECRET) {
         throw new ForbiddenException('Invalid admin secret');
       }
-      role = 'admin';
+      role = Role.admin;
     }
 
     const hashedPassword = await this.passwordService.hashPassword(
@@ -143,7 +144,7 @@ export class AuthService {
         name: data.fullName,
         email: data.email,
         passwordHash: hashedPassword,
-        role: role as any,
+        role,
         onboardingStatus: 'account_created',
       },
       include: {
