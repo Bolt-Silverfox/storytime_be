@@ -50,8 +50,28 @@ git push origin integration/refactor-2026-02
 - Module wiring: StoryModule now properly imports SubscriptionModule
 
 ### Instance 2 - ✅ Completed
+**Focus**: God service refactoring documentation
+**Timestamp**: 2026-02-08
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `QA_IMPROVEMENTS.md` - Expanded section 2.3 with detailed god service refactoring plans:
+  - AdminService (2,121 lines) → 4 services
+  - StoryService (1,787 lines) → 5 services
+  - AuthService (694 lines) → 3 new services
+  - NotificationService (737 lines) → 4 services
+  - UserService (689 lines) → 4 services
+  - StoryBuddyService (728 lines) → 4 services
+  - ReportsService (536 lines) → 3 services
+- Added method-to-service mappings, dependencies, implementation order
+- Added 4-phase action items for systematic extraction
+
+**Status**: Documentation complete. Ready for service extraction work.
+
+### Instance 3 - ✅ Completed
 **Focus**: Unit tests for critical untested services
 **Timestamp**: 2026-02-08
+**Branch**: `fix/bug-fixes`
 
 **Changes Made**:
 - `src/auth/auth.service.spec.ts` - NEW: 31 tests for AuthService
@@ -63,7 +83,7 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - 125 tests passing
 
-### Instance 3 - 🔄 In Progress
+### Instance 4 - 🔄 In Progress
 **Focus**: [Describe your work area]
 **Timestamp**:
 
@@ -83,11 +103,11 @@ Files currently being modified by other instances - avoid editing these:
 | `src/subscription/subscription.service.ts` | Instance 1 | ✅ Done |
 | `src/story/story-quota.service.ts` | Instance 1 | ✅ Done |
 | `src/shared/guards/subscription-throttle.guard.ts` | Instance 1 | ✅ Done |
-| `src/auth/auth.service.spec.ts` | Instance 2 | ✅ Done |
-| `src/user/user.service.spec.ts` | Instance 2 | ✅ Done |
-| `src/subscription/subscription.service.spec.ts` | Instance 2 | ✅ Done |
-| `src/notification/notification.service.spec.ts` | Instance 2 | ✅ Done |
-| `jest.config.js` | Instance 2 | ✅ Done |
+| `src/auth/auth.service.spec.ts` | Instance 3 | ✅ Done |
+| `src/user/user.service.spec.ts` | Instance 3 | ✅ Done |
+| `src/subscription/subscription.service.spec.ts` | Instance 3 | ✅ Done |
+| `src/notification/notification.service.spec.ts` | Instance 3 | ✅ Done |
+| `jest.config.js` | Instance 3 | ✅ Done |
 
 ---
 
@@ -103,13 +123,38 @@ Available tasks from the roadmaps:
 - [ ] Implement circuit breaker for external services
 
 ### From QA_IMPROVEMENTS.md
-- [x] Add unit tests for AuthService *(Instance 2)*
-- [x] Add unit tests for UserService *(Instance 2)*
-- [x] Add unit tests for SubscriptionService *(Instance 2)*
-- [x] Add unit tests for NotificationService *(Instance 2)*
+- [x] Add unit tests for AuthService *(Instance 3)*
+- [x] Add unit tests for UserService *(Instance 3)*
+- [x] Add unit tests for SubscriptionService *(Instance 3)*
+- [x] Add unit tests for NotificationService *(Instance 3)*
 - [ ] Add E2E tests for authentication flows
 - [ ] Replace remaining `any` types (~22 files)
-- [ ] Refactor god services (AdminService: 2,121 lines)
+
+### God Service Extractions (see QA_IMPROVEMENTS.md section 2.3 for details)
+
+**Phase 1: High-Impact Extractions**
+- [ ] Extract `StoryProgressService` from `StoryService`
+- [ ] Extract `DailyChallengeService` from `StoryService`
+- [ ] Extract `AdminAnalyticsService` from `AdminService`
+
+**Phase 2: Auth & User Domain**
+- [ ] Extract `OAuthService` from `AuthService`
+- [ ] Extract `OnboardingService` from `AuthService`
+- [ ] Extract `UserDeletionService` from `UserService`
+- [ ] Extract `UserPinService` from `UserService`
+
+**Phase 3: Notification & Reports**
+- [ ] Extract `NotificationPreferenceService` from `NotificationService`
+- [ ] Extract `InAppNotificationService` from `NotificationService`
+- [ ] Extract `ScreenTimeService` from `ReportsService`
+
+**Phase 4: Remaining Extractions**
+- [ ] Extract `AdminUserService` from `AdminService`
+- [ ] Extract `AdminStoryService` from `AdminService`
+- [ ] Extract `StoryGenerationService` from `StoryService`
+- [ ] Extract `StoryRecommendationService` from `StoryService`
+- [ ] Extract `BuddySelectionService` from `StoryBuddyService`
+- [ ] Extract `BuddyMessagingService` from `StoryBuddyService`
 
 ---
 
