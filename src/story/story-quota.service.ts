@@ -69,41 +69,46 @@ export class StoryQuotaService {
    * Should be called after user successfully accesses a story for the first time
    */
   async recordNewStoryAccess(userId: string, storyId: string): Promise<void> {
-    // Only increment if this is truly a new story (no existing progress)
-    const existing = await this.prisma.userStoryProgress.findUnique({
-      where: { userId_storyId: { userId, storyId } },
+    const currentMonth = this.getCurrentMonth();
+
+    // Use interactive transaction to handle race condition atomically
+    await this.prisma.$transaction(async (tx) => {
+      // Check inside transaction to prevent race conditions
+      const existing = await tx.userStoryProgress.findUnique({
+        where: { userId_storyId: { userId, storyId } },
+      });
+
+      if (existing) {
+        return; // Already recorded, nothing to do
+      }
+
+      // Create UserStoryProgress record to mark story as "read"
+      await tx.userStoryProgress.create({
+        data: {
+          userId,
+          storyId,
+          progress: 0,
+        },
+      });
+
+      // Increment the unique stories count
+      await tx.userUsage.upsert({
+        where: { userId },
+        create: {
+          userId,
+          currentMonth,
+          uniqueStoriesRead: 1,
+          lastBonusGrantedAt: new Date(),
+        },
+        update: {
+          uniqueStoriesRead: { increment: 1 },
+        },
+      });
+
+      this.logger.debug(
+        `Recorded new story access for user ${userId}, story ${storyId}`,
+      );
     });
-
-    if (!existing) {
-      const currentMonth = this.getCurrentMonth();
-
-      // Use transaction to atomically create progress and update usage
-      await this.prisma.$transaction([
-        // Create UserStoryProgress record to mark story as "read"
-        this.prisma.userStoryProgress.create({
-          data: {
-            userId,
-            storyId,
-            progress: 0, // Initial progress
-          },
-        }),
-        // Increment the unique stories count
-        this.prisma.userUsage.upsert({
-          where: { userId },
-          create: {
-            userId,
-            currentMonth,
-            uniqueStoriesRead: 1,
-            lastBonusGrantedAt: new Date(),
-          },
-          update: {
-            uniqueStoriesRead: { increment: 1 },
-          },
-        }),
-      ]);
-
-      this.logger.debug(`Recorded new story access for user ${userId}, story ${storyId}`);
-    }
   }
 
   /**

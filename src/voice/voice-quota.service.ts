@@ -75,9 +75,15 @@ export class VoiceQuotaService {
   }
 
   async incrementUsage(userId: string): Promise<void> {
-    await this.prisma.userUsage.update({
+    const currentMonth = this.getCurrentMonth();
+    await this.prisma.userUsage.upsert({
       where: { userId },
-      data: {
+      create: {
+        userId,
+        currentMonth,
+        elevenLabsCount: 1,
+      },
+      update: {
         elevenLabsCount: { increment: 1 },
       },
     });
