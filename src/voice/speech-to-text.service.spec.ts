@@ -5,7 +5,9 @@ import { DeepgramSTTProvider } from './providers/deepgram-stt.provider';
 
 describe('SpeechToTextService', () => {
   let service: SpeechToTextService;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let elevenLabsProvider: ElevenLabsSTTProvider;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let deepgramProvider: DeepgramSTTProvider;
 
   const mockElevenLabsTranscribe = jest.fn();

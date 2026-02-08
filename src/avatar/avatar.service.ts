@@ -18,11 +18,12 @@ export class AvatarService {
   ) {}
 
   // Helper Methods
+
   private async handleCustomAvatarUpload(
     entityId: string,
     entityType: 'user' | 'kid',
     file: Express.Multer.File,
-    entityName: string,
+    entityName: string, // eslint-disable-line @typescript-eslint/no-unused-vars
   ) {
     let uploadResult;
     try {

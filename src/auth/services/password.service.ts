@@ -32,10 +32,11 @@ export class PasswordService {
   /**
    * Request a password reset - sends reset email to user
    */
+
   async requestPasswordReset(
     data: RequestResetDto,
-    _ip?: string,
-    _userAgent?: string,
+    ip?: string, // eslint-disable-line @typescript-eslint/no-unused-vars
+    userAgent?: string, // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<{ message: string }> {
     const { email } = data;
     const user = await this.prisma.user.findUnique({ where: { email } });
@@ -80,10 +81,11 @@ export class PasswordService {
   /**
    * Validate a password reset token
    */
+
   async validateResetToken(
     token: string,
     email: string,
-    _data: ValidateResetTokenDto,
+    data: ValidateResetTokenDto, // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<{ message: string }> {
     const hashedToken = this.tokenService.hashToken(token);
     const resetToken = await this.prisma.token.findUnique({
@@ -110,11 +112,12 @@ export class PasswordService {
   /**
    * Reset password using a reset token
    */
+
   async resetPassword(
     token: string,
     email: string,
     newPassword: string,
-    _data: ResetPasswordDto,
+    data: ResetPasswordDto, // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<{ message: string }> {
     const hashedToken = this.tokenService.hashToken(token);
     const resetToken = await this.prisma.token.findUnique({

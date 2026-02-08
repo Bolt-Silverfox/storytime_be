@@ -107,7 +107,7 @@ describe('Global Handlers (e2e)', () => {
       );
     });
 
-    it('should format custom thrown HttpException (409 Conflict)', async () => {
+    it('should format custom thrown HttpException (409 Conflict)', () => {
       // To properly test this, we need a test route that throws new ConflictException('Already used').
       // Since we don't have access to your controllers, we will mock the request response
       // based on the expected behavior of a controller throwing this exception.

@@ -49,7 +49,9 @@ export class PaymentService {
       } else if (dto.platform === 'apple') {
         return await this.verifyApplePurchase(userId, dto);
       } else {
-        throw new BadRequestException(`Unsupported platform: ${dto.platform}`);
+        throw new BadRequestException(
+          `Unsupported platform: ${String(dto.platform)}`,
+        );
       }
     } catch (error) {
       if (

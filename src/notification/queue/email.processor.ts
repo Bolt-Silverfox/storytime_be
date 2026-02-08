@@ -53,6 +53,7 @@ export class EmailProcessor extends WorkerHost {
    * This method is called by BullMQ for each job
    */
   async process(job: Job<EmailJobData>): Promise<EmailJobResult> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { to, subject, html, userId, category, jobId } = job.data;
     const attemptsMade = job.attemptsMade + 1;
 

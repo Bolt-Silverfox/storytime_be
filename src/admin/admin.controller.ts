@@ -1872,8 +1872,8 @@ export class AdminController {
       },
     },
   })
-  async createBackup() {
-    const data = await this.adminService.createBackup();
+  createBackup() {
+    const data = this.adminService.createBackup();
     return {
       statusCode: 200,
       message: 'Backup created successfully',

@@ -47,7 +47,7 @@ export class PrismaService
         message: 'Prisma is up and running',
         duration: Date.now() - start,
       };
-    } catch (error) {
+    } catch {
       return {
         service: 'prisma',
         status: 'down',

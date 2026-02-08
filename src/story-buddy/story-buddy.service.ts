@@ -452,7 +452,7 @@ export class StoryBuddyService {
     // Prepare context data if needed
     if (contextId) {
       switch (context) {
-        case 'challenge':
+        case 'challenge': {
           const challenge = await this.prisma.dailyChallenge.findUnique({
             where: {
               id: contextId,
@@ -467,9 +467,10 @@ export class StoryBuddyService {
             };
           }
           break;
+        }
 
         case 'story_start':
-        case 'story_complete':
+        case 'story_complete': {
           const story = await this.prisma.story.findUnique({
             where: {
               id: contextId,
@@ -484,6 +485,7 @@ export class StoryBuddyService {
             };
           }
           break;
+        }
       }
     }
 
@@ -636,7 +638,7 @@ export class StoryBuddyService {
         return publicIdWithVersion.split('.')[0];
       }
       return null;
-    } catch (error) {
+    } catch {
       this.logger.warn('Failed to extract public ID from URL:', imageUrl);
       return null;
     }

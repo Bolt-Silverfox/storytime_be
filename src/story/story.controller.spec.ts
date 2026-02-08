@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
 import { TextToSpeechService } from './text-to-speech.service';
-import { CreateStoryDto } from './dto/story.dto';
 
 // Mock the Service so we test the Controller in isolation
 const mockStoryService = {
@@ -33,6 +32,7 @@ describe('StoryController', () => {
         },
       ],
     })
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       .overrideGuard(require('../auth/auth.guard').AuthSessionGuard) // Bypass Auth Guard
       .useValue({ canActivate: () => true })
       .compile();

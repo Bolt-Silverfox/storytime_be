@@ -1,12 +1,5 @@
 import { PartialType, ApiProperty } from '@nestjs/swagger';
-import {
-  IsString,
-  IsInt,
-  Min,
-  Max,
-  IsNotEmpty,
-  IsOptional,
-} from 'class-validator';
+import { IsString, IsInt, Min, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class CreateAgeDto {
   @ApiProperty({

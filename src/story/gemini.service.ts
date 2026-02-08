@@ -322,11 +322,11 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     return true;
   }
 
-  async generateStoryImage(
+  generateStoryImage(
     title: string,
     description: string,
-    userId?: string, // Added userId for tracking
-  ): Promise<string> {
+    userId?: string,
+  ): string {
     const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
     const encodedPrompt = encodeURIComponent(imagePrompt);
     const seed = Math.floor(Math.random() * 100000);

@@ -47,7 +47,7 @@ export class AnalyticsService {
     userId?: string;
     kidId?: string;
     action: string;
-    status: 'SUCCESS' | 'FAILED' | string;
+    status: string;
     details?: string;
     ipAddress?: string;
     deviceName?: string;

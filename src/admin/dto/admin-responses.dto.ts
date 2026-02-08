@@ -923,7 +923,7 @@ export class ActivityLogDto {
     },
     required: false,
   })
-  user?: any | null;
+  user?: Record<string, unknown> | null;
 
   @ApiProperty({
     description: 'Kid information',
@@ -933,7 +933,7 @@ export class ActivityLogDto {
     },
     required: false,
   })
-  kid?: any | null;
+  kid?: Record<string, unknown> | null;
 }
 
 export class AiCreditAnalyticsDto {

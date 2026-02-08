@@ -9,7 +9,6 @@ import {
   IsString,
   MaxLength,
   IsArray,
-  ArrayMinSize,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
