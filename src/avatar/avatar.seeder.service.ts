@@ -6,7 +6,7 @@ import { systemAvatars } from '../../prisma/data';
 export class AvatarSeederService implements OnModuleInit {
   private readonly logger = new Logger(AvatarSeederService.name);
 
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
     await this.seedSystemAvatars();

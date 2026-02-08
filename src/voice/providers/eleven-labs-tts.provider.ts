@@ -44,8 +44,13 @@ export class ElevenLabsTTSProvider
     text: string,
     voiceId: string,
     modelId: string = 'eleven_multilingual_v2',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    options?: any,
+
+    options?: {
+      stability?: number;
+      similarity_boost?: number;
+      style?: number;
+      use_speaker_boost?: boolean;
+    },
   ): Promise<Buffer> {
     if (!this.client) {
       throw new Error('ElevenLabs client is not initialized');
@@ -56,16 +61,14 @@ export class ElevenLabsTTSProvider
         `Generating audio with voice ${voiceId} and model ${modelId}`,
       );
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const convertOptions: any = {
+      const convertOptions: Parameters<
+        typeof this.client.textToSpeech.convert
+      >[1] = {
         text,
         model_id: modelId,
         output_format: 'mp3_44100_128',
+        ...(options && { voice_settings: options }),
       };
-
-      if (options) {
-        convertOptions.voice_settings = options;
-      }
 
       const audioStream = await this.client.textToSpeech.convert(
         voiceId,
@@ -110,7 +113,7 @@ export class ElevenLabsTTSProvider
       }
     }
 
-    throw lastError;
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
   private isRateLimitError(error: unknown): boolean {
@@ -146,7 +149,6 @@ export class ElevenLabsTTSProvider
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-
   async addVoice(name: string, fileBuffer: Buffer): Promise<string> {
     if (!this.client) {
       throw new Error('ElevenLabs client is not initialized');
@@ -160,7 +162,7 @@ export class ElevenLabsTTSProvider
 
       const response = await this.client.voices.add({
         name,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         files: [blob as any],
         description: 'Cloned via StoryTime App',
       });
@@ -174,7 +176,6 @@ export class ElevenLabsTTSProvider
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async getSubscriptionInfo(): Promise<any> {
     if (!this.client) {
       throw new Error('ElevenLabs client is not initialized');

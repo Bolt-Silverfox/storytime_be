@@ -1,5 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { NotificationCategory as PrismaCategory, NotificationType as PrismaType } from '@prisma/client';
+import {
+  NotificationCategory as PrismaCategory,
+  NotificationType as PrismaType,
+} from '@prisma/client';
 
 export const NotificationType = PrismaType;
 export type NotificationType = PrismaType;
@@ -78,7 +81,7 @@ export class NotificationDto {
   body: string;
 
   @ApiProperty()
-  data: any;
+  data: Record<string, unknown> | null;
 
   @ApiProperty()
   isRead: boolean;

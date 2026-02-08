@@ -19,12 +19,7 @@ import { StoryAccessGuard } from '@/shared/guards/story-access.guard';
     forwardRef(() => VoiceModule),
   ],
   controllers: [StoryController],
-  providers: [
-    StoryService,
-    GeminiService,
-    StoryQuotaService,
-    StoryAccessGuard,
-  ],
+  providers: [StoryService, GeminiService, StoryQuotaService, StoryAccessGuard],
   exports: [StoryService, StoryQuotaService],
 })
-export class StoryModule { }
+export class StoryModule {}

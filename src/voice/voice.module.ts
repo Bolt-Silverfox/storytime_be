@@ -51,4 +51,4 @@ import { VoiceQuotaService } from './voice-quota.service';
     VoiceQuotaService,
   ],
 })
-export class VoiceModule { }
+export class VoiceModule {}

@@ -31,7 +31,11 @@ interface AppleTransactionInfo {
   productId: string;
   purchaseDate: number;
   expiresDate?: number;
-  type: 'Auto-Renewable Subscription' | 'Non-Consumable' | 'Consumable' | 'Non-Renewing Subscription';
+  type:
+    | 'Auto-Renewable Subscription'
+    | 'Non-Consumable'
+    | 'Consumable'
+    | 'Non-Renewing Subscription';
   inAppOwnershipType: 'PURCHASED' | 'FAMILY_SHARED';
   environment: 'Sandbox' | 'Production';
   price?: number;
@@ -86,7 +90,10 @@ export class AppleVerificationService {
 
     try {
       const token = this.generateJWT();
-      const transactionInfo = await this.getTransactionInfo(transactionId, token);
+      const transactionInfo = await this.getTransactionInfo(
+        transactionId,
+        token,
+      );
 
       if (!transactionInfo) {
         return { success: false };
@@ -143,7 +150,9 @@ export class AppleVerificationService {
       if (error instanceof HttpException) {
         throw error;
       }
-      this.logger.error(`Apple verification failed: ${this.errorMessage(error)}`);
+      this.logger.error(
+        `Apple verification failed: ${this.errorMessage(error)}`,
+      );
       throw new HttpException(
         'Failed to verify Apple App Store purchase',
         HttpStatus.BAD_REQUEST,
@@ -218,7 +227,9 @@ export class AppleVerificationService {
           res.on('end', () => {
             if (res.statusCode === 200) {
               try {
-                const response = JSON.parse(data);
+                const response = JSON.parse(data) as {
+                  signedTransactionInfo: string;
+                };
                 // The signedTransactionInfo is a JWS, decode the payload
                 const decoded = this.decodeJWS(response.signedTransactionInfo);
                 resolve(decoded as AppleTransactionInfo);
@@ -237,7 +248,8 @@ export class AppleVerificationService {
       );
 
       req.on('error', reject);
-      req.setTimeout(15000, () => { // 15 second timeout (Apple recommended range)
+      req.setTimeout(15000, () => {
+        // 15 second timeout (Apple recommended range)
         req.destroy();
         reject(new Error('Apple API request timeout'));
       });
@@ -267,7 +279,7 @@ export class AppleVerificationService {
     // DER format: 0x30 [total-length] 0x02 [r-length] [r] 0x02 [s-length] [s]
     let offset = 2; // Skip 0x30 and length byte
     if (derSignature[1] & 0x80) {
-      offset += (derSignature[1] & 0x7f);
+      offset += derSignature[1] & 0x7f;
     }
 
     // Read r

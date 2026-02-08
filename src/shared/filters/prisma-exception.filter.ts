@@ -38,17 +38,16 @@ export class PrismaExceptionFilter
       }
       // P2002: Unique constraint failed
       case 'P2002': {
-        // ts-expect-error
-        const fields = exception.meta?.target || 'unknown fields';
+        const fields =
+          (exception.meta?.target as string[] | string) || 'unknown fields';
         statusCode = HttpStatus.CONFLICT;
-        message = `A record with this identifier already exists: ${Array.isArray(fields) ? fields.join(', ') : fields}.`;
+        message = `A record with this identifier already exists: ${Array.isArray(fields) ? fields.join(', ') : String(fields)}.`;
         error = 'Conflict';
         break;
       }
       // P2025: An operation failed because it depends on one or more records that were required but not found
       case 'P2025': {
-        // @ts-expect-error
-        message = exception.meta?.cause || 'Resource not found.';
+        message = (exception.meta?.cause as string) || 'Resource not found.';
         statusCode = HttpStatus.NOT_FOUND;
         error = 'Not Found';
         break;

@@ -31,7 +31,9 @@ import {
   Category,
   Theme,
   DailyChallenge,
+  ParentRecommendation,
 } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TextToSpeechService } from './text-to-speech.service';
 import {
@@ -42,7 +44,11 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { GeminiService, GenerateStoryOptions } from './gemini.service';
+import {
+  GeminiService,
+  GenerateStoryOptions,
+  GeneratedStory,
+} from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
@@ -107,7 +113,7 @@ export class StoryService {
     const limit = filter.limit || 12;
     const skip = (page - 1) * limit;
 
-    const where: any = {
+    const where: Prisma.StoryWhereInput = {
       isDeleted: false,
     };
 
@@ -208,27 +214,35 @@ export class StoryService {
     ) {
       // Overlap logic: story.ageMin <= filter.maxAge AND story.ageMax >= filter.minAge
       if (filter.minAge !== undefined) {
-        where.ageMax = { ...where.ageMax, gte: filter.minAge };
+        where.ageMax = {
+          ...((where.ageMax as object) || {}),
+          gte: filter.minAge,
+        };
       }
       if (filter.maxAge !== undefined) {
-        where.ageMin = { ...where.ageMin, lte: filter.maxAge };
+        where.ageMin = {
+          ...((where.ageMin as object) || {}),
+          lte: filter.maxAge,
+        };
       }
     }
 
     if (recommendedStoryIds.length > 0 && filter.recommended === undefined) {
-      const recommendedClause: any = { id: { in: recommendedStoryIds } };
+      const recommendedClause: Prisma.StoryWhereInput = {
+        id: { in: recommendedStoryIds },
+      };
 
       // If seasonal filter is active, enforce it on recommended stories too
       if (filter.isSeasonal && where.seasons) {
         recommendedClause.seasons = where.seasons;
       }
 
-      where.OR = [{ ...where }, recommendedClause];
+      where.OR = [{ ...(where as object) }, recommendedClause];
     }
 
     // Exclude restricted stories (already fetched in batch query above)
     if (restrictedStoryIds.length > 0) {
-      where.id = { notIn: restrictedStoryIds, ...where.id };
+      where.id = { notIn: restrictedStoryIds, ...((where.id as object) || {}) };
     }
 
     if (filter.recommended === true && filter.kidId) {
@@ -354,7 +368,8 @@ export class StoryService {
     }
 
     // 1. Recommended Stories (based on preferred categories)
-    let recommended: any[] = [];
+    let recommended: Awaited<ReturnType<typeof this.prisma.story.findMany>> =
+      [];
     if (user.preferredCategories.length > 0) {
       recommended = await this.prisma.story.findMany({
         where: {
@@ -382,7 +397,7 @@ export class StoryService {
     // 2. Seasonal Stories (Logic: find active season based on today's date)
     const { activeSeasons, backfillSeasons } = await this.getRelevantSeasons();
 
-    let seasonal: any[] = [];
+    let seasonal: Awaited<ReturnType<typeof this.prisma.story.findMany>> = [];
     let seasonalCount = 0;
 
     if (activeSeasons.length > 0) {
@@ -866,7 +881,7 @@ export class StoryService {
   // ... [Keep Assignment, Voice, and StoryPath methods] ...
 
   private toDailyChallengeAssignmentDto(
-    assignment: any,
+    assignment: DailyChallengeAssignment,
   ): DailyChallengeAssignmentDto {
     return {
       id: assignment.id,
@@ -960,7 +975,7 @@ export class StoryService {
     return audioUrl;
   }
 
-  private toStoryPathDto(path: any): StoryPathDto {
+  private toStoryPathDto(path: StoryPath): StoryPathDto {
     return {
       id: path.id,
       kidId: path.kidId,
@@ -1077,7 +1092,7 @@ export class StoryService {
         ),
       );
       const availableStories = stories.filter(
-        (s: any) => !usedStoryIds.has(s.id),
+        (s: { id: string }) => !usedStoryIds.has(s.id),
       );
       const storyPool =
         availableStories.length > 0 ? availableStories : stories;
@@ -1340,7 +1355,7 @@ export class StoryService {
 
   // --- PRIVATE HELPER: PERSIST STORY (Includes Image & Audio Gen) ---
   private async persistGeneratedStory(
-    generatedStory: any,
+    generatedStory: GeneratedStory & { textContent?: string },
     kidName: string,
     creatorKidId?: string,
     voiceType?: VoiceType,
@@ -1360,7 +1375,7 @@ export class StoryService {
     let coverImageUrl = '';
     try {
       this.logger.log(`Generating cover image for "${generatedStory.title}"`);
-      coverImageUrl = await this.geminiService.generateStoryImage(
+      coverImageUrl = this.geminiService.generateStoryImage(
         generatedStory.title,
         generatedStory.description || `A story about ${generatedStory.title}`,
         userId, // Pass userId for tracking
@@ -1683,7 +1698,11 @@ export class StoryService {
   }
 
   private toRecommendationResponse(
-    recommendation: any,
+    recommendation: ParentRecommendation & {
+      story?: Record<string, unknown>;
+      user?: { id: string; name?: string | null; email?: string };
+      kid?: { id: string; name?: string | null };
+    },
   ): RecommendationResponseDto {
     return {
       id: recommendation.id,
@@ -1692,13 +1711,13 @@ export class StoryService {
       storyId: recommendation.storyId,
       message: recommendation.message ?? undefined,
       recommendedAt: recommendation.recommendedAt,
-      story: recommendation.story,
+      story: recommendation.story as CreateStoryDto | undefined,
       user: recommendation.user,
       kid: recommendation.kid,
     };
   }
 
-  async getTopPicksFromParents(limit: number = 10): Promise<any[]> {
+  async getTopPicksFromParents(limit: number = 10) {
     const topStories = await this.prisma.parentRecommendation.groupBy({
       by: ['storyId'],
       where: { isDeleted: false },
@@ -1736,7 +1755,7 @@ export class StoryService {
    * Get random stories for "Top Picks from Us" homepage section.
    * Results are cached for 24 hours.
    */
-  async getTopPicksFromUs(limit: number = 10): Promise<any[]> {
+  async getTopPicksFromUs(limit: number = 10) {
     const sanitizedLimit = PaginationUtil.sanitizeLimit(limit, {
       defaultValue: 10,
       min: 1,

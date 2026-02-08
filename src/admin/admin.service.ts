@@ -21,17 +21,13 @@ import {
   PaginatedResponseDto,
   SubscriptionAnalyticsDto,
   RevenueAnalyticsDto,
-  UserDetailDto,
-  StoryDetailDto,
   CategoryDto,
   ThemeDto,
   SubscriptionDto,
   ActivityLogDto,
   AiCreditAnalyticsDto,
   UserGrowthMonthlyDto,
-  MetricWithTrendDto,
 } from './dto/admin-responses.dto';
-import { CreateSupportTicketDto } from '../help-support/dto/create-support-ticket.dto';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import {
   UserFilterDto,
@@ -51,7 +47,11 @@ import {
 } from '../../prisma/data';
 import { DateUtil } from '@/shared/utils/date.util';
 import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';
-import { CACHE_KEYS, CACHE_TTL_MS, STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+  STORY_INVALIDATION_KEYS,
+} from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
@@ -98,7 +98,11 @@ export class AdminService {
     const rangeYesterday = DateUtil.getRange(Timeframe.YESTERDAY, now); // For "New Users Today" comparison
 
     // Helper to count between dates
-    const countBetween = (model: any, start: Date, end: Date) =>
+    const countBetween = (
+      model: { count: (args: { where: object }) => Promise<number> },
+      start: Date,
+      end: Date,
+    ): Promise<number> =>
       model.count({
         where: { createdAt: { gte: start, lte: end }, isDeleted: false },
       });
@@ -248,7 +252,7 @@ export class AdminService {
       prevActiveUsers24h,
       prevActiveUsers7d,
       prevActiveUsers30d,
-      prevNewUsersToday,
+      _unused, // eslint-disable-line @typescript-eslint/no-unused-vars
       prevNewUsersThisMonth,
     ] = await Promise.all([
       this.prisma.user.count({
@@ -818,14 +822,14 @@ export class AdminService {
 
     return {
       data: users.map((user) => {
-        // Sanitize user object
+        // Sanitize user object - exclude sensitive fields
         const {
-          passwordHash,
-          pinHash,
-          kids,
-          paymentTransactions,
-          usage,
-          subscriptions,
+          passwordHash, // eslint-disable-line @typescript-eslint/no-unused-vars
+          pinHash, // eslint-disable-line @typescript-eslint/no-unused-vars
+          kids, // eslint-disable-line @typescript-eslint/no-unused-vars
+          paymentTransactions, // eslint-disable-line @typescript-eslint/no-unused-vars
+          usage, // eslint-disable-line @typescript-eslint/no-unused-vars
+          subscriptions, // eslint-disable-line @typescript-eslint/no-unused-vars
           ...safeUser
         } = user;
 
@@ -925,6 +929,7 @@ export class AdminService {
       },
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, pinHash, ...safeUser } = user;
 
     return {
@@ -1073,7 +1078,7 @@ export class AdminService {
     const { userIds, action } = data;
 
     switch (action) {
-      case 'delete':
+      case 'delete': {
         const deleteResult = await this.prisma.user.updateMany({
           where: { id: { in: userIds } },
           data: {
@@ -1082,8 +1087,9 @@ export class AdminService {
           },
         });
         return { count: deleteResult.count };
+      }
 
-      case 'restore':
+      case 'restore': {
         const restoreResult = await this.prisma.user.updateMany({
           where: { id: { in: userIds } },
           data: {
@@ -1092,8 +1098,9 @@ export class AdminService {
           },
         });
         return { count: restoreResult.count };
+      }
 
-      case 'verify':
+      case 'verify': {
         const verifyResult = await this.prisma.user.updateMany({
           where: { id: { in: userIds } },
           data: {
@@ -1101,6 +1108,7 @@ export class AdminService {
           },
         });
         return { count: verifyResult.count };
+      }
 
       default:
         throw new BadRequestException('Invalid action');
@@ -1240,7 +1248,9 @@ export class AdminService {
     try {
       await this.cacheManager.del(CACHE_KEYS.STORY_STATS);
     } catch (error) {
-      this.logger.warn(`Failed to invalidate story stats cache: ${error.message}`);
+      this.logger.warn(
+        `Failed to invalidate story stats cache: ${error.message}`,
+      );
     }
 
     return result;
@@ -1274,7 +1284,9 @@ export class AdminService {
         STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
       );
     } catch (error) {
-      this.logger.warn(`Failed to invalidate dashboard caches: ${error.message}`);
+      this.logger.warn(
+        `Failed to invalidate dashboard caches: ${error.message}`,
+      );
     }
 
     return result;
@@ -1719,7 +1731,9 @@ export class AdminService {
           STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
         );
       } catch (cacheError) {
-        this.logger.warn(`Failed to invalidate caches after seeding: ${cacheError.message}`);
+        this.logger.warn(
+          `Failed to invalidate caches after seeding: ${cacheError.message}`,
+        );
       }
 
       this.logger.log('✅ Database seeded successfully!');
@@ -1781,13 +1795,14 @@ export class AdminService {
         const details = JSON.parse(log.details || '{}');
         credits = details.credits || 1;
         provider = details.provider || '';
-      } catch (e) {
+      } catch {
         // Fallback
       }
 
       const entry = dataMap.get(month)!;
-      if (provider === AiProviders.ElevenLabs) entry.elevenLabs += credits;
-      if (provider === AiProviders.Gemini) entry.gemini += credits;
+      if (provider === String(AiProviders.ElevenLabs))
+        entry.elevenLabs += credits;
+      if (provider === String(AiProviders.Gemini)) entry.gemini += credits;
       entry.total += credits;
     });
 
@@ -1903,7 +1918,7 @@ export class AdminService {
   // SYSTEM MANAGEMENT
   // =====================
 
-  async createBackup(): Promise<{ message: string; timestamp: Date }> {
+  createBackup(): { message: string; timestamp: Date } {
     // Implement backup logic based on your database
     return { message: 'Backup created successfully', timestamp: new Date() };
   }
@@ -2000,7 +2015,7 @@ export class AdminService {
     status?: string,
   ) {
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.SupportTicketWhereInput = {};
     if (status) where.status = status;
 
     const [tickets, total] = await Promise.all([

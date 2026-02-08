@@ -9,7 +9,9 @@ describe('ParentFavoritesController', () => {
       controllers: [ParentFavoritesController],
     }).compile();
 
-    controller = module.get<ParentFavoritesController>(ParentFavoritesController);
+    controller = module.get<ParentFavoritesController>(
+      ParentFavoritesController,
+    );
   });
 
   it('should be defined', () => {

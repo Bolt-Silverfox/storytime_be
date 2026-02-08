@@ -101,13 +101,14 @@ export class AgeController {
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the age group (default: false - soft delete)'
+    description:
+      'Permanently delete the age group (default: false - soft delete)',
   })
   @ApiResponse({ status: 200, description: 'Age group deleted successfully.' })
   @ApiNotFoundResponse({ description: 'Age group not found.' })
   remove(
     @Param('id') id: string,
-    @Query('permanent') permanent: boolean = false
+    @Query('permanent') permanent: boolean = false,
   ) {
     return this.ageService.delete(id, permanent);
   }

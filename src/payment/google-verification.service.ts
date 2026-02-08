@@ -137,7 +137,9 @@ export class GoogleVerificationService {
       );
 
       if (stderr) {
-        this.logger.warn(`Python script stderr received (len=${stderr.length})`);
+        this.logger.warn(
+          `Python script stderr received (len=${stderr.length})`,
+        );
       }
 
       // Parse JSON response from Python script
@@ -248,10 +250,10 @@ export class GoogleVerificationService {
 
   private errorMessage(error: unknown): string {
     if (error instanceof Error) return error.message;
-    const msg =
-      (error as Record<string, unknown>)?.message ||
-      (error as Record<string, unknown>)?.toString?.();
-    return typeof msg === 'string' ? msg : 'Unknown error';
+    const errObj = error as Record<string, unknown>;
+    const msg = errObj?.message;
+    if (typeof msg === 'string') return msg;
+    return 'Unknown error';
   }
 
   /** Sanitize value for safe logging (truncate, remove control characters) */
