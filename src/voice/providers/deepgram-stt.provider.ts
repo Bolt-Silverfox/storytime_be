@@ -1,6 +1,11 @@
 import { ISpeechToTextProvider } from '../interfaces/speech-provider.interface';
 import { createClient, DeepgramClient } from '@deepgram/sdk';
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -20,7 +25,9 @@ export class DeepgramSTTProvider implements ISpeechToTextProvider {
 
   async transcribe(buffer: Buffer, mimetype: string): Promise<string> {
     if (!this.deepgram) {
-      throw new Error('Deepgram client is not initialized');
+      throw new ServiceUnavailableException(
+        'Deepgram client is not initialized',
+      );
     }
 
     try {
@@ -33,7 +40,7 @@ export class DeepgramSTTProvider implements ISpeechToTextProvider {
         });
 
       if (error) {
-        throw new Error(error.message);
+        throw new InternalServerErrorException(error.message);
       }
 
       return result.results.channels[0].alternatives[0].transcript;

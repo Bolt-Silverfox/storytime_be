@@ -9,6 +9,13 @@ import {
 import { Request, Response } from 'express';
 import { ErrorResponse } from '../dtos/api-response.dto';
 
+/** Shape of NestJS exception response objects */
+interface ExceptionResponseObject {
+  message?: string | string[];
+  error?: string;
+  statusCode?: number;
+}
+
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
@@ -37,7 +44,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exceptionResponse !== null
     ) {
       // NestJS validation pipe error structure
-      const resObj = exceptionResponse as any;
+      const resObj = exceptionResponse as ExceptionResponseObject;
       message = resObj.message || 'An error occurred.';
       error = resObj.error || HttpStatus[statusCode];
     } else {

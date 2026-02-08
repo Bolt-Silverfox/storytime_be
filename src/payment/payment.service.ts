@@ -211,12 +211,15 @@ export class PaymentService {
     endsAt: Date,
   ) {
     const now = new Date();
-    const existingSub = await this.prisma.subscription.findFirst({
-      where: { userId },
-    });
 
-    const subscription = existingSub
-      ? await this.prisma.subscription.update({
+    // Use transaction to ensure atomicity between finding and updating/creating
+    const subscription = await this.prisma.$transaction(async (tx) => {
+      const existingSub = await tx.subscription.findFirst({
+        where: { userId },
+      });
+
+      if (existingSub) {
+        return tx.subscription.update({
           where: { id: existingSub.id },
           data: {
             plan,
@@ -224,16 +227,19 @@ export class PaymentService {
             startedAt: now,
             endsAt,
           },
-        })
-      : await this.prisma.subscription.create({
-          data: {
-            userId,
-            plan,
-            status: 'active',
-            startedAt: now,
-            endsAt,
-          },
         });
+      }
+
+      return tx.subscription.create({
+        data: {
+          userId,
+          plan,
+          status: 'active',
+          startedAt: now,
+          endsAt,
+        },
+      });
+    });
 
     return {
       success: true,
