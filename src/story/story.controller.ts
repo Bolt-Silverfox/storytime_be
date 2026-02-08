@@ -63,6 +63,7 @@ import {
 import { VoiceType, StoryContentAudioDto } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { StoryService } from './story.service';
+import { StoryProgressService } from './story-progress.service';
 import { VoiceService } from '../voice/voice.service';
 import { TextToSpeechService } from './text-to-speech.service';
 
@@ -87,6 +88,7 @@ export class StoryController {
   private readonly logger = new Logger(StoryController.name);
   constructor(
     private readonly storyService: StoryService,
+    private readonly storyProgressService: StoryProgressService,
     private readonly voiceService: VoiceService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly storyQuotaService: StoryQuotaService,
@@ -568,7 +570,7 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async setProgress(@Body() body: StoryProgressDto) {
-    return this.storyService.setProgress(body);
+    return this.storyProgressService.setProgress(body);
   }
 
   @Get('progress/:kidId/:storyId')
@@ -597,7 +599,7 @@ export class StoryController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyService.getProgress(kidId, storyId);
+    return this.storyProgressService.getProgress(kidId, storyId);
   }
 
   // --- USER STORY PROGRESS (Parent/User - non-kid specific) ---
@@ -639,7 +641,7 @@ export class StoryController {
     @Body() body: UserStoryProgressDto,
   ) {
     // Execute the operation first, then record quota on success
-    const result = await this.storyService.setUserProgress(
+    const result = await this.storyProgressService.setUserProgress(
       req.authUserData!.userId,
       body,
     );
@@ -686,7 +688,7 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyService.getUserProgress(req.authUserData.userId, storyId);
+    return this.storyProgressService.getUserProgress(req.authUserData.userId, storyId);
   }
 
   @Get('user/library/continue-reading')
@@ -704,7 +706,7 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async getUserContinueReading(@Req() req: AuthenticatedRequest) {
-    return this.storyService.getUserContinueReading(req.authUserData.userId);
+    return this.storyProgressService.getUserContinueReading(req.authUserData.userId);
   }
 
   @Get('user/library/completed')
@@ -722,7 +724,7 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async getUserCompletedStories(@Req() req: AuthenticatedRequest) {
-    return this.storyService.getUserCompletedStories(req.authUserData.userId);
+    return this.storyProgressService.getUserCompletedStories(req.authUserData.userId);
   }
 
   @Delete('user/library/remove/:storyId')
@@ -742,7 +744,7 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Param('storyId') storyId: string,
   ) {
-    await this.storyService.removeFromUserLibrary(
+    await this.storyProgressService.removeFromUserLibrary(
       req.authUserData.userId,
       storyId,
     );
@@ -1134,7 +1136,7 @@ export class StoryController {
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [StoryWithProgressDto] })
   async getContinueReading(@Param('kidId') kidId: string) {
-    return this.storyService.getContinueReading(kidId);
+    return this.storyProgressService.getContinueReading(kidId);
   }
 
   @Get('library/:kidId/completed')
@@ -1142,7 +1144,7 @@ export class StoryController {
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [StoryDto] })
   async getCompleted(@Param('kidId') kidId: string) {
-    return this.storyService.getCompletedStories(kidId);
+    return this.storyProgressService.getCompletedStories(kidId);
   }
 
   @Get('library/:kidId/created')
@@ -1150,7 +1152,7 @@ export class StoryController {
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [StoryDto] })
   async getCreated(@Param('kidId') kidId: string) {
-    return this.storyService.getCreatedStories(kidId);
+    return this.storyProgressService.getCreatedStories(kidId);
   }
 
   @Get('library/:kidId/downloads')
@@ -1158,7 +1160,7 @@ export class StoryController {
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [StoryDto] })
   async getDownloads(@Param('kidId') kidId: string) {
-    return this.storyService.getDownloads(kidId);
+    return this.storyProgressService.getDownloads(kidId);
   }
 
   @Post('library/:kidId/download/:storyId')
@@ -1170,7 +1172,7 @@ export class StoryController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyService.addDownload(kidId, storyId);
+    return this.storyProgressService.addDownload(kidId, storyId);
   }
 
   @Delete('library/:kidId/download/:storyId')
@@ -1182,7 +1184,7 @@ export class StoryController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyService.removeDownload(kidId, storyId);
+    return this.storyProgressService.removeDownload(kidId, storyId);
   }
 
   @Delete('library/:kidId/remove/:storyId')
@@ -1199,7 +1201,7 @@ export class StoryController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    await this.storyService.removeFromLibrary(kidId, storyId);
+    await this.storyProgressService.removeFromLibrary(kidId, storyId);
     return { message: 'Story removed from library successfully' };
   }
 
