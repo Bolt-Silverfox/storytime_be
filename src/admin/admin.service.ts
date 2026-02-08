@@ -51,7 +51,11 @@ import {
 } from '../../prisma/data';
 import { DateUtil } from '@/shared/utils/date.util';
 import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';
-import { CACHE_KEYS, CACHE_TTL_MS, STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+  STORY_INVALIDATION_KEYS,
+} from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
@@ -1240,7 +1244,9 @@ export class AdminService {
     try {
       await this.cacheManager.del(CACHE_KEYS.STORY_STATS);
     } catch (error) {
-      this.logger.warn(`Failed to invalidate story stats cache: ${error.message}`);
+      this.logger.warn(
+        `Failed to invalidate story stats cache: ${error.message}`,
+      );
     }
 
     return result;
@@ -1274,7 +1280,9 @@ export class AdminService {
         STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
       );
     } catch (error) {
-      this.logger.warn(`Failed to invalidate dashboard caches: ${error.message}`);
+      this.logger.warn(
+        `Failed to invalidate dashboard caches: ${error.message}`,
+      );
     }
 
     return result;
@@ -1719,7 +1727,9 @@ export class AdminService {
           STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
         );
       } catch (cacheError) {
-        this.logger.warn(`Failed to invalidate caches after seeding: ${cacheError.message}`);
+        this.logger.warn(
+          `Failed to invalidate caches after seeding: ${cacheError.message}`,
+        );
       }
 
       this.logger.log('✅ Database seeded successfully!');

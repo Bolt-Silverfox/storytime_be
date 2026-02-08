@@ -130,4 +130,4 @@ import { HealthModule } from './health/health.module';
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

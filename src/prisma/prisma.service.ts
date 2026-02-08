@@ -1,4 +1,9 @@
-import { Injectable, OnModuleDestroy, OnModuleInit, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleDestroy,
+  OnModuleInit,
+  Logger,
+} from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import IHealth, { HealthResponse } from '@/health/Ihealth.interfaces';
 
@@ -18,9 +23,8 @@ export class PrismaService
           url: process.env.DATABASE_URL,
         },
       },
-      log: process.env.NODE_ENV === 'development'
-        ? ['warn', 'error']
-        : ['error'],
+      log:
+        process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
     });
   }
 

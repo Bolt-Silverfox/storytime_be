@@ -68,8 +68,9 @@ describe('AppleVerificationService', () => {
         ],
       }).compile();
 
-      const serviceWithoutConfig =
-        module.get<AppleVerificationService>(AppleVerificationService);
+      const serviceWithoutConfig = module.get<AppleVerificationService>(
+        AppleVerificationService,
+      );
 
       await expect(serviceWithoutConfig.verify(validParams)).rejects.toThrow(
         HttpException,
@@ -98,8 +99,9 @@ describe('AppleVerificationService', () => {
         ],
       }).compile();
 
-      const devService =
-        module.get<AppleVerificationService>(AppleVerificationService);
+      const devService = module.get<AppleVerificationService>(
+        AppleVerificationService,
+      );
 
       // This will fail due to missing key, but we can verify sandbox is selected
       await expect(devService.verify(validParams)).rejects.toThrow(
@@ -128,8 +130,9 @@ describe('AppleVerificationService', () => {
         ],
       }).compile();
 
-      const prodService =
-        module.get<AppleVerificationService>(AppleVerificationService);
+      const prodService = module.get<AppleVerificationService>(
+        AppleVerificationService,
+      );
 
       // This will fail due to missing key, but environment is set to production
       await expect(prodService.verify(validParams)).rejects.toThrow(
@@ -154,7 +157,9 @@ describe('AppleVerificationService', () => {
         ],
       }).compile();
 
-      const svc = module.get<AppleVerificationService>(AppleVerificationService);
+      const svc = module.get<AppleVerificationService>(
+        AppleVerificationService,
+      );
 
       await expect(
         svc.verify({ transactionId: 'test', productId: 'test' }),
@@ -176,7 +181,9 @@ describe('AppleVerificationService', () => {
         ],
       }).compile();
 
-      const svc = module.get<AppleVerificationService>(AppleVerificationService);
+      const svc = module.get<AppleVerificationService>(
+        AppleVerificationService,
+      );
 
       await expect(
         svc.verify({ transactionId: 'test', productId: 'test' }),
@@ -198,7 +205,9 @@ describe('AppleVerificationService', () => {
         ],
       }).compile();
 
-      const svc = module.get<AppleVerificationService>(AppleVerificationService);
+      const svc = module.get<AppleVerificationService>(
+        AppleVerificationService,
+      );
 
       await expect(
         svc.verify({ transactionId: 'test', productId: 'test' }),
@@ -220,7 +229,9 @@ describe('AppleVerificationService', () => {
         ],
       }).compile();
 
-      const svc = module.get<AppleVerificationService>(AppleVerificationService);
+      const svc = module.get<AppleVerificationService>(
+        AppleVerificationService,
+      );
 
       await expect(
         svc.verify({ transactionId: 'test', productId: 'test' }),

@@ -9,7 +9,11 @@ import { EnvConfig } from '@/shared/config/env.validation';
 import * as nodemailer from 'nodemailer';
 import { NotificationRegistry, Notifications } from './notification.registry';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationPreference, NotificationCategory as PrismaCategory, NotificationType as PrismaNotificationType } from '@prisma/client';
+import {
+  NotificationPreference,
+  NotificationCategory as PrismaCategory,
+  NotificationType as PrismaNotificationType,
+} from '@prisma/client';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
@@ -22,7 +26,10 @@ import {
   NotificationPayload,
   NotificationResult,
 } from './providers/notification-provider.interface';
-import { EmailQueueService, QueuedEmailResult } from './queue/email-queue.service';
+import {
+  EmailQueueService,
+  QueuedEmailResult,
+} from './queue/email-queue.service';
 
 @Injectable()
 export class NotificationService {
@@ -113,11 +120,11 @@ export class NotificationService {
 
       const results = await this.sendViaProvider(payload, channels);
 
-      const success = results.some(r => r.success);
+      const success = results.some((r) => r.success);
       return {
         success,
-        messageId: results.find(r => r.messageId)?.messageId,
-        error: results.find(r => !r.success)?.error,
+        messageId: results.find((r) => r.messageId)?.messageId,
+        error: results.find((r) => !r.success)?.error,
       };
     } catch (error) {
       this.logger.error(
@@ -156,7 +163,9 @@ export class NotificationService {
       to: email,
       subject,
       html: htmlContent,
-      metadata: options?.templateName ? { templateName: options.templateName } : undefined,
+      metadata: options?.templateName
+        ? { templateName: options.templateName }
+        : undefined,
     });
   }
 
@@ -603,7 +612,9 @@ export class NotificationService {
       skipDuplicates: true,
     });
 
-    this.logger.log(`Seeded ${preferences.length} default preferences for user ${userId}`);
+    this.logger.log(
+      `Seeded ${preferences.length} default preferences for user ${userId}`,
+    );
   }
 
   /**
@@ -668,9 +679,9 @@ export class NotificationService {
     ]);
 
     return {
-      notifications: notifications.map(n => ({
+      notifications: notifications.map((n) => ({
         ...n,
-        category: n.category as PrismaCategory,
+        category: n.category,
       })),
       total,
     };

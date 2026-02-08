@@ -446,7 +446,6 @@ export class GenerateStoryDto {
   @IsString({ each: true })
   themes?: string[];
 
-
   @ApiProperty({ type: [String], required: false })
   @IsOptional()
   @IsArray()
@@ -644,7 +643,9 @@ export class RecommendationsStatsDto {
 }
 
 export class TopPickStoryDto extends StoryDto {
-  @ApiProperty({ description: 'Number of times this story has been recommended by parents' })
+  @ApiProperty({
+    description: 'Number of times this story has been recommended by parents',
+  })
   @IsNumber()
   recommendationCount: number;
 
