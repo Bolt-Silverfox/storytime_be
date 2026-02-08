@@ -27,15 +27,11 @@ import {
   BulkActionDto,
 } from './dto/user-management.dto';
 import { PaginationUtil } from '../shared/utils/pagination.util';
-import { DeletionRequestDto } from './dto/admin-deletion-request.dto';
 import {
   DashboardStatsDto,
   StoryStatsDto,
   ContentBreakdownDto,
   SystemHealthDto,
-  PaginatedResponseDto,
-  SubscriptionAnalyticsDto,
-  RevenueAnalyticsDto,
 } from './dto/admin-responses.dto';
 import {
   ApiBearerAuth,

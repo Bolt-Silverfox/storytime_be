@@ -24,4 +24,4 @@ async function seedBadges() {
   }
 }
 
-seedBadges();
+void seedBadges();
