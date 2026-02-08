@@ -4,7 +4,6 @@ import {
   IsArray,
   IsBoolean,
   IsDate,
-  IsEnum,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -12,9 +11,7 @@ import {
   IsString,
   IsUUID,
   Max,
-  MaxLength,
   Min,
-  MinLength,
   ValidateNested,
 } from 'class-validator';
 export { VoiceType } from '@/voice/dto/voice.dto';
@@ -436,7 +433,7 @@ export class ErrorResponseDto {
   @ApiProperty({ example: 400, required: false })
   statusCode?: number;
   @ApiProperty({ required: false, description: 'Additional error details' })
-  details?: any;
+  details?: Record<string, unknown>;
 }
 
 export class GenerateStoryDto {
@@ -445,7 +442,6 @@ export class GenerateStoryDto {
   @IsArray()
   @IsString({ each: true })
   themes?: string[];
-
 
   @ApiProperty({ type: [String], required: false })
   @IsOptional()
@@ -529,7 +525,7 @@ export class PaginatedStoriesDto {
     isArray: true,
   })
   @IsArray()
-  data: any[];
+  data: Record<string, unknown>[];
 
   @ApiProperty({
     description: 'Pagination metadata',
@@ -632,10 +628,10 @@ export class RecommendationResponseDto {
   story?: CreateStoryDto;
 
   @ApiProperty({ required: false })
-  user?: any;
+  user?: { id: string; name?: string | null; email?: string };
 
   @ApiProperty({ required: false })
-  kid?: any;
+  kid?: { id: string; name?: string | null };
 }
 
 export class RecommendationsStatsDto {
@@ -644,7 +640,9 @@ export class RecommendationsStatsDto {
 }
 
 export class TopPickStoryDto extends StoryDto {
-  @ApiProperty({ description: 'Number of times this story has been recommended by parents' })
+  @ApiProperty({
+    description: 'Number of times this story has been recommended by parents',
+  })
   @IsNumber()
   recommendationCount: number;
 

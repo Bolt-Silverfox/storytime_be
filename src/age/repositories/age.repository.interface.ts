@@ -5,7 +5,11 @@ export interface IAgeRepository {
   findAll(): Promise<AgeGroup[]>;
   findById(id: string): Promise<AgeGroup | null>;
   findByIdIncludingDeleted(id: string): Promise<AgeGroup | null>;
-  findOverlapping(min: number, max: number, excludeId?: string): Promise<AgeGroup | null>;
+  findOverlapping(
+    min: number,
+    max: number,
+    excludeId?: string,
+  ): Promise<AgeGroup | null>;
   findByAgeValue(age: number): Promise<AgeGroup | null>;
   create(data: CreateAgeDto): Promise<AgeGroup>;
   update(id: string, data: UpdateAgeDto): Promise<AgeGroup>;

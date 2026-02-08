@@ -138,8 +138,10 @@ export const NotificationRegistry: Record<
       if (!data.storyTitle) return 'Story title is required';
       return null;
     },
-    getTemplate: async (data) => {
-      return `A new story "${data.storyTitle}" is now available for you to read!`;
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `A new story "${data.storyTitle}" is now available for you to read!`,
+      );
     },
   },
   AchievementUnlocked: {
@@ -150,8 +152,10 @@ export const NotificationRegistry: Record<
       if (!data.achievementName) return 'Achievement name is required';
       return null;
     },
-    getTemplate: async (data) => {
-      return `Congratulations! You've unlocked the "${data.achievementName}" achievement.`;
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `Congratulations! You've unlocked the "${data.achievementName}" achievement.`,
+      );
     },
   },
 };

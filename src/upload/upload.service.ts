@@ -68,30 +68,23 @@ export class UploadService {
   }
 
   async deleteImage(publicId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      cloudinary.uploader.destroy(
-        publicId,
-        (error: UploadApiErrorResponse, result: any) => {
-          if (error) {
-            this.logger.error('Cloudinary delete error:', error);
-            return reject(
-              new InternalServerErrorException(
-                `Delete failed: ${error.message}`,
-              ),
-            );
-          }
-          if (result.result !== 'ok') {
-            this.logger.error('Cloudinary delete failed:', result);
-            return reject(
-              new InternalServerErrorException(
-                `Delete failed: ${result.result}`,
-              ),
-            );
-          }
-          resolve();
-        },
+    try {
+      const result = await cloudinary.uploader.destroy(publicId);
+      if (result.result !== 'ok') {
+        this.logger.error('Cloudinary delete failed:', result);
+        throw new InternalServerErrorException(
+          `Delete failed: ${result.result}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('Cloudinary delete error:', error);
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Delete failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
-    });
+    }
   }
 
   async uploadAudioBuffer(buffer: Buffer, filename: string): Promise<string> {

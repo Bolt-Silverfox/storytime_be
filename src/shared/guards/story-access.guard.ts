@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { CHECK_STORY_QUOTA_KEY } from '../decorators/story-quota.decorator';
-import { StoryQuotaService, StoryAccessResult } from '@/story/story-quota.service';
+import {
+  StoryQuotaService,
+  StoryAccessResult,
+} from '@/story/story-quota.service';
 
 export interface RequestWithStoryAccess {
   authUserData?: { userId: string };
@@ -43,11 +46,15 @@ export class StoryAccessGuard implements CanActivate {
       return true;
     }
 
-    const result = await this.storyQuotaService.checkStoryAccess(userId, storyId);
+    const result = await this.storyQuotaService.checkStoryAccess(
+      userId,
+      storyId,
+    );
 
     if (!result.canAccess) {
       throw new ForbiddenException({
-        message: 'Story limit reached. Upgrade to premium for unlimited access.',
+        message:
+          'Story limit reached. Upgrade to premium for unlimited access.',
         code: 'STORY_LIMIT_EXCEEDED',
         remaining: result.remaining,
         totalAllowed: result.totalAllowed,

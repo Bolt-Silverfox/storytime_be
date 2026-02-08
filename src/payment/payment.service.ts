@@ -10,7 +10,10 @@ import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
 import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
 import { createHash } from 'crypto';
-import { PLANS, PRODUCT_ID_TO_PLAN } from '@/subscription/subscription.constants';
+import {
+  PLANS,
+  PRODUCT_ID_TO_PLAN,
+} from '@/subscription/subscription.constants';
 
 /** Transaction result from payment processing */
 export interface TransactionRecord {
@@ -46,7 +49,9 @@ export class PaymentService {
       } else if (dto.platform === 'apple') {
         return await this.verifyApplePurchase(userId, dto);
       } else {
-        throw new BadRequestException(`Unsupported platform: ${dto.platform}`);
+        throw new BadRequestException(
+          `Unsupported platform: ${String(dto.platform)}`,
+        );
       }
     } catch (error) {
       if (

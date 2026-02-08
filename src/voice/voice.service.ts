@@ -19,6 +19,7 @@ import {
 } from './dto/voice.dto';
 import { VOICE_CONFIG } from './voice.constants';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
+import type { Voice } from '@prisma/client';
 
 /** Cache key for available voices */
 const AVAILABLE_VOICES_CACHE_KEY = 'available-voices';
@@ -48,11 +49,18 @@ export class VoiceService {
 
     if (fileBuffer) {
       try {
-        elevenLabsId = await this.elevenLabsProvider.addVoice(dto.name, fileBuffer);
+        elevenLabsId = await this.elevenLabsProvider.addVoice(
+          dto.name,
+          fileBuffer,
+        );
         this.logger.log(`Cloned voice ${dto.name} with ID ${elevenLabsId}`);
       } catch (error) {
-        this.logger.warn(`Failed to clone voice with ElevenLabs: ${error.message}`);
-        throw new InternalServerErrorException('Voice cloning failed: ' + error.message);
+        this.logger.warn(
+          `Failed to clone voice with ElevenLabs: ${error.message}`,
+        );
+        throw new InternalServerErrorException(
+          'Voice cloning failed: ' + error.message,
+        );
       }
     }
 
@@ -130,20 +138,20 @@ export class VoiceService {
   }
 
   // --- Helper to map Prisma Voice to VoiceResponseDto ---
-  private toVoiceResponse(voice: any): VoiceResponseDto {
+  private toVoiceResponse(voice: Voice): VoiceResponseDto {
     let previewUrl = voice.url ?? undefined;
-    let voiceAvatar = voice.voiceAvatar ?? undefined; // Assuming DB has this field now, or null
+    let voiceAvatar = voice.voiceAvatar ?? undefined;
 
     // If it's an uploaded voice, the 'url' is the preview/audio itself
-    if (voice.type === VoiceSourceType.UPLOADED) {
-      previewUrl = voice.url;
+    if (voice.type === (VoiceSourceType.UPLOADED as string)) {
+      previewUrl = voice.url ?? undefined;
       // Use a default avatar for uploaded voices if none exists
       if (!voiceAvatar) {
         voiceAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${voice.name}`;
       }
-    } else if (voice.type === VoiceSourceType.ELEVENLABS) {
+    } else if (voice.type === (VoiceSourceType.ELEVENLABS as string)) {
       // For ElevenLabs, 'url' might be the preview URL if we saved it
-      previewUrl = voice.url;
+      previewUrl = voice.url ?? undefined;
       if (!voiceAvatar) {
         voiceAvatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${voice.elevenLabsVoiceId}`;
       }
@@ -173,7 +181,7 @@ export class VoiceService {
 
     if (existing) {
       return { id: existing.id };
-    } 
+    }
 
     // 2. Fetch details from ElevenLabs to get Name AND Preview URL
     let voiceName = 'Imported ElevenLabs Voice';
@@ -208,11 +216,15 @@ export class VoiceService {
     // 3. Fallback: If API failed, check if it's a known voice just to fix the name
     if (voiceName === 'Imported ElevenLabs Voice') {
       const knownKey = Object.keys(VOICE_CONFIG).find(
-        (key) => VOICE_CONFIG[key as keyof typeof VOICE_CONFIG].elevenLabsId === elevenLabsId, // Changed to match ID not model
+        (key) =>
+          VOICE_CONFIG[key as keyof typeof VOICE_CONFIG].elevenLabsId ===
+          elevenLabsId, // Changed to match ID not model
       );
       if (knownKey) {
         const config = VOICE_CONFIG[knownKey as keyof typeof VOICE_CONFIG];
-        voiceName = config.name || knownKey.charAt(0).toUpperCase() + knownKey.slice(1).toLowerCase();
+        voiceName =
+          config.name ||
+          knownKey.charAt(0).toUpperCase() + knownKey.slice(1).toLowerCase();
         if (!voicePreviewUrl) voicePreviewUrl = config.previewUrl || null;
       }
     }
@@ -238,8 +250,9 @@ export class VoiceService {
    */
   async fetchAvailableVoices(): Promise<VoiceResponseDto[]> {
     // Check cache first
-    const cached =
-      await this.cacheManager.get<VoiceResponseDto[]>(AVAILABLE_VOICES_CACHE_KEY);
+    const cached = await this.cacheManager.get<VoiceResponseDto[]>(
+      AVAILABLE_VOICES_CACHE_KEY,
+    );
     if (cached) {
       this.logger.debug('Returning cached available voices');
       return cached;

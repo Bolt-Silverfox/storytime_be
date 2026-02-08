@@ -93,7 +93,9 @@ describe('ParentFavoritesService', () => {
         },
       ];
 
-      mockPrismaService.parentFavorite.findMany.mockResolvedValue(mockFavorites);
+      mockPrismaService.parentFavorite.findMany.mockResolvedValue(
+        mockFavorites,
+      );
 
       const result = await service.getFavorites('user-1');
 

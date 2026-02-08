@@ -14,16 +14,13 @@ import {
   MaxFileSizeValidator,
   FileTypeValidator,
   BadRequestException,
-  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  ApiTags,
   ApiOperation,
   ApiResponse,
   ApiConsumes,
   ApiBody,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { AvatarService } from './avatar.service';
 import {
@@ -31,7 +28,10 @@ import {
   UpdateAvatarDto,
   AssignAvatarDto,
 } from './dto/avatar.dto';
-import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import { AdminGuard } from '@/shared/guards/admin.guard';
 import { Public } from '@/shared/decorators/public.decorator';
 import { SuccessResponse } from '@/shared/dtos/api-response.dto';
@@ -39,7 +39,7 @@ import { SuccessResponse } from '@/shared/dtos/api-response.dto';
 @Controller('avatars')
 @UseGuards(AuthSessionGuard)
 export class AvatarController {
-  constructor(private readonly avatarService: AvatarService) { }
+  constructor(private readonly avatarService: AvatarService) {}
 
   @Get('system')
   @ApiOperation({

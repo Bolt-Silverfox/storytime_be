@@ -31,9 +31,9 @@
     "make-migration": "npx prisma migrate dev",
     "db:reset": "npx prisma migrate reset",
     "db:seed": "npx ts-node prisma/seeds/index.ts",
-    "deploy:dev": "pnpm generate && pnpm start:pm2:dev",
-    "deploy:staging": "pnpm make-migration && pnpm generate && pnpm start:pm2:staging",
-    "deploy:prod": "pnpm make-migration && pnpm generate && pnpm start:pm2:prod"
+    "deploy:dev": "pnpm migrate && pnpm generate && pnpm start:pm2:dev",
+    "deploy:staging": "pnpm migrate && pnpm generate && pnpm start:pm2:staging",
+    "deploy:prod": "pnpm migrate && pnpm generate && pnpm start:pm2:prod"
   },
   "dependencies": {
     "@deepgram/sdk": "^4.11.2",
@@ -72,7 +72,7 @@
     "cacheable": "^2.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
-    "cloudinary": "^1.41.3",
+    "cloudinary": "^2.7.0",
     "ejs": "^3.1.10",
     "elevenlabs": "^1.59.0",
     "google-auth-library": "^10.5.0",
@@ -80,8 +80,7 @@
     "jsonwebtoken": "^9.0.2",
     "keyv": "^5.5.4",
     "multer": "^2.0.1",
-    "multer-storage-cloudinary": "^4.0.0",
-    "nodemailer": "^7.0.10",
+    "nodemailer": "^7.0.11",
     "passport": "^0.7.0",
     "passport-custom": "^1.1.1",
     "passport-google-oauth20": "^2.0.0",
@@ -95,6 +94,19 @@
     "uuid": "^13.0.0",
     "zod": "^3.25.51"
   },
+  "pnpm": {
+    "overrides": {
+      "body-parser": ">=2.2.1",
+      "jws": ">=4.0.1",
+      "qs": ">=6.14.1",
+      "lodash": ">=4.17.23",
+      "lodash-es": ">=4.17.23",
+      "diff": ">=4.0.4",
+      "@isaacs/brace-expansion": ">=5.0.1",
+      "fast-xml-parser": ">=5.3.4",
+      "webpack": ">=5.104.1"
+    }
+  },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
@@ -106,7 +118,6 @@
     "@swc/core": "^1.10.7",
     "@types/bcrypt": "^6.0.0",
     "@types/buffer-to-stream": "^1.0.3",
-    "@types/cache-manager": "^5.0.0",
     "@types/ejs": "^3.1.5",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
@@ -114,7 +125,6 @@
     "@types/multer": "^1.4.13",
     "@types/node": "^22.10.7",
     "@types/supertest": "^6.0.2",
-    "@types/uuid": "^11.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",

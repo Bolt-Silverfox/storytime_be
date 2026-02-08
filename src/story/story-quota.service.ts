@@ -29,7 +29,10 @@ export class StoryQuotaService {
   /**
    * Check if user can access a story (either new or re-read)
    */
-  async checkStoryAccess(userId: string, storyId: string): Promise<StoryAccessResult> {
+  async checkStoryAccess(
+    userId: string,
+    storyId: string,
+  ): Promise<StoryAccessResult> {
     // 1. Check if premium user
     const isPremium = await this.isPremiumUser(userId);
     if (isPremium) {
@@ -46,7 +49,8 @@ export class StoryQuotaService {
 
     // 3. Get/create usage record with bonus calculation
     const usage = await this.getOrCreateUsageWithBonus(userId);
-    const totalAllowed = FREE_TIER_LIMITS.STORIES.BASE_LIMIT + usage.bonusStories;
+    const totalAllowed =
+      FREE_TIER_LIMITS.STORIES.BASE_LIMIT + usage.bonusStories;
     const remaining = totalAllowed - usage.uniqueStoriesRead;
 
     if (remaining <= 0) {
@@ -121,7 +125,8 @@ export class StoryQuotaService {
     }
 
     const usage = await this.getOrCreateUsageWithBonus(userId);
-    const totalAllowed = FREE_TIER_LIMITS.STORIES.BASE_LIMIT + usage.bonusStories;
+    const totalAllowed =
+      FREE_TIER_LIMITS.STORIES.BASE_LIMIT + usage.bonusStories;
 
     return {
       isPremium: false,
@@ -169,7 +174,10 @@ export class StoryQuotaService {
       }
 
       // Calculate pending bonus stories to grant
-      const bonusesToGrant = this.calculatePendingBonuses(usage.lastBonusGrantedAt, now);
+      const bonusesToGrant = this.calculatePendingBonuses(
+        usage.lastBonusGrantedAt,
+        now,
+      );
 
       if (bonusesToGrant > 0) {
         usage = await tx.userUsage.update({

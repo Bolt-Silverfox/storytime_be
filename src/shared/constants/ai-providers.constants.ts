@@ -1,4 +1,4 @@
 export enum AiProviders {
-    ElevenLabs = 'ElevenLabs',
-    Gemini = 'Gemini',
+  ElevenLabs = 'ElevenLabs',
+  Gemini = 'Gemini',
 }

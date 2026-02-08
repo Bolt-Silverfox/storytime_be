@@ -100,7 +100,7 @@ export class TokenService {
    * Decode a JWT without verification (for inspection only)
    */
   decodeJwt(token: string): TokenPayload | null {
-    return this.jwtService.decode(token) as TokenPayload | null;
+    return this.jwtService.decode(token);
   }
 
   /**
@@ -154,7 +154,10 @@ export class TokenService {
   /**
    * Delete all sessions for a user except the specified one
    */
-  async deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void> {
+  async deleteOtherSessions(
+    userId: string,
+    exceptSessionId: string,
+  ): Promise<void> {
     await this.prisma.session.deleteMany({
       where: {
         userId,
