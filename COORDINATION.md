@@ -69,6 +69,25 @@ git push origin integration/refactor-2026-02
 **Status**: Documentation complete. Ready for service extraction work.
 
 ### Instance 3 - ✅ Completed
+**Focus**: Payment atomicity & GeminiService retry logic
+**Timestamp**: 2026-02-08
+**Branch**: `feat/gemini-retry-logic` (merged)
+
+**Changes Made**:
+- `src/payment/payment.service.ts` - Combined payment + subscription in single atomic transaction
+  - New `processPaymentAndSubscriptionAtomic()` method with idempotency check
+  - Added cache invalidation after payment/subscription changes
+  - Removed unused `upsertSubscription`, `upsertSubscriptionWithExpiry` methods
+- `src/payment/payment.module.ts` - Added SubscriptionModule import for cache invalidation
+- `src/story/gemini.service.ts` - Added retry logic with exponential backoff
+  - RETRY_CONFIG: 3 attempts, 1s base delay, 8s max delay
+  - `isTransientError()`, `sleep()`, `getBackoffDelay()` helpers
+  - Retry loop for transient errors (429, 503, 500, network issues)
+  - Only records circuit breaker failure after all retries exhausted
+
+**Status**: All work complete and merged into integration branch.
+
+### Instance 4 - ✅ Completed
 **Focus**: Unit tests for critical untested services
 **Timestamp**: 2026-02-08
 **Branch**: `fix/bug-fixes`
@@ -83,7 +102,7 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - 125 tests passing
 
-### Instance 4 - 🔄 In Progress
+### Instance 5 - 🔄 In Progress
 **Focus**: [Describe your work area]
 **Timestamp**:
 
@@ -103,11 +122,14 @@ Files currently being modified by other instances - avoid editing these:
 | `src/subscription/subscription.service.ts` | Instance 1 | ✅ Done |
 | `src/story/story-quota.service.ts` | Instance 1 | ✅ Done |
 | `src/shared/guards/subscription-throttle.guard.ts` | Instance 1 | ✅ Done |
-| `src/auth/auth.service.spec.ts` | Instance 3 | ✅ Done |
-| `src/user/user.service.spec.ts` | Instance 3 | ✅ Done |
-| `src/subscription/subscription.service.spec.ts` | Instance 3 | ✅ Done |
-| `src/notification/notification.service.spec.ts` | Instance 3 | ✅ Done |
-| `jest.config.js` | Instance 3 | ✅ Done |
+| `src/payment/payment.service.ts` | Instance 3 | ✅ Done |
+| `src/payment/payment.module.ts` | Instance 3 | ✅ Done |
+| `src/story/gemini.service.ts` | Instance 3 | ✅ Done |
+| `src/auth/auth.service.spec.ts` | Instance 4 | ✅ Done |
+| `src/user/user.service.spec.ts` | Instance 4 | ✅ Done |
+| `src/subscription/subscription.service.spec.ts` | Instance 4 | ✅ Done |
+| `src/notification/notification.service.spec.ts` | Instance 4 | ✅ Done |
+| `jest.config.js` | Instance 4 | ✅ Done |
 
 ---
 
@@ -116,17 +138,18 @@ Files currently being modified by other instances - avoid editing these:
 Available tasks from the roadmaps:
 
 ### From PERFORMANCE_IMPROVEMENTS.md
-- [ ] Add transactions to SubscriptionService for plan changes
+- [x] Add transactions to SubscriptionService for plan changes *(Instance 1)*
+- [x] Add transactions to PaymentService for atomic payment + subscription *(Instance 3)*
 - [ ] Add transactions to StoryService for story creation
 - [ ] Batch sequential queries (N+1 fixes in story.service.ts)
-- [ ] Add retry logic to AI provider calls (GeminiService)
-- [ ] Implement circuit breaker for external services
+- [x] Add retry logic to AI provider calls (GeminiService) *(Instance 3)*
+- [x] Implement circuit breaker for external services *(already existed in GeminiService)*
 
 ### From QA_IMPROVEMENTS.md
-- [x] Add unit tests for AuthService *(Instance 3)*
-- [x] Add unit tests for UserService *(Instance 3)*
-- [x] Add unit tests for SubscriptionService *(Instance 3)*
-- [x] Add unit tests for NotificationService *(Instance 3)*
+- [x] Add unit tests for AuthService *(Instance 4)*
+- [x] Add unit tests for UserService *(Instance 4)*
+- [x] Add unit tests for SubscriptionService *(Instance 4)*
+- [x] Add unit tests for NotificationService *(Instance 4)*
 - [ ] Add E2E tests for authentication flows
 - [ ] Replace remaining `any` types (~22 files)
 
@@ -164,8 +187,9 @@ Available tasks from the roadmaps:
 develop-v0.0.1 (base)
     └── integration/refactor-2026-02 (shared integration)
             ├── fix/format-and-lint (merged ✅)
-            ├── [instance-2-branch]
-            └── [instance-3-branch]
+            ├── perf/improvements (Instance 2)
+            ├── feat/gemini-retry-logic (merged ✅)
+            └── fix/bug-fixes (Instance 4)
 ```
 
 When all instances complete their work:
