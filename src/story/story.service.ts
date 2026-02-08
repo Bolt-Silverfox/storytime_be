@@ -1054,54 +1054,97 @@ export class StoryService {
     return seasons;
   }
 
-  // ... [Keep daily challenge automation methods] ...
+  /**
+   * Assigns daily challenges to all kids.
+   * Optimized to use batch queries instead of N+1 pattern.
+   */
   async assignDailyChallengeToAllKids() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const kids = await this.prisma.kid.findMany({
-      where: { isDeleted: false },
-    });
-    let totalAssigned = 0;
+
+    // 1. Batch fetch all required data in parallel (4 queries instead of N*5)
+    const [kids, allStories, allPastAssignments, todaysChallenges] =
+      await Promise.all([
+        this.prisma.kid.findMany({ where: { isDeleted: false } }),
+        this.prisma.story.findMany({ where: { isDeleted: false } }),
+        this.prisma.dailyChallengeAssignment.findMany({
+          include: { challenge: true },
+        }),
+        this.prisma.dailyChallenge.findMany({
+          where: { challengeDate: today, isDeleted: false },
+        }),
+      ]);
+
+    // 2. Create lookup maps for O(1) access
+    const pastAssignmentsByKid = new Map<string, Set<string>>();
+    for (const assignment of allPastAssignments) {
+      if (!pastAssignmentsByKid.has(assignment.kidId)) {
+        pastAssignmentsByKid.set(assignment.kidId, new Set());
+      }
+      pastAssignmentsByKid
+        .get(assignment.kidId)!
+        .add(assignment.challenge.storyId);
+    }
+
+    const challengesByStoryId = new Map<string, DailyChallenge>();
+    for (const challenge of todaysChallenges) {
+      challengesByStoryId.set(challenge.storyId, challenge);
+    }
+
+    // Get existing assignments for today's challenges
+    const todaysChallengeIds = todaysChallenges.map((c) => c.id);
+    const existingAssignments =
+      todaysChallengeIds.length > 0
+        ? await this.prisma.dailyChallengeAssignment.findMany({
+            where: { challengeId: { in: todaysChallengeIds } },
+          })
+        : [];
+    const existingAssignmentKeys = new Set(
+      existingAssignments.map((a) => `${a.kidId}-${a.challengeId}`),
+    );
+
+    // 3. Process each kid in memory and collect new assignments
+    const newAssignments: { kidId: string; challengeId: string }[] = [];
+
     for (const kid of kids) {
+      // Parse age from ageRange
       let kidAge = 0;
       if (kid.ageRange) {
         const match = kid.ageRange.match(/(\d+)/);
         if (match) kidAge = parseInt(match[1], 10);
       }
-      const stories = await this.prisma.story.findMany({
-        where: {
-          ageMin: { lte: kidAge },
-          ageMax: { gte: kidAge },
-          isDeleted: false,
-        },
-      });
-      if (stories.length === 0) continue;
-      const pastAssignments =
-        await this.prisma.dailyChallengeAssignment.findMany({
-          where: { kidId: kid.id },
-          include: { challenge: true },
-        });
-      const usedStoryIds = new Set(
-        pastAssignments.map(
-          (a: DailyChallengeAssignment & { challenge: DailyChallenge }) =>
-            a.challenge.storyId,
-        ),
+
+      // Filter stories for this kid's age (in memory)
+      const ageAppropriateStories = allStories.filter(
+        (s) =>
+          s.ageMin !== null &&
+          s.ageMax !== null &&
+          s.ageMin <= kidAge &&
+          s.ageMax >= kidAge,
       );
-      const availableStories = stories.filter(
-        (s: { id: string }) => !usedStoryIds.has(s.id),
+      if (ageAppropriateStories.length === 0) continue;
+
+      // Get stories not yet assigned to this kid
+      const usedStoryIds = pastAssignmentsByKid.get(kid.id) || new Set();
+      const availableStories = ageAppropriateStories.filter(
+        (s) => !usedStoryIds.has(s.id),
       );
       const storyPool =
-        availableStories.length > 0 ? availableStories : stories;
+        availableStories.length > 0 ? availableStories : ageAppropriateStories;
+
+      // Pick random story
       const story = storyPool[Math.floor(Math.random() * storyPool.length)];
-      const wordOfTheDay = story.title;
-      const description = story.description ?? '';
-      const meaning = description
-        ? description.split('. ')[0] + (description.includes('.') ? '.' : '')
-        : '';
-      let challenge = await this.prisma.dailyChallenge.findFirst({
-        where: { storyId: story.id, challengeDate: today, isDeleted: false },
-      });
+
+      // Check if challenge exists for this story today
+      let challenge = challengesByStoryId.get(story.id);
       if (!challenge) {
+        // Create challenge (only for unique stories - typically few per day)
+        const wordOfTheDay = story.title;
+        const description = story.description ?? '';
+        const meaning = description
+          ? description.split('. ')[0] + (description.includes('.') ? '.' : '')
+          : '';
+
         challenge = await this.prisma.dailyChallenge.create({
           data: {
             storyId: story.id,
@@ -1110,23 +1153,30 @@ export class StoryService {
             meaning,
           },
         });
+        challengesByStoryId.set(story.id, challenge);
       }
-      const existingAssignment =
-        await this.prisma.dailyChallengeAssignment.findFirst({
-          where: { kidId: kid.id, challengeId: challenge.id },
-        });
-      if (!existingAssignment) {
-        await this.prisma.dailyChallengeAssignment.create({
-          data: { kidId: kid.id, challengeId: challenge.id },
-        });
+
+      // Check if assignment already exists
+      const assignmentKey = `${kid.id}-${challenge.id}`;
+      if (!existingAssignmentKeys.has(assignmentKey)) {
+        newAssignments.push({ kidId: kid.id, challengeId: challenge.id });
+        existingAssignmentKeys.add(assignmentKey);
         this.logger.log(
           `Assigned story '${story.title}' to kid '${kid.name ?? kid.id}' for daily challenge.`,
         );
-        totalAssigned++;
       }
     }
+
+    // 4. Batch create all new assignments in one query
+    if (newAssignments.length > 0) {
+      await this.prisma.dailyChallengeAssignment.createMany({
+        data: newAssignments,
+        skipDuplicates: true,
+      });
+    }
+
     this.logger.log(
-      `Daily challenge assignment complete. Total assignments: ${totalAssigned}`,
+      `Daily challenge assignment complete. Total assignments: ${newAssignments.length}`,
     );
   }
 
