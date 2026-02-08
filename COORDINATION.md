@@ -68,14 +68,24 @@ git push origin integration/refactor-2026-02
 
 **Status**: Documentation complete. Ready for service extraction work.
 
-### Instance 3 - 🔄 In Progress
-**Focus**: [Describe your work area]
-**Timestamp**:
+### Instance 3 - ✅ Completed
+**Focus**: Payment atomicity & GeminiService retry logic
+**Timestamp**: 2026-02-08
+**Branch**: `feat/gemini-retry-logic` (merged)
 
 **Changes Made**:
-- [List files being modified]
+- `src/payment/payment.service.ts` - Combined payment + subscription in single atomic transaction
+  - New `processPaymentAndSubscriptionAtomic()` method with idempotency check
+  - Added cache invalidation after payment/subscription changes
+  - Removed unused `upsertSubscription`, `upsertSubscriptionWithExpiry` methods
+- `src/payment/payment.module.ts` - Added SubscriptionModule import for cache invalidation
+- `src/story/gemini.service.ts` - Added retry logic with exponential backoff
+  - RETRY_CONFIG: 3 attempts, 1s base delay, 8s max delay
+  - `isTransientError()`, `sleep()`, `getBackoffDelay()` helpers
+  - Retry loop for transient errors (429, 503, 500, network issues)
+  - Only records circuit breaker failure after all retries exhausted
 
-**Status**:
+**Status**: All work complete and merged into integration branch.
 
 ---
 
@@ -88,6 +98,9 @@ Files currently being modified by other instances - avoid editing these:
 | `src/subscription/subscription.service.ts` | Instance 1 | ✅ Done |
 | `src/story/story-quota.service.ts` | Instance 1 | ✅ Done |
 | `src/shared/guards/subscription-throttle.guard.ts` | Instance 1 | ✅ Done |
+| `src/payment/payment.service.ts` | Instance 3 | ✅ Done |
+| `src/payment/payment.module.ts` | Instance 3 | ✅ Done |
+| `src/story/gemini.service.ts` | Instance 3 | ✅ Done |
 
 ---
 
@@ -96,11 +109,12 @@ Files currently being modified by other instances - avoid editing these:
 Available tasks from the roadmaps:
 
 ### From PERFORMANCE_IMPROVEMENTS.md
-- [ ] Add transactions to SubscriptionService for plan changes
+- [x] Add transactions to SubscriptionService for plan changes *(Instance 1)*
+- [x] Add transactions to PaymentService for atomic payment + subscription *(Instance 3)*
 - [ ] Add transactions to StoryService for story creation
 - [ ] Batch sequential queries (N+1 fixes in story.service.ts)
-- [ ] Add retry logic to AI provider calls (GeminiService)
-- [ ] Implement circuit breaker for external services
+- [x] Add retry logic to AI provider calls (GeminiService) *(Instance 3)*
+- [x] Implement circuit breaker for external services *(already existed in GeminiService)*
 
 ### From QA_IMPROVEMENTS.md
 - [ ] Add unit tests for AuthService
@@ -142,8 +156,8 @@ Available tasks from the roadmaps:
 develop-v0.0.1 (base)
     └── integration/refactor-2026-02 (shared integration)
             ├── fix/format-and-lint (merged ✅)
-            ├── [instance-2-branch]
-            └── [instance-3-branch]
+            ├── perf/improvements (Instance 2)
+            └── feat/gemini-retry-logic (merged ✅)
 ```
 
 When all instances complete their work:
