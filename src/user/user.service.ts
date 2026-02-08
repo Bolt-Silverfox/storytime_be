@@ -451,7 +451,7 @@ export class UserService {
 
   async updateUserRole(id: string, role: UserRole) {
     if (!Object.values(UserRole).includes(role)) {
-      throw new Error('Invalid role');
+      throw new BadRequestException('Invalid role');
     }
 
     const user = await this.prisma.user.update({

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants';
+import { SubscriptionService } from '../subscription/subscription.service';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 
 export interface StoryAccessResult {
@@ -24,7 +24,10 @@ export interface StoryQuotaStatus {
 export class StoryQuotaService {
   private readonly logger = new Logger(StoryQuotaService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subscriptionService: SubscriptionService,
+  ) {}
 
   /**
    * Check if user can access a story (either new or re-read)
@@ -210,18 +213,10 @@ export class StoryQuotaService {
   }
 
   /**
-   * Check if user has an active premium subscription
+   * Check if user has an active premium subscription (uses cached SubscriptionService)
    */
   private async isPremiumUser(userId: string): Promise<boolean> {
-    const subscription = await this.prisma.subscription.findFirst({
-      where: {
-        userId,
-        status: SUBSCRIPTION_STATUS.ACTIVE,
-        OR: [{ endsAt: { gt: new Date() } }, { endsAt: null }],
-      },
-    });
-
-    return !!subscription;
+    return this.subscriptionService.isPremiumUser(userId);
   }
 
   private getCurrentMonth(): string {
