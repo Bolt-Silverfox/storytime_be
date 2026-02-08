@@ -187,9 +187,12 @@ export class VoiceQuotaService {
       );
     }
 
-    // Validate voice exists
-    const voice = await this.prisma.voice.findUnique({
-      where: { id: voiceId },
+    // Validate voice exists and user has access (owned by user or public/system voice)
+    const voice = await this.prisma.voice.findFirst({
+      where: {
+        id: voiceId,
+        OR: [{ userId }, { userId: null }],
+      },
     });
     if (!voice) {
       throw new NotFoundException('Voice not found');

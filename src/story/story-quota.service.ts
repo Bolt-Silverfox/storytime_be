@@ -158,6 +158,16 @@ export class StoryQuotaService {
         return usage;
       }
 
+      // Initialize lastBonusGrantedAt for existing users who don't have it set
+      // This enables bonus accrual for migrated users without granting retroactive bonuses
+      if (!usage.lastBonusGrantedAt) {
+        usage = await tx.userUsage.update({
+          where: { userId },
+          data: { lastBonusGrantedAt: now },
+        });
+        return usage;
+      }
+
       // Calculate pending bonus stories to grant
       const bonusesToGrant = this.calculatePendingBonuses(usage.lastBonusGrantedAt, now);
 
