@@ -1008,15 +1008,24 @@ model RestrictedStory {
 // USAGE TRACKING
 // -------------------------
 model UserUsage {
-  id                String   @id @default(uuid())
-  userId            String   @unique
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  elevenLabsCount   Int      @default(0)
-  geminiStoryCount  Int      @default(0)
-  geminiImageCount  Int      @default(0)
-  currentMonth      String   // Format: "YYYY-MM" to track resets
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                    String    @id @default(uuid())
+  userId                String    @unique
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  elevenLabsCount       Int       @default(0)
+  geminiStoryCount      Int       @default(0)
+  geminiImageCount      Int       @default(0)
+  currentMonth          String    // Format: "YYYY-MM" to track resets
+
+  // Free tier story quota
+  uniqueStoriesRead     Int       @default(0) // Lifetime count of unique stories accessed
+  bonusStories          Int       @default(0) // Accumulated weekly bonus stories
+  lastBonusGrantedAt    DateTime? // When last weekly bonus was granted
+
+  // Free tier voice quota
+  selectedSecondVoiceId String?   // The one custom voice free users can select (beyond default)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   @@map("user_usages")
 }

@@ -72,9 +72,12 @@ import { TextToSpeechService } from './text-to-speech.service';
 
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
+import { StoryAccessGuard, RequestWithStoryAccess } from '@/shared/guards/story-access.guard';
+import { CheckStoryQuota } from '@/shared/decorators/story-quota.decorator';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 import { CACHE_KEYS, CACHE_TTL_MS } from '@/shared/constants/cache-keys.constants';
+import { StoryQuotaService } from './story-quota.service';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -84,6 +87,7 @@ export class StoryController {
     private readonly storyService: StoryService,
     private readonly voiceService: VoiceService,
     private readonly textToSpeechService: TextToSpeechService,
+    private readonly storyQuotaService: StoryQuotaService,
   ) { }
 
   @Get()
@@ -588,19 +592,26 @@ export class StoryController {
   // --- USER STORY PROGRESS (Parent/User - non-kid specific) ---
 
   @Post('user/progress')
-  @UseGuards(AuthSessionGuard)
+  @UseGuards(AuthSessionGuard, StoryAccessGuard)
   @ApiBearerAuth()
+  @CheckStoryQuota()
   @ApiOperation({ summary: 'Record story progress for authenticated user (parent account)' })
   @ApiBody({ type: UserStoryProgressDto })
   @ApiOkResponse({ description: 'Progress recorded', type: UserStoryProgressResponseDto })
   @ApiResponse({ status: 400, description: 'Bad Request', type: ErrorResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  @ApiResponse({ status: 403, description: 'Story limit reached', type: ErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Not Found', type: ErrorResponseDto })
   async setUserProgress(
-    @Req() req: AuthenticatedRequest,
+    @Req() req: RequestWithStoryAccess,
     @Body() body: UserStoryProgressDto,
   ) {
-    return this.storyService.setUserProgress(req.authUserData.userId, body);
+    // Record access if this is a new story for the user
+    if (req.authUserData?.userId && req.storyAccessResult?.reason !== 'already_read') {
+      await this.storyQuotaService.recordNewStoryAccess(req.authUserData.userId, body.storyId);
+    }
+
+    return this.storyService.setUserProgress(req.authUserData!.userId, body);
   }
 
   @Get('user/progress/:storyId')
@@ -652,6 +663,30 @@ export class StoryController {
   ) {
     await this.storyService.removeFromUserLibrary(req.authUserData.userId, storyId);
     return { message: 'Story removed from library successfully' };
+  }
+
+  @Get('user/quota')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get story quota status for authenticated user' })
+  @ApiOkResponse({
+    description: 'Quota status',
+    schema: {
+      type: 'object',
+      properties: {
+        isPremium: { type: 'boolean' },
+        unlimited: { type: 'boolean' },
+        used: { type: 'number' },
+        baseLimit: { type: 'number' },
+        bonusStories: { type: 'number' },
+        totalAllowed: { type: 'number' },
+        remaining: { type: 'number' },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  async getQuotaStatus(@Req() req: AuthenticatedRequest) {
+    return this.storyQuotaService.getQuotaStatus(req.authUserData.userId);
   }
 
   // --- Daily Challenge ---
@@ -807,21 +842,28 @@ export class StoryController {
   }
 
   @Get('story/audio/:id')
-  @UseGuards(AuthSessionGuard)
+  @UseGuards(AuthSessionGuard, StoryAccessGuard)
   @ApiBearerAuth()
+  @CheckStoryQuota()
   @ApiOperation({ summary: 'Get audio for a story path by id' })
   @ApiParam({ name: 'id', type: String })
   @ApiQuery({ name: 'voiceId', required: false, type: String, description: 'VoiceType enum value or Voice UUID' })
   @ApiResponse({ status: 200, type: StoryPathDto })
+  @ApiResponse({ status: 403, description: 'Story limit reached', type: ErrorResponseDto })
   async getStoryPathAudioById(
     @Param('id') id: string,
-    @Req() req: AuthenticatedRequest,
+    @Req() req: RequestWithStoryAccess,
     @Query('voiceId') voiceId?: VoiceType | string,
   ) {
+    // Record access if this is a new story for the user
+    if (req.authUserData?.userId && req.storyAccessResult?.reason !== 'already_read') {
+      await this.storyQuotaService.recordNewStoryAccess(req.authUserData.userId, id);
+    }
+
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
       voiceId ?? DEFAULT_VOICE,
-      req.authUserData.userId,
+      req.authUserData!.userId,
     );
 
     return {
@@ -938,6 +980,9 @@ export class StoryController {
   }
 
   @Get(':id')
+  @UseGuards(AuthSessionGuard, StoryAccessGuard)
+  @ApiBearerAuth()
+  @CheckStoryQuota()
   @ApiOperation({ summary: 'Get a story by id' })
   @ApiParam({ name: 'id', type: String })
   @ApiOkResponse({ description: 'Story', type: CreateStoryDto })
@@ -952,12 +997,27 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   @ApiResponse({
+    status: 403,
+    description: 'Story limit reached',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
     status: 404,
     description: 'Not Found',
     type: ErrorResponseDto,
   })
-  async getStoryById(@Param('id') id: string) {
-    return await this.storyService.getStoryById(id);
+  async getStoryById(
+    @Param('id') id: string,
+    @Req() req: RequestWithStoryAccess,
+  ) {
+    const story = await this.storyService.getStoryById(id);
+
+    // Record access if this is a new story for the user
+    if (req.authUserData?.userId && req.storyAccessResult?.reason !== 'already_read') {
+      await this.storyQuotaService.recordNewStoryAccess(req.authUserData.userId, id);
+    }
+
+    return story;
   }
 
   // --- LIBRARY ENDPOINTS ---
