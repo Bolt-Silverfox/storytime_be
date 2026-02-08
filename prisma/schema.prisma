@@ -546,8 +546,9 @@ model Voice {
   // SOFT DELETE FIELDS
   isDeleted           Boolean   @default(false)
   deletedAt           DateTime?
-  usersPreferring     User[]    @relation("PreferredVoice")
-  kidsPreferring      Kid[]     @relation("KidPreferredVoice")
+  usersPreferring     User[]      @relation("PreferredVoice")
+  kidsPreferring      Kid[]       @relation("KidPreferredVoice")
+  usersWithAsSecond   UserUsage[] @relation("SecondVoiceSelection")
 
   @@index([name])
   @@index([isDeleted])
@@ -1023,6 +1024,7 @@ model UserUsage {
 
   // Free tier voice quota
   selectedSecondVoiceId String?   // The one custom voice free users can select (beyond default)
+  selectedSecondVoice   Voice?    @relation("SecondVoiceSelection", fields: [selectedSecondVoiceId], references: [id], onDelete: SetNull)
 
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
