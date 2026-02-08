@@ -76,18 +76,32 @@ export class StoryQuotaService {
 
     if (!existing) {
       const currentMonth = this.getCurrentMonth();
-      await this.prisma.userUsage.upsert({
-        where: { userId },
-        create: {
-          userId,
-          currentMonth,
-          uniqueStoriesRead: 1,
-          lastBonusGrantedAt: new Date(),
-        },
-        update: {
-          uniqueStoriesRead: { increment: 1 },
-        },
-      });
+
+      // Use transaction to atomically create progress and update usage
+      await this.prisma.$transaction([
+        // Create UserStoryProgress record to mark story as "read"
+        this.prisma.userStoryProgress.create({
+          data: {
+            userId,
+            storyId,
+            progress: 0, // Initial progress
+          },
+        }),
+        // Increment the unique stories count
+        this.prisma.userUsage.upsert({
+          where: { userId },
+          create: {
+            userId,
+            currentMonth,
+            uniqueStoriesRead: 1,
+            lastBonusGrantedAt: new Date(),
+          },
+          update: {
+            uniqueStoriesRead: { increment: 1 },
+          },
+        }),
+      ]);
+
       this.logger.debug(`Recorded new story access for user ${userId}, story ${storyId}`);
     }
   }
