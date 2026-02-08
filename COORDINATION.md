@@ -10,9 +10,43 @@
 
 All Claude instances working on this codebase should:
 
-1. **Before starting work**: Pull latest from `integration/refactor-2026-02`
-2. **After completing work**: Push to integration branch with clear commit messages
-3. **Update this file**: Log your changes in the Active Work section below
+1. **Load required skills first** (before starting any work):
+   ```
+   # QA & Code Quality
+   /senior-qa
+   /code-review-excellence
+   /javascript-testing-patterns
+   /nestjs-testing-expert
+
+   # JavaScript
+   /javascript-mastery
+   /modern-javascript-patterns
+
+   # Node.js & Backend
+   /nodejs-backend-patterns
+   /nodejs-backend
+   /nodejs-express-server
+   /express-rest-api
+
+   # NestJS
+   /nestjs-expert
+   /nestjs-best-practices
+
+   # Database
+   /prisma-orm-v7-skills
+   /database-schema-designer
+
+   # DevOps & Infrastructure
+   /devops-engineer
+   /ci-cd-pipeline-builder
+
+   # Git
+   /git-workflow
+   ```
+
+2. **Before starting work**: Pull latest from `integration/refactor-2026-02`
+3. **After completing work**: Push to integration branch with clear commit messages
+4. **Update this file**: Log your changes in the Active Work section below
 
 ### Commands to Sync
 
@@ -88,7 +122,7 @@ git push origin integration/refactor-2026-02
 **Status**: All work complete and merged into integration branch.
 
 ### Instance 4 - ✅ Completed
-**Focus**: Unit tests for critical untested services
+**Focus**: Unit tests for critical untested services + StoryService transactions
 **Timestamp**: 2026-02-08
 **Branch**: `fix/bug-fixes`
 
@@ -99,8 +133,12 @@ git push origin integration/refactor-2026-02
 - `src/notification/notification.service.spec.ts` - NEW: 34 tests for NotificationService
 - `__mocks__/uuid.ts` - NEW: Mock for uuid ESM module
 - `jest.config.js` - Added transformIgnorePatterns and uuid mock mapping
+- `src/story/story.service.ts` - Added atomic transactions:
+  - `createStory()`: Transaction with validation for categories, themes, seasons
+  - `updateStory()`: Transaction with validation for categories, themes, seasons
+  - `persistGeneratedStory()`: Refactored to generate audio first with pre-generated UUID, then create story atomically with all data
 
-**Status**: Complete - 125 tests passing
+**Status**: Complete - 125 unit tests passing, build passing
 
 ### Instance 5 - 🔄 In Progress
 **Focus**: [Describe your work area]
@@ -130,6 +168,7 @@ Files currently being modified by other instances - avoid editing these:
 | `src/subscription/subscription.service.spec.ts` | Instance 4 | ✅ Done |
 | `src/notification/notification.service.spec.ts` | Instance 4 | ✅ Done |
 | `jest.config.js` | Instance 4 | ✅ Done |
+| `src/story/story.service.ts` | Instance 4 | ✅ Done |
 
 ---
 
@@ -140,7 +179,7 @@ Available tasks from the roadmaps:
 ### From PERFORMANCE_IMPROVEMENTS.md
 - [x] Add transactions to SubscriptionService for plan changes *(Instance 1)*
 - [x] Add transactions to PaymentService for atomic payment + subscription *(Instance 3)*
-- [ ] Add transactions to StoryService for story creation
+- [x] Add transactions to StoryService for story creation *(Instance 4)*
 - [ ] Batch sequential queries (N+1 fixes in story.service.ts)
 - [x] Add retry logic to AI provider calls (GeminiService) *(Instance 3)*
 - [x] Implement circuit breaker for external services *(already existed in GeminiService)*
