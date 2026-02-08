@@ -49,14 +49,24 @@ git push origin integration/refactor-2026-02
 - Lint errors: unused `error` variables in catch blocks
 - Module wiring: StoryModule now properly imports SubscriptionModule
 
-### Instance 2 - 🔄 In Progress
-**Focus**: [Describe your work area]
-**Timestamp**:
+### Instance 2 - ✅ Completed
+**Focus**: God service refactoring documentation
+**Timestamp**: 2026-02-08
+**Branch**: `perf/improvements`
 
 **Changes Made**:
-- [List files being modified]
+- `QA_IMPROVEMENTS.md` - Expanded section 2.3 with detailed god service refactoring plans:
+  - AdminService (2,121 lines) → 4 services
+  - StoryService (1,787 lines) → 5 services
+  - AuthService (694 lines) → 3 new services
+  - NotificationService (737 lines) → 4 services
+  - UserService (689 lines) → 4 services
+  - StoryBuddyService (728 lines) → 4 services
+  - ReportsService (536 lines) → 3 services
+- Added method-to-service mappings, dependencies, implementation order
+- Added 4-phase action items for systematic extraction
 
-**Status**:
+**Status**: Documentation complete. Ready for service extraction work.
 
 ### Instance 3 - 🔄 In Progress
 **Focus**: [Describe your work area]
@@ -97,7 +107,32 @@ Available tasks from the roadmaps:
 - [ ] Add unit tests for UserService
 - [ ] Add E2E tests for authentication flows
 - [ ] Replace remaining `any` types (~22 files)
-- [ ] Refactor god services (AdminService: 2,121 lines)
+
+### God Service Extractions (see QA_IMPROVEMENTS.md section 2.3 for details)
+
+**Phase 1: High-Impact Extractions**
+- [ ] Extract `StoryProgressService` from `StoryService`
+- [ ] Extract `DailyChallengeService` from `StoryService`
+- [ ] Extract `AdminAnalyticsService` from `AdminService`
+
+**Phase 2: Auth & User Domain**
+- [ ] Extract `OAuthService` from `AuthService`
+- [ ] Extract `OnboardingService` from `AuthService`
+- [ ] Extract `UserDeletionService` from `UserService`
+- [ ] Extract `UserPinService` from `UserService`
+
+**Phase 3: Notification & Reports**
+- [ ] Extract `NotificationPreferenceService` from `NotificationService`
+- [ ] Extract `InAppNotificationService` from `NotificationService`
+- [ ] Extract `ScreenTimeService` from `ReportsService`
+
+**Phase 4: Remaining Extractions**
+- [ ] Extract `AdminUserService` from `AdminService`
+- [ ] Extract `AdminStoryService` from `AdminService`
+- [ ] Extract `StoryGenerationService` from `StoryService`
+- [ ] Extract `StoryRecommendationService` from `StoryService`
+- [ ] Extract `BuddySelectionService` from `StoryBuddyService`
+- [ ] Extract `BuddyMessagingService` from `StoryBuddyService`
 
 ---
 
