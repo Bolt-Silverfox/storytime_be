@@ -23,6 +23,13 @@ const CIRCUIT_CONFIG = {
   halfOpenMaxAttempts: 1, // Allow 1 test request in half-open state
 };
 
+/** Retry configuration for transient failures */
+const RETRY_CONFIG = {
+  maxAttempts: 3, // Maximum retry attempts
+  baseDelayMs: 1000, // Base delay (1 second)
+  maxDelayMs: 8000, // Maximum delay cap
+};
+
 export interface GenerateStoryOptions {
   theme: string[];
   category: string[];
@@ -147,6 +154,43 @@ export class GeminiService {
     }
   }
 
+  /**
+   * Check if an error is transient and should trigger retry
+   */
+  private isTransientError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+
+    const err = error as { status?: number; message?: string };
+    return Boolean(
+      err.status === 429 ||
+        err.status === 503 ||
+        err.status === 500 ||
+        err.message?.includes('fetch failed') ||
+        err.message?.includes('ETIMEDOUT') ||
+        err.message?.includes('ECONNRESET') ||
+        err.message?.includes('network'),
+    );
+  }
+
+  /**
+   * Sleep helper for exponential backoff
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Calculate exponential backoff delay with jitter
+   */
+  private getBackoffDelay(attempt: number): number {
+    const exponentialDelay =
+      RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt - 1);
+    const cappedDelay = Math.min(exponentialDelay, RETRY_CONFIG.maxDelayMs);
+    // Add 0-25% jitter to prevent thundering herd
+    const jitter = cappedDelay * Math.random() * 0.25;
+    return Math.floor(cappedDelay + jitter);
+  }
+
   async generateStory(options: GenerateStoryOptions): Promise<GeneratedStory> {
     if (!this.genAI) {
       throw new ServiceUnavailableException(
@@ -162,90 +206,120 @@ export class GeminiService {
       );
     }
 
-    // UPDATED: Changed model from 'gemini-1.5-flash' to 'gemini-2.5-flash'
     const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
     const prompt = this.buildPrompt(options);
 
-    try {
-      const result = await model.generateContent(prompt);
-      const response = result.response;
-      const text = response.text();
+    let lastError: unknown = null;
 
-      // Parse the JSON response
-      const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
-      const story = JSON.parse(cleanText);
+    // Retry loop with exponential backoff for transient errors
+    for (let attempt = 1; attempt <= RETRY_CONFIG.maxAttempts; attempt++) {
+      try {
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        const text = response.text();
 
-      // Validate the response structure
-      if (!this.validateStoryStructure(story)) {
-        throw new InternalServerErrorException(
-          'Invalid story structure received from Gemini',
-        );
-      }
+        // Parse the JSON response
+        const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+        const story = JSON.parse(cleanText);
 
-      // Track usage if userId is provided
-      if (options.userId) {
-        // Run in background to not block response
-        this.voiceQuotaService
-          .trackGeminiStory(options.userId)
-          .catch((err) =>
-            this.logger.error(
-              `Failed to track Gemini story usage for user ${options.userId}:`,
-              err,
-            ),
+        // Validate the response structure
+        if (!this.validateStoryStructure(story)) {
+          throw new InternalServerErrorException(
+            'Invalid story structure received from Gemini',
           );
+        }
+
+        // Track usage if userId is provided
+        if (options.userId) {
+          // Run in background to not block response
+          this.voiceQuotaService
+            .trackGeminiStory(options.userId)
+            .catch((err) =>
+              this.logger.error(
+                `Failed to track Gemini story usage for user ${options.userId}:`,
+                err,
+              ),
+            );
+        }
+
+        // Record success for circuit breaker
+        this.recordSuccess();
+
+        return {
+          ...story,
+          theme: options.theme,
+          category: options.category,
+          seasons: options.seasons,
+          ageMin: options.ageMin,
+          ageMax: options.ageMax,
+          language: options.language || 'English',
+        };
+      } catch (error) {
+        lastError = error;
+
+        // Don't retry parse errors or validation errors - they won't succeed
+        if (
+          error instanceof SyntaxError ||
+          error instanceof InternalServerErrorException
+        ) {
+          this.logger.error('Non-retryable error generating story:', error);
+          throw new InternalServerErrorException(
+            'Something went wrong generating the story. Please try again.',
+          );
+        }
+
+        // Check if error is transient and worth retrying
+        if (this.isTransientError(error)) {
+          if (attempt < RETRY_CONFIG.maxAttempts) {
+            const delay = this.getBackoffDelay(attempt);
+            this.logger.warn(
+              `Gemini API transient error (attempt ${attempt}/${RETRY_CONFIG.maxAttempts}). ` +
+                `Retrying in ${delay}ms...`,
+            );
+            await this.sleep(delay);
+            continue;
+          }
+
+          // All retries exhausted - record failure for circuit breaker
+          this.logger.error(
+            `Gemini API failed after ${RETRY_CONFIG.maxAttempts} attempts`,
+            error,
+          );
+          this.recordFailure();
+        } else {
+          // Non-transient error, don't retry
+          this.logger.error('Non-transient Gemini API error:', error);
+          break;
+        }
       }
+    }
 
-      // Record success for circuit breaker
-      this.recordSuccess();
+    // Handle the final error after all retries exhausted
+    const err = lastError as { status?: number; message?: string };
 
-      return {
-        ...story,
-        theme: options.theme,
-        category: options.category,
-        seasons: options.seasons,
-        ageMin: options.ageMin,
-        ageMax: options.ageMax,
-        language: options.language || 'English',
-      };
-    } catch (error) {
-      this.logger.error('Failed to generate story with Gemini:', error);
-
-      // Only count transient API errors toward circuit breaker
-      // Parse errors and validation errors are not API instability
-      const isTransientError =
-        error.status === 429 ||
-        error.status === 503 ||
-        error.message?.includes('fetch failed') ||
-        error.message?.includes('ETIMEDOUT');
-
-      if (isTransientError) {
-        this.recordFailure();
-      }
-
-      // 1. Check for Network/Fetch errors
-      if (
-        error.message &&
-        (error.message.includes('fetch failed') ||
-          error.message.includes('ETIMEDOUT'))
-      ) {
-        throw new ServiceUnavailableException(
-          'We are having trouble connecting to the AI service right now. Please check your internet connection or try again in a moment.',
-        );
-      }
-
-      // 2. Check for API Overload/Rate Limits
-      if (error.status === 429 || error.status === 503) {
-        throw new ServiceUnavailableException(
-          'The AI storyteller is a bit busy right now. Please try again in 1 minute.',
-        );
-      }
-
-      // 3. Fallback for other errors (parse errors, validation, etc.)
-      throw new InternalServerErrorException(
-        'Something went wrong generating the story. Please try again.',
+    // Network/Fetch errors
+    if (
+      err?.message &&
+      (err.message.includes('fetch failed') ||
+        err.message.includes('ETIMEDOUT') ||
+        err.message.includes('ECONNRESET'))
+    ) {
+      throw new ServiceUnavailableException(
+        'We are having trouble connecting to the AI service right now. Please check your internet connection or try again in a moment.',
       );
     }
+
+    // API Overload/Rate Limits
+    if (err?.status === 429 || err?.status === 503) {
+      throw new ServiceUnavailableException(
+        'The AI storyteller is a bit busy right now. Please try again in 1 minute.',
+      );
+    }
+
+    // Fallback for other errors
+    throw new InternalServerErrorException(
+      'Something went wrong generating the story. Please try again.',
+    );
   }
 
   private buildPrompt(options: GenerateStoryOptions): string {
