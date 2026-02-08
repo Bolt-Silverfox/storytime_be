@@ -101,23 +101,250 @@ No E2E tests found for critical business flows:
 
 ### 2.3 God Services - Single Responsibility Violations (P1 - High)
 
-Services exceeding 400-line recommendation:
+#### Overview
 
-| Service | Lines | Suggested Split |
-|---------|-------|-----------------|
-| `AdminService` | **2,121** | Split into: `AdminUserService`, `AdminStoryService`, `AdminAnalyticsService`, `AdminReportsService` |
-| `StoryService` | **1,772** | Split into: `StoryService`, `StoryRecommendationService`, `StoryGenerationService`, `StoryCacheService` |
-| `NotificationService` | **737** | Split into: `NotificationService`, `NotificationTemplateService`, `NotificationPreferenceService` |
-| `StoryBuddyService` | **728** | Split into: `StoryBuddyService`, `BuddyInteractionService`, `BuddyRecommendationService` |
-| `AuthService` | **694** | Split into: `AuthService`, `OAuthService`, `SessionService`, `TokenService` |
-| `UserService` | **689** | Split into: `UserService`, `UserProfileService`, `UserPreferencesService` |
-| `ReportsService` | **536** | Split into: `ReportsService`, `ReportGenerationService` |
-| `AvatarService` | **422** | Consider minor refactor |
+Services exceeding 400-line recommendation with detailed refactoring plans. Current state: **7 god services totaling 7,292 lines** that should be split into **27 focused services averaging ~270 lines each**.
 
-**Action Items:**
-- [ ] Refactor `AdminService` into domain-specific services
-- [ ] Refactor `StoryService` into focused services
-- [ ] Refactor `AuthService` to extract OAuth and session logic
+---
+
+#### 2.3.1 AdminService (2,121 lines) → 4 Services
+
+**Current Responsibilities:**
+
+| Area | Lines | Methods |
+|------|-------|---------|
+| Dashboard Statistics | ~385 | 5 methods |
+| User Management | ~410 | 7 methods |
+| Story Management | ~175 | 4 methods |
+| Analytics (Subscription/Revenue/AI) | ~350 | 6 methods |
+| System Management | ~200 | 6 methods |
+| Support & Integrations | ~115 | 4 methods |
+
+**Proposed Split:**
+
+1. **AdminUserService** (~410 lines)
+   - `getAllUsers()`, `getUserById()`, `createAdmin()`
+   - `updateUser()`, `deleteUser()`, `restoreUser()`, `bulkUserAction()`
+
+2. **AdminStoryService** (~250 lines)
+   - `getAllStories()`, `getStoryById()`
+   - `toggleStoryRecommendation()`, `deleteStory()`
+   - `getCategories()`, `getThemes()`
+
+3. **AdminAnalyticsService** (~600 lines)
+   - `getDashboardStats()`, `getUserGrowth()`, `getStoryStats()`
+   - `getContentBreakdown()`, `getSystemHealth()`
+   - `getSubscriptionAnalytics()`, `getRevenueAnalytics()`
+   - `getAiCreditAnalytics()`, `getUserGrowthMonthly()`
+
+4. **AdminSystemService** (~300 lines)
+   - `getRecentActivity()`, `getSystemLogs()`, `createBackup()`
+   - `seedDatabase()`, `getSubscriptions()`
+   - `getElevenLabsBalance()`, `getAllSupportTickets()`
+   - `updateSupportTicket()`, `getDeletionRequests()`
+
+**Dependencies:**
+- All services inject `PrismaService`
+- `AdminAnalyticsService` injects `CacheManager`
+- `AdminSystemService` injects `ElevenLabsTTSProvider`
+
+**Implementation Order:** Analytics → User → Story → System
+
+---
+
+#### 2.3.2 StoryService (1,787 lines) → 5 Services
+
+**Current Responsibilities:**
+
+| Area | Lines | Methods |
+|------|-------|---------|
+| Core CRUD | ~200 | 8 methods |
+| Progress & Library | ~250 | 12 methods |
+| Daily Challenges | ~320 | 9 methods |
+| AI Generation | ~300 | 4 methods |
+| Recommendations | ~180 | 6 methods |
+| Home Page & Cache | ~165 | 4 methods |
+
+**Proposed Split:**
+
+1. **StoryService** (core, ~350 lines)
+   - `getStories()`, `createStory()`, `updateStory()`, `deleteStory()`
+   - `undoDeleteStory()`, `addImage()`, `addBranch()`
+   - `getStoryById()`, `getCategories()`, `getThemes()`, `getSeasons()`
+
+2. **StoryProgressService** (~300 lines)
+   - `setProgress()`, `getProgress()`, `setUserProgress()`, `getUserProgress()`
+   - `getContinueReading()`, `getCompletedStories()`, `getCreatedStories()`
+   - `getDownloads()`, `addDownload()`, `removeDownload()`
+   - `removeFromLibrary()`, `removeFromUserLibrary()`
+
+3. **StoryGenerationService** (~350 lines)
+   - `generateStoryWithAI()`, `generateStoryForKid()`
+   - `persistGeneratedStory()`, `adjustReadingLevel()`
+   - `calculateDurationSeconds()`, `getStoryAudioUrl()`
+
+4. **StoryRecommendationService** (~250 lines)
+   - `getHomePageStories()`, `getRelevantSeasons()`
+   - `recommendStoryToKid()`, `getKidRecommendations()`
+   - `deleteRecommendation()`, `getRecommendationStats()`
+   - `getTopPicksFromParents()`, `getTopPicksFromUs()`
+   - `restrictStory()`, `unrestrictStory()`, `getRestrictedStories()`
+
+5. **DailyChallengeService** (~350 lines)
+   - `setDailyChallenge()`, `getDailyChallenge()`
+   - `assignDailyChallenge()`, `completeDailyChallenge()`
+   - `getAssignmentsForKid()`, `getAssignmentById()`
+   - `assignDailyChallengeToAllKids()`, `handleDailyChallengeAssignment()`
+   - `getTodaysDailyChallengeAssignment()`, `getWeeklyDailyChallengeAssignments()`
+   - `addFavorite()`, `removeFavorite()`, `getFavorites()`
+
+**Dependencies:**
+- `StoryGenerationService` → `GeminiService`, `TextToSpeechService`
+- `StoryProgressService` → `CacheManager`
+- All → `PrismaService`
+
+**Implementation Order:** Progress → Recommendations → DailyChallenge → Generation → Core
+
+---
+
+#### 2.3.3 AuthService (694 lines) → 3 New Services
+
+**Already Extracted:** `TokenService`, `PasswordService`
+
+**Proposed Additional Splits:**
+
+1. **AuthService** (core, ~200 lines)
+   - `login()`, `refresh()`, `logout()`, `logoutAllDevices()`
+
+2. **OAuthService** (new, ~180 lines)
+   - `loginWithGoogleIdToken()`, `handleGoogleOAuthPayload()`
+   - `loginWithAppleIdToken()`, `_upsertOrReturnUserFromOAuthPayload()`
+
+3. **OnboardingService** (new, ~150 lines)
+   - `register()`, `completeProfile()`, `updateProfile()`
+   - `getLearningExpectations()`
+
+4. **EmailVerificationService** (new, ~80 lines)
+   - `sendEmailVerification()`, `verifyEmail()`
+
+---
+
+#### 2.3.4 NotificationService (737 lines) → 4 Services
+
+1. **NotificationService** (core, ~100 lines)
+   - `sendNotification()`, `sendViaProvider()`
+
+2. **EmailService** (new, ~150 lines)
+   - `queueEmail()`, `sendEmail()`, `sendEmailSync()`
+
+3. **NotificationPreferenceService** (new, ~300 lines)
+   - `create()`, `update()`, `getForUser()`, `getForKid()`, `getById()`, `delete()`
+   - `toggleCategoryPreference()`, `getUserPreferencesGrouped()`
+   - `updateUserPreferences()`, `seedDefaultPreferences()`, `undoDelete()`
+
+4. **InAppNotificationService** (new, ~100 lines)
+   - `getInAppNotifications()`, `markAsRead()`, `markAllAsRead()`
+
+---
+
+#### 2.3.5 UserService (689 lines) → 4 Services
+
+1. **UserService** (core, ~200 lines)
+   - `getUser()`, `getUserIncludingDeleted()`, `getAllUsers()`, `getActiveUsers()`
+   - `updateUser()`, `getUserRole()`, `updateUserRole()`
+
+2. **UserDeletionService** (new, ~200 lines)
+   - `deleteUser()`, `deleteUserAccount()`
+   - `undoDeleteUser()`, `undoDeleteMyAccount()`
+   - `verifyPasswordAndLogDeletion()`, `terminateUserSessions()`
+
+3. **ParentProfileService** (new, ~100 lines)
+   - `updateParentProfile()`, `updateAvatarForParent()`
+
+4. **UserPinService** (new, ~150 lines)
+   - `setPin()`, `verifyPin()`
+   - `requestPinResetOtp()`, `validatePinResetOtp()`, `resetPinWithOtp()`
+
+---
+
+#### 2.3.6 StoryBuddyService (728 lines) → 4 Services
+
+1. **StoryBuddyService** (core, ~300 lines)
+   - `getActiveBuddies()`, `getAllBuddies()`, `getBuddyById()`
+   - `createBuddy()`, `updateBuddy()`, `deleteBuddy()`, `undoDeleteBuddy()`
+
+2. **BuddySelectionService** (new, ~100 lines)
+   - `selectBuddyForKid()`, `getKidCurrentBuddy()`
+
+3. **BuddyMessagingService** (new, ~150 lines)
+   - `getBuddyWelcome()`, `getBuddyMessage()`
+
+4. **BuddyAnalyticsService** (new, ~80 lines)
+   - `getBuddyStats()`
+
+---
+
+#### 2.3.7 ReportsService (536 lines) → 3 Services
+
+1. **ReportsService** (core, ~150 lines)
+   - `getWeeklyOverview()`, `getKidDetailedReport()`
+
+2. **ScreenTimeService** (new, ~200 lines)
+   - `startScreenTimeSession()`, `endScreenTimeSession()`
+   - `getTodayScreenTime()`, `getScreenTimeForRange()`
+   - `getDailyLimitStatus()`, `getEffectiveDailyLimit()`
+
+3. **ProgressTrackingService** (new, ~100 lines)
+   - `recordAnswer()`, `completeStory()`
+
+---
+
+#### 2.3.8 AvatarService (422 lines)
+
+**Status:** Borderline - consider minor refactor only if time permits.
+
+---
+
+#### Summary: Refactoring Impact
+
+| Current Service | Lines | New Services | Avg Lines/Service |
+|-----------------|-------|--------------|-------------------|
+| AdminService | 2,121 | 4 | ~530 |
+| StoryService | 1,787 | 5 | ~360 |
+| AuthService | 694 | 3 new (+2 existing) | ~140 |
+| NotificationService | 737 | 4 | ~185 |
+| UserService | 689 | 4 | ~170 |
+| StoryBuddyService | 728 | 4 | ~180 |
+| ReportsService | 536 | 3 | ~180 |
+| **Total** | **7,292** | **27** | **~270** |
+
+---
+
+#### Action Items (Phased Approach)
+
+**Phase 1: High-Impact Extractions**
+- [ ] Extract `StoryProgressService` from `StoryService`
+- [ ] Extract `DailyChallengeService` from `StoryService`
+- [ ] Extract `AdminAnalyticsService` from `AdminService`
+
+**Phase 2: Auth & User Domain**
+- [ ] Extract `OAuthService` from `AuthService`
+- [ ] Extract `OnboardingService` from `AuthService`
+- [ ] Extract `UserDeletionService` from `UserService`
+- [ ] Extract `UserPinService` from `UserService`
+
+**Phase 3: Notification & Reports**
+- [ ] Extract `NotificationPreferenceService` from `NotificationService`
+- [ ] Extract `InAppNotificationService` from `NotificationService`
+- [ ] Extract `ScreenTimeService` from `ReportsService`
+
+**Phase 4: Remaining Extractions**
+- [ ] Extract `AdminUserService` from `AdminService`
+- [ ] Extract `AdminStoryService` from `AdminService`
+- [ ] Extract `StoryGenerationService` from `StoryService`
+- [ ] Extract `StoryRecommendationService` from `StoryService`
+- [ ] Extract `BuddySelectionService` from `StoryBuddyService`
+- [ ] Extract `BuddyMessagingService` from `StoryBuddyService`
 
 ---
 
