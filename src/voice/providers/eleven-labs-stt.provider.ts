@@ -1,6 +1,10 @@
 import { ISpeechToTextProvider } from '../interfaces/speech-provider.interface';
 import { ElevenLabsClient } from 'elevenlabs';
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -26,7 +30,9 @@ export class ElevenLabsSTTProvider implements ISpeechToTextProvider {
 
   async transcribe(buffer: Buffer, mimetype: string): Promise<string> {
     if (!this.client) {
-      throw new Error('ElevenLabs client is not initialized');
+      throw new ServiceUnavailableException(
+        'ElevenLabs client is not initialized',
+      );
     }
 
     try {

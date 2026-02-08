@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   InternalServerErrorException,
+  NotFoundException,
   Inject,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -110,7 +111,7 @@ export class VoiceService {
     });
 
     if (!result.preferredVoice) {
-      throw new Error('Preferred voice not found');
+      throw new NotFoundException('Preferred voice not found');
     }
 
     return this.toVoiceResponse(result.preferredVoice);

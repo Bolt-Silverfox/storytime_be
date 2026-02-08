@@ -358,6 +358,7 @@ export class StoryService {
     limitSeasonal: number = 5,
     limitTopLiked: number = 5,
   ) {
+    // First, get user with preferences (required for recommended stories)
     const user = await this.prisma.user.findUnique({
       where: { id: userId, isDeleted: false },
       include: { preferredCategories: true },
@@ -367,38 +368,46 @@ export class StoryService {
       throw new NotFoundException('User not found');
     }
 
-    // 1. Recommended Stories (based on preferred categories)
-    let recommended: Awaited<ReturnType<typeof this.prisma.story.findMany>> =
-      [];
-    if (user.preferredCategories.length > 0) {
-      recommended = await this.prisma.story.findMany({
-        where: {
-          isDeleted: false,
-          categories: {
-            some: {
-              id: { in: user.preferredCategories.map((c: Category) => c.id) },
+    // Build recommended query based on user preferences
+    const recommendedWhere =
+      user.preferredCategories.length > 0
+        ? {
+            isDeleted: false,
+            categories: {
+              some: {
+                id: { in: user.preferredCategories.map((c: Category) => c.id) },
+              },
+            },
+          }
+        : { isDeleted: false };
+
+    // Run independent queries in parallel for better performance
+    const [recommended, { activeSeasons, backfillSeasons }, topLiked] =
+      await Promise.all([
+        // 1. Recommended Stories (based on preferred categories)
+        this.prisma.story.findMany({
+          where: recommendedWhere,
+          take: limitRecommended,
+          include: { images: true, categories: true },
+          orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
+        }),
+        // 2. Get relevant seasons (runs in parallel)
+        this.getRelevantSeasons(),
+        // 3. Top Liked by Parents (independent, runs in parallel)
+        this.prisma.story.findMany({
+          where: { isDeleted: false },
+          orderBy: {
+            parentFavorites: {
+              _count: 'desc',
             },
           },
-        },
-        take: limitRecommended,
-        include: { images: true, categories: true },
-        orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
-      });
-    } else {
-      // Fallback if no preferences: just fresh stories
-      recommended = await this.prisma.story.findMany({
-        where: { isDeleted: false },
-        orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
-        take: limitRecommended,
-        include: { images: true, categories: true },
-      });
-    }
+          take: limitTopLiked,
+          include: { images: true },
+        }),
+      ]);
 
-    // 2. Seasonal Stories (Logic: find active season based on today's date)
-    const { activeSeasons, backfillSeasons } = await this.getRelevantSeasons();
-
+    // Sequential: Get seasonal stories (depends on seasons result)
     let seasonal: Awaited<ReturnType<typeof this.prisma.story.findMany>> = [];
-    let seasonalCount = 0;
 
     if (activeSeasons.length > 0) {
       seasonal = await this.prisma.story.findMany({
@@ -413,12 +422,11 @@ export class StoryService {
         take: limitSeasonal,
         include: { images: true, themes: true, seasons: true },
       });
-      seasonalCount = seasonal.length;
     }
 
-    // Backfill if needed
-    if (seasonalCount < limitSeasonal && backfillSeasons.length > 0) {
-      const needed = limitSeasonal - seasonalCount;
+    // Backfill if needed (depends on seasonal results)
+    if (seasonal.length < limitSeasonal && backfillSeasons.length > 0) {
+      const needed = limitSeasonal - seasonal.length;
       const existingIds = new Set(seasonal.map((s) => s.id));
 
       const backfillStories = await this.prisma.story.findMany({
@@ -438,18 +446,6 @@ export class StoryService {
 
       seasonal = [...seasonal, ...backfillStories];
     }
-
-    // 3. Top Liked by Parents
-    const topLiked = await this.prisma.story.findMany({
-      where: { isDeleted: false },
-      orderBy: {
-        parentFavorites: {
-          _count: 'desc',
-        },
-      },
-      take: limitTopLiked,
-      include: { images: true },
-    });
 
     return {
       recommended,
