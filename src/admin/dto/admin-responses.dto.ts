@@ -1034,3 +1034,89 @@ export class UserGrowthMonthlyDto {
     paidUsers: number[];
   };
 }
+
+// User list item for paginated user listing - extended from base user fields
+export interface UserListItemDto {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  isEmailVerified: boolean;
+  isDeleted: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date | null;
+  registrationDate: Date;
+  activityLength: number;
+  creditUsed: number;
+  amountSpent: number;
+  isPaidUser: boolean;
+  activeSubscription: Partial<SubscriptionInfo> | null;
+  kidsCount: number;
+  sessionsCount: number;
+  favoritesCount: number;
+  subscriptionsCount: number;
+  transactionsCount: number;
+  profile?: ProfileInfo | null;
+  avatar?: AvatarInfo | null;
+  // Allow additional fields from Prisma User model
+  [key: string]: unknown;
+}
+
+// Story list item for paginated story listing
+export interface StoryListItemDto {
+  id: string;
+  title: string;
+  description: string;
+  language: string;
+  coverImageUrl: string;
+  audioUrl?: string | null;
+  isInteractive: boolean;
+  ageMin: number;
+  ageMax: number;
+  backgroundColor: string;
+  recommended: boolean;
+  aiGenerated: boolean;
+  difficultyLevel: number;
+  wordCount: number;
+  isDeleted: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  categories: CategoryInfo[];
+  themes: ThemeInfo[];
+  favoritesCount: number;
+  viewsCount: number;
+  parentFavoritesCount: number;
+  downloadsCount: number;
+  // Allow additional fields from Prisma Story model
+  [key: string]: unknown;
+}
+
+// Admin creation response
+export interface AdminCreatedDto {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  createdAt: Date;
+}
+
+// User update response
+export interface UserUpdatedDto {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  isEmailVerified: boolean;
+  updatedAt: Date;
+}
+
+// Story toggle/update response
+export interface StoryActionResultDto {
+  id: string;
+  title: string;
+  recommended: boolean;
+  isDeleted: boolean;
+  deletedAt: Date | null;
+  updatedAt: Date;
+}
