@@ -478,40 +478,64 @@ export class StoryService {
   }
 
   async createStory(data: CreateStoryDto) {
-    if (data.categoryIds && data.categoryIds.length > 0) {
-      const categories = await this.prisma.category.findMany({
-        where: { id: { in: data.categoryIds } },
-      });
-      if (categories.length !== data.categoryIds.length) {
-        throw new BadRequestException('One or more categories not found');
-      }
-    }
-
     const audioUrl = data.audioUrl;
 
-    const story = await this.prisma.story.create({
-      data: {
-        title: data.title,
-        description: data.description,
-        language: data.language,
-        coverImageUrl: data.coverImageUrl ?? '',
-        audioUrl: audioUrl ?? '',
-        isInteractive: data.isInteractive ?? false,
-        ageMin: data.ageMin ?? 0,
-        ageMax: data.ageMax ?? 9,
-        images: data.images ? { create: data.images } : undefined,
-        branches: data.branches ? { create: data.branches } : undefined,
-        categories: data.categoryIds
-          ? { connect: data.categoryIds.map((id) => ({ id })) }
-          : undefined,
-        themes: data.themeIds
-          ? { connect: data.themeIds.map((id) => ({ id })) }
-          : undefined,
-        seasons: data.seasonIds
-          ? { connect: data.seasonIds.map((id) => ({ id })) }
-          : undefined,
-      },
-      include: { images: true, branches: true },
+    // Use transaction to ensure category validation and story creation are atomic
+    const story = await this.prisma.$transaction(async (tx) => {
+      // Validate categories exist within transaction
+      if (data.categoryIds && data.categoryIds.length > 0) {
+        const categories = await tx.category.findMany({
+          where: { id: { in: data.categoryIds } },
+        });
+        if (categories.length !== data.categoryIds.length) {
+          throw new BadRequestException('One or more categories not found');
+        }
+      }
+
+      // Validate themes exist within transaction
+      if (data.themeIds && data.themeIds.length > 0) {
+        const themes = await tx.theme.findMany({
+          where: { id: { in: data.themeIds } },
+        });
+        if (themes.length !== data.themeIds.length) {
+          throw new BadRequestException('One or more themes not found');
+        }
+      }
+
+      // Validate seasons exist within transaction
+      if (data.seasonIds && data.seasonIds.length > 0) {
+        const seasons = await tx.season.findMany({
+          where: { id: { in: data.seasonIds } },
+        });
+        if (seasons.length !== data.seasonIds.length) {
+          throw new BadRequestException('One or more seasons not found');
+        }
+      }
+
+      return tx.story.create({
+        data: {
+          title: data.title,
+          description: data.description,
+          language: data.language,
+          coverImageUrl: data.coverImageUrl ?? '',
+          audioUrl: audioUrl ?? '',
+          isInteractive: data.isInteractive ?? false,
+          ageMin: data.ageMin ?? 0,
+          ageMax: data.ageMax ?? 9,
+          images: data.images ? { create: data.images } : undefined,
+          branches: data.branches ? { create: data.branches } : undefined,
+          categories: data.categoryIds
+            ? { connect: data.categoryIds.map((id) => ({ id })) }
+            : undefined,
+          themes: data.themeIds
+            ? { connect: data.themeIds.map((id) => ({ id })) }
+            : undefined,
+          seasons: data.seasonIds
+            ? { connect: data.seasonIds.map((id) => ({ id })) }
+            : undefined,
+        },
+        include: { images: true, branches: true },
+      });
     });
 
     await this.invalidateStoryCaches();
@@ -519,36 +543,69 @@ export class StoryService {
   }
 
   async updateStory(id: string, data: UpdateStoryDto) {
-    const story = await this.prisma.story.findUnique({
-      where: { id, isDeleted: false },
-    });
+    // Use transaction to ensure validation and update are atomic
+    const updatedStory = await this.prisma.$transaction(async (tx) => {
+      const story = await tx.story.findUnique({
+        where: { id, isDeleted: false },
+      });
 
-    if (!story) throw new NotFoundException('Story not found');
+      if (!story) throw new NotFoundException('Story not found');
 
-    const updatedStory = await this.prisma.story.update({
-      where: { id },
-      data: {
-        title: data.title,
-        description: data.description,
-        language: data.language,
-        coverImageUrl: data.coverImageUrl,
-        isInteractive: data.isInteractive,
-        ageMin: data.ageMin,
-        ageMax: data.ageMax,
-        audioUrl: data.audioUrl,
-        images: data.images ? { create: data.images } : undefined,
-        branches: data.branches ? { create: data.branches } : undefined,
-        categories: data.categoryIds
-          ? { set: data.categoryIds.map((id) => ({ id })) }
-          : undefined,
-        themes: data.themeIds
-          ? { set: data.themeIds.map((id) => ({ id })) }
-          : undefined,
-        seasons: data.seasonIds
-          ? { set: data.seasonIds.map((id) => ({ id })) }
-          : undefined,
-      },
-      include: { images: true, branches: true },
+      // Validate categories exist within transaction
+      if (data.categoryIds && data.categoryIds.length > 0) {
+        const categories = await tx.category.findMany({
+          where: { id: { in: data.categoryIds } },
+        });
+        if (categories.length !== data.categoryIds.length) {
+          throw new BadRequestException('One or more categories not found');
+        }
+      }
+
+      // Validate themes exist within transaction
+      if (data.themeIds && data.themeIds.length > 0) {
+        const themes = await tx.theme.findMany({
+          where: { id: { in: data.themeIds } },
+        });
+        if (themes.length !== data.themeIds.length) {
+          throw new BadRequestException('One or more themes not found');
+        }
+      }
+
+      // Validate seasons exist within transaction
+      if (data.seasonIds && data.seasonIds.length > 0) {
+        const seasons = await tx.season.findMany({
+          where: { id: { in: data.seasonIds } },
+        });
+        if (seasons.length !== data.seasonIds.length) {
+          throw new BadRequestException('One or more seasons not found');
+        }
+      }
+
+      return tx.story.update({
+        where: { id },
+        data: {
+          title: data.title,
+          description: data.description,
+          language: data.language,
+          coverImageUrl: data.coverImageUrl,
+          isInteractive: data.isInteractive,
+          ageMin: data.ageMin,
+          ageMax: data.ageMax,
+          audioUrl: data.audioUrl,
+          images: data.images ? { create: data.images } : undefined,
+          branches: data.branches ? { create: data.branches } : undefined,
+          categories: data.categoryIds
+            ? { set: data.categoryIds.map((id) => ({ id })) }
+            : undefined,
+          themes: data.themeIds
+            ? { set: data.themeIds.map((id) => ({ id })) }
+            : undefined,
+          seasons: data.seasonIds
+            ? { set: data.seasonIds.map((id) => ({ id })) }
+            : undefined,
+        },
+        include: { images: true, branches: true },
+      });
     });
 
     await this.invalidateStoryCaches();
@@ -1375,7 +1432,7 @@ export class StoryService {
   // --- PRIVATE HELPER: PERSIST STORY (Includes Image & Audio Gen) ---
   private async persistGeneratedStory(
     generatedStory: GeneratedStory & { textContent?: string },
-    kidName: string,
+    _kidName: string,
     creatorKidId?: string,
     voiceType?: VoiceType,
     seasonIds?: string[],
@@ -1390,20 +1447,52 @@ export class StoryService {
       if (kid) userId = kid.parentId;
     }
 
-    // 1. Generate Cover Image (Pollinations)
+    // 1. Generate Cover Image (Pollinations) - external call, done first
     let coverImageUrl = '';
     try {
       this.logger.log(`Generating cover image for "${generatedStory.title}"`);
       coverImageUrl = this.geminiService.generateStoryImage(
         generatedStory.title,
         generatedStory.description || `A story about ${generatedStory.title}`,
-        userId, // Pass userId for tracking
+        userId,
       );
     } catch (e) {
-      this.logger.error(`Failed to generate story image: ${e.message}`);
+      this.logger.error(`Failed to generate story image: ${(e as Error).message}`);
     }
 
-    // 2. Prepare Relations (Categories/Themes)
+    // 2. Prepare text content and calculate metrics
+    const textContent =
+      generatedStory.content ||
+      generatedStory.textContent ||
+      generatedStory.description ||
+      '';
+    const wordCount = textContent
+      .split(/\s+/)
+      .filter((word: string) => word.length > 0).length;
+    const durationSeconds = this.calculateDurationSeconds(wordCount);
+
+    // 3. Generate audio FIRST using a pre-generated story ID
+    // This ensures we can create the story atomically with the audio URL
+    const storyId = crypto.randomUUID();
+    let audioUrl = '';
+
+    if (textContent) {
+      try {
+        this.logger.log(`Generating audio for story ${storyId}`);
+        audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
+          storyId,
+          textContent,
+          voiceType ?? DEFAULT_VOICE,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to generate audio for story ${storyId}: ${(error as Error).message}`,
+        );
+        // Continue without audio - story is still valid
+      }
+    }
+
+    // 4. Prepare Relations (Categories/Themes)
     const categoryConnect =
       generatedStory.category?.map((c: string) => ({
         where: { name: c },
@@ -1416,79 +1505,49 @@ export class StoryService {
         create: { name: t, description: 'Auto-generated theme' },
       })) || [];
 
-    const textContent =
-      generatedStory.content ||
-      generatedStory.textContent ||
-      generatedStory.description ||
-      '';
-    const wordCount = textContent
-      .split(/\s+/)
-      .filter((word: string) => word.length > 0).length;
-    const durationSeconds = this.calculateDurationSeconds(wordCount);
+    // 5. Create Story atomically with all data including audio URL
+    const story = await this.prisma.$transaction(async (tx) => {
+      return tx.story.create({
+        data: {
+          id: storyId, // Use pre-generated ID that matches audio file
+          title: generatedStory.title,
+          description: generatedStory.description,
+          language: generatedStory.language || 'English',
+          ageMin: generatedStory.ageMin ?? 4,
+          ageMax: generatedStory.ageMax ?? 8,
+          isInteractive: false,
+          coverImageUrl: coverImageUrl,
+          textContent: textContent,
+          wordCount: wordCount,
+          durationSeconds: durationSeconds,
+          audioUrl: audioUrl, // Already generated with pre-known ID
+          creatorKidId: creatorKidId || null,
+          aiGenerated: true,
 
-    // 3. Create Story Record
-    let story = await this.prisma.story.create({
-      data: {
-        title: generatedStory.title,
-        description: generatedStory.description,
-        language: generatedStory.language || 'English',
-        ageMin: generatedStory.ageMin ?? 4,
-        ageMax: generatedStory.ageMax ?? 8,
-        isInteractive: false,
-        coverImageUrl: coverImageUrl,
-        textContent: textContent,
-        wordCount: wordCount,
-        durationSeconds: durationSeconds,
-        audioUrl: '', // Will update momentarily
-        creatorKidId: creatorKidId || null, // Allow null for orphan stories
-        aiGenerated: true,
-
-        categories: { connectOrCreate: categoryConnect },
-        themes: { connectOrCreate: themeConnect },
-        seasons:
-          seasonIds && seasonIds.length > 0
-            ? {
-                connect: seasonIds.map((id) => ({ id })),
-              }
-            : generatedStory.seasons
+          categories: { connectOrCreate: categoryConnect },
+          themes: { connectOrCreate: themeConnect },
+          seasons:
+            seasonIds && seasonIds.length > 0
               ? {
-                  connect: generatedStory.seasons.map((s: string) => ({
-                    name: s,
-                  })),
+                  connect: seasonIds.map((id) => ({ id })),
                 }
-              : undefined,
-      },
-      include: { images: true, branches: true, categories: true, themes: true },
+              : generatedStory.seasons
+                ? {
+                    connect: generatedStory.seasons.map((s: string) => ({
+                      name: s,
+                    })),
+                  }
+                : undefined,
+        },
+        include: {
+          images: true,
+          branches: true,
+          categories: true,
+          themes: true,
+          seasons: true,
+        },
+      });
     });
-
-    // 4. Generate Audio (TTS)
-    if (story.textContent) {
-      try {
-        this.logger.log(`Generating audio for story ${story.id}`);
-        const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
-          story.id,
-          story.textContent,
-          voiceType ?? DEFAULT_VOICE,
-        );
-
-        // Update story with audio URL
-        story = await this.prisma.story.update({
-          where: { id: story.id },
-          data: { audioUrl },
-          include: {
-            images: true,
-            branches: true,
-            categories: true,
-            themes: true,
-            seasons: true,
-          },
-        });
-      } catch (error) {
-        this.logger.error(
-          `Failed to generate audio for story ${story.id}: ${error.message}`,
-        );
-      }
-    }
 
     await this.invalidateStoryCaches();
 
