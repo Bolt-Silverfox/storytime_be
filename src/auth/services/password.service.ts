@@ -168,7 +168,10 @@ export class PasswordService {
     }
 
     // Ensure new password is different
-    const isSameAsOld = await bcrypt.compare(data.newPassword, user.passwordHash);
+    const isSameAsOld = await bcrypt.compare(
+      data.newPassword,
+      user.passwordHash,
+    );
     if (isSameAsOld) {
       throw new BadRequestException(
         'New password cannot be the same as old password',
@@ -205,7 +208,10 @@ export class PasswordService {
   /**
    * Verify a password against a hash
    */
-  async verifyPassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
+  async verifyPassword(
+    plainPassword: string,
+    hashedPassword: string,
+  ): Promise<boolean> {
     return bcrypt.compare(plainPassword, hashedPassword);
   }
 

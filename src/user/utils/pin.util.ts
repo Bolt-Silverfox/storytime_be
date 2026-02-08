@@ -15,6 +15,9 @@ export async function hashPin(pin: string): Promise<string> {
 /**
  * Compare PIN with hashed version
  */
-export async function verifyPinHash(pin: string, hash: string): Promise<boolean> {
+export async function verifyPinHash(
+  pin: string,
+  hash: string,
+): Promise<boolean> {
   return bcrypt.compare(pin, hash);
 }

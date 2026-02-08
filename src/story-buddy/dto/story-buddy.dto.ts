@@ -1,13 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { 
-  IsString, 
-  IsNotEmpty, 
-  IsOptional, 
-  IsBoolean, 
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsBoolean,
   IsInt,
   Min,
   Max,
-  IsUUID
+  IsUUID,
 } from 'class-validator';
 
 export class CreateStoryBuddyDto {
@@ -52,7 +52,8 @@ export class CreateStoryBuddyDto {
   imageUrl: string;
 
   @ApiPropertyOptional({
-    description: 'Profile avatar URL for the buddy (small circular avatar shown in kid profile)',
+    description:
+      'Profile avatar URL for the buddy (small circular avatar shown in kid profile)',
     example: 'https://example.com/lumina-avatar.png',
   })
   @IsString()

@@ -40,10 +40,16 @@ export class MetricWithTrendDto {
   @ApiProperty({ description: 'Trend percentage vs previous period' })
   trend: number;
 
-  @ApiProperty({ description: 'Trend direction', enum: ['up', 'down', 'neutral'] })
+  @ApiProperty({
+    description: 'Trend direction',
+    enum: ['up', 'down', 'neutral'],
+  })
   direction: 'up' | 'down' | 'neutral';
 
-  @ApiProperty({ description: 'Timeframe comparison label', example: 'vs last month' })
+  @ApiProperty({
+    description: 'Timeframe comparison label',
+    example: 'vs last month',
+  })
   timeframe: string;
 }
 
@@ -91,11 +97,18 @@ export class DashboardStatsDto {
   @ApiProperty({ description: 'Total favorites', example: 2300 })
   totalFavorites: number;
 
-  @ApiProperty({ description: 'Average session time in minutes', example: 15, required: false })
+  @ApiProperty({
+    description: 'Average session time in minutes',
+    example: 15,
+    required: false,
+  })
   averageSessionTime?: number;
 
   // Subscription metrics
-  @ApiProperty({ description: 'Number of paid users (with active subscriptions)', example: 180 })
+  @ApiProperty({
+    description: 'Number of paid users (with active subscriptions)',
+    example: 180,
+  })
   paidUsers: number;
 
   @ApiProperty({ description: 'Number of unpaid users', example: 1070 })
@@ -112,18 +125,21 @@ export class DashboardStatsDto {
     example: [
       { plan: 'monthly', count: 120 },
       { plan: 'yearly', count: 60 },
-      { plan: 'family', count: 20 }
-    ]
+      { plan: 'family', count: 20 },
+    ],
   })
   subscriptionPlans: Array<{
     plan: string;
     count: number;
   }>;
 
-  @ApiProperty({ description: 'Total revenue generated', example: 12500.50 })
+  @ApiProperty({ description: 'Total revenue generated', example: 12500.5 })
   totalRevenue: number;
 
-  @ApiProperty({ description: 'Conversion rate (paid users / total users)', example: 14.4 })
+  @ApiProperty({
+    description: 'Conversion rate (paid users / total users)',
+    example: 14.4,
+  })
   conversionRate: number;
 
   @ApiProperty({ description: 'Key performance indicators with trends' })
@@ -162,16 +178,28 @@ export class UserGrowthDto {
   @ApiProperty({ description: 'Date', example: '2023-10-01' })
   date: string;
 
-  @ApiProperty({ description: 'New users registered on this date', example: 10 })
+  @ApiProperty({
+    description: 'New users registered on this date',
+    example: 10,
+  })
   newUsers: number;
 
-  @ApiProperty({ description: 'New paid users registered on this date', example: 2 })
+  @ApiProperty({
+    description: 'New paid users registered on this date',
+    example: 2,
+  })
   paidUsers: number;
 
-  @ApiProperty({ description: 'Cumulative total users up to this date', example: 1000 })
+  @ApiProperty({
+    description: 'Cumulative total users up to this date',
+    example: 1000,
+  })
   totalUsers: number;
 
-  @ApiProperty({ description: 'Cumulative total paid users up to this date', example: 150 })
+  @ApiProperty({
+    description: 'Cumulative total paid users up to this date',
+    example: 150,
+  })
   totalPaidUsers: number;
 }
 
@@ -210,8 +238,8 @@ export class ContentBreakdownDto {
     example: [
       { language: 'English', count: 250 },
       { language: 'Spanish', count: 50 },
-      { language: 'French', count: 25 }
-    ]
+      { language: 'French', count: 25 },
+    ],
   })
   byLanguage: { language: string; count: number }[];
 
@@ -220,8 +248,8 @@ export class ContentBreakdownDto {
     example: [
       { ageRange: '3-5', count: 100 },
       { ageRange: '6-8', count: 150 },
-      { ageRange: '9-12', count: 75 }
-    ]
+      { ageRange: '9-12', count: 75 },
+    ],
   })
   byAgeGroup: { ageRange: string; count: number }[];
 
@@ -230,8 +258,8 @@ export class ContentBreakdownDto {
     example: [
       { categoryName: 'Animal Stories', count: 80 },
       { categoryName: 'Adventure & Action', count: 70 },
-      { categoryName: 'Bedtime Stories', count: 60 }
-    ]
+      { categoryName: 'Bedtime Stories', count: 60 },
+    ],
   })
   byCategory: { categoryName: string; count: number }[];
 
@@ -240,8 +268,8 @@ export class ContentBreakdownDto {
     example: [
       { themeName: 'Adventure', count: 120 },
       { themeName: 'Friendship', count: 90 },
-      { themeName: 'Courage', count: 70 }
-    ]
+      { themeName: 'Courage', count: 70 },
+    ],
   })
   byTheme: { themeName: string; count: number }[];
 }
@@ -249,7 +277,7 @@ export class ContentBreakdownDto {
 export class SystemHealthDto {
   @ApiProperty({
     enum: ['healthy', 'degraded', 'down'],
-    example: 'healthy'
+    example: 'healthy',
   })
   status: 'healthy' | 'degraded' | 'down';
 
@@ -257,8 +285,8 @@ export class SystemHealthDto {
     description: 'Database connection status',
     example: {
       connected: true,
-      responseTime: 45
-    }
+      responseTime: 45,
+    },
   })
   database: {
     connected: boolean;
@@ -273,8 +301,8 @@ export class SystemHealthDto {
     example: {
       used: 512,
       total: 1024,
-      percentage: 50
-    }
+      percentage: 50,
+    },
   })
   memoryUsage: {
     used: number;
@@ -282,7 +310,10 @@ export class SystemHealthDto {
     percentage: number;
   };
 
-  @ApiProperty({ description: 'Timestamp of health check', example: '2023-10-15T10:30:00Z' })
+  @ApiProperty({
+    description: 'Timestamp of health check',
+    example: '2023-10-15T10:30:00Z',
+  })
   timestamp: Date;
 }
 
@@ -296,8 +327,8 @@ export class PaginatedResponseDto<T> {
       total: 1250,
       page: 1,
       limit: 10,
-      totalPages: 125
-    }
+      totalPages: 125,
+    },
   })
   meta: {
     total: number;
@@ -312,8 +343,8 @@ export class SubscriptionAnalyticsDto {
     description: 'Subscription growth over time',
     example: [
       { date: '2023-10-01', count: 5 },
-      { date: '2023-10-02', count: 3 }
-    ]
+      { date: '2023-10-02', count: 3 },
+    ],
   })
   subscriptionGrowth: Array<{
     date: string;
@@ -324,8 +355,8 @@ export class SubscriptionAnalyticsDto {
     description: 'Revenue growth over time',
     example: [
       { date: '2023-10-01', amount: 500 },
-      { date: '2023-10-02', amount: 300 }
-    ]
+      { date: '2023-10-02', amount: 300 },
+    ],
   })
   revenueGrowth: Array<{
     date: string;
@@ -337,8 +368,8 @@ export class SubscriptionAnalyticsDto {
     example: [
       { plan: 'monthly', count: 120 },
       { plan: 'yearly', count: 60 },
-      { plan: 'family', count: 20 }
-    ]
+      { plan: 'family', count: 20 },
+    ],
   })
   planBreakdown: Array<{
     plan: string;
@@ -354,8 +385,8 @@ export class RevenueAnalyticsDto {
     description: 'Daily revenue breakdown',
     example: [
       { date: '2023-10-01', amount: 500 },
-      { date: '2023-10-02', amount: 750 }
-    ]
+      { date: '2023-10-02', amount: 750 },
+    ],
   })
   dailyRevenue: Array<{
     date: string;
@@ -366,8 +397,8 @@ export class RevenueAnalyticsDto {
     description: 'Monthly revenue breakdown',
     example: [
       { month: '2023-10', total_amount: 12500 },
-      { month: '2023-09', total_amount: 11800 }
-    ]
+      { month: '2023-09', total_amount: 11800 },
+    ],
   })
   monthlyRevenue: Array<{
     month: string;
@@ -378,8 +409,8 @@ export class RevenueAnalyticsDto {
     description: 'Yearly revenue breakdown',
     example: [
       { year: '2023', total_amount: 85000 },
-      { year: '2022', total_amount: 72000 }
-    ]
+      { year: '2022', total_amount: 72000 },
+    ],
   })
   yearlyRevenue: Array<{
     year: string;
@@ -392,14 +423,14 @@ export class RevenueAnalyticsDto {
       {
         plan: 'yearly',
         subscription_count: 60,
-        total_revenue: 6000
+        total_revenue: 6000,
       },
       {
         plan: 'monthly',
         subscription_count: 120,
-        total_revenue: 4800
-      }
-    ]
+        total_revenue: 4800,
+      },
+    ],
   })
   topPlans: Array<{
     plan: string;
@@ -430,16 +461,22 @@ export class UserDetailDto {
   @ApiProperty({ description: 'Deletion status', example: false })
   isDeleted: boolean;
 
-  @ApiProperty({ description: 'Creation timestamp', example: '2023-10-01T12:00:00Z' })
+  @ApiProperty({
+    description: 'Creation timestamp',
+    example: '2023-10-01T12:00:00Z',
+  })
   createdAt: Date;
 
-  @ApiProperty({ description: 'Last update timestamp', example: '2023-10-15T10:30:00Z' })
+  @ApiProperty({
+    description: 'Last update timestamp',
+    example: '2023-10-15T10:30:00Z',
+  })
   updatedAt: Date;
 
   @ApiProperty({ description: 'Paid user status', example: true })
   isPaidUser: boolean;
 
-  @ApiProperty({ description: 'Total amount spent', example: 125.50 })
+  @ApiProperty({ description: 'Total amount spent', example: 125.5 })
   totalSpent: number;
 
   @ApiProperty({
@@ -451,8 +488,8 @@ export class UserDetailDto {
       language: 'english',
       country: 'US',
       createdAt: '2023-10-01T12:00:00Z',
-      updatedAt: '2023-10-15T10:30:00Z'
-    }
+      updatedAt: '2023-10-15T10:30:00Z',
+    },
   })
   profile: any;
 
@@ -467,10 +504,10 @@ export class UserDetailDto {
         avatar: {
           id: 'avatar-456',
           name: 'Kid Avatar',
-          url: 'https://example.com/kid-avatar.png'
-        }
-      }
-    ]
+          url: 'https://example.com/kid-avatar.png',
+        },
+      },
+    ],
   })
   kids: any[];
 
@@ -482,8 +519,8 @@ export class UserDetailDto {
       url: 'https://example.com/avatar.png',
       isSystemAvatar: true,
       publicId: 'avatar_123',
-      createdAt: '2023-10-01T12:00:00Z'
-    }
+      createdAt: '2023-10-01T12:00:00Z',
+    },
   })
   avatar: any;
 
@@ -495,9 +532,9 @@ export class UserDetailDto {
         plan: 'monthly',
         status: 'active',
         startedAt: '2023-10-01T12:00:00Z',
-        endsAt: '2023-11-01T12:00:00Z'
-      }
-    ]
+        endsAt: '2023-11-01T12:00:00Z',
+      },
+    ],
   })
   subscriptions: any[];
 
@@ -509,9 +546,9 @@ export class UserDetailDto {
         amount: 9.99,
         currency: 'USD',
         status: 'success',
-        createdAt: '2023-10-01T12:00:00Z'
-      }
-    ]
+        createdAt: '2023-10-01T12:00:00Z',
+      },
+    ],
   })
   paymentTransactions: any[];
 
@@ -523,8 +560,8 @@ export class UserDetailDto {
       voicesCount: 1,
       subscriptionsCount: 1,
       ticketsCount: 2,
-      transactionsCount: 3
-    }
+      transactionsCount: 3,
+    },
   })
   stats: {
     sessionsCount: number;
@@ -543,19 +580,33 @@ export class StoryDetailDto {
   @ApiProperty({ description: 'Story title', example: 'The Magic Forest' })
   title: string;
 
-  @ApiProperty({ description: 'Story description', example: 'A magical adventure in an enchanted forest' })
+  @ApiProperty({
+    description: 'Story description',
+    example: 'A magical adventure in an enchanted forest',
+  })
   description: string;
 
   @ApiProperty({ description: 'Story language', example: 'english' })
   language: string;
 
-  @ApiProperty({ description: 'Cover image URL', example: 'https://example.com/forest.jpg' })
+  @ApiProperty({
+    description: 'Cover image URL',
+    example: 'https://example.com/forest.jpg',
+  })
   coverImageUrl: string;
 
-  @ApiProperty({ description: 'Audio URL', example: 'https://example.com/forest.mp3', required: false })
+  @ApiProperty({
+    description: 'Audio URL',
+    example: 'https://example.com/forest.mp3',
+    required: false,
+  })
   audioUrl?: string | null;
 
-  @ApiProperty({ description: 'Text content', example: 'Once upon a time in a magical forest...', required: false })
+  @ApiProperty({
+    description: 'Text content',
+    example: 'Once upon a time in a magical forest...',
+    required: false,
+  })
   textContent?: string | null;
 
   @ApiProperty({ description: 'Is interactive story', example: true })
@@ -585,10 +636,16 @@ export class StoryDetailDto {
   @ApiProperty({ description: 'Deletion status', example: false })
   isDeleted: boolean;
 
-  @ApiProperty({ description: 'Creation timestamp', example: '2023-10-01T12:00:00Z' })
+  @ApiProperty({
+    description: 'Creation timestamp',
+    example: '2023-10-01T12:00:00Z',
+  })
   createdAt: Date;
 
-  @ApiProperty({ description: 'Last update timestamp', example: '2023-10-15T10:30:00Z' })
+  @ApiProperty({
+    description: 'Last update timestamp',
+    example: '2023-10-15T10:30:00Z',
+  })
   updatedAt: Date;
 
   @ApiProperty({
@@ -597,25 +654,21 @@ export class StoryDetailDto {
       {
         id: 'img-123',
         url: 'https://example.com/forest-1.jpg',
-        caption: 'The enchanted forest entrance'
-      }
-    ]
+        caption: 'The enchanted forest entrance',
+      },
+    ],
   })
   images: any[];
 
   @ApiProperty({
     description: 'Story categories',
-    example: [
-      { id: 'cat-1', name: 'Fantasy & Magic' }
-    ]
+    example: [{ id: 'cat-1', name: 'Fantasy & Magic' }],
   })
   categories: any[];
 
   @ApiProperty({
     description: 'Story themes',
-    example: [
-      { id: 'theme-1', name: 'Adventure' }
-    ]
+    example: [{ id: 'theme-1', name: 'Adventure' }],
   })
   themes: any[];
 
@@ -628,9 +681,9 @@ export class StoryDetailDto {
         optionA: 'Take the left path',
         optionB: 'Take the right path',
         nextA: 'story-124',
-        nextB: 'story-125'
-      }
-    ]
+        nextB: 'story-125',
+      },
+    ],
   })
   branches: any[];
 
@@ -639,11 +692,11 @@ export class StoryDetailDto {
     example: [
       {
         id: 'question-1',
-        question: 'What was the main character\'s name?',
+        question: "What was the main character's name?",
         options: ['Alice', 'Bob', 'Charlie', 'Diana'],
-        correctOption: 0
-      }
-    ]
+        correctOption: 0,
+      },
+    ],
   })
   questions: any[];
 
@@ -653,8 +706,8 @@ export class StoryDetailDto {
       favoritesCount: 45,
       viewsCount: 120,
       parentFavoritesCount: 15,
-      downloadsCount: 30
-    }
+      downloadsCount: 30,
+    },
   })
   stats: {
     favoritesCount: number;
@@ -671,24 +724,36 @@ export class CategoryDto {
   @ApiProperty({ description: 'Category name', example: 'Animal Stories' })
   name: string;
 
-  @ApiProperty({ description: 'Category image URL', example: 'https://example.com/animals.jpg', required: false })
+  @ApiProperty({
+    description: 'Category image URL',
+    example: 'https://example.com/animals.jpg',
+    required: false,
+  })
   image?: string | null;
 
-  @ApiProperty({ description: 'Category description', example: 'Stories featuring animals as main characters', required: false })
+  @ApiProperty({
+    description: 'Category description',
+    example: 'Stories featuring animals as main characters',
+    required: false,
+  })
   description?: string | null;
 
   @ApiProperty({ description: 'Deletion status', example: false })
   isDeleted: boolean;
 
-  @ApiProperty({ description: 'Deletion timestamp', example: null, required: false })
+  @ApiProperty({
+    description: 'Deletion timestamp',
+    example: null,
+    required: false,
+  })
   deletedAt?: Date | null;
 
   @ApiProperty({
     description: 'Category statistics',
     example: {
       stories: 80,
-      preferredByKids: 45
-    }
+      preferredByKids: 45,
+    },
   })
   _count: {
     stories: number;
@@ -703,23 +768,35 @@ export class ThemeDto {
   @ApiProperty({ description: 'Theme name', example: 'Adventure' })
   name: string;
 
-  @ApiProperty({ description: 'Theme image URL', example: 'https://example.com/adventure.jpg', required: false })
+  @ApiProperty({
+    description: 'Theme image URL',
+    example: 'https://example.com/adventure.jpg',
+    required: false,
+  })
   image?: string | null;
 
-  @ApiProperty({ description: 'Theme description', example: 'Themes of adventure and exploration', required: false })
+  @ApiProperty({
+    description: 'Theme description',
+    example: 'Themes of adventure and exploration',
+    required: false,
+  })
   description?: string | null;
 
   @ApiProperty({ description: 'Deletion status', example: false })
   isDeleted: boolean;
 
-  @ApiProperty({ description: 'Deletion timestamp', example: null, required: false })
+  @ApiProperty({
+    description: 'Deletion timestamp',
+    example: null,
+    required: false,
+  })
   deletedAt?: Date | null;
 
   @ApiProperty({
     description: 'Theme statistics',
     example: {
-      stories: 120
-    }
+      stories: 120,
+    },
   })
   _count: {
     stories: number;
@@ -736,16 +813,27 @@ export class SubscriptionDto {
   @ApiProperty({ description: 'Subscription status', example: 'active' })
   status: string;
 
-  @ApiProperty({ description: 'Subscription start timestamp', example: '2023-10-01T12:00:00Z' })
+  @ApiProperty({
+    description: 'Subscription start timestamp',
+    example: '2023-10-01T12:00:00Z',
+  })
   startedAt: Date;
 
-  @ApiProperty({ description: 'Subscription end timestamp', example: '2023-11-01T12:00:00Z', required: false })
+  @ApiProperty({
+    description: 'Subscription end timestamp',
+    example: '2023-11-01T12:00:00Z',
+    required: false,
+  })
   endsAt?: Date | null;
 
   @ApiProperty({ description: 'Deletion status', example: false })
   isDeleted: boolean;
 
-  @ApiProperty({ description: 'Deletion timestamp', example: null, required: false })
+  @ApiProperty({
+    description: 'Deletion timestamp',
+    example: null,
+    required: false,
+  })
   deletedAt?: Date | null;
 
   @ApiProperty({
@@ -753,8 +841,8 @@ export class SubscriptionDto {
     example: {
       id: 'user-123',
       email: 'parent@example.com',
-      name: 'John Doe'
-    }
+      name: 'John Doe',
+    },
   })
   user: any;
 }
@@ -775,28 +863,55 @@ export class ActivityLogDto {
   @ApiProperty({ description: 'Action status', example: 'SUCCESS' })
   status: string;
 
-  @ApiProperty({ description: 'Device name', example: 'iPhone 13', required: false })
+  @ApiProperty({
+    description: 'Device name',
+    example: 'iPhone 13',
+    required: false,
+  })
   deviceName?: string | null;
 
-  @ApiProperty({ description: 'Device model', example: 'A2482', required: false })
+  @ApiProperty({
+    description: 'Device model',
+    example: 'A2482',
+    required: false,
+  })
   deviceModel?: string | null;
 
-  @ApiProperty({ description: 'Operating system', example: 'iOS 17', required: false })
+  @ApiProperty({
+    description: 'Operating system',
+    example: 'iOS 17',
+    required: false,
+  })
   os?: string | null;
 
-  @ApiProperty({ description: 'IP address', example: '192.168.1.100', required: false })
+  @ApiProperty({
+    description: 'IP address',
+    example: '192.168.1.100',
+    required: false,
+  })
   ipAddress?: string | null;
 
-  @ApiProperty({ description: 'Action details', example: 'User logged in successfully', required: false })
+  @ApiProperty({
+    description: 'Action details',
+    example: 'User logged in successfully',
+    required: false,
+  })
   details?: string | null;
 
-  @ApiProperty({ description: 'Creation timestamp', example: '2023-10-15T10:30:00Z' })
+  @ApiProperty({
+    description: 'Creation timestamp',
+    example: '2023-10-15T10:30:00Z',
+  })
   createdAt: Date;
 
   @ApiProperty({ description: 'Deletion status', example: false })
   isDeleted: boolean;
 
-  @ApiProperty({ description: 'Deletion timestamp', example: null, required: false })
+  @ApiProperty({
+    description: 'Deletion timestamp',
+    example: null,
+    required: false,
+  })
   deletedAt?: Date | null;
 
   @ApiProperty({
@@ -804,9 +919,9 @@ export class ActivityLogDto {
     example: {
       id: 'user-123',
       email: 'parent@example.com',
-      name: 'John Doe'
+      name: 'John Doe',
     },
-    required: false
+    required: false,
   })
   user?: any | null;
 
@@ -814,9 +929,9 @@ export class ActivityLogDto {
     description: 'Kid information',
     example: {
       id: 'kid-123',
-      name: 'Emma Doe'
+      name: 'Emma Doe',
     },
-    required: false
+    required: false,
   })
   kid?: any | null;
 }
