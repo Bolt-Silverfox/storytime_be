@@ -76,12 +76,12 @@ export class NotificationService {
     try {
       const notification = NotificationRegistry[type];
       if (!notification) {
-        throw new Error(`Invalid notification type: ${type}`);
+        throw new BadRequestException(`Invalid notification type: ${type}`);
       }
 
       const err = notification.validate(data);
       if (err) {
-        throw new Error(`Validation failed for ${type}: ${err}`);
+        throw new BadRequestException(`Validation failed for ${type}: ${err}`);
       }
 
       const template = await notification.getTemplate(data);

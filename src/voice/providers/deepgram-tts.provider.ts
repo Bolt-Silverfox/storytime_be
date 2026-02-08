@@ -1,6 +1,11 @@
 import { ITextToSpeechProvider } from '../interfaces/speech-provider.interface';
 import { createClient, DeepgramClient } from '@deepgram/sdk';
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SSMLFormatter } from '../utils/ssml-formatter';
 import { TextChunker } from '../utils/text-chunker';
@@ -34,7 +39,9 @@ export class DeepgramTTSProvider implements ITextToSpeechProvider {
     options?: { speed?: string },
   ): Promise<Buffer> {
     if (!this.deepgram) {
-      throw new Error('Deepgram client is not initialized');
+      throw new ServiceUnavailableException(
+        'Deepgram client is not initialized',
+      );
     }
 
     // 1. Transform raw text into "Storyteller Mode" (SSML)
@@ -66,7 +73,9 @@ export class DeepgramTTSProvider implements ITextToSpeechProvider {
 
         const stream = await response.getStream();
         if (!stream) {
-          throw new Error('No audio stream returned from Deepgram');
+          throw new InternalServerErrorException(
+            'No audio stream returned from Deepgram',
+          );
         }
         audioBuffers.push(await this.converter.toBuffer(stream));
       } catch (innerError) {
