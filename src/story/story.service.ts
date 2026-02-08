@@ -48,6 +48,7 @@ import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
+import { PaginationUtil } from '@/shared/utils/pagination.util';
 
 @Injectable()
 export class StoryService {
@@ -1491,12 +1492,18 @@ export class StoryService {
    * Results are cached for 24 hours.
    */
   async getTopPicksFromUs(limit: number = 10): Promise<any[]> {
+    const sanitizedLimit = PaginationUtil.sanitizeLimit(limit, {
+      defaultValue: 10,
+      min: 1,
+      max: 50,
+    });
+
     // Get random story IDs using raw SQL for efficiency
     const randomIds = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT id FROM "Story"
       WHERE "isDeleted" = false
       ORDER BY RANDOM()
-      LIMIT ${limit}
+      LIMIT ${sanitizedLimit}
     `;
 
     if (randomIds.length === 0) {

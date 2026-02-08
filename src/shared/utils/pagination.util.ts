@@ -1,3 +1,9 @@
+export interface SanitizeLimitOptions {
+    defaultValue?: number;
+    min?: number;
+    max?: number;
+}
+
 export class PaginationUtil {
     /**
      * Sanitizes page and limit query parameters.
@@ -19,5 +25,28 @@ export class PaginationUtil {
             page: pageNumber,
             limit: limitNumber,
         };
+    }
+
+    /**
+     * Sanitizes a single limit value.
+     * Ensures the value is a positive integer within bounds.
+     * @param value - The limit value to sanitize
+     * @param options - Configuration options
+     * @returns Sanitized limit as a positive integer
+     */
+    static sanitizeLimit(
+        value: unknown,
+        options: SanitizeLimitOptions = {},
+    ): number {
+        const { defaultValue = 10, min = 1, max = 100 } = options;
+
+        let result = Number(value);
+
+        if (!Number.isFinite(result) || Number.isNaN(result)) {
+            result = defaultValue;
+        }
+
+        result = Math.floor(result);
+        return Math.max(min, Math.min(max, result));
     }
 }
