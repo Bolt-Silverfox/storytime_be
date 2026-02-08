@@ -171,7 +171,7 @@ export class ElevenLabsTTSProvider
       const response = await this.client.voices.add({
         name,
 
-        files: [blob as any],
+        files: [blob as unknown as File],
         description: 'Cloned via StoryTime App',
       });
 
