@@ -382,9 +382,9 @@ export class UserService {
     });
     if (!user) throw new NotFoundException('User not found');
 
-    const updateData: Record<string, any> = {};
+    const updateData: Prisma.UserUncheckedUpdateInput = {};
 
-    const profileUpdate: Record<string, any> = {};
+    const profileUpdate: Prisma.ProfileUpdateInput = {};
 
     // -------- USER FIELDS --------
     if (data.name !== undefined) updateData.name = data.name;
@@ -479,9 +479,9 @@ export class UserService {
     });
     if (!existing) throw new NotFoundException('User not found');
 
-    const updateUser: Record<string, any> = {};
+    const updateUser: Prisma.UserUpdateInput = {};
 
-    const updateProfile: Record<string, any> = {};
+    const updateProfile: Prisma.ProfileUpdateInput = {};
 
     if (data.name !== undefined) updateUser.name = data.name;
     if (data.biometricsEnabled !== undefined)
