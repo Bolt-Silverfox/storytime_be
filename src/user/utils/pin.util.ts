@@ -1,4 +1,5 @@
 import * as bcrypt from 'bcrypt';
+import { BadRequestException } from '@nestjs/common';
 
 const SALT_ROUNDS = 12;
 
@@ -7,7 +8,7 @@ const SALT_ROUNDS = 12;
  */
 export async function hashPin(pin: string): Promise<string> {
   if (!/^\d{6}$/.test(pin)) {
-    throw new Error('PIN must be exactly 6 digits');
+    throw new BadRequestException('PIN must be exactly 6 digits');
   }
   return bcrypt.hash(pin, SALT_ROUNDS);
 }
