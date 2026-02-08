@@ -49,14 +49,19 @@ git push origin integration/refactor-2026-02
 - Lint errors: unused `error` variables in catch blocks
 - Module wiring: StoryModule now properly imports SubscriptionModule
 
-### Instance 2 - 🔄 In Progress
-**Focus**: [Describe your work area]
-**Timestamp**:
+### Instance 2 - ✅ Completed
+**Focus**: Unit tests for critical untested services
+**Timestamp**: 2026-02-08
 
 **Changes Made**:
-- [List files being modified]
+- `src/auth/auth.service.spec.ts` - NEW: 31 tests for AuthService
+- `src/user/user.service.spec.ts` - NEW: 45 tests for UserService
+- `src/subscription/subscription.service.spec.ts` - NEW: 15 tests for SubscriptionService
+- `src/notification/notification.service.spec.ts` - NEW: 34 tests for NotificationService
+- `__mocks__/uuid.ts` - NEW: Mock for uuid ESM module
+- `jest.config.js` - Added transformIgnorePatterns and uuid mock mapping
 
-**Status**:
+**Status**: Complete - 125 tests passing
 
 ### Instance 3 - 🔄 In Progress
 **Focus**: [Describe your work area]
@@ -78,6 +83,11 @@ Files currently being modified by other instances - avoid editing these:
 | `src/subscription/subscription.service.ts` | Instance 1 | ✅ Done |
 | `src/story/story-quota.service.ts` | Instance 1 | ✅ Done |
 | `src/shared/guards/subscription-throttle.guard.ts` | Instance 1 | ✅ Done |
+| `src/auth/auth.service.spec.ts` | Instance 2 | ✅ Done |
+| `src/user/user.service.spec.ts` | Instance 2 | ✅ Done |
+| `src/subscription/subscription.service.spec.ts` | Instance 2 | ✅ Done |
+| `src/notification/notification.service.spec.ts` | Instance 2 | ✅ Done |
+| `jest.config.js` | Instance 2 | ✅ Done |
 
 ---
 
@@ -93,8 +103,10 @@ Available tasks from the roadmaps:
 - [ ] Implement circuit breaker for external services
 
 ### From QA_IMPROVEMENTS.md
-- [ ] Add unit tests for AuthService
-- [ ] Add unit tests for UserService
+- [x] Add unit tests for AuthService *(Instance 2)*
+- [x] Add unit tests for UserService *(Instance 2)*
+- [x] Add unit tests for SubscriptionService *(Instance 2)*
+- [x] Add unit tests for NotificationService *(Instance 2)*
 - [ ] Add E2E tests for authentication flows
 - [ ] Replace remaining `any` types (~22 files)
 - [ ] Refactor god services (AdminService: 2,121 lines)
