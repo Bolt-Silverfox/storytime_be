@@ -24,6 +24,10 @@ interface StoryData {
   theme: string | string[];
   seasons?: string[];
   questions: StoryQuestion[];
+  wordCount?: number;
+  durationSeconds?: number;
+  difficultyLevel?: number;
+  aiGenerated?: boolean;
 }
 
 export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
@@ -70,6 +74,10 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
           textContent: story.content,
           recommended: story.recommended ?? false,
           backgroundColor: story.backgroundColor || '#5E3A54',
+          wordCount: story.wordCount ?? 0,
+          durationSeconds: story.durationSeconds ?? null,
+          difficultyLevel: story.difficultyLevel ?? 1,
+          aiGenerated: story.aiGenerated ?? false,
           categories: {
             connectOrCreate: cleanCategories.map((name: string) => ({
               where: { name },
