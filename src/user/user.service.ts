@@ -1,8 +1,8 @@
+import { Injectable } from '@nestjs/common';
 import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+  ResourceNotFoundException,
+  InvalidRoleException,
+} from '@/shared/exceptions';
 import { Prisma, User, Profile, Kid, Avatar, Subscription } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { UserRole } from './user.controller';
@@ -19,6 +19,29 @@ export type SafeUser = Omit<User, 'passwordHash' | 'pinHash'> & {
   numberOfKids?: number;
 };
 
+/**
+ * Select object that excludes sensitive fields (passwordHash, pinHash) at the database level.
+ * This prevents sensitive data from ever being fetched, rather than relying on TypeScript types.
+ */
+const safeUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  avatarId: true,
+  isEmailVerified: true,
+  onboardingStatus: true,
+  role: true,
+  createdAt: true,
+  updatedAt: true,
+  biometricsEnabled: true,
+  isDeleted: true,
+  deletedAt: true,
+  preferredVoiceId: true,
+  googleId: true,
+  appleId: true,
+  // Explicitly exclude: passwordHash, pinHash
+} satisfies Prisma.UserSelect;
+
 @Injectable()
 export class UserService {
   constructor(private readonly prisma: PrismaService) {}
@@ -29,7 +52,13 @@ export class UserService {
         id,
         isDeleted: false,
       },
-      include: { profile: true, kids: true, avatar: true, subscriptions: true },
+      select: {
+        ...safeUserSelect,
+        profile: true,
+        kids: true,
+        avatar: true,
+        subscriptions: true,
+      },
     });
     if (!user) return null;
 
@@ -42,7 +71,13 @@ export class UserService {
   async getUserIncludingDeleted(id: string): Promise<SafeUser | null> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { profile: true, kids: true, avatar: true, subscriptions: true },
+      select: {
+        ...safeUserSelect,
+        profile: true,
+        kids: true,
+        avatar: true,
+        subscriptions: true,
+      },
     });
 
     if (user) {
@@ -56,18 +91,15 @@ export class UserService {
    */
   async getAllUsers(): Promise<SafeUser[]> {
     const users = await this.prisma.user.findMany({
-      include: {
+      select: {
+        ...safeUserSelect,
         profile: true,
         avatar: true,
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    return users.map((user) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { passwordHash, pinHash, ...safeUser } = user;
-      return safeUser;
-    });
+    return users;
   }
 
   /**
@@ -78,14 +110,14 @@ export class UserService {
       where: {
         isDeleted: false,
       },
-      include: { profile: true, avatar: true },
+      select: {
+        ...safeUserSelect,
+        profile: true,
+        avatar: true,
+      },
     });
 
-    return users.map((user) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { passwordHash, pinHash, ...safeUser } = user;
-      return safeUser;
-    });
+    return users;
   }
 
   async updateUser(id: string, data: UpdateUserDto): Promise<unknown> {
@@ -95,7 +127,7 @@ export class UserService {
         isDeleted: false,
       },
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new ResourceNotFoundException('User', id);
 
     const updateData: Prisma.UserUncheckedUpdateInput = {};
 
@@ -174,7 +206,7 @@ export class UserService {
 
   async updateUserRole(id: string, role: UserRole) {
     if (!Object.values(UserRole).includes(role)) {
-      throw new BadRequestException('Invalid role');
+      throw new InvalidRoleException(role);
     }
 
     const user = await this.prisma.user.update({
@@ -200,7 +232,7 @@ export class UserService {
         isDeleted: false,
       },
     });
-    if (!existing) throw new NotFoundException('User not found');
+    if (!existing) throw new ResourceNotFoundException('User', userId);
 
     const updateUser: Prisma.UserUpdateInput = {};
 
