@@ -341,7 +341,7 @@ git push origin integration/refactor-2026-02
 **Status**: Complete - Build passing
 
 ### Instance 12 - ✅ Completed
-**Focus**: Unit Tests for Extracted Auth Services (OAuthService & OnboardingService)
+**Focus**: Unit Tests for Extracted Auth & User Services
 **Timestamp**: 2026-02-09
 **Branch**: `fix/bug-fixes`
 
@@ -359,8 +359,23 @@ git push origin integration/refactor-2026-02
     - getLearningExpectations: fetching active learning expectations
     - updateProfile: partial updates, profile creation, upsert behavior
     - Error scenarios: user not found, duplicate onboarding, invalid learning expectations
+- `src/user/services/user-deletion.service.spec.ts` (NEW ~350 lines) - Comprehensive unit tests for UserDeletionService
+  - 18 tests covering:
+    - deleteUser: soft delete, permanent delete with session termination, error handling
+    - verifyPasswordAndLogDeletion: password verification, support ticket creation
+    - undoDeleteUser: admin restore of soft-deleted users
+    - undoDeleteMyAccount: self-restoration of soft-deleted accounts
+    - Error scenarios: user not found, already deleted, foreign key constraints
+- `src/user/services/user-pin.service.spec.ts` (NEW ~380 lines) - Comprehensive unit tests for UserPinService
+  - 23 tests covering:
+    - setPin: PIN validation, onboarding status check, hash storage
+    - verifyPin: PIN verification against bcrypt hash
+    - requestPinResetOtp: OTP generation, email sending via NotificationService
+    - validatePinResetOtp: OTP format validation, expiry checking
+    - resetPinWithOtp: full PIN reset flow with OTP verification
+    - Error scenarios: invalid format, expired OTP, same PIN as old
 
-**Status**: Complete - All 43 tests passing, build passing
+**Status**: Complete - All 84 tests passing (43 auth + 41 user), build passing
 
 ### Instance 13 - ✅ Completed
 **Focus**: Phase 4 God Service Extractions (StoryGenerationService)
@@ -474,6 +489,8 @@ Files currently being modified by other instances - avoid editing these:
 | `src/story/story.controller.ts` | Instance 11 & 13 | ✅ Done |
 | `src/auth/services/oauth.service.spec.ts` | Instance 12 | ✅ Done |
 | `src/auth/services/onboarding.service.spec.ts` | Instance 12 | ✅ Done |
+| `src/user/services/user-deletion.service.spec.ts` | Instance 12 | ✅ Done |
+| `src/user/services/user-pin.service.spec.ts` | Instance 12 | ✅ Done |
 | `src/story/story-generation.service.ts` | Instance 13 | ✅ Done |
 | `src/story/scripts/backfill-duration.ts` | Instance 13 | ✅ Done |
 | `src/story-buddy/buddy-selection.service.ts` | Instance 14 & 15 | ✅ Done |
