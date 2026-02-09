@@ -41,7 +41,11 @@ import {
 import { StoryRecommendationService } from './story-recommendation.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { VoiceType } from '../voice/dto/voice.dto';
-import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+  STORY_INVALIDATION_KEYS,
+} from '@/shared/constants/cache-keys.constants';
 
 @Injectable()
 export class StoryService {
@@ -860,36 +864,84 @@ export class StoryService {
   }
 
   async getCategories(): Promise<CategoryDto[]> {
+    // Try cache first
+    const cached = await this.cacheManager.get<CategoryDto[]>(
+      CACHE_KEYS.CATEGORIES_ALL,
+    );
+    if (cached) {
+      return cached;
+    }
+
     this.logger.log('Fetching categories with story counts from database');
     const categories = await this.prisma.category.findMany({
       where: { isDeleted: false },
       include: { _count: { select: { stories: true } } },
     });
-    return categories.map((c) => ({
+    const result = categories.map((c) => ({
       id: c.id,
       name: c.name,
       image: c.image ?? undefined,
       description: c.description ?? undefined,
       storyCount: c._count.stories,
     }));
+
+    // Cache for 1 hour
+    await this.cacheManager.set(
+      CACHE_KEYS.CATEGORIES_ALL,
+      result,
+      CACHE_TTL_MS.STATIC_CONTENT,
+    );
+
+    return result;
   }
 
   async getThemes(): Promise<ThemeDto[]> {
+    // Try cache first
+    const cached = await this.cacheManager.get<ThemeDto[]>(
+      CACHE_KEYS.THEMES_ALL,
+    );
+    if (cached) {
+      return cached;
+    }
+
     const themes = await this.prisma.theme.findMany({
       where: { isDeleted: false },
     });
-    return themes.map((t: Theme) => ({
+    const result = themes.map((t: Theme) => ({
       ...t,
       image: t.image ?? undefined,
       description: t.description ?? undefined,
     }));
+
+    // Cache for 1 hour
+    await this.cacheManager.set(
+      CACHE_KEYS.THEMES_ALL,
+      result,
+      CACHE_TTL_MS.STATIC_CONTENT,
+    );
+
+    return result;
   }
 
   async getSeasons() {
+    // Try cache first
+    const cached = await this.cacheManager.get(CACHE_KEYS.SEASONS_ALL);
+    if (cached) {
+      return cached;
+    }
+
     const seasons = await this.prisma.season.findMany({
       where: { isDeleted: false },
       orderBy: { startDate: 'asc' },
     });
+
+    // Cache for 1 hour
+    await this.cacheManager.set(
+      CACHE_KEYS.SEASONS_ALL,
+      seasons,
+      CACHE_TTL_MS.STATIC_CONTENT,
+    );
+
     return seasons;
   }
 
