@@ -63,6 +63,7 @@ import {
 import { VoiceType, StoryContentAudioDto } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { StoryService } from './story.service';
+import { StoryGenerationService } from './story-generation.service';
 import { StoryProgressService } from './story-progress.service';
 import { StoryRecommendationService } from './story-recommendation.service';
 import { DailyChallengeService } from './daily-challenge.service';
@@ -90,6 +91,7 @@ export class StoryController {
   private readonly logger = new Logger(StoryController.name);
   constructor(
     private readonly storyService: StoryService,
+    private readonly storyGenerationService: StoryGenerationService,
     private readonly storyProgressService: StoryProgressService,
     private readonly storyRecommendationService: StoryRecommendationService,
     private readonly dailyChallengeService: DailyChallengeService,
@@ -1035,7 +1037,7 @@ export class StoryController {
   async generateStory(@Body() body: GenerateStoryDto) {
     // If kidId is provided, use the specialized method
     if (body.kidId) {
-      return this.storyService.generateStoryForKid(
+      return this.storyGenerationService.generateStoryForKid(
         body.kidId,
         body.themes,
         body.categories,
@@ -1056,7 +1058,7 @@ export class StoryController {
       seasonIds: body.seasonIds,
     };
 
-    return this.storyService.generateStoryWithAI(options);
+    return this.storyGenerationService.generateStoryWithAI(options);
   }
 
   @Post('generate/kid/:kidId')
@@ -1091,7 +1093,7 @@ export class StoryController {
   ) {
     const themes = theme ? [theme] : undefined;
     const categories = category ? [category] : undefined;
-    return this.storyService.generateStoryForKid(kidId, themes, categories);
+    return this.storyGenerationService.generateStoryForKid(kidId, themes, categories);
   }
 
   @Get(':id')
