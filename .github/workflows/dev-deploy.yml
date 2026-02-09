@@ -201,7 +201,7 @@ jobs:
     name: Auto-fix Formatting
     runs-on: ubuntu-latest
     needs: [quality]
-    if: github.event.action != 'closed' && failure()
+    if: github.event.action != 'closed' && always()
     timeout-minutes: 5
     permissions:
       contents: write
