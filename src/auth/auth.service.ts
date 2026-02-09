@@ -1,12 +1,17 @@
 import {
   Injectable,
   Logger,
-  NotFoundException,
   ServiceUnavailableException,
-  UnauthorizedException,
-  ForbiddenException,
-  BadRequestException,
 } from '@nestjs/common';
+import {
+  InvalidCredentialsException,
+  InvalidTokenException,
+  TokenExpiredException,
+  EmailNotVerifiedException,
+  ResourceNotFoundException,
+  ResourceAlreadyExistsException,
+  InvalidAdminSecretException,
+} from '@/shared/exceptions';
 import {
   LoginDto,
   LoginResponseDto,
@@ -56,17 +61,15 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new BadRequestException('Invalid credentials');
+      throw new InvalidCredentialsException();
     }
 
     if (!(await bcrypt.compare(data.password, user.passwordHash))) {
-      throw new BadRequestException('Invalid credentials');
+      throw new InvalidCredentialsException();
     }
 
     if (!user.isEmailVerified) {
-      throw new BadRequestException(
-        'Email not verified. Please check your inbox.',
-      );
+      throw new EmailNotVerifiedException();
     }
 
     const tokenData = await this.tokenService.createTokenPair(user);
@@ -84,7 +87,7 @@ export class AuthService {
       await this.tokenService.findSessionByRefreshToken(refreshToken);
 
     if (!session) {
-      throw new UnauthorizedException('Invalid token');
+      throw new InvalidTokenException('refresh token');
     }
 
     const jwt = this.tokenService.generateJwt(
@@ -116,13 +119,13 @@ export class AuthService {
       where: { email: data.email },
     });
     if (existingUser) {
-      throw new BadRequestException('Email already exists');
+      throw new ResourceAlreadyExistsException('User', 'email', data.email);
     }
 
     let role: Role = Role.parent;
     if (data.role === 'admin') {
       if (data.adminSecret !== process.env.ADMIN_SECRET) {
-        throw new ForbiddenException('Invalid admin secret');
+        throw new InvalidAdminSecretException();
       }
       role = Role.admin;
     }
@@ -197,7 +200,7 @@ export class AuthService {
   async sendEmailVerification(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new ResourceNotFoundException('User');
     }
 
     const { token, expiresAt } = generateToken(24);
@@ -240,12 +243,12 @@ export class AuthService {
     });
 
     if (!verificationToken) {
-      throw new BadRequestException('Invalid verification token');
+      throw new InvalidTokenException('verification token');
     }
 
     if (verificationToken.expiresAt < new Date()) {
       await this.prisma.token.delete({ where: { id: verificationToken.id } });
-      throw new UnauthorizedException('Verification token has expired');
+      throw new TokenExpiredException();
     }
 
     // Use transaction to ensure user update + token deletion are atomic

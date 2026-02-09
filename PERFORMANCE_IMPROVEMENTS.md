@@ -19,6 +19,7 @@ This document tracks performance optimization opportunities in the Storytime bac
 7. [Queue System Optimization](#7-queue-system-optimization)
 8. [API Performance Patterns](#8-api-performance-patterns)
 9. [Prisma v7 Upgrade Considerations](#9-prisma-v7-upgrade-considerations)
+10. [Error Handling & Domain Exceptions](#10-error-handling--domain-exceptions)
 
 ---
 
@@ -88,36 +89,51 @@ const kids = await this.prisma.kid.findMany({
 - [x] Replace sequential queries with batched queries *(Instance 4 & 5)*
 - [x] Use Prisma `include` for related data instead of separate queries *(Instance 4)*
 
-### 1.4 Query Select Optimization (P2 - Medium)
+### 1.4 Query Select Optimization (P2 - Medium) ✅ PARTIALLY COMPLETED
+
+**Status**: UserService optimizations completed (February 2026)
 
 Many queries fetch all columns when only a few are needed:
 
-| Location | Issue | Optimization |
-|----------|-------|--------------|
-| `StoryService.findAll()` | Fetches all story fields | Add `select` for list views |
-| `UserService.findOne()` | Fetches password hash unnecessarily | Exclude sensitive fields |
-| `AdminService` dashboard queries | Full records for counts | Use `_count` aggregations |
+| Location | Issue | Optimization | Status |
+|----------|-------|--------------|--------|
+| `StoryService.getStories()` | Fetches all story fields | Add `select` for list views | ⏳ Pending |
+| `UserService.getUser()` | Fetches password hash unnecessarily | Exclude sensitive fields | ✅ Completed |
+| `AdminService` dashboard queries | Full records for counts | Use `_count` aggregations | ✅ Already optimized |
 
-**Example:**
+**Implementation Details:**
+
+Added `safeUserSelect` constant in `UserService` that explicitly selects all user fields except `passwordHash` and `pinHash` at the database level. Applied to:
+- `getUser()` - Single user lookup
+- `getUserIncludingDeleted()` - User lookup including soft-deleted
+- `getAllUsers()` - Admin user list
+- `getActiveUsers()` - Active user list
+
 ```typescript
-// ❌ Fetches everything
-const stories = await this.prisma.story.findMany();
+// ✅ safeUserSelect excludes passwordHash and pinHash at DB level
+const safeUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  // ... all other safe fields
+  // Explicitly excludes: passwordHash, pinHash
+} satisfies Prisma.UserSelect;
 
-// ✅ Select only needed fields
-const stories = await this.prisma.story.findMany({
+const user = await this.prisma.user.findUnique({
+  where: { id },
   select: {
-    id: true,
-    title: true,
-    coverImageUrl: true,
-    createdAt: true,
-  }
+    ...safeUserSelect,
+    profile: true,
+    kids: true,
+  },
 });
 ```
 
 **Action Items:**
-- [ ] Add `select` to list/index queries
+- [x] Never fetch `passwordHash` outside auth operations
+- [x] Add `select` to UserService queries
+- [ ] Add `select` to StoryService list queries (exclude `textContent` for list views)
 - [ ] Create DTOs that map to select fields
-- [ ] Never fetch `passwordHash` outside auth operations
 
 ---
 
@@ -713,6 +729,78 @@ app.enableCors({
 
 ---
 
+## 10. Error Handling & Domain Exceptions ✅ COMPLETED
+
+**Status**: Implemented (February 2026)
+
+### 10.1 Custom Domain Exceptions Hierarchy
+
+Created a structured exception hierarchy that provides:
+- Machine-readable error codes for client-side handling
+- Consistent error response format across the API
+- Better debugging with contextual details
+- Proper HTTP status codes
+
+**Files Created:**
+- `src/shared/exceptions/domain.exception.ts` - Exception classes
+- `src/shared/exceptions/index.ts` - Export barrel
+
+**Exception Categories:**
+
+| Category | Exceptions | HTTP Status |
+|----------|------------|-------------|
+| Auth | `InvalidCredentialsException`, `TokenExpiredException`, `EmailNotVerifiedException`, `InvalidTokenException`, `InvalidAdminSecretException` | 400-403 |
+| Resources | `ResourceNotFoundException`, `ResourceAlreadyExistsException` | 404, 409 |
+| Business Logic | `QuotaExceededException`, `SubscriptionRequiredException`, `InvalidRoleException`, `ValidationException` | 400, 402, 429 |
+
+**Implementation:**
+
+```typescript
+// Base class
+export abstract class DomainException extends HttpException {
+  constructor(
+    public readonly code: string,      // Machine-readable code
+    message: string,                    // Human-readable message
+    status: HttpStatus,
+    public readonly details?: Record<string, unknown>,  // Context
+  ) {
+    super({ code, message, details }, status);
+  }
+}
+
+// Usage example
+throw new ResourceNotFoundException('User', userId);
+// Returns: { code: 'RESOURCE_NOT_FOUND', message: 'User with id xyz not found', details: { resource: 'User', id: 'xyz' } }
+```
+
+### 10.2 Exception Filter Integration
+
+Updated `HttpExceptionFilter` to extract `code` and `details` from domain exceptions:
+
+```typescript
+if (exception instanceof DomainException) {
+  code = exception.code;
+  details = exception.details;
+}
+```
+
+Updated `ErrorResponse` DTO with optional `code` and `details` fields for structured API error responses.
+
+### 10.3 Services Updated
+
+| Service | Exceptions Replaced |
+|---------|---------------------|
+| `AuthService` | InvalidCredentialsException, EmailNotVerifiedException, InvalidTokenException, TokenExpiredException, InvalidAdminSecretException, ResourceNotFoundException, ResourceAlreadyExistsException |
+| `UserService` | ResourceNotFoundException, InvalidRoleException |
+
+**Benefits:**
+- ✅ Consistent error codes across API
+- ✅ Client can programmatically handle specific errors
+- ✅ Better error logging with context
+- ✅ Reduced error message duplication
+
+---
+
 ## 9. Prisma v7 Upgrade Considerations
 
 ### 9.1 Breaking Changes Impact (P2 - Medium)
@@ -787,6 +875,8 @@ pnpm add @prisma/adapter-pg
 - [x] Response compression middleware *(1KB threshold, level 6)*
 - [x] Static content caching (categories, themes, seasons, story buddies)
 - [x] Cache invalidation on CRUD operations
+- [x] Custom domain exceptions hierarchy *(AuthService, UserService)*
+- [x] Query select optimization - UserService (exclude passwordHash/pinHash at DB level)
 
 ### In Progress 🔄
 - [ ] User preferences caching
@@ -807,7 +897,7 @@ pnpm add @prisma/adapter-pg
 1. ~~**Add transactions to subscription operations**~~ ✅ *(Instance 3)*
 2. ~~**Cache subscription status**~~ ✅ Already implemented in SubscriptionService
 3. ~~**Add request timeouts to AI providers**~~ ✅ *(Instance 3 - GeminiService)*
-4. **Use `select` in list queries** - Reduces data transfer
+4. ~~**Use `select` in list queries**~~ ✅ Partially complete - UserService done, StoryService pending
 5. ~~**Replace sequential queries with batch**~~ ✅ *(Instance 4 & 5)*
 6. **Add Prisma query logging** - Identify slow queries immediately
 7. **Implement cursor pagination** - Better performance for infinite scroll
