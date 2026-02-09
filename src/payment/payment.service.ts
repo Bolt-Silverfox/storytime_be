@@ -14,6 +14,14 @@ import {
   PLANS,
   PRODUCT_ID_TO_PLAN,
 } from '@/subscription/subscription.constants';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  AppEvents,
+  PaymentCompletedEvent,
+  PaymentFailedEvent,
+  SubscriptionCreatedEvent,
+  SubscriptionChangedEvent,
+} from '@/shared/events';
 
 /** Transaction result from payment processing */
 export interface TransactionRecord {
@@ -34,6 +42,7 @@ export class PaymentService {
     private readonly subscriptionService: SubscriptionService,
     private readonly googleVerificationService: GoogleVerificationService,
     private readonly appleVerificationService: AppleVerificationService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -61,9 +70,20 @@ export class PaymentService {
       ) {
         throw error;
       }
-      this.logger.error(
-        `Purchase verification failed: ${this.getErrorMessage(error)}`,
-      );
+
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.error(`Purchase verification failed: ${errorMessage}`);
+
+      // Emit payment failed event
+      this.eventEmitter.emit(AppEvents.PAYMENT_FAILED, {
+        userId,
+        amount: 0, // Unknown at this point
+        currency: 'USD',
+        provider: dto.platform,
+        errorMessage,
+        failedAt: new Date(),
+      } satisfies PaymentFailedEvent);
+
       throw new BadRequestException('Purchase verification failed');
     }
   }
@@ -299,11 +319,49 @@ export class PaymentService {
         });
       }
 
-      return { paymentTx, subscription };
+      return { paymentTx, subscription, existingSub };
     });
 
     // Invalidate subscription cache after successful update
     await this.subscriptionService.invalidateCache(userId);
+
+    // Emit payment completed event
+    this.eventEmitter.emit(AppEvents.PAYMENT_COMPLETED, {
+      paymentId: result.paymentTx.id,
+      userId,
+      amount,
+      currency,
+      provider: 'iap', // In-app purchase (Google/Apple)
+      subscriptionId: result.subscription.id,
+      completedAt: now,
+    } satisfies PaymentCompletedEvent);
+
+    // Emit subscription created or changed event
+    if (result.existingSub) {
+      // Determine change type based on plan comparison
+      const changeType: 'upgrade' | 'downgrade' | 'renewal' =
+        result.existingSub.plan === plan ? 'renewal' : 'upgrade';
+
+      this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CHANGED, {
+        subscriptionId: result.subscription.id,
+        userId,
+        previousPlanId: result.existingSub.plan,
+        newPlanId: plan,
+        previousPlanName: result.existingSub.plan,
+        newPlanName: plan,
+        changeType,
+        changedAt: now,
+      } satisfies SubscriptionChangedEvent);
+    } else {
+      this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CREATED, {
+        subscriptionId: result.subscription.id,
+        userId,
+        planId: plan,
+        planName: plan,
+        provider: 'iap',
+        createdAt: now,
+      } satisfies SubscriptionCreatedEvent);
+    }
 
     return {
       tx: result.paymentTx,

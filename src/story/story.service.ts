@@ -46,6 +46,12 @@ import {
   CACHE_TTL_MS,
   STORY_INVALIDATION_KEYS,
 } from '@/shared/constants/cache-keys.constants';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  AppEvents,
+  StoryCreatedEvent,
+  StoryCompletedEvent,
+} from '@/shared/events';
 
 @Injectable()
 export class StoryService {
@@ -69,6 +75,7 @@ export class StoryService {
     private readonly textToSpeechService: TextToSpeechService,
     @Inject(forwardRef(() => StoryRecommendationService))
     private readonly storyRecommendationService: StoryRecommendationService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async getStories(filter: {
@@ -350,6 +357,15 @@ export class StoryService {
     });
 
     await this.invalidateStoryCaches();
+
+    // Emit story created event
+    this.eventEmitter.emit(AppEvents.STORY_CREATED, {
+      storyId: story.id,
+      title: story.title,
+      aiGenerated: false, // Manual creation
+      createdAt: story.createdAt,
+    } satisfies StoryCreatedEvent);
+
     return story;
   }
 
@@ -550,6 +566,15 @@ export class StoryService {
       this.adjustReadingLevel(dto.kidId, dto.storyId, newTotalTime).catch((e) =>
         this.logger.error(`Failed to adjust reading level: ${e.message}`),
       );
+
+      // Emit story completed event
+      this.eventEmitter.emit(AppEvents.STORY_COMPLETED, {
+        storyId: dto.storyId,
+        kidId: dto.kidId,
+        durationSeconds: newTotalTime,
+        completionPercentage: dto.progress,
+        completedAt: new Date(),
+      } satisfies StoryCompletedEvent);
     }
     return result;
   }
