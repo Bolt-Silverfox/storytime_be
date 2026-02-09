@@ -52,6 +52,20 @@ export class ErrorResponse {
   message: string | string[];
 
   @ApiProperty({
+    example: 'AUTH_INVALID_CREDENTIALS',
+    description: 'Machine-readable error code for client handling.',
+    required: false,
+  })
+  code?: string;
+
+  @ApiProperty({
+    example: { resource: 'User', id: '123' },
+    description: 'Additional details about the error for debugging.',
+    required: false,
+  })
+  details?: Record<string, unknown>;
+
+  @ApiProperty({
     example: '1701234567890',
     description: 'A timestamp of when the error occurred.',
   })
@@ -68,6 +82,8 @@ export class ErrorResponse {
     error: string,
     message: string | string[],
     path: string,
+    code?: string,
+    details?: Record<string, unknown>,
   ) {
     this.statusCode = statusCode;
     this.success = false;
@@ -75,5 +91,7 @@ export class ErrorResponse {
     this.message = message;
     this.path = path;
     this.timestamp = new Date().toISOString();
+    if (code) this.code = code;
+    if (details) this.details = details;
   }
 }

@@ -74,6 +74,13 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.REFRESH.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.REFRESH.TTL,
+    },
+  })
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
   async refresh(@Body('token') token: string) {
@@ -170,6 +177,13 @@ export class AuthController {
   }
 
   @Post('verify-email')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.EMAIL_VERIFICATION.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.EMAIL_VERIFICATION.TTL,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify email using token' })
   @ApiResponse({ status: 200, description: 'Email verified successfully.' })
@@ -181,6 +195,13 @@ export class AuthController {
   }
 
   @Post('send-verification')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.EMAIL_VERIFICATION.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.EMAIL_VERIFICATION.TTL,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend email verification token' })
   @ApiResponse({ status: 200, description: 'Verification email sent.' })
@@ -223,6 +244,13 @@ export class AuthController {
 
   // ===== PASSWORD RESET =====
   @Post('request-password-reset')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.PASSWORD_RESET_REQUEST.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.PASSWORD_RESET_REQUEST.TTL,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset' })
   @ApiBody({ type: RequestResetDto })
@@ -240,6 +268,13 @@ export class AuthController {
   }
 
   @Post('validate-reset-token')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.PASSWORD_RESET.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.PASSWORD_RESET.TTL,
+    },
+  })
   @ApiOperation({ summary: 'Validate password reset token' })
   @ApiBody({ type: ValidateResetTokenDto })
   @ApiResponse({ status: 200, description: 'Token is valid.' })
@@ -248,6 +283,13 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.PASSWORD_RESET.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.PASSWORD_RESET.TTL,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password with token' })
   @ApiBody({ type: ResetPasswordDto })
@@ -264,6 +306,13 @@ export class AuthController {
   // ===== GOOGLE AUTH (MOBILE / WEB id_token) =====
   // Mobile or web app can POST an id_token payload { id_token: '...' }
   @Post('google')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.OAUTH.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.OAUTH.TTL,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Google sign-in (id_token) — mobile/web' })
   @ApiBody({
@@ -280,6 +329,13 @@ export class AuthController {
 
   // ===== APPLE AUTH (MOBILE / WEB id_token) =====
   @Post('apple')
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH.OAUTH.LIMIT,
+      ttl: THROTTLE_LIMITS.AUTH.OAUTH.TTL,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Apple sign-in (id_token) — mobile/web' })
   @ApiBody({
