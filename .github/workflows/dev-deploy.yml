@@ -11,7 +11,7 @@ concurrency:
 
 env:
   NODE_VERSION: '22'
-  PNPM_VERSION: '9'
+  PNPM_VERSION: '10'
 
 jobs:
   # ===================
@@ -127,7 +127,7 @@ jobs:
     environment: development
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storytime_test
-      REDIS_URL: redis://:redis_password@localhost:6379
+      REDIS_URL: redis://localhost:6379
 
     services:
       postgres:
@@ -149,8 +149,7 @@ jobs:
         ports:
           - 6379:6379
         options: >-
-          --requirepass redis_password
-          --health-cmd "redis-cli -a redis_password ping"
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
