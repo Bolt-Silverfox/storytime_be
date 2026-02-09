@@ -3,10 +3,17 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { VoiceService } from '../voice/voice.service';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+} from '@/shared/constants/cache-keys.constants';
 import type {
   Kid,
   Avatar,
@@ -32,7 +39,21 @@ export class KidService {
   constructor(
     private prisma: PrismaService,
     private voiceService: VoiceService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
+
+  /**
+   * Invalidate kid-related caches
+   */
+  private async invalidateKidCaches(
+    kidId: string,
+    userId: string,
+  ): Promise<void> {
+    await Promise.all([
+      this.cacheManager.del(CACHE_KEYS.KID_PROFILE(kidId)),
+      this.cacheManager.del(CACHE_KEYS.USER_KIDS(userId)),
+    ]);
+  }
 
   // --- HELPER: Transforms the DB response for the Frontend ---
   // This ensures preferredVoiceId is ALWAYS the ElevenLabs ID (if available) (frontend specified smh)
@@ -72,10 +93,25 @@ export class KidService {
         parent: { select: { id: true, name: true, email: true } },
       },
     });
+
+    // Invalidate user's kids cache after creation
+    await this.cacheManager.del(CACHE_KEYS.USER_KIDS(userId));
+
     return this.transformKid(kid);
   }
 
+  /**
+   * Get all kids for a user
+   * Uses caching for improved performance (5-minute TTL)
+   */
   async findAllByUser(userId: string) {
+    // Check cache first
+    const cacheKey = CACHE_KEYS.USER_KIDS(userId);
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const kids = await this.prisma.kid.findMany({
       where: {
         parentId: userId,
@@ -91,7 +127,12 @@ export class KidService {
     });
 
     // Map every kid through the transformer
-    return kids.map((k) => this.transformKid(k));
+    const result = kids.map((k) => this.transformKid(k));
+
+    // Cache for 5 minutes
+    await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.USER_DATA);
+
+    return result;
   }
 
   async findOne(kidId: string, userId: string) {
@@ -196,6 +237,9 @@ export class KidService {
       },
     });
 
+    // Invalidate caches after update
+    await this.invalidateKidCaches(kidId, userId);
+
     return this.transformKid(updatedKid);
   }
 
@@ -216,12 +260,13 @@ export class KidService {
       throw new NotFoundException('Kid not found or access denied');
     }
 
+    let result;
     if (permanent) {
-      return this.prisma.kid.delete({
+      result = await this.prisma.kid.delete({
         where: { id: kidId },
       });
     } else {
-      return this.prisma.kid.update({
+      result = await this.prisma.kid.update({
         where: { id: kidId },
         data: {
           isDeleted: true,
@@ -229,6 +274,11 @@ export class KidService {
         },
       });
     }
+
+    // Invalidate caches after deletion
+    await this.invalidateKidCaches(kidId, userId);
+
+    return result;
   }
 
   /**
@@ -244,13 +294,18 @@ export class KidService {
     if (kid.parentId !== userId) throw new ForbiddenException('Access denied');
     if (!kid.isDeleted) throw new BadRequestException('Kid is not deleted');
 
-    return this.prisma.kid.update({
+    const restoredKid = await this.prisma.kid.update({
       where: { id: kidId },
       data: {
         isDeleted: false,
         deletedAt: null,
       },
     });
+
+    // Invalidate caches after restoration
+    await this.invalidateKidCaches(kidId, userId);
+
+    return restoredKid;
   }
 
   async createKids(userId: string, dtos: CreateKidDto[]) {
@@ -278,6 +333,9 @@ export class KidService {
         });
       }),
     );
+
+    // Invalidate user's kids cache after bulk creation
+    await this.cacheManager.del(CACHE_KEYS.USER_KIDS(userId));
 
     // Fetch them back to return full structures
     return this.findAllByUser(userId);

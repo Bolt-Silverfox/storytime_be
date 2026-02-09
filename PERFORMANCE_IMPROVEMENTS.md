@@ -135,12 +135,12 @@ const stories = await this.prisma.story.findMany({
 - `src/story/story.service.ts` (Lines 63-71) - Story cache invalidation
 - `src/admin/admin.service.ts` (Lines 75-81) - Dashboard caching
 
-### 2.2 Missing Cache Opportunities (P2 - Medium) ✅ PARTIALLY COMPLETED
+### 2.2 Missing Cache Opportunities (P2 - Medium) ✅ COMPLETED
 
 | Data | TTL | Cache Key Pattern | Status |
 |------|-----|-------------------|--------|
-| User preferences | 5 min | `user:${userId}:preferences` | ⏳ Pending |
-| Kid profiles | 5 min | `kid:${kidId}:profile` | ⏳ Pending |
+| User preferences | 5 min | `user:${userId}:preferences` | ✅ Implemented |
+| Kid profiles | 5 min | `user:${userId}:kids` | ✅ Implemented |
 | Story categories | 1 hour | `categories:all` | ✅ Implemented |
 | Themes | 1 hour | `themes:all` | ✅ Implemented |
 | Seasons | 1 hour | `seasons:all` | ✅ Implemented |
@@ -152,10 +152,10 @@ const stories = await this.prisma.story.findMany({
 - ✅ Static content caching (categories, themes, seasons, buddies) with 1-hour TTL
 - ✅ Subscription status caching (1-min TTL) - was already implemented
 - ✅ Cache invalidation on CRUD operations
+- ✅ User preferences caching (SettingsService) with 5-min TTL
+- ✅ Kid profiles caching (KidService) with 5-min TTL and cache invalidation on all CRUD operations
 
-**Remaining:**
-- [ ] Cache user preferences
-- [ ] Cache kid profiles
+**All caching opportunities implemented!**
 
 ### 2.3 Cache Invalidation Strategy (P2 - Medium)
 
@@ -1484,10 +1484,11 @@ await this.prisma.entity.createMany({
 - [x] Cache invalidation on CRUD operations
 - [x] Sequential operations optimization (Section 15)
 - [x] Prisma slow query logging (>100ms threshold in development)
+- [x] User preferences caching (SettingsService with 5-min TTL)
+- [x] Kid profiles caching (KidService with 5-min TTL + cache invalidation)
 
 ### In Progress 🔄
-- [ ] User preferences caching
-- [ ] Kid profiles caching
+*(No items currently in progress)*
 
 ### Not Recommended ⚠️
 - Module lazy loading (not beneficial for NestJS HTTP modules - see section 5.1)
