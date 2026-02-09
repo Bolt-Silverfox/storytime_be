@@ -140,36 +140,50 @@ export class StoryQuotaService {
   }
 
   /**
-   * Get or create usage record, calculating and granting pending weekly bonuses
+   * Get or create usage record, calculating and granting pending weekly bonuses.
+   * Bonuses only start accruing AFTER the user exhausts their base limit.
    */
   private async getOrCreateUsageWithBonus(userId: string) {
     const now = new Date();
     const currentMonth = this.getCurrentMonth();
+    const baseLimit = FREE_TIER_LIMITS.STORIES.BASE_LIMIT;
 
     return await this.prisma.$transaction(async (tx) => {
       let usage = await tx.userUsage.findUnique({ where: { userId } });
 
       if (!usage) {
         // Create new usage record for first-time user
+        // Don't set lastBonusGrantedAt yet - only set when base limit is exhausted
         usage = await tx.userUsage.create({
           data: {
             userId,
             currentMonth,
             uniqueStoriesRead: 0,
             bonusStories: 0,
-            lastBonusGrantedAt: now,
+            lastBonusGrantedAt: null,
           },
         });
         return usage;
       }
 
-      // Initialize lastBonusGrantedAt for existing users who don't have it set
-      // This enables bonus accrual for migrated users without granting retroactive bonuses
+      // Only start bonus accrual after user has exhausted base limit
+      const hasExhaustedBaseLimit = usage.uniqueStoriesRead >= baseLimit;
+
+      if (!hasExhaustedBaseLimit) {
+        // User still has base stories available, no bonus accrual yet
+        return usage;
+      }
+
+      // User has exhausted base limit - start or continue bonus accrual
       if (!usage.lastBonusGrantedAt) {
+        // First time hitting limit - start tracking bonus from now
         usage = await tx.userUsage.update({
           where: { userId },
           data: { lastBonusGrantedAt: now },
         });
+        this.logger.debug(
+          `User ${userId} exhausted base limit, bonus accrual started`,
+        );
         return usage;
       }
 
