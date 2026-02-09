@@ -103,7 +103,12 @@ export class StoryController {
   @ApiQuery({ name: 'recommended', required: false, type: String })
   @ApiQuery({ name: 'isMostLiked', required: false, type: String })
   @ApiQuery({ name: 'isSeasonal', required: false, type: String })
-  @ApiQuery({ name: 'topPicksFromUs', required: false, type: String, description: 'Get random top picks from us' })
+  @ApiQuery({
+    name: 'topPicksFromUs',
+    required: false,
+    type: String,
+    description: 'Get random top picks from us',
+  })
   @ApiQuery({ name: 'kidId', required: false, type: String })
   @ApiQuery({ name: 'age', required: false, type: String })
   @ApiQuery({ name: 'minAge', required: false, type: String })
