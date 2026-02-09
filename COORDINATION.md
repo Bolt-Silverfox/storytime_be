@@ -442,6 +442,25 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - Build passing
 
+### Instance 16 - ✅ Completed
+**Focus**: Database Transactions for UserService & AuthService
+**Timestamp**: 2026-02-09
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/user/user.service.ts` - Added atomic transactions:
+  - `updateUser()`: Transaction wraps avatar creation + user update (prevents orphaned avatars)
+  - `updateParentProfile()`: Transaction wraps deleteMany + create for learning expectations (prevents data loss)
+- `src/auth/auth.service.ts` - Added atomic transactions:
+  - `register()`: Transaction wraps user creation + notification preferences seeding (prevents orphaned users)
+  - `sendEmailVerification()`: Transaction wraps token deletion + creation (prevents token loss)
+  - `verifyEmail()`: Transaction wraps user update + token deletion (ensures consistency)
+  - Removed `NotificationPreferenceService` dependency - logic moved inline with proper Prisma enums
+  - Added imports: `NotificationCategory`, `NotificationType` from `@prisma/client`
+- `PERFORMANCE_IMPROVEMENTS.md` - Updated section 1.2 to mark transactions as COMPLETE
+
+**Status**: Complete - Build passing, auth tests passing
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
