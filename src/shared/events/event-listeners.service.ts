@@ -12,6 +12,8 @@ import {
   SubscriptionChangedEvent,
   SubscriptionCancelledEvent,
   KidCreatedEvent,
+  KidDeletedEvent,
+  NotificationSentEvent,
 } from './app-events';
 
 /**
@@ -54,9 +56,17 @@ export class EventListenersService {
   @OnEvent(AppEvents.KID_CREATED)
   handleKidCreated(event: KidCreatedEvent): void {
     this.logger.log(
-      `Kid profile created: ${event.kidId} for parent ${event.parentId}`,
+      `Kid profile created: ${event.kidId} (${event.name ?? 'unnamed'}) for parent ${event.parentId}`,
     );
     // Future: Analytics, onboarding triggers, etc.
+  }
+
+  @OnEvent(AppEvents.KID_DELETED)
+  handleKidDeleted(event: KidDeletedEvent): void {
+    this.logger.log(
+      `Kid profile deleted: ${event.kidId} for parent ${event.parentId}`,
+    );
+    // Future: Data cleanup, analytics, etc.
   }
 
   // =============================================================================
