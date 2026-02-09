@@ -1,12 +1,15 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
 import { systemAvatars } from '../../prisma/data';
+import { IAvatarRepository, AVATAR_REPOSITORY } from './repositories';
 
 @Injectable()
 export class AvatarSeederService implements OnModuleInit {
   private readonly logger = new Logger(AvatarSeederService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(AVATAR_REPOSITORY)
+    private readonly avatarRepository: IAvatarRepository,
+  ) {}
 
   async onModuleInit() {
     await this.seedSystemAvatars();
@@ -17,22 +20,15 @@ export class AvatarSeederService implements OnModuleInit {
       this.logger.log('Starting avatar seeding process...');
       this.logger.log(`Seeding ${systemAvatars.length} system avatars...`);
 
-      // Batch all upserts in a single transaction to avoid sequential queries
-      const upsertOperations = systemAvatars.map((avatarData) =>
-        this.prisma.avatar.upsert({
-          where: { name: avatarData.name },
-          update: { url: avatarData.url },
-          create: {
-            name: avatarData.name,
+      // Batch all upserts concurrently via repository
+      await Promise.all(
+        systemAvatars.map((avatarData) =>
+          this.avatarRepository.upsertByName(avatarData.name, {
             url: avatarData.url,
             isSystemAvatar: true,
-            isDeleted: false,
-            deletedAt: null,
-          },
-        }),
+          }),
+        ),
       );
-
-      await this.prisma.$transaction(upsertOperations);
 
       this.logger.log('System avatar seeding completed!');
     } catch (error) {
