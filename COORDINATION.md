@@ -224,7 +224,7 @@ git push origin integration/refactor-2026-02
 **Status**: Phase 2 complete. All four Auth & User domain extractions done.
 
 ### Instance 8 - ✅ Completed
-**Focus**: Phase 3 God Service Extractions (Notification Domain)
+**Focus**: Phase 3 God Service Extractions (Notification & Reports Domain)
 **Timestamp**: 2026-02-09
 **Branch**: `perf/improvements`
 
@@ -233,13 +233,19 @@ git push origin integration/refactor-2026-02
   - Methods: create, update, getForUser, getForKid, getById, toggleCategoryPreference, getUserPreferencesGrouped, updateUserPreferences, seedDefaultPreferences, delete, undoDelete
 - `src/notification/services/in-app-notification.service.ts` (NEW ~65 lines) - Extracted from NotificationService
   - Methods: getInAppNotifications, markAsRead, markAllAsRead
+- `src/reports/services/screen-time.service.ts` (NEW ~175 lines) - Extracted from ReportsService
+  - Methods: startScreenTimeSession, endScreenTimeSession, getTodayScreenTime, getScreenTimeForRange, getEffectiveDailyLimit, getDailyLimitStatus
 - Updated NotificationModule with new services as providers and exports
 - Updated NotificationController to use NotificationPreferenceService
 - Updated UserPreferencesController to use NotificationPreferenceService
 - Updated InAppNotificationController to use InAppNotificationService
+- Updated ReportsModule to include ScreenTimeService
+- Updated ReportsController to use ScreenTimeService for screen time endpoints
+- Updated ReportsService to delegate to ScreenTimeService
 - NotificationService reduced to core notification sending functionality (~323 lines)
+- ReportsService reduced from ~536 lines to ~337 lines
 
-**Status**: Phase 3 notification extractions complete. ScreenTimeService extraction remaining.
+**Status**: Phase 3 complete. All Notification & Reports domain extractions done.
 
 ### Instance 9 - ✅ Completed
 **Focus**: E2E Tests for Authentication Flows
@@ -327,6 +333,10 @@ Files currently being modified by other instances - avoid editing these:
 | `src/notification/notification.controller.ts` | Instance 8 | ✅ Done |
 | `src/notification/user-preferences.controller.ts` | Instance 8 | ✅ Done |
 | `src/notification/in-app-notification.controller.ts` | Instance 8 | ✅ Done |
+| `src/reports/services/screen-time.service.ts` | Instance 8 | ✅ Done |
+| `src/reports/reports.service.ts` | Instance 8 | ✅ Done |
+| `src/reports/reports.module.ts` | Instance 8 | ✅ Done |
+| `src/reports/reports.controller.ts` | Instance 8 | ✅ Done |
 | `test/auth.e2e-spec.ts` | Instance 9 | ✅ Done |
 | `test/jest-e2e.json` | Instance 9 | ✅ Done |
 | `src/admin/admin-user.service.ts` | Instance 10 | ✅ Done |
@@ -370,10 +380,10 @@ Available tasks from the roadmaps:
 - [x] Extract `UserDeletionService` from `UserService`
 - [x] Extract `UserPinService` from `UserService`
 
-**Phase 3: Notification & Reports** (Partially Complete - Instance 8)
+**Phase 3: Notification & Reports** ✅ COMPLETE *(Instance 8)*
 - [x] Extract `NotificationPreferenceService` from `NotificationService` *(Instance 8)*
 - [x] Extract `InAppNotificationService` from `NotificationService` *(Instance 8)*
-- [ ] Extract `ScreenTimeService` from `ReportsService`
+- [x] Extract `ScreenTimeService` from `ReportsService` *(Instance 8)*
 
 **Phase 4: Remaining Extractions** (Partially Complete - Instance 10)
 - [x] Extract `AdminUserService` from `AdminService` *(Instance 10)*
