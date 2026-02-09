@@ -8,6 +8,7 @@ import { GeminiService } from './gemini.service';
 import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
 import { StoryProgressService } from './story-progress.service';
+import { StoryRecommendationService } from './story-recommendation.service';
 import { DailyChallengeService } from './daily-challenge.service';
 import { StoryQuotaService } from './story-quota.service';
 import { VoiceModule } from '../voice/voice.module';
@@ -27,12 +28,13 @@ import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle
   providers: [
     StoryService,
     StoryProgressService,
+    StoryRecommendationService,
     DailyChallengeService,
     GeminiService,
     StoryQuotaService,
     StoryAccessGuard,
     SubscriptionThrottleGuard,
   ],
-  exports: [StoryService, StoryProgressService, DailyChallengeService, StoryQuotaService]
+  exports: [StoryService, StoryProgressService, StoryRecommendationService, DailyChallengeService, StoryQuotaService]
 })
 export class StoryModule {}

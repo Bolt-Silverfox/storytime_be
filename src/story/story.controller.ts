@@ -64,6 +64,7 @@ import { VoiceType, StoryContentAudioDto } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { StoryService } from './story.service';
 import { StoryProgressService } from './story-progress.service';
+import { StoryRecommendationService } from './story-recommendation.service';
 import { DailyChallengeService } from './daily-challenge.service';
 import { VoiceService } from '../voice/voice.service';
 import { TextToSpeechService } from './text-to-speech.service';
@@ -90,6 +91,7 @@ export class StoryController {
   constructor(
     private readonly storyService: StoryService,
     private readonly storyProgressService: StoryProgressService,
+    private readonly storyRecommendationService: StoryRecommendationService,
     private readonly dailyChallengeService: DailyChallengeService,
     private readonly voiceService: VoiceService,
     private readonly textToSpeechService: TextToSpeechService,
@@ -197,7 +199,7 @@ export class StoryController {
     @Query('limitTopLiked', new DefaultValuePipe(5), ParseIntPipe)
     limitTopLiked: number,
   ) {
-    return this.storyService.getHomePageStories(
+    return this.storyRecommendationService.getHomePageStories(
       req.authUserData.userId,
       limitRecommended,
       limitSeasonal,
@@ -521,7 +523,7 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Body() body: RestrictStoryDto,
   ) {
-    return this.storyService.restrictStory({
+    return this.storyRecommendationService.restrictStory({
       ...body,
       userId: req.authUserData.userId,
     });
@@ -536,7 +538,7 @@ export class StoryController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyService.unrestrictStory(
+    return this.storyRecommendationService.unrestrictStory(
       kidId,
       storyId,
       req.authUserData.userId,
@@ -551,7 +553,7 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
   ) {
-    return this.storyService.getRestrictedStories(
+    return this.storyRecommendationService.getRestrictedStories(
       kidId,
       req.authUserData.userId,
     );
@@ -1245,7 +1247,7 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Body() body: ParentRecommendationDto,
   ) {
-    return this.storyService.recommendStoryToKid(req.authUserData.userId, body);
+    return this.storyRecommendationService.recommendStoryToKid(req.authUserData.userId, body);
   }
 
   @Get('recommendations/kid/:kidId')
@@ -1277,7 +1279,7 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
   ) {
-    return this.storyService.getKidRecommendations(
+    return this.storyRecommendationService.getKidRecommendations(
       kidId,
       req.authUserData.userId,
     );
@@ -1315,7 +1317,7 @@ export class StoryController {
     @Param('recommendationId') recommendationId: string,
     @Query('permanent') permanent: boolean = false,
   ) {
-    return this.storyService.deleteRecommendation(
+    return this.storyRecommendationService.deleteRecommendation(
       recommendationId,
       req.authUserData.userId,
       permanent,
@@ -1350,7 +1352,7 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
   ) {
-    return this.storyService.getRecommendationStats(
+    return this.storyRecommendationService.getRecommendationStats(
       kidId,
       req.authUserData.userId,
     );
@@ -1377,7 +1379,7 @@ export class StoryController {
   async getTopPicksFromParents(
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
   ) {
-    return this.storyService.getTopPicksFromParents(Math.min(limit, 50));
+    return this.storyRecommendationService.getTopPicksFromParents(Math.min(limit, 50));
   }
 
   @Get('top-picks-from-us')
@@ -1401,6 +1403,6 @@ export class StoryController {
   async getTopPicksFromUs(
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
   ) {
-    return this.storyService.getTopPicksFromUs(Math.min(limit, 20));
+    return this.storyRecommendationService.getTopPicksFromUs(Math.min(limit, 20));
   }
 }

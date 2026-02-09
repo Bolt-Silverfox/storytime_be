@@ -318,6 +318,28 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - Build passing, admin controller tests passing
 
+### Instance 11 - ✅ Completed
+**Focus**: Phase 4 God Service Extractions (StoryRecommendationService)
+**Timestamp**: 2026-02-09
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/story/story-recommendation.service.ts` (NEW ~510 lines) - Extracted from StoryService
+  - Methods: getHomePageStories, getRelevantSeasons, restrictStory, unrestrictStory, getRestrictedStories,
+    recommendStoryToKid, getKidRecommendations, deleteRecommendation, getRecommendationStats,
+    getTopPicksFromParents, getTopPicksFromUs, getRandomStoryIds, toRecommendationResponse (private)
+  - Constant: RECENT_SEASON_THRESHOLD_DAYS
+- `src/story/story.service.ts` - Removed extracted methods, added delegation via forwardRef injection:
+  - getStories() now delegates getRelevantSeasons() and getRandomStoryIds() to StoryRecommendationService
+  - StoryService reduced from ~1984 lines to ~1505 lines
+- `src/story/story.module.ts` - Added StoryRecommendationService to providers and exports
+- `src/story/story.controller.ts` - Updated 10 endpoints to use StoryRecommendationService:
+  - getHomePageStories, restrictStory, unrestrictStory, getRestrictedStories,
+    recommendStoryToKid, getKidRecommendations, deleteRecommendation,
+    getRecommendationStats, getTopPicksFromParents, getTopPicksFromUs
+
+**Status**: Complete - Build passing
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
@@ -376,6 +398,10 @@ Files currently being modified by other instances - avoid editing these:
 | `src/admin/admin.module.ts` | Instance 10 | ✅ Done |
 | `src/admin/admin.controller.ts` | Instance 10 | ✅ Done |
 | `src/admin/tests/admin.controller.spec.ts` | Instance 10 | ✅ Done |
+| `src/story/story-recommendation.service.ts` | Instance 11 | ✅ Done |
+| `src/story/story.service.ts` | Instance 11 | ✅ Done |
+| `src/story/story.module.ts` | Instance 11 | ✅ Done |
+| `src/story/story.controller.ts` | Instance 11 | ✅ Done |
 
 ---
 
@@ -417,11 +443,11 @@ Available tasks from the roadmaps:
 - [x] Extract `InAppNotificationService` from `NotificationService` *(Instance 8)*
 - [x] Extract `ScreenTimeService` from `ReportsService` *(Instance 8)*
 
-**Phase 4: Remaining Extractions** (Partially Complete - Instance 10)
+**Phase 4: Remaining Extractions** (Partially Complete - Instance 10 & 11)
 - [x] Extract `AdminUserService` from `AdminService` *(Instance 10)*
 - [x] Extract `AdminStoryService` from `AdminService` *(Instance 10)*
 - [ ] Extract `StoryGenerationService` from `StoryService`
-- [ ] Extract `StoryRecommendationService` from `StoryService`
+- [x] Extract `StoryRecommendationService` from `StoryService` *(Instance 11)*
 - [ ] Extract `BuddySelectionService` from `StoryBuddyService`
 - [ ] Extract `BuddyMessagingService` from `StoryBuddyService`
 
@@ -433,7 +459,7 @@ Available tasks from the roadmaps:
 develop-v0.0.1 (base)
     └── integration/refactor-2026-02 (shared integration - source of truth)
             ├── fix/format-and-lint (merged ✅)
-            ├── perf/improvements (Instance 2, 6, 7 & 8)
+            ├── perf/improvements (Instance 2, 6, 7, 8 & 11)
             ├── feat/gemini-retry-logic (merged ✅)
             ├── fix/bug-fixes (Instance 4, 9 & 10)
             └── perf/resilience-improvements (Instance 5 - PR #219)
