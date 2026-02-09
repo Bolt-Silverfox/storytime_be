@@ -14,6 +14,8 @@ import {
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { AdminAnalyticsService } from './admin-analytics.service';
+import { AdminUserService } from './admin-user.service';
+import { AdminStoryService } from './admin-story.service';
 import { Admin } from './decorators/admin.decorator';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import {
@@ -56,6 +58,8 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly adminAnalyticsService: AdminAnalyticsService,
+    private readonly adminUserService: AdminUserService,
+    private readonly adminStoryService: AdminStoryService,
   ) {}
 
   // =====================
@@ -641,7 +645,7 @@ export class AdminController {
     filters.page = page;
     filters.limit = limit;
 
-    const result = await this.adminService.getAllUsers(filters);
+    const result = await this.adminUserService.getAllUsers(filters);
     return {
       statusCode: 200,
       message: 'Users retrieved successfully',
@@ -714,7 +718,7 @@ export class AdminController {
     filters.limit = limit;
 
     const modifiedFilters = { ...filters, hasActiveSubscription: true };
-    const result = await this.adminService.getAllUsers(modifiedFilters);
+    const result = await this.adminUserService.getAllUsers(modifiedFilters);
     return {
       statusCode: 200,
       message: 'Paid users retrieved successfully',
@@ -784,7 +788,7 @@ export class AdminController {
     filters.limit = limit;
 
     const modifiedFilters = { ...filters, hasActiveSubscription: false };
-    const result = await this.adminService.getAllUsers(modifiedFilters);
+    const result = await this.adminUserService.getAllUsers(modifiedFilters);
     return {
       statusCode: 200,
       message: 'Unpaid users retrieved successfully',
@@ -959,7 +963,7 @@ export class AdminController {
     },
   })
   async getUserById(@Param('userId') userId: string) {
-    const data = await this.adminService.getUserById(userId);
+    const data = await this.adminUserService.getUserById(userId);
     return {
       statusCode: 200,
       message: 'User details retrieved successfully',
@@ -1025,7 +1029,7 @@ export class AdminController {
     },
   })
   async createAdmin(@Body() createAdminDto: CreateAdminDto) {
-    const data = await this.adminService.createAdmin(createAdminDto);
+    const data = await this.adminUserService.createAdmin(createAdminDto);
     return {
       statusCode: 201,
       message: 'Admin user created successfully',
@@ -1102,7 +1106,7 @@ export class AdminController {
     @Param('userId') userId: string,
     @Body() updateUserDto: UpdateUserDto,
   ) {
-    const data = await this.adminService.updateUser(
+    const data = await this.adminUserService.updateUser(
       userId,
       updateUserDto,
       req.authUserData.userId,
@@ -1154,7 +1158,7 @@ export class AdminController {
     @Param('userId') userId: string,
     @Query('permanent') permanent?: boolean,
   ) {
-    await this.adminService.deleteUser(
+    await this.adminUserService.deleteUser(
       userId,
       permanent,
       req.authUserData.userId,
@@ -1206,7 +1210,7 @@ export class AdminController {
     },
   })
   async restoreUser(@Param('userId') userId: string) {
-    const data = await this.adminService.restoreUser(userId);
+    const data = await this.adminUserService.restoreUser(userId);
     return {
       statusCode: 200,
       message: 'User restored successfully',
@@ -1275,7 +1279,7 @@ export class AdminController {
     @Param('userId') userId: string,
     @Body() updateUserRoleDto: UpdateUserRoleDto,
   ) {
-    const data = await this.adminService.updateUser(
+    const data = await this.adminUserService.updateUser(
       userId,
       { role: updateUserRoleDto.role },
       req.authUserData.userId,
@@ -1329,7 +1333,7 @@ export class AdminController {
     },
   })
   async bulkUserAction(@Body() bulkActionDto: BulkActionDto) {
-    const result = await this.adminService.bulkUserAction(bulkActionDto);
+    const result = await this.adminUserService.bulkUserAction(bulkActionDto);
     return {
       statusCode: 200,
       message: 'Bulk action completed successfully',
@@ -1449,7 +1453,7 @@ export class AdminController {
     },
   })
   async getAllStories(@Query() filters: StoryFilterDto) {
-    const result = await this.adminService.getAllStories(filters);
+    const result = await this.adminStoryService.getAllStories(filters);
     return {
       statusCode: 200,
       message: 'Stories retrieved successfully',
@@ -1545,7 +1549,7 @@ export class AdminController {
     },
   })
   async getStoryById(@Param('storyId') storyId: string) {
-    const data = await this.adminService.getStoryById(storyId);
+    const data = await this.adminStoryService.getStoryById(storyId);
     return {
       statusCode: 200,
       message: 'Story details retrieved successfully',
@@ -1592,7 +1596,7 @@ export class AdminController {
     },
   })
   async toggleStoryRecommendation(@Param('storyId') storyId: string) {
-    const data = await this.adminService.toggleStoryRecommendation(storyId);
+    const data = await this.adminStoryService.toggleStoryRecommendation(storyId);
     return {
       statusCode: 200,
       message: 'Story recommendation toggled successfully',
@@ -1639,7 +1643,7 @@ export class AdminController {
     @Param('storyId') storyId: string,
     @Query('permanent') permanent?: boolean,
   ) {
-    await this.adminService.deleteStory(storyId, permanent);
+    await this.adminStoryService.deleteStory(storyId, permanent);
     return {
       statusCode: 204,
       message: permanent ? 'Story permanently deleted' : 'Story soft deleted',
@@ -1693,7 +1697,7 @@ export class AdminController {
     },
   })
   async getCategories() {
-    const data = await this.adminService.getCategories();
+    const data = await this.adminStoryService.getCategories();
     return {
       statusCode: 200,
       message: 'Categories retrieved successfully',
@@ -1741,7 +1745,7 @@ export class AdminController {
     },
   })
   async getThemes() {
-    const data = await this.adminService.getThemes();
+    const data = await this.adminStoryService.getThemes();
     return {
       statusCode: 200,
       message: 'Themes retrieved successfully',
