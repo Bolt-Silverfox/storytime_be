@@ -154,10 +154,9 @@ export class NotificationPreferenceService {
       PrismaNotificationType.push,
     ];
 
-    const results: NotificationPreferenceDto[] = [];
-
-    for (const type of channels) {
-      const pref = await this.prisma.notificationPreference.upsert({
+    // Batch all upserts in a single transaction to avoid sequential queries
+    const upsertOperations = channels.map((type) =>
+      this.prisma.notificationPreference.upsert({
         where: {
           userId_category_type: {
             userId,
@@ -176,11 +175,12 @@ export class NotificationPreferenceService {
           isDeleted: false, // Restore if previously soft deleted
           deletedAt: null,
         },
-      });
-      results.push(this.toNotificationPreferenceDto(pref));
-    }
+      }),
+    );
 
-    return results;
+    const prefs = await this.prisma.$transaction(upsertOperations);
+
+    return prefs.map((p) => this.toNotificationPreferenceDto(p));
   }
 
   /**

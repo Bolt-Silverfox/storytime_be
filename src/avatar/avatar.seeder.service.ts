@@ -15,45 +15,11 @@ export class AvatarSeederService implements OnModuleInit {
   private async seedSystemAvatars() {
     try {
       this.logger.log('Starting avatar seeding process...');
-      const existingAvatarsCount = await this.prisma.avatar.count({
-        where: { isSystemAvatar: true },
-      });
-
-      if (existingAvatarsCount >= systemAvatars.length) {
-        for (const avatarData of systemAvatars) {
-          const existingAvatar = await this.prisma.avatar.findFirst({
-            where: {
-              name: avatarData.name,
-              isSystemAvatar: true,
-            },
-          });
-          if (!existingAvatar) {
-            this.logger.log(
-              `Seeding missing system avatar: ${avatarData.name}`,
-            );
-            await this.prisma.avatar.create({
-              data: {
-                name: avatarData.name,
-                url: avatarData.url,
-                isSystemAvatar: true,
-                isDeleted: false,
-                deletedAt: null,
-              },
-            });
-          } else {
-            await this.prisma.avatar.update({
-              where: { id: existingAvatar.id },
-              data: { url: avatarData.url },
-            });
-            this.logger.log(`Updated system avatar URL: ${avatarData.name}`);
-          }
-        }
-      }
-
-      // 3. Populate avatars
       this.logger.log(`Seeding ${systemAvatars.length} system avatars...`);
-      for (const avatarData of systemAvatars) {
-        await this.prisma.avatar.upsert({
+
+      // Batch all upserts in a single transaction to avoid sequential queries
+      const upsertOperations = systemAvatars.map((avatarData) =>
+        this.prisma.avatar.upsert({
           where: { name: avatarData.name },
           update: { url: avatarData.url },
           create: {
@@ -63,9 +29,11 @@ export class AvatarSeederService implements OnModuleInit {
             isDeleted: false,
             deletedAt: null,
           },
-        });
-        this.logger.log(`Upserted system avatar: ${avatarData.name}`);
-      }
+        }),
+      );
+
+      await this.prisma.$transaction(upsertOperations);
+
       this.logger.log('System avatar seeding completed!');
     } catch (error) {
       this.logger.error('Error seeding system avatars:', error);

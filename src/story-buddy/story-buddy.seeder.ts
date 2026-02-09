@@ -23,47 +23,21 @@ export class StoryBuddySeederService implements OnModuleInit {
     this.logger.log('🌟 Seeding story buddies...');
 
     try {
-      // Get existing buddies to avoid duplicates
-      const existingBuddies = await prisma.storyBuddy.findMany({
-        select: { name: true },
+      // Use createMany with skipDuplicates for efficient batch insert
+      const result = await prisma.storyBuddy.createMany({
+        data: storyBuddiesData,
+        skipDuplicates: true,
       });
 
-      const existingBuddyNames = new Set(
-        existingBuddies.map((buddy) => buddy.name),
-      );
-
-      const buddiesToCreate = storyBuddiesData.filter(
-        (buddyData) => !existingBuddyNames.has(buddyData.name),
-      );
-
-      if (buddiesToCreate.length === 0) {
+      if (result.count === 0) {
         this.logger.log(
           '✅ All story buddies already exist, skipping creation.',
         );
-        return;
+      } else {
+        this.logger.log(
+          `✨ Story buddies seeding completed! Created ${result.count} new buddies.`,
+        );
       }
-
-      this.logger.log(
-        `📝 Creating ${buddiesToCreate.length} new story buddies...`,
-      );
-
-      for (const buddyData of buddiesToCreate) {
-        try {
-          const buddy = await prisma.storyBuddy.create({
-            data: buddyData,
-          });
-          this.logger.log(`✅ Created buddy: ${buddy.displayName}`);
-        } catch (error) {
-          this.logger.error(
-            `❌ Error creating buddy ${buddyData.name}:`,
-            error,
-          );
-        }
-      }
-
-      this.logger.log(
-        `✨ Story buddies seeding completed! Created ${buddiesToCreate.length} new buddies.`,
-      );
     } catch (error) {
       this.logger.error('❌ Error during story buddies seeding:', error);
       throw error;
@@ -77,40 +51,19 @@ export async function seedStoryBuddies() {
   logger.log('🌟 Seeding story buddies...');
 
   try {
-    // Get existing buddies to avoid duplicates
-    const existingBuddies = await prisma.storyBuddy.findMany({
-      select: { name: true },
+    // Use createMany with skipDuplicates for efficient batch insert
+    const result = await prisma.storyBuddy.createMany({
+      data: storyBuddiesData,
+      skipDuplicates: true,
     });
 
-    const existingBuddyNames = new Set(
-      existingBuddies.map((buddy) => buddy.name),
-    );
-
-    const buddiesToCreate = storyBuddiesData.filter(
-      (buddyData) => !existingBuddyNames.has(buddyData.name),
-    );
-
-    if (buddiesToCreate.length === 0) {
+    if (result.count === 0) {
       logger.log('✅ All story buddies already exist, skipping creation.');
-      return;
+    } else {
+      logger.log(
+        `✨ Story buddies seeding completed! Created ${result.count} new buddies.`,
+      );
     }
-
-    logger.log(`📝 Creating ${buddiesToCreate.length} new story buddies...`);
-
-    for (const buddyData of buddiesToCreate) {
-      try {
-        const buddy = await prisma.storyBuddy.create({
-          data: buddyData,
-        });
-        logger.log(`✅ Created buddy: ${buddy.displayName}`);
-      } catch (error) {
-        logger.error(`❌ Error creating buddy ${buddyData.name}:`, error);
-      }
-    }
-
-    logger.log(
-      `✨ Story buddies seeding completed! Created ${buddiesToCreate.length} new buddies.`,
-    );
   } catch (error) {
     logger.error('❌ Error during story buddies seeding:', error);
     throw error;
