@@ -6,12 +6,14 @@ import {
   ApiParam,
   ApiBody,
 } from '@nestjs/swagger';
-import { NotificationService } from './notification.service';
+import { NotificationPreferenceService } from './services/notification-preference.service';
 
 @ApiTags('users')
 @Controller('users')
 export class UserPreferencesController {
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(
+    private readonly notificationPreferenceService: NotificationPreferenceService,
+  ) {}
 
   @Get(':userId/notification-preferences')
   @ApiOperation({
@@ -39,7 +41,7 @@ export class UserPreferencesController {
     },
   })
   async getUserPreferences(@Param('userId') userId: string) {
-    return this.notificationService.getUserPreferencesGrouped(userId);
+    return this.notificationPreferenceService.getUserPreferencesGrouped(userId);
   }
 
   @Patch(':userId/notification-preferences')
@@ -78,6 +80,6 @@ export class UserPreferencesController {
     @Param('userId') userId: string,
     @Body() preferences: Record<string, boolean>,
   ) {
-    return this.notificationService.updateUserPreferences(userId, preferences);
+    return this.notificationPreferenceService.updateUserPreferences(userId, preferences);
   }
 }

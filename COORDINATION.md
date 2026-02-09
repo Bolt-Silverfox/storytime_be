@@ -223,6 +223,24 @@ git push origin integration/refactor-2026-02
 
 **Status**: Phase 2 complete. All four Auth & User domain extractions done.
 
+### Instance 8 - ✅ Completed
+**Focus**: Phase 3 God Service Extractions (Notification Domain)
+**Timestamp**: 2026-02-09
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/notification/services/notification-preference.service.ts` (NEW ~370 lines) - Extracted from NotificationService
+  - Methods: create, update, getForUser, getForKid, getById, toggleCategoryPreference, getUserPreferencesGrouped, updateUserPreferences, seedDefaultPreferences, delete, undoDelete
+- `src/notification/services/in-app-notification.service.ts` (NEW ~65 lines) - Extracted from NotificationService
+  - Methods: getInAppNotifications, markAsRead, markAllAsRead
+- Updated NotificationModule with new services as providers and exports
+- Updated NotificationController to use NotificationPreferenceService
+- Updated UserPreferencesController to use NotificationPreferenceService
+- Updated InAppNotificationController to use InAppNotificationService
+- NotificationService reduced to core notification sending functionality (~323 lines)
+
+**Status**: Phase 3 notification extractions complete. ScreenTimeService extraction remaining.
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
@@ -264,6 +282,12 @@ Files currently being modified by other instances - avoid editing these:
 | `src/auth/auth.controller.ts` | Instance 7 | ✅ Done |
 | `src/user/user.module.ts` | Instance 7 | ✅ Done |
 | `src/user/user.controller.ts` | Instance 7 | ✅ Done |
+| `src/notification/services/notification-preference.service.ts` | Instance 8 | ✅ Done |
+| `src/notification/services/in-app-notification.service.ts` | Instance 8 | ✅ Done |
+| `src/notification/notification.module.ts` | Instance 8 | ✅ Done |
+| `src/notification/notification.controller.ts` | Instance 8 | ✅ Done |
+| `src/notification/user-preferences.controller.ts` | Instance 8 | ✅ Done |
+| `src/notification/in-app-notification.controller.ts` | Instance 8 | ✅ Done |
 
 ---
 
@@ -300,9 +324,9 @@ Available tasks from the roadmaps:
 - [x] Extract `UserDeletionService` from `UserService`
 - [x] Extract `UserPinService` from `UserService`
 
-**Phase 3: Notification & Reports**
-- [ ] Extract `NotificationPreferenceService` from `NotificationService`
-- [ ] Extract `InAppNotificationService` from `NotificationService`
+**Phase 3: Notification & Reports** (Partially Complete - Instance 8)
+- [x] Extract `NotificationPreferenceService` from `NotificationService` *(Instance 8)*
+- [x] Extract `InAppNotificationService` from `NotificationService` *(Instance 8)*
 - [ ] Extract `ScreenTimeService` from `ReportsService`
 
 **Phase 4: Remaining Extractions**
@@ -321,7 +345,7 @@ Available tasks from the roadmaps:
 develop-v0.0.1 (base)
     └── integration/refactor-2026-02 (shared integration)
             ├── fix/format-and-lint (merged ✅)
-            ├── perf/improvements (Instance 2 & 6)
+            ├── perf/improvements (Instance 2, 6, 7 & 8)
             ├── feat/gemini-retry-logic (merged ✅)
             ├── fix/bug-fixes (Instance 4)
             └── perf/resilience-improvements (Instance 5 - PR #219)
