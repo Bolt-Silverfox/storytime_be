@@ -10,6 +10,7 @@ import { StoryService } from './story.service';
 import { StoryProgressService } from './story-progress.service';
 import { StoryRecommendationService } from './story-recommendation.service';
 import { DailyChallengeService } from './daily-challenge.service';
+import { StoryGenerationService } from './story-generation.service';
 import { StoryQuotaService } from './story-quota.service';
 import { VoiceModule } from '../voice/voice.module';
 import { StoryAccessGuard } from '@/shared/guards/story-access.guard';
@@ -30,11 +31,12 @@ import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle
     StoryProgressService,
     StoryRecommendationService,
     DailyChallengeService,
+    StoryGenerationService,
     GeminiService,
     StoryQuotaService,
     StoryAccessGuard,
     SubscriptionThrottleGuard,
   ],
-  exports: [StoryService, StoryProgressService, StoryRecommendationService, DailyChallengeService, StoryQuotaService]
+  exports: [StoryService, StoryProgressService, StoryRecommendationService, DailyChallengeService, StoryGenerationService, StoryQuotaService]
 })
 export class StoryModule {}
