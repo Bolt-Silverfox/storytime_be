@@ -6,6 +6,7 @@ import { Logger } from '@nestjs/common';
 
 async function backfillDuration() {
   const logger = new Logger('BackfillDuration');
+  const BATCH_SIZE = 100; // Process stories in batches to avoid memory issues
 
   try {
     const app = await NestFactory.createApplicationContext(StoryModule);
@@ -29,9 +30,9 @@ async function backfillDuration() {
 
     logger.log(`Found ${stories.length} stories without duration`);
 
-    let updated = 0;
+    // Prepare update data for all stories
+    const updates: { id: string; durationSeconds: number }[] = [];
     for (const story of stories) {
-      // Calculate duration from wordCount if available, otherwise from textContent
       let durationSeconds = 0;
 
       if (story.wordCount && story.wordCount > 0) {
@@ -45,15 +46,29 @@ async function backfillDuration() {
       }
 
       if (durationSeconds > 0) {
-        await prisma.story.update({
-          where: { id: story.id },
-          data: { durationSeconds },
-        });
-        updated++;
+        updates.push({ id: story.id, durationSeconds });
       }
     }
 
-    logger.log(`Backfill completed: ${updated} stories updated`);
+    logger.log(`Preparing to update ${updates.length} stories in batches of ${BATCH_SIZE}...`);
+
+    // Process updates in batches using transactions
+    let totalUpdated = 0;
+    for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+      const batch = updates.slice(i, i + BATCH_SIZE);
+      const updateOperations = batch.map((update) =>
+        prisma.story.update({
+          where: { id: update.id },
+          data: { durationSeconds: update.durationSeconds },
+        }),
+      );
+
+      await prisma.$transaction(updateOperations);
+      totalUpdated += batch.length;
+      logger.log(`Processed ${totalUpdated}/${updates.length} stories...`);
+    }
+
+    logger.log(`Backfill completed: ${totalUpdated} stories updated`);
     await app.close();
     process.exit(0);
   } catch (error) {
