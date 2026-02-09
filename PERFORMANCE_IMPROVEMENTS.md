@@ -407,21 +407,29 @@ Large services may cause memory issues:
 | Memory usage | Resource planning | P2 | Health check |
 | Queue depth | Processing backlog | P1 | BullMQ metrics |
 
-**Prisma Query Logging:**
-```typescript
-// prisma/prisma.service.ts
-this.prisma.$use(async (params, next) => {
-  const before = Date.now();
-  const result = await next(params);
-  const after = Date.now();
+**Prisma Query Logging:** ✅ IMPLEMENTED
 
-  if (after - before > 100) { // Log slow queries > 100ms
-    this.logger.warn(
-      `Slow query: ${params.model}.${params.action} took ${after - before}ms`
-    );
-  }
-  return result;
-});
+```typescript
+// prisma/prisma.service.ts - Using event-based logging (Prisma 6.x compatible)
+const SLOW_QUERY_THRESHOLD_MS = 100;
+
+// In constructor - enable query event logging in development
+log: process.env.NODE_ENV === 'development'
+  ? [
+      { emit: 'event', level: 'query' },
+      { emit: 'stdout', level: 'warn' },
+      { emit: 'stdout', level: 'error' },
+    ]
+  : [{ emit: 'stdout', level: 'error' }],
+
+// Set up query event listener
+private setupQueryLogging(): void {
+  this.$on('query', (e: Prisma.QueryEvent) => {
+    if (e.duration > SLOW_QUERY_THRESHOLD_MS) {
+      this.logger.warn(`Slow query detected (${e.duration}ms): ${e.query}`);
+    }
+  });
+}
 ```
 
 **Cache Metrics Interceptor:**
@@ -477,7 +485,7 @@ sdk.start();
 - Queue depth and processing time
 
 **Action Items:**
-- [ ] Add Prisma query logging middleware
+- [x] Add Prisma query logging middleware ✅
 - [ ] Implement cache metrics
 - [ ] Set up OpenTelemetry SDK
 - [ ] Create Grafana dashboards
@@ -1475,6 +1483,7 @@ await this.prisma.entity.createMany({
 - [x] Static content caching (categories, themes, seasons, story buddies)
 - [x] Cache invalidation on CRUD operations
 - [x] Sequential operations optimization (Section 15)
+- [x] Prisma slow query logging (>100ms threshold in development)
 
 ### In Progress 🔄
 - [ ] User preferences caching
@@ -1527,7 +1536,7 @@ await this.prisma.entity.createMany({
 3. ~~**Add request timeouts to AI providers**~~ ✅ *(Instance 3 - GeminiService)*
 4. **Use `select` in list queries** - Reduces data transfer
 5. ~~**Replace sequential queries with batch**~~ ✅ *(Instance 4 & 5)*
-6. **Add Prisma query logging** - Identify slow queries immediately
+6. ~~**Add Prisma query logging**~~ ✅ Slow query logging (>100ms) in development
 7. **Implement cursor pagination** - Better performance for infinite scroll
 8. ~~**Add compression middleware**~~ ✅ Added with 1KB threshold
 
