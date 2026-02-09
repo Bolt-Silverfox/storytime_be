@@ -377,6 +377,37 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - All 84 tests passing (43 auth + 41 user), build passing
 
+### Instance 13 - ✅ Completed
+**Focus**: Phase 4 God Service Extractions (StoryGenerationService)
+**Timestamp**: 2026-02-09
+**Branch**: `perf/resilience-improvements`
+
+**Changes Made**:
+- `src/story/story-generation.service.ts` (NEW ~340 lines) - Extracted from StoryService
+  - Methods: generateStoryWithAI, generateStoryForKid, persistGeneratedStory, calculateDurationSeconds
+  - Dependencies: PrismaService, CACHE_MANAGER, GeminiService, TextToSpeechService
+- `src/story/story.service.ts` - Removed generation methods (~280 lines removed)
+  - Removed: WORDS_PER_MINUTE constant, calculateDurationSeconds, generateStoryWithAI, generateStoryForKid, persistGeneratedStory
+  - Removed: geminiService from constructor
+- `src/story/story.module.ts` - Added StoryGenerationService to providers and exports
+- `src/story/story.controller.ts` - Updated to use StoryGenerationService for generation endpoints
+- `src/story/scripts/backfill-duration.ts` - Updated to use StoryGenerationService
+
+**Status**: Complete - Build passing
+
+### Instance 14 - ✅ Completed
+**Focus**: Phase 4 God Service Extractions (BuddySelectionService)
+**Timestamp**: 2026-02-09
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/story-buddy/buddy-selection.service.ts` (NEW ~190 lines) - Extracted from StoryBuddyService
+  - Methods: selectBuddyForKid, getBuddyWelcome, getKidCurrentBuddy, logBuddyInteraction (private)
+- `src/story-buddy/story-buddy.service.ts` - Updated to delegate to BuddySelectionService
+- `src/story-buddy/story-buddy.module.ts` - Added BuddySelectionService to providers and exports
+
+**Status**: Complete - Build passing
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
@@ -436,13 +467,18 @@ Files currently being modified by other instances - avoid editing these:
 | `src/admin/admin.controller.ts` | Instance 10 | ✅ Done |
 | `src/admin/tests/admin.controller.spec.ts` | Instance 10 | ✅ Done |
 | `src/story/story-recommendation.service.ts` | Instance 11 | ✅ Done |
-| `src/story/story.service.ts` | Instance 11 | ✅ Done |
-| `src/story/story.module.ts` | Instance 11 | ✅ Done |
-| `src/story/story.controller.ts` | Instance 11 | ✅ Done |
+| `src/story/story.service.ts` | Instance 11 & 13 | ✅ Done |
+| `src/story/story.module.ts` | Instance 11 & 13 | ✅ Done |
+| `src/story/story.controller.ts` | Instance 11 & 13 | ✅ Done |
 | `src/auth/services/oauth.service.spec.ts` | Instance 12 | ✅ Done |
 | `src/auth/services/onboarding.service.spec.ts` | Instance 12 | ✅ Done |
 | `src/user/services/user-deletion.service.spec.ts` | Instance 12 | ✅ Done |
 | `src/user/services/user-pin.service.spec.ts` | Instance 12 | ✅ Done |
+| `src/story/story-generation.service.ts` | Instance 13 | ✅ Done |
+| `src/story/scripts/backfill-duration.ts` | Instance 13 | ✅ Done |
+| `src/story-buddy/buddy-selection.service.ts` | Instance 14 | ✅ Done |
+| `src/story-buddy/story-buddy.service.ts` | Instance 14 | ✅ Done |
+| `src/story-buddy/story-buddy.module.ts` | Instance 14 | ✅ Done |
 
 ---
 
@@ -484,12 +520,12 @@ Available tasks from the roadmaps:
 - [x] Extract `InAppNotificationService` from `NotificationService` *(Instance 8)*
 - [x] Extract `ScreenTimeService` from `ReportsService` *(Instance 8)*
 
-**Phase 4: Remaining Extractions** (Partially Complete - Instance 10 & 11)
+**Phase 4: Remaining Extractions** (Partially Complete - Instance 10, 11, 13 & 14)
 - [x] Extract `AdminUserService` from `AdminService` *(Instance 10)*
 - [x] Extract `AdminStoryService` from `AdminService` *(Instance 10)*
-- [ ] Extract `StoryGenerationService` from `StoryService`
 - [x] Extract `StoryRecommendationService` from `StoryService` *(Instance 11)*
-- [ ] Extract `BuddySelectionService` from `StoryBuddyService`
+- [x] Extract `StoryGenerationService` from `StoryService` *(Instance 13)*
+- [x] Extract `BuddySelectionService` from `StoryBuddyService` *(Instance 14)*
 - [ ] Extract `BuddyMessagingService` from `StoryBuddyService`
 
 ---
@@ -500,7 +536,7 @@ Available tasks from the roadmaps:
 develop-v0.0.1 (base)
     └── integration/refactor-2026-02 (shared integration - source of truth)
             ├── fix/format-and-lint (merged ✅)
-            ├── perf/improvements (Instance 2, 6, 7, 8 & 11)
+            ├── perf/improvements (Instance 2, 6, 7, 8, 11 & 12)
             ├── feat/gemini-retry-logic (merged ✅)
             ├── fix/bug-fixes (Instance 4, 9 & 10)
             └── perf/resilience-improvements (Instance 5 - PR #219)
