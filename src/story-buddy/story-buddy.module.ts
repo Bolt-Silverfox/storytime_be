@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { StoryBuddyController } from './story-buddy.controller';
 import { StoryBuddyService } from './story-buddy.service';
 import { BuddySelectionService } from './buddy-selection.service';
+import { BuddyMessagingService } from './buddy-messaging.service';
 import { StoryBuddySeederService } from './story-buddy.seeder';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UploadModule } from '../upload/upload.module';
@@ -14,7 +15,7 @@ import { AuthModule } from '../auth/auth.module';
     AuthModule,
   ],
   controllers: [StoryBuddyController],
-  providers: [StoryBuddyService, BuddySelectionService, StoryBuddySeederService],
-  exports: [StoryBuddyService, BuddySelectionService],
+  providers: [StoryBuddyService, BuddySelectionService, BuddyMessagingService, StoryBuddySeederService],
+  exports: [StoryBuddyService, BuddySelectionService, BuddyMessagingService],
 })
 export class StoryBuddyModule {}

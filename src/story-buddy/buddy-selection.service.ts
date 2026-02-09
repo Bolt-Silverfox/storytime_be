@@ -3,15 +3,19 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-  Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { BuddyMessagingService } from './buddy-messaging.service';
 
 @Injectable()
 export class BuddySelectionService {
-  private readonly logger = new Logger(BuddySelectionService.name);
-
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => BuddyMessagingService))
+    private readonly buddyMessagingService: BuddyMessagingService,
+  ) {}
 
   /**
    * Select a story buddy for a kid
@@ -75,7 +79,7 @@ export class BuddySelectionService {
     });
 
     // Log the selection interaction
-    await this.logBuddyInteraction({
+    await this.buddyMessagingService.logBuddyInteraction({
       kidId,
       buddyId,
       interactionType: 'buddy_selected',
@@ -129,7 +133,7 @@ export class BuddySelectionService {
     const buddy = kid.storyBuddy;
 
     // Log the interaction
-    await this.logBuddyInteraction({
+    await this.buddyMessagingService.logBuddyInteraction({
       kidId,
       buddyId: buddy.id,
       interactionType: 'greeting',
@@ -190,30 +194,5 @@ export class BuddySelectionService {
     }
 
     return kid.storyBuddy;
-  }
-
-  /**
-   * Log buddy interaction (private helper) - without saving messages
-   */
-  private async logBuddyInteraction(data: {
-    kidId: string;
-    buddyId: string;
-    interactionType: string;
-    context?: string | null;
-  }) {
-    try {
-      return await this.prisma.buddyInteraction.create({
-        data: {
-          kidId: data.kidId,
-          buddyId: data.buddyId,
-          interactionType: data.interactionType,
-          context: data.context || null,
-          message: null, // No longer saving messages
-        },
-      });
-    } catch (error) {
-      this.logger.error('Failed to log buddy interaction:', error);
-      // Don't throw error for logging failures
-    }
   }
 }

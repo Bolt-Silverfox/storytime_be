@@ -393,6 +393,23 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - Build passing
 
+### Instance 15 - ✅ Completed
+**Focus**: Phase 4 God Service Extractions (BuddyMessagingService)
+**Timestamp**: 2026-02-09
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/story-buddy/buddy-messaging.service.ts` (NEW ~150 lines) - Extracted from StoryBuddyService
+  - Methods: getBuddyMessage, logBuddyInteraction (public - shared utility)
+  - Removed duplicate logBuddyInteraction from both StoryBuddyService and BuddySelectionService
+- `src/story-buddy/story-buddy.service.ts` - Updated to delegate to BuddyMessagingService
+  - Removed ~130 lines (getBuddyMessage and logBuddyInteraction)
+- `src/story-buddy/buddy-selection.service.ts` - Updated to use BuddyMessagingService.logBuddyInteraction
+  - Removed duplicate logBuddyInteraction (~20 lines)
+- `src/story-buddy/story-buddy.module.ts` - Added BuddyMessagingService to providers and exports
+
+**Status**: Complete - Build passing
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
@@ -459,9 +476,10 @@ Files currently being modified by other instances - avoid editing these:
 | `src/auth/services/onboarding.service.spec.ts` | Instance 12 | ✅ Done |
 | `src/story/story-generation.service.ts` | Instance 13 | ✅ Done |
 | `src/story/scripts/backfill-duration.ts` | Instance 13 | ✅ Done |
-| `src/story-buddy/buddy-selection.service.ts` | Instance 14 | ✅ Done |
-| `src/story-buddy/story-buddy.service.ts` | Instance 14 | ✅ Done |
-| `src/story-buddy/story-buddy.module.ts` | Instance 14 | ✅ Done |
+| `src/story-buddy/buddy-selection.service.ts` | Instance 14 & 15 | ✅ Done |
+| `src/story-buddy/story-buddy.service.ts` | Instance 14 & 15 | ✅ Done |
+| `src/story-buddy/story-buddy.module.ts` | Instance 14 & 15 | ✅ Done |
+| `src/story-buddy/buddy-messaging.service.ts` | Instance 15 | ✅ Done |
 
 ---
 
@@ -503,13 +521,13 @@ Available tasks from the roadmaps:
 - [x] Extract `InAppNotificationService` from `NotificationService` *(Instance 8)*
 - [x] Extract `ScreenTimeService` from `ReportsService` *(Instance 8)*
 
-**Phase 4: Remaining Extractions** (Partially Complete - Instance 10, 11, 13 & 14)
+**Phase 4: Remaining Extractions** ✅ COMPLETE (Instance 10, 11, 13, 14 & 15)
 - [x] Extract `AdminUserService` from `AdminService` *(Instance 10)*
 - [x] Extract `AdminStoryService` from `AdminService` *(Instance 10)*
 - [x] Extract `StoryRecommendationService` from `StoryService` *(Instance 11)*
 - [x] Extract `StoryGenerationService` from `StoryService` *(Instance 13)*
 - [x] Extract `BuddySelectionService` from `StoryBuddyService` *(Instance 14)*
-- [ ] Extract `BuddyMessagingService` from `StoryBuddyService`
+- [x] Extract `BuddyMessagingService` from `StoryBuddyService` *(Instance 15)*
 
 ---
 
