@@ -247,6 +247,29 @@ git push origin integration/refactor-2026-02
 
 **Status**: Phase 3 complete. All Notification & Reports domain extractions done.
 
+### Instance 9 - ✅ Completed
+**Focus**: E2E Tests for Authentication Flows
+**Timestamp**: 2026-02-09
+**Branch**: `fix/bug-fixes`
+
+**Changes Made**:
+- `test/auth.e2e-spec.ts` (NEW ~850 lines) - Comprehensive E2E tests for auth flows:
+  - Registration tests: valid registration, invalid email, weak password, single name, missing fields, duplicate email, email sanitization
+  - Login tests: valid credentials, invalid password, non-existent email, missing fields, email case handling
+  - Token refresh tests: valid refresh, invalid token, missing token
+  - Protected routes tests: with/without token, invalid token, malformed header
+  - Logout tests: single session and all devices
+  - Email verification tests: invalid token, missing token, send verification
+  - Password reset tests: request reset, validate token, reset with weak password
+  - Change password tests: with token, incorrect old password, without auth
+  - OAuth tests: Google and Apple with missing/invalid id_token
+  - Learning expectations: public endpoint access
+- `test/jest-e2e.json` - Added moduleNameMapper for googleapis and uuid mocks
+- Mock PrismaService with in-memory storage for user, session, token, profile models
+- Mock EmailQueueService, EmailProcessor, EmailProvider for email testing
+
+**Status**: Complete - 41 E2E tests passing, build passing
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
@@ -298,6 +321,8 @@ Files currently being modified by other instances - avoid editing these:
 | `src/reports/reports.service.ts` | Instance 8 | ✅ Done |
 | `src/reports/reports.module.ts` | Instance 8 | ✅ Done |
 | `src/reports/reports.controller.ts` | Instance 8 | ✅ Done |
+| `test/auth.e2e-spec.ts` | Instance 9 | ✅ Done |
+| `test/jest-e2e.json` | Instance 9 | ✅ Done |
 
 ---
 
@@ -318,7 +343,7 @@ Available tasks from the roadmaps:
 - [x] Add unit tests for UserService *(Instance 4)*
 - [x] Add unit tests for SubscriptionService *(Instance 4)*
 - [x] Add unit tests for NotificationService *(Instance 4)*
-- [ ] Add E2E tests for authentication flows
+- [x] Add E2E tests for authentication flows *(Instance 9)*
 - [x] Replace remaining `any` types (~22 files) *(Instance 4 & 5 - production code complete, only test mocks remain)*
 
 ### God Service Extractions (see QA_IMPROVEMENTS.md section 2.3 for details)
@@ -357,7 +382,7 @@ develop-v0.0.1 (base)
             ├── fix/format-and-lint (merged ✅)
             ├── perf/improvements (Instance 2, 6, 7 & 8)
             ├── feat/gemini-retry-logic (merged ✅)
-            ├── fix/bug-fixes (Instance 4)
+            ├── fix/bug-fixes (Instance 4 & 9)
             └── perf/resilience-improvements (Instance 5 - PR #219)
 ```
 
