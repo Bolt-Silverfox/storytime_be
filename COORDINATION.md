@@ -318,6 +318,28 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - Build passing, admin controller tests passing
 
+### Instance 11 - ✅ Completed
+**Focus**: Unit Tests for Extracted Auth Services (OAuthService & OnboardingService)
+**Timestamp**: 2026-02-09
+**Branch**: `fix/bug-fixes`
+
+**Changes Made**:
+- `src/auth/services/oauth.service.spec.ts` (NEW ~870 lines) - Comprehensive unit tests for OAuthService
+  - 21 tests covering:
+    - Google OAuth: token validation, existing user login, email linking, new user creation
+    - Apple OAuth: token validation, existing user login, new user creation with/without names
+    - Avatar handling: creating, reusing, and updating avatars during OAuth
+    - Error scenarios: invalid tokens, unverified emails, missing payloads
+  - Mocks for google-auth-library (OAuth2Client), apple-signin-auth, PrismaService, TokenService, PasswordService, NotificationPreferenceService
+- `src/auth/services/onboarding.service.spec.ts` (NEW ~650 lines) - Comprehensive unit tests for OnboardingService
+  - 22 tests covering:
+    - completeProfile: profile completion with learning expectations, categories, avatars
+    - getLearningExpectations: fetching active learning expectations
+    - updateProfile: partial updates, profile creation, upsert behavior
+    - Error scenarios: user not found, duplicate onboarding, invalid learning expectations
+
+**Status**: Complete - All 43 tests passing, build passing
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
@@ -376,6 +398,8 @@ Files currently being modified by other instances - avoid editing these:
 | `src/admin/admin.module.ts` | Instance 10 | ✅ Done |
 | `src/admin/admin.controller.ts` | Instance 10 | ✅ Done |
 | `src/admin/tests/admin.controller.spec.ts` | Instance 10 | ✅ Done |
+| `src/auth/services/oauth.service.spec.ts` | Instance 11 | ✅ Done |
+| `src/auth/services/onboarding.service.spec.ts` | Instance 11 | ✅ Done |
 
 ---
 
