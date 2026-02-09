@@ -45,19 +45,24 @@ Added 70+ indexes for FK columns and query optimization:
 
 ### 1.2 Missing Transactions (P1 - High) ✅ COMPLETED
 
-**Status**: Fixed by Instance 3 & 4 (February 2026)
+**Status**: Fixed by Instance 3, 4 & 16 (February 2026)
 
 Added atomic transactions to critical operations:
 - `PaymentService.processPaymentAndSubscriptionAtomic()` - Combined payment + subscription in single transaction
 - `StoryService.createStory()` - Transaction with validation for categories, themes, seasons
 - `StoryService.updateStory()` - Transaction with validation for categories, themes, seasons
 - `StoryService.persistGeneratedStory()` - Atomic story creation with all related data
+- `UserService.updateUser()` - Avatar creation + user update atomic (Instance 16)
+- `UserService.updateParentProfile()` - Learning expectations delete + create atomic (Instance 16)
+- `AuthService.register()` - User creation + notification preferences atomic (Instance 16)
+- `AuthService.sendEmailVerification()` - Token rotation atomic (Instance 16)
+- `AuthService.verifyEmail()` - User update + token deletion atomic (Instance 16)
 
 **Action Items:**
 - [x] Add transactions to `SubscriptionService` for plan changes *(Instance 3)*
 - [x] Add transactions to `StoryService` for story creation *(Instance 4)*
-- [ ] Add transactions to `UserService` for profile updates
-- [ ] Add transactions to `AuthService` for registration flow
+- [x] Add transactions to `UserService` for profile updates *(Instance 16)*
+- [x] Add transactions to `AuthService` for registration flow *(Instance 16)*
 - [ ] Document transaction patterns in CLAUDE.md
 
 ### 1.3 N+1 Query Prevention (P1 - High) ✅ COMPLETED
@@ -89,36 +94,51 @@ const kids = await this.prisma.kid.findMany({
 - [x] Replace sequential queries with batched queries *(Instance 4 & 5)*
 - [x] Use Prisma `include` for related data instead of separate queries *(Instance 4)*
 
-### 1.4 Query Select Optimization (P2 - Medium)
+### 1.4 Query Select Optimization (P2 - Medium) ✅ PARTIALLY COMPLETED
+
+**Status**: UserService optimizations completed (February 2026)
 
 Many queries fetch all columns when only a few are needed:
 
-| Location | Issue | Optimization |
-|----------|-------|--------------|
-| `StoryService.findAll()` | Fetches all story fields | Add `select` for list views |
-| `UserService.findOne()` | Fetches password hash unnecessarily | Exclude sensitive fields |
-| `AdminService` dashboard queries | Full records for counts | Use `_count` aggregations |
+| Location | Issue | Optimization | Status |
+|----------|-------|--------------|--------|
+| `StoryService.getStories()` | Fetches all story fields | Add `select` for list views | ⏳ Pending |
+| `UserService.getUser()` | Fetches password hash unnecessarily | Exclude sensitive fields | ✅ Completed |
+| `AdminService` dashboard queries | Full records for counts | Use `_count` aggregations | ✅ Already optimized |
 
-**Example:**
+**Implementation Details:**
+
+Added `safeUserSelect` constant in `UserService` that explicitly selects all user fields except `passwordHash` and `pinHash` at the database level. Applied to:
+- `getUser()` - Single user lookup
+- `getUserIncludingDeleted()` - User lookup including soft-deleted
+- `getAllUsers()` - Admin user list
+- `getActiveUsers()` - Active user list
+
 ```typescript
-// ❌ Fetches everything
-const stories = await this.prisma.story.findMany();
+// ✅ safeUserSelect excludes passwordHash and pinHash at DB level
+const safeUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  // ... all other safe fields
+  // Explicitly excludes: passwordHash, pinHash
+} satisfies Prisma.UserSelect;
 
-// ✅ Select only needed fields
-const stories = await this.prisma.story.findMany({
+const user = await this.prisma.user.findUnique({
+  where: { id },
   select: {
-    id: true,
-    title: true,
-    coverImageUrl: true,
-    createdAt: true,
-  }
+    ...safeUserSelect,
+    profile: true,
+    kids: true,
+  },
 });
 ```
 
 **Action Items:**
-- [ ] Add `select` to list/index queries
+- [x] Never fetch `passwordHash` outside auth operations
+- [x] Add `select` to UserService queries
+- [ ] Add `select` to StoryService list queries (exclude `textContent` for list views)
 - [ ] Create DTOs that map to select fields
-- [ ] Never fetch `passwordHash` outside auth operations
 
 ---
 
@@ -719,6 +739,78 @@ app.enableCors({
 - [ ] Add response DTOs to limit data transfer
 - [ ] Configure compression threshold
 - [ ] Review rate limit configurations
+
+---
+
+## 10. Error Handling & Domain Exceptions ✅ COMPLETED
+
+**Status**: Implemented (February 2026)
+
+### 10.1 Custom Domain Exceptions Hierarchy
+
+Created a structured exception hierarchy that provides:
+- Machine-readable error codes for client-side handling
+- Consistent error response format across the API
+- Better debugging with contextual details
+- Proper HTTP status codes
+
+**Files Created:**
+- `src/shared/exceptions/domain.exception.ts` - Exception classes
+- `src/shared/exceptions/index.ts` - Export barrel
+
+**Exception Categories:**
+
+| Category | Exceptions | HTTP Status |
+|----------|------------|-------------|
+| Auth | `InvalidCredentialsException`, `TokenExpiredException`, `EmailNotVerifiedException`, `InvalidTokenException`, `InvalidAdminSecretException` | 400-403 |
+| Resources | `ResourceNotFoundException`, `ResourceAlreadyExistsException` | 404, 409 |
+| Business Logic | `QuotaExceededException`, `SubscriptionRequiredException`, `InvalidRoleException`, `ValidationException` | 400, 402, 429 |
+
+**Implementation:**
+
+```typescript
+// Base class
+export abstract class DomainException extends HttpException {
+  constructor(
+    public readonly code: string,      // Machine-readable code
+    message: string,                    // Human-readable message
+    status: HttpStatus,
+    public readonly details?: Record<string, unknown>,  // Context
+  ) {
+    super({ code, message, details }, status);
+  }
+}
+
+// Usage example
+throw new ResourceNotFoundException('User', userId);
+// Returns: { code: 'RESOURCE_NOT_FOUND', message: 'User with id xyz not found', details: { resource: 'User', id: 'xyz' } }
+```
+
+### 10.2 Exception Filter Integration
+
+Updated `HttpExceptionFilter` to extract `code` and `details` from domain exceptions:
+
+```typescript
+if (exception instanceof DomainException) {
+  code = exception.code;
+  details = exception.details;
+}
+```
+
+Updated `ErrorResponse` DTO with optional `code` and `details` fields for structured API error responses.
+
+### 10.3 Services Updated
+
+| Service | Exceptions Replaced |
+|---------|---------------------|
+| `AuthService` | InvalidCredentialsException, EmailNotVerifiedException, InvalidTokenException, TokenExpiredException, InvalidAdminSecretException, ResourceNotFoundException, ResourceAlreadyExistsException |
+| `UserService` | ResourceNotFoundException, InvalidRoleException |
+
+**Benefits:**
+- ✅ Consistent error codes across API
+- ✅ Client can programmatically handle specific errors
+- ✅ Better error logging with context
+- ✅ Reduced error message duplication
 
 ---
 
@@ -1484,7 +1576,8 @@ await this.prisma.entity.createMany({
 - [x] Cache invalidation on CRUD operations
 - [x] Sequential operations optimization (Section 15)
 - [x] Prisma slow query logging (>100ms threshold in development)
-
+- [x] Custom domain exceptions hierarchy *(AuthService, UserService)*
+- [x] Query select optimization - UserService (exclude passwordHash/pinHash at DB level)
 ### In Progress 🔄
 - [ ] User preferences caching
 - [ ] Kid profiles caching
@@ -1534,7 +1627,7 @@ await this.prisma.entity.createMany({
 1. ~~**Add transactions to subscription operations**~~ ✅ *(Instance 3)*
 2. ~~**Cache subscription status**~~ ✅ Already implemented in SubscriptionService
 3. ~~**Add request timeouts to AI providers**~~ ✅ *(Instance 3 - GeminiService)*
-4. **Use `select` in list queries** - Reduces data transfer
+4. ~~**Use `select` in list queries**~~ ✅ Partially complete - UserService done, StoryService pending
 5. ~~**Replace sequential queries with batch**~~ ✅ *(Instance 4 & 5)*
 6. ~~**Add Prisma query logging**~~ ✅ Slow query logging (>100ms) in development
 7. **Implement cursor pagination** - Better performance for infinite scroll
