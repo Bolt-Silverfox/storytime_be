@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { StoryModule } from '../story.module';
-import { StoryService } from '../story.service';
+import { StoryGenerationService } from '../story-generation.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Logger } from '@nestjs/common';
 
@@ -9,7 +9,7 @@ async function backfillDuration() {
 
   try {
     const app = await NestFactory.createApplicationContext(StoryModule);
-    const storyService = app.get(StoryService);
+    const storyGenerationService = app.get(StoryGenerationService);
     const prisma = app.get(PrismaService);
 
     logger.log('Starting story duration backfill...');
@@ -35,11 +35,11 @@ async function backfillDuration() {
       let durationSeconds = 0;
 
       if (story.wordCount && story.wordCount > 0) {
-        durationSeconds = storyService.calculateDurationSeconds(
+        durationSeconds = storyGenerationService.calculateDurationSeconds(
           story.wordCount,
         );
       } else if (story.textContent) {
-        durationSeconds = storyService.calculateDurationSeconds(
+        durationSeconds = storyGenerationService.calculateDurationSeconds(
           story.textContent,
         );
       }
