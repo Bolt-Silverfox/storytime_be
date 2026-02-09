@@ -256,7 +256,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: development
-      url: ${{ secrets.DEV_APP_URL }}
+      url: ${{ vars.DEV_APP_URL }}
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
