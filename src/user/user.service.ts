@@ -106,46 +106,54 @@ export class UserService {
     if (data.biometricsEnabled !== undefined)
       updateData.biometricsEnabled = data.biometricsEnabled;
 
-    // Avatar logic
-    if (data.avatarId !== undefined) {
-      updateData.avatarId = data.avatarId;
-    } else if (data.avatarUrl !== undefined) {
-      const newAvatar = await this.prisma.avatar.create({
-        data: {
-          url: data.avatarUrl,
-          name: `Custom Avatar for ${id}`,
-          isSystemAvatar: false,
-        },
-      });
-      updateData.avatarId = newAvatar.id;
-    }
-
     // -------- PROFILE FIELDS --------
     if (data.language !== undefined) profileUpdate.language = data.language;
     if (data.country !== undefined) profileUpdate.country = data.country;
 
+    // Avatar logic - handled inside transaction if custom URL provided
+    const needsCustomAvatar = data.avatarId === undefined && data.avatarUrl !== undefined;
+    if (data.avatarId !== undefined) {
+      updateData.avatarId = data.avatarId;
+    }
+
     // If nothing to update, return existing
     if (
       Object.keys(updateData).length === 0 &&
-      Object.keys(profileUpdate).length === 0
+      Object.keys(profileUpdate).length === 0 &&
+      !needsCustomAvatar
     ) {
       return this.getUser(id);
     }
 
-    const updatedUser = await this.prisma.user.update({
-      where: { id },
-      data: {
-        ...updateData,
-        ...(Object.keys(profileUpdate).length > 0 && {
-          profile: {
-            upsert: {
-              create: profileUpdate,
-              update: profileUpdate,
-            },
+    // Use transaction to ensure avatar creation + user update are atomic
+    const updatedUser = await this.prisma.$transaction(async (tx) => {
+      // Create custom avatar if URL provided (inside transaction)
+      if (needsCustomAvatar) {
+        const newAvatar = await tx.avatar.create({
+          data: {
+            url: data.avatarUrl!,
+            name: `Custom Avatar for ${id}`,
+            isSystemAvatar: false,
           },
-        }),
-      } as Prisma.UserUpdateInput,
-      include: { profile: true, kids: true, avatar: true },
+        });
+        updateData.avatarId = newAvatar.id;
+      }
+
+      return tx.user.update({
+        where: { id },
+        data: {
+          ...updateData,
+          ...(Object.keys(profileUpdate).length > 0 && {
+            profile: {
+              upsert: {
+                create: profileUpdate,
+                update: profileUpdate,
+              },
+            },
+          }),
+        } as Prisma.UserUpdateInput,
+        include: { profile: true, kids: true, avatar: true },
+      });
     });
 
     return {
@@ -211,16 +219,40 @@ export class UserService {
       };
     }
 
-    // Handle learning expectations if provided (explicit M-N)
+    // Use transaction for learning expectations (deleteMany + create must be atomic)
+    // to prevent data loss if create fails after deleteMany succeeds
     if (data.learningExpectationIds) {
-      updateUser.learningExpectations = {
-        deleteMany: {},
-        create: data.learningExpectationIds.map((id: string) => ({
-          learningExpectationId: id,
-        })),
-      };
+      return this.prisma.$transaction(async (tx) => {
+        // First delete existing learning expectations
+        await tx.userLearningExpectation.deleteMany({
+          where: { userId },
+        });
+
+        // Then update user with new learning expectations
+        return tx.user.update({
+          where: { id: userId },
+          data: {
+            ...updateUser,
+            learningExpectations: {
+              create: data.learningExpectationIds!.map((id: string) => ({
+                learningExpectationId: id,
+              })),
+            },
+            ...(Object.keys(updateProfile).length > 0 && {
+              profile: {
+                upsert: {
+                  create: updateProfile,
+                  update: updateProfile,
+                },
+              },
+            }),
+          } as Prisma.UserUpdateInput,
+          include: { profile: true, avatar: true, preferredCategories: true },
+        });
+      });
     }
 
+    // No learning expectations update - simple update without transaction
     return this.prisma.user.update({
       where: { id: userId },
       data: {

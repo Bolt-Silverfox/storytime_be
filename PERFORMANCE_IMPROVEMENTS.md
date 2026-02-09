@@ -37,61 +37,57 @@ Added 70+ indexes for FK columns and query optimization:
 
 **Migration**: `prisma/migrations/20260208170000_add_comprehensive_indexes/`
 
-### 1.2 Missing Transactions (P1 - High)
+### 1.2 Missing Transactions (P1 - High) ✅ COMPLETE
 
-Only **9 instances** of `$transaction` across all services. Multi-step operations need atomic transactions.
+~~Only **9 instances** of `$transaction` across all services.~~ Now properly covered.
 
-| Service | Operation | Risk | Priority |
-|---------|-----------|------|----------|
-| `UserService` | User profile update with preferences | Data inconsistency | P1 |
-| `SubscriptionService` | Subscription + payment record | Orphaned records | P0 |
-| `StoryService` | Story creation with images/paths | Partial creation | P1 |
-| `AuthService` | User registration + session | Orphaned sessions | P1 |
-| `KidService` | Kid creation with preferences | Partial creation | P2 |
-
-**Current Transaction Usage:**
-```typescript
-// Found in: src/auth/auth.service.ts, src/admin/admin.service.ts, etc.
-await this.prisma.$transaction(async (tx) => {
-  // Operations here
-});
-```
+| Service | Operation | Status | Instance |
+|---------|-----------|--------|----------|
+| `SubscriptionService` | Subscription + payment record | ✅ Fixed | Instance 1 |
+| `PaymentService` | Payment + subscription atomic | ✅ Fixed | Instance 3 |
+| `StoryService` | Story creation with validation | ✅ Fixed | Instance 4 |
+| `StoryService` | Story update with validation | ✅ Fixed | Instance 4 |
+| `StoryService` | persistGeneratedStory atomic | ✅ Fixed | Instance 4 |
+| `UserService` | updateUser (avatar + profile) | ✅ Fixed | Instance 16 |
+| `UserService` | updateParentProfile (learning expectations) | ✅ Fixed | Instance 16 |
+| `AuthService` | register (user + notification prefs) | ✅ Fixed | Instance 16 |
+| `AuthService` | sendEmailVerification (token rotation) | ✅ Fixed | Instance 16 |
+| `AuthService` | verifyEmail (user + token deletion) | ✅ Fixed | Instance 16 |
+| `KidService` | createKids (batch creation) | ✅ Already had | - |
 
 **Action Items:**
-- [ ] Add transactions to `SubscriptionService` for plan changes
-- [ ] Add transactions to `StoryService` for story creation
-- [ ] Add transactions to `UserService` for profile updates
-- [ ] Add transactions to `AuthService` for registration flow
+- [x] Add transactions to `SubscriptionService` for plan changes ✅ *Instance 1*
+- [x] Add transactions to `PaymentService` for atomic payment + subscription ✅ *Instance 3*
+- [x] Add transactions to `StoryService` for story creation ✅ *Instance 4*
+- [x] Add transactions to `UserService` for profile updates ✅ *Instance 16*
+- [x] Add transactions to `AuthService` for registration flow ✅ *Instance 16*
 - [ ] Document transaction patterns in CLAUDE.md
 
-### 1.3 N+1 Query Prevention (P1 - High)
+### 1.3 N+1 Query Prevention (P1 - High) ✅ COMPLETE
 
-Some operations use sequential queries that could be batched:
+~~Some operations use sequential queries that could be batched.~~ Fixed in StoryService.
 
-| File | Line | Issue | Solution |
-|------|------|-------|----------|
-| `src/story/story.service.ts` | 253 | Sequential `findMany` calls | Use `Promise.all()` or single query with includes |
-| `src/story/story.service.ts` | 363-378 | Multiple separate queries | Batch into single query |
-| `src/story/story.service.ts` | 393-413 | Loop with individual queries | Use `findMany` with `where: { id: { in: ids } }` |
+**Fixes Applied** *(Instance 4 & 5)*:
 
-**Example Fix:**
-```typescript
-// ❌ N+1 Problem
-for (const kidId of kidIds) {
-  const kid = await this.prisma.kid.findUnique({ where: { id: kidId } });
-  results.push(kid);
-}
-
-// ✅ Batched Query
-const kids = await this.prisma.kid.findMany({
-  where: { id: { in: kidIds } }
-});
-```
+| Method | Before | After |
+|--------|--------|-------|
+| `addFavorite` | Sequential validation queries | `Promise.all()` batched |
+| `setProgress` | Sequential queries | `Promise.all()` batched |
+| `getProgress` | Sequential queries | `Promise.all()` batched |
+| `setUserProgress` | Sequential queries | `Promise.all()` batched |
+| `getUserProgress` | Sequential queries | `Promise.all()` batched |
+| `restrictStory` | Sequential queries | `Promise.all()` batched |
+| `assignDailyChallenge` | Sequential queries | `Promise.all()` batched |
+| `startStoryPath` | Sequential queries | `Promise.all()` batched |
+| `adjustReadingLevel` | Sequential queries | `Promise.all()` batched |
+| `recommendStoryToKid` | Sequential queries | `Promise.all()` batched |
+| `assignDailyChallengeToAllKids` | O(N×5) queries | O(4 + M) with batch creates |
+| `generateStoryForKid` | Duplicate queries | Batched themes/categories |
 
 **Action Items:**
-- [ ] Audit all `for` loops with database queries
-- [ ] Replace sequential queries with batched queries
-- [ ] Use Prisma `include` for related data instead of separate queries
+- [x] Audit all `for` loops with database queries ✅ *Instance 4*
+- [x] Replace sequential queries with batched queries ✅ *Instance 4 & 5*
+- [x] Use Prisma `include` for related data instead of separate queries ✅
 
 ### 1.4 Query Select Optimization (P2 - Medium)
 
@@ -239,15 +235,15 @@ const stats = await this.prisma.story.groupBy({
 
 ## 4. External Service Optimizations
 
-### 4.1 AI Provider Calls (P1 - High)
+### 4.1 AI Provider Calls (P1 - High) - Partially Complete
 
 External API calls to Gemini, ElevenLabs, Deepgram need optimization:
 
-| Service | Issue | Solution |
-|---------|-------|----------|
-| `GeminiService` | No retry logic | Implement exponential backoff |
-| `ElevenLabsTtsProvider` | No timeout | Add request timeout |
-| `DeepgramSttProvider` | No circuit breaker | Implement circuit breaker pattern |
+| Service | Issue | Solution | Status |
+|---------|-------|----------|--------|
+| `GeminiService` | No retry logic | Implement exponential backoff | ✅ Fixed (Instance 3) |
+| `ElevenLabsTtsProvider` | No timeout | Add request timeout | ⚠️ Pending |
+| `DeepgramSttProvider` | No circuit breaker | Implement circuit breaker pattern | ⚠️ Pending |
 
 **Recommended Pattern:**
 ```typescript
@@ -265,7 +261,8 @@ async callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
 ```
 
 **Action Items:**
-- [ ] Add retry logic to all AI provider calls
+- [x] Add retry logic to GeminiService ✅ *Instance 3*
+- [ ] Add retry logic to ElevenLabs/Deepgram providers
 - [ ] Implement circuit breaker for external services
 - [ ] Add request timeouts (30s max)
 - [ ] Add fallback responses for non-critical failures
@@ -772,17 +769,21 @@ pnpm add @prisma/adapter-pg
 - [x] Add queue optimization section
 - [x] Add API performance patterns
 - [x] Add Prisma v7 upgrade considerations
+- [x] Transaction coverage (SubscriptionService, PaymentService, StoryService) ✅ *Instances 1, 3, 4*
+- [x] N+1 query fixes in StoryService (12 methods optimized) ✅ *Instances 4, 5*
+- [x] GeminiService retry logic with exponential backoff ✅ *Instance 3*
 
 ### In Progress 🔄
-- [ ] Transaction coverage improvement
-- [ ] N+1 query fixes
+- [x] Transaction coverage for remaining services ✅ *Instance 16* (UserService, AuthService already complete; KidService was already using transactions)
 
 ### Pending 📋
 - [ ] Cache strategy improvements
-- [ ] External service retry logic
+- [ ] External service retry logic (ElevenLabs, Deepgram)
 - [ ] Lazy loading implementation
 - [ ] APM integration
 - [ ] Queue system expansion
+- [ ] Query select optimization
+- [ ] Pagination improvements
 
 ---
 
