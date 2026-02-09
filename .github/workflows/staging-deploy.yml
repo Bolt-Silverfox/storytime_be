@@ -42,7 +42,7 @@ jobs:
           branch: ${{ github.head_ref }}
 
       - name: Build
-        run: pnpm generate && pnpm build
+        run: pnpm db:generate && pnpm build
 
     # - name: Run tests
     #   run: pnpm test
@@ -78,7 +78,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm generate && pnpm build && npx prisma migrate deploy
+        run: pnpm db:generate && pnpm build && pnpm db:migrate:deploy
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@master
