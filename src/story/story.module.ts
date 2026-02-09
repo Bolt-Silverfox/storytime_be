@@ -33,6 +33,6 @@ import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle
     StoryAccessGuard,
     SubscriptionThrottleGuard,
   ],
-  exports: [StoryService, StoryProgressService, DailyChallengeService, StoryQuotaService],
+  exports: [StoryService, StoryProgressService, DailyChallengeService, StoryQuotaService]
 })
 export class StoryModule {}

@@ -16,6 +16,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { OAuthService } from './services/oauth.service';
+import { OnboardingService } from './services/onboarding.service';
 import {
   LoginDto,
   LoginResponseDto,
@@ -49,7 +51,11 @@ import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 @Controller('auth')
 @SkipThrottle() // Skip default throttling, apply specific guards per endpoint
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly oAuthService: OAuthService,
+    private readonly onboardingService: OnboardingService,
+  ) {}
 
   @Post('login')
   @UseGuards(AuthThrottleGuard)
@@ -122,7 +128,7 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() data: CompleteProfileDto,
   ) {
-    return this.authService.completeProfile(req.authUserData['userId'], data);
+    return this.onboardingService.completeProfile(req.authUserData['userId'], data);
   }
   // ==================== GET LEARNING EXPECTATIONS ====================
   @Get('learning-expectations')
@@ -137,7 +143,7 @@ export class AuthController {
     description: 'List of available learning expectations',
   })
   async getLearningExpectations() {
-    return this.authService.getLearningExpectations();
+    return this.onboardingService.getLearningExpectations();
   }
 
   @Post('logout')
@@ -193,7 +199,7 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() data: updateProfileDto,
   ) {
-    return this.authService.updateProfile(req.authUserData['userId'], data);
+    return this.onboardingService.updateProfile(req.authUserData['userId'], data);
   }
 
   @Post('change-password')
@@ -269,7 +275,7 @@ export class AuthController {
       throw new BadRequestException('id_token is required');
     }
 
-    return this.authService.loginWithGoogleIdToken(idToken);
+    return this.oAuthService.loginWithGoogleIdToken(idToken);
   }
 
   // ===== APPLE AUTH (MOBILE / WEB id_token) =====
@@ -289,7 +295,7 @@ export class AuthController {
       throw new BadRequestException('id_token is required');
     }
 
-    return this.authService.loginWithAppleIdToken(
+    return this.oAuthService.loginWithAppleIdToken(
       body.id_token,
       body.firstName,
       body.lastName,
@@ -311,7 +317,7 @@ export class AuthController {
     @Res() res: Response,
   ) {
     const payload = req.user;
-    const result = await this.authService.handleGoogleOAuthPayload(payload);
+    const result = await this.oAuthService.handleGoogleOAuthPayload(payload);
 
     return res.redirect(
       `${process.env.WEB_APP_BASE_URL}/oauth-success?jwt=${encodeURIComponent(

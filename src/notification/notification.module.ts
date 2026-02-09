@@ -2,6 +2,8 @@ import { Module, forwardRef } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bullmq';
 import { NotificationService } from './notification.service';
+import { NotificationPreferenceService } from './services/notification-preference.service';
+import { InAppNotificationService } from './services/in-app-notification.service';
 import { NotificationController } from './notification.controller';
 import { InAppNotificationController } from './in-app-notification.controller';
 import { UserPreferencesController } from './user-preferences.controller';
@@ -28,12 +30,19 @@ import { EmailProcessor } from './queue/email.processor';
   ],
   providers: [
     NotificationService,
+    NotificationPreferenceService,
+    InAppNotificationService,
     InAppProvider,
     EmailProvider,
     // Queue components
     EmailQueueService,
     EmailProcessor,
   ],
-  exports: [NotificationService, EmailQueueService],
+  exports: [
+    NotificationService,
+    NotificationPreferenceService,
+    InAppNotificationService,
+    EmailQueueService,
+  ],
 })
 export class NotificationModule {}
