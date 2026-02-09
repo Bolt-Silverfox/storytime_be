@@ -6,6 +6,9 @@ module.exports = {
     transform: {
       '^.+\\.(t|j)sx?$': 'ts-jest',
     },
+    transformIgnorePatterns: [
+      '/node_modules/(?!uuid)/',
+    ],
     collectCoverageFrom: ['**/*.(t|j)s'],
     coverageDirectory: './coverage',
     testEnvironment: 'node',
@@ -13,5 +16,6 @@ module.exports = {
       '^@/(.*)$': '<rootDir>/src/$1',
       '^src/(.*)$': '<rootDir>/src/$1',
       '^googleapis$': '<rootDir>/__mocks__/googleapis.ts',
+      '^uuid$': '<rootDir>/__mocks__/uuid.ts',
     },
   };

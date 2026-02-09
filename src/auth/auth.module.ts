@@ -10,6 +10,8 @@ import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GoogleOAuthStrategy } from './strategies/google-oauth.strategy';
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
+import { OAuthService } from './services/oauth.service';
+import { OnboardingService } from './services/onboarding.service';
 
 @Module({
   imports: [
@@ -34,11 +36,13 @@ import { PasswordService } from './services/password.service';
     AuthService,
     TokenService,
     PasswordService,
+    OAuthService,
+    OnboardingService,
     GoogleStrategy,
     GoogleAuthGuard,
     GoogleOAuthStrategy,
   ],
 
-  exports: [AuthService, TokenService, JwtModule, PassportModule],
+  exports: [AuthService, TokenService, OAuthService, OnboardingService, JwtModule, PassportModule],
 })
 export class AuthModule {}

@@ -23,8 +23,8 @@ export const NotificationRegistry: Record<
     medium: Medium;
     category: NotificationCategory;
     subject: string;
-    validate: (data: Record<string, any>) => string | null;
-    getTemplate: (data: Record<string, any>) => Promise<string>;
+    validate: (data: Record<string, unknown>) => string | null;
+    getTemplate: (data: Record<string, unknown>) => Promise<string>;
   }
 > = {
   EmailVerification: {

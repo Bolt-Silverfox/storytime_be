@@ -14,7 +14,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
-import { NotificationService } from './notification.service';
+import { InAppNotificationService } from './services/in-app-notification.service';
 import { NotificationDto, MarkReadDto } from './dto/notification.dto';
 import {
   AuthSessionGuard,
@@ -26,7 +26,9 @@ import {
 @UseGuards(AuthSessionGuard)
 @Controller('notifications')
 export class InAppNotificationController {
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(
+    private readonly inAppNotificationService: InAppNotificationService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Get in-app notifications for current user' })
@@ -40,7 +42,7 @@ export class InAppNotificationController {
     @Query('offset') offset?: number,
     @Query('unreadOnly') unreadOnly?: boolean,
   ) {
-    return this.notificationService.getInAppNotifications(
+    return this.inAppNotificationService.getInAppNotifications(
       req.authUserData.userId,
       limit ? Number(limit) : undefined,
       offset ? Number(offset) : undefined,
@@ -55,7 +57,7 @@ export class InAppNotificationController {
     @Request() req: AuthenticatedRequest,
     @Body() dto: MarkReadDto,
   ) {
-    await this.notificationService.markAsRead(
+    await this.inAppNotificationService.markAsRead(
       req.authUserData.userId,
       dto.notificationIds,
     );
@@ -66,7 +68,7 @@ export class InAppNotificationController {
   @ApiOperation({ summary: 'Mark all notifications as read' })
   @ApiResponse({ status: 200 })
   async markAllAsRead(@Request() req: AuthenticatedRequest) {
-    await this.notificationService.markAllAsRead(req.authUserData.userId);
+    await this.inAppNotificationService.markAllAsRead(req.authUserData.userId);
     return { success: true };
   }
 }

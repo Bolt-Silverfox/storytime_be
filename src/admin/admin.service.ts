@@ -10,7 +10,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
-import { Role, Prisma } from '@prisma/client';
+import { Role, Prisma, User, Story } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {
   DashboardStatsDto,
@@ -27,6 +27,12 @@ import {
   ActivityLogDto,
   AiCreditAnalyticsDto,
   UserGrowthMonthlyDto,
+  UserListItemDto,
+  StoryListItemDto,
+  UserDetailDto,
+  StoryDetailDto,
+  AdminCreatedDto,
+  UserUpdatedDto,
 } from './dto/admin-responses.dto';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import {
@@ -707,7 +713,7 @@ export class AdminService {
 
   async getAllUsers(
     filters: UserFilterDto,
-  ): Promise<PaginatedResponseDto<any>> {
+  ): Promise<PaginatedResponseDto<UserListItemDto>> {
     const {
       page = 1,
       limit = 10,
@@ -824,18 +830,19 @@ export class AdminService {
       data: users.map((user) => {
         // Sanitize user object - exclude sensitive fields
         const {
-          passwordHash, // eslint-disable-line @typescript-eslint/no-unused-vars
-          pinHash, // eslint-disable-line @typescript-eslint/no-unused-vars
-          kids, // eslint-disable-line @typescript-eslint/no-unused-vars
-          paymentTransactions, // eslint-disable-line @typescript-eslint/no-unused-vars
-          usage, // eslint-disable-line @typescript-eslint/no-unused-vars
-          subscriptions, // eslint-disable-line @typescript-eslint/no-unused-vars
+          passwordHash: _passwordHash,
+          pinHash: _pinHash,
+          kids,
+          paymentTransactions,
+          usage,
+          subscriptions,
+          _count,
           ...safeUser
         } = user;
 
         // Calculate metrics
-        const creditUsed = user.usage?.elevenLabsCount || 0;
-        const activityLength = user.kids.reduce(
+        const creditUsed = usage?.elevenLabsCount || 0;
+        const activityLength = kids.reduce(
           (total, kid) =>
             total +
             kid.screenTimeSessions.reduce(
@@ -844,7 +851,7 @@ export class AdminService {
             ),
           0,
         );
-        const amountSpent = user.paymentTransactions.reduce(
+        const amountSpent = paymentTransactions.reduce(
           (sum, txn) => sum + txn.amount,
           0,
         );
@@ -855,13 +862,13 @@ export class AdminService {
           activityLength,
           creditUsed,
           amountSpent,
-          isPaidUser: user.subscriptions.length > 0,
-          activeSubscription: user.subscriptions[0] || null,
-          kidsCount: user._count.kids,
-          sessionsCount: user._count.auth,
-          favoritesCount: user._count.parentFavorites,
-          subscriptionsCount: user._count.subscriptions,
-          transactionsCount: user._count.paymentTransactions,
+          isPaidUser: subscriptions.length > 0,
+          activeSubscription: subscriptions[0] || null,
+          kidsCount: _count.kids,
+          sessionsCount: _count.auth,
+          favoritesCount: _count.parentFavorites,
+          subscriptionsCount: _count.subscriptions,
+          transactionsCount: _count.paymentTransactions,
         };
       }),
       meta: {
@@ -873,7 +880,18 @@ export class AdminService {
     };
   }
 
-  async getUserById(userId: string): Promise<any> {
+  async getUserById(userId: string): Promise<Omit<User, 'passwordHash' | 'pinHash'> & {
+    isPaidUser: boolean;
+    totalSpent: number;
+    stats: {
+      sessionsCount: number;
+      favoritesCount: number;
+      voicesCount: number;
+      subscriptionsCount: number;
+      ticketsCount: number;
+      transactionsCount: number;
+    };
+  }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -929,26 +947,29 @@ export class AdminService {
       },
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { passwordHash, pinHash, ...safeUser } = user;
+    const {
+      passwordHash: _passwordHash,
+      pinHash: _pinHash,
+      _count,
+      ...safeUser
+    } = user;
 
     return {
       ...safeUser,
       isPaidUser: hasActiveSubscription,
       totalSpent: totalSpentResult._sum.amount || 0,
       stats: {
-        sessionsCount: user._count.auth,
-        favoritesCount: user._count.parentFavorites,
-        voicesCount: user._count.voices,
-        subscriptionsCount: user._count.subscriptions,
-        ticketsCount: user._count.supportTickets,
-        transactionsCount: user._count.paymentTransactions,
+        sessionsCount: _count.auth,
+        favoritesCount: _count.parentFavorites,
+        voicesCount: _count.voices,
+        subscriptionsCount: _count.subscriptions,
+        ticketsCount: _count.supportTickets,
+        transactionsCount: _count.paymentTransactions,
       },
-      _count: undefined,
     };
   }
 
-  async createAdmin(data: CreateAdminDto): Promise<any> {
+  async createAdmin(data: CreateAdminDto): Promise<AdminCreatedDto> {
     const existingUser = await this.prisma.user.findUnique({
       where: { email: data.email },
     });
@@ -986,7 +1007,7 @@ export class AdminService {
     userId: string,
     data: UpdateUserDto,
     currentAdminId?: string,
-  ): Promise<any> {
+  ): Promise<UserUpdatedDto> {
     // Safety check: prevent self-demotion
     if (userId === currentAdminId && data.role && data.role !== Role.admin) {
       throw new BadRequestException(
@@ -1033,7 +1054,14 @@ export class AdminService {
     userId: string,
     permanent: boolean = false,
     currentAdminId?: string,
-  ): Promise<any> {
+  ): Promise<{
+    id: string;
+    email: string;
+    name: string | null;
+    role: string;
+    isDeleted: boolean;
+    deletedAt: Date | null;
+  }> {
     // Safety check: prevent self-deletion
     if (userId === currentAdminId) {
       throw new BadRequestException('You cannot delete your own account.');
@@ -1045,8 +1073,20 @@ export class AdminService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
+    const selectFields = {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      isDeleted: true,
+      deletedAt: true,
+    } as const;
+
     if (permanent) {
-      return this.prisma.user.delete({ where: { id: userId } });
+      return this.prisma.user.delete({
+        where: { id: userId },
+        select: selectFields,
+      });
     } else {
       return this.prisma.user.update({
         where: { id: userId },
@@ -1054,11 +1094,19 @@ export class AdminService {
           isDeleted: true,
           deletedAt: new Date(),
         },
+        select: selectFields,
       });
     }
   }
 
-  async restoreUser(userId: string): Promise<any> {
+  async restoreUser(userId: string): Promise<{
+    id: string;
+    email: string;
+    name: string | null;
+    role: string;
+    isDeleted: boolean;
+    deletedAt: Date | null;
+  }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
@@ -1070,6 +1118,14 @@ export class AdminService {
       data: {
         isDeleted: false,
         deletedAt: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isDeleted: true,
+        deletedAt: true,
       },
     });
   }
@@ -1121,7 +1177,7 @@ export class AdminService {
 
   async getAllStories(
     filters: StoryFilterDto,
-  ): Promise<PaginatedResponseDto<any>> {
+  ): Promise<PaginatedResponseDto<StoryListItemDto>> {
     const {
       page = 1,
       limit = 10,
@@ -1177,14 +1233,16 @@ export class AdminService {
     ]);
 
     return {
-      data: stories.map((story) => ({
-        ...story,
-        favoritesCount: story._count.favorites,
-        viewsCount: story._count.progresses,
-        parentFavoritesCount: story._count.parentFavorites,
-        downloadsCount: story._count.downloads,
-        _count: undefined,
-      })),
+      data: stories.map((story) => {
+        const { _count, ...storyData } = story;
+        return {
+          ...storyData,
+          favoritesCount: _count.favorites,
+          viewsCount: _count.progresses,
+          parentFavoritesCount: _count.parentFavorites,
+          downloadsCount: _count.downloads,
+        };
+      }),
       meta: {
         total,
         page,
@@ -1194,7 +1252,7 @@ export class AdminService {
     };
   }
 
-  async getStoryById(storyId: string): Promise<any> {
+  async getStoryById(storyId: string): Promise<StoryDetailDto> {
     const story = await this.prisma.story.findUnique({
       where: { id: storyId },
       include: {
@@ -1218,19 +1276,19 @@ export class AdminService {
       throw new NotFoundException(`Story with ID ${storyId} not found`);
     }
 
+    const { _count, ...storyData } = story;
     return {
-      ...story,
+      ...storyData,
       stats: {
-        favoritesCount: story._count.favorites,
-        viewsCount: story._count.progresses,
-        parentFavoritesCount: story._count.parentFavorites,
-        downloadsCount: story._count.downloads,
+        favoritesCount: _count.favorites,
+        viewsCount: _count.progresses,
+        parentFavoritesCount: _count.parentFavorites,
+        downloadsCount: _count.downloads,
       },
-      _count: undefined,
     };
   }
 
-  async toggleStoryRecommendation(storyId: string): Promise<any> {
+  async toggleStoryRecommendation(storyId: string): Promise<Story> {
     const story = await this.prisma.story.findUnique({
       where: { id: storyId },
     });
@@ -1256,7 +1314,7 @@ export class AdminService {
     return result;
   }
 
-  async deleteStory(storyId: string, permanent: boolean = false): Promise<any> {
+  async deleteStory(storyId: string, permanent: boolean = false): Promise<Story> {
     const story = await this.prisma.story.findUnique({
       where: { id: storyId },
     });
