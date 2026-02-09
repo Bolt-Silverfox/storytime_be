@@ -207,10 +207,19 @@ export class BadgeService {
     const relevantBadges =
       this.badgeConstants.BADGE_DEFS_BY_TYPE[badgeType] || [];
 
+    if (relevantBadges.length === 0) {
+      return;
+    }
+
+    // Batch fetch all badges by title to avoid N+1 queries
+    const badgeTitles = relevantBadges.map((b) => b.title);
+    const badges = await this.prisma.badge.findMany({
+      where: { title: { in: badgeTitles } },
+    });
+    const badgeMap = new Map(badges.map((b) => [b.title, b]));
+
     for (const badgeDef of relevantBadges) {
-      const badge = await this.prisma.badge.findFirst({
-        where: { title: badgeDef.title },
-      });
+      const badge = badgeMap.get(badgeDef.title);
 
       if (!badge) {
         this.logger.warn(`Badge not found: ${badgeDef.title}`);
