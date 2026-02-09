@@ -103,6 +103,7 @@ export class StoryController {
   @ApiQuery({ name: 'recommended', required: false, type: String })
   @ApiQuery({ name: 'isMostLiked', required: false, type: String })
   @ApiQuery({ name: 'isSeasonal', required: false, type: String })
+  @ApiQuery({ name: 'topPicksFromUs', required: false, type: String, description: 'Get random top picks from us' })
   @ApiQuery({ name: 'kidId', required: false, type: String })
   @ApiQuery({ name: 'age', required: false, type: String })
   @ApiQuery({ name: 'minAge', required: false, type: String })
@@ -137,6 +138,7 @@ export class StoryController {
     @Query('recommended') recommended?: string,
     @Query('isMostLiked') isMostLiked?: string,
     @Query('isSeasonal') isSeasonal?: string,
+    @Query('topPicksFromUs') topPicksFromUs?: string,
     @Query('kidId') kidId?: string,
     @Query('age') age?: string,
     @Query('minAge') minAge?: string,
@@ -154,6 +156,7 @@ export class StoryController {
       recommended: recommended === 'true',
       isMostLiked: isMostLiked === 'true',
       isSeasonal: isSeasonal === 'true',
+      topPicksFromUs: topPicksFromUs === 'true',
       kidId,
       age: age ? parseInt(age, 10) : undefined,
       minAge: minAge ? parseInt(minAge, 10) : undefined,
