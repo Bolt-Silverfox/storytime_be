@@ -102,6 +102,7 @@ export class StoryService {
     recommended?: boolean;
     isMostLiked?: boolean;
     isSeasonal?: boolean;
+    topPicksFromUs?: boolean;
     age?: number;
     minAge?: number;
     maxAge?: number;
@@ -249,6 +250,26 @@ export class StoryService {
       where.id = { in: recommendedStoryIds };
     }
 
+    // Handle topPicksFromUs filter - get random stories using shared helper
+    if (filter.topPicksFromUs) {
+      const randomStoryIds = await this.getRandomStoryIds(limit, skip);
+
+      if (randomStoryIds.length === 0) {
+        return {
+          data: [],
+          pagination: {
+            currentPage: page,
+            totalPages: 0,
+            pageSize: limit,
+            totalCount: 0,
+          },
+        };
+      }
+
+      // Apply random IDs to where clause
+      where.id = { in: randomStoryIds, ...((where.id as object) || {}) };
+    }
+
     const orderBy = filter.isMostLiked
       ? [
           { parentFavorites: { _count: 'desc' as const } },
@@ -258,12 +279,14 @@ export class StoryService {
       : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
     // Run count and findMany in parallel to reduce latency by ~50%
+    // For topPicksFromUs, pagination is handled in the raw SQL query
     const [totalCount, stories] = await Promise.all([
-      this.prisma.story.count({ where }),
+      filter.topPicksFromUs
+        ? this.prisma.story.count({ where: { isDeleted: false } })
+        : this.prisma.story.count({ where }),
       this.prisma.story.findMany({
         where,
-        skip,
-        take: limit,
+        ...(filter.topPicksFromUs ? {} : { skip, take: limit }),
         orderBy,
         include: {
           images: true,
@@ -1752,6 +1775,27 @@ export class StoryService {
   }
 
   /**
+   * Get random story IDs using raw SQL for efficiency.
+   * @param limit - Maximum number of IDs to return
+   * @param offset - Number of results to skip (for pagination)
+   * @returns Array of random story IDs
+   */
+  private async getRandomStoryIds(
+    limit: number,
+    offset: number = 0,
+  ): Promise<string[]> {
+    const randomIds = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "Story"
+      WHERE "isDeleted" = false
+      ORDER BY RANDOM()
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
+
+    return randomIds.map((r) => r.id);
+  }
+
+  /**
    * Get random stories for "Top Picks from Us" homepage section.
    * Results are cached for 24 hours.
    */
@@ -1762,13 +1806,7 @@ export class StoryService {
       max: 50,
     });
 
-    // Get random story IDs using raw SQL for efficiency
-    const randomIds = await this.prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM "Story"
-      WHERE "isDeleted" = false
-      ORDER BY RANDOM()
-      LIMIT ${sanitizedLimit}
-    `;
+    const randomIds = await this.getRandomStoryIds(sanitizedLimit);
 
     if (randomIds.length === 0) {
       return [];
@@ -1776,7 +1814,7 @@ export class StoryService {
 
     // Fetch full story objects with relations
     return this.prisma.story.findMany({
-      where: { id: { in: randomIds.map((r) => r.id) } },
+      where: { id: { in: randomIds } },
       include: {
         themes: true,
         categories: true,
