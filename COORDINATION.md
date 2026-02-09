@@ -264,6 +264,22 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - 41 E2E tests passing, build passing
 
+### Instance 10 - ✅ Completed
+**Focus**: Phase 4 God Service Extractions (Admin Domain)
+**Timestamp**: 2026-02-09
+**Branch**: `fix/bug-fixes`
+
+**Changes Made**:
+- `src/admin/admin-user.service.ts` (NEW ~370 lines) - Extracted from AdminService
+  - Methods: getAllUsers, getUserById, createAdmin, updateUser, deleteUser, restoreUser, bulkUserAction
+- `src/admin/admin-story.service.ts` (NEW ~240 lines) - Extracted from AdminService
+  - Methods: getAllStories, getStoryById, toggleStoryRecommendation, deleteStory, getCategories, getThemes
+- `src/admin/admin.module.ts` - Added new services to providers and exports
+- `src/admin/admin.controller.ts` - Updated to use AdminUserService and AdminStoryService
+- `src/admin/tests/admin.controller.spec.ts` - Updated test file with mock providers for new services
+
+**Status**: Complete - Build passing, admin controller tests passing
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
@@ -313,6 +329,11 @@ Files currently being modified by other instances - avoid editing these:
 | `src/notification/in-app-notification.controller.ts` | Instance 8 | ✅ Done |
 | `test/auth.e2e-spec.ts` | Instance 9 | ✅ Done |
 | `test/jest-e2e.json` | Instance 9 | ✅ Done |
+| `src/admin/admin-user.service.ts` | Instance 10 | ✅ Done |
+| `src/admin/admin-story.service.ts` | Instance 10 | ✅ Done |
+| `src/admin/admin.module.ts` | Instance 10 | ✅ Done |
+| `src/admin/admin.controller.ts` | Instance 10 | ✅ Done |
+| `src/admin/tests/admin.controller.spec.ts` | Instance 10 | ✅ Done |
 
 ---
 
@@ -354,9 +375,9 @@ Available tasks from the roadmaps:
 - [x] Extract `InAppNotificationService` from `NotificationService` *(Instance 8)*
 - [ ] Extract `ScreenTimeService` from `ReportsService`
 
-**Phase 4: Remaining Extractions**
-- [ ] Extract `AdminUserService` from `AdminService`
-- [ ] Extract `AdminStoryService` from `AdminService`
+**Phase 4: Remaining Extractions** (Partially Complete - Instance 10)
+- [x] Extract `AdminUserService` from `AdminService` *(Instance 10)*
+- [x] Extract `AdminStoryService` from `AdminService` *(Instance 10)*
 - [ ] Extract `StoryGenerationService` from `StoryService`
 - [ ] Extract `StoryRecommendationService` from `StoryService`
 - [ ] Extract `BuddySelectionService` from `StoryBuddyService`
@@ -372,7 +393,7 @@ develop-v0.0.1 (base)
             ├── fix/format-and-lint (merged ✅)
             ├── perf/improvements (Instance 2, 6, 7 & 8)
             ├── feat/gemini-retry-logic (merged ✅)
-            ├── fix/bug-fixes (Instance 4 & 9)
+            ├── fix/bug-fixes (Instance 4, 9 & 10)
             └── perf/resilience-improvements (Instance 5 - PR #219)
 ```
 
