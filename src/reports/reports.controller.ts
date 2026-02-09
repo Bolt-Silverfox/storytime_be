@@ -7,6 +7,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
+import { ScreenTimeService } from './services/screen-time.service';
 import {
   WeeklyReportDto,
   KidDetailedReportDto,
@@ -19,7 +20,10 @@ import { QuestionAnswerDto } from '../story/dto/story.dto';
 @ApiTags('reports')
 @Controller('reports')
 export class ReportsController {
-  constructor(private readonly reportsService: ReportsService) {}
+  constructor(
+    private readonly reportsService: ReportsService,
+    private readonly screenTimeService: ScreenTimeService,
+  ) {}
 
   // ============== WEEKLY OVERVIEW ==============
   @Get('weekly/:parentId')
@@ -45,7 +49,7 @@ export class ReportsController {
   @ApiBody({ type: ScreenTimeSessionDto })
   @ApiResponse({ status: 201, description: 'Returns session ID' })
   async startScreenTime(@Body() dto: ScreenTimeSessionDto) {
-    return this.reportsService.startScreenTimeSession(dto.kidId);
+    return this.screenTimeService.startScreenTimeSession(dto.kidId);
   }
 
   @Post('screen-time/end')
@@ -53,7 +57,7 @@ export class ReportsController {
   @ApiBody({ type: EndScreenTimeSessionDto })
   @ApiResponse({ status: 200, description: 'Returns session duration' })
   async endScreenTime(@Body() dto: EndScreenTimeSessionDto) {
-    return this.reportsService.endScreenTimeSession(dto.sessionId);
+    return this.screenTimeService.endScreenTimeSession(dto.sessionId);
   }
 
   @Get('daily-limit/:kidId')
@@ -61,7 +65,7 @@ export class ReportsController {
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: DailyLimitDto })
   async getDailyLimitStatus(@Param('kidId') kidId: string) {
-    return this.reportsService.getDailyLimitStatus(kidId);
+    return this.screenTimeService.getDailyLimitStatus(kidId);
   }
 
   // ============== QUIZ TRACKING ==============
