@@ -20,7 +20,7 @@ export interface NotificationPayload {
   category: NotificationCategory;
   title: string;
   body: string;
-  data?: Record<string, any>; // Additional metadata
+  data?: Record<string, unknown>; // Additional metadata
 }
 
 /**

@@ -10,9 +10,43 @@
 
 All Claude instances working on this codebase should:
 
-1. **Before starting work**: Pull latest from `integration/refactor-2026-02`
-2. **After completing work**: Push to integration branch with clear commit messages
-3. **Update this file**: Log your changes in the Active Work section below
+1. **Load required skills first** (before starting any work):
+   ```
+   # QA & Code Quality
+   /senior-qa
+   /code-review-excellence
+   /javascript-testing-patterns
+   /nestjs-testing-expert
+
+   # JavaScript
+   /javascript-mastery
+   /modern-javascript-patterns
+
+   # Node.js & Backend
+   /nodejs-backend-patterns
+   /nodejs-backend
+   /nodejs-express-server
+   /express-rest-api
+
+   # NestJS
+   /nestjs-expert
+   /nestjs-best-practices
+
+   # Database
+   /prisma-orm-v7-skills
+   /database-schema-designer
+
+   # DevOps & Infrastructure
+   /devops-engineer
+   /ci-cd-pipeline-builder
+
+   # Git
+   /git-workflow
+   ```
+
+2. **Before starting work**: Pull latest from `integration/refactor-2026-02`
+3. **After completing work**: Push to integration branch with clear commit messages
+4. **Update this file**: Log your changes in the Active Work section below
 
 ### Commands to Sync
 
@@ -87,6 +121,155 @@ git push origin integration/refactor-2026-02
 
 **Status**: All work complete and merged into integration branch.
 
+### Instance 4 - ✅ Completed
+**Focus**: Unit tests + StoryService transactions + N+1 query fixes
+**Timestamp**: 2026-02-08
+**Branch**: `fix/bug-fixes`
+
+**Changes Made**:
+- `src/auth/auth.service.spec.ts` - NEW: 31 tests for AuthService
+- `src/user/user.service.spec.ts` - NEW: 45 tests for UserService
+- `src/subscription/subscription.service.spec.ts` - NEW: 15 tests for SubscriptionService
+- `src/notification/notification.service.spec.ts` - NEW: 34 tests for NotificationService
+- `__mocks__/uuid.ts` - NEW: Mock for uuid ESM module
+- `jest.config.js` - Added transformIgnorePatterns and uuid mock mapping
+- `src/story/story.service.ts` - Added atomic transactions:
+  - `createStory()`: Transaction with validation for categories, themes, seasons
+  - `updateStory()`: Transaction with validation for categories, themes, seasons
+  - `persistGeneratedStory()`: Refactored to generate audio first with pre-generated UUID, then create story atomically with all data
+- `src/story/story.service.ts` - Fixed N+1 query patterns:
+  - Batched 10+ sequential validation queries using `Promise.all()` (addFavorite, setProgress, getProgress, setUserProgress, getUserProgress, restrictStory, assignDailyChallenge, startStoryPath, adjustReadingLevel, recommendStoryToKid)
+  - `assignDailyChallengeToAllKids()`: Refactored from O(n*queries) to 4 upfront queries + batch creates
+  - `generateStoryForKid()`: Removed duplicate kid query, batched themes/categories fetch
+
+**Status**: Complete - 178 unit tests passing, build passing
+
+**Additional Work (Type Safety Phase)**:
+- `src/admin/admin.service.ts` - Eliminated 10 `any` types:
+  - `getAllUsers()` → `PaginatedResponseDto<UserListItemDto>`
+  - `getUserById()` → Proper inline type with `Omit<User, ...>`
+  - `createAdmin()` → `AdminCreatedDto`
+  - `updateUser()` → `UserUpdatedDto`
+  - `deleteUser()` / `restoreUser()` → Explicit return types with `select`
+  - `getAllStories()` → `PaginatedResponseDto<StoryListItemDto>`
+  - `getStoryById()` → `StoryDetailDto`
+  - `toggleStoryRecommendation()` / `deleteStory()` → `Story` type
+  - Fixed security issue: `deleteUser`/`restoreUser` now use `select` to exclude `passwordHash`/`pinHash`
+- `src/admin/admin.controller.ts` - Fixed 4 `as any` casts with `ApiResponseDto<T>`
+- `src/admin/dto/admin-responses.dto.ts` - Added new DTOs: `UserListItemDto`, `StoryListItemDto`, `AdminCreatedDto`, `UserUpdatedDto`
+- `src/notification/*.ts` - Changed `Record<string, any>` to `Record<string, unknown>`
+- `src/achievement-progress/badge.service.ts` - Fixed Prisma compound key type assertion
+- `src/voice/providers/eleven-labs-tts.provider.ts` - Fixed SDK type compatibility (`blob as unknown as File`)
+- `src/notification/providers/in-app.provider.ts` - Fixed Prisma JSON type with proper cast
+
+### Instance 5 - ✅ Completed
+**Focus**: Type safety improvements & N+1 query optimization
+**Timestamp**: 2026-02-08
+**Branch**: `perf/resilience-improvements`
+**PR**: #219
+
+**Changes Made**:
+- `src/auth/auth.service.ts` - Use Prisma `Role` enum instead of `as any` cast
+- `src/user/user.service.ts` - Use `Prisma.UserUncheckedUpdateInput` for type safety
+- `src/voice/providers/eleven-labs-tts.provider.ts` - Use `Promise<unknown>` instead of `Promise<any>`
+- `src/story/story.service.ts` - Optimized `assignDailyChallengeToAllKids()`:
+  - Before: O(N×5) queries where N = number of kids
+  - After: O(4 + M) queries where M = unique stories selected
+  - Used `Promise.all` for parallel data fetching
+  - In-memory processing with `Map` for O(1) lookups
+  - Batch `createMany` for assignments
+
+**Status**: Complete. PR #219 open to integration branch.
+
+### Instance 6 - ✅ Completed
+**Focus**: Phase 1 God Service Extractions
+**Timestamp**: 2026-02-08
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/story/story-progress.service.ts` (NEW ~300 lines) - Extracted from StoryService
+  - Methods: setProgress, getProgress, getContinueReading, getCompletedStories, getCreatedStories,
+    setUserProgress, getUserProgress, getUserContinueReading, getUserCompletedStories,
+    removeFromUserLibrary, getDownloads, addDownload, removeDownload, removeFromLibrary
+- `src/story/daily-challenge.service.ts` (NEW ~260 lines) - Extracted from StoryService
+  - Methods: setDailyChallenge, getDailyChallenge, assignDailyChallenge, completeDailyChallenge,
+    getAssignmentsForKid, getAssignmentById, assignDailyChallengeToAllKids,
+    handleDailyChallengeAssignment (cron), getTodaysDailyChallengeAssignment, getWeeklyDailyChallengeAssignments
+- `src/admin/admin-analytics.service.ts` (NEW ~600 lines) - Extracted from AdminService
+  - Methods: getDashboardStats, getUserGrowth, getStoryStats, getContentBreakdown, getSystemHealth,
+    getSubscriptionAnalytics, getRevenueAnalytics, getAiCreditAnalytics, getUserGrowthMonthly, calculateChurnRate
+- Updated controllers and modules to use new services
+
+**Status**: Phase 1 complete. All three high-impact extractions done.
+
+### Instance 7 - ✅ Completed
+**Focus**: Phase 2 God Service Extractions (Auth & User Domain)
+**Timestamp**: 2026-02-09
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/auth/services/oauth.service.ts` (NEW ~250 lines) - Extracted from AuthService
+  - Methods: loginWithGoogleIdToken, handleGoogleOAuthPayload, loginWithAppleIdToken, upsertOrReturnUserFromOAuthPayload
+- `src/auth/services/onboarding.service.ts` (NEW ~190 lines) - Extracted from AuthService
+  - Methods: completeProfile, getLearningExpectations, updateProfile
+- `src/user/services/user-deletion.service.ts` (NEW ~280 lines) - Extracted from UserService
+  - Methods: deleteUser, terminateUserSessions, deleteUserAccount, verifyPasswordAndLogDeletion, undoDeleteUser, undoDeleteMyAccount
+- `src/user/services/user-pin.service.ts` (NEW ~200 lines) - Extracted from UserService
+  - Methods: setPin, verifyPin, requestPinResetOtp, validatePinResetOtp, resetPinWithOtp
+- Updated AuthModule, AuthController, UserModule, UserController to use new services
+- Updated test files to remove tests for moved methods
+- AuthService reduced from ~694 lines to ~264 lines
+- UserService reduced from ~448 lines to ~256 lines
+
+**Status**: Phase 2 complete. All four Auth & User domain extractions done.
+
+### Instance 8 - ✅ Completed
+**Focus**: Phase 3 God Service Extractions (Notification & Reports Domain)
+**Timestamp**: 2026-02-09
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/notification/services/notification-preference.service.ts` (NEW ~370 lines) - Extracted from NotificationService
+  - Methods: create, update, getForUser, getForKid, getById, toggleCategoryPreference, getUserPreferencesGrouped, updateUserPreferences, seedDefaultPreferences, delete, undoDelete
+- `src/notification/services/in-app-notification.service.ts` (NEW ~65 lines) - Extracted from NotificationService
+  - Methods: getInAppNotifications, markAsRead, markAllAsRead
+- `src/reports/services/screen-time.service.ts` (NEW ~175 lines) - Extracted from ReportsService
+  - Methods: startScreenTimeSession, endScreenTimeSession, getTodayScreenTime, getScreenTimeForRange, getEffectiveDailyLimit, getDailyLimitStatus
+- Updated NotificationModule with new services as providers and exports
+- Updated NotificationController to use NotificationPreferenceService
+- Updated UserPreferencesController to use NotificationPreferenceService
+- Updated InAppNotificationController to use InAppNotificationService
+- Updated ReportsModule to include ScreenTimeService
+- Updated ReportsController to use ScreenTimeService for screen time endpoints
+- Updated ReportsService to delegate to ScreenTimeService
+- NotificationService reduced to core notification sending functionality (~323 lines)
+- ReportsService reduced from ~536 lines to ~337 lines
+
+**Status**: Phase 3 complete. All Notification & Reports domain extractions done.
+
+### Instance 9 - ✅ Completed
+**Focus**: E2E Tests for Authentication Flows
+**Timestamp**: 2026-02-09
+**Branch**: `fix/bug-fixes`
+
+**Changes Made**:
+- `test/auth.e2e-spec.ts` (NEW ~850 lines) - Comprehensive E2E tests for auth flows:
+  - Registration tests: valid registration, invalid email, weak password, single name, missing fields, duplicate email, email sanitization
+  - Login tests: valid credentials, invalid password, non-existent email, missing fields, email case handling
+  - Token refresh tests: valid refresh, invalid token, missing token
+  - Protected routes tests: with/without token, invalid token, malformed header
+  - Logout tests: single session and all devices
+  - Email verification tests: invalid token, missing token, send verification
+  - Password reset tests: request reset, validate token, reset with weak password
+  - Change password tests: with token, incorrect old password, without auth
+  - OAuth tests: Google and Apple with missing/invalid id_token
+  - Learning expectations: public endpoint access
+- `test/jest-e2e.json` - Added moduleNameMapper for googleapis and uuid mocks
+- Mock PrismaService with in-memory storage for user, session, token, profile models
+- Mock EmailQueueService, EmailProcessor, EmailProvider for email testing
+
+**Status**: Complete - 41 E2E tests passing, build passing
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
@@ -101,6 +284,45 @@ Files currently being modified by other instances - avoid editing these:
 | `src/payment/payment.service.ts` | Instance 3 | ✅ Done |
 | `src/payment/payment.module.ts` | Instance 3 | ✅ Done |
 | `src/story/gemini.service.ts` | Instance 3 | ✅ Done |
+| `src/auth/auth.service.spec.ts` | Instance 4 | ✅ Done |
+| `src/user/user.service.spec.ts` | Instance 4 | ✅ Done |
+| `src/subscription/subscription.service.spec.ts` | Instance 4 | ✅ Done |
+| `src/notification/notification.service.spec.ts` | Instance 4 | ✅ Done |
+| `jest.config.js` | Instance 4 | ✅ Done |
+| `src/story/story.service.ts` | Instance 4 & 5 | ✅ Done |
+| `src/auth/auth.service.ts` | Instance 5 | ✅ Done |
+| `src/user/user.service.ts` | Instance 5 | ✅ Done |
+| `src/voice/providers/eleven-labs-tts.provider.ts` | Instance 5 | ✅ Done |
+| `src/story/story-progress.service.ts` | Instance 6 | ✅ Done |
+| `src/story/daily-challenge.service.ts` | Instance 6 | ✅ Done |
+| `src/admin/admin-analytics.service.ts` | Instance 6 | ✅ Done |
+| `src/admin/admin.service.ts` | Instance 4 | ✅ Done |
+| `src/admin/admin.controller.ts` | Instance 4 | ✅ Done |
+| `src/admin/dto/admin-responses.dto.ts` | Instance 4 | ✅ Done |
+| `src/notification/notification.service.ts` | Instance 4 | ✅ Done |
+| `src/notification/notification.registry.ts` | Instance 4 | ✅ Done |
+| `src/notification/providers/*` | Instance 4 | ✅ Done |
+| `src/achievement-progress/badge.service.ts` | Instance 4 | ✅ Done |
+| `src/auth/services/oauth.service.ts` | Instance 7 | ✅ Done |
+| `src/auth/services/onboarding.service.ts` | Instance 7 | ✅ Done |
+| `src/user/services/user-deletion.service.ts` | Instance 7 | ✅ Done |
+| `src/user/services/user-pin.service.ts` | Instance 7 | ✅ Done |
+| `src/auth/auth.module.ts` | Instance 7 | ✅ Done |
+| `src/auth/auth.controller.ts` | Instance 7 | ✅ Done |
+| `src/user/user.module.ts` | Instance 7 | ✅ Done |
+| `src/user/user.controller.ts` | Instance 7 | ✅ Done |
+| `src/notification/services/notification-preference.service.ts` | Instance 8 | ✅ Done |
+| `src/notification/services/in-app-notification.service.ts` | Instance 8 | ✅ Done |
+| `src/notification/notification.module.ts` | Instance 8 | ✅ Done |
+| `src/notification/notification.controller.ts` | Instance 8 | ✅ Done |
+| `src/notification/user-preferences.controller.ts` | Instance 8 | ✅ Done |
+| `src/notification/in-app-notification.controller.ts` | Instance 8 | ✅ Done |
+| `src/reports/services/screen-time.service.ts` | Instance 8 | ✅ Done |
+| `src/reports/reports.service.ts` | Instance 8 | ✅ Done |
+| `src/reports/reports.module.ts` | Instance 8 | ✅ Done |
+| `src/reports/reports.controller.ts` | Instance 8 | ✅ Done |
+| `test/auth.e2e-spec.ts` | Instance 9 | ✅ Done |
+| `test/jest-e2e.json` | Instance 9 | ✅ Done |
 
 ---
 
@@ -111,34 +333,36 @@ Available tasks from the roadmaps:
 ### From PERFORMANCE_IMPROVEMENTS.md
 - [x] Add transactions to SubscriptionService for plan changes *(Instance 1)*
 - [x] Add transactions to PaymentService for atomic payment + subscription *(Instance 3)*
-- [ ] Add transactions to StoryService for story creation
-- [ ] Batch sequential queries (N+1 fixes in story.service.ts)
+- [x] Add transactions to StoryService for story creation *(Instance 4)*
+- [x] Batch sequential queries (N+1 fixes in story.service.ts) *(Instance 4 & 5)*
 - [x] Add retry logic to AI provider calls (GeminiService) *(Instance 3)*
 - [x] Implement circuit breaker for external services *(already existed in GeminiService)*
 
 ### From QA_IMPROVEMENTS.md
-- [ ] Add unit tests for AuthService
-- [ ] Add unit tests for UserService
-- [ ] Add E2E tests for authentication flows
-- [ ] Replace remaining `any` types (~22 files)
+- [x] Add unit tests for AuthService *(Instance 4)*
+- [x] Add unit tests for UserService *(Instance 4)*
+- [x] Add unit tests for SubscriptionService *(Instance 4)*
+- [x] Add unit tests for NotificationService *(Instance 4)*
+- [x] Add E2E tests for authentication flows *(Instance 9)*
+- [x] Replace remaining `any` types (~22 files) *(Instance 4 & 5 - production code complete, only test mocks remain)*
 
 ### God Service Extractions (see QA_IMPROVEMENTS.md section 2.3 for details)
 
-**Phase 1: High-Impact Extractions**
-- [ ] Extract `StoryProgressService` from `StoryService`
-- [ ] Extract `DailyChallengeService` from `StoryService`
-- [ ] Extract `AdminAnalyticsService` from `AdminService`
+**Phase 1: High-Impact Extractions** ✅ COMPLETE *(Instance 6)*
+- [x] Extract `StoryProgressService` from `StoryService`
+- [x] Extract `DailyChallengeService` from `StoryService`
+- [x] Extract `AdminAnalyticsService` from `AdminService`
 
-**Phase 2: Auth & User Domain**
-- [ ] Extract `OAuthService` from `AuthService`
-- [ ] Extract `OnboardingService` from `AuthService`
-- [ ] Extract `UserDeletionService` from `UserService`
-- [ ] Extract `UserPinService` from `UserService`
+**Phase 2: Auth & User Domain** ✅ COMPLETE *(Instance 7)*
+- [x] Extract `OAuthService` from `AuthService`
+- [x] Extract `OnboardingService` from `AuthService`
+- [x] Extract `UserDeletionService` from `UserService`
+- [x] Extract `UserPinService` from `UserService`
 
-**Phase 3: Notification & Reports**
-- [ ] Extract `NotificationPreferenceService` from `NotificationService`
-- [ ] Extract `InAppNotificationService` from `NotificationService`
-- [ ] Extract `ScreenTimeService` from `ReportsService`
+**Phase 3: Notification & Reports** ✅ COMPLETE *(Instance 8)*
+- [x] Extract `NotificationPreferenceService` from `NotificationService` *(Instance 8)*
+- [x] Extract `InAppNotificationService` from `NotificationService` *(Instance 8)*
+- [x] Extract `ScreenTimeService` from `ReportsService` *(Instance 8)*
 
 **Phase 4: Remaining Extractions**
 - [ ] Extract `AdminUserService` from `AdminService`
@@ -156,8 +380,10 @@ Available tasks from the roadmaps:
 develop-v0.0.1 (base)
     └── integration/refactor-2026-02 (shared integration)
             ├── fix/format-and-lint (merged ✅)
-            ├── perf/improvements (Instance 2)
-            └── feat/gemini-retry-logic (merged ✅)
+            ├── perf/improvements (Instance 2, 6, 7 & 8)
+            ├── feat/gemini-retry-logic (merged ✅)
+            ├── fix/bug-fixes (Instance 4 & 9)
+            └── perf/resilience-improvements (Instance 5 - PR #219)
 ```
 
 When all instances complete their work:
