@@ -20,7 +20,7 @@ export class ParentFavoritesService {
       include: {
         story: {
           include: {
-            creatorKid: true,
+            categories: true,
           },
         },
       },
@@ -32,8 +32,14 @@ export class ParentFavoritesService {
       title: favorite.story.title,
       description: favorite.story.description,
       coverImageUrl: favorite.story.coverImageUrl,
-      author: favorite.story.creatorKid?.name ?? undefined,
+      categories: favorite.story.categories.map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        image: cat.image ?? undefined,
+        description: cat.description ?? undefined,
+      })),
       ageRange: `${favorite.story.ageMin}-${favorite.story.ageMax}`,
+      durationSeconds: favorite.story.durationSeconds ?? undefined,
       createdAt: favorite.createdAt,
     };
   }
@@ -44,11 +50,7 @@ export class ParentFavoritesService {
       include: {
         story: {
           include: {
-            images: true,
-            branches: true,
-            themes: true,
             categories: true,
-            creatorKid: true,
           },
         },
       },
@@ -61,8 +63,14 @@ export class ParentFavoritesService {
       title: fav.story.title,
       description: fav.story.description,
       coverImageUrl: fav.story.coverImageUrl,
-      author: fav.story.creatorKid?.name ?? undefined,
+      categories: fav.story.categories.map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        image: cat.image ?? undefined,
+        description: cat.description ?? undefined,
+      })),
       ageRange: `${fav.story.ageMin}-${fav.story.ageMax}`,
+      durationSeconds: fav.story.durationSeconds ?? undefined,
       createdAt: fav.createdAt,
     }));
   }
