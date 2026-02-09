@@ -203,6 +203,45 @@ git push origin integration/refactor-2026-02
 **Status**: Phase 1 complete. All three high-impact extractions done.
 
 ### Instance 7 - ✅ Completed
+**Focus**: Phase 2 God Service Extractions (Auth & User Domain)
+**Timestamp**: 2026-02-09
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/auth/services/oauth.service.ts` (NEW ~250 lines) - Extracted from AuthService
+  - Methods: loginWithGoogleIdToken, handleGoogleOAuthPayload, loginWithAppleIdToken, upsertOrReturnUserFromOAuthPayload
+- `src/auth/services/onboarding.service.ts` (NEW ~190 lines) - Extracted from AuthService
+  - Methods: completeProfile, getLearningExpectations, updateProfile
+- `src/user/services/user-deletion.service.ts` (NEW ~280 lines) - Extracted from UserService
+  - Methods: deleteUser, terminateUserSessions, deleteUserAccount, verifyPasswordAndLogDeletion, undoDeleteUser, undoDeleteMyAccount
+- `src/user/services/user-pin.service.ts` (NEW ~200 lines) - Extracted from UserService
+  - Methods: setPin, verifyPin, requestPinResetOtp, validatePinResetOtp, resetPinWithOtp
+- Updated AuthModule, AuthController, UserModule, UserController to use new services
+- Updated test files to remove tests for moved methods
+- AuthService reduced from ~694 lines to ~264 lines
+- UserService reduced from ~448 lines to ~256 lines
+
+**Status**: Phase 2 complete. All four Auth & User domain extractions done.
+
+### Instance 8 - ✅ Completed
+**Focus**: Phase 3 God Service Extractions (Notification Domain)
+**Timestamp**: 2026-02-09
+**Branch**: `perf/improvements`
+
+**Changes Made**:
+- `src/notification/services/notification-preference.service.ts` (NEW ~370 lines) - Extracted from NotificationService
+  - Methods: create, update, getForUser, getForKid, getById, toggleCategoryPreference, getUserPreferencesGrouped, updateUserPreferences, seedDefaultPreferences, delete, undoDelete
+- `src/notification/services/in-app-notification.service.ts` (NEW ~65 lines) - Extracted from NotificationService
+  - Methods: getInAppNotifications, markAsRead, markAllAsRead
+- Updated NotificationModule with new services as providers and exports
+- Updated NotificationController to use NotificationPreferenceService
+- Updated UserPreferencesController to use NotificationPreferenceService
+- Updated InAppNotificationController to use InAppNotificationService
+- NotificationService reduced to core notification sending functionality (~323 lines)
+
+**Status**: Phase 3 notification extractions complete. ScreenTimeService extraction remaining.
+
+### Instance 9 - ✅ Completed
 **Focus**: E2E Tests for Authentication Flows
 **Timestamp**: 2026-02-09
 **Branch**: `fix/bug-fixes`
@@ -258,8 +297,22 @@ Files currently being modified by other instances - avoid editing these:
 | `src/notification/notification.registry.ts` | Instance 4 | ✅ Done |
 | `src/notification/providers/*` | Instance 4 | ✅ Done |
 | `src/achievement-progress/badge.service.ts` | Instance 4 | ✅ Done |
-| `test/auth.e2e-spec.ts` | Instance 7 | ✅ Done |
-| `test/jest-e2e.json` | Instance 7 | ✅ Done |
+| `src/auth/services/oauth.service.ts` | Instance 7 | ✅ Done |
+| `src/auth/services/onboarding.service.ts` | Instance 7 | ✅ Done |
+| `src/user/services/user-deletion.service.ts` | Instance 7 | ✅ Done |
+| `src/user/services/user-pin.service.ts` | Instance 7 | ✅ Done |
+| `src/auth/auth.module.ts` | Instance 7 | ✅ Done |
+| `src/auth/auth.controller.ts` | Instance 7 | ✅ Done |
+| `src/user/user.module.ts` | Instance 7 | ✅ Done |
+| `src/user/user.controller.ts` | Instance 7 | ✅ Done |
+| `src/notification/services/notification-preference.service.ts` | Instance 8 | ✅ Done |
+| `src/notification/services/in-app-notification.service.ts` | Instance 8 | ✅ Done |
+| `src/notification/notification.module.ts` | Instance 8 | ✅ Done |
+| `src/notification/notification.controller.ts` | Instance 8 | ✅ Done |
+| `src/notification/user-preferences.controller.ts` | Instance 8 | ✅ Done |
+| `src/notification/in-app-notification.controller.ts` | Instance 8 | ✅ Done |
+| `test/auth.e2e-spec.ts` | Instance 9 | ✅ Done |
+| `test/jest-e2e.json` | Instance 9 | ✅ Done |
 
 ---
 
@@ -280,7 +333,7 @@ Available tasks from the roadmaps:
 - [x] Add unit tests for UserService *(Instance 4)*
 - [x] Add unit tests for SubscriptionService *(Instance 4)*
 - [x] Add unit tests for NotificationService *(Instance 4)*
-- [x] Add E2E tests for authentication flows *(Instance 7)*
+- [x] Add E2E tests for authentication flows *(Instance 9)*
 - [x] Replace remaining `any` types (~22 files) *(Instance 4 & 5 - production code complete, only test mocks remain)*
 
 ### God Service Extractions (see QA_IMPROVEMENTS.md section 2.3 for details)
@@ -290,15 +343,15 @@ Available tasks from the roadmaps:
 - [x] Extract `DailyChallengeService` from `StoryService`
 - [x] Extract `AdminAnalyticsService` from `AdminService`
 
-**Phase 2: Auth & User Domain**
-- [ ] Extract `OAuthService` from `AuthService`
-- [ ] Extract `OnboardingService` from `AuthService`
-- [ ] Extract `UserDeletionService` from `UserService`
-- [ ] Extract `UserPinService` from `UserService`
+**Phase 2: Auth & User Domain** ✅ COMPLETE *(Instance 7)*
+- [x] Extract `OAuthService` from `AuthService`
+- [x] Extract `OnboardingService` from `AuthService`
+- [x] Extract `UserDeletionService` from `UserService`
+- [x] Extract `UserPinService` from `UserService`
 
-**Phase 3: Notification & Reports**
-- [ ] Extract `NotificationPreferenceService` from `NotificationService`
-- [ ] Extract `InAppNotificationService` from `NotificationService`
+**Phase 3: Notification & Reports** (Partially Complete - Instance 8)
+- [x] Extract `NotificationPreferenceService` from `NotificationService` *(Instance 8)*
+- [x] Extract `InAppNotificationService` from `NotificationService` *(Instance 8)*
 - [ ] Extract `ScreenTimeService` from `ReportsService`
 
 **Phase 4: Remaining Extractions**
@@ -317,9 +370,9 @@ Available tasks from the roadmaps:
 develop-v0.0.1 (base)
     └── integration/refactor-2026-02 (shared integration)
             ├── fix/format-and-lint (merged ✅)
-            ├── perf/improvements (Instance 2 & 6)
+            ├── perf/improvements (Instance 2, 6, 7 & 8)
             ├── feat/gemini-retry-logic (merged ✅)
-            ├── fix/bug-fixes (Instance 4 & 7)
+            ├── fix/bug-fixes (Instance 4 & 9)
             └── perf/resilience-improvements (Instance 5 - PR #219)
 ```
 

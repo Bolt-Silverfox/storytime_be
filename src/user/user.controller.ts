@@ -25,6 +25,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
+import { UserDeletionService } from './services/user-deletion.service';
+import { UserPinService } from './services/user-pin.service';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -59,7 +61,11 @@ class UpdateUserRoleDto {
 @ApiTags('user')
 @Controller('user')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly userDeletionService: UserDeletionService,
+    private readonly userPinService: UserPinService,
+  ) {}
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
   // ============================================================
@@ -149,7 +155,7 @@ export class UserController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Set or update PIN' })
   async setPin(@Req() req: AuthenticatedRequest, @Body() body: SetPinDto) {
-    return this.userService.setPin(req.authUserData.userId, body.pin);
+    return this.userPinService.setPin(req.authUserData.userId, body.pin);
   }
 
   @Post('me/pin/verify')
@@ -179,7 +185,7 @@ export class UserController {
     },
   })
   async verifyPin(@Req() req: AuthenticatedRequest, @Body() body: SetPinDto) {
-    return this.userService.verifyPin(req.authUserData.userId, body.pin);
+    return this.userPinService.verifyPin(req.authUserData.userId, body.pin);
   }
 
   @Post('me/pin/request-reset')
@@ -200,7 +206,7 @@ export class UserController {
     },
   })
   async requestPinResetOtp(@Req() req: AuthenticatedRequest) {
-    return this.userService.requestPinResetOtp(req.authUserData.userId);
+    return this.userPinService.requestPinResetOtp(req.authUserData.userId);
   }
 
   @Post('me/pin/validate-otp')
@@ -225,7 +231,7 @@ export class UserController {
     @Req() req: AuthenticatedRequest,
     @Body() body: ValidatePinResetOtpDto,
   ) {
-    return this.userService.validatePinResetOtp(
+    return this.userPinService.validatePinResetOtp(
       req.authUserData.userId,
       body.otp,
     );
@@ -259,7 +265,7 @@ export class UserController {
     if (body.newPin !== body.confirmNewPin) {
       throw new BadRequestException('New PIN and confirmation do not match');
     }
-    return this.userService.resetPinWithOtp(
+    return this.userPinService.resetPinWithOtp(
       req.authUserData.userId,
       body.otp,
       body.newPin,
@@ -328,7 +334,7 @@ export class UserController {
     @Req() req: AuthenticatedRequest,
     @Query('permanent') permanent: boolean = false,
   ) {
-    const result = await this.userService.deleteUserAccount(
+    const result = await this.userDeletionService.deleteUserAccount(
       req.authUserData.userId,
       permanent,
     );
@@ -390,7 +396,7 @@ export class UserController {
     @Query('permanent') permanent: boolean = false,
   ) {
     // Verify password and create support ticket
-    await this.userService.verifyPasswordAndLogDeletion(
+    await this.userDeletionService.verifyPasswordAndLogDeletion(
       req.authUserData.userId,
       body.password,
       body.reasons,
@@ -459,7 +465,7 @@ export class UserController {
     },
   })
   async undoDeleteMyAccount(@Req() req: AuthenticatedRequest) {
-    const restoredUser = await this.userService.undoDeleteMyAccount(
+    const restoredUser = await this.userDeletionService.undoDeleteMyAccount(
       req.authUserData.userId,
     );
 
@@ -538,7 +544,7 @@ export class UserController {
     @Param('id') id: string,
     @Query('permanent') permanent: boolean = false,
   ) {
-    return await this.userService.deleteUserAccount(id, permanent);
+    return await this.userDeletionService.deleteUserAccount(id, permanent);
   }
 
   @Post(':id/undo-delete')
@@ -571,7 +577,7 @@ export class UserController {
       throw new ForbiddenException('Admins only');
     }
 
-    const restoredUser = await this.userService.undoDeleteUser(id);
+    const restoredUser = await this.userDeletionService.undoDeleteUser(id);
 
     return {
       statusCode: 200,
