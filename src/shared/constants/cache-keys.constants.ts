@@ -7,9 +7,12 @@ export const CACHE_KEYS = {
   STORY_STATS: 'admin:story:stats',
   CONTENT_BREAKDOWN: 'admin:content:breakdown',
 
-  // Content caches
+  // Content caches (static data)
   CATEGORIES_ALL: 'categories:all',
+  THEMES_ALL: 'themes:all',
   VOICES_ALL: 'voices:all',
+  STORY_BUDDIES_ALL: 'story-buddies:all',
+  SEASONS_ALL: 'seasons:all',
 
   // Homepage caches
   TOP_PICKS_FROM_US: 'top-picks-from-us',
@@ -18,13 +21,16 @@ export const CACHE_KEYS = {
 /** Cache TTL values */
 export const CACHE_TTL_MS = {
   DASHBOARD: 5 * 60 * 1000, // 5 minutes
-  VOICES: 5 * 60 * 1000, // 5 minutes
+  STATIC_CONTENT: 60 * 60 * 1000, // 1 hour for categories, themes, buddies
+  VOICES: 30 * 60 * 1000, // 30 minutes
   TOP_PICKS_FROM_US: 24 * 60 * 60 * 1000, // 24 hours
 } as const;
 
 /** Keys to invalidate when story content changes */
 export const STORY_INVALIDATION_KEYS = [
   CACHE_KEYS.CATEGORIES_ALL,
+  CACHE_KEYS.THEMES_ALL,
+  CACHE_KEYS.SEASONS_ALL,
   CACHE_KEYS.DASHBOARD_STATS,
   CACHE_KEYS.STORY_STATS,
   CACHE_KEYS.CONTENT_BREAKDOWN,

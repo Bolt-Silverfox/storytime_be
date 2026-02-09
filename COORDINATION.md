@@ -341,7 +341,7 @@ git push origin integration/refactor-2026-02
 **Status**: Complete - Build passing
 
 ### Instance 12 - ✅ Completed
-**Focus**: Unit Tests for Extracted Auth & User Services
+**Focus**: Unit Tests for Extracted Auth, User & Admin Services
 **Timestamp**: 2026-02-09
 **Branch**: `fix/bug-fixes`
 
@@ -374,8 +374,25 @@ git push origin integration/refactor-2026-02
     - validatePinResetOtp: OTP format validation, expiry checking
     - resetPinWithOtp: full PIN reset flow with OTP verification
     - Error scenarios: invalid format, expired OTP, same PIN as old
+- `src/admin/tests/admin-user.service.spec.ts` (NEW ~750 lines) - Comprehensive unit tests for AdminUserService
+  - 41 tests covering:
+    - getAllUsers: pagination, filtering (role, status, subscription, search), sorting
+    - getUserById: user retrieval with subscription status, error handling
+    - createAdmin: admin creation with password hashing, email validation
+    - updateUser: partial updates, email uniqueness, role changes, self-demotion prevention
+    - deleteUser: soft delete, permanent delete, self-deletion prevention
+    - restoreUser: soft-deleted user restoration
+    - bulkUserAction: bulk activate, suspend, delete operations with self-modification prevention
+- `src/admin/tests/admin-story.service.spec.ts` (NEW ~500 lines) - Comprehensive unit tests for AdminStoryService
+  - 33 tests covering:
+    - getAllStories: pagination, filtering (category, theme, recommended, featured, search), sorting
+    - getStoryById: story retrieval with all relations, error handling
+    - toggleStoryRecommendation: recommendation toggle, featured update, cache invalidation
+    - deleteStory: story deletion, cache invalidation, error handling
+    - getCategories: active categories retrieval with story counts
+    - getThemes: active themes retrieval with story counts
 
-**Status**: Complete - All 84 tests passing (43 auth + 41 user), build passing
+**Status**: Complete - All 158 tests passing (43 auth + 41 user + 74 admin), build passing
 
 ### Instance 13 - ✅ Completed
 **Focus**: Phase 4 God Service Extractions (StoryGenerationService)
@@ -510,6 +527,8 @@ Files currently being modified by other instances - avoid editing these:
 | `src/auth/services/onboarding.service.spec.ts` | Instance 12 | ✅ Done |
 | `src/user/services/user-deletion.service.spec.ts` | Instance 12 | ✅ Done |
 | `src/user/services/user-pin.service.spec.ts` | Instance 12 | ✅ Done |
+| `src/admin/tests/admin-user.service.spec.ts` | Instance 12 | ✅ Done |
+| `src/admin/tests/admin-story.service.spec.ts` | Instance 12 | ✅ Done |
 | `src/story/story-generation.service.ts` | Instance 13 | ✅ Done |
 | `src/story/scripts/backfill-duration.ts` | Instance 13 | ✅ Done |
 | `src/story-buddy/buddy-selection.service.ts` | Instance 14 & 15 | ✅ Done |
