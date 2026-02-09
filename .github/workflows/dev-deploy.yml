@@ -241,7 +241,7 @@ jobs:
   deploy:
     name: Deploy to Dev
     needs: [build, test]
-    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    if: always() && github.event.action == 'closed' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
