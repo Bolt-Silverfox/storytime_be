@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { CategoryDto } from '@/story/dto/story.dto';
 
 export class ParentFavoriteResponseDto {
   @ApiProperty({ description: 'ID of the favorite entry' })
@@ -16,14 +17,22 @@ export class ParentFavoriteResponseDto {
   @ApiProperty({ description: 'Cover image URL of the story' })
   coverImageUrl: string;
 
-  @ApiProperty({ description: 'Author of the story (if any)', required: false })
-  author?: string;
+  @ApiProperty({
+    description: 'Categories of the story',
+    type: [CategoryDto],
+  })
+  categories: CategoryDto[];
 
   @ApiProperty({
     description: 'Age range of the story (e.g. "3-5")',
+  })
+  ageRange: string;
+
+  @ApiProperty({
+    description: 'Duration of the story in seconds',
     required: false,
   })
-  ageRange?: string;
+  durationSeconds?: number;
 
   @ApiProperty({ description: 'Date the story was favorited' })
   createdAt: Date;
