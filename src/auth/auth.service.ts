@@ -20,11 +20,14 @@ import {
   ChangePasswordDto,
 } from './dto/auth.dto';
 import { PrismaService } from '@/prisma/prisma.service';
-import { Role } from '@prisma/client';
+import {
+  Role,
+  NotificationCategory,
+  NotificationType,
+} from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { generateToken } from '@/utils/generate-token';
 import { NotificationService } from '@/notification/notification.service';
-import { NotificationPreferenceService } from '@/notification/services/notification-preference.service';
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
 
@@ -35,7 +38,6 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
-    private readonly notificationPreferenceService: NotificationPreferenceService,
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
   ) {}
@@ -129,34 +131,56 @@ export class AuthService {
       data.password,
     );
 
-    const user = await this.prisma.user.create({
-      data: {
-        name: data.fullName,
-        email: data.email,
-        passwordHash: hashedPassword,
-        role,
-        onboardingStatus: 'account_created',
-      },
-      include: {
-        profile: true,
-        avatar: true,
-      },
+    // Use transaction to ensure user creation + notification preferences are atomic
+    const user = await this.prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          name: data.fullName,
+          email: data.email,
+          passwordHash: hashedPassword,
+          role,
+          onboardingStatus: 'account_created',
+        },
+        include: {
+          profile: true,
+          avatar: true,
+        },
+      });
+
+      // Seed default notification preferences inside the transaction
+      // User-facing categories that should have preferences
+      const userFacingCategories = [
+        NotificationCategory.SUBSCRIPTION_REMINDER,
+        NotificationCategory.SUBSCRIPTION_ALERT,
+        NotificationCategory.NEW_STORY,
+        NotificationCategory.STORY_FINISHED,
+        NotificationCategory.INCOMPLETE_STORY_REMINDER,
+        NotificationCategory.DAILY_LISTENING_REMINDER,
+      ];
+      const channels = [NotificationType.in_app, NotificationType.push];
+
+      const preferences = userFacingCategories.flatMap((category) =>
+        channels.map((type) => ({
+          userId: newUser.id,
+          category,
+          type,
+          enabled: true,
+        })),
+      );
+
+      await tx.notificationPreference.createMany({
+        data: preferences,
+        skipDuplicates: true,
+      });
+
+      return newUser;
     });
 
+    // Send email verification (outside transaction - non-critical)
     try {
       await this.sendEmailVerification(user.email);
     } catch (error) {
       this.logger.error('Email failed but user registered:', error.message);
-    }
-
-    // Seed default notification preferences for the new user
-    try {
-      await this.notificationPreferenceService.seedDefaultPreferences(user.id);
-    } catch (error) {
-      this.logger.error(
-        'Failed to seed notification preferences:',
-        error.message,
-      );
     }
 
     const tokenData = await this.tokenService.createTokenPair(user);
@@ -176,19 +200,22 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    await this.prisma.token.deleteMany({
-      where: { userId: user.id, type: TokenType.VERIFICATION },
-    });
-
     const { token, expiresAt } = generateToken(24);
 
-    await this.prisma.token.create({
-      data: {
-        userId: user.id,
-        token: this.tokenService.hashToken(token),
-        expiresAt,
-        type: TokenType.VERIFICATION,
-      },
+    // Use transaction to ensure old tokens are deleted and new one created atomically
+    await this.prisma.$transaction(async (tx) => {
+      await tx.token.deleteMany({
+        where: { userId: user.id, type: TokenType.VERIFICATION },
+      });
+
+      await tx.token.create({
+        data: {
+          userId: user.id,
+          token: this.tokenService.hashToken(token),
+          expiresAt,
+          type: TokenType.VERIFICATION,
+        },
+      });
     });
 
     const resp = await this.notificationService.sendNotification(
@@ -221,14 +248,17 @@ export class AuthService {
       throw new UnauthorizedException('Verification token has expired');
     }
 
-    await this.prisma.user.update({
-      where: { id: verificationToken.userId },
-      data: {
-        isEmailVerified: true,
-        onboardingStatus: 'email_verified',
-      },
+    // Use transaction to ensure user update + token deletion are atomic
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: verificationToken.userId },
+        data: {
+          isEmailVerified: true,
+          onboardingStatus: 'email_verified',
+        },
+      });
+      await tx.token.delete({ where: { id: verificationToken.id } });
     });
-    await this.prisma.token.delete({ where: { id: verificationToken.id } });
 
     return { message: 'Email verified successfully' };
   }
