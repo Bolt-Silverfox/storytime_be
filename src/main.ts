@@ -4,6 +4,7 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
+import compression from 'compression';
 import { SuccessResponseInterceptor } from './shared/interceptors/success-response.interceptor';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter';
@@ -18,9 +19,26 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);
 
-  // 1. GLOBAL SETUP (Prefix, CORS, Security)
+  // 1. GLOBAL SETUP (Prefix, CORS, Security, Compression)
 
   app.setGlobalPrefix('api/v1');
+
+  // Enable gzip/deflate compression for responses > 1KB
+  app.use(
+    compression({
+      filter: (req, res) => {
+        // Don't compress if client doesn't accept it
+        if (req.headers['x-no-compression']) {
+          return false;
+        }
+        // Use compression's default filter (checks Accept-Encoding)
+        return compression.filter(req, res);
+      },
+      threshold: 1024, // Only compress responses > 1KB
+      level: 6, // Compression level (1-9, 6 is default balance of speed/ratio)
+    }),
+  );
+
   app.use(helmet());
   app.use(requestLogger);
   app.enableCors({
