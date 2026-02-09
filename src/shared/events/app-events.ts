@@ -83,7 +83,7 @@ export interface UserPasswordChangedEvent {
 export interface KidCreatedEvent {
   kidId: string;
   parentId: string;
-  name: string;
+  name: string | null;
   ageRange: string | null;
   createdAt: Date;
 }
