@@ -5,7 +5,10 @@ import {
   ConflictException,
   ForbiddenException,
   Logger,
+  Inject,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
 import { BuddySelectionService } from './buddy-selection.service';
@@ -13,6 +16,10 @@ import {
   CreateStoryBuddyDto,
   UpdateStoryBuddyDto,
 } from './dto/story-buddy.dto';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+} from '../shared/constants/cache-keys.constants';
 
 @Injectable()
 export class StoryBuddyService {
@@ -22,19 +29,43 @@ export class StoryBuddyService {
     private readonly prisma: PrismaService,
     private readonly uploadService: UploadService,
     private readonly buddySelectionService: BuddySelectionService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
   /**
+   * Invalidate story buddies cache
+   */
+  private async invalidateBuddiesCache(): Promise<void> {
+    await this.cacheManager.del(CACHE_KEYS.STORY_BUDDIES_ALL);
+  }
+
+  /**
    * Get all active story buddies (public access)
+   * Uses caching for improved performance (1 hour TTL)
    */
   async getActiveBuddies() {
-    return await this.prisma.storyBuddy.findMany({
+    // Check cache first
+    const cached = await this.cacheManager.get(CACHE_KEYS.STORY_BUDDIES_ALL);
+    if (cached) {
+      return cached;
+    }
+
+    const buddies = await this.prisma.storyBuddy.findMany({
       where: {
         isActive: true,
         isDeleted: false, // EXCLUDE SOFT DELETED BUDDIES
       },
       orderBy: { createdAt: 'asc' },
     });
+
+    // Cache for 1 hour (static content)
+    await this.cacheManager.set(
+      CACHE_KEYS.STORY_BUDDIES_ALL,
+      buddies,
+      CACHE_TTL_MS.STATIC_CONTENT,
+    );
+
+    return buddies;
   }
 
   /**
@@ -137,7 +168,7 @@ export class StoryBuddyService {
     }
 
     // Create the buddy
-    return await this.prisma.storyBuddy.create({
+    const buddy = await this.prisma.storyBuddy.create({
       data: {
         name: createDto.name.toLowerCase(),
         displayName: createDto.displayName,
@@ -151,6 +182,11 @@ export class StoryBuddyService {
         ageGroupMax: createDto.ageGroupMax ?? 12,
       },
     });
+
+    // Invalidate cache
+    await this.invalidateBuddiesCache();
+
+    return buddy;
   }
 
   /**
@@ -198,7 +234,7 @@ export class StoryBuddyService {
       }
     }
 
-    return await this.prisma.storyBuddy.update({
+    const updatedBuddy = await this.prisma.storyBuddy.update({
       where: { id: buddyId },
       data: {
         displayName: updateDto.displayName,
@@ -212,6 +248,11 @@ export class StoryBuddyService {
         ageGroupMax: updateDto.ageGroupMax,
       },
     });
+
+    // Invalidate cache
+    await this.invalidateBuddiesCache();
+
+    return updatedBuddy;
   }
 
   /**
@@ -251,18 +292,28 @@ export class StoryBuddyService {
         where: { buddyId },
       });
 
-      return await this.prisma.storyBuddy.delete({
+      const deletedBuddy = await this.prisma.storyBuddy.delete({
         where: { id: buddyId },
       });
+
+      // Invalidate cache
+      await this.invalidateBuddiesCache();
+
+      return deletedBuddy;
     } else {
       // Soft delete
-      return await this.prisma.storyBuddy.update({
+      const softDeletedBuddy = await this.prisma.storyBuddy.update({
         where: { id: buddyId },
         data: {
           isDeleted: true,
           deletedAt: new Date(),
         },
       });
+
+      // Invalidate cache
+      await this.invalidateBuddiesCache();
+
+      return softDeletedBuddy;
     }
   }
 
@@ -283,13 +334,18 @@ export class StoryBuddyService {
       throw new BadRequestException('Story buddy is not deleted');
     }
 
-    return await this.prisma.storyBuddy.update({
+    const restoredBuddy = await this.prisma.storyBuddy.update({
       where: { id: buddyId },
       data: {
         isDeleted: false,
         deletedAt: null,
       },
     });
+
+    // Invalidate cache
+    await this.invalidateBuddiesCache();
+
+    return restoredBuddy;
   }
 
   /**
