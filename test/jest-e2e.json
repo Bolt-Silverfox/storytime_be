@@ -2,15 +2,22 @@
   "moduleFileExtensions": [
     "js",
     "json",
-    "ts"
+    "ts",
+    "tsx"
   ],
   "rootDir": ".",
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
+    "^.+\\.(t|j)sx?$": "ts-jest"
   },
   "moduleNameMapper": {
-    "^src/(.*)$": "<rootDir>/../src/$1"
-  }
+    "^src/(.*)$": "<rootDir>/../src/$1",
+    "^@/(.*)$": "<rootDir>/../src/$1",
+    "^googleapis$": "<rootDir>/../__mocks__/googleapis.ts",
+    "^uuid$": "<rootDir>/../__mocks__/uuid.ts"
+  },
+  "transformIgnorePatterns": [
+    "/node_modules/(?!uuid)/"
+  ]
 }
