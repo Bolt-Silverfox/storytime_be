@@ -9,6 +9,7 @@ import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
 import { StoryProgressService } from './story-progress.service';
 import { DailyChallengeService } from './daily-challenge.service';
+import { StoryGenerationService } from './story-generation.service';
 import { StoryQuotaService } from './story-quota.service';
 import { VoiceModule } from '../voice/voice.module';
 import { StoryAccessGuard } from '@/shared/guards/story-access.guard';
@@ -28,11 +29,12 @@ import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle
     StoryService,
     StoryProgressService,
     DailyChallengeService,
+    StoryGenerationService,
     GeminiService,
     StoryQuotaService,
     StoryAccessGuard,
     SubscriptionThrottleGuard,
   ],
-  exports: [StoryService, StoryProgressService, DailyChallengeService, StoryQuotaService]
+  exports: [StoryService, StoryProgressService, DailyChallengeService, StoryGenerationService, StoryQuotaService]
 })
 export class StoryModule {}
