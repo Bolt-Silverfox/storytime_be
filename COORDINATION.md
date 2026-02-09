@@ -6,6 +6,30 @@
 
 ---
 
+## ⚠️ CRITICAL RULES (READ FIRST)
+
+**These rules prevent merge conflicts and lost work:**
+
+1. **ALWAYS use `git merge`, NEVER use `git rebase`**
+   - Rebase rewrites history and loses merge conflict resolutions
+   - This causes massive conflicts when multiple instances work together
+   - If you accidentally rebase, abort with `git rebase --abort`
+
+2. **ONE instance per file/service at a time**
+   - Before starting work on a file, check the "Conflict Zones" table below
+   - If a file is being modified by another instance, DO NOT touch it
+   - Claim your files by adding them to the Conflict Zones table BEFORE starting
+
+3. **Pull before starting, pull before pushing**
+   - Always sync with the latest changes before starting work
+   - Always sync again before pushing to catch any new changes
+
+4. **Do NOT use `git pull --rebase`**
+   - Use `git pull` (which does merge by default)
+   - Or explicitly: `git pull --no-rebase origin integration/refactor-2026-02`
+
+---
+
 ## 🔄 Coordination Protocol
 
 All Claude instances working on this codebase should:
@@ -51,17 +75,25 @@ All Claude instances working on this codebase should:
 ### Commands to Sync
 
 ```bash
-# Sync before starting
+# Sync before starting (ALWAYS do this first)
 git checkout integration/refactor-2026-02
-git pull origin integration/refactor-2026-02
+git pull --no-rebase origin integration/refactor-2026-02
 
 # After completing work
 git add .
 git commit -m "type(scope): description"
-git push origin integration/refactor-2026-02
 
-# Update this coordination file with your changes
+# Sync again before pushing (to merge any new changes from other instances)
+git pull --no-rebase origin integration/refactor-2026-02
+
+# Then push
+git push origin integration/refactor-2026-02
 ```
+
+⚠️ **NEVER use these commands:**
+- `git rebase` - rewrites history, causes conflicts
+- `git pull --rebase` - same problem
+- `git push --force` - overwrites other instances' work
 
 ---
 
@@ -270,6 +302,22 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - 41 E2E tests passing, build passing
 
+### Instance 10 - ✅ Completed
+**Focus**: Phase 4 God Service Extractions (Admin Domain)
+**Timestamp**: 2026-02-09
+**Branch**: `fix/bug-fixes`
+
+**Changes Made**:
+- `src/admin/admin-user.service.ts` (NEW ~370 lines) - Extracted from AdminService
+  - Methods: getAllUsers, getUserById, createAdmin, updateUser, deleteUser, restoreUser, bulkUserAction
+- `src/admin/admin-story.service.ts` (NEW ~240 lines) - Extracted from AdminService
+  - Methods: getAllStories, getStoryById, toggleStoryRecommendation, deleteStory, getCategories, getThemes
+- `src/admin/admin.module.ts` - Added new services to providers and exports
+- `src/admin/admin.controller.ts` - Updated to use AdminUserService and AdminStoryService
+- `src/admin/tests/admin.controller.spec.ts` - Updated test file with mock providers for new services
+
+**Status**: Complete - Build passing, admin controller tests passing
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
@@ -323,6 +371,11 @@ Files currently being modified by other instances - avoid editing these:
 | `src/reports/reports.controller.ts` | Instance 8 | ✅ Done |
 | `test/auth.e2e-spec.ts` | Instance 9 | ✅ Done |
 | `test/jest-e2e.json` | Instance 9 | ✅ Done |
+| `src/admin/admin-user.service.ts` | Instance 10 | ✅ Done |
+| `src/admin/admin-story.service.ts` | Instance 10 | ✅ Done |
+| `src/admin/admin.module.ts` | Instance 10 | ✅ Done |
+| `src/admin/admin.controller.ts` | Instance 10 | ✅ Done |
+| `src/admin/tests/admin.controller.spec.ts` | Instance 10 | ✅ Done |
 
 ---
 
@@ -364,9 +417,9 @@ Available tasks from the roadmaps:
 - [x] Extract `InAppNotificationService` from `NotificationService` *(Instance 8)*
 - [x] Extract `ScreenTimeService` from `ReportsService` *(Instance 8)*
 
-**Phase 4: Remaining Extractions**
-- [ ] Extract `AdminUserService` from `AdminService`
-- [ ] Extract `AdminStoryService` from `AdminService`
+**Phase 4: Remaining Extractions** (Partially Complete - Instance 10)
+- [x] Extract `AdminUserService` from `AdminService` *(Instance 10)*
+- [x] Extract `AdminStoryService` from `AdminService` *(Instance 10)*
 - [ ] Extract `StoryGenerationService` from `StoryService`
 - [ ] Extract `StoryRecommendationService` from `StoryService`
 - [ ] Extract `BuddySelectionService` from `StoryBuddyService`
@@ -378,13 +431,36 @@ Available tasks from the roadmaps:
 
 ```
 develop-v0.0.1 (base)
-    └── integration/refactor-2026-02 (shared integration)
+    └── integration/refactor-2026-02 (shared integration - source of truth)
             ├── fix/format-and-lint (merged ✅)
             ├── perf/improvements (Instance 2, 6, 7 & 8)
             ├── feat/gemini-retry-logic (merged ✅)
-            ├── fix/bug-fixes (Instance 4 & 9)
+            ├── fix/bug-fixes (Instance 4, 9 & 10)
             └── perf/resilience-improvements (Instance 5 - PR #219)
 ```
+
+### Workflow for Each Instance
+
+Each instance works on a **separate worktree** with their own **feature branch**, using the integration branch as the source of truth:
+
+1. **Pull from integration** to see what's left and what others are doing:
+   ```bash
+   git fetch origin
+   git merge origin/integration/refactor-2026-02
+   ```
+
+2. **Do your work** on your feature branch (one file/service at a time - check Conflict Zones first!)
+
+3. **Merge back to integration** to let others know what you're doing:
+   ```bash
+   git checkout integration/refactor-2026-02
+   git merge your-feature-branch
+   git push origin integration/refactor-2026-02
+   ```
+
+4. **Update COORDINATION.md** - log your changes and update Conflict Zones table
+
+### Final Merge to develop-v0.0.1
 
 When all instances complete their work:
 1. Verify build passes: `pnpm run build`
