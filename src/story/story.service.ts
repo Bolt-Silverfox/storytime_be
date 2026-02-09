@@ -1785,7 +1785,7 @@ export class StoryService {
     offset: number = 0,
   ): Promise<string[]> {
     const randomIds = await this.prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM "Story"
+      SELECT id FROM "stories"
       WHERE "isDeleted" = false
       ORDER BY RANDOM()
       LIMIT ${limit}
