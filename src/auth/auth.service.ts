@@ -24,6 +24,7 @@ import { Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { generateToken } from '@/utils/generate-token';
 import { NotificationService } from '@/notification/notification.service';
+import { NotificationPreferenceService } from '@/notification/services/notification-preference.service';
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
 
@@ -34,6 +35,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
+    private readonly notificationPreferenceService: NotificationPreferenceService,
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
   ) {}
@@ -149,7 +151,7 @@ export class AuthService {
 
     // Seed default notification preferences for the new user
     try {
-      await this.notificationService.seedDefaultPreferences(user.id);
+      await this.notificationPreferenceService.seedDefaultPreferences(user.id);
     } catch (error) {
       this.logger.error(
         'Failed to seed notification preferences:',

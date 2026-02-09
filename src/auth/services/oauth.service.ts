@@ -6,7 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { NotificationService } from '@/notification/notification.service';
+import { NotificationPreferenceService } from '@/notification/services/notification-preference.service';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
 import { OAuth2Client } from 'google-auth-library';
@@ -31,7 +31,7 @@ export class OAuthService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationService: NotificationService,
+    private readonly notificationPreferenceService: NotificationPreferenceService,
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
   ) {
@@ -194,7 +194,7 @@ export class OAuthService {
 
       // Seed default notification preferences for new OAuth users
       try {
-        await this.notificationService.seedDefaultPreferences(user.id);
+        await this.notificationPreferenceService.seedDefaultPreferences(user.id);
       } catch (error) {
         this.logger.error(
           'Failed to seed notification preferences:',
