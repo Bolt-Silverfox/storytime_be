@@ -1,7 +1,13 @@
-// settings.service.ts - Enhanced version
-import { Injectable, BadRequestException } from '@nestjs/common';
+// settings.service.ts - Enhanced version with caching
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '@/prisma/prisma.service';
 import { Profile } from '@prisma/client';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+} from '@/shared/constants/cache-keys.constants';
 
 export interface UpdateSettingsBody {
   explicitContent?: boolean;
@@ -12,17 +18,39 @@ export interface UpdateSettingsBody {
 
 @Injectable()
 export class SettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
+  /**
+   * Invalidate user preferences cache
+   */
+  private async invalidateUserPreferencesCache(userId: string): Promise<void> {
+    await this.cacheManager.del(CACHE_KEYS.USER_PREFERENCES(userId));
+  }
+
   /**
    * Get user profile settings (parent-level)
+   * Uses caching for improved performance (5-minute TTL)
    */
   async getSettings(userId: string): Promise<Profile> {
+    // Check cache first
+    const cacheKey = CACHE_KEYS.USER_PREFERENCES(userId);
+    const cached = await this.cacheManager.get<Profile>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     let profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (!profile) {
       profile = await this.prisma.profile.create({
         data: { userId, language: 'en', country: 'NG' },
       });
     }
+
+    // Cache for 5 minutes
+    await this.cacheManager.set(cacheKey, profile, CACHE_TTL_MS.USER_DATA);
+
     return profile;
   }
 
@@ -76,10 +104,15 @@ export class SettingsService {
       return profile;
     }
 
-    return await this.prisma.profile.update({
+    const updatedProfile = await this.prisma.profile.update({
       where: { userId },
       data: updateData,
     });
+
+    // Invalidate cache after update
+    await this.invalidateUserPreferencesCache(userId);
+
+    return updatedProfile;
   }
 
   /**
