@@ -442,6 +442,26 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - Build passing
 
+### Instance 18 - ✅ Completed
+**Focus**: Post-merge refactoring tasks
+**Timestamp**: 2026-02-10
+
+**Changes Made**:
+- `src/shared/events/app-events.ts`:
+  - Added `QUOTA_EXHAUSTED` and `QUOTA_WARNING` events
+  - Added `QuotaTypes` constant (`STORY`, `VOICE`, `AI_GENERATION`)
+  - Added `QuotaExhaustedEvent` and `QuotaWarningEvent` interfaces
+- `src/story/story-quota.service.ts` - Emit QUOTA_EXHAUSTED when story limit reached
+- `src/voice/voice-quota.service.ts` - Emit QUOTA_EXHAUSTED when voice limit reached
+- `src/shared/events/event-listeners.service.ts` - Added quota event listener
+- `src/shared/constants/cache-keys.constants.ts`:
+  - Added `SUBSCRIPTION_STATUS`, `PROGRESS_HOME`, `PROGRESS_OVERVIEW` keys
+- `src/subscription/subscription.service.ts` - Updated to use centralized CACHE_KEYS
+- `src/achievement-progress/progress.service.ts` - Updated to use CACHE_KEYS and CACHE_TTL_MS
+- `src/shared/pipes/clamp.pipe.spec.ts` - NEW: 30 unit tests for ClampPipe
+
+**Status**: Complete - All post-merge tasks done, build passing, 30 tests passing
+
 ### Instance 17 - ✅ Completed
 **Focus**: Merge develop-v0.0.1 into integration branch
 **Timestamp**: 2026-02-10
@@ -663,11 +683,11 @@ The integration branch was merged with `develop-v0.0.1` to bring in new features
 
 ### Tasks for Next Instances
 
-- [ ] Add event emissions for quota exhaustion (`QUOTA_EXHAUSTED` event)
-- [ ] Add event emissions for payment/subscription changes from new IAP flow
-- [ ] Review `VoiceQuotaService` for extraction opportunities (currently ~400 lines)
-- [ ] Add unit tests for new `ClampPipe`
-- [ ] Verify cache invalidation uses consistent `CACHE_KEYS` constants
+- [x] Add event emissions for quota exhaustion (`QUOTA_EXHAUSTED` event) *(Instance 18)*
+- [x] Add event emissions for payment/subscription changes from new IAP flow *(Already done in PaymentService)*
+- [x] Review `VoiceQuotaService` for extraction opportunities *(Instance 18 - 317 lines, not needed)*
+- [x] Add unit tests for new `ClampPipe` *(Instance 18 - 30 tests)*
+- [x] Verify cache invalidation uses consistent `CACHE_KEYS` constants *(Instance 18)*
 
 ### Event-Driven Architecture Integration
 
