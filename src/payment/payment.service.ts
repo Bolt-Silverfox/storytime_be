@@ -352,22 +352,25 @@ export class PaymentService {
       completedAt: now,
     } satisfies PaymentCompletedEvent);
 
-    // Emit subscription created or changed event
+    // Emit subscription events
     if (result.existingSub) {
-      // Determine change type based on plan comparison
-      const changeType = this.determineChangeType(result.existingSub.plan, plan);
+      // Only emit SUBSCRIPTION_CHANGED if plan actually changed
+      if (result.existingSub.plan !== plan) {
+        const changeType = this.determineChangeType(result.existingSub.plan, plan);
 
-      this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CHANGED, {
-        subscriptionId: result.subscription.id,
-        userId,
-        previousPlanId: result.existingSub.plan,
-        newPlanId: plan,
-        previousPlanName: PLANS[result.existingSub.plan]?.display || result.existingSub.plan,
-        newPlanName: PLANS[plan]?.display || plan,
-        changeType,
-        changedAt: now,
-      } satisfies SubscriptionChangedEvent);
+        this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CHANGED, {
+          subscriptionId: result.subscription.id,
+          userId,
+          previousPlanId: result.existingSub.plan,
+          newPlanId: plan,
+          previousPlanName: PLANS[result.existingSub.plan]?.display || result.existingSub.plan,
+          newPlanName: PLANS[plan]?.display || plan,
+          changeType,
+          changedAt: now,
+        } satisfies SubscriptionChangedEvent);
+      }
     } else {
+      // New subscription created
       this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CREATED, {
         subscriptionId: result.subscription.id,
         userId,
@@ -377,6 +380,8 @@ export class PaymentService {
         createdAt: now,
       } satisfies SubscriptionCreatedEvent);
     }
+
+    this.logger.log(`Payment completed: ${result.paymentTx.id} for user ${userId.substring(0, 8)}`);
 
     return {
       tx: result.paymentTx,
