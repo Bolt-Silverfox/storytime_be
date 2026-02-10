@@ -21,6 +21,13 @@ export const CACHE_KEYS = {
   USER_PREFERENCES: (userId: string) => `user:${userId}:preferences`,
   KID_PROFILE: (kidId: string) => `kid:${kidId}:profile`,
   USER_KIDS: (userId: string) => `user:${userId}:kids`,
+
+  // Subscription caches
+  SUBSCRIPTION_STATUS: (userId: string) => `subscription:status:${userId}`,
+
+  // Progress/Achievement caches
+  PROGRESS_HOME: (userId: string) => `progress:home:${userId}`,
+  PROGRESS_OVERVIEW: (userId: string) => `progress:overview:${userId}`,
 } as const;
 
 /** Cache TTL values */

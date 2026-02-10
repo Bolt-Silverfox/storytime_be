@@ -14,6 +14,7 @@ import {
   KidCreatedEvent,
   KidDeletedEvent,
   NotificationSentEvent,
+  QuotaExhaustedEvent,
 } from './app-events';
 
 /**
@@ -131,5 +132,17 @@ export class EventListenersService {
       `Subscription cancelled: ${event.subscriptionId} for user ${event.userId}${event.reason ? ` - Reason: ${event.reason}` : ''}`,
     );
     // Future: Churn analytics, win-back campaign trigger, etc.
+  }
+
+  // =============================================================================
+  // QUOTA EVENTS
+  // =============================================================================
+
+  @OnEvent(AppEvents.QUOTA_EXHAUSTED)
+  handleQuotaExhausted(event: QuotaExhaustedEvent): void {
+    this.logger.log(
+      `Quota exhausted: ${event.quotaType} for user ${event.userId} (${event.used}/${event.limit})`,
+    );
+    // Future: Upgrade prompt notification, analytics for conversion optimization, etc.
   }
 }
