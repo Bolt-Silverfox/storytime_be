@@ -4,6 +4,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { NotificationService } from './notification.service';
 import { NotificationPreferenceService } from './services/notification-preference.service';
 import { InAppNotificationService } from './services/in-app-notification.service';
+import { EventNotificationService } from './services/event-notification.service';
 import { NotificationController } from './notification.controller';
 import { InAppNotificationController } from './in-app-notification.controller';
 import { UserPreferencesController } from './user-preferences.controller';
@@ -32,6 +33,7 @@ import { EmailProcessor } from './queue/email.processor';
     NotificationService,
     NotificationPreferenceService,
     InAppNotificationService,
+    EventNotificationService,
     InAppProvider,
     EmailProvider,
     // Queue components
