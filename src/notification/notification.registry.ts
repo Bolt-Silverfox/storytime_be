@@ -4,6 +4,9 @@ import { PasswordResetTemplate } from './templates/password-reset';
 import { PasswordResetAlertTemplate } from './templates/password-reset-alert';
 import { PasswordChangedTemplate } from './templates/password-changed';
 import { PinResetTemplate } from './templates/pin-reset';
+import { QuotaExhaustedTemplate } from './templates/quota-exhausted';
+import { SubscriptionWelcomeTemplate } from './templates/subscription-welcome';
+import { PaymentFailedTemplate } from './templates/payment-failed';
 import { NotificationCategory } from '@prisma/client';
 
 export type Notifications =
@@ -13,7 +16,10 @@ export type Notifications =
   | 'PasswordChanged'
   | 'PinReset'
   | 'NewStory'
-  | 'AchievementUnlocked';
+  | 'AchievementUnlocked'
+  | 'QuotaExhausted'
+  | 'SubscriptionWelcome'
+  | 'PaymentFailed';
 
 export type Medium = 'email' | 'sms' | 'push' | 'in_app';
 
@@ -156,6 +162,72 @@ export const NotificationRegistry: Record<
       return Promise.resolve(
         `Congratulations! You've unlocked the "${data.achievementName}" achievement.`,
       );
+    },
+  },
+  QuotaExhausted: {
+    medium: 'email',
+    category: NotificationCategory.SUBSCRIPTION_ALERT,
+    subject: "You've Reached Your Free Limit - Upgrade to Premium",
+    validate: (data) => {
+      if (!data.email) return 'Email is required';
+      if (!data.userName) return 'User name is required';
+      if (!data.quotaType) return 'Quota type is required';
+      if (typeof data.used !== 'number') return 'Used count is required';
+      if (typeof data.limit !== 'number') return 'Limit is required';
+      return null;
+    },
+    getTemplate: async (data) => {
+      const emailHtml = render(
+        QuotaExhaustedTemplate({
+          email: data.email as string,
+          userName: data.userName as string,
+          quotaType: data.quotaType as 'story' | 'voice',
+          used: data.used as number,
+          limit: data.limit as number,
+        }),
+      );
+      return emailHtml;
+    },
+  },
+  SubscriptionWelcome: {
+    medium: 'email',
+    category: NotificationCategory.PAYMENT_SUCCESS,
+    subject: 'Welcome to StoryTime Premium!',
+    validate: (data) => {
+      if (!data.email) return 'Email is required';
+      if (!data.userName) return 'User name is required';
+      if (!data.planName) return 'Plan name is required';
+      return null;
+    },
+    getTemplate: async (data) => {
+      const emailHtml = render(
+        SubscriptionWelcomeTemplate({
+          email: data.email as string,
+          userName: data.userName as string,
+          planName: data.planName as string,
+        }),
+      );
+      return emailHtml;
+    },
+  },
+  PaymentFailed: {
+    medium: 'email',
+    category: NotificationCategory.PAYMENT_FAILED,
+    subject: 'Payment Could Not Be Processed - StoryTime',
+    validate: (data) => {
+      if (!data.email) return 'Email is required';
+      if (!data.userName) return 'User name is required';
+      return null;
+    },
+    getTemplate: async (data) => {
+      const emailHtml = render(
+        PaymentFailedTemplate({
+          email: data.email as string,
+          userName: data.userName as string,
+          errorMessage: data.errorMessage as string | undefined,
+        }),
+      );
+      return emailHtml;
     },
   },
 };
