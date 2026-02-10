@@ -203,6 +203,15 @@ export class AuthService {
 
     const tokenData = await this.tokenService.createTokenPair(user);
 
+    // Emit user registered event for analytics, onboarding triggers, etc.
+    this.eventEmitter.emit(AppEvents.USER_REGISTERED, {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      registeredAt: user.createdAt,
+    } satisfies UserRegisteredEvent);
+
     return {
       user: new UserDto({ ...user, numberOfKids: 0 }),
       jwt: tokenData.jwt,
@@ -277,14 +286,11 @@ export class AuthService {
     });
 
     // Emit email verified event
-    const verifiedEvent: UserEmailVerifiedEvent = {
+    this.eventEmitter.emit(AppEvents.USER_EMAIL_VERIFIED, {
       userId: verificationToken.user.id,
       email: verificationToken.user.email,
       verifiedAt: new Date(),
-    };
-    this.eventEmitter.emit(AppEvents.USER_EMAIL_VERIFIED, verifiedEvent);
-
-    this.logger.log(`Email verified for user ${verificationToken.user.id}`);
+    } satisfies UserEmailVerifiedEvent);
 
     return { message: 'Email verified successfully' };
   }

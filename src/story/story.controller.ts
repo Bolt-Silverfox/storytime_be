@@ -84,6 +84,12 @@ import {
   CACHE_TTL_MS,
 } from '@/shared/constants/cache-keys.constants';
 import { StoryQuotaService } from './story-quota.service';
+import {
+  StoryQueueService,
+  QueueStoryOptions,
+  QueueStoryForKidOptions,
+  StoryPriority,
+} from './queue';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -98,6 +104,7 @@ export class StoryController {
     private readonly voiceService: VoiceService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly storyQuotaService: StoryQuotaService,
+    private readonly storyQueueService: StoryQueueService,
   ) {}
 
   @Get()
@@ -1094,6 +1101,226 @@ export class StoryController {
     const themes = theme ? [theme] : undefined;
     const categories = category ? [category] : undefined;
     return this.storyGenerationService.generateStoryForKid(kidId, themes, categories);
+  }
+
+  // === ASYNC STORY GENERATION ENDPOINTS ===
+
+  @Post('generate/async')
+  @UseGuards(AuthSessionGuard, SubscriptionThrottleGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Queue async story generation (returns jobId for polling)',
+  })
+  @ApiBody({ type: GenerateStoryDto })
+  @ApiOkResponse({
+    description: 'Story generation queued',
+    schema: {
+      type: 'object',
+      properties: {
+        queued: { type: 'boolean' },
+        jobId: { type: 'string' },
+        estimatedWaitTime: { type: 'number' },
+        error: { type: 'string' },
+      },
+    },
+  })
+  @Throttle({
+    medium: {
+      limit: THROTTLE_LIMITS.GENERATION.FREE.LIMIT,
+      ttl: THROTTLE_LIMITS.GENERATION.FREE.TTL,
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  async queueStoryGeneration(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: GenerateStoryDto,
+  ) {
+    const userId = req.authUserData.userId;
+
+    // If kidId is provided, queue for kid
+    if (body.kidId) {
+      const options: QueueStoryForKidOptions = {
+        userId,
+        kidId: body.kidId,
+        themes: body.themes,
+        categories: body.categories,
+        seasonIds: body.seasonIds,
+        kidName: body.kidName,
+        priority: StoryPriority.NORMAL,
+        metadata: {
+          clientIp: req.ip,
+          userAgent: req.headers['user-agent'],
+        },
+      };
+      return this.storyQueueService.queueStoryForKid(options);
+    }
+
+    // Otherwise, queue standard generation
+    const options: QueueStoryOptions = {
+      userId,
+      theme: body.themes || ['Adventure'],
+      category: body.categories || ['Bedtime Stories'],
+      ageMin: body.ageMin || 4,
+      ageMax: body.ageMax || 8,
+      language: body.language || 'English',
+      kidName: body.kidName,
+      additionalContext: body.additionalContext,
+      seasonIds: body.seasonIds,
+      priority: StoryPriority.NORMAL,
+      metadata: {
+        clientIp: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+    };
+
+    return this.storyQueueService.queueStoryGeneration(options);
+  }
+
+  @Get('generate/status/:jobId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get async story generation job status' })
+  @ApiParam({ name: 'jobId', type: String })
+  @ApiOkResponse({
+    description: 'Job status',
+    schema: {
+      type: 'object',
+      properties: {
+        jobId: { type: 'string' },
+        status: {
+          type: 'string',
+          enum: [
+            'queued',
+            'processing',
+            'generating_content',
+            'generating_image',
+            'generating_audio',
+            'persisting',
+            'completed',
+            'failed',
+          ],
+        },
+        progress: { type: 'number' },
+        progressMessage: { type: 'string' },
+        createdAt: { type: 'string', format: 'date-time' },
+        startedAt: { type: 'string', format: 'date-time' },
+        completedAt: { type: 'string', format: 'date-time' },
+        result: { type: 'object' },
+        error: { type: 'string' },
+        estimatedTimeRemaining: { type: 'number' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Job not found',
+    type: ErrorResponseDto,
+  })
+  async getJobStatus(@Param('jobId') jobId: string) {
+    return this.storyQueueService.getJobStatus(jobId);
+  }
+
+  @Get('generate/result/:jobId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get completed job result' })
+  @ApiParam({ name: 'jobId', type: String })
+  @ApiOkResponse({
+    description: 'Job result',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        storyId: { type: 'string' },
+        story: { type: 'object' },
+        error: { type: 'string' },
+        attemptsMade: { type: 'number' },
+        processingTimeMs: { type: 'number' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Job not found',
+    type: ErrorResponseDto,
+  })
+  async getJobResult(@Param('jobId') jobId: string) {
+    return this.storyQueueService.getJobResult(jobId);
+  }
+
+  @Delete('generate/job/:jobId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancel a pending job' })
+  @ApiParam({ name: 'jobId', type: String })
+  @ApiOkResponse({
+    description: 'Job cancellation result',
+    schema: {
+      type: 'object',
+      properties: {
+        cancelled: { type: 'boolean' },
+        reason: { type: 'string' },
+      },
+    },
+  })
+  async cancelJob(
+    @Req() req: AuthenticatedRequest,
+    @Param('jobId') jobId: string,
+  ) {
+    return this.storyQueueService.cancelJob(jobId, req.authUserData.userId);
+  }
+
+  @Get('generate/pending')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Get user's pending story generation jobs" })
+  @ApiOkResponse({
+    description: 'List of pending jobs',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          jobId: { type: 'string' },
+          status: { type: 'string' },
+          progress: { type: 'number' },
+          progressMessage: { type: 'string' },
+          createdAt: { type: 'string', format: 'date-time' },
+          estimatedTimeRemaining: { type: 'number' },
+        },
+      },
+    },
+  })
+  async getPendingJobs(@Req() req: AuthenticatedRequest) {
+    return this.storyQueueService.getUserPendingJobs(req.authUserData.userId);
+  }
+
+  @Get('generate/queue-stats')
+  @ApiOperation({ summary: 'Get queue statistics (for admin/monitoring)' })
+  @ApiOkResponse({
+    description: 'Queue statistics',
+    schema: {
+      type: 'object',
+      properties: {
+        waiting: { type: 'number' },
+        active: { type: 'number' },
+        completed: { type: 'number' },
+        failed: { type: 'number' },
+        delayed: { type: 'number' },
+      },
+    },
+  })
+  async getQueueStats() {
+    return this.storyQueueService.getQueueStats();
   }
 
   @Get(':id')

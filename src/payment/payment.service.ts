@@ -85,9 +85,20 @@ export class PaymentService {
       ) {
         throw error;
       }
-      this.logger.error(
-        `Purchase verification failed: ${this.getErrorMessage(error)}`,
-      );
+
+      const errorMessage = this.getErrorMessage(error);
+      this.logger.error(`Purchase verification failed: ${errorMessage}`);
+
+      // Emit payment failed event
+      this.eventEmitter.emit(AppEvents.PAYMENT_FAILED, {
+        userId,
+        amount: 0, // Unknown at this point
+        currency: 'USD',
+        provider: dto.platform,
+        errorMessage,
+        failedAt: new Date(),
+      } satisfies PaymentFailedEvent);
+
       throw new BadRequestException('Purchase verification failed');
     }
   }
@@ -301,11 +312,8 @@ export class PaymentService {
       });
 
       let subscription;
-      let isNewSubscription = false;
-      let previousPlan: string | null = null;
 
       if (existingSub) {
-        previousPlan = existingSub.plan;
         subscription = await tx.subscription.update({
           where: { id: existingSub.id },
           data: {
@@ -316,7 +324,6 @@ export class PaymentService {
           },
         });
       } else {
-        isNewSubscription = true;
         subscription = await tx.subscription.create({
           data: {
             userId,
@@ -328,14 +335,14 @@ export class PaymentService {
         });
       }
 
-      return { paymentTx, subscription, isNewSubscription, previousPlan };
+      return { paymentTx, subscription, existingSub };
     });
 
     // Invalidate subscription cache after successful update
     await this.subscriptionService.invalidateCache(userId);
 
     // Emit payment completed event
-    const completedEvent: PaymentCompletedEvent = {
+    this.eventEmitter.emit(AppEvents.PAYMENT_COMPLETED, {
       paymentId: result.paymentTx.id,
       userId,
       amount,
@@ -343,37 +350,33 @@ export class PaymentService {
       provider: reference.startsWith('google_') ? 'google' : 'apple',
       subscriptionId: result.subscription.id,
       completedAt: now,
-    };
-    this.eventEmitter.emit(AppEvents.PAYMENT_COMPLETED, completedEvent);
+    } satisfies PaymentCompletedEvent);
 
-    // Emit subscription events
-    if (result.isNewSubscription) {
-      // New subscription created
-      const createdEvent: SubscriptionCreatedEvent = {
+    // Emit subscription created or changed event
+    if (result.existingSub) {
+      // Determine change type based on plan comparison
+      const changeType = this.determineChangeType(result.existingSub.plan, plan);
+
+      this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CHANGED, {
         subscriptionId: result.subscription.id,
         userId,
-        planId: result.subscription.plan,
-        planName: PLANS[result.subscription.plan]?.display || result.subscription.plan,
+        previousPlanId: result.existingSub.plan,
+        newPlanId: plan,
+        previousPlanName: PLANS[result.existingSub.plan]?.display || result.existingSub.plan,
+        newPlanName: PLANS[plan]?.display || plan,
+        changeType,
+        changedAt: now,
+      } satisfies SubscriptionChangedEvent);
+    } else {
+      this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CREATED, {
+        subscriptionId: result.subscription.id,
+        userId,
+        planId: plan,
+        planName: PLANS[plan]?.display || plan,
         provider: reference.startsWith('google_') ? 'google' : 'apple',
         createdAt: now,
-      };
-      this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CREATED, createdEvent);
-    } else if (result.previousPlan && result.previousPlan !== result.subscription.plan) {
-      // Subscription plan changed
-      const changedEvent: SubscriptionChangedEvent = {
-        subscriptionId: result.subscription.id,
-        userId,
-        previousPlanId: result.previousPlan,
-        newPlanId: result.subscription.plan,
-        previousPlanName: PLANS[result.previousPlan]?.display || result.previousPlan,
-        newPlanName: PLANS[result.subscription.plan]?.display || result.subscription.plan,
-        changeType: this.determineChangeType(result.previousPlan, result.subscription.plan),
-        changedAt: now,
-      };
-      this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CHANGED, changedEvent);
+      } satisfies SubscriptionCreatedEvent);
     }
-
-    this.logger.log(`Payment completed: ${result.paymentTx.id} for user ${userId.substring(0, 8)}`);
 
     return {
       tx: result.paymentTx,

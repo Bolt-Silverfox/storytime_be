@@ -63,14 +63,13 @@ export class UserDeletionService {
         // Delete the user and all associated data
         const deletedUser = await this.prisma.user.delete({ where: { id } });
 
-        // Emit user deleted event
-        const deletedEvent: UserDeletedEvent = {
+        // Emit user deleted event for GDPR compliance logging, analytics, etc.
+        this.eventEmitter.emit(AppEvents.USER_DELETED, {
           userId: deletedUser.id,
           email: deletedUser.email,
           deletedAt: new Date(),
-          reason: 'permanent_delete',
-        };
-        this.eventEmitter.emit(AppEvents.USER_DELETED, deletedEvent);
+          reason: 'permanent_deletion',
+        } satisfies UserDeletedEvent);
 
         return {
           id: deletedUser.id,
@@ -88,14 +87,13 @@ export class UserDeletionService {
           },
         });
 
-        // Emit user deleted event (soft delete)
-        const deletedEvent: UserDeletedEvent = {
+        // Emit user deleted event for soft deletion (deactivation)
+        this.eventEmitter.emit(AppEvents.USER_DELETED, {
           userId: updatedUser.id,
           email: updatedUser.email,
-          deletedAt: updatedUser.deletedAt!,
-          reason: 'soft_delete',
-        };
-        this.eventEmitter.emit(AppEvents.USER_DELETED, deletedEvent);
+          deletedAt: updatedUser.deletedAt ?? new Date(),
+          reason: 'soft_deletion',
+        } satisfies UserDeletedEvent);
 
         return {
           ...updatedUser,

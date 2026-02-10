@@ -1,12 +1,15 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
 import { systemAvatars } from '../../prisma/data';
+import { IAvatarRepository, AVATAR_REPOSITORY } from './repositories';
 
 @Injectable()
 export class AvatarSeederService implements OnModuleInit {
   private readonly logger = new Logger(AvatarSeederService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(AVATAR_REPOSITORY)
+    private readonly avatarRepository: IAvatarRepository,
+  ) {}
 
   async onModuleInit() {
     await this.seedSystemAvatars();
@@ -15,57 +18,18 @@ export class AvatarSeederService implements OnModuleInit {
   private async seedSystemAvatars() {
     try {
       this.logger.log('Starting avatar seeding process...');
-      const existingAvatarsCount = await this.prisma.avatar.count({
-        where: { isSystemAvatar: true },
-      });
-
-      if (existingAvatarsCount >= systemAvatars.length) {
-        for (const avatarData of systemAvatars) {
-          const existingAvatar = await this.prisma.avatar.findFirst({
-            where: {
-              name: avatarData.name,
-              isSystemAvatar: true,
-            },
-          });
-          if (!existingAvatar) {
-            this.logger.log(
-              `Seeding missing system avatar: ${avatarData.name}`,
-            );
-            await this.prisma.avatar.create({
-              data: {
-                name: avatarData.name,
-                url: avatarData.url,
-                isSystemAvatar: true,
-                isDeleted: false,
-                deletedAt: null,
-              },
-            });
-          } else {
-            await this.prisma.avatar.update({
-              where: { id: existingAvatar.id },
-              data: { url: avatarData.url },
-            });
-            this.logger.log(`Updated system avatar URL: ${avatarData.name}`);
-          }
-        }
-      }
-
-      // 3. Populate avatars
       this.logger.log(`Seeding ${systemAvatars.length} system avatars...`);
-      for (const avatarData of systemAvatars) {
-        await this.prisma.avatar.upsert({
-          where: { name: avatarData.name },
-          update: { url: avatarData.url },
-          create: {
-            name: avatarData.name,
+
+      // Batch all upserts concurrently via repository
+      await Promise.all(
+        systemAvatars.map((avatarData) =>
+          this.avatarRepository.upsertByName(avatarData.name, {
             url: avatarData.url,
             isSystemAvatar: true,
-            isDeleted: false,
-            deletedAt: null,
-          },
-        });
-        this.logger.log(`Upserted system avatar: ${avatarData.name}`);
-      }
+          }),
+        ),
+      );
+
       this.logger.log('System avatar seeding completed!');
     } catch (error) {
       this.logger.error('Error seeding system avatars:', error);

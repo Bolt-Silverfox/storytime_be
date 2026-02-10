@@ -16,6 +16,18 @@ export const CACHE_KEYS = {
 
   // Homepage caches
   TOP_PICKS_FROM_US: 'top-picks-from-us',
+
+  // User-specific caches (dynamic keys with userId/kidId)
+  USER_PREFERENCES: (userId: string) => `user:${userId}:preferences`,
+  KID_PROFILE: (kidId: string) => `kid:${kidId}:profile`,
+  USER_KIDS: (userId: string) => `user:${userId}:kids`,
+
+  // Subscription caches
+  SUBSCRIPTION_STATUS: (userId: string) => `subscription:status:${userId}`,
+
+  // Progress/Achievement caches
+  PROGRESS_HOME: (userId: string) => `progress:home:${userId}`,
+  PROGRESS_OVERVIEW: (userId: string) => `progress:overview:${userId}`,
 } as const;
 
 /** Cache TTL values */
@@ -24,6 +36,7 @@ export const CACHE_TTL_MS = {
   STATIC_CONTENT: 60 * 60 * 1000, // 1 hour for categories, themes, buddies
   VOICES: 30 * 60 * 1000, // 30 minutes
   TOP_PICKS_FROM_US: 24 * 60 * 60 * 1000, // 24 hours
+  USER_DATA: 5 * 60 * 1000, // 5 minutes for user preferences and kid profiles
 } as const;
 
 /** Keys to invalidate when story content changes */
