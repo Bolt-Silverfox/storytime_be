@@ -4,7 +4,7 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
-import * as compression from 'compression';
+import compression from 'compression';
 import { SuccessResponseInterceptor } from './shared/interceptors/success-response.interceptor';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter';
@@ -26,7 +26,7 @@ async function bootstrap() {
   // Enable gzip/deflate compression for responses > 1KB
   app.use(
     compression({
-      filter: (req, res) => {
+      filter: (req: any, res: any) => {
         // Don't compress if client doesn't accept it
         if (req.headers['x-no-compression']) {
           return false;
