@@ -14,6 +14,14 @@ import {
   PLANS,
   PRODUCT_ID_TO_PLAN,
 } from '@/subscription/subscription.constants';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  AppEvents,
+  PaymentCompletedEvent,
+  PaymentFailedEvent,
+  SubscriptionCreatedEvent,
+  SubscriptionChangedEvent,
+} from '@/shared/events';
 
 /** Transaction result from payment processing */
 export interface TransactionRecord {
@@ -34,6 +42,7 @@ export class PaymentService {
     private readonly subscriptionService: SubscriptionService,
     private readonly googleVerificationService: GoogleVerificationService,
     private readonly appleVerificationService: AppleVerificationService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -55,6 +64,21 @@ export class PaymentService {
         );
       }
     } catch (error) {
+      // Emit payment failed event (amount estimated from product)
+      const planKey = PRODUCT_ID_TO_PLAN[dto.productId];
+      const plan = planKey ? PLANS[planKey] : null;
+
+      const failedEvent: PaymentFailedEvent = {
+        userId,
+        amount: plan?.amount || 0,
+        currency: 'USD', // Default currency for IAP
+        provider: dto.platform,
+        errorCode: error.code,
+        errorMessage: this.getErrorMessage(error),
+        failedAt: new Date(),
+      };
+      this.eventEmitter.emit(AppEvents.PAYMENT_FAILED, failedEvent);
+
       if (
         error instanceof BadRequestException ||
         error instanceof NotFoundException
@@ -277,7 +301,11 @@ export class PaymentService {
       });
 
       let subscription;
+      let isNewSubscription = false;
+      let previousPlan: string | null = null;
+
       if (existingSub) {
+        previousPlan = existingSub.plan;
         subscription = await tx.subscription.update({
           where: { id: existingSub.id },
           data: {
@@ -288,6 +316,7 @@ export class PaymentService {
           },
         });
       } else {
+        isNewSubscription = true;
         subscription = await tx.subscription.create({
           data: {
             userId,
@@ -299,11 +328,52 @@ export class PaymentService {
         });
       }
 
-      return { paymentTx, subscription };
+      return { paymentTx, subscription, isNewSubscription, previousPlan };
     });
 
     // Invalidate subscription cache after successful update
     await this.subscriptionService.invalidateCache(userId);
+
+    // Emit payment completed event
+    const completedEvent: PaymentCompletedEvent = {
+      paymentId: result.paymentTx.id,
+      userId,
+      amount,
+      currency,
+      provider: reference.startsWith('google_') ? 'google' : 'apple',
+      subscriptionId: result.subscription.id,
+      completedAt: now,
+    };
+    this.eventEmitter.emit(AppEvents.PAYMENT_COMPLETED, completedEvent);
+
+    // Emit subscription events
+    if (result.isNewSubscription) {
+      // New subscription created
+      const createdEvent: SubscriptionCreatedEvent = {
+        subscriptionId: result.subscription.id,
+        userId,
+        planId: result.subscription.plan,
+        planName: PLANS[result.subscription.plan]?.display || result.subscription.plan,
+        provider: reference.startsWith('google_') ? 'google' : 'apple',
+        createdAt: now,
+      };
+      this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CREATED, createdEvent);
+    } else if (result.previousPlan && result.previousPlan !== result.subscription.plan) {
+      // Subscription plan changed
+      const changedEvent: SubscriptionChangedEvent = {
+        subscriptionId: result.subscription.id,
+        userId,
+        previousPlanId: result.previousPlan,
+        newPlanId: result.subscription.plan,
+        previousPlanName: PLANS[result.previousPlan]?.display || result.previousPlan,
+        newPlanName: PLANS[result.subscription.plan]?.display || result.subscription.plan,
+        changeType: this.determineChangeType(result.previousPlan, result.subscription.plan),
+        changedAt: now,
+      };
+      this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CHANGED, changedEvent);
+    }
+
+    this.logger.log(`Payment completed: ${result.paymentTx.id} for user ${userId.substring(0, 8)}`);
 
     return {
       tx: result.paymentTx,
@@ -315,5 +385,24 @@ export class PaymentService {
       },
       alreadyProcessed: false,
     };
+  }
+
+  /**
+   * Determine the type of subscription change based on plan amounts
+   */
+  private determineChangeType(
+    previousPlan: string,
+    newPlan: string,
+  ): 'upgrade' | 'downgrade' | 'renewal' {
+    const previousAmount = PLANS[previousPlan]?.amount || 0;
+    const newAmount = PLANS[newPlan]?.amount || 0;
+
+    if (previousPlan === newPlan) {
+      return 'renewal';
+    } else if (newAmount > previousAmount) {
+      return 'upgrade';
+    } else {
+      return 'downgrade';
+    }
   }
 }

@@ -9,6 +9,13 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  AppEvents,
+  SubscriptionCreatedEvent,
+  SubscriptionChangedEvent,
+  SubscriptionCancelledEvent,
+} from '@/shared/events';
 
 // Re-export PLANS for backward compatibility
 export { PLANS } from './subscription.constants';
@@ -25,6 +32,7 @@ export class SubscriptionService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   getPlans() {
@@ -105,8 +113,21 @@ export class SubscriptionService {
       data: { status: SUBSCRIPTION_STATUS.CANCELLED, endsAt },
     });
 
+    // Emit subscription cancelled event
+    const cancelledEvent: SubscriptionCancelledEvent = {
+      subscriptionId: cancelled.id,
+      userId,
+      planId: cancelled.plan,
+      effectiveEndDate: endsAt,
+      cancelledAt: now,
+      reason: 'user_cancelled',
+    };
+    this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CANCELLED, cancelledEvent);
+
     // Invalidate cache after subscription cancellation
     await this.invalidateCache(userId);
+
+    this.logger.log(`Subscription cancelled for user ${userId.substring(0, 8)}`);
 
     return cancelled;
   }

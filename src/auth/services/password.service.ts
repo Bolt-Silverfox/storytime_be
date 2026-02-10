@@ -4,10 +4,8 @@ import {
   NotFoundException,
   UnauthorizedException,
   BadRequestException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { NotificationService } from '@/notification/notification.service';
 import { TokenService } from './token.service';
 import { generateToken } from '@/utils/generate-token';
 import {
@@ -18,6 +16,11 @@ import {
   ChangePasswordDto,
 } from '../dto/auth.dto';
 import * as bcrypt from 'bcryptjs';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  AppEvents,
+  UserPasswordChangedEvent,
+} from '@/shared/events';
 
 @Injectable()
 export class PasswordService {
@@ -25,7 +28,7 @@ export class PasswordService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationService: NotificationService,
+    private readonly eventEmitter: EventEmitter2,
     private readonly tokenService: TokenService,
   ) {}
 
@@ -60,20 +63,14 @@ export class PasswordService {
       },
     });
 
-    // Send password reset notification
-    const resp = await this.notificationService.sendNotification(
-      'PasswordReset',
-      {
-        email: user.email,
-        resetToken: token,
-      },
-    );
+    // Emit event for password reset notification (handled by PasswordEventListener)
+    this.eventEmitter.emit('password.reset_requested', {
+      userId: user.id,
+      email: user.email,
+      resetToken: token,
+    });
 
-    if (!resp.success) {
-      throw new ServiceUnavailableException(
-        resp.error || 'Failed to send password reset email',
-      );
-    }
+    this.logger.log(`Password reset requested for user ${user.id}`);
 
     return { message: 'Password reset token sent' };
   }
@@ -199,11 +196,23 @@ export class PasswordService {
       });
     });
 
-    // Notify user of password change
-    await this.notificationService.sendNotification('PasswordChanged', {
+    // Emit events for password changed
+    // 1. Custom event for notification (backward compatibility)
+    this.eventEmitter.emit('password.changed', {
+      userId: user.id,
       email: user.email,
       userName: user.name,
     });
+
+    // 2. Standardized event for analytics/logging
+    const passwordChangedEvent: UserPasswordChangedEvent = {
+      userId: user.id,
+      changedAt: new Date(),
+      sessionsInvalidated: true, // We invalidated all other sessions
+    };
+    this.eventEmitter.emit(AppEvents.USER_PASSWORD_CHANGED, passwordChangedEvent);
+
+    this.logger.log(`Password changed for user ${user.id}`);
 
     return { message: 'Password changed successfully' };
   }

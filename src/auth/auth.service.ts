@@ -32,9 +32,14 @@ import {
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { generateToken } from '@/utils/generate-token';
-import { NotificationService } from '@/notification/notification.service';
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  AppEvents,
+  UserRegisteredEvent,
+  UserEmailVerifiedEvent,
+} from '@/shared/events';
 
 @Injectable()
 export class AuthService {
@@ -42,7 +47,7 @@ export class AuthService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationService: NotificationService,
+    private readonly eventEmitter: EventEmitter2,
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
   ) {}
@@ -179,6 +184,16 @@ export class AuthService {
       return newUser;
     });
 
+    // Emit user registration event
+    const registeredEvent: UserRegisteredEvent = {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      registeredAt: user.createdAt,
+    };
+    this.eventEmitter.emit(AppEvents.USER_REGISTERED, registeredEvent);
+
     // Send email verification (outside transaction - non-critical)
     try {
       await this.sendEmailVerification(user.email);
@@ -221,16 +236,14 @@ export class AuthService {
       });
     });
 
-    const resp = await this.notificationService.sendNotification(
-      'EmailVerification',
-      { email: user.email, token },
-    );
+    // Emit event for email verification (handled by PasswordEventListener)
+    this.eventEmitter.emit('email.verification_requested', {
+      userId: user.id,
+      email: user.email,
+      token,
+    });
 
-    if (!resp.success) {
-      throw new ServiceUnavailableException(
-        resp.error || 'Failed to send verification email',
-      );
-    }
+    this.logger.log(`Email verification requested for user ${user.id}`);
 
     return { message: 'Verification email sent' };
   }
@@ -262,6 +275,16 @@ export class AuthService {
       });
       await tx.token.delete({ where: { id: verificationToken.id } });
     });
+
+    // Emit email verified event
+    const verifiedEvent: UserEmailVerifiedEvent = {
+      userId: verificationToken.user.id,
+      email: verificationToken.user.email,
+      verifiedAt: new Date(),
+    };
+    this.eventEmitter.emit(AppEvents.USER_EMAIL_VERIFIED, verifiedEvent);
+
+    this.logger.log(`Email verified for user ${verificationToken.user.id}`);
 
     return { message: 'Email verified successfully' };
   }
