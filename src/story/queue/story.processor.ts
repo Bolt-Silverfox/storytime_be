@@ -6,7 +6,11 @@ import {
   STORY_QUEUE_NAME,
   STORY_GENERATION_STAGES,
 } from './story-queue.constants';
-import { StoryJobData, StoryJobResult, StoryResult } from './story-job.interface';
+import {
+  StoryJobData,
+  StoryJobResult,
+  StoryResult,
+} from './story-job.interface';
 
 /**
  * Story Queue Processor
@@ -19,9 +23,7 @@ import { StoryJobData, StoryJobResult, StoryResult } from './story-job.interface
 export class StoryProcessor extends WorkerHost {
   private readonly logger = new Logger(StoryProcessor.name);
 
-  constructor(
-    private readonly storyGenerationService: StoryGenerationService,
-  ) {
+  constructor(private readonly storyGenerationService: StoryGenerationService) {
     super();
   }
 
@@ -49,7 +51,7 @@ export class StoryProcessor extends WorkerHost {
       } else if (type === 'generate-for-kid') {
         story = await this.processGenerateForKid(job);
       } else {
-        throw new Error(`Unknown job type: ${type}`);
+        throw new Error(`Unknown job type: ${String(type)}`);
       }
 
       // Stage: Completed
@@ -176,14 +178,16 @@ export class StoryProcessor extends WorkerHost {
       durationSeconds: story.durationSeconds,
       aiGenerated: story.aiGenerated,
       createdAt: story.createdAt,
-      categories: story.categories?.map((c: any) => ({
-        id: c.id,
-        name: c.name,
-      })) || [],
-      themes: story.themes?.map((t: any) => ({
-        id: t.id,
-        name: t.name,
-      })) || [],
+      categories:
+        story.categories?.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+        })) || [],
+      themes:
+        story.themes?.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+        })) || [],
       seasons: story.seasons?.map((s: any) => ({
         id: s.id,
         name: s.name,
