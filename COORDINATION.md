@@ -442,6 +442,47 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - Build passing
 
+### Instance 18 - ✅ Completed
+**Focus**: Post-merge refactoring tasks + Email notifications
+**Timestamp**: 2026-02-10
+
+**Changes Made**:
+- `src/shared/events/app-events.ts`:
+  - Added `QUOTA_EXHAUSTED` and `QUOTA_WARNING` events
+  - Added `QuotaTypes` constant (`STORY`, `VOICE`, `AI_GENERATION`)
+  - Added `QuotaExhaustedEvent` and `QuotaWarningEvent` interfaces
+- `src/story/story-quota.service.ts` - Emit QUOTA_EXHAUSTED when story limit reached
+- `src/voice/voice-quota.service.ts` - Emit QUOTA_EXHAUSTED when voice limit reached
+- `src/shared/events/event-listeners.service.ts` - Added quota event listener
+- `src/shared/constants/cache-keys.constants.ts`:
+  - Added `SUBSCRIPTION_STATUS`, `PROGRESS_HOME`, `PROGRESS_OVERVIEW` keys
+- `src/subscription/subscription.service.ts` - Updated to use centralized CACHE_KEYS
+- `src/achievement-progress/progress.service.ts` - Updated to use CACHE_KEYS and CACHE_TTL_MS
+- `src/shared/pipes/clamp.pipe.spec.ts` - NEW: 30 unit tests for ClampPipe
+
+**Email Notifications Added**:
+- `src/notification/templates/quota-exhausted.tsx` - Upgrade prompt when quota hit
+- `src/notification/templates/subscription-welcome.tsx` - Premium welcome email
+- `src/notification/templates/payment-failed.tsx` - Payment failure alert
+- `src/notification/notification.registry.ts` - Registered QuotaExhausted, SubscriptionWelcome, PaymentFailed
+- `src/notification/services/event-notification.service.ts` - Event-to-email bridge service
+
+**Status**: Complete - All tasks done, build passing, 30 tests passing
+
+### Instance 17 - ✅ Completed
+**Focus**: Merge develop-v0.0.1 into integration branch
+**Timestamp**: 2026-02-10
+
+**Changes Made**:
+- Merged `origin/develop-v0.0.1` into `integration/refactor-2026-02`
+- Resolved conflict in `src/story/story.service.ts` - kept refactored version with extracted services
+- Added event emissions to `KidService` (KID_CREATED, KID_DELETED events)
+- Added event emissions to `NotificationService` (NOTIFICATION_SENT event)
+- Updated `KidCreatedEvent` name field to allow null
+- Added `KID_DELETED` event listener in `EventListenersService`
+
+**Status**: Complete - Branch now has all develop features + all refactoring work
+
 ### Instance 16 - ✅ Completed
 **Focus**: Database Transactions for UserService & AuthService
 **Timestamp**: 2026-02-09
@@ -727,9 +768,111 @@ When all instances complete their work:
 
 ---
 
+## 🔄 Post-Merge Tasks (develop-v0.0.1 → integration)
+
+**Merged**: 2026-02-10
+**Merge Commit**: abe7e22
+
+The integration branch was merged with `develop-v0.0.1` to bring in new features. The following new functionality from develop may need refactoring patterns applied:
+
+### New Features to Review
+
+| Feature | Files | Needed Work |
+|---------|-------|-------------|
+| `topPicksFromUs` filter | `story.service.ts`, `story.controller.ts` | ✅ Already in `StoryRecommendationService` |
+| Free tier limits | `story-quota.service.ts`, `voice-quota.service.ts` | Review for event emissions |
+| Parent favorites response | `story.service.ts` | Check if needs extraction |
+| ClampPipe | `src/shared/pipes/clamp.pipe.ts` | ✅ Utility - no changes needed |
+| Per-voice settings | `voice/` services | Review for consistency |
+| IAP-only verification | `payment.service.ts` | Review for event emissions |
+| Cache invalidation patterns | Multiple files | Verify consistency with new patterns |
+
+### Tasks for Next Instances
+
+- [x] Add event emissions for quota exhaustion (`QUOTA_EXHAUSTED` event) *(Instance 18)*
+- [x] Add event emissions for payment/subscription changes from new IAP flow *(Already done in PaymentService)*
+- [x] Review `VoiceQuotaService` for extraction opportunities *(Instance 18 - 317 lines, not needed)*
+- [x] Add unit tests for new `ClampPipe` *(Instance 18 - 30 tests)*
+- [x] Verify cache invalidation uses consistent `CACHE_KEYS` constants *(Instance 18)*
+
+### Event-Driven Architecture Integration
+
+The following new operations should emit events (from `src/shared/events/app-events.ts`):
+
+```typescript
+// Suggested new events for quota system
+QUOTA_EXHAUSTED = 'quota.exhausted',      // When user hits free tier limit
+QUOTA_RESET = 'quota.reset',              // Daily quota reset
+
+// Suggested new events for voice system
+VOICE_GENERATED = 'voice.generated',      // TTS generation completed
+VOICE_QUOTA_WARNING = 'voice.quota.warning', // Approaching limit
+```
+
+---
+
 ## 📝 Notes
 
 - All instances should follow conventional commits
 - Run `pnpm run build` before pushing
 - Lint errors should be fixed immediately
 - Update the conflict zones table when claiming new files
+
+### Instance 17 - ✅ Completed  
+**Focus**: Async Story Generation Queue System
+**Timestamp**: 2026-02-10
+**Branch**: `fix/bug-fixes`
+
+**Changes Made**:
+- `src/story/queue/story-queue.service.ts` (NEW ~600 lines) - Queue management service:
+  - Methods: queueStoryGeneration, queueStoryForKid, getJobStatus, getJobResult, cancelJob, getQueueStats, getUserPendingJobs, pause, resume
+  - Job priority support (HIGH/NORMAL/LOW)
+  - Estimated wait time and remaining time calculations
+  - Job ownership verification for cancellation
+- `src/story/queue/story.processor.ts` (NEW ~270 lines) - BullMQ processor for story generation:
+  - Concurrency: 2 (prevents overwhelming AI APIs)
+  - Progress tracking through 6 stages (queued → processing → generating_content → generating_image → generating_audio → persisting → completed)
+  - Retry logic with exponential backoff (3 attempts, 1m base delay)
+  - Non-retryable error detection
+  - Event listeners for completed, failed, active, error, and stalled events
+- `src/story/queue/story-queue.constants.ts` (NEW ~60 lines) - Queue configuration:
+  - STORY_QUEUE_NAME, STORY_JOB_NAMES constants
+  - Default job options with retry config
+  - Job retention policies (2h for completed, 24h for failed)
+  - STORY_GENERATION_STAGES progress constants
+- `src/story/queue/story-job.interface.ts` (NEW ~130 lines) - Type definitions:
+  - StoryJobData, StoryJobResult, StoryResult interfaces
+  - StoryJobStatus, StoryPriority enums
+  - StoryJobStatusResponse for client polling
+- `src/story/queue/index.ts` (NEW ~5 lines) - Barrel exports
+- `src/story/story.controller.ts` - Added 6 new async endpoints:
+  - POST `/stories/generate/async` - Queue story generation (returns jobId)
+  - GET `/stories/generate/status/:jobId` - Poll job status with progress
+  - GET `/stories/generate/result/:jobId` - Get completed story result
+  - DELETE `/stories/generate/job/:jobId` - Cancel pending job
+  - GET `/stories/generate/pending` - List user's pending jobs
+  - GET `/stories/generate/queue-stats` - Queue statistics for monitoring
+- `src/story/story.module.ts` - Registered BullMQ queue:
+  - Added BullModule.registerQueue for STORY_QUEUE_NAME
+  - Added StoryQueueService and StoryProcessor to providers
+  - Exported StoryQueueService for potential use by other modules
+
+**Technical Details**:
+- Uses existing BullMQ infrastructure (already configured in app.module.ts)
+- Leverages existing StoryGenerationService for actual story generation
+- Progress updates at each stage: Processing (10%) → Content (30%) → Image (50%) → Audio (70%) → Persisting (90%) → Complete (100%)
+- Job metadata includes client IP, user agent, and request timestamp
+- Supports both standard generation and kid-specific generation paths
+
+**Status**: Complete - Build passing, commit 078972a
+
+
+**Additional Documentation**:
+- `ASYNC_STORY_GENERATION.md` - Comprehensive architecture doc for Phase 2 mobile notifications
+
+**Phase 2 Available for Implementation** 📋:
+- Firebase Cloud Messaging (FCM) integration
+- Device token management  
+- Push notifications on job completion/failure
+- See `ASYNC_STORY_GENERATION.md` for full implementation plan
+

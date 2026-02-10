@@ -1,38 +1,52 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { VoiceService } from '../voice/voice.service';
-import type {
-  Kid,
-  Avatar,
-  Category,
-  Voice,
-  User,
-  NotificationPreference,
-  ActivityLog,
-} from '@prisma/client';
-
-/** Kid with loaded relations from Prisma queries */
-interface KidWithRelations extends Kid {
-  avatar?: Avatar | null;
-  preferredCategories?: Category[];
-  preferredVoice?: Voice | null;
-  parent?: Pick<User, 'id' | 'name' | 'email'>;
-  notificationPreferences?: NotificationPreference[];
-  activityLogs?: ActivityLog[];
-}
+import {
+  IKidRepository,
+  KID_REPOSITORY,
+  KidWithRelations,
+} from './repositories';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+} from '@/shared/constants/cache-keys.constants';
+import {
+  AppEvents,
+  KidCreatedEvent,
+  KidDeletedEvent,
+} from '@/shared/events';
 
 @Injectable()
 export class KidService {
   constructor(
-    private prisma: PrismaService,
+    @Inject(KID_REPOSITORY)
+    private readonly kidRepository: IKidRepository,
     private voiceService: VoiceService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  /**
+   * Invalidate kid-related caches
+   */
+  private async invalidateKidCaches(
+    kidId: string,
+    userId: string,
+  ): Promise<void> {
+    await Promise.all([
+      this.cacheManager.del(CACHE_KEYS.KID_PROFILE(kidId)),
+      this.cacheManager.del(CACHE_KEYS.USER_KIDS(userId)),
+    ]);
+  }
 
   // --- HELPER: Transforms the DB response for the Frontend ---
   // This ensures preferredVoiceId is ALWAYS the ElevenLabs ID (if available) (frontend specified smh)
@@ -56,70 +70,59 @@ export class KidService {
   async createKid(userId: string, dto: CreateKidDto) {
     const { preferredCategoryIds, avatarId, ...data } = dto;
 
-    const kid = await this.prisma.kid.create({
-      data: {
-        ...data,
-        parentId: userId,
-        avatarId: avatarId,
-        preferredCategories: preferredCategoryIds
-          ? { connect: preferredCategoryIds.map((id) => ({ id })) }
-          : undefined,
-      },
-      include: {
-        avatar: true,
-        preferredCategories: true,
-        preferredVoice: true,
-        parent: { select: { id: true, name: true, email: true } },
-      },
+    const kid = await this.kidRepository.create({
+      ...data,
+      parentId: userId,
+      avatarId,
+      preferredCategoryIds,
     });
+
+    // Invalidate user's kids cache after creation
+    await this.cacheManager.del(CACHE_KEYS.USER_KIDS(userId));
+
+    // Emit kid created event
+    this.eventEmitter.emit(AppEvents.KID_CREATED, {
+      kidId: kid.id,
+      parentId: userId,
+      name: kid.name,
+      ageRange: kid.ageRange,
+      createdAt: kid.createdAt,
+    } satisfies KidCreatedEvent);
+
     return this.transformKid(kid);
   }
 
+  /**
+   * Get all kids for a user
+   * Uses caching for improved performance (5-minute TTL)
+   */
   async findAllByUser(userId: string) {
-    const kids = await this.prisma.kid.findMany({
-      where: {
-        parentId: userId,
-        isDeleted: false, // EXCLUDE SOFT DELETED KIDS
-      },
-      include: {
-        avatar: true,
-        preferredCategories: true,
-        preferredVoice: true,
-        parent: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // Check cache first
+    const cacheKey = CACHE_KEYS.USER_KIDS(userId);
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const kids = await this.kidRepository.findAllByParentId(userId);
 
     // Map every kid through the transformer
-    return kids.map((k) => this.transformKid(k));
+    const result = kids.map((k: KidWithRelations) => this.transformKid(k));
+
+    // Cache for 5 minutes
+    await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.USER_DATA);
+
+    return result;
   }
 
   async findOne(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: {
-        id: kidId,
-        isDeleted: false, // EXCLUDE SOFT DELETED KIDS
-      },
-      include: {
-        avatar: true,
-        preferredCategories: true,
-        preferredVoice: true,
-        notificationPreferences: true,
-        activityLogs: { take: 10, orderBy: { createdAt: 'desc' } },
-        parent: { select: { id: true, name: true, email: true } },
-      },
-    });
+    const kid = await this.kidRepository.findByIdWithFullRelations(kidId);
 
     if (!kid) throw new NotFoundException('Kid not found');
     if (kid.parentId !== userId) throw new ForbiddenException('Access denied');
 
     // Get recommendation stats
-    const totalRecommendations = await this.prisma.parentRecommendation.count({
-      where: {
-        kidId,
-        isDeleted: false,
-      },
-    });
+    const totalRecommendations = await this.kidRepository.countParentRecommendations(kidId);
 
     const transformedKid = this.transformKid(kid);
 
@@ -134,12 +137,7 @@ export class KidService {
 
   async updateKid(kidId: string, userId: string, dto: UpdateKidDto) {
     // 1. Verify ownership and check if not soft deleted
-    const kid = await this.prisma.kid.findUnique({
-      where: {
-        id: kidId,
-        isDeleted: false, // CANNOT UPDATE SOFT DELETED KIDS
-      },
-    });
+    const kid = await this.kidRepository.findByIdNotDeleted(kidId);
     if (!kid || kid.parentId !== userId) {
       throw new NotFoundException('Kid not found or access denied');
     }
@@ -147,7 +145,7 @@ export class KidService {
     const { preferredCategoryIds, preferredVoiceId, avatarId, ...rest } = dto;
 
     // 2. Resolve Voice ID (Supports both UUID and ElevenLabs ID input)
-    let finalVoiceId = undefined;
+    let finalVoiceId: string | undefined = undefined;
 
     if (preferredVoiceId) {
       // Check if input is a UUID (Internal DB ID)
@@ -157,12 +155,7 @@ export class KidService {
         );
 
       if (isUuid) {
-        const voice = await this.prisma.voice.findUnique({
-          where: {
-            id: preferredVoiceId,
-            isDeleted: false, // CANNOT USE SOFT DELETED VOICES
-          },
-        });
+        const voice = await this.kidRepository.findVoiceById(preferredVoiceId);
         if (!voice) throw new NotFoundException('Voice not found');
         finalVoiceId = voice.id;
       } else {
@@ -176,25 +169,15 @@ export class KidService {
     }
 
     // 3. Update the Kid
-    const updatedKid = await this.prisma.kid.update({
-      where: { id: kidId },
-      data: {
-        ...rest,
-        avatar: avatarId ? { connect: { id: avatarId } } : undefined,
-        preferredCategories: preferredCategoryIds
-          ? { set: preferredCategoryIds.map((id) => ({ id })) }
-          : undefined,
-        preferredVoice: finalVoiceId
-          ? { connect: { id: finalVoiceId } }
-          : undefined,
-      },
-      include: {
-        avatar: true,
-        preferredCategories: true,
-        preferredVoice: true,
-        parent: { select: { id: true, name: true, email: true } },
-      },
+    const updatedKid = await this.kidRepository.update(kidId, {
+      ...rest,
+      avatarId,
+      preferredCategoryIds,
+      preferredVoiceId: finalVoiceId,
     });
+
+    // Invalidate caches after update
+    await this.invalidateKidCaches(kidId, userId);
 
     return this.transformKid(updatedKid);
   }
@@ -206,29 +189,29 @@ export class KidService {
    * @param permanent Whether to permanently delete (default: false)
    */
   async deleteKid(kidId: string, userId: string, permanent: boolean = false) {
-    const kid = await this.prisma.kid.findUnique({
-      where: {
-        id: kidId,
-        isDeleted: false, // CANNOT DELETE ALREADY DELETED KIDS
-      },
-    });
+    const kid = await this.kidRepository.findByIdNotDeleted(kidId);
     if (!kid || kid.parentId !== userId) {
       throw new NotFoundException('Kid not found or access denied');
     }
 
+    let result;
     if (permanent) {
-      return this.prisma.kid.delete({
-        where: { id: kidId },
-      });
+      result = await this.kidRepository.hardDelete(kidId);
     } else {
-      return this.prisma.kid.update({
-        where: { id: kidId },
-        data: {
-          isDeleted: true,
-          deletedAt: new Date(),
-        },
-      });
+      result = await this.kidRepository.softDelete(kidId);
     }
+
+    // Invalidate caches after deletion
+    await this.invalidateKidCaches(kidId, userId);
+
+    // Emit kid deleted event
+    this.eventEmitter.emit(AppEvents.KID_DELETED, {
+      kidId: kid.id,
+      parentId: userId,
+      deletedAt: new Date(),
+    } satisfies KidDeletedEvent);
+
+    return result;
   }
 
   /**
@@ -237,47 +220,38 @@ export class KidService {
    * @param userId User ID for verification
    */
   async undoDeleteKid(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
-    });
+    const kid = await this.kidRepository.findById(kidId);
     if (!kid) throw new NotFoundException('Kid not found');
     if (kid.parentId !== userId) throw new ForbiddenException('Access denied');
     if (!kid.isDeleted) throw new BadRequestException('Kid is not deleted');
 
-    return this.prisma.kid.update({
-      where: { id: kidId },
-      data: {
-        isDeleted: false,
-        deletedAt: null,
-      },
-    });
+    const restoredKid = await this.kidRepository.restore(kidId);
+
+    // Invalidate caches after restoration
+    await this.invalidateKidCaches(kidId, userId);
+
+    return restoredKid;
   }
 
   async createKids(userId: string, dtos: CreateKidDto[]) {
-    const parent = await this.prisma.user.findUnique({
-      where: {
-        id: userId,
-        isDeleted: false, // CANNOT CREATE KIDS FOR SOFT DELETED USERS
-      },
-    });
+    const parent = await this.kidRepository.findUserByIdNotDeleted(userId);
     if (!parent) throw new NotFoundException('Parent User not found');
 
     // Execute creates in transaction
-    await this.prisma.$transaction(
-      dtos.map((dto) => {
-        const { preferredCategoryIds, avatarId, ...data } = dto;
-        return this.prisma.kid.create({
-          data: {
-            ...data,
-            parentId: userId,
-            avatarId: avatarId,
-            preferredCategories: preferredCategoryIds
-              ? { connect: preferredCategoryIds.map((id) => ({ id })) }
-              : undefined,
-          },
-        });
-      }),
-    );
+    const kidData = dtos.map((dto) => {
+      const { preferredCategoryIds, avatarId, ...data } = dto;
+      return {
+        ...data,
+        parentId: userId,
+        avatarId,
+        preferredCategoryIds,
+      };
+    });
+
+    await this.kidRepository.createMany(userId, kidData);
+
+    // Invalidate user's kids cache after bulk creation
+    await this.cacheManager.del(CACHE_KEYS.USER_KIDS(userId));
 
     // Fetch them back to return full structures
     return this.findAllByUser(userId);

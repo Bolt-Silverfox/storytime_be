@@ -1,7 +1,13 @@
-// settings.service.ts - Enhanced version
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
+// settings.service.ts - Enhanced version with caching and repository pattern
+import { Injectable, Inject, BadRequestException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { Profile } from '@prisma/client';
+import { ISettingsRepository, SETTINGS_REPOSITORY } from './repositories';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+} from '@/shared/constants/cache-keys.constants';
 
 export interface UpdateSettingsBody {
   explicitContent?: boolean;
@@ -12,17 +18,42 @@ export interface UpdateSettingsBody {
 
 @Injectable()
 export class SettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(SETTINGS_REPOSITORY)
+    private readonly settingsRepository: ISettingsRepository,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
+
+  /**
+   * Invalidate user preferences cache
+   */
+  private async invalidateUserPreferencesCache(userId: string): Promise<void> {
+    await this.cacheManager.del(CACHE_KEYS.USER_PREFERENCES(userId));
+  }
+
   /**
    * Get user profile settings (parent-level)
+   * Uses caching for improved performance (5-minute TTL)
    */
   async getSettings(userId: string): Promise<Profile> {
-    let profile = await this.prisma.profile.findUnique({ where: { userId } });
+    // Check cache first
+    const cacheKey = CACHE_KEYS.USER_PREFERENCES(userId);
+    const cached = await this.cacheManager.get<Profile>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    let profile = await this.settingsRepository.findProfileByUserId(userId);
     if (!profile) {
-      profile = await this.prisma.profile.create({
-        data: { userId, language: 'en', country: 'NG' },
+      profile = await this.settingsRepository.createProfile(userId, {
+        language: 'en',
+        country: 'NG',
       });
     }
+
+    // Cache for 5 minutes
+    await this.cacheManager.set(cacheKey, profile, CACHE_TTL_MS.USER_DATA);
+
     return profile;
   }
 
@@ -33,15 +64,16 @@ export class SettingsService {
     userId: string,
     body: UpdateSettingsBody,
   ): Promise<Profile> {
-    let profile = await this.prisma.profile.findUnique({ where: { userId } });
+    let profile = await this.settingsRepository.findProfileByUserId(userId);
     if (!profile) {
-      profile = await this.prisma.profile.create({
-        data: { userId, language: 'en', country: 'NG' },
+      profile = await this.settingsRepository.createProfile(userId, {
+        language: 'en',
+        country: 'NG',
       });
     }
 
     // Validation
-    const updateData: Record<string, boolean | number | string> = {};
+    const updateData: Partial<Pick<Profile, 'explicitContent' | 'maxScreenTimeMins' | 'language' | 'country'>> = {};
     if (body.explicitContent !== undefined) {
       if (typeof body.explicitContent !== 'boolean') {
         throw new BadRequestException('explicitContent must be a boolean');
@@ -76,10 +108,12 @@ export class SettingsService {
       return profile;
     }
 
-    return await this.prisma.profile.update({
-      where: { userId },
-      data: updateData,
-    });
+    const updatedProfile = await this.settingsRepository.updateProfile(userId, updateData);
+
+    // Invalidate cache after update
+    await this.invalidateUserPreferencesCache(userId);
+
+    return updatedProfile;
   }
 
   /**
@@ -90,9 +124,7 @@ export class SettingsService {
     kidId: string,
     limitMins?: number,
   ): Promise<{ success: boolean; kidId: string; limitMins?: number }> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
-    });
+    const kid = await this.settingsRepository.findKidById(kidId);
 
     if (!kid) {
       throw new BadRequestException('Kid not found');
@@ -107,12 +139,10 @@ export class SettingsService {
       }
     }
 
-    await this.prisma.kid.update({
-      where: { id: kidId },
-      data: {
-        dailyScreenTimeLimitMins: limitMins,
-      },
-    });
+    await this.settingsRepository.updateKidScreenTimeLimit(
+      kidId,
+      limitMins ?? null,
+    );
 
     return { success: true, kidId, limitMins };
   }
@@ -126,16 +156,7 @@ export class SettingsService {
     limitMins?: number;
     source: 'kid' | 'parent' | 'none';
   }> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
-      include: {
-        parent: {
-          include: {
-            profile: true,
-          },
-        },
-      },
-    });
+    const kid = await this.settingsRepository.findKidWithParentProfile(kidId);
 
     if (!kid) {
       throw new BadRequestException('Kid not found');
@@ -175,13 +196,7 @@ export class SettingsService {
   async applyDefaultToAllKids(
     userId: string,
   ): Promise<{ success: boolean; appliedLimit: number; kidsUpdated: number }> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        profile: true,
-        kids: true,
-      },
-    });
+    const user = await this.settingsRepository.findUserWithProfileAndKids(userId);
 
     if (!user) {
       throw new BadRequestException('User not found');
@@ -193,22 +208,16 @@ export class SettingsService {
       throw new BadRequestException('No default screen time limit set');
     }
 
+    // Count kids that will be updated before the update
+    const kidsToUpdate = user.kids.filter((k) => k.dailyScreenTimeLimitMins === null).length;
+
     // Update all kids that don't have a custom limit
-    await this.prisma.kid.updateMany({
-      where: {
-        parentId: userId,
-        dailyScreenTimeLimitMins: null,
-      },
-      data: {
-        dailyScreenTimeLimitMins: defaultLimit,
-      },
-    });
+    await this.settingsRepository.updateManyKidsScreenTimeLimit(userId, null, defaultLimit);
 
     return {
       success: true,
       appliedLimit: defaultLimit,
-      kidsUpdated: user.kids.filter((k) => k.dailyScreenTimeLimitMins === null)
-        .length,
+      kidsUpdated: kidsToUpdate,
     };
   }
 
@@ -225,17 +234,8 @@ export class SettingsService {
       isCustom: boolean;
     }[]
   > {
-    const kids = await this.prisma.kid.findMany({
-      where: { parentId },
-      include: {
-        avatar: true,
-      },
-    });
-
-    const parent = await this.prisma.user.findUnique({
-      where: { id: parentId },
-      include: { profile: true },
-    });
+    const kids = await this.settingsRepository.findKidsByParentWithAvatar(parentId);
+    const parent = await this.settingsRepository.findUserWithProfile(parentId);
 
     const parentDefaultLimit = parent?.profile?.maxScreenTimeMins;
 

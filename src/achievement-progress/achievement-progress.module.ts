@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ProgressController } from './progress.controller';
 import { ProgressService } from './progress.service';
@@ -7,6 +7,7 @@ import { BadgeService } from './badge.service';
 import { BadgeProgressEngine } from './badge-progress.engine';
 import { BadgeConstants } from './badge.constants';
 import { NotificationModule } from '../notification/notification.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -14,7 +15,8 @@ import { NotificationModule } from '../notification/notification.module';
       ttl: 300, // 5 minutes default TTL
       max: 100, // Max items in cache
     }),
-    // EventEmitterModule is now global (configured in app.module.ts)
+    // EventEmitterModule is now globally registered in AppModule
+    forwardRef(() => AuthModule),
     NotificationModule,
   ],
   controllers: [ProgressController],

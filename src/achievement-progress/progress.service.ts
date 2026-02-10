@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProgressHomeResponseDto } from './dto/progress-response.dto';
 import { ProgressOverviewResponseDto } from './dto/progress-response.dto';
 import { ProgressStatsDto } from './dto/progress-response.dto';
+import { CACHE_KEYS, CACHE_TTL_MS } from '@/shared/constants/cache-keys.constants';
 
 @Injectable()
 export class ProgressService {
@@ -23,7 +24,7 @@ export class ProgressService {
   // Get aggregated home screen data
 
   async getHomeScreenData(userId: string): Promise<ProgressHomeResponseDto> {
-    const cacheKey = `progress:home:${userId}`;
+    const cacheKey = CACHE_KEYS.PROGRESS_HOME(userId);
 
     // Try cache first
     const cached =
@@ -46,7 +47,7 @@ export class ProgressService {
       };
 
       // Cache for 5 minutes
-      await this.cacheManager.set(cacheKey, result, 300000);
+      await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.USER_DATA);
 
       return result;
     } catch (error) {
@@ -58,7 +59,7 @@ export class ProgressService {
   // Get progress overview (lightweight)
 
   async getOverview(userId: string): Promise<ProgressOverviewResponseDto> {
-    const cacheKey = `progress:overview:${userId}`;
+    const cacheKey = CACHE_KEYS.PROGRESS_OVERVIEW(userId);
 
     const cached =
       await this.cacheManager.get<ProgressOverviewResponseDto>(cacheKey);
@@ -80,7 +81,7 @@ export class ProgressService {
         challengesCompleted: stats.challengesCompleted,
       };
 
-      await this.cacheManager.set(cacheKey, result, 300000);
+      await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.USER_DATA);
 
       return result;
     } catch (error) {

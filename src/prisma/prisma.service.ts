@@ -4,8 +4,11 @@ import {
   OnModuleInit,
   Logger,
 } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import IHealth, { HealthResponse } from '@/health/Ihealth.interfaces';
+
+// Threshold for slow query warnings (milliseconds)
+const SLOW_QUERY_THRESHOLD_MS = 100;
 
 @Injectable()
 export class PrismaService
@@ -24,7 +27,33 @@ export class PrismaService
         },
       },
       log:
-        process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+        process.env.NODE_ENV === 'development'
+          ? [
+              { emit: 'event', level: 'query' },
+              { emit: 'stdout', level: 'warn' },
+              { emit: 'stdout', level: 'error' },
+            ]
+          : [{ emit: 'stdout', level: 'error' }],
+    });
+
+    // Set up slow query logging in development
+    if (process.env.NODE_ENV === 'development') {
+      this.setupQueryLogging();
+    }
+  }
+
+  /**
+   * Set up query event logging for slow query detection
+   */
+  private setupQueryLogging(): void {
+    // @ts-expect-error - Prisma event typing is complex
+    this.$on('query', (e: Prisma.QueryEvent) => {
+      const duration = e.duration;
+      if (duration > SLOW_QUERY_THRESHOLD_MS) {
+        this.logger.warn(
+          `Slow query detected (${duration}ms): ${e.query.substring(0, 200)}${e.query.length > 200 ? '...' : ''}`,
+        );
+      }
     });
   }
 

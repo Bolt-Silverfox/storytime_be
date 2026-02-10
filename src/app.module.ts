@@ -104,16 +104,15 @@ import { HealthModule } from './health/health.module';
         },
       }),
     }),
-    // Event-driven architecture for decoupling services
+    // Event-driven architecture for decoupled, scalable services
     EventEmitterModule.forRoot({
-      // Use wildcards for flexible event matching
-      wildcard: true,
-      // Delimiter for namespaced events (e.g., 'user.registered')
+      wildcard: false,
       delimiter: '.',
-      // Enable detailed event tracking in development
-      verboseMemoryLeak: process.env.NODE_ENV === 'development',
-      // Max listeners (default is 10, increase for complex event flows)
+      newListener: false,
+      removeListener: false,
       maxListeners: 20,
+      verboseMemoryLeak: true,
+      ignoreErrors: false,
     }),
     SharedModule,
     AuthModule,

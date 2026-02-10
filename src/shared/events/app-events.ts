@@ -42,6 +42,10 @@ export const AppEvents = {
 
   // Notification events
   NOTIFICATION_SENT: 'notification.sent',
+
+  // Quota events
+  QUOTA_EXHAUSTED: 'quota.exhausted',
+  QUOTA_WARNING: 'quota.warning',
 } as const;
 
 export type AppEventName = (typeof AppEvents)[keyof typeof AppEvents];
@@ -83,7 +87,7 @@ export interface UserPasswordChangedEvent {
 export interface KidCreatedEvent {
   kidId: string;
   parentId: string;
-  name: string;
+  name: string | null;
   ageRange: string | null;
   createdAt: Date;
 }
@@ -209,6 +213,38 @@ export interface NotificationSentEvent {
   sentAt: Date;
 }
 
+// Quota Events
+export const QuotaTypes = {
+  STORY: 'story',
+  VOICE: 'voice',
+  AI_GENERATION: 'ai_generation',
+} as const;
+
+export type QuotaType = (typeof QuotaTypes)[keyof typeof QuotaTypes];
+
+export interface QuotaExhaustedEvent {
+  userId: string;
+  quotaType: QuotaType;
+  /** Current usage count */
+  used: number;
+  /** Maximum allowed */
+  limit: number;
+  /** When the quota resets (next month, next week, etc.) */
+  resetsAt?: Date;
+  exhaustedAt: Date;
+}
+
+export interface QuotaWarningEvent {
+  userId: string;
+  quotaType: QuotaType;
+  used: number;
+  limit: number;
+  /** Percentage of quota used (e.g., 80, 90) */
+  percentageUsed: number;
+  resetsAt?: Date;
+  warnedAt: Date;
+}
+
 // =============================================================================
 // EVENT PAYLOAD MAP (for type-safe event handling)
 // =============================================================================
@@ -231,4 +267,6 @@ export interface AppEventPayloads {
   [AppEvents.BADGE_EARNED]: BadgeEarnedEvent;
   [AppEvents.STREAK_UPDATED]: StreakUpdatedEvent;
   [AppEvents.NOTIFICATION_SENT]: NotificationSentEvent;
+  [AppEvents.QUOTA_EXHAUSTED]: QuotaExhaustedEvent;
+  [AppEvents.QUOTA_WARNING]: QuotaWarningEvent;
 }
