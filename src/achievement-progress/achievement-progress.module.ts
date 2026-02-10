@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ProgressController } from './progress.controller';
 import { ProgressService } from './progress.service';
@@ -6,8 +6,8 @@ import { StreakService } from './streak.service';
 import { BadgeService } from './badge.service';
 import { BadgeProgressEngine } from './badge-progress.engine';
 import { BadgeConstants } from './badge.constants';
-import { AuthModule } from '../auth/auth.module';
 import { NotificationModule } from '../notification/notification.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [

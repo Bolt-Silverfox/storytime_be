@@ -84,8 +84,11 @@ export class EventListenersService {
 
   @OnEvent(AppEvents.STORY_COMPLETED)
   handleStoryCompleted(event: StoryCompletedEvent): void {
+    const identifier = event.kidId
+      ? `kid ${event.kidId}`
+      : `user ${event.userId}`;
     this.logger.log(
-      `Story completed: ${event.storyId} by kid ${event.kidId} - ${event.completionPercentage}% in ${event.durationSeconds}s`,
+      `Story completed: ${event.storyId} by ${identifier} - ${event.totalTimeSpent}s`,
     );
     // Future: Achievement progress triggers, engagement analytics, etc.
   }
