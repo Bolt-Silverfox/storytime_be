@@ -144,7 +144,7 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
   }): Promise<{
     id: string;
     email: string;
-    name: string;
+    name: string | null;
     role: string;
     createdAt: Date;
   }> {

@@ -26,7 +26,10 @@ import {
 
 @Injectable()
 export class AdminUserService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(ADMIN_USER_REPOSITORY)
+    private readonly adminUserRepository: IAdminUserRepository,
+  ) {}
 
   async getAllUsers(
     filters: UserFilterDto,
@@ -94,53 +97,13 @@ export class AdminUserService {
     }
 
     const [users, total] = await Promise.all([
-      this.prisma.user.findMany({
+      this.adminUserRepository.findUsers({
         where,
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
-        include: {
-          subscriptions: {
-            where: {
-              status: 'active',
-              isDeleted: false,
-              OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
-            },
-            select: {
-              id: true,
-              plan: true,
-              status: true,
-              endsAt: true,
-            },
-          },
-          profile: true,
-          avatar: true,
-          usage: {
-            select: { elevenLabsCount: true },
-          },
-          kids: {
-            select: {
-              screenTimeSessions: {
-                select: { duration: true },
-              },
-            },
-          },
-          paymentTransactions: {
-            where: { status: 'success' },
-            select: { amount: true },
-          },
-          _count: {
-            select: {
-              kids: true,
-              auth: true,
-              parentFavorites: true,
-              subscriptions: true,
-              paymentTransactions: true,
-            },
-          },
-        },
       }),
-      this.prisma.user.count({ where }),
+      this.adminUserRepository.countUsers(where),
     ]);
 
     return {
@@ -213,40 +176,7 @@ export class AdminUserService {
       };
     }
   > {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        profile: true,
-        kids: {
-          where: { isDeleted: false },
-          select: {
-            id: true,
-            name: true,
-            ageRange: true,
-            createdAt: true,
-            avatar: true,
-          },
-        },
-        avatar: true,
-        subscriptions: {
-          orderBy: { startedAt: 'desc' },
-        },
-        paymentTransactions: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-        _count: {
-          select: {
-            auth: true,
-            parentFavorites: true,
-            voices: true,
-            subscriptions: true,
-            supportTickets: true,
-            paymentTransactions: true,
-          },
-        },
-      },
-    });
+    const user = await this.adminUserRepository.findUserById(userId);
 
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
@@ -258,14 +188,9 @@ export class AdminUserService {
       (sub) => sub.status === 'active' && (!sub.endsAt || sub.endsAt > now),
     );
 
-    const totalSpentResult = await this.prisma.paymentTransaction.aggregate({
-      where: {
-        userId: userId,
-        status: 'success',
-      },
-      _sum: {
-        amount: true,
-      },
+    const totalSpentResult = await this.adminUserRepository.aggregatePaymentTransactions({
+      userId,
+      status: 'success',
     });
 
     /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -293,9 +218,7 @@ export class AdminUserService {
   }
 
   async createAdmin(data: CreateAdminDto): Promise<AdminCreatedDto> {
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: data.email },
-    });
+    const existingUser = await this.adminUserRepository.findUserByEmail(data.email);
 
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
@@ -303,25 +226,14 @@ export class AdminUserService {
 
     const passwordHash = await bcrypt.hash(data.password, 10);
 
-    return this.prisma.user.create({
-      data: {
-        email: data.email,
-        passwordHash,
-        name: data.name,
-        role: Role.admin,
-        isEmailVerified: true,
-        profile: {
-          create: {
-            country: 'NG',
-          },
-        },
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
+    return this.adminUserRepository.createUser({
+      email: data.email,
+      passwordHash,
+      name: data.name,
+      role: Role.admin,
+      isEmailVerified: true,
+      profile: {
+        country: 'NG',
       },
     });
   }
@@ -338,16 +250,14 @@ export class AdminUserService {
       );
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.adminUserRepository.findUserByIdSimple(userId);
 
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
     if (data.email && data.email !== user.email) {
-      const existingUser = await this.prisma.user.findUnique({
-        where: { email: data.email },
-      });
+      const existingUser = await this.adminUserRepository.findUserByEmail(data.email);
       if (existingUser) {
         throw new ConflictException('Email already in use');
       }
@@ -359,17 +269,9 @@ export class AdminUserService {
       ...(data.email && { email: data.email }),
     };
 
-    return this.prisma.user.update({
-      where: { id: userId },
+    return this.adminUserRepository.updateUser({
+      userId,
       data: updateData,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isEmailVerified: true,
-        updatedAt: true,
-      },
     });
   }
 
@@ -390,35 +292,16 @@ export class AdminUserService {
       throw new BadRequestException('You cannot delete your own account.');
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.adminUserRepository.findUserByIdSimple(userId);
 
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    const selectFields = {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      isDeleted: true,
-      deletedAt: true,
-    } as const;
-
     if (permanent) {
-      return this.prisma.user.delete({
-        where: { id: userId },
-        select: selectFields,
-      });
+      return this.adminUserRepository.hardDeleteUser(userId);
     } else {
-      return this.prisma.user.update({
-        where: { id: userId },
-        data: {
-          isDeleted: true,
-          deletedAt: new Date(),
-        },
-        select: selectFields,
-      });
+      return this.adminUserRepository.softDeleteUser(userId);
     }
   }
 
@@ -430,64 +313,27 @@ export class AdminUserService {
     isDeleted: boolean;
     deletedAt: Date | null;
   }> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.adminUserRepository.findUserByIdSimple(userId);
 
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        isDeleted: false,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isDeleted: true,
-        deletedAt: true,
-      },
-    });
+    return this.adminUserRepository.restoreUser(userId);
   }
 
   async bulkUserAction(data: BulkActionDto): Promise<{ count: number }> {
     const { userIds, action } = data;
 
     switch (action) {
-      case 'delete': {
-        const deleteResult = await this.prisma.user.updateMany({
-          where: { id: { in: userIds } },
-          data: {
-            isDeleted: true,
-            deletedAt: new Date(),
-          },
-        });
-        return { count: deleteResult.count };
-      }
+      case 'delete':
+        return this.adminUserRepository.bulkSoftDeleteUsers(userIds);
 
-      case 'restore': {
-        const restoreResult = await this.prisma.user.updateMany({
-          where: { id: { in: userIds } },
-          data: {
-            isDeleted: false,
-            deletedAt: null,
-          },
-        });
-        return { count: restoreResult.count };
-      }
+      case 'restore':
+        return this.adminUserRepository.bulkRestoreUsers(userIds);
 
-      case 'verify': {
-        const verifyResult = await this.prisma.user.updateMany({
-          where: { id: { in: userIds } },
-          data: {
-            isEmailVerified: true,
-          },
-        });
-        return { count: verifyResult.count };
-      }
+      case 'verify':
+        return this.adminUserRepository.bulkVerifyUsers(userIds);
 
       default:
         throw new BadRequestException('Invalid action');

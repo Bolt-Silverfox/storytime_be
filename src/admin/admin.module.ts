@@ -10,6 +10,8 @@ import { VoiceModule } from '../voice/voice.module';
 import {
   ADMIN_STORY_REPOSITORY,
   PrismaAdminStoryRepository,
+  ADMIN_USER_REPOSITORY,
+  PrismaAdminUserRepository,
 } from './repositories';
 
 @Module({
@@ -23,6 +25,10 @@ import {
     {
       provide: ADMIN_STORY_REPOSITORY,
       useClass: PrismaAdminStoryRepository,
+    },
+    {
+      provide: ADMIN_USER_REPOSITORY,
+      useClass: PrismaAdminUserRepository,
     },
   ],
   exports: [
