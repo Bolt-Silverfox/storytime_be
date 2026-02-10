@@ -331,7 +331,9 @@ describe('NotificationService', () => {
   describe('create', () => {
     it('should create notification preference for user', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      mockPrisma.notificationPreference.create.mockResolvedValue(mockPreference);
+      mockPrisma.notificationPreference.create.mockResolvedValue(
+        mockPreference,
+      );
 
       const result = await service.create({
         userId: 'user-1',
@@ -489,7 +491,9 @@ describe('NotificationService', () => {
       mockPrisma.notificationPreference.findUnique.mockResolvedValue(
         mockPreference,
       );
-      mockPrisma.notificationPreference.delete.mockResolvedValue(mockPreference);
+      mockPrisma.notificationPreference.delete.mockResolvedValue(
+        mockPreference,
+      );
 
       await service.delete('pref-1', true);
 
@@ -554,7 +558,9 @@ describe('NotificationService', () => {
 
   describe('toggleCategoryPreference', () => {
     it('should toggle category preference for all channels', async () => {
-      mockPrisma.notificationPreference.upsert.mockResolvedValue(mockPreference);
+      mockPrisma.notificationPreference.upsert.mockResolvedValue(
+        mockPreference,
+      );
 
       const result = await service.toggleCategoryPreference(
         'user-1',
@@ -607,7 +613,9 @@ describe('NotificationService', () => {
 
   describe('updateUserPreferences', () => {
     it('should update multiple category preferences', async () => {
-      mockPrisma.notificationPreference.upsert.mockResolvedValue(mockPreference);
+      mockPrisma.notificationPreference.upsert.mockResolvedValue(
+        mockPreference,
+      );
       mockPrisma.notificationPreference.findMany.mockResolvedValue([]);
 
       await service.updateUserPreferences('user-1', {
@@ -629,15 +637,17 @@ describe('NotificationService', () => {
 
       await service.seedDefaultPreferences('user-1');
 
-      expect(mockPrisma.notificationPreference.createMany).toHaveBeenCalledWith({
-        data: expect.arrayContaining([
-          expect.objectContaining({
-            userId: 'user-1',
-            enabled: true,
-          }),
-        ]),
-        skipDuplicates: true,
-      });
+      expect(mockPrisma.notificationPreference.createMany).toHaveBeenCalledWith(
+        {
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              userId: 'user-1',
+              enabled: true,
+            }),
+          ]),
+          skipDuplicates: true,
+        },
+      );
     });
   });
 

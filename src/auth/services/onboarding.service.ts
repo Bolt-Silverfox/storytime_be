@@ -1,20 +1,21 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
 import { CompleteProfileDto, updateProfileDto, UserDto } from '../dto/auth.dto';
+import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 
 @Injectable()
 export class OnboardingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(AUTH_REPOSITORY)
+    private readonly authRepository: IAuthRepository,
+  ) {}
 
   async completeProfile(userId: string, data: CompleteProfileDto) {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId },
-      include: { profile: true },
-    });
+    const user = await this.authRepository.findUserByIdWithProfile(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -24,13 +25,9 @@ export class OnboardingService {
 
     if (data.learningExpectationIds && data.learningExpectationIds.length > 0) {
       const existingExpectations =
-        await this.prisma.learningExpectation.findMany({
-          where: {
-            id: { in: data.learningExpectationIds },
-            isActive: true,
-            isDeleted: false,
-          },
-        });
+        await this.authRepository.findLearningExpectationsByIds(
+          data.learningExpectationIds,
+        );
 
       if (existingExpectations.length !== data.learningExpectationIds.length) {
         throw new BadRequestException(
@@ -38,80 +35,52 @@ export class OnboardingService {
         );
       }
 
-      await this.prisma.userLearningExpectation.createMany({
-        data: existingExpectations.map((exp) => ({
-          userId,
-          learningExpectationId: exp.id,
-        })),
-        skipDuplicates: true,
-      });
+      await this.authRepository.createUserLearningExpectations(
+        userId,
+        existingExpectations.map((exp) => exp.id),
+      );
     }
 
     // Handle preferred categories
     if (data.preferredCategories && data.preferredCategories.length > 0) {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: {
-          preferredCategories: {
-            set: data.preferredCategories.map((id) => ({ id })),
-          },
-        },
-      });
+      await this.authRepository.updateUserPreferredCategories(
+        userId,
+        data.preferredCategories,
+      );
     }
 
-    const profile = await this.prisma.profile.update({
-      where: { userId },
-      data: {
-        language: data.language,
-        languageCode: data.languageCode,
-      },
+    const profile = await this.authRepository.updateProfile(userId, {
+      language: data.language,
+      languageCode: data.languageCode,
     });
 
     if (data.profileImageUrl) {
-      let avatar = await this.prisma.avatar.findFirst({
-        where: { url: data.profileImageUrl },
-      });
+      let avatar = await this.authRepository.findAvatarByUrl(
+        data.profileImageUrl,
+      );
 
       if (!avatar) {
-        avatar = await this.prisma.avatar.create({
-          data: {
-            url: data.profileImageUrl,
-            name: `user_${userId}`,
-            isSystemAvatar: false,
-          },
+        avatar = await this.authRepository.createAvatar({
+          url: data.profileImageUrl,
+          name: `user_${userId}`,
+          isSystemAvatar: false,
         });
       }
 
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { avatarId: avatar.id },
-      });
+      await this.authRepository.updateUser(userId, { avatarId: avatar.id });
     }
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { onboardingStatus: 'profile_setup' },
+    await this.authRepository.updateUser(userId, {
+      onboardingStatus: 'profile_setup',
     });
 
-    const updatedUser = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        profile: true,
-        avatar: true,
-        learningExpectations: {
-          include: {
-            learningExpectation: true,
-          },
-        },
-      },
-    });
+    const updatedUser =
+      await this.authRepository.findUserByIdWithLearningExpectations(userId);
     if (!updatedUser) {
       throw new NotFoundException('User not found');
     }
 
-    const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: userId },
-    });
+    const numberOfKids = await this.authRepository.countKidsByParentId(userId);
 
     return new UserDto({
       ...updatedUser,
@@ -121,28 +90,11 @@ export class OnboardingService {
   }
 
   async getLearningExpectations() {
-    return this.prisma.learningExpectation.findMany({
-      where: {
-        isActive: true,
-        isDeleted: false,
-      },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        category: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    });
+    return this.authRepository.findActiveLearningExpectations();
   }
 
   async updateProfile(userId: string, data: updateProfileDto) {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId },
-      include: { profile: true },
-    });
+    const user = await this.authRepository.findUserByIdWithProfile(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -159,44 +111,26 @@ export class OnboardingService {
 
     // Update profile
     if (Object.keys(updateData).length === 0 && !user.profile) {
-      return this.prisma.profile.create({
-        data: {
-          userId,
-          country: 'NG',
-        },
-      });
+      return this.authRepository.createProfile(userId, { country: 'NG' });
     }
 
-    const profile = await this.prisma.profile.upsert({
-      where: { userId },
-      update: updateData,
-      create: {
-        userId,
+    const profile = await this.authRepository.upsertProfile(
+      userId,
+      updateData,
+      {
         country: data.country || 'NG',
         language: data.language,
         languageCode: data.languageCode,
-        ...updateData,
       },
-    });
+    );
 
-    const userWithKids = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        profile: true,
-        learningExpectations: {
-          include: {
-            learningExpectation: true,
-          },
-        },
-      },
-    });
+    const userWithKids =
+      await this.authRepository.findUserByIdWithLearningExpectations(userId);
     if (!userWithKids) {
       throw new NotFoundException('User not found');
     }
 
-    const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: userId },
-    });
+    const numberOfKids = await this.authRepository.countKidsByParentId(userId);
 
     return new UserDto({
       ...userWithKids,

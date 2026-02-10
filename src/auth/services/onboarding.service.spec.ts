@@ -206,15 +206,15 @@ describe('OnboardingService', () => {
           isDeleted: false,
         },
       });
-      expect(mockPrisma.userLearningExpectation.createMany).toHaveBeenCalledWith(
-        {
-          data: [
-            { userId: 'user-1', learningExpectationId: 'exp-1' },
-            { userId: 'user-1', learningExpectationId: 'exp-2' },
-          ],
-          skipDuplicates: true,
-        },
-      );
+      expect(
+        mockPrisma.userLearningExpectation.createMany,
+      ).toHaveBeenCalledWith({
+        data: [
+          { userId: 'user-1', learningExpectationId: 'exp-1' },
+          { userId: 'user-1', learningExpectationId: 'exp-2' },
+        ],
+        skipDuplicates: true,
+      });
     });
 
     it('should throw BadRequestException when some learning expectations do not exist', async () => {

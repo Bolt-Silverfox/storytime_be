@@ -135,7 +135,10 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() data: CompleteProfileDto,
   ) {
-    return this.onboardingService.completeProfile(req.authUserData['userId'], data);
+    return this.onboardingService.completeProfile(
+      req.authUserData['userId'],
+      data,
+    );
   }
   // ==================== GET LEARNING EXPECTATIONS ====================
   @Get('learning-expectations')
@@ -220,7 +223,10 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() data: updateProfileDto,
   ) {
-    return this.onboardingService.updateProfile(req.authUserData['userId'], data);
+    return this.onboardingService.updateProfile(
+      req.authUserData['userId'],
+      data,
+    );
   }
 
   @Post('change-password')

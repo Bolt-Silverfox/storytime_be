@@ -1,9 +1,15 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { Injectable, Inject } from '@nestjs/common';
+import {
+  IInAppNotificationRepository,
+  IN_APP_NOTIFICATION_REPOSITORY,
+} from '../repositories';
 
 @Injectable()
 export class InAppNotificationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(IN_APP_NOTIFICATION_REPOSITORY)
+    private readonly inAppNotificationRepository: IInAppNotificationRepository,
+  ) {}
 
   async getInAppNotifications(
     userId: string,
@@ -11,23 +17,17 @@ export class InAppNotificationService {
     offset: number = 0,
     unreadOnly: boolean = false,
   ) {
-    const where: { userId: string; isDeleted: boolean; isRead?: boolean } = {
-      userId,
-      isDeleted: false,
-    };
-
-    if (unreadOnly) {
-      where.isRead = false;
-    }
-
     const [notifications, total] = await Promise.all([
-      this.prisma.notification.findMany({
-        where,
-        take: limit,
-        skip: offset,
-        orderBy: { createdAt: 'desc' },
+      this.inAppNotificationRepository.findNotifications({
+        userId,
+        limit,
+        offset,
+        unreadOnly,
       }),
-      this.prisma.notification.count({ where }),
+      this.inAppNotificationRepository.countNotifications({
+        userId,
+        unreadOnly,
+      }),
     ]);
 
     return {
@@ -40,26 +40,13 @@ export class InAppNotificationService {
   }
 
   async markAsRead(userId: string, notificationIds: string[]) {
-    return this.prisma.notification.updateMany({
-      where: {
-        id: { in: notificationIds },
-        userId,
-      },
-      data: {
-        isRead: true,
-      },
+    return this.inAppNotificationRepository.markNotificationsAsRead({
+      userId,
+      notificationIds,
     });
   }
 
   async markAllAsRead(userId: string) {
-    return this.prisma.notification.updateMany({
-      where: {
-        userId,
-        isRead: false,
-      },
-      data: {
-        isRead: true,
-      },
-    });
+    return this.inAppNotificationRepository.markAllNotificationsAsRead(userId);
   }
 }

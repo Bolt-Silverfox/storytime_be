@@ -11,12 +11,20 @@ import { UserPreferencesController } from './user-preferences.controller';
 import { InAppProvider } from './providers/in-app.provider';
 import { EmailProvider } from './providers/email.provider';
 import { AuthModule } from '../auth/auth.module';
+import { PrismaModule } from '@/prisma/prisma.module';
 import { EMAIL_QUEUE_NAME } from './queue/email-queue.constants';
 import { EmailQueueService } from './queue/email-queue.service';
 import { EmailProcessor } from './queue/email.processor';
+import {
+  NOTIFICATION_PREFERENCE_REPOSITORY,
+  PrismaNotificationPreferenceRepository,
+  IN_APP_NOTIFICATION_REPOSITORY,
+  PrismaInAppNotificationRepository,
+} from './repositories';
 
 @Module({
   imports: [
+    PrismaModule,
     HttpModule,
     forwardRef(() => AuthModule),
     // Register email queue
@@ -39,6 +47,14 @@ import { EmailProcessor } from './queue/email.processor';
     // Queue components
     EmailQueueService,
     EmailProcessor,
+    {
+      provide: NOTIFICATION_PREFERENCE_REPOSITORY,
+      useClass: PrismaNotificationPreferenceRepository,
+    },
+    {
+      provide: IN_APP_NOTIFICATION_REPOSITORY,
+      useClass: PrismaInAppNotificationRepository,
+    },
   ],
   exports: [
     NotificationService,
