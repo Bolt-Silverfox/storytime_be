@@ -4,8 +4,8 @@ import {
   NotFoundException,
   UnauthorizedException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
 import { TokenService } from './token.service';
 import { generateToken } from '@/utils/generate-token';
 import {
@@ -21,13 +21,15 @@ import {
   AppEvents,
   UserPasswordChangedEvent,
 } from '@/shared/events';
+import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 
 @Injectable()
 export class PasswordService {
   private readonly logger = new Logger(PasswordService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(AUTH_REPOSITORY)
+    private readonly authRepository: IAuthRepository,
     private readonly eventEmitter: EventEmitter2,
     private readonly tokenService: TokenService,
   ) {}
@@ -42,25 +44,24 @@ export class PasswordService {
     userAgent?: string, // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<{ message: string }> {
     const { email } = data;
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.authRepository.findUserByEmail(email);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
     // Delete any existing reset tokens
-    await this.prisma.token.deleteMany({
-      where: { userId: user.id, type: TokenType.PASSWORD_RESET },
-    });
+    await this.authRepository.deleteUserTokensByType(
+      user.id,
+      TokenType.PASSWORD_RESET,
+    );
 
     // Generate new reset token (24 hour expiry)
     const { token, expiresAt } = generateToken(24);
-    await this.prisma.token.create({
-      data: {
-        userId: user.id,
-        token: this.tokenService.hashToken(token),
-        expiresAt,
-        type: TokenType.PASSWORD_RESET,
-      },
+    await this.authRepository.createToken({
+      userId: user.id,
+      token: this.tokenService.hashToken(token),
+      expiresAt,
+      type: TokenType.PASSWORD_RESET,
     });
 
     // Emit event for password reset notification (handled by PasswordEventListener)
@@ -85,17 +86,17 @@ export class PasswordService {
     data: ValidateResetTokenDto, // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<{ message: string }> {
     const hashedToken = this.tokenService.hashToken(token);
-    const resetToken = await this.prisma.token.findUnique({
-      where: { token: hashedToken, type: TokenType.PASSWORD_RESET },
-      include: { user: true },
-    });
+    const resetToken = await this.authRepository.findTokenByHashedToken(
+      hashedToken,
+      TokenType.PASSWORD_RESET,
+    );
 
     if (!resetToken) {
       throw new NotFoundException('Invalid reset token');
     }
 
     if (resetToken.expiresAt < new Date()) {
-      await this.prisma.token.delete({ where: { id: resetToken.id } });
+      await this.authRepository.deleteToken(resetToken.id);
       throw new UnauthorizedException('Reset token has expired');
     }
 
@@ -117,30 +118,29 @@ export class PasswordService {
     data: ResetPasswordDto, // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<{ message: string }> {
     const hashedToken = this.tokenService.hashToken(token);
-    const resetToken = await this.prisma.token.findUnique({
-      where: { token: hashedToken, type: TokenType.PASSWORD_RESET },
-      include: { user: true },
-    });
+    const resetToken = await this.authRepository.findTokenByHashedToken(
+      hashedToken,
+      TokenType.PASSWORD_RESET,
+    );
 
     if (!resetToken) {
       throw new NotFoundException('Invalid reset token');
     }
 
     if (resetToken.expiresAt < new Date()) {
-      await this.prisma.token.delete({ where: { id: resetToken.id } });
+      await this.authRepository.deleteToken(resetToken.id);
       throw new UnauthorizedException('Reset token has expired');
     }
 
     // Hash new password and update user
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await this.prisma.user.update({
-      where: { id: resetToken.userId },
-      data: { passwordHash: hashedPassword },
+    await this.authRepository.updateUser(resetToken.userId, {
+      passwordHash: hashedPassword,
     });
 
     // Clean up: delete token and invalidate all sessions
-    await this.prisma.token.delete({ where: { id: resetToken.id } });
-    await this.tokenService.deleteAllUserSessions(resetToken.userId);
+    await this.authRepository.deleteToken(resetToken.id);
+    await this.authRepository.deleteAllUserSessions(resetToken.userId);
 
     return { message: 'Password has been reset successfully' };
   }
@@ -153,7 +153,7 @@ export class PasswordService {
     data: ChangePasswordDto,
     currentSessionId: string,
   ): Promise<{ message: string }> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.authRepository.findUserById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -181,19 +181,9 @@ export class PasswordService {
     const hashedPassword = await bcrypt.hash(data.newPassword, 10);
 
     // Update password and invalidate other sessions atomically
-    await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: userId },
-        data: { passwordHash: hashedPassword },
-      });
-
-      // Delete all sessions except the current one
-      await tx.session.deleteMany({
-        where: {
-          userId: userId,
-          id: { not: currentSessionId },
-        },
-      });
+    await this.authRepository.transaction(async (tx) => {
+      await tx.updateUser(userId, { passwordHash: hashedPassword });
+      await tx.deleteOtherSessions(userId, currentSessionId);
     });
 
     // Emit events for password changed
