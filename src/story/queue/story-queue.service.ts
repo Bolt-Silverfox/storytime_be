@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
-import { Queue, Job } from 'bullmq';
+import { Queue } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
 import { VoiceType } from '@/voice/dto/voice.dto';
 import {
@@ -203,7 +203,7 @@ export class StoryQueueService {
     const progress =
       typeof job.progress === 'number'
         ? job.progress
-        : (job.progress as { percent?: number })?.percent ?? 0;
+        : ((job.progress as { percent?: number })?.percent ?? 0);
 
     let status: StoryJobStatus;
     let progressMessage: string | undefined;
@@ -242,7 +242,7 @@ export class StoryQueueService {
 
     // Include result if completed
     if (state === 'completed' && job.returnvalue) {
-      const result = job.returnvalue as StoryJobResult;
+      const result = job.returnvalue;
       if (result.success && result.story) {
         response.result = result.story;
       }
@@ -277,7 +277,7 @@ export class StoryQueueService {
       return null;
     }
 
-    return job.returnvalue as StoryJobResult;
+    return job.returnvalue;
   }
 
   /**
