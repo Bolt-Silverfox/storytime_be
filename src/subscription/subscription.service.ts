@@ -9,12 +9,11 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
+import { CACHE_KEYS } from '@/shared/constants/cache-keys.constants';
 
 // Re-export PLANS for backward compatibility
 export { PLANS } from './subscription.constants';
 
-/** Cache key prefix for subscription status */
-const SUBSCRIPTION_CACHE_PREFIX = 'subscription:status:';
 /** Cache TTL: 1 minute (balance between freshness and performance) */
 const SUBSCRIPTION_CACHE_TTL_MS = 60 * 1000;
 
@@ -123,7 +122,7 @@ export class SubscriptionService {
    * Results are cached for 1 minute to reduce database load.
    */
   async isPremiumUser(userId: string): Promise<boolean> {
-    const cacheKey = `${SUBSCRIPTION_CACHE_PREFIX}${userId}`;
+    const cacheKey = CACHE_KEYS.SUBSCRIPTION_STATUS(userId);
 
     // Try to get from cache first
     const cached = await this.cacheManager.get<boolean>(cacheKey);
@@ -162,7 +161,7 @@ export class SubscriptionService {
    * Should be called when subscription status changes.
    */
   async invalidateCache(userId: string): Promise<void> {
-    const cacheKey = `${SUBSCRIPTION_CACHE_PREFIX}${userId}`;
+    const cacheKey = CACHE_KEYS.SUBSCRIPTION_STATUS(userId);
     try {
       await this.cacheManager.del(cacheKey);
     } catch {
