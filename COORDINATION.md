@@ -442,6 +442,20 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - Build passing
 
+### Instance 17 - ✅ Completed
+**Focus**: Merge develop-v0.0.1 into integration branch
+**Timestamp**: 2026-02-10
+
+**Changes Made**:
+- Merged `origin/develop-v0.0.1` into `integration/refactor-2026-02`
+- Resolved conflict in `src/story/story.service.ts` - kept refactored version with extracted services
+- Added event emissions to `KidService` (KID_CREATED, KID_DELETED events)
+- Added event emissions to `NotificationService` (NOTIFICATION_SENT event)
+- Updated `KidCreatedEvent` name field to allow null
+- Added `KID_DELETED` event listener in `EventListenersService`
+
+**Status**: Complete - Branch now has all develop features + all refactoring work
+
 ### Instance 16 - ✅ Completed
 **Focus**: Database Transactions for UserService & AuthService
 **Timestamp**: 2026-02-09
@@ -625,6 +639,49 @@ When all instances complete their work:
 1. Verify build passes: `pnpm run build`
 2. Run tests: `pnpm run test`
 3. Create PR from `integration/refactor-2026-02` → `develop-v0.0.1`
+
+---
+
+## 🔄 Post-Merge Tasks (develop-v0.0.1 → integration)
+
+**Merged**: 2026-02-10
+**Merge Commit**: abe7e22
+
+The integration branch was merged with `develop-v0.0.1` to bring in new features. The following new functionality from develop may need refactoring patterns applied:
+
+### New Features to Review
+
+| Feature | Files | Needed Work |
+|---------|-------|-------------|
+| `topPicksFromUs` filter | `story.service.ts`, `story.controller.ts` | ✅ Already in `StoryRecommendationService` |
+| Free tier limits | `story-quota.service.ts`, `voice-quota.service.ts` | Review for event emissions |
+| Parent favorites response | `story.service.ts` | Check if needs extraction |
+| ClampPipe | `src/shared/pipes/clamp.pipe.ts` | ✅ Utility - no changes needed |
+| Per-voice settings | `voice/` services | Review for consistency |
+| IAP-only verification | `payment.service.ts` | Review for event emissions |
+| Cache invalidation patterns | Multiple files | Verify consistency with new patterns |
+
+### Tasks for Next Instances
+
+- [ ] Add event emissions for quota exhaustion (`QUOTA_EXHAUSTED` event)
+- [ ] Add event emissions for payment/subscription changes from new IAP flow
+- [ ] Review `VoiceQuotaService` for extraction opportunities (currently ~400 lines)
+- [ ] Add unit tests for new `ClampPipe`
+- [ ] Verify cache invalidation uses consistent `CACHE_KEYS` constants
+
+### Event-Driven Architecture Integration
+
+The following new operations should emit events (from `src/shared/events/app-events.ts`):
+
+```typescript
+// Suggested new events for quota system
+QUOTA_EXHAUSTED = 'quota.exhausted',      // When user hits free tier limit
+QUOTA_RESET = 'quota.reset',              // Daily quota reset
+
+// Suggested new events for voice system
+VOICE_GENERATED = 'voice.generated',      // TTS generation completed
+VOICE_QUOTA_WARNING = 'voice.quota.warning', // Approaching limit
+```
 
 ---
 
