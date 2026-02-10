@@ -1,30 +1,28 @@
 // src/parent-favorites/parent-favorites.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { CreateParentFavoriteDto } from './dto/create-parent-favorite.dto';
 import { ParentFavoriteResponseDto } from './dto/parent-favorite-response.dto';
+import {
+  IParentFavoriteRepository,
+  PARENT_FAVORITE_REPOSITORY,
+} from './repositories';
 
 @Injectable()
 export class ParentFavoritesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @Inject(PARENT_FAVORITE_REPOSITORY)
+    private readonly parentFavoriteRepository: IParentFavoriteRepository,
+  ) {}
 
   async addFavorite(
     userId: string,
     dto: CreateParentFavoriteDto,
   ): Promise<ParentFavoriteResponseDto> {
-    const favorite = await this.prisma.parentFavorite.create({
-      data: {
+    const favorite =
+      await this.parentFavoriteRepository.createParentFavorite(
         userId,
-        storyId: dto.storyId,
-      },
-      include: {
-        story: {
-          include: {
-            categories: true,
-          },
-        },
-      },
-    });
+        dto.storyId,
+      );
 
     return {
       id: favorite.id,
@@ -45,17 +43,8 @@ export class ParentFavoritesService {
   }
 
   async getFavorites(userId: string): Promise<ParentFavoriteResponseDto[]> {
-    const favorites = await this.prisma.parentFavorite.findMany({
-      where: { userId },
-      include: {
-        story: {
-          include: {
-            categories: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const favorites =
+      await this.parentFavoriteRepository.findFavoritesByUserId(userId);
 
     return favorites.map((fav) => ({
       id: fav.id,
@@ -76,15 +65,14 @@ export class ParentFavoritesService {
   }
 
   async removeFavorite(userId: string, storyId: string): Promise<string> {
-    const favorite = await this.prisma.parentFavorite.findFirst({
-      where: { userId, storyId },
-    });
+    const favorite = await this.parentFavoriteRepository.findFavorite(
+      userId,
+      storyId,
+    );
 
     if (!favorite) throw new NotFoundException('Favorite not found');
 
-    await this.prisma.parentFavorite.delete({
-      where: { id: favorite.id },
-    });
+    await this.parentFavoriteRepository.deleteParentFavorite(favorite.id);
 
     return 'Favorite removed successfully';
   }

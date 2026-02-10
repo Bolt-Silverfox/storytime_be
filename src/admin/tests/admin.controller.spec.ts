@@ -117,7 +117,9 @@ describe('AdminController', () => {
       const result = (await controller.getUserGrowth(mockDateRange)) as any;
 
       expect(result.data).toEqual(mockGrowth);
-      expect(analyticsService.getUserGrowth).toHaveBeenCalledWith(mockDateRange);
+      expect(analyticsService.getUserGrowth).toHaveBeenCalledWith(
+        mockDateRange,
+      );
     });
   });
 

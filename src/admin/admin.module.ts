@@ -7,6 +7,12 @@ import { AdminStoryService } from './admin-story.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { VoiceModule } from '../voice/voice.module';
+import {
+  ADMIN_STORY_REPOSITORY,
+  PrismaAdminStoryRepository,
+  ADMIN_USER_REPOSITORY,
+  PrismaAdminUserRepository,
+} from './repositories';
 
 @Module({
   imports: [PrismaModule, AuthModule, VoiceModule],
@@ -16,6 +22,14 @@ import { VoiceModule } from '../voice/voice.module';
     AdminAnalyticsService,
     AdminUserService,
     AdminStoryService,
+    {
+      provide: ADMIN_STORY_REPOSITORY,
+      useClass: PrismaAdminStoryRepository,
+    },
+    {
+      provide: ADMIN_USER_REPOSITORY,
+      useClass: PrismaAdminUserRepository,
+    },
   ],
   exports: [
     AdminService,

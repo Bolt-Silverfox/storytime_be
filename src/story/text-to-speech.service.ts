@@ -1,5 +1,6 @@
 import { UploadService } from '../upload/upload.service';
 import {
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -12,7 +13,7 @@ import {
 } from '../voice/voice.constants';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';
-import { PrismaService } from '../prisma/prisma.service';
+import { STORY_REPOSITORY, IStoryRepository } from './repositories';
 
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { VOICE_CONFIG_SETTINGS } from '../voice/voice.config';
@@ -25,7 +26,8 @@ export class TextToSpeechService {
     private readonly uploadService: UploadService,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
     private readonly deepgramProvider: DeepgramTTSProvider,
-    private readonly prisma: PrismaService,
+    @Inject(STORY_REPOSITORY)
+    private readonly storyRepository: IStoryRepository,
     private readonly voiceQuota: VoiceQuotaService,
   ) {}
 
@@ -51,7 +53,7 @@ export class TextToSpeechService {
     } else {
       // Assume dynamic UUID (Custom Voice)
       // Look up in DB
-      const voice = await this.prisma.voice.findUnique({ where: { id: type } });
+      const voice = await this.storyRepository.findVoiceById(type);
       if (voice && voice.elevenLabsVoiceId) {
         elevenLabsId = voice.elevenLabsVoiceId;
         // Custom voices use default settings optimized for storytelling

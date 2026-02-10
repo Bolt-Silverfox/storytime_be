@@ -221,7 +221,8 @@ export class AdminController {
     },
   })
   async getSubscriptionAnalytics(@Query() dateRange: DateRangeDto) {
-    const data = await this.adminAnalyticsService.getSubscriptionAnalytics(dateRange);
+    const data =
+      await this.adminAnalyticsService.getSubscriptionAnalytics(dateRange);
     return {
       statusCode: 200,
       message: 'Subscription analytics retrieved successfully',
@@ -286,7 +287,8 @@ export class AdminController {
     },
   })
   async getRevenueAnalytics(@Query() dateRange: DateRangeDto) {
-    const data = await this.adminAnalyticsService.getRevenueAnalytics(dateRange);
+    const data =
+      await this.adminAnalyticsService.getRevenueAnalytics(dateRange);
     return {
       statusCode: 200,
       message: 'Revenue analytics retrieved successfully',
@@ -1596,7 +1598,8 @@ export class AdminController {
     },
   })
   async toggleStoryRecommendation(@Param('storyId') storyId: string) {
-    const data = await this.adminStoryService.toggleStoryRecommendation(storyId);
+    const data =
+      await this.adminStoryService.toggleStoryRecommendation(storyId);
     return {
       statusCode: 200,
       message: 'Story recommendation toggled successfully',

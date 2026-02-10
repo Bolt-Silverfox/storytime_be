@@ -1,33 +1,33 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
 import { DailyLimitDto } from '../dto/reports.dto';
+import {
+  IScreenTimeRepository,
+  SCREEN_TIME_REPOSITORY,
+} from '../repositories';
 
 @Injectable()
 export class ScreenTimeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(SCREEN_TIME_REPOSITORY)
+    private readonly screenTimeRepository: IScreenTimeRepository,
+  ) {}
 
   /**
    * Start a screen time session for a kid
    */
   async startScreenTimeSession(kidId: string) {
     // Check if there's an active session
-    const activeSession = await this.prisma.screenTimeSession.findFirst({
-      where: {
-        kidId,
-        endTime: null,
-      },
-    });
+    const activeSession =
+      await this.screenTimeRepository.findActiveSession(kidId);
 
     if (activeSession) {
       return { sessionId: activeSession.id };
     }
 
-    const session = await this.prisma.screenTimeSession.create({
-      data: {
-        kidId,
-        date: new Date(),
-      },
-    });
+    const session = await this.screenTimeRepository.createSession(
+      kidId,
+      new Date(),
+    );
 
     return { sessionId: session.id };
   }
@@ -36,9 +36,7 @@ export class ScreenTimeService {
    * End a screen time session
    */
   async endScreenTimeSession(sessionId: string) {
-    const session = await this.prisma.screenTimeSession.findUnique({
-      where: { id: sessionId },
-    });
+    const session = await this.screenTimeRepository.findSessionById(sessionId);
 
     if (!session || session.endTime) {
       throw new BadRequestException('Invalid or already ended session');
@@ -49,12 +47,9 @@ export class ScreenTimeService {
       (endTime.getTime() - session.startTime.getTime()) / 1000,
     );
 
-    await this.prisma.screenTimeSession.update({
-      where: { id: sessionId },
-      data: {
-        endTime,
-        duration,
-      },
+    await this.screenTimeRepository.updateSession(sessionId, {
+      endTime,
+      duration,
     });
 
     return { sessionId, duration };
@@ -69,15 +64,12 @@ export class ScreenTimeService {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const sessions = await this.prisma.screenTimeSession.findMany({
-      where: {
-        kidId,
-        date: {
-          gte: today,
-          lt: tomorrow,
-        },
-      },
-    });
+    const sessions = await this.screenTimeRepository.findSessionsByDateRange(
+      kidId,
+      today,
+      tomorrow,
+      true, // includeActive
+    );
 
     // Calculate total minutes including active session
     let totalSeconds = 0;
@@ -105,16 +97,12 @@ export class ScreenTimeService {
     startDate: Date,
     endDate: Date,
   ): Promise<number> {
-    const sessions = await this.prisma.screenTimeSession.findMany({
-      where: {
-        kidId,
-        date: {
-          gte: startDate,
-          lt: endDate,
-        },
-        endTime: { not: null },
-      },
-    });
+    const sessions = await this.screenTimeRepository.findSessionsByDateRange(
+      kidId,
+      startDate,
+      endDate,
+      false, // exclude active sessions
+    );
 
     const totalSeconds = sessions.reduce(
       (sum, s) => sum + (s.duration || 0),
@@ -128,16 +116,7 @@ export class ScreenTimeService {
    * Priority: Kid's specific limit > Parent's default > No limit
    */
   async getEffectiveDailyLimit(kidId: string): Promise<number | null> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
-      include: {
-        parent: {
-          include: {
-            profile: true,
-          },
-        },
-      },
-    });
+    const kid = await this.screenTimeRepository.findKidWithParentProfile(kidId);
 
     if (!kid) {
       return null;
@@ -164,9 +143,7 @@ export class ScreenTimeService {
    * Get daily limit status
    */
   async getDailyLimitStatus(kidId: string): Promise<DailyLimitDto> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
-    });
+    const kid = await this.screenTimeRepository.findKidById(kidId);
 
     if (!kid) {
       throw new BadRequestException('Kid not found');

@@ -6,11 +6,20 @@ import { UserPinService } from './services/user-pin.service';
 import { AuthModule } from '@/auth/auth.module';
 import { NotificationModule } from '@/notification/notification.module';
 import { PrismaModule } from '@/prisma/prisma.module';
+import { USER_REPOSITORY, PrismaUserRepository } from './repositories';
 
 @Module({
   imports: [AuthModule, NotificationModule, PrismaModule],
   controllers: [UserController],
-  providers: [UserService, UserDeletionService, UserPinService],
+  providers: [
+    {
+      provide: USER_REPOSITORY,
+      useClass: PrismaUserRepository,
+    },
+    UserService,
+    UserDeletionService,
+    UserPinService,
+  ],
   exports: [UserService, UserDeletionService, UserPinService],
 })
 export class UserModule {}

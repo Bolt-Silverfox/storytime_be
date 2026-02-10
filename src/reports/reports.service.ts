@@ -115,11 +115,12 @@ export class ReportsService {
         });
 
         // Screen time this week (delegated to ScreenTimeService)
-        const screenTimeMins = await this.screenTimeService.getScreenTimeForRange(
-          kid.id,
-          weekStart,
-          weekEnd,
-        );
+        const screenTimeMins =
+          await this.screenTimeService.getScreenTimeForRange(
+            kid.id,
+            weekStart,
+            weekEnd,
+          );
 
         // Stars earned (assuming daily challenge completions)
         const starsEarned = await this.prisma.dailyChallengeAssignment.count({
@@ -255,8 +256,10 @@ export class ReportsService {
     weekStart.setHours(0, 0, 0, 0);
 
     // Screen time today (delegated to ScreenTimeService)
-    const screenTimeMins = await this.screenTimeService.getTodayScreenTime(kidId);
-    const screenTimeLimitMins = await this.screenTimeService.getEffectiveDailyLimit(kidId);
+    const screenTimeMins =
+      await this.screenTimeService.getTodayScreenTime(kidId);
+    const screenTimeLimitMins =
+      await this.screenTimeService.getEffectiveDailyLimit(kidId);
     const screenTimeRemainingMins =
       screenTimeLimitMins !== null
         ? Math.max(0, screenTimeLimitMins - screenTimeMins)

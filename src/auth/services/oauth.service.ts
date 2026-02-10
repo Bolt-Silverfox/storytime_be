@@ -1,11 +1,11 @@
 import {
   Injectable,
+  Inject,
   Logger,
   BadRequestException,
   UnauthorizedException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
 import { NotificationPreferenceService } from '@/notification/services/notification-preference.service';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
@@ -14,6 +14,11 @@ import { GoogleOAuthProfile } from '@/shared/types';
 import { UserDto } from '../dto/auth.dto';
 import appleSigninAuth from 'apple-signin-auth';
 import * as crypto from 'crypto';
+import {
+  AUTH_REPOSITORY,
+  IAuthRepository,
+  UserWithProfileAndAvatar,
+} from '../repositories';
 
 interface OAuthPayload {
   googleId?: string;
@@ -30,7 +35,8 @@ export class OAuthService {
   private googleClient: OAuth2Client;
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(AUTH_REPOSITORY)
+    private readonly authRepository: IAuthRepository,
     private readonly notificationPreferenceService: NotificationPreferenceService,
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
@@ -136,34 +142,24 @@ export class OAuthService {
   private async upsertOrReturnUserFromOAuthPayload(payload: OAuthPayload) {
     const { googleId, appleId, email, picture, name, emailVerified } = payload;
 
-    let user = null;
+    let user: UserWithProfileAndAvatar | null = null;
 
     // 1. Try find by googleId or appleId
     if (googleId) {
-      user = await this.prisma.user.findFirst({
-        where: { googleId },
-        include: { profile: true, avatar: true },
-      });
+      user = await this.authRepository.findUserByGoogleId(googleId);
     } else if (appleId) {
-      user = await this.prisma.user.findFirst({
-        where: { appleId },
-        include: { profile: true, avatar: true },
-      });
+      user = await this.authRepository.findUserByAppleId(appleId);
     }
 
     // 2. Try find by email
     if (!user) {
-      const existing = await this.prisma.user.findUnique({ where: { email } });
+      const existing = await this.authRepository.findUserByEmail(email);
 
       if (existing) {
-        user = await this.prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            isEmailVerified: emailVerified ? true : existing.isEmailVerified,
-            googleId: googleId || existing.googleId,
-            appleId: appleId || existing.appleId,
-          },
-          include: { profile: true, avatar: true },
+        user = await this.authRepository.updateUserWithRelations(existing.id, {
+          isEmailVerified: emailVerified ? true : existing.isEmailVerified,
+          googleId: googleId || existing.googleId,
+          appleId: appleId || existing.appleId,
         });
       }
     }
@@ -174,27 +170,26 @@ export class OAuthService {
       const hashedPassword =
         await this.passwordService.hashPassword(randomPassword);
 
-      user = await this.prisma.user.create({
-        data: {
-          name: name || email || 'User',
-          email,
-          passwordHash: hashedPassword,
-          isEmailVerified: emailVerified === true,
-          googleId: googleId || null,
-          appleId: appleId || null,
-          role: 'parent',
-          profile: {
-            create: {
-              country: 'NG',
-            },
+      user = await this.authRepository.createUser({
+        name: name || email || 'User',
+        email,
+        passwordHash: hashedPassword,
+        isEmailVerified: emailVerified === true,
+        googleId: googleId || null,
+        appleId: appleId || null,
+        role: 'parent',
+        profile: {
+          create: {
+            country: 'NG',
           },
         },
-        include: { profile: true, avatar: true },
       });
 
       // Seed default notification preferences for new OAuth users
       try {
-        await this.notificationPreferenceService.seedDefaultPreferences(user.id);
+        await this.notificationPreferenceService.seedDefaultPreferences(
+          user.id,
+        );
       } catch (error) {
         this.logger.error(
           'Failed to seed notification preferences:',
@@ -205,25 +200,19 @@ export class OAuthService {
 
     // 4. Handle avatar from OAuth picture
     if (picture) {
-      let avatar = await this.prisma.avatar.findFirst({
-        where: { url: picture },
-      });
+      let avatar = await this.authRepository.findAvatarByUrl(picture);
 
       if (!avatar) {
-        avatar = await this.prisma.avatar.create({
-          data: {
-            url: picture,
-            name: `oauth_${googleId || appleId || user.id}`,
-            isSystemAvatar: false,
-          },
+        avatar = await this.authRepository.createAvatar({
+          url: picture,
+          name: `oauth_${googleId || appleId || user.id}`,
+          isSystemAvatar: false,
         });
       }
 
       if (user.avatarId !== avatar.id) {
-        user = await this.prisma.user.update({
-          where: { id: user.id },
-          data: { avatarId: avatar.id },
-          include: { profile: true, avatar: true },
+        user = await this.authRepository.updateUserWithRelations(user.id, {
+          avatarId: avatar.id,
         });
       }
     }
@@ -236,9 +225,7 @@ export class OAuthService {
     }
 
     // 6. Build response
-    const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: user.id },
-    });
+    const numberOfKids = await this.authRepository.countKidsByParentId(user.id);
 
     const userDto = new UserDto({ ...user, numberOfKids });
     const tokenData = await this.tokenService.createTokenPair(userDto);

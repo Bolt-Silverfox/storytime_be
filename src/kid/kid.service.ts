@@ -122,7 +122,8 @@ export class KidService {
     if (kid.parentId !== userId) throw new ForbiddenException('Access denied');
 
     // Get recommendation stats
-    const totalRecommendations = await this.kidRepository.countParentRecommendations(kidId);
+    const totalRecommendations =
+      await this.kidRepository.countParentRecommendations(kidId);
 
     const transformedKid = this.transformKid(kid);
 

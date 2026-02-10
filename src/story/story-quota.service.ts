@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { STORY_REPOSITORY, IStoryRepository } from './repositories';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
@@ -27,7 +27,8 @@ export class StoryQuotaService {
   private readonly logger = new Logger(StoryQuotaService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(STORY_REPOSITORY)
+    private readonly storyRepository: IStoryRepository,
     private readonly subscriptionService: SubscriptionService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -46,9 +47,10 @@ export class StoryQuotaService {
     }
 
     // 2. Check if story was already read (re-reading is always free)
-    const existingProgress = await this.prisma.userStoryProgress.findUnique({
-      where: { userId_storyId: { userId, storyId } },
-    });
+    const existingProgress = await this.storyRepository.findUserStoryProgress(
+      userId,
+      storyId,
+    );
     if (existingProgress) {
       return { canAccess: true, reason: 'already_read' };
     }
@@ -92,7 +94,7 @@ export class StoryQuotaService {
     const currentMonth = this.getCurrentMonth();
 
     // Use interactive transaction to handle race condition atomically
-    await this.prisma.$transaction(async (tx) => {
+    await this.storyRepository.executeTransaction(async (tx) => {
       // Check inside transaction to prevent race conditions
       const existing = await tx.userStoryProgress.findUnique({
         where: { userId_storyId: { userId, storyId } },
@@ -164,7 +166,7 @@ export class StoryQuotaService {
     const currentMonth = this.getCurrentMonth();
     const baseLimit = FREE_TIER_LIMITS.STORIES.BASE_LIMIT;
 
-    return await this.prisma.$transaction(async (tx) => {
+    return await this.storyRepository.executeTransaction(async (tx) => {
       let usage = await tx.userUsage.findUnique({ where: { userId } });
 
       if (!usage) {

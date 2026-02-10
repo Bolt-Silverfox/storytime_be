@@ -74,7 +74,8 @@ export class RewardService {
   }
 
   async getRedemptionsForKid(kidId: string): Promise<RewardRedemptionDto[]> {
-    const redemptions = await this.rewardRepository.findRedemptionsByKidId(kidId);
+    const redemptions =
+      await this.rewardRepository.findRedemptionsByKidId(kidId);
     return redemptions.map((r: RewardRedemption) =>
       this.toRewardRedemptionDto(r),
     );
