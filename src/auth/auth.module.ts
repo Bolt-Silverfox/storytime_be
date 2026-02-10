@@ -1,9 +1,8 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { NotificationModule } from '@/notification/notification.module';
 import { PassportModule } from '@nestjs/passport';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
@@ -26,8 +25,7 @@ import { OnboardingService } from './services/onboarding.service';
         signOptions: { expiresIn: 3600 },
       }),
     }),
-
-    forwardRef(() => NotificationModule),
+    // EventEmitterModule is global (configured in app.module.ts)
   ],
 
   controllers: [AuthController],
