@@ -64,6 +64,21 @@ export class PaymentService {
         );
       }
     } catch (error) {
+      // Emit payment failed event (amount estimated from product)
+      const planKey = PRODUCT_ID_TO_PLAN[dto.productId];
+      const plan = planKey ? PLANS[planKey] : null;
+
+      const failedEvent: PaymentFailedEvent = {
+        userId,
+        amount: plan?.amount || 0,
+        currency: 'USD', // Default currency for IAP
+        provider: dto.platform,
+        errorCode: error.code,
+        errorMessage: this.getErrorMessage(error),
+        failedAt: new Date(),
+      };
+      this.eventEmitter.emit(AppEvents.PAYMENT_FAILED, failedEvent);
+
       if (
         error instanceof BadRequestException ||
         error instanceof NotFoundException
@@ -297,6 +312,7 @@ export class PaymentService {
       });
 
       let subscription;
+
       if (existingSub) {
         subscription = await tx.subscription.update({
           where: { id: existingSub.id },
@@ -331,37 +347,41 @@ export class PaymentService {
       userId,
       amount,
       currency,
-      provider: 'iap', // In-app purchase (Google/Apple)
+      provider: reference.startsWith('google_') ? 'google' : 'apple',
       subscriptionId: result.subscription.id,
       completedAt: now,
     } satisfies PaymentCompletedEvent);
 
-    // Emit subscription created or changed event
+    // Emit subscription events
     if (result.existingSub) {
-      // Determine change type based on plan comparison
-      const changeType: 'upgrade' | 'downgrade' | 'renewal' =
-        result.existingSub.plan === plan ? 'renewal' : 'upgrade';
+      // Only emit SUBSCRIPTION_CHANGED if plan actually changed
+      if (result.existingSub.plan !== plan) {
+        const changeType = this.determineChangeType(result.existingSub.plan, plan);
 
-      this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CHANGED, {
-        subscriptionId: result.subscription.id,
-        userId,
-        previousPlanId: result.existingSub.plan,
-        newPlanId: plan,
-        previousPlanName: result.existingSub.plan,
-        newPlanName: plan,
-        changeType,
-        changedAt: now,
-      } satisfies SubscriptionChangedEvent);
+        this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CHANGED, {
+          subscriptionId: result.subscription.id,
+          userId,
+          previousPlanId: result.existingSub.plan,
+          newPlanId: plan,
+          previousPlanName: PLANS[result.existingSub.plan]?.display || result.existingSub.plan,
+          newPlanName: PLANS[plan]?.display || plan,
+          changeType,
+          changedAt: now,
+        } satisfies SubscriptionChangedEvent);
+      }
     } else {
+      // New subscription created
       this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CREATED, {
         subscriptionId: result.subscription.id,
         userId,
         planId: plan,
-        planName: plan,
-        provider: 'iap',
+        planName: PLANS[plan]?.display || plan,
+        provider: reference.startsWith('google_') ? 'google' : 'apple',
         createdAt: now,
       } satisfies SubscriptionCreatedEvent);
     }
+
+    this.logger.log(`Payment completed: ${result.paymentTx.id} for user ${userId.substring(0, 8)}`);
 
     return {
       tx: result.paymentTx,
@@ -373,5 +393,24 @@ export class PaymentService {
       },
       alreadyProcessed: false,
     };
+  }
+
+  /**
+   * Determine the type of subscription change based on plan amounts
+   */
+  private determineChangeType(
+    previousPlan: string,
+    newPlan: string,
+  ): 'upgrade' | 'downgrade' | 'renewal' {
+    const previousAmount = PLANS[previousPlan]?.amount || 0;
+    const newAmount = PLANS[newPlan]?.amount || 0;
+
+    if (previousPlan === newPlan) {
+      return 'renewal';
+    } else if (newAmount > previousAmount) {
+      return 'upgrade';
+    } else {
+      return 'downgrade';
+    }
   }
 }

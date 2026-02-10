@@ -26,7 +26,7 @@ async function bootstrap() {
   // Enable gzip/deflate compression for responses > 1KB
   app.use(
     compression({
-      filter: (req, res) => {
+      filter: (req: any, res: any) => {
         // Don't compress if client doesn't accept it
         if (req.headers['x-no-compression']) {
           return false;

@@ -1,18 +1,24 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import {
   StoryProgressDto,
   UserStoryProgressDto,
   UserStoryProgressResponseDto,
 } from './dto/story.dto';
-import { STORY_REPOSITORY, IStoryRepository } from './repositories';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  AppEvents,
+  StoryCompletedEvent,
+  StoryProgressUpdatedEvent,
+} from '@/shared/events';
 
 @Injectable()
 export class StoryProgressService {
   private readonly logger = new Logger(StoryProgressService.name);
 
   constructor(
-    @Inject(STORY_REPOSITORY)
-    private readonly storyRepository: IStoryRepository,
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // =====================
@@ -20,33 +26,60 @@ export class StoryProgressService {
   // =====================
 
   async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
-    // Batch validation queries
-    const [kid, story] = await Promise.all([
-      this.storyRepository.findKidById(dto.kidId),
-      this.storyRepository.findStoryById(dto.storyId),
-    ]);
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
-    const existing = await this.storyRepository.findStoryProgress(
-      dto.kidId,
-      dto.storyId,
-    );
+    const existing = await this.prisma.storyProgress.findUnique({
+      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
+    });
 
     const sessionTime = dto.sessionTime || 0;
     const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
 
-    const result = await this.storyRepository.upsertStoryProgress(
-      dto.kidId,
-      dto.storyId,
-      {
+    const result = await this.prisma.storyProgress.upsert({
+      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
+      update: {
         progress: dto.progress,
         completed: dto.completed ?? false,
+        lastAccessed: new Date(),
         totalTimeSpent: newTotalTime,
       },
-    );
+      create: {
+        kidId: dto.kidId,
+        storyId: dto.storyId,
+        progress: dto.progress,
+        completed: dto.completed ?? false,
+        totalTimeSpent: sessionTime,
+      },
+    });
+
+    // Emit story progress updated event
+    const progressEvent: StoryProgressUpdatedEvent = {
+      storyId: dto.storyId,
+      kidId: dto.kidId,
+      progress: dto.progress,
+      sessionTime,
+      totalTimeSpent: newTotalTime,
+      updatedAt: new Date(),
+    };
+    this.eventEmitter.emit(AppEvents.STORY_PROGRESS_UPDATED, progressEvent);
 
     if (dto.completed && (!existing || !existing.completed)) {
+      // Emit story completed event
+      const completedEvent: StoryCompletedEvent = {
+        storyId: dto.storyId,
+        kidId: dto.kidId,
+        totalTimeSpent: newTotalTime,
+        completedAt: new Date(),
+      };
+      this.eventEmitter.emit(AppEvents.STORY_COMPLETED, completedEvent);
+
       this.adjustReadingLevel(dto.kidId, dto.storyId, newTotalTime).catch((e) =>
         this.logger.error(`Failed to adjust reading level: ${e.message}`),
       );
@@ -55,19 +88,25 @@ export class StoryProgressService {
   }
 
   async getProgress(kidId: string, storyId: string) {
-    // Batch validation queries
-    const [kid, story] = await Promise.all([
-      this.storyRepository.findKidById(kidId),
-      this.storyRepository.findStoryById(storyId),
-    ]);
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
-    return await this.storyRepository.findStoryProgress(kidId, storyId);
+    return await this.prisma.storyProgress.findUnique({
+      where: { kidId_storyId: { kidId, storyId } },
+    });
   }
 
   async getContinueReading(kidId: string) {
-    const progressRecords =
-      await this.storyRepository.findContinueReadingProgress(kidId);
+    const progressRecords = await this.prisma.storyProgress.findMany({
+      where: { kidId, progress: { gt: 0 }, completed: false, isDeleted: false },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
     return progressRecords.map((record) => ({
       ...record.story,
       progress: record.progress,
@@ -77,14 +116,18 @@ export class StoryProgressService {
   }
 
   async getCompletedStories(kidId: string) {
-    const records = await this.storyRepository.findCompletedProgress(kidId);
+    const records = await this.prisma.storyProgress.findMany({
+      where: { kidId, completed: true, isDeleted: false },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
     return records.map((r) => r.story);
   }
 
   async getCreatedStories(kidId: string) {
-    return await this.storyRepository.findStories({
+    return await this.prisma.story.findMany({
       where: { creatorKidId: kidId, isDeleted: false },
-      orderBy: [{ createdAt: 'desc' }],
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -96,31 +139,60 @@ export class StoryProgressService {
     userId: string,
     dto: UserStoryProgressDto,
   ): Promise<UserStoryProgressResponseDto> {
-    // Batch validation queries
-    const [user, story] = await Promise.all([
-      this.storyRepository.findUserById(userId),
-      this.storyRepository.findStoryById(dto.storyId),
-    ]);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+    });
     if (!user) throw new NotFoundException('User not found');
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
-    const existing = await this.storyRepository.findUserStoryProgress(
-      userId,
-      dto.storyId,
-    );
+    const existing = await this.prisma.userStoryProgress.findUnique({
+      where: { userId_storyId: { userId, storyId: dto.storyId } },
+    });
 
     const sessionTime = dto.sessionTime || 0;
     const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
 
-    const result = await this.storyRepository.upsertUserStoryProgress(
-      userId,
-      dto.storyId,
-      {
+    const result = await this.prisma.userStoryProgress.upsert({
+      where: { userId_storyId: { userId, storyId: dto.storyId } },
+      update: {
         progress: dto.progress,
         completed: dto.completed ?? false,
+        lastAccessed: new Date(),
         totalTimeSpent: newTotalTime,
       },
-    );
+      create: {
+        userId,
+        storyId: dto.storyId,
+        progress: dto.progress,
+        completed: dto.completed ?? false,
+        totalTimeSpent: sessionTime,
+      },
+    });
+
+    // Emit story progress updated event (for user)
+    const progressEvent: StoryProgressUpdatedEvent = {
+      storyId: dto.storyId,
+      userId,
+      progress: dto.progress,
+      sessionTime,
+      totalTimeSpent: newTotalTime,
+      updatedAt: new Date(),
+    };
+    this.eventEmitter.emit(AppEvents.STORY_PROGRESS_UPDATED, progressEvent);
+
+    // Emit story completed event if newly completed
+    if (dto.completed && (!existing || !existing.completed)) {
+      const completedEvent: StoryCompletedEvent = {
+        storyId: dto.storyId,
+        userId,
+        totalTimeSpent: newTotalTime,
+        completedAt: new Date(),
+      };
+      this.eventEmitter.emit(AppEvents.STORY_COMPLETED, completedEvent);
+    }
 
     return {
       id: result.id,
@@ -136,18 +208,18 @@ export class StoryProgressService {
     userId: string,
     storyId: string,
   ): Promise<UserStoryProgressResponseDto | null> {
-    // Batch validation queries
-    const [user, story] = await Promise.all([
-      this.storyRepository.findUserById(userId),
-      this.storyRepository.findStoryById(storyId),
-    ]);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+    });
     if (!user) throw new NotFoundException('User not found');
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
-    const progress = await this.storyRepository.findUserStoryProgress(
-      userId,
-      storyId,
-    );
+    const progress = await this.prisma.userStoryProgress.findUnique({
+      where: { userId_storyId: { userId, storyId } },
+    });
 
     if (!progress) return null;
 
@@ -162,8 +234,16 @@ export class StoryProgressService {
   }
 
   async getUserContinueReading(userId: string) {
-    const progressRecords =
-      await this.storyRepository.findUserContinueReadingProgress(userId);
+    const progressRecords = await this.prisma.userStoryProgress.findMany({
+      where: {
+        userId,
+        progress: { gt: 0 },
+        completed: false,
+        isDeleted: false,
+      },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
 
     return progressRecords.map((record) => ({
       ...record.story,
@@ -174,18 +254,20 @@ export class StoryProgressService {
   }
 
   async getUserCompletedStories(userId: string) {
-    const records =
-      await this.storyRepository.findUserCompletedProgress(userId);
+    const records = await this.prisma.userStoryProgress.findMany({
+      where: { userId, completed: true, isDeleted: false },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: true },
+    });
+
     return records.map((r) => r.story);
   }
 
   async removeFromUserLibrary(userId: string, storyId: string) {
-    // Execute deletions in parallel - repository handles individual operations
-    await Promise.all([
-      this.storyRepository.deleteParentFavorites(userId, storyId),
-      this.storyRepository.deleteUserStoryProgress(userId, storyId),
+    return await this.prisma.$transaction([
+      this.prisma.parentFavorite.deleteMany({ where: { userId, storyId } }),
+      this.prisma.userStoryProgress.deleteMany({ where: { userId, storyId } }),
     ]);
-    return { message: 'Removed from library' };
   }
 
   // =====================
@@ -193,19 +275,34 @@ export class StoryProgressService {
   // =====================
 
   async getDownloads(kidId: string) {
-    const downloads = await this.storyRepository.findDownloadsByKidId(kidId);
+    const downloads = await this.prisma.downloadedStory.findMany({
+      where: { kidId },
+      include: { story: true },
+      orderBy: { downloadedAt: 'desc' },
+    });
     return downloads.map((d) => d.story);
   }
 
   async addDownload(kidId: string, storyId: string) {
-    const story = await this.storyRepository.findStoryById(storyId);
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
-    return await this.storyRepository.upsertDownload(kidId, storyId);
+    return await this.prisma.downloadedStory.upsert({
+      where: { kidId_storyId: { kidId, storyId } },
+      create: { kidId, storyId },
+      update: { downloadedAt: new Date() },
+    });
   }
 
   async removeDownload(kidId: string, storyId: string) {
-    const result = await this.storyRepository.deleteDownload(kidId, storyId);
-    return result ?? { message: 'Download removed' };
+    try {
+      return await this.prisma.downloadedStory.delete({
+        where: { kidId_storyId: { kidId, storyId } },
+      });
+    } catch {
+      return { message: 'Download removed' };
+    }
   }
 
   // =====================
@@ -213,13 +310,11 @@ export class StoryProgressService {
   // =====================
 
   async removeFromLibrary(kidId: string, storyId: string) {
-    // Execute deletions in parallel - repository handles individual operations
-    await Promise.all([
-      this.storyRepository.deleteFavorites(kidId, storyId),
-      this.storyRepository.deleteDownloads(kidId, storyId),
-      this.storyRepository.deleteStoryProgress(kidId, storyId),
+    return await this.prisma.$transaction([
+      this.prisma.favorite.deleteMany({ where: { kidId, storyId } }),
+      this.prisma.downloadedStory.deleteMany({ where: { kidId, storyId } }),
+      this.prisma.storyProgress.deleteMany({ where: { kidId, storyId } }),
     ]);
-    return { message: 'Removed from library' };
   }
 
   // =====================
@@ -231,11 +326,12 @@ export class StoryProgressService {
     storyId: string,
     totalTimeSeconds: number,
   ) {
-    // Batch queries for story and kid
-    const [story, kid] = await Promise.all([
-      this.storyRepository.findStoryById(storyId),
-      this.storyRepository.findKidById(kidId),
-    ]);
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!story || !kid || story.wordCount === 0) return;
     const minutes = totalTimeSeconds / 60;
     const wpm = minutes > 0 ? story.wordCount / minutes : 0;
@@ -246,7 +342,10 @@ export class StoryProgressService {
       newLevel = Math.max(1, kid.currentReadingLevel - 1);
     }
     if (newLevel !== kid.currentReadingLevel) {
-      await this.storyRepository.updateKidReadingLevel(kidId, newLevel);
+      await this.prisma.kid.update({
+        where: { id: kidId },
+        data: { currentReadingLevel: newLevel },
+      });
       this.logger.log(`Adjusted Kid ${kidId} reading level to ${newLevel}`);
     }
   }

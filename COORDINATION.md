@@ -818,3 +818,38 @@ VOICE_QUOTA_WARNING = 'voice.quota.warning', // Approaching limit
 - Push notifications on job completion/failure
 - See `ASYNC_STORY_GENERATION.md` for full implementation plan
 
+### Instance 18 - ✅ Completed
+**Focus**: Event-Driven Architecture Implementation
+**Timestamp**: 2026-02-10
+**Branch**: `perf/improvements`
+**Commits**: `90c2016`, `8cbd6dc` (merge), `f5d6faa` (improvements restored)
+
+**Changes Made**:
+- `src/shared/events/app-events.ts` - Comprehensive business event catalog (20 events total):
+  - User: USER_REGISTERED, USER_DELETED, USER_EMAIL_VERIFIED, USER_PASSWORD_CHANGED
+  - Kid: KID_CREATED, KID_DELETED
+  - Story: STORY_CREATED, STORY_COMPLETED, STORY_PROGRESS_UPDATED
+  - Payment: PAYMENT_COMPLETED, PAYMENT_FAILED
+  - Subscription: SUBSCRIPTION_CREATED, SUBSCRIPTION_CHANGED, SUBSCRIPTION_CANCELLED
+  - Achievement: BADGE_EARNED, STREAK_UPDATED
+  - Notification: NOTIFICATION_SENT
+  - Quota: QUOTA_EXHAUSTED, QUOTA_WARNING
+  - Full TypeScript type safety with `AppEventPayloads` map
+- `src/shared/listeners/analytics-event.listener.ts` (NEW ~150 lines) - Analytics tracking for 8 major business events
+- `src/shared/listeners/activity-log-event.listener.ts` (NEW ~200 lines) - Database audit trail for 10 important events
+- `src/shared/events/events.module.ts` - Combined EventListenersService + AnalyticsEventListener + ActivityLogEventListener
+- Event emissions added to 7 services:
+  - `auth.service.ts` - USER_REGISTERED, USER_EMAIL_VERIFIED, USER_PASSWORD_CHANGED
+  - `user-deletion.service.ts` - USER_DELETED
+  - `kid.service.ts` - KID_CREATED, KID_DELETED
+  - `payment.service.ts` - PAYMENT_COMPLETED, PAYMENT_FAILED, SUBSCRIPTION_CREATED/CHANGED (only when plan changes)
+  - `subscription.service.ts` - SUBSCRIPTION_CANCELLED
+  - `story-generation.service.ts` - STORY_CREATED
+  - `story-progress.service.ts` - STORY_PROGRESS_UPDATED, STORY_COMPLETED (supports kid & user tracking)
+- `src/app.module.ts` - EventEmitterModule with wildcard support and dev-only verbose logging
+- `QA_IMPROVEMENTS.md` - Section 2.2 updated with complete EDA implementation details
+
+**Integration**: Successfully merged with `origin/integration/refactor-2026-02`, resolved all conflicts, restored better implementations (wildcard events, conditional logging, precise subscription change detection)
+
+**Status**: Complete and integrated - Build passing
+

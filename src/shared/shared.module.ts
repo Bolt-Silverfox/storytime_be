@@ -19,7 +19,10 @@ import { EventsModule } from './events';
       }),
     }),
   ],
-  providers: [AuthSessionGuard, AdminGuard],
+  providers: [
+    AuthSessionGuard,
+    AdminGuard,
+  ],
   exports: [AuthSessionGuard, AdminGuard, JwtModule],
 })
 export class SharedModule {}
