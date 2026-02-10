@@ -571,8 +571,7 @@ export class StoryService {
       this.eventEmitter.emit(AppEvents.STORY_COMPLETED, {
         storyId: dto.storyId,
         kidId: dto.kidId,
-        durationSeconds: newTotalTime,
-        completionPercentage: dto.progress,
+        totalTimeSpent: newTotalTime,
         completedAt: new Date(),
       } satisfies StoryCompletedEvent);
     }
