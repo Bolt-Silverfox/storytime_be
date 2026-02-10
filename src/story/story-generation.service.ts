@@ -1,7 +1,12 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
-import { PrismaService } from '../prisma/prisma.service';
-import { GeminiService, GenerateStoryOptions, GeneratedStory } from './gemini.service';
+import { Prisma } from '@prisma/client';
+import { STORY_REPOSITORY, IStoryRepository } from './repositories';
+import {
+  GeminiService,
+  GenerateStoryOptions,
+  GeneratedStory,
+} from './gemini.service';
 import { TextToSpeechService } from './text-to-speech.service';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
@@ -15,7 +20,8 @@ export class StoryGenerationService {
   private readonly WORDS_PER_MINUTE = 150;
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(STORY_REPOSITORY)
+    private readonly storyRepository: IStoryRepository,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private readonly geminiService: GeminiService,
     private readonly textToSpeechService: TextToSpeechService,
@@ -43,7 +49,9 @@ export class StoryGenerationService {
         STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
       );
     } catch (error) {
-      this.logger.warn(`Failed to invalidate story caches: ${(error as Error).message}`);
+      this.logger.warn(
+        `Failed to invalidate story caches: ${(error as Error).message}`,
+      );
     }
   }
 
@@ -57,10 +65,9 @@ export class StoryGenerationService {
       options.seasonIds.length > 0 &&
       (!options.seasons || options.seasons.length === 0)
     ) {
-      const seasons = await this.prisma.season.findMany({
-        where: { id: { in: options.seasonIds }, isDeleted: false },
-        select: { name: true },
-      });
+      const seasons = await this.storyRepository.findSeasonsByIds(
+        options.seasonIds,
+      );
       options.seasons = seasons.map((s) => s.name);
     }
 
@@ -87,10 +94,7 @@ export class StoryGenerationService {
     seasonIds?: string[],
     kidName?: string,
   ) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-      include: { preferredCategories: true, preferredVoice: true },
-    });
+    const kid = await this.storyRepository.findKidByIdWithPreferences(kidId);
 
     if (!kid) {
       throw new NotFoundException(`Kid with id ${kidId} not found`);
@@ -122,11 +126,9 @@ export class StoryGenerationService {
 
     if (needThemes || needCategories) {
       const [availableThemes, availableCategories] = await Promise.all([
-        needThemes
-          ? this.prisma.theme.findMany({ where: { isDeleted: false } })
-          : Promise.resolve([]),
+        needThemes ? this.storyRepository.findAllThemes() : Promise.resolve([]),
         needCategories
-          ? this.prisma.category.findMany({ where: { isDeleted: false } })
+          ? this.storyRepository.findAllCategories()
           : Promise.resolve([]),
       ]);
 
@@ -167,10 +169,7 @@ export class StoryGenerationService {
     // Resolve Season IDs to Names for AI Context
     const seasonNames: string[] = [];
     if (seasonIds && seasonIds.length > 0) {
-      const seasons = await this.prisma.season.findMany({
-        where: { id: { in: seasonIds }, isDeleted: false },
-        select: { name: true },
-      });
+      const seasons = await this.storyRepository.findSeasonsByIds(seasonIds);
       seasonNames.push(...seasons.map((s) => s.name));
     }
 
@@ -222,10 +221,7 @@ export class StoryGenerationService {
     // Resolve userId for tracking if creatorKidId is present
     let userId: string | undefined;
     if (creatorKidId) {
-      const kid = await this.prisma.kid.findUnique({
-        where: { id: creatorKidId },
-        select: { parentId: true },
-      });
+      const kid = await this.storyRepository.findKidById(creatorKidId);
       if (kid) userId = kid.parentId;
     }
 
@@ -239,7 +235,9 @@ export class StoryGenerationService {
         userId,
       );
     } catch (e) {
-      this.logger.error(`Failed to generate story image: ${(e as Error).message}`);
+      this.logger.error(
+        `Failed to generate story image: ${(e as Error).message}`,
+      );
     }
 
     // 2. Prepare text content and calculate metrics
@@ -288,48 +286,50 @@ export class StoryGenerationService {
       })) || [];
 
     // 5. Create Story atomically with all data including audio URL
-    const story = await this.prisma.$transaction(async (tx) => {
-      return tx.story.create({
-        data: {
-          id: storyId, // Use pre-generated ID that matches audio file
-          title: generatedStory.title,
-          description: generatedStory.description,
-          language: generatedStory.language || 'English',
-          ageMin: generatedStory.ageMin ?? 4,
-          ageMax: generatedStory.ageMax ?? 8,
-          isInteractive: false,
-          coverImageUrl: coverImageUrl,
-          textContent: textContent,
-          wordCount: wordCount,
-          durationSeconds: durationSeconds,
-          audioUrl: audioUrl, // Already generated with pre-known ID
-          creatorKidId: creatorKidId || null,
-          aiGenerated: true,
+    const story = await this.storyRepository.executeTransaction(
+      async (tx: Prisma.TransactionClient) => {
+        return tx.story.create({
+          data: {
+            id: storyId, // Use pre-generated ID that matches audio file
+            title: generatedStory.title,
+            description: generatedStory.description,
+            language: generatedStory.language || 'English',
+            ageMin: generatedStory.ageMin ?? 4,
+            ageMax: generatedStory.ageMax ?? 8,
+            isInteractive: false,
+            coverImageUrl: coverImageUrl,
+            textContent: textContent,
+            wordCount: wordCount,
+            durationSeconds: durationSeconds,
+            audioUrl: audioUrl, // Already generated with pre-known ID
+            creatorKidId: creatorKidId || null,
+            aiGenerated: true,
 
-          categories: { connectOrCreate: categoryConnect },
-          themes: { connectOrCreate: themeConnect },
-          seasons:
-            seasonIds && seasonIds.length > 0
-              ? {
-                  connect: seasonIds.map((id) => ({ id })),
-                }
-              : generatedStory.seasons
+            categories: { connectOrCreate: categoryConnect },
+            themes: { connectOrCreate: themeConnect },
+            seasons:
+              seasonIds && seasonIds.length > 0
                 ? {
-                    connect: generatedStory.seasons.map((s: string) => ({
-                      name: s,
-                    })),
+                    connect: seasonIds.map((id) => ({ id })),
                   }
-                : undefined,
-        },
-        include: {
-          images: true,
-          branches: true,
-          categories: true,
-          themes: true,
-          seasons: true,
-        },
-      });
-    });
+                : generatedStory.seasons
+                  ? {
+                      connect: generatedStory.seasons.map((s: string) => ({
+                        name: s,
+                      })),
+                    }
+                  : undefined,
+          },
+          include: {
+            images: true,
+            branches: true,
+            categories: true,
+            themes: true,
+            seasons: true,
+          },
+        });
+      },
+    );
 
     await this.invalidateStoryCaches();
 

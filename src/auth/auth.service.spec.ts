@@ -669,7 +669,11 @@ describe('AuthService', () => {
         'token',
         'test@example.com',
         'NewPassword1#',
-        { token: 'token', email: 'test@example.com', newPassword: 'NewPassword1#' },
+        {
+          token: 'token',
+          email: 'test@example.com',
+          newPassword: 'NewPassword1#',
+        },
       );
 
       expect(result.message).toBe('Password reset');

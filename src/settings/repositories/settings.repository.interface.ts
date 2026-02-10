@@ -24,13 +24,21 @@ export interface ISettingsRepository {
   ): Promise<Profile>;
   updateProfile(
     userId: string,
-    data: Partial<Pick<Profile, 'explicitContent' | 'maxScreenTimeMins' | 'language' | 'country'>>,
+    data: Partial<
+      Pick<
+        Profile,
+        'explicitContent' | 'maxScreenTimeMins' | 'language' | 'country'
+      >
+    >,
   ): Promise<Profile>;
 
   // Kid screen time operations
   findKidById(kidId: string): Promise<Kid | null>;
   findKidWithParentProfile(kidId: string): Promise<KidWithParentProfile | null>;
-  updateKidScreenTimeLimit(kidId: string, limitMins: number | null): Promise<Kid>;
+  updateKidScreenTimeLimit(
+    kidId: string,
+    limitMins: number | null,
+  ): Promise<Kid>;
   findKidsByParentWithAvatar(parentId: string): Promise<KidWithAvatar[]>;
   updateManyKidsScreenTimeLimit(
     parentId: string,
@@ -39,8 +47,12 @@ export interface ISettingsRepository {
   ): Promise<{ count: number }>;
 
   // User operations
-  findUserWithProfileAndKids(userId: string): Promise<UserWithProfileAndKids | null>;
-  findUserWithProfile(userId: string): Promise<(User & { profile: Profile | null }) | null>;
+  findUserWithProfileAndKids(
+    userId: string,
+  ): Promise<UserWithProfileAndKids | null>;
+  findUserWithProfile(
+    userId: string,
+  ): Promise<(User & { profile: Profile | null }) | null>;
 }
 
 export const SETTINGS_REPOSITORY = Symbol('SETTINGS_REPOSITORY');

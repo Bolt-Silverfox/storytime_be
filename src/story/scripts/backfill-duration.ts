@@ -50,7 +50,9 @@ async function backfillDuration() {
       }
     }
 
-    logger.log(`Preparing to update ${updates.length} stories in batches of ${BATCH_SIZE}...`);
+    logger.log(
+      `Preparing to update ${updates.length} stories in batches of ${BATCH_SIZE}...`,
+    );
 
     // Process updates in batches using transactions
     let totalUpdated = 0;

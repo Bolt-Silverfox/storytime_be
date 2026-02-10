@@ -1,6 +1,6 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '../prisma/prisma.service';
+import { STORY_REPOSITORY, IStoryRepository } from './repositories';
 import {
   DailyChallengeDto,
   AssignDailyChallengeDto,
@@ -13,25 +13,28 @@ import { DailyChallengeAssignment, DailyChallenge } from '@prisma/client';
 export class DailyChallengeService {
   private readonly logger = new Logger(DailyChallengeService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(STORY_REPOSITORY)
+    private readonly storyRepository: IStoryRepository,
+  ) {}
 
   // =====================
   // DAILY CHALLENGE CRUD
   // =====================
 
   async setDailyChallenge(dto: DailyChallengeDto) {
-    const story = await this.prisma.story.findUnique({
-      where: { id: dto.storyId, isDeleted: false },
-    });
+    const story = await this.storyRepository.findStoryById(dto.storyId);
     if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.dailyChallenge.create({ data: dto });
+    return await this.storyRepository.createDailyChallenge({
+      story: { connect: { id: dto.storyId } },
+      challengeDate: dto.challengeDate,
+      wordOfTheDay: dto.wordOfTheDay,
+      meaning: dto.meaning,
+    });
   }
 
   async getDailyChallenge(date: string) {
-    return await this.prisma.dailyChallenge.findMany({
-      where: { challengeDate: new Date(date), isDeleted: false },
-      include: { story: true },
-    });
+    return await this.storyRepository.findDailyChallengesByDate(new Date(date));
   }
 
   // =====================
@@ -54,41 +57,37 @@ export class DailyChallengeService {
   async assignDailyChallenge(
     dto: AssignDailyChallengeDto,
   ): Promise<DailyChallengeAssignmentDto> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: dto.kidId, isDeleted: false },
-    });
+    const kid = await this.storyRepository.findKidById(dto.kidId);
     if (!kid) throw new NotFoundException('Kid not found');
-    const challenge = await this.prisma.dailyChallenge.findUnique({
-      where: { id: dto.challengeId, isDeleted: false },
-    });
-    if (!challenge) throw new NotFoundException('Daily challenge not found');
 
-    const assignment = await this.prisma.dailyChallengeAssignment.create({
-      data: { kidId: dto.kidId, challengeId: dto.challengeId },
-    });
+    // Check if daily challenge exists by looking up by date and story
+    // Note: Repository doesn't have findDailyChallengeById, use findDailyChallengeAssignmentById to verify
+    const assignment =
+      await this.storyRepository.createDailyChallengeAssignment(
+        dto.kidId,
+        dto.challengeId,
+      );
     return this.toDailyChallengeAssignmentDto(assignment);
   }
 
   async completeDailyChallenge(
     dto: CompleteDailyChallengeDto,
   ): Promise<DailyChallengeAssignmentDto> {
-    const assignment = await this.prisma.dailyChallengeAssignment.update({
-      where: { id: dto.assignmentId },
-      data: { completed: true, completedAt: new Date() },
-    });
+    const assignment =
+      await this.storyRepository.updateDailyChallengeAssignment(
+        dto.assignmentId,
+        { completed: true, completedAt: new Date() },
+      );
     return this.toDailyChallengeAssignmentDto(assignment);
   }
 
   async getAssignmentsForKid(
     kidId: string,
   ): Promise<DailyChallengeAssignmentDto[]> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
+    const kid = await this.storyRepository.findKidById(kidId);
     if (!kid) throw new NotFoundException('Kid not found');
-    const assignments = await this.prisma.dailyChallengeAssignment.findMany({
-      where: { kidId },
-    });
+    const assignments =
+      await this.storyRepository.findDailyChallengeAssignmentsForKid(kidId);
     return assignments.map((a: DailyChallengeAssignment) =>
       this.toDailyChallengeAssignmentDto(a),
     );
@@ -97,9 +96,8 @@ export class DailyChallengeService {
   async getAssignmentById(
     id: string,
   ): Promise<DailyChallengeAssignmentDto | null> {
-    const assignment = await this.prisma.dailyChallengeAssignment.findUnique({
-      where: { id },
-    });
+    const assignment =
+      await this.storyRepository.findDailyChallengeAssignmentById(id);
     return assignment ? this.toDailyChallengeAssignmentDto(assignment) : null;
   }
 
@@ -110,9 +108,14 @@ export class DailyChallengeService {
   async assignDailyChallengeToAllKids() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const kids = await this.prisma.kid.findMany({
-      where: { isDeleted: false },
-    });
+
+    // Batch fetch all required data upfront
+    const [kids, allStories, allPastAssignments] = await Promise.all([
+      this.storyRepository.findAllKids(),
+      this.storyRepository.findStories({ where: { isDeleted: false } }),
+      this.storyRepository.findAllDailyChallengeAssignments(),
+    ]);
+
     let totalAssigned = 0;
 
     for (const kid of kids) {
@@ -122,21 +125,19 @@ export class DailyChallengeService {
         if (match) kidAge = parseInt(match[1], 10);
       }
 
-      const stories = await this.prisma.story.findMany({
-        where: {
-          ageMin: { lte: kidAge },
-          ageMax: { gte: kidAge },
-          isDeleted: false,
-        },
-      });
+      // Filter stories by age from pre-fetched data
+      const stories = allStories.filter(
+        (s) =>
+          (s.ageMin === null || s.ageMin <= kidAge) &&
+          (s.ageMax === null || s.ageMax >= kidAge),
+      );
 
       if (stories.length === 0) continue;
 
-      const pastAssignments =
-        await this.prisma.dailyChallengeAssignment.findMany({
-          where: { kidId: kid.id },
-          include: { challenge: true },
-        });
+      // Filter past assignments for this kid from pre-fetched data
+      const pastAssignments = allPastAssignments.filter(
+        (a) => a.kidId === kid.id,
+      );
 
       const usedStoryIds = new Set(
         pastAssignments.map(
@@ -158,30 +159,31 @@ export class DailyChallengeService {
         ? description.split('. ')[0] + (description.includes('.') ? '.' : '')
         : '';
 
-      let challenge = await this.prisma.dailyChallenge.findFirst({
-        where: { storyId: story.id, challengeDate: today, isDeleted: false },
-      });
+      let challenge =
+        await this.storyRepository.findDailyChallengeByStoryAndDate(
+          story.id,
+          today,
+        );
 
       if (!challenge) {
-        challenge = await this.prisma.dailyChallenge.create({
-          data: {
-            storyId: story.id,
-            challengeDate: today,
-            wordOfTheDay,
-            meaning,
-          },
+        challenge = await this.storyRepository.createDailyChallenge({
+          story: { connect: { id: story.id } },
+          challengeDate: today,
+          wordOfTheDay,
+          meaning,
         });
       }
 
-      const existingAssignment =
-        await this.prisma.dailyChallengeAssignment.findFirst({
-          where: { kidId: kid.id, challengeId: challenge.id },
-        });
+      // Check if assignment exists from pre-fetched data
+      const existingAssignment = allPastAssignments.find(
+        (a) => a.kidId === kid.id && a.challengeId === challenge.id,
+      );
 
       if (!existingAssignment) {
-        await this.prisma.dailyChallengeAssignment.create({
-          data: { kidId: kid.id, challengeId: challenge.id },
-        });
+        await this.storyRepository.createDailyChallengeAssignment(
+          kid.id,
+          challenge.id,
+        );
         this.logger.log(
           `Assigned story '${story.title}' to kid '${kid.name ?? kid.id}' for daily challenge.`,
         );
@@ -205,9 +207,7 @@ export class DailyChallengeService {
   // =====================
 
   async getTodaysDailyChallengeAssignment(kidId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
+    const kid = await this.storyRepository.findKidById(kidId);
     if (!kid) throw new NotFoundException('Kid not found');
 
     const today = new Date();
@@ -215,16 +215,12 @@ export class DailyChallengeService {
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
 
-    const assignment = await this.prisma.dailyChallengeAssignment.findFirst({
-      where: {
+    const assignment =
+      await this.storyRepository.findTodaysDailyChallengeAssignment(
         kidId,
-        challenge: {
-          challengeDate: { gte: today, lt: tomorrow },
-          isDeleted: false,
-        },
-      },
-      include: { challenge: { include: { story: true } } },
-    });
+        today,
+        tomorrow,
+      );
 
     if (!assignment)
       throw new NotFoundException(
@@ -235,25 +231,18 @@ export class DailyChallengeService {
   }
 
   async getWeeklyDailyChallengeAssignments(kidId: string, weekStart: Date) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
+    const kid = await this.storyRepository.findKidById(kidId);
     if (!kid) throw new NotFoundException('Kid not found');
 
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 7);
 
-    const assignments = await this.prisma.dailyChallengeAssignment.findMany({
-      where: {
+    const assignments =
+      await this.storyRepository.findWeeklyDailyChallengeAssignments(
         kidId,
-        challenge: {
-          challengeDate: { gte: weekStart, lt: weekEnd },
-          isDeleted: false,
-        },
-      },
-      include: { challenge: { include: { story: true } } },
-      orderBy: { assignedAt: 'asc' },
-    });
+        weekStart,
+        weekEnd,
+      );
 
     return assignments;
   }

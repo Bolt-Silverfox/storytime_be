@@ -3,10 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Inject,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
 import { Role, Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import {
+  IAdminUserRepository,
+  ADMIN_USER_REPOSITORY,
+} from './repositories';
 import {
   PaginatedResponseDto,
   UserListItemDto,
@@ -142,6 +146,7 @@ export class AdminUserService {
     return {
       data: users.map((user) => {
         // Sanitize user object - exclude sensitive fields
+        /* eslint-disable @typescript-eslint/no-unused-vars */
         const {
           passwordHash: _passwordHash,
           pinHash: _pinHash,
@@ -152,6 +157,7 @@ export class AdminUserService {
           _count,
           ...safeUser
         } = user;
+        /* eslint-enable @typescript-eslint/no-unused-vars */
 
         // Calculate metrics
         const creditUsed = usage?.elevenLabsCount || 0;
@@ -262,12 +268,14 @@ export class AdminUserService {
       },
     });
 
+    /* eslint-disable @typescript-eslint/no-unused-vars */
     const {
       passwordHash: _passwordHash,
       pinHash: _pinHash,
       _count,
       ...safeUser
     } = user;
+    /* eslint-enable @typescript-eslint/no-unused-vars */
 
     return {
       ...safeUser,

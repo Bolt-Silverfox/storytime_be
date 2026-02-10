@@ -1,15 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import {
   StreakResponseDto,
   WeeklyActivityDto,
 } from './dto/streak-response.dto';
+import { IStreakRepository, STREAK_REPOSITORY } from './repositories';
 
 @Injectable()
 export class StreakService {
   private readonly logger = new Logger(StreakService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @Inject(STREAK_REPOSITORY)
+    private readonly streakRepository: IStreakRepository,
+  ) {}
 
   // Get streak summary for a user
 
@@ -20,19 +23,11 @@ export class StreakService {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       // Query activity logs where user was active
-      const activities = await this.prisma.activityLog.findMany({
-        where: {
-          userId,
-          createdAt: { gte: thirtyDaysAgo },
-          action: {
-            in: ['story_read', 'challenge_completed', 'quiz_answered'],
-          },
-        },
-        select: {
-          createdAt: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+      const activities = await this.streakRepository.findUserActivityLogs(
+        userId,
+        thirtyDaysAgo,
+        ['story_read', 'challenge_completed', 'quiz_answered'],
+      );
 
       // Get unique dates (YYYY-MM-DD format)
       const activeDates = new Set(
@@ -86,11 +81,8 @@ export class StreakService {
       }
 
       // Get last active date
-      const lastActivity = await this.prisma.activityLog.findFirst({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        select: { createdAt: true },
-      });
+      const lastActivity =
+        await this.streakRepository.findLastUserActivity(userId);
 
       return {
         currentStreak,
@@ -115,17 +107,11 @@ export class StreakService {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       // Query activity logs where kid was active
-      const activities = await this.prisma.activityLog.findMany({
-        where: {
-          kidId,
-          createdAt: { gte: thirtyDaysAgo },
-          action: {
-            in: ['story_read', 'challenge_completed', 'quiz_answered'],
-          },
-        },
-        select: { createdAt: true },
-        orderBy: { createdAt: 'desc' },
-      });
+      const activities = await this.streakRepository.findKidActivityLogs(
+        kidId,
+        thirtyDaysAgo,
+        ['story_read', 'challenge_completed', 'quiz_answered'],
+      );
 
       const activeDates = new Set(
         activities.map((a) => a.createdAt.toISOString().split('T')[0]),
@@ -171,11 +157,8 @@ export class StreakService {
         });
       }
 
-      const lastActivity = await this.prisma.activityLog.findFirst({
-        where: { kidId },
-        orderBy: { createdAt: 'desc' },
-        select: { createdAt: true },
-      });
+      const lastActivity =
+        await this.streakRepository.findLastKidActivity(kidId);
 
       return {
         currentStreak,

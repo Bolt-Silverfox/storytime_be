@@ -128,7 +128,9 @@ describe('OAuthService', () => {
 
     // Setup mock Google client
     mockGoogleClient = { verifyIdToken: jest.fn() };
-    (OAuth2Client as unknown as jest.Mock).mockImplementation(() => mockGoogleClient);
+    (OAuth2Client as unknown as jest.Mock).mockImplementation(
+      () => mockGoogleClient,
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -563,10 +565,7 @@ describe('OAuthService', () => {
       expect(appleSigninAuth.verifyIdToken).toHaveBeenCalledWith(
         'valid-apple-token',
         {
-          audience: [
-            process.env.APPLE_CLIENT_ID,
-            process.env.APPLE_SERVICE_ID,
-          ],
+          audience: [process.env.APPLE_CLIENT_ID, process.env.APPLE_SERVICE_ID],
           nonce: 'NONCE',
           ignoreExpiration: false,
         },
