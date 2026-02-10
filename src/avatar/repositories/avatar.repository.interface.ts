@@ -41,12 +41,22 @@ export interface IAvatarRepository {
 
   // User/Kid avatar assignment
   findUserById(userId: string): Promise<User | null>;
-  findUserWithAvatar(userId: string): Promise<(User & { avatar: Avatar | null }) | null>;
-  updateUserAvatar(userId: string, avatarId: string): Promise<User & { avatar: Avatar | null }>;
+  findUserWithAvatar(
+    userId: string,
+  ): Promise<(User & { avatar: Avatar | null }) | null>;
+  updateUserAvatar(
+    userId: string,
+    avatarId: string,
+  ): Promise<User & { avatar: Avatar | null }>;
 
   findKidById(kidId: string): Promise<Kid | null>;
-  findKidWithAvatar(kidId: string): Promise<(Kid & { avatar: Avatar | null }) | null>;
-  updateKidAvatar(kidId: string, avatarId: string): Promise<Kid & { avatar: Avatar | null }>;
+  findKidWithAvatar(
+    kidId: string,
+  ): Promise<(Kid & { avatar: Avatar | null }) | null>;
+  updateKidAvatar(
+    kidId: string,
+    avatarId: string,
+  ): Promise<Kid & { avatar: Avatar | null }>;
 }
 
 export const AVATAR_REPOSITORY = Symbol('AVATAR_REPOSITORY');

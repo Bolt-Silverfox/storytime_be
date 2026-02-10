@@ -29,7 +29,6 @@ import {
   UserGrowthMonthlyDto,
   UserListItemDto,
   StoryListItemDto,
-  UserDetailDto,
   StoryDetailDto,
   AdminCreatedDto,
   UserUpdatedDto,
@@ -829,6 +828,7 @@ export class AdminService {
     return {
       data: users.map((user) => {
         // Sanitize user object - exclude sensitive fields
+        /* eslint-disable @typescript-eslint/no-unused-vars */
         const {
           passwordHash: _passwordHash,
           pinHash: _pinHash,
@@ -839,6 +839,7 @@ export class AdminService {
           _count,
           ...safeUser
         } = user;
+        /* eslint-enable @typescript-eslint/no-unused-vars */
 
         // Calculate metrics
         const creditUsed = usage?.elevenLabsCount || 0;
@@ -880,18 +881,20 @@ export class AdminService {
     };
   }
 
-  async getUserById(userId: string): Promise<Omit<User, 'passwordHash' | 'pinHash'> & {
-    isPaidUser: boolean;
-    totalSpent: number;
-    stats: {
-      sessionsCount: number;
-      favoritesCount: number;
-      voicesCount: number;
-      subscriptionsCount: number;
-      ticketsCount: number;
-      transactionsCount: number;
-    };
-  }> {
+  async getUserById(userId: string): Promise<
+    Omit<User, 'passwordHash' | 'pinHash'> & {
+      isPaidUser: boolean;
+      totalSpent: number;
+      stats: {
+        sessionsCount: number;
+        favoritesCount: number;
+        voicesCount: number;
+        subscriptionsCount: number;
+        ticketsCount: number;
+        transactionsCount: number;
+      };
+    }
+  > {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -947,12 +950,14 @@ export class AdminService {
       },
     });
 
+    /* eslint-disable @typescript-eslint/no-unused-vars */
     const {
       passwordHash: _passwordHash,
       pinHash: _pinHash,
       _count,
       ...safeUser
     } = user;
+    /* eslint-enable @typescript-eslint/no-unused-vars */
 
     return {
       ...safeUser,
@@ -1314,7 +1319,10 @@ export class AdminService {
     return result;
   }
 
-  async deleteStory(storyId: string, permanent: boolean = false): Promise<Story> {
+  async deleteStory(
+    storyId: string,
+    permanent: boolean = false,
+  ): Promise<Story> {
     const story = await this.prisma.story.findUnique({
       where: { id: storyId },
     });

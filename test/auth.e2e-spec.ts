@@ -207,7 +207,9 @@ describe('Authentication (e2e)', () => {
       });
 
       expectErrorResponse(res, 400, 'Bad Request');
-      expect(res.body.message.some((msg: string) => msg.includes('Password'))).toBe(true);
+      expect(
+        res.body.message.some((msg: string) => msg.includes('Password')),
+      ).toBe(true);
     });
 
     it('should reject registration with single name', async () => {
@@ -218,7 +220,9 @@ describe('Authentication (e2e)', () => {
       });
 
       expectErrorResponse(res, 400, 'Bad Request');
-      expect(res.body.message.some((msg: string) => msg.includes('Full name'))).toBe(true);
+      expect(
+        res.body.message.some((msg: string) => msg.includes('Full name')),
+      ).toBe(true);
     });
 
     it('should reject registration with missing fields', async () => {
@@ -471,7 +475,9 @@ describe('Authentication (e2e)', () => {
     });
 
     it('should reject verification without token', async () => {
-      const res = await request(server).post('/api/v1/auth/verify-email').send({});
+      const res = await request(server)
+        .post('/api/v1/auth/verify-email')
+        .send({});
 
       expectErrorResponse(res, 400, 'Bad Request');
     });
@@ -542,22 +548,26 @@ describe('Authentication (e2e)', () => {
 
   describe('POST /auth/reset-password', () => {
     it('should reject reset with invalid token', async () => {
-      const res = await request(server).post('/api/v1/auth/reset-password').send({
-        token: 'invalid-reset-token',
-        email: testUser.email,
-        newPassword: 'NewPassword1#',
-      });
+      const res = await request(server)
+        .post('/api/v1/auth/reset-password')
+        .send({
+          token: 'invalid-reset-token',
+          email: testUser.email,
+          newPassword: 'NewPassword1#',
+        });
 
       // Token validation should fail
       expect([400, 404, 500]).toContain(res.status);
     });
 
     it('should reject reset with weak password', async () => {
-      const res = await request(server).post('/api/v1/auth/reset-password').send({
-        token: 'some-token',
-        email: testUser.email,
-        newPassword: 'weak',
-      });
+      const res = await request(server)
+        .post('/api/v1/auth/reset-password')
+        .send({
+          token: 'some-token',
+          email: testUser.email,
+          newPassword: 'weak',
+        });
 
       expectErrorResponse(res, 400, 'Bad Request');
     });
@@ -669,7 +679,9 @@ describe('Authentication (e2e)', () => {
 
   describe('GET /auth/learning-expectations', () => {
     it('should return learning expectations without authentication', async () => {
-      const res = await request(server).get('/api/v1/auth/learning-expectations');
+      const res = await request(server).get(
+        '/api/v1/auth/learning-expectations',
+      );
 
       expectSuccessResponse(res, 200);
       expect(res.body.data).toBeDefined();
@@ -684,17 +696,21 @@ function createMockPrismaService() {
 
   return {
     user: {
-      findUnique: jest.fn(({ where }: { where: { email?: string; id?: string } }) => {
-        if (where.email) {
-          return Promise.resolve(users.get(where.email.toLowerCase()) || null);
-        }
-        if (where.id) {
-          for (const user of users.values()) {
-            if (user.id === where.id) return Promise.resolve(user);
+      findUnique: jest.fn(
+        ({ where }: { where: { email?: string; id?: string } }) => {
+          if (where.email) {
+            return Promise.resolve(
+              users.get(where.email.toLowerCase()) || null,
+            );
           }
-        }
-        return Promise.resolve(null);
-      }),
+          if (where.id) {
+            for (const user of users.values()) {
+              if (user.id === where.id) return Promise.resolve(user);
+            }
+          }
+          return Promise.resolve(null);
+        },
+      ),
       findFirst: jest.fn(({ where }: { where: { email?: string } }) => {
         if (where.email) {
           return Promise.resolve(users.get(where.email.toLowerCase()) || null);
@@ -706,7 +722,9 @@ function createMockPrismaService() {
         // Check for duplicate
         if (users.has(email)) {
           // Throw Prisma-like unique constraint error
-          const error = new Error('Unique constraint failed on the fields: (`email`)') as Error & { code: string };
+          const error = new Error(
+            'Unique constraint failed on the fields: (`email`)',
+          ) as Error & { code: string };
           error.code = 'P2002';
           return Promise.reject(error);
         }
@@ -726,24 +744,32 @@ function createMockPrismaService() {
         users.set(email, user);
         return Promise.resolve(user);
       }),
-      update: jest.fn(({ where, data }: { where: { email?: string; id?: string }; data: Record<string, unknown> }) => {
-        let user: Record<string, unknown> | undefined;
-        if (where.email) {
-          user = users.get(where.email.toLowerCase());
-        } else if (where.id) {
-          for (const u of users.values()) {
-            if (u.id === where.id) {
-              user = u;
-              break;
+      update: jest.fn(
+        ({
+          where,
+          data,
+        }: {
+          where: { email?: string; id?: string };
+          data: Record<string, unknown>;
+        }) => {
+          let user: Record<string, unknown> | undefined;
+          if (where.email) {
+            user = users.get(where.email.toLowerCase());
+          } else if (where.id) {
+            for (const u of users.values()) {
+              if (u.id === where.id) {
+                user = u;
+                break;
+              }
             }
           }
-        }
-        if (user) {
-          Object.assign(user, data, { updatedAt: new Date() });
-          return Promise.resolve(user);
-        }
-        return Promise.resolve(null);
-      }),
+          if (user) {
+            Object.assign(user, data, { updatedAt: new Date() });
+            return Promise.resolve(user);
+          }
+          return Promise.resolve(null);
+        },
+      ),
     },
     session: {
       create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
@@ -759,24 +785,41 @@ function createMockPrismaService() {
       findUnique: jest.fn(({ where }: { where: { id: string } }) => {
         return Promise.resolve(sessions.get(where.id) || null);
       }),
-      findFirst: jest.fn(({ where }: { where: { refreshTokenHash?: string; userId?: string } }) => {
-        if (where.refreshTokenHash) {
-          for (const session of sessions.values()) {
-            if (session.refreshTokenHash === where.refreshTokenHash && session.isActive) {
-              return Promise.resolve(session);
+      findFirst: jest.fn(
+        ({
+          where,
+        }: {
+          where: { refreshTokenHash?: string; userId?: string };
+        }) => {
+          if (where.refreshTokenHash) {
+            for (const session of sessions.values()) {
+              if (
+                session.refreshTokenHash === where.refreshTokenHash &&
+                session.isActive
+              ) {
+                return Promise.resolve(session);
+              }
             }
           }
-        }
-        return Promise.resolve(null);
-      }),
-      update: jest.fn(({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-        const session = sessions.get(where.id);
-        if (session) {
-          Object.assign(session, data);
-          return Promise.resolve(session);
-        }
-        return Promise.resolve(null);
-      }),
+          return Promise.resolve(null);
+        },
+      ),
+      update: jest.fn(
+        ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Record<string, unknown>;
+        }) => {
+          const session = sessions.get(where.id);
+          if (session) {
+            Object.assign(session, data);
+            return Promise.resolve(session);
+          }
+          return Promise.resolve(null);
+        },
+      ),
       updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
       deleteMany: jest.fn(() => Promise.resolve({ count: 1 })),
     },
@@ -791,37 +834,51 @@ function createMockPrismaService() {
         tokens.set(data.token as string, token);
         return Promise.resolve(token);
       }),
-      findUnique: jest.fn(({ where }: { where: { id?: string; token?: string } }) => {
-        if (where.token) {
-          return Promise.resolve(tokens.get(where.token) || null);
-        }
-        if (where.id) {
-          for (const token of tokens.values()) {
-            if (token.id === where.id) return Promise.resolve(token);
+      findUnique: jest.fn(
+        ({ where }: { where: { id?: string; token?: string } }) => {
+          if (where.token) {
+            return Promise.resolve(tokens.get(where.token) || null);
           }
-        }
-        return Promise.resolve(null);
-      }),
+          if (where.id) {
+            for (const token of tokens.values()) {
+              if (token.id === where.id) return Promise.resolve(token);
+            }
+          }
+          return Promise.resolve(null);
+        },
+      ),
       findFirst: jest.fn(({ where }: { where: { token?: string } }) => {
         if (where.token) {
           return Promise.resolve(tokens.get(where.token) || null);
         }
         return Promise.resolve(null);
       }),
-      update: jest.fn(({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-        for (const token of tokens.values()) {
-          if (token.id === where.id) {
-            Object.assign(token, data);
-            return Promise.resolve(token);
+      update: jest.fn(
+        ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Record<string, unknown>;
+        }) => {
+          for (const token of tokens.values()) {
+            if (token.id === where.id) {
+              Object.assign(token, data);
+              return Promise.resolve(token);
+            }
           }
-        }
-        return Promise.resolve(null);
-      }),
+          return Promise.resolve(null);
+        },
+      ),
       deleteMany: jest.fn(() => Promise.resolve({ count: 1 })),
     },
     profile: {
-      create: jest.fn(({ data }: { data: Record<string, unknown> }) => Promise.resolve({ id: `profile-${Date.now()}`, ...data })),
-      update: jest.fn(({ data }: { data: Record<string, unknown> }) => Promise.resolve(data)),
+      create: jest.fn(({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve({ id: `profile-${Date.now()}`, ...data }),
+      ),
+      update: jest.fn(({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve(data),
+      ),
       findUnique: jest.fn(() => Promise.resolve(null)),
     },
     notificationPreference: {
@@ -837,12 +894,14 @@ function createMockPrismaService() {
         ]),
       ),
     },
-    $transaction: jest.fn((operations: unknown[] | ((prisma: unknown) => Promise<unknown>)) => {
-      if (typeof operations === 'function') {
-        // Interactive transaction - we don't support this in the mock, just resolve
-        return Promise.resolve(undefined);
-      }
-      return Promise.all(operations as Promise<unknown>[]);
-    }),
+    $transaction: jest.fn(
+      (operations: unknown[] | ((prisma: unknown) => Promise<unknown>)) => {
+        if (typeof operations === 'function') {
+          // Interactive transaction - we don't support this in the mock, just resolve
+          return Promise.resolve(undefined);
+        }
+        return Promise.all(operations as Promise<unknown>[]);
+      },
+    ),
   };
 }

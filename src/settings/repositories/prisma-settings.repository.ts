@@ -27,7 +27,12 @@ export class PrismaSettingsRepository implements ISettingsRepository {
 
   async updateProfile(
     userId: string,
-    data: Partial<Pick<Profile, 'explicitContent' | 'maxScreenTimeMins' | 'language' | 'country'>>,
+    data: Partial<
+      Pick<
+        Profile,
+        'explicitContent' | 'maxScreenTimeMins' | 'language' | 'country'
+      >
+    >,
   ): Promise<Profile> {
     return this.prisma.profile.update({
       where: { userId },
@@ -41,7 +46,9 @@ export class PrismaSettingsRepository implements ISettingsRepository {
     });
   }
 
-  async findKidWithParentProfile(kidId: string): Promise<KidWithParentProfile | null> {
+  async findKidWithParentProfile(
+    kidId: string,
+  ): Promise<KidWithParentProfile | null> {
     return this.prisma.kid.findUnique({
       where: { id: kidId },
       include: {
@@ -54,7 +61,10 @@ export class PrismaSettingsRepository implements ISettingsRepository {
     });
   }
 
-  async updateKidScreenTimeLimit(kidId: string, limitMins: number | null): Promise<Kid> {
+  async updateKidScreenTimeLimit(
+    kidId: string,
+    limitMins: number | null,
+  ): Promise<Kid> {
     return this.prisma.kid.update({
       where: { id: kidId },
       data: {
@@ -88,7 +98,9 @@ export class PrismaSettingsRepository implements ISettingsRepository {
     });
   }
 
-  async findUserWithProfileAndKids(userId: string): Promise<UserWithProfileAndKids | null> {
+  async findUserWithProfileAndKids(
+    userId: string,
+  ): Promise<UserWithProfileAndKids | null> {
     return this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -98,7 +110,9 @@ export class PrismaSettingsRepository implements ISettingsRepository {
     });
   }
 
-  async findUserWithProfile(userId: string): Promise<(User & { profile: Profile | null }) | null> {
+  async findUserWithProfile(
+    userId: string,
+  ): Promise<(User & { profile: Profile | null }) | null> {
     return this.prisma.user.findUnique({
       where: { id: userId },
       include: { profile: true },

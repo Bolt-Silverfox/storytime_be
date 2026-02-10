@@ -1,11 +1,12 @@
 import {
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { STORY_REPOSITORY, IStoryRepository } from './repositories';
 import {
   CreateStoryDto,
   ParentRecommendationDto,
@@ -23,7 +24,10 @@ export class StoryRecommendationService {
   // Threshold in days to consider a past season as "recent" for backfill
   private readonly RECENT_SEASON_THRESHOLD_DAYS = 45;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(STORY_REPOSITORY)
+    private readonly storyRepository: IStoryRepository,
+  ) {}
 
   // =====================
   // HOME PAGE RECOMMENDATIONS
@@ -37,9 +41,7 @@ export class StoryRecommendationService {
       .toString()
       .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
 
-    const allSeasons = await this.prisma.season.findMany({
-      where: { isDeleted: false },
-    });
+    const allSeasons = await this.storyRepository.findAllSeasons();
 
     const activeSeasons = allSeasons.filter((s) => {
       if (!s.isActive) return false;
@@ -96,10 +98,7 @@ export class StoryRecommendationService {
     limitTopLiked: number = 5,
   ) {
     // First, get user with preferences (required for recommended stories)
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-      include: { preferredCategories: true },
-    });
+    const user = await this.storyRepository.findUserByIdWithPreferences(userId);
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -122,7 +121,7 @@ export class StoryRecommendationService {
     const [recommended, { activeSeasons, backfillSeasons }, topLiked] =
       await Promise.all([
         // 1. Recommended Stories (based on preferred categories)
-        this.prisma.story.findMany({
+        this.storyRepository.findStories({
           where: recommendedWhere,
           take: limitRecommended,
           include: { images: true, categories: true },
@@ -131,7 +130,7 @@ export class StoryRecommendationService {
         // 2. Get relevant seasons (runs in parallel)
         this.getRelevantSeasons(),
         // 3. Top Liked by Parents (independent, runs in parallel)
-        this.prisma.story.findMany({
+        this.storyRepository.findStories({
           where: { isDeleted: false },
           orderBy: {
             parentFavorites: {
@@ -144,10 +143,11 @@ export class StoryRecommendationService {
       ]);
 
     // Sequential: Get seasonal stories (depends on seasons result)
-    let seasonal: Awaited<ReturnType<typeof this.prisma.story.findMany>> = [];
+    let seasonal: Awaited<ReturnType<typeof this.storyRepository.findStories>> =
+      [];
 
     if (activeSeasons.length > 0) {
-      seasonal = await this.prisma.story.findMany({
+      seasonal = await this.storyRepository.findStories({
         where: {
           isDeleted: false,
           seasons: {
@@ -166,7 +166,7 @@ export class StoryRecommendationService {
       const needed = limitSeasonal - seasonal.length;
       const existingIds = new Set(seasonal.map((s) => s.id));
 
-      const backfillStories = await this.prisma.story.findMany({
+      const backfillStories = await this.storyRepository.findStories({
         where: {
           isDeleted: false,
           seasons: {
@@ -198,12 +198,8 @@ export class StoryRecommendationService {
   async restrictStory(dto: RestrictStoryDto & { userId: string }) {
     // Batch validation queries
     const [kid, story] = await Promise.all([
-      this.prisma.kid.findUnique({
-        where: { id: dto.kidId, isDeleted: false },
-      }),
-      this.prisma.story.findUnique({
-        where: { id: dto.storyId, isDeleted: false },
-      }),
+      this.storyRepository.findKidById(dto.kidId),
+      this.storyRepository.findStoryById(dto.storyId),
     ]);
 
     if (!kid) throw new NotFoundException('Kid not found');
@@ -214,57 +210,44 @@ export class StoryRecommendationService {
       throw new ForbiddenException('You are not the parent of this kid');
     }
 
-    return await this.prisma.restrictedStory.upsert({
-      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
-      create: {
-        kidId: dto.kidId,
-        storyId: dto.storyId,
-        userId: dto.userId,
-        reason: dto.reason,
-      },
-      update: {
-        reason: dto.reason,
-      },
-    });
+    return await this.storyRepository.upsertRestrictedStory(
+      dto.kidId,
+      dto.storyId,
+      dto.userId,
+      dto.reason,
+    );
   }
 
   async unrestrictStory(kidId: string, storyId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
+    const kid = await this.storyRepository.findKidById(kidId);
     if (!kid) throw new NotFoundException('Kid not found');
 
     if (kid.parentId !== userId) {
       throw new ForbiddenException('You are not the parent of this kid');
     }
 
-    const restriction = await this.prisma.restrictedStory.findUnique({
-      where: { kidId_storyId: { kidId, storyId } },
-    });
+    const restriction = await this.storyRepository.findRestrictedStory(
+      kidId,
+      storyId,
+    );
 
     if (!restriction) {
       throw new NotFoundException('Story is not restricted for this kid');
     }
 
-    return await this.prisma.restrictedStory.delete({
-      where: { kidId_storyId: { kidId, storyId } },
-    });
+    return await this.storyRepository.deleteRestrictedStory(kidId, storyId);
   }
 
   async getRestrictedStories(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
+    const kid = await this.storyRepository.findKidById(kidId);
     if (!kid) throw new NotFoundException('Kid not found');
 
     if (kid.parentId !== userId) {
       throw new ForbiddenException('You are not the parent of this kid');
     }
 
-    const restricted = await this.prisma.restrictedStory.findMany({
-      where: { kidId },
-      include: { story: true },
-    });
+    const restricted =
+      await this.storyRepository.findRestrictedStoriesByKidId(kidId);
 
     return restricted.map((r) => ({
       ...r.story,
@@ -283,24 +266,14 @@ export class StoryRecommendationService {
   ): Promise<RecommendationResponseDto> {
     // Batch all validation and lookup queries
     const [kid, story, isRestricted, existing] = await Promise.all([
-      this.prisma.kid.findUnique({
-        where: { id: dto.kidId, parentId: userId, isDeleted: false },
-      }),
-      this.prisma.story.findUnique({
-        where: { id: dto.storyId, isDeleted: false },
-      }),
-      this.prisma.restrictedStory.findUnique({
-        where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
-      }),
-      this.prisma.parentRecommendation.findUnique({
-        where: {
-          userId_kidId_storyId: {
-            userId,
-            kidId: dto.kidId,
-            storyId: dto.storyId,
-          },
-        },
-      }),
+      this.storyRepository.findKidByIdAndParent(dto.kidId, userId),
+      this.storyRepository.findStoryById(dto.storyId),
+      this.storyRepository.findRestrictedStory(dto.kidId, dto.storyId),
+      this.storyRepository.findParentRecommendation(
+        userId,
+        dto.kidId,
+        dto.storyId,
+      ),
     ]);
 
     if (!kid) throw new NotFoundException('Kid not found or access denied');
@@ -313,34 +286,23 @@ export class StoryRecommendationService {
     }
     if (existing) {
       if (existing.isDeleted) {
-        const restored = await this.prisma.parentRecommendation.update({
-          where: { id: existing.id },
-          data: { isDeleted: false, deletedAt: null, message: dto.message },
-          include: {
-            story: true,
-            user: { select: { id: true, name: true, email: true } },
-            kid: { select: { id: true, name: true } },
-          },
-        });
+        const restored = await this.storyRepository.updateParentRecommendation(
+          existing.id,
+          { isDeleted: false, deletedAt: null, message: dto.message },
+        );
         return this.toRecommendationResponse(restored);
       }
       throw new BadRequestException(
         `You have already recommended this story to ${kid.name}`,
       );
     }
-    const recommendation = await this.prisma.parentRecommendation.create({
-      data: {
+    const recommendation =
+      await this.storyRepository.createParentRecommendation(
         userId,
-        kidId: dto.kidId,
-        storyId: dto.storyId,
-        message: dto.message,
-      },
-      include: {
-        story: true,
-        user: { select: { id: true, name: true, email: true } },
-        kid: { select: { id: true, name: true } },
-      },
-    });
+        dto.kidId,
+        dto.storyId,
+        dto.message,
+      );
     return this.toRecommendationResponse(recommendation);
   }
 
@@ -348,19 +310,10 @@ export class StoryRecommendationService {
     kidId: string,
     userId: string,
   ): Promise<RecommendationResponseDto[]> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
+    const kid = await this.storyRepository.findKidByIdAndParent(kidId, userId);
     if (!kid) throw new NotFoundException('Kid not found or access denied');
-    const recommendations = await this.prisma.parentRecommendation.findMany({
-      where: { kidId, isDeleted: false },
-      include: {
-        story: true,
-        user: { select: { id: true, name: true, email: true } },
-        kid: { select: { id: true, name: true } },
-      },
-      orderBy: { recommendedAt: 'desc' },
-    });
+    const recommendations =
+      await this.storyRepository.findParentRecommendationsByKidId(kidId);
     return recommendations.map((rec) => this.toRecommendationResponse(rec));
   }
 
@@ -369,21 +322,18 @@ export class StoryRecommendationService {
     userId: string,
     permanent: boolean = false,
   ) {
-    const recommendation = await this.prisma.parentRecommendation.findUnique({
-      where: { id: recommendationId },
-    });
+    const recommendation =
+      await this.storyRepository.findParentRecommendationById(recommendationId);
     if (!recommendation)
       throw new NotFoundException('Recommendation not found');
     if (recommendation.userId !== userId)
       throw new ForbiddenException('Access denied');
     if (permanent) {
-      return this.prisma.parentRecommendation.delete({
-        where: { id: recommendationId },
-      });
+      return this.storyRepository.deleteParentRecommendation(recommendationId);
     } else {
-      return this.prisma.parentRecommendation.update({
-        where: { id: recommendationId },
-        data: { isDeleted: true, deletedAt: new Date() },
+      return this.storyRepository.updateParentRecommendation(recommendationId, {
+        isDeleted: true,
+        deletedAt: new Date(),
       });
     }
   }
@@ -392,13 +342,10 @@ export class StoryRecommendationService {
     kidId: string,
     userId: string,
   ): Promise<RecommendationsStatsDto> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
+    const kid = await this.storyRepository.findKidByIdAndParent(kidId, userId);
     if (!kid) throw new NotFoundException('Kid not found or access denied');
-    const totalCount = await this.prisma.parentRecommendation.count({
-      where: { kidId, isDeleted: false },
-    });
+    const totalCount =
+      await this.storyRepository.countParentRecommendationsByKidId(kidId);
     return { totalCount };
   }
 
@@ -427,20 +374,15 @@ export class StoryRecommendationService {
   // =====================
 
   async getTopPicksFromParents(limit: number = 10) {
-    const topStories = await this.prisma.parentRecommendation.groupBy({
-      by: ['storyId'],
-      where: { isDeleted: false },
-      _count: { storyId: true },
-      orderBy: { _count: { storyId: 'desc' } },
-      take: limit,
-    });
+    const topStories =
+      await this.storyRepository.groupParentRecommendationsByStory(limit);
 
     if (topStories.length === 0) {
       return [];
     }
 
     const storyIds = topStories.map((s) => s.storyId);
-    const stories = await this.prisma.story.findMany({
+    const stories = await this.storyRepository.findStories({
       where: { id: { in: storyIds }, isDeleted: false },
       include: {
         themes: true,
@@ -470,15 +412,7 @@ export class StoryRecommendationService {
     limit: number,
     offset: number = 0,
   ): Promise<string[]> {
-    const randomIds = await this.prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM "Story"
-      WHERE "isDeleted" = false
-      ORDER BY RANDOM()
-      LIMIT ${limit}
-      OFFSET ${offset}
-    `;
-
-    return randomIds.map((r) => r.id);
+    return this.storyRepository.getRandomStoryIds(limit, offset);
   }
 
   /**
@@ -499,7 +433,7 @@ export class StoryRecommendationService {
     }
 
     // Fetch full story objects with relations
-    return this.prisma.story.findMany({
+    return this.storyRepository.findStories({
       where: { id: { in: randomIds } },
       include: {
         themes: true,

@@ -1,12 +1,13 @@
 import {
   Injectable,
+  Inject,
   Logger,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaService } from '@/prisma/prisma.service';
 import { UserDto } from '../dto/auth.dto';
 import * as crypto from 'crypto';
+import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 
 const REFRESH_TOKEN_EXPIRES_IN_DAYS = 7;
 
@@ -30,7 +31,8 @@ export class TokenService {
 
   constructor(
     private readonly jwtService: JwtService,
-    private readonly prisma: PrismaService,
+    @Inject(AUTH_REPOSITORY)
+    private readonly authRepository: IAuthRepository,
   ) {}
 
   /**
@@ -41,12 +43,10 @@ export class TokenService {
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRES_IN_DAYS);
     const refreshToken = this.generateRefreshToken();
 
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        token: this.hashToken(refreshToken),
-        expiresAt,
-      },
+    const session = await this.authRepository.createSession({
+      userId: user.id,
+      token: this.hashToken(refreshToken),
+      expiresAt,
     });
 
     const jwt = this.generateJwt(user, session.id);
@@ -116,16 +116,7 @@ export class TokenService {
    * Includes user with kid count to avoid separate query
    */
   async findSessionByRefreshToken(refreshToken: string) {
-    return this.prisma.session.findUnique({
-      where: { token: this.hashToken(refreshToken) },
-      include: {
-        user: {
-          include: {
-            _count: { select: { kids: true } },
-          },
-        },
-      },
-    });
+    return this.authRepository.findSessionByToken(this.hashToken(refreshToken));
   }
 
   /**
@@ -133,12 +124,10 @@ export class TokenService {
    */
   async deleteSession(sessionId: string): Promise<boolean> {
     try {
-      const session = await this.prisma.session.findUnique({
-        where: { id: sessionId },
-      });
+      const session = await this.authRepository.findSessionById(sessionId);
       if (!session) return false;
 
-      await this.prisma.session.delete({ where: { id: sessionId } });
+      await this.authRepository.deleteSession(sessionId);
       return true;
     } catch (error) {
       this.logger.error('Error deleting session:', error);
@@ -151,7 +140,7 @@ export class TokenService {
    */
   async deleteAllUserSessions(userId: string): Promise<boolean> {
     try {
-      await this.prisma.session.deleteMany({ where: { userId } });
+      await this.authRepository.deleteAllUserSessions(userId);
       return true;
     } catch (error) {
       this.logger.error('Error deleting all user sessions:', error);
@@ -166,11 +155,6 @@ export class TokenService {
     userId: string,
     exceptSessionId: string,
   ): Promise<void> {
-    await this.prisma.session.deleteMany({
-      where: {
-        userId,
-        id: { not: exceptSessionId },
-      },
-    });
+    await this.authRepository.deleteOtherSessions(userId, exceptSessionId);
   }
 }

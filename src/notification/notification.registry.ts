@@ -146,7 +146,7 @@ export const NotificationRegistry: Record<
     },
     getTemplate: (data) => {
       return Promise.resolve(
-        `A new story "${data.storyTitle}" is now available for you to read!`,
+        `A new story "${String(data.storyTitle)}" is now available for you to read!`,
       );
     },
   },
@@ -160,7 +160,7 @@ export const NotificationRegistry: Record<
     },
     getTemplate: (data) => {
       return Promise.resolve(
-        `Congratulations! You've unlocked the "${data.achievementName}" achievement.`,
+        `Congratulations! You've unlocked the "${String(data.achievementName)}" achievement.`,
       );
     },
   },

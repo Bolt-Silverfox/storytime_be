@@ -60,7 +60,9 @@ export class PrismaKidRepository implements IKidRepository {
     });
   }
 
-  async findByIdWithFullRelations(id: string): Promise<KidWithRelations | null> {
+  async findByIdWithFullRelations(
+    id: string,
+  ): Promise<KidWithRelations | null> {
     return this.prisma.kid.findUnique({
       where: { id, isDeleted: false },
       include: kidRelationsFull,

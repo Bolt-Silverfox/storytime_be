@@ -18,10 +18,7 @@ export interface IRewardRepository {
   }): Promise<RewardRedemption>;
   findRedemptionById(id: string): Promise<RewardRedemption | null>;
   findRedemptionsByKidId(kidId: string): Promise<RewardRedemption[]>;
-  updateRedemptionStatus(
-    id: string,
-    status: string,
-  ): Promise<RewardRedemption>;
+  updateRedemptionStatus(id: string, status: string): Promise<RewardRedemption>;
 }
 
 export const REWARD_REPOSITORY = Symbol('REWARD_REPOSITORY');

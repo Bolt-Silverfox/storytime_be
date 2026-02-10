@@ -80,6 +80,9 @@ export class UserPreferencesController {
     @Param('userId') userId: string,
     @Body() preferences: Record<string, boolean>,
   ) {
-    return this.notificationPreferenceService.updateUserPreferences(userId, preferences);
+    return this.notificationPreferenceService.updateUserPreferences(
+      userId,
+      preferences,
+    );
   }
 }

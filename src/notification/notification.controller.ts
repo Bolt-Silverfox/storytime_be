@@ -35,7 +35,9 @@ export class NotificationController {
   @ApiBody({ type: [CreateNotificationPreferenceDto] })
   @ApiResponse({ status: 201, type: [NotificationPreferenceDto] })
   async create(@Body() dtos: CreateNotificationPreferenceDto[]) {
-    return Promise.all(dtos.map((dto) => this.notificationPreferenceService.create(dto)));
+    return Promise.all(
+      dtos.map((dto) => this.notificationPreferenceService.create(dto)),
+    );
   }
 
   @Patch(':id')

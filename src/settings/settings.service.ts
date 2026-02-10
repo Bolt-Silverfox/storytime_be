@@ -73,7 +73,12 @@ export class SettingsService {
     }
 
     // Validation
-    const updateData: Partial<Pick<Profile, 'explicitContent' | 'maxScreenTimeMins' | 'language' | 'country'>> = {};
+    const updateData: Partial<
+      Pick<
+        Profile,
+        'explicitContent' | 'maxScreenTimeMins' | 'language' | 'country'
+      >
+    > = {};
     if (body.explicitContent !== undefined) {
       if (typeof body.explicitContent !== 'boolean') {
         throw new BadRequestException('explicitContent must be a boolean');
@@ -196,7 +201,8 @@ export class SettingsService {
   async applyDefaultToAllKids(
     userId: string,
   ): Promise<{ success: boolean; appliedLimit: number; kidsUpdated: number }> {
-    const user = await this.settingsRepository.findUserWithProfileAndKids(userId);
+    const user =
+      await this.settingsRepository.findUserWithProfileAndKids(userId);
 
     if (!user) {
       throw new BadRequestException('User not found');
@@ -209,10 +215,16 @@ export class SettingsService {
     }
 
     // Count kids that will be updated before the update
-    const kidsToUpdate = user.kids.filter((k) => k.dailyScreenTimeLimitMins === null).length;
+    const kidsToUpdate = user.kids.filter(
+      (k) => k.dailyScreenTimeLimitMins === null,
+    ).length;
 
     // Update all kids that don't have a custom limit
-    await this.settingsRepository.updateManyKidsScreenTimeLimit(userId, null, defaultLimit);
+    await this.settingsRepository.updateManyKidsScreenTimeLimit(
+      userId,
+      null,
+      defaultLimit,
+    );
 
     return {
       success: true,
@@ -234,7 +246,8 @@ export class SettingsService {
       isCustom: boolean;
     }[]
   > {
-    const kids = await this.settingsRepository.findKidsByParentWithAvatar(parentId);
+    const kids =
+      await this.settingsRepository.findKidsByParentWithAvatar(parentId);
     const parent = await this.settingsRepository.findUserWithProfile(parentId);
 
     const parentDefaultLimit = parent?.profile?.maxScreenTimeMins;

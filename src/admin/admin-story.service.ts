@@ -1,13 +1,11 @@
-import {
-  Injectable,
-  NotFoundException,
-  Logger,
-  Inject,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, Story } from '@prisma/client';
+import {
+  IAdminStoryRepository,
+  ADMIN_STORY_REPOSITORY,
+} from './repositories';
 import {
   PaginatedResponseDto,
   StoryListItemDto,
@@ -26,7 +24,8 @@ export class AdminStoryService {
   private readonly logger = new Logger(AdminStoryService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(ADMIN_STORY_REPOSITORY)
+    private readonly adminStoryRepository: IAdminStoryRepository,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
@@ -66,25 +65,13 @@ export class AdminStoryService {
     if (maxAge) where.ageMax = { lte: maxAge };
 
     const [stories, total] = await Promise.all([
-      this.prisma.story.findMany({
+      this.adminStoryRepository.findStories({
         where,
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
-        include: {
-          categories: true,
-          themes: true,
-          _count: {
-            select: {
-              favorites: true,
-              progresses: true,
-              parentFavorites: true,
-              downloads: true,
-            },
-          },
-        },
       }),
-      this.prisma.story.count({ where }),
+      this.adminStoryRepository.countStories(where),
     ]);
 
     return {
@@ -108,24 +95,7 @@ export class AdminStoryService {
   }
 
   async getStoryById(storyId: string): Promise<StoryDetailDto> {
-    const story = await this.prisma.story.findUnique({
-      where: { id: storyId },
-      include: {
-        images: true,
-        categories: true,
-        themes: true,
-        branches: true,
-        questions: true,
-        _count: {
-          select: {
-            favorites: true,
-            progresses: true,
-            parentFavorites: true,
-            downloads: true,
-          },
-        },
-      },
-    });
+    const story = await this.adminStoryRepository.findStoryById(storyId);
 
     if (!story) {
       throw new NotFoundException(`Story with ID ${storyId} not found`);
@@ -144,17 +114,21 @@ export class AdminStoryService {
   }
 
   async toggleStoryRecommendation(storyId: string): Promise<Story> {
-    const story = await this.prisma.story.findUnique({
-      where: { id: storyId },
-    });
+    const storyExists = await this.adminStoryRepository.storyExists(storyId);
 
+    if (!storyExists) {
+      throw new NotFoundException(`Story with ID ${storyId} not found`);
+    }
+
+    // Need to get current story to toggle its recommendation status
+    const story = await this.adminStoryRepository.findStoryById(storyId);
     if (!story) {
       throw new NotFoundException(`Story with ID ${storyId} not found`);
     }
 
-    const result = await this.prisma.story.update({
-      where: { id: storyId },
-      data: { recommended: !story.recommended },
+    const result = await this.adminStoryRepository.updateStoryRecommendation({
+      storyId,
+      recommended: !story.recommended,
     });
 
     // Invalidate story stats cache for immediate dashboard accuracy
@@ -173,25 +147,17 @@ export class AdminStoryService {
     storyId: string,
     permanent: boolean = false,
   ): Promise<Story> {
-    const story = await this.prisma.story.findUnique({
-      where: { id: storyId },
-    });
+    const storyExists = await this.adminStoryRepository.storyExists(storyId);
 
-    if (!story) {
+    if (!storyExists) {
       throw new NotFoundException(`Story with ID ${storyId} not found`);
     }
 
     let result;
     if (permanent) {
-      result = await this.prisma.story.delete({ where: { id: storyId } });
+      result = await this.adminStoryRepository.hardDeleteStory(storyId);
     } else {
-      result = await this.prisma.story.update({
-        where: { id: storyId },
-        data: {
-          isDeleted: true,
-          deletedAt: new Date(),
-        },
-      });
+      result = await this.adminStoryRepository.softDeleteStory(storyId);
     }
 
     // Invalidate dashboard caches for immediate accuracy
@@ -209,18 +175,7 @@ export class AdminStoryService {
   }
 
   async getCategories(): Promise<CategoryDto[]> {
-    const categories = await this.prisma.category.findMany({
-      where: { isDeleted: false },
-      include: {
-        _count: {
-          select: {
-            stories: true,
-            preferredByKids: true,
-          },
-        },
-      },
-      orderBy: { name: 'asc' },
-    });
+    const categories = await this.adminStoryRepository.findCategories();
 
     return categories.map((cat) => ({
       id: cat.id,
@@ -237,17 +192,7 @@ export class AdminStoryService {
   }
 
   async getThemes(): Promise<ThemeDto[]> {
-    const themes = await this.prisma.theme.findMany({
-      where: { isDeleted: false },
-      include: {
-        _count: {
-          select: {
-            stories: true,
-          },
-        },
-      },
-      orderBy: { name: 'asc' },
-    });
+    const themes = await this.adminStoryRepository.findThemes();
 
     return themes.map((theme) => ({
       id: theme.id,

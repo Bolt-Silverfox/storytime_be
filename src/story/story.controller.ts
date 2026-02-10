@@ -709,7 +709,10 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyProgressService.getUserProgress(req.authUserData.userId, storyId);
+    return this.storyProgressService.getUserProgress(
+      req.authUserData.userId,
+      storyId,
+    );
   }
 
   @Get('user/library/continue-reading')
@@ -727,7 +730,9 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async getUserContinueReading(@Req() req: AuthenticatedRequest) {
-    return this.storyProgressService.getUserContinueReading(req.authUserData.userId);
+    return this.storyProgressService.getUserContinueReading(
+      req.authUserData.userId,
+    );
   }
 
   @Get('user/library/completed')
@@ -745,7 +750,9 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async getUserCompletedStories(@Req() req: AuthenticatedRequest) {
-    return this.storyProgressService.getUserCompletedStories(req.authUserData.userId);
+    return this.storyProgressService.getUserCompletedStories(
+      req.authUserData.userId,
+    );
   }
 
   @Delete('user/library/remove/:storyId')
@@ -874,7 +881,9 @@ export class StoryController {
     this.logger.log(
       `Getting today's daily challenge assignment for kid ${kidId}`,
     );
-    return await this.dailyChallengeService.getTodaysDailyChallengeAssignment(kidId);
+    return await this.dailyChallengeService.getTodaysDailyChallengeAssignment(
+      kidId,
+    );
   }
 
   @Get('daily-challenge/kid/:kidId/week')
@@ -1100,7 +1109,11 @@ export class StoryController {
   ) {
     const themes = theme ? [theme] : undefined;
     const categories = category ? [category] : undefined;
-    return this.storyGenerationService.generateStoryForKid(kidId, themes, categories);
+    return this.storyGenerationService.generateStoryForKid(
+      kidId,
+      themes,
+      categories,
+    );
   }
 
   // === ASYNC STORY GENERATION ENDPOINTS ===
@@ -1476,7 +1489,10 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Body() body: ParentRecommendationDto,
   ) {
-    return this.storyRecommendationService.recommendStoryToKid(req.authUserData.userId, body);
+    return this.storyRecommendationService.recommendStoryToKid(
+      req.authUserData.userId,
+      body,
+    );
   }
 
   @Get('recommendations/kid/:kidId')
@@ -1608,7 +1624,9 @@ export class StoryController {
   async getTopPicksFromParents(
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
   ) {
-    return this.storyRecommendationService.getTopPicksFromParents(Math.min(limit, 50));
+    return this.storyRecommendationService.getTopPicksFromParents(
+      Math.min(limit, 50),
+    );
   }
 
   @Get('top-picks-from-us')
@@ -1632,6 +1650,8 @@ export class StoryController {
   async getTopPicksFromUs(
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
   ) {
-    return this.storyRecommendationService.getTopPicksFromUs(Math.min(limit, 20));
+    return this.storyRecommendationService.getTopPicksFromUs(
+      Math.min(limit, 20),
+    );
   }
 }

@@ -1,17 +1,19 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
 import { NotificationService } from '@/notification/notification.service';
 import { hashPin, verifyPinHash } from '../utils/pin.util';
+import { USER_REPOSITORY, IUserRepository } from '../repositories';
 
 @Injectable()
 export class UserPinService {
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: IUserRepository,
     private readonly notificationService: NotificationService,
   ) {}
 
@@ -19,9 +21,7 @@ export class UserPinService {
     if (!/^\d{6}$/.test(pin))
       throw new BadRequestException('PIN must be exactly 6 digits');
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-    });
+    const user = await this.userRepository.findUserById(userId);
 
     if (!user) throw new NotFoundException('User not found');
     if (user.onboardingStatus !== 'profile_setup') {
@@ -32,24 +32,16 @@ export class UserPinService {
 
     const hash = await hashPin(pin);
 
-    await this.prisma.user.update({
-      where: {
-        id: userId,
-        isDeleted: false,
-      },
-      data: { pinHash: hash, onboardingStatus: 'pin_setup' },
+    await this.userRepository.updateUserSimple(userId, {
+      pinHash: hash,
+      onboardingStatus: 'pin_setup',
     });
 
     return { success: true, message: 'PIN set successfully' };
   }
 
   async verifyPin(userId: string, pin: string) {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id: userId,
-        isDeleted: false,
-      },
-    });
+    const user = await this.userRepository.findUserById(userId);
     if (!user?.pinHash) throw new BadRequestException('No PIN is set');
 
     const match = await verifyPinHash(pin, user.pinHash);
@@ -63,18 +55,11 @@ export class UserPinService {
   // ----------------------------------------------------------
 
   async requestPinResetOtp(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id: userId,
-        isDeleted: false,
-      },
-    });
+    const user = await this.userRepository.findUserById(userId);
     if (!user) throw new NotFoundException('User not found');
 
     // Delete any existing PIN reset tokens for this user
-    await this.prisma.token.deleteMany({
-      where: { userId: user.id, type: 'pin_reset' },
-    });
+    await this.userRepository.deleteTokensByUserAndType(user.id, 'pin_reset');
 
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -87,13 +72,11 @@ export class UserPinService {
     const crypto = await import('crypto');
     const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
 
-    await this.prisma.token.create({
-      data: {
-        userId: user.id,
-        token: hashedOtp,
-        expiresAt,
-        type: 'pin_reset',
-      },
+    await this.userRepository.createToken({
+      userId: user.id,
+      token: hashedOtp,
+      expiresAt,
+      type: 'pin_reset',
     });
 
     // Send OTP via email using notification service
@@ -120,20 +103,18 @@ export class UserPinService {
     const crypto = await import('crypto');
     const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
 
-    const resetToken = await this.prisma.token.findFirst({
-      where: {
-        userId,
-        token: hashedOtp,
-        type: 'pin_reset',
-      },
-    });
+    const resetToken = await this.userRepository.findTokenByHashedToken(
+      userId,
+      hashedOtp,
+      'pin_reset',
+    );
 
     if (!resetToken) {
       throw new BadRequestException('Invalid OTP');
     }
 
     if (resetToken.expiresAt < new Date()) {
-      await this.prisma.token.delete({ where: { id: resetToken.id } });
+      await this.userRepository.deleteToken(resetToken.id);
       throw new BadRequestException(
         'OTP has expired. Please request a new one.',
       );
@@ -157,31 +138,24 @@ export class UserPinService {
     const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
 
     // Verify OTP
-    const resetToken = await this.prisma.token.findFirst({
-      where: {
-        userId,
-        token: hashedOtp,
-        type: 'pin_reset',
-      },
-    });
+    const resetToken = await this.userRepository.findTokenByHashedToken(
+      userId,
+      hashedOtp,
+      'pin_reset',
+    );
 
     if (!resetToken) {
       throw new BadRequestException('Invalid OTP');
     }
 
     if (resetToken.expiresAt < new Date()) {
-      await this.prisma.token.delete({ where: { id: resetToken.id } });
+      await this.userRepository.deleteToken(resetToken.id);
       throw new BadRequestException(
         'OTP has expired. Please request a new one.',
       );
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id: userId,
-        isDeleted: false,
-      },
-    });
+    const user = await this.userRepository.findUserById(userId);
     if (!user) throw new NotFoundException('User not found');
 
     // Check if new PIN is same as old PIN (using bcrypt)
@@ -195,13 +169,10 @@ export class UserPinService {
     // Hash and save new PIN using bcrypt
     const pinHash = await hashPin(newPin);
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { pinHash },
-    });
+    await this.userRepository.updateUserSimple(userId, { pinHash });
 
     // Delete the used OTP token
-    await this.prisma.token.delete({ where: { id: resetToken.id } });
+    await this.userRepository.deleteToken(resetToken.id);
 
     return { success: true, message: 'PIN has been reset successfully' };
   }

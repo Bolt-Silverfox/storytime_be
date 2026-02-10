@@ -54,8 +54,10 @@ export class AvatarService {
       try {
         await this.uploadService.deleteImage(oldAvatar.publicId);
 
-        const usersUsing = await this.avatarRepository.countUsersUsingAvatar(avatarId);
-        const kidsUsing = await this.avatarRepository.countKidsUsingAvatar(avatarId);
+        const usersUsing =
+          await this.avatarRepository.countUsersUsingAvatar(avatarId);
+        const kidsUsing =
+          await this.avatarRepository.countKidsUsingAvatar(avatarId);
 
         if (usersUsing === 0 && kidsUsing === 0) {
           await this.avatarRepository.hardDelete(avatarId);
