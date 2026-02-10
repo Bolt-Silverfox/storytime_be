@@ -822,7 +822,7 @@ VOICE_QUOTA_WARNING = 'voice.quota.warning', // Approaching limit
 **Focus**: Event-Driven Architecture Implementation
 **Timestamp**: 2026-02-10
 **Branch**: `perf/improvements`
-**Commits**: `90c2016`, `8cbd6dc` (merge), `f5d6faa` (improvements restored)
+**Commits**: `90c2016`, `8cbd6dc` (merge), `f5d6faa` (improvements restored), `3bf5786` (repository pattern restored)
 
 **Changes Made**:
 - `src/shared/events/app-events.ts` - Comprehensive business event catalog (20 events total):
@@ -851,21 +851,12 @@ VOICE_QUOTA_WARNING = 'voice.quota.warning', // Approaching limit
 
 **Integration**: Successfully merged with `origin/integration/refactor-2026-02`, resolved all conflicts, restored better implementations (wildcard events, conditional logging, precise subscription change detection)
 
-**⚠️ Known Regression During Integration**:
-During merge conflict resolution, Repository Pattern implementations from Instance 19 were lost in favor of direct Prisma usage. This needs to be addressed in a follow-up commit:
+**Repository Pattern Restoration** (commit `3bf5786`):
+- Added AUTH_REPOSITORY to auth module (3 new repository files)
+- Added NOTIFICATION_PREFERENCE_REPOSITORY and IN_APP_NOTIFICATION_REPOSITORY to notification module (5 new repository files)
+- Updated PasswordService to use AUTH_REPOSITORY while preserving EventEmitter2 for events
+- Updated auth.module.ts and notification.module.ts to provide repository implementations alongside event listeners
+- Both architectural improvements now coexist: Repository Pattern (testability, decoupling) + Event-Driven Architecture (analytics, audit logging)
 
-**Files Affected**:
-- `src/auth/services/password.service.ts`:
-  - Lost: `@Inject(AUTH_REPOSITORY) private readonly authRepository: IAuthRepository`
-  - Kept: `private readonly prisma: PrismaService`
-  - Need: Both (Repository Pattern + EventEmitter2 for events)
-  
-- `src/notification/notification.module.ts`:
-  - Lost: Repository providers (`NOTIFICATION_PREFERENCE_REPOSITORY`, `IN_APP_NOTIFICATION_REPOSITORY`)
-  - Kept: Event listeners (`AuthEventListener`, `PasswordEventListener`)
-  - Need: Both (Repository providers + Event listeners)
-
-**Action Required**: Create follow-up commit to restore Repository Pattern while keeping EDA implementation. This will properly merge both architectural improvements.
-
-**Status**: Complete and integrated - Build passing
+**Status**: Complete and integrated - Build passing, both architectural patterns successfully merged
 
