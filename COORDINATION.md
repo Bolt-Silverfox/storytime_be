@@ -461,6 +461,90 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - Build passing, auth tests passing
 
+### Instance 17 - ⚠️ In Progress
+**Focus**: Integration Branch Setup & Event System Foundation
+**Timestamp**: 2026-02-09
+**Branch**: `integration/refactor-2026-02`
+
+**Changes Made**:
+- `src/shared/events/app-events.ts` (NEW ~235 lines) - Event type definitions:
+  - Added quota events: `QUOTA_EXHAUSTED`, `QUOTA_WARNING`
+  - Event payload interfaces: `QuotaExhaustedEvent`, `QuotaWarningEvent`
+- `src/shared/events/index.ts` (NEW) - Event module exports
+- `src/shared/events/event-listeners.service.ts` (NEW ~60 lines) - Basic event logging service
+  - Handlers: quota exhausted, quota warning, story completed
+- `src/shared/events/events.module.ts` (NEW ~15 lines) - Event system module
+- `src/shared/shared.module.ts` - Updated to import EventsModule
+- `src/app.module.ts` - Added EventEmitterModule.forRoot() configuration
+
+**Status**: Foundation complete. Ready for expanded event implementations.
+
+### Instance 18 - ✅ Completed
+**Focus**: Event-Driven Architecture Implementation
+**Timestamp**: 2026-02-10
+**Branch**: `perf/improvements`
+**Commit**: `90c2016` (feat: complete event-driven architecture implementation)
+
+**Changes Made**:
+- `src/shared/events/app-events.ts` - Expanded to comprehensive business event catalog:
+  - Added 13 new event types across user lifecycle, payments, subscriptions, kids, stories, achievements, notifications
+  - Total 18 events: USER_REGISTERED, USER_DELETED, USER_EMAIL_VERIFIED, USER_PASSWORD_CHANGED, KID_CREATED, KID_DELETED, STORY_CREATED, STORY_COMPLETED, STORY_PROGRESS_UPDATED, PAYMENT_COMPLETED, PAYMENT_FAILED, SUBSCRIPTION_CREATED, SUBSCRIPTION_CHANGED, SUBSCRIPTION_CANCELLED, BADGE_EARNED, STREAK_UPDATED, NOTIFICATION_SENT + 2 quota events
+  - Added TypeScript interfaces for all event payloads with complete type safety
+  - Created `AppEventPayloads` map for type-safe event handling
+- `src/shared/listeners/analytics-event.listener.ts` (NEW ~150 lines) - Centralized analytics tracking:
+  - Handlers for 8 major business events (user registration, payments, subscriptions, story completion, etc.)
+  - Ready for Mixpanel/Amplitude integration
+- `src/shared/listeners/activity-log-event.listener.ts` (NEW ~200 lines) - Database audit trail logging:
+  - Persists 10 important events to ActivityLog table
+  - Uses PrismaService for database operations
+  - Comprehensive error handling
+- `src/auth/auth.service.ts` - Added event emissions:
+  - `USER_REGISTERED` on successful registration
+  - `USER_EMAIL_VERIFIED` on email verification
+  - `USER_PASSWORD_CHANGED` on password change/reset
+- `src/user/services/user-deletion.service.ts` - Added event emissions:
+  - `USER_DELETED` on user deletion
+- `src/kid/kid.service.ts` - Added event emissions:
+  - `KID_CREATED` on kid creation
+  - `KID_DELETED` on kid deletion
+- `src/payment/payment.service.ts` - Added event emissions:
+  - `PAYMENT_COMPLETED` on successful payment
+  - `PAYMENT_FAILED` on payment failure
+- `src/subscription/subscription.service.ts` - Added event emissions:
+  - `SUBSCRIPTION_CREATED` on new subscription
+  - `SUBSCRIPTION_CHANGED` on plan change (upgrade/downgrade)
+  - `SUBSCRIPTION_CANCELLED` on cancellation
+- `src/story/story-generation.service.ts` - Added event emissions:
+  - `STORY_CREATED` on story generation
+- `src/story/story-progress.service.ts` - Added event emissions:
+  - `STORY_PROGRESS_UPDATED` on progress updates (supports both kid and user tracking)
+  - `STORY_COMPLETED` on story completion (supports both kid and user tracking)
+- `QA_IMPROVEMENTS.md` - Updated section 2.2 with complete EDA implementation details:
+  - Table of all 18 implemented events
+  - Table of 4 event listeners
+  - Table of 7 services modified
+  - Complete benefits and implementation details
+
+**Integration Status**: ⚠️ Merge conflicts with integration branch
+- Attempted merge from `origin/integration/refactor-2026-02` encountered 11 conflicts
+- Resolved 5 conflicts (event files, shared module structure)
+- Remaining 6 conflicts in core service files (auth, payment, subscription, user-deletion, achievement-progress, app module)
+- Merge aborted to preserve work - requires careful manual resolution
+
+**Key Conflicts**:
+- Integration branch uses `EventsModule` pattern (Instance 17) vs my direct listener imports
+- Event payload structures differ (quota events from Instance 17 vs my expanded story events)
+- Service modifications overlap with other instances' work
+
+**Recommendations for Conflict Resolution**:
+1. Adopt `EventsModule` pattern from Instance 17
+2. Merge both sets of events (quota + comprehensive business events)
+3. Add my new listeners (`AnalyticsEventListener`, `ActivityLogEventListener`) to `EventsModule`
+4. Carefully review each service file conflict to preserve event emissions from both branches
+5. Test thoroughly after merge to ensure all event emissions work correctly
+
+**Status**: Complete but not integrated. All work committed to `perf/improvements` branch. Awaiting conflict resolution for integration.
+
 ---
 
 ## ⚠️ Conflict Zones (Do Not Touch)
@@ -535,6 +619,21 @@ Files currently being modified by other instances - avoid editing these:
 | `src/story-buddy/story-buddy.service.ts` | Instance 14 & 15 | ✅ Done |
 | `src/story-buddy/story-buddy.module.ts` | Instance 14 & 15 | ✅ Done |
 | `src/story-buddy/buddy-messaging.service.ts` | Instance 15 | ✅ Done |
+| `src/shared/events/app-events.ts` | Instance 17 & 18 | ⚠️ Conflicts |
+| `src/shared/events/index.ts` | Instance 17 & 18 | ⚠️ Conflicts |
+| `src/shared/shared.module.ts` | Instance 17 & 18 | ⚠️ Conflicts |
+| `src/shared/listeners/analytics-event.listener.ts` | Instance 18 | ✅ Done |
+| `src/shared/listeners/activity-log-event.listener.ts` | Instance 18 | ✅ Done |
+| `src/auth/auth.service.ts` | Instance 5, 7, 16 & 18 | ⚠️ Conflicts |
+| `src/user/services/user-deletion.service.ts` | Instance 7 & 18 | ⚠️ Conflicts |
+| `src/kid/kid.service.ts` | Instance 18 | ✅ Done |
+| `src/payment/payment.service.ts` | Instance 3 & 18 | ⚠️ Conflicts |
+| `src/subscription/subscription.service.ts` | Instance 1 & 18 | ⚠️ Conflicts |
+| `src/story/story-generation.service.ts` | Instance 13 & 18 | ⚠️ Conflicts |
+| `src/story/story-progress.service.ts` | Instance 6 & 18 | ⚠️ Conflicts |
+| `src/achievement-progress/achievement-progress.module.ts` | Instance 18 | ⚠️ Conflicts |
+| `src/app.module.ts` | Instance 17 & 18 | ⚠️ Conflicts |
+| `QA_IMPROVEMENTS.md` | Instance 2 & 18 | ⚠️ Conflicts |
 
 ---
 
