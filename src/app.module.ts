@@ -2,6 +2,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AgeModule } from './age/age.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
@@ -102,6 +103,16 @@ import { HealthModule } from './health/health.module';
           removeOnFail: { age: 7 * 24 * 3600 },
         },
       }),
+    }),
+    // Event-driven architecture for decoupled, scalable services
+    EventEmitterModule.forRoot({
+      wildcard: false,
+      delimiter: '.',
+      newListener: false,
+      removeListener: false,
+      maxListeners: 20,
+      verboseMemoryLeak: true,
+      ignoreErrors: false,
     }),
     SharedModule,
     AuthModule,

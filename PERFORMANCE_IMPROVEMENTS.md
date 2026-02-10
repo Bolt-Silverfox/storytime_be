@@ -1359,116 +1359,140 @@ export class SubscriptionRequiredException extends DomainException {
 
 ---
 
-## 14. Event-Driven Architecture Expansion
+## 14. Event-Driven Architecture Expansion ✅ COMPLETED
 
-### 14.1 Current State (P2 - Medium)
+### 14.1 Implementation Status
 
-**Limited event usage:**
-- 11 event-related occurrences across 3 files
-- Primarily in `achievement-progress` module
-- Uses `@nestjs/event-emitter` (EventEmitter2)
+**Status**: Completed - February 2026
 
-**Current events:**
-```typescript
-// achievement-progress/badge-progress.engine.ts
-this.eventEmitter.emit('badge.earned', { kidId, badgeId });
-this.eventEmitter.emit('streak.updated', { kidId, streak });
-```
+**Files created:**
+- `src/shared/events/app-events.ts` - Event constants and typed payload interfaces
+- `src/shared/events/index.ts` - Barrel exports
+- `src/shared/events/event-listeners.service.ts` - Global event listeners for logging
+- `src/shared/events/events.module.ts` - Events module for DI
 
-### 14.2 Event-Driven Opportunities
+**Services integrated:**
+- `AuthService` - user.registered, user.email_verified
+- `UserDeletionService` - user.deleted (permanent & soft)
+- `StoryService` - story.created, story.completed
+- `PaymentService` - payment.completed, payment.failed, subscription.created, subscription.changed
 
-| Event | Trigger | Subscribers | Priority |
-|-------|---------|-------------|----------|
-| `user.registered` | User registration | Welcome email, analytics, onboarding | P1 |
-| `user.deleted` | Account deletion | Cleanup jobs, analytics | P1 |
-| `story.created` | Story generation | Recommendations, analytics, achievements | P1 |
-| `story.completed` | Story listened | Progress tracking, achievements, streaks | P1 |
-| `subscription.changed` | Plan change | Email notification, feature unlock | P1 |
-| `payment.completed` | Payment success | Receipt email, subscription activation | P1 |
-| `payment.failed` | Payment failure | Alert email, subscription suspension | P1 |
-| `kid.created` | New kid profile | Recommendations setup, welcome flow | P2 |
-| `notification.sent` | Any notification | Analytics, delivery tracking | P2 |
-
-### 14.3 Implementation Pattern
+### 14.2 Event Constants
 
 ```typescript
-// shared/events/events.ts
+// src/shared/events/app-events.ts
 export const AppEvents = {
+  // User lifecycle
   USER_REGISTERED: 'user.registered',
   USER_DELETED: 'user.deleted',
+  USER_EMAIL_VERIFIED: 'user.email_verified',
+  USER_PASSWORD_CHANGED: 'user.password_changed',
+
+  // Kid lifecycle
+  KID_CREATED: 'kid.created',
+  KID_DELETED: 'kid.deleted',
+
+  // Story lifecycle
   STORY_CREATED: 'story.created',
   STORY_COMPLETED: 'story.completed',
-  SUBSCRIPTION_CHANGED: 'subscription.changed',
+  STORY_PROGRESS_UPDATED: 'story.progress_updated',
+
+  // Payment & Subscription
   PAYMENT_COMPLETED: 'payment.completed',
   PAYMENT_FAILED: 'payment.failed',
-} as const;
+  SUBSCRIPTION_CREATED: 'subscription.created',
+  SUBSCRIPTION_CHANGED: 'subscription.changed',
+  SUBSCRIPTION_CANCELLED: 'subscription.cancelled',
 
-// Event payload types
+  // Achievements (existing)
+  BADGE_EARNED: 'badge.earned',
+  STREAK_UPDATED: 'streak.updated',
+
+  // Notifications
+  NOTIFICATION_SENT: 'notification.sent',
+} as const;
+```
+
+### 14.3 Typed Event Payloads
+
+All events have TypeScript interfaces for type-safe emission:
+
+```typescript
 export interface UserRegisteredEvent {
   userId: string;
   email: string;
+  name: string | null;
+  role: string;
   registeredAt: Date;
 }
 
 export interface StoryCompletedEvent {
   storyId: string;
   kidId: string;
-  duration: number;
+  durationSeconds: number;
+  completionPercentage: number;
   completedAt: Date;
 }
 
-// Emitting events
-@Injectable()
-export class AuthService {
-  constructor(private eventEmitter: EventEmitter2) {}
-
-  async register(dto: RegisterDto) {
-    const user = await this.createUser(dto);
-
-    this.eventEmitter.emit(AppEvents.USER_REGISTERED, {
-      userId: user.id,
-      email: user.email,
-      registeredAt: new Date(),
-    } satisfies UserRegisteredEvent);
-
-    return user;
-  }
+export interface PaymentCompletedEvent {
+  paymentId: string;
+  userId: string;
+  amount: number;
+  currency: string;
+  provider: string;
+  subscriptionId?: string;
+  completedAt: Date;
 }
 
-// Subscribing to events
-@Injectable()
-export class WelcomeEmailListener {
-  @OnEvent(AppEvents.USER_REGISTERED)
-  async handleUserRegistered(event: UserRegisteredEvent) {
-    await this.emailService.sendWelcomeEmail(event.email);
-  }
-}
+// ... 17+ typed event interfaces
+```
 
-@Injectable()
-export class AnalyticsListener {
-  @OnEvent(AppEvents.USER_REGISTERED)
-  async trackRegistration(event: UserRegisteredEvent) {
-    await this.analytics.track('user_registered', event);
-  }
+### 14.4 Usage Pattern
+
+```typescript
+// Emitting events (type-safe with satisfies)
+this.eventEmitter.emit(AppEvents.USER_REGISTERED, {
+  userId: user.id,
+  email: user.email,
+  name: user.name,
+  role: user.role,
+  registeredAt: user.createdAt,
+} satisfies UserRegisteredEvent);
+
+// Listening to events
+@OnEvent(AppEvents.USER_REGISTERED)
+handleUserRegistered(event: UserRegisteredEvent): void {
+  this.logger.log(`User registered: ${event.userId}`);
 }
 ```
 
-### 14.4 Benefits
+### 14.5 Benefits Achieved
 
-| Benefit | Description |
-|---------|-------------|
-| Decoupling | Services don't need to know about all side effects |
-| Scalability | Listeners can be moved to separate workers |
-| Maintainability | Adding new side effects doesn't modify core logic |
-| Testing | Core logic testable without side effects |
-| Audit trail | Events can be logged for debugging |
+| Benefit | Implementation |
+|---------|----------------|
+| Decoupling | Services emit events without knowing subscribers |
+| Type Safety | All payloads validated via TypeScript interfaces |
+| Logging | EventListenersService logs all events for audit trail |
+| Extensibility | New listeners can subscribe without modifying emitters |
+| Testability | Events can be mocked in unit tests |
+
+### 14.6 Remaining Events (Future Work)
+
+| Event | Service | Priority |
+|-------|---------|----------|
+| `kid.created` | KidService | P2 |
+| `kid.deleted` | KidService | P2 |
+| `notification.sent` | NotificationService | P3 |
+| `subscription.cancelled` | SubscriptionService | P2 |
 
 **Action Items:**
-- [ ] Define standard event names and payloads
-- [ ] Add user lifecycle events (register, delete)
-- [ ] Add story lifecycle events (create, complete)
-- [ ] Add payment/subscription events
-- [ ] Create event listener module for cross-cutting concerns
+- [x] Define standard event names and payloads
+- [x] Add user lifecycle events (register, delete, email_verified)
+- [x] Add story lifecycle events (create, complete)
+- [x] Add payment/subscription events
+- [x] Create event listener module for cross-cutting concerns
+- [ ] Add kid lifecycle events (P2)
+- [ ] Add notification events (P3)
 - [ ] Document event patterns in CLAUDE.md
 
 ---
@@ -1580,6 +1604,8 @@ await this.prisma.entity.createMany({
 - [x] Kid profiles caching (KidService with 5-min TTL + cache invalidation)
 - [x] Custom domain exceptions hierarchy *(AuthService, UserService)*
 - [x] Query select optimization - UserService (exclude passwordHash/pinHash at DB level)
+- [x] Event-driven architecture expansion *(Section 14 - AuthService, UserDeletionService, StoryService, PaymentService)*
+
 ### In Progress 🔄
 *(No items currently in progress)*
 
@@ -1603,16 +1629,6 @@ await this.prisma.entity.createMany({
 - [ ] Add rate limiting to auth endpoints (P0)
 - [ ] Add rate limiting to payment endpoints (P0)
 - [ ] Create centralized throttle configuration
-
-**Domain Exceptions (Section 13)**
-- [ ] Create base DomainException class
-- [ ] Implement auth/resource/business exceptions
-- [ ] Update exception filter
-
-**Event-Driven Architecture (Section 14)**
-- [ ] Define standard event names and payloads
-- [ ] Add user/story/payment lifecycle events
-- [ ] Create event listener module
 
 **Infrastructure**
 - [ ] Cache strategy improvements

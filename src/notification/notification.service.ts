@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EnvConfig } from '@/shared/config/env.validation';
 import * as nodemailer from 'nodemailer';
 import { NotificationRegistry, Notifications } from './notification.registry';
@@ -19,6 +20,7 @@ import {
   EmailQueueService,
   QueuedEmailResult,
 } from './queue/email-queue.service';
+import { AppEvents, NotificationSentEvent } from '@/shared/events';
 
 @Injectable()
 export class NotificationService {
@@ -32,6 +34,7 @@ export class NotificationService {
     private readonly inAppProvider: InAppProvider,
     private readonly emailProvider: EmailProvider,
     private readonly emailQueueService: EmailQueueService,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     // Initialize legacy email transporter (for backward compatibility / sync sends)
     this.transporter = nodemailer.createTransport({
@@ -259,6 +262,18 @@ export class NotificationService {
       try {
         const result = await provider.send(payload);
         results.push(result);
+
+        // Emit notification sent event for successful sends
+        if (result.success && payload.userId) {
+          const notificationType = channel as 'push' | 'in_app' | 'email';
+          this.eventEmitter.emit(AppEvents.NOTIFICATION_SENT, {
+            notificationId: result.messageId ?? `${payload.userId}-${Date.now()}`,
+            userId: payload.userId,
+            category: payload.category,
+            type: notificationType,
+            sentAt: new Date(),
+          } satisfies NotificationSentEvent);
+        }
       } catch (error) {
         this.logger.error(
           `Failed to send via ${channel}: ${error.message}`,

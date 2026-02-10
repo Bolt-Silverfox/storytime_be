@@ -5,17 +5,22 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { VOICE_CONFIG } from './voice.constants';
+import { AppEvents, QuotaExhaustedEvent, QuotaTypes } from '@/shared/events';
 
 @Injectable()
 export class VoiceQuotaService {
   private readonly logger = new Logger(VoiceQuotaService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   private getCurrentMonth(): string {
     const now = new Date();
@@ -68,6 +73,16 @@ export class VoiceQuotaService {
       this.logger.log(
         `User ${userId} exceeded ElevenLabs quota (${usage.elevenLabsCount}/${limit}).`,
       );
+
+      // Emit quota exhausted event
+      this.eventEmitter.emit(AppEvents.QUOTA_EXHAUSTED, {
+        userId,
+        quotaType: QuotaTypes.VOICE,
+        used: usage.elevenLabsCount,
+        limit,
+        exhaustedAt: new Date(),
+      } satisfies QuotaExhaustedEvent);
+
       return false;
     }
 

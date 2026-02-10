@@ -442,6 +442,47 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - Build passing
 
+### Instance 18 - ✅ Completed
+**Focus**: Post-merge refactoring tasks + Email notifications
+**Timestamp**: 2026-02-10
+
+**Changes Made**:
+- `src/shared/events/app-events.ts`:
+  - Added `QUOTA_EXHAUSTED` and `QUOTA_WARNING` events
+  - Added `QuotaTypes` constant (`STORY`, `VOICE`, `AI_GENERATION`)
+  - Added `QuotaExhaustedEvent` and `QuotaWarningEvent` interfaces
+- `src/story/story-quota.service.ts` - Emit QUOTA_EXHAUSTED when story limit reached
+- `src/voice/voice-quota.service.ts` - Emit QUOTA_EXHAUSTED when voice limit reached
+- `src/shared/events/event-listeners.service.ts` - Added quota event listener
+- `src/shared/constants/cache-keys.constants.ts`:
+  - Added `SUBSCRIPTION_STATUS`, `PROGRESS_HOME`, `PROGRESS_OVERVIEW` keys
+- `src/subscription/subscription.service.ts` - Updated to use centralized CACHE_KEYS
+- `src/achievement-progress/progress.service.ts` - Updated to use CACHE_KEYS and CACHE_TTL_MS
+- `src/shared/pipes/clamp.pipe.spec.ts` - NEW: 30 unit tests for ClampPipe
+
+**Email Notifications Added**:
+- `src/notification/templates/quota-exhausted.tsx` - Upgrade prompt when quota hit
+- `src/notification/templates/subscription-welcome.tsx` - Premium welcome email
+- `src/notification/templates/payment-failed.tsx` - Payment failure alert
+- `src/notification/notification.registry.ts` - Registered QuotaExhausted, SubscriptionWelcome, PaymentFailed
+- `src/notification/services/event-notification.service.ts` - Event-to-email bridge service
+
+**Status**: Complete - All tasks done, build passing, 30 tests passing
+
+### Instance 17 - ✅ Completed
+**Focus**: Merge develop-v0.0.1 into integration branch
+**Timestamp**: 2026-02-10
+
+**Changes Made**:
+- Merged `origin/develop-v0.0.1` into `integration/refactor-2026-02`
+- Resolved conflict in `src/story/story.service.ts` - kept refactored version with extracted services
+- Added event emissions to `KidService` (KID_CREATED, KID_DELETED events)
+- Added event emissions to `NotificationService` (NOTIFICATION_SENT event)
+- Updated `KidCreatedEvent` name field to allow null
+- Added `KID_DELETED` event listener in `EventListenersService`
+
+**Status**: Complete - Branch now has all develop features + all refactoring work
+
 ### Instance 16 - ✅ Completed
 **Focus**: Database Transactions for UserService & AuthService
 **Timestamp**: 2026-02-09
@@ -625,6 +666,49 @@ When all instances complete their work:
 1. Verify build passes: `pnpm run build`
 2. Run tests: `pnpm run test`
 3. Create PR from `integration/refactor-2026-02` → `develop-v0.0.1`
+
+---
+
+## 🔄 Post-Merge Tasks (develop-v0.0.1 → integration)
+
+**Merged**: 2026-02-10
+**Merge Commit**: abe7e22
+
+The integration branch was merged with `develop-v0.0.1` to bring in new features. The following new functionality from develop may need refactoring patterns applied:
+
+### New Features to Review
+
+| Feature | Files | Needed Work |
+|---------|-------|-------------|
+| `topPicksFromUs` filter | `story.service.ts`, `story.controller.ts` | ✅ Already in `StoryRecommendationService` |
+| Free tier limits | `story-quota.service.ts`, `voice-quota.service.ts` | Review for event emissions |
+| Parent favorites response | `story.service.ts` | Check if needs extraction |
+| ClampPipe | `src/shared/pipes/clamp.pipe.ts` | ✅ Utility - no changes needed |
+| Per-voice settings | `voice/` services | Review for consistency |
+| IAP-only verification | `payment.service.ts` | Review for event emissions |
+| Cache invalidation patterns | Multiple files | Verify consistency with new patterns |
+
+### Tasks for Next Instances
+
+- [x] Add event emissions for quota exhaustion (`QUOTA_EXHAUSTED` event) *(Instance 18)*
+- [x] Add event emissions for payment/subscription changes from new IAP flow *(Already done in PaymentService)*
+- [x] Review `VoiceQuotaService` for extraction opportunities *(Instance 18 - 317 lines, not needed)*
+- [x] Add unit tests for new `ClampPipe` *(Instance 18 - 30 tests)*
+- [x] Verify cache invalidation uses consistent `CACHE_KEYS` constants *(Instance 18)*
+
+### Event-Driven Architecture Integration
+
+The following new operations should emit events (from `src/shared/events/app-events.ts`):
+
+```typescript
+// Suggested new events for quota system
+QUOTA_EXHAUSTED = 'quota.exhausted',      // When user hits free tier limit
+QUOTA_RESET = 'quota.reset',              // Daily quota reset
+
+// Suggested new events for voice system
+VOICE_GENERATED = 'voice.generated',      // TTS generation completed
+VOICE_QUOTA_WARNING = 'voice.quota.warning', // Approaching limit
+```
 
 ---
 

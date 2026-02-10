@@ -35,6 +35,12 @@ import { generateToken } from '@/utils/generate-token';
 import { NotificationService } from '@/notification/notification.service';
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  AppEvents,
+  UserRegisteredEvent,
+  UserEmailVerifiedEvent,
+} from '@/shared/events';
 
 @Injectable()
 export class AuthService {
@@ -45,6 +51,7 @@ export class AuthService {
     private readonly notificationService: NotificationService,
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // ==================== AUTHENTICATION ====================
@@ -188,6 +195,15 @@ export class AuthService {
 
     const tokenData = await this.tokenService.createTokenPair(user);
 
+    // Emit user registered event for analytics, onboarding triggers, etc.
+    this.eventEmitter.emit(AppEvents.USER_REGISTERED, {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      registeredAt: user.createdAt,
+    } satisfies UserRegisteredEvent);
+
     return {
       user: new UserDto({ ...user, numberOfKids: 0 }),
       jwt: tokenData.jwt,
@@ -262,6 +278,13 @@ export class AuthService {
       });
       await tx.token.delete({ where: { id: verificationToken.id } });
     });
+
+    // Emit email verified event
+    this.eventEmitter.emit(AppEvents.USER_EMAIL_VERIFIED, {
+      userId: verificationToken.user.id,
+      email: verificationToken.user.email,
+      verifiedAt: new Date(),
+    } satisfies UserEmailVerifiedEvent);
 
     return { message: 'Email verified successfully' };
   }
