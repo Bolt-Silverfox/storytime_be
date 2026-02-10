@@ -6,6 +6,8 @@ import { TextToSpeechService } from './text-to-speech.service';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppEvents, StoryCreatedEvent } from '@/shared/events';
 
 @Injectable()
 export class StoryGenerationService {
@@ -19,6 +21,7 @@ export class StoryGenerationService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private readonly geminiService: GeminiService,
     private readonly textToSpeechService: TextToSpeechService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -331,7 +334,19 @@ export class StoryGenerationService {
       });
     });
 
+    // Emit story created event
+    const createdEvent: StoryCreatedEvent = {
+      storyId: story.id,
+      title: story.title,
+      creatorKidId: story.creatorKidId || undefined,
+      aiGenerated: story.aiGenerated,
+      createdAt: story.createdAt,
+    };
+    this.eventEmitter.emit(AppEvents.STORY_CREATED, createdEvent);
+
     await this.invalidateStoryCaches();
+
+    this.logger.log(`Story created: ${story.id} - "${story.title}"`);
 
     return story;
   }

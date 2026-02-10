@@ -3,11 +3,15 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthSessionGuard } from './guards/auth.guard';
 import { AdminGuard } from './guards/admin.guard';
+import { PrismaModule } from '@/prisma/prisma.module';
+import { AnalyticsEventListener } from './listeners/analytics-event.listener';
+import { ActivityLogEventListener } from './listeners/activity-log-event.listener';
 
 @Global()
 @Module({
   imports: [
     ConfigModule,
+    PrismaModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -17,7 +21,12 @@ import { AdminGuard } from './guards/admin.guard';
       }),
     }),
   ],
-  providers: [AuthSessionGuard, AdminGuard],
+  providers: [
+    AuthSessionGuard,
+    AdminGuard,
+    AnalyticsEventListener,
+    ActivityLogEventListener,
+  ],
   exports: [AuthSessionGuard, AdminGuard, JwtModule],
 })
 export class SharedModule {}

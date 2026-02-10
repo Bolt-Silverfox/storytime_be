@@ -5,12 +5,21 @@ import {
   UserStoryProgressDto,
   UserStoryProgressResponseDto,
 } from './dto/story.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  AppEvents,
+  StoryCompletedEvent,
+  StoryProgressUpdatedEvent,
+} from '@/shared/events';
 
 @Injectable()
 export class StoryProgressService {
   private readonly logger = new Logger(StoryProgressService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   // =====================
   // KID STORY PROGRESS
@@ -50,7 +59,27 @@ export class StoryProgressService {
       },
     });
 
+    // Emit story progress updated event
+    const progressEvent: StoryProgressUpdatedEvent = {
+      storyId: dto.storyId,
+      kidId: dto.kidId,
+      progress: dto.progress,
+      sessionTime,
+      totalTimeSpent: newTotalTime,
+      updatedAt: new Date(),
+    };
+    this.eventEmitter.emit(AppEvents.STORY_PROGRESS_UPDATED, progressEvent);
+
     if (dto.completed && (!existing || !existing.completed)) {
+      // Emit story completed event
+      const completedEvent: StoryCompletedEvent = {
+        storyId: dto.storyId,
+        kidId: dto.kidId,
+        totalTimeSpent: newTotalTime,
+        completedAt: new Date(),
+      };
+      this.eventEmitter.emit(AppEvents.STORY_COMPLETED, completedEvent);
+
       this.adjustReadingLevel(dto.kidId, dto.storyId, newTotalTime).catch((e) =>
         this.logger.error(`Failed to adjust reading level: ${e.message}`),
       );
@@ -142,6 +171,28 @@ export class StoryProgressService {
         totalTimeSpent: sessionTime,
       },
     });
+
+    // Emit story progress updated event (for user)
+    const progressEvent: StoryProgressUpdatedEvent = {
+      storyId: dto.storyId,
+      userId,
+      progress: dto.progress,
+      sessionTime,
+      totalTimeSpent: newTotalTime,
+      updatedAt: new Date(),
+    };
+    this.eventEmitter.emit(AppEvents.STORY_PROGRESS_UPDATED, progressEvent);
+
+    // Emit story completed event if newly completed
+    if (dto.completed && (!existing || !existing.completed)) {
+      const completedEvent: StoryCompletedEvent = {
+        storyId: dto.storyId,
+        userId,
+        totalTimeSpent: newTotalTime,
+        completedAt: new Date(),
+      };
+      this.eventEmitter.emit(AppEvents.STORY_COMPLETED, completedEvent);
+    }
 
     return {
       id: result.id,

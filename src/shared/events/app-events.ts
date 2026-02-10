@@ -106,21 +106,25 @@ export interface StoryCreatedEvent {
 
 export interface StoryCompletedEvent {
   storyId: string;
-  kidId: string;
-  /** Listening duration in seconds */
-  durationSeconds: number;
-  /** Completion percentage (0-100) */
-  completionPercentage: number;
+  /** Either kidId or userId - one must be present */
+  kidId?: string;
+  userId?: string;
+  /** Total time spent on story in seconds */
+  totalTimeSpent: number;
   completedAt: Date;
 }
 
 export interface StoryProgressUpdatedEvent {
   storyId: string;
-  kidId: string;
+  /** Either kidId or userId - one must be present */
+  kidId?: string;
+  userId?: string;
   /** Progress percentage (0-100) */
   progress: number;
-  /** Current position in seconds */
-  currentPosition: number;
+  /** Time spent in this session (seconds) */
+  sessionTime: number;
+  /** Total time spent on story (seconds) */
+  totalTimeSpent: number;
   updatedAt: Date;
 }
 
