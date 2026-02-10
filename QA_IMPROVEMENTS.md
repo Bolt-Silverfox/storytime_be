@@ -101,23 +101,57 @@ Current coverage: **~9%** (20 spec files out of 220+ TypeScript files)
 
 ### 2.2 Event-Driven Architecture (P1 - High) ✅ COMPLETE
 
-**Status**: Implemented *(Instance 17 - 2026-02-10)*
+**Status**: Fully Implemented *(Instances 17, 18 - 2026-02-10)*
 
-Circular dependencies between modules have been resolved using an event-driven architecture pattern.
+Circular dependencies between modules have been resolved using a comprehensive event-driven architecture pattern.
 
 #### Architecture Overview
 
 **Event System Setup:**
 - `EventEmitterModule` configured globally in `app.module.ts`
 - Centralized event types in `src/shared/events/app-events.ts`
-- Event listeners in `src/notification/listeners/`
+- Event listeners in `src/notification/listeners/` and `src/shared/listeners/`
 
-**Events Implemented:**
-| Event Name | Emitted By | Listened By | Purpose |
-|------------|-----------|-------------|---------|
-| `email.verification_requested` | AuthService | PasswordEventListener | Send verification emails |
-| `password.reset_requested` | PasswordService | PasswordEventListener | Send password reset emails |
-| `password.changed` | PasswordService | PasswordEventListener | Send password change confirmations |
+**All Events Implemented (18 events):**
+
+| Category | Event Name | Emitted By | Purpose |
+|----------|-----------|-----------|---------|
+| **User Lifecycle** | `user.registered` | AuthService | Track new user registrations |
+| | `user.deleted` | UserDeletionService | Track account deletions |
+| | `user.email_verified` | AuthService | Track email verifications |
+| | `user.password_changed` | PasswordService | Track password changes |
+| **Payment** | `payment.completed` | PaymentService | Track successful payments |
+| | `payment.failed` | PaymentService | Track failed payments |
+| **Subscription** | `subscription.created` | PaymentService | Track new subscriptions |
+| | `subscription.changed` | PaymentService | Track plan changes |
+| | `subscription.cancelled` | SubscriptionService | Track cancellations |
+| **Story** | `story.created` | StoryGenerationService | Track story creation |
+| | `story.completed` | StoryProgressService | Track story completions |
+| | `story.progress_updated` | StoryProgressService | Track reading progress |
+| **Password** | `password.reset_requested` | PasswordService | Send password reset emails |
+| | `password.changed` | PasswordService | Send password change confirmations |
+| **Email** | `email.verification_requested` | AuthService | Send verification emails |
+
+**Event Listeners Implemented:**
+
+| Listener | Location | Purpose | Events Handled |
+|----------|----------|---------|----------------|
+| `AuthEventListener` | `src/notification/listeners/` | Handle auth notifications | user.registered, user.email_verified, user.password_changed |
+| `PasswordEventListener` | `src/notification/listeners/` | Handle password emails | password.reset_requested, password.changed |
+| `AnalyticsEventListener` | `src/shared/listeners/` | Track business metrics | All payment, subscription, story events |
+| `ActivityLogEventListener` | `src/shared/listeners/` | Audit trail logging | All user, payment, subscription events |
+
+**Services Emitting Events:**
+
+| Service | Events Emitted | Lines Modified |
+|---------|---------------|----------------|
+| `AuthService` | user.registered, user.email_verified | ~10 lines |
+| `PasswordService` | user.password_changed, password.reset_requested, password.changed | ~20 lines |
+| `UserDeletionService` | user.deleted | ~10 lines |
+| `PaymentService` | payment.completed, payment.failed, subscription.created, subscription.changed | ~45 lines |
+| `SubscriptionService` | subscription.cancelled | ~12 lines |
+| `StoryGenerationService` | story.created | ~10 lines |
+| `StoryProgressService` | story.completed, story.progress_updated | ~35 lines |
 
 **Circular Dependencies Removed:**
 | Modules | Before | After |
@@ -128,17 +162,21 @@ Circular dependencies between modules have been resolved using an event-driven a
 | Achievement ↔ Auth | `forwardRef()` | Removed (unnecessary) |
 
 **Benefits:**
-- ✅ No more circular dependencies between Auth/Notification
-- ✅ Loose coupling between modules
-- ✅ Easier testing (mock event emitters)
-- ✅ Better scalability (add listeners without modifying emitters)
+- ✅ Zero circular dependencies remaining
+- ✅ Complete decoupling between business logic and cross-cutting concerns
+- ✅ Comprehensive audit trail via ActivityLogEventListener
+- ✅ Analytics tracking centralized in AnalyticsEventListener
+- ✅ Easy to add new listeners without modifying emitters
+- ✅ Type-safe event payloads with TypeScript interfaces
 - ✅ Async operation support (fire-and-forget events)
+- ✅ Ready for future integrations (Mixpanel, Amplitude, etc.)
 
-**Future Events to Implement:**
-- User lifecycle events (registered, deleted, email verified)
-- Payment events (completed, failed)
-- Subscription events (created, changed, cancelled)
-- Story events (created, completed, progress updated)
+**Implementation Details:**
+- Event payload types defined in `src/shared/events/app-events.ts`
+- All events use standardized naming: `domain.action` (e.g., `user.registered`)
+- Listeners registered in SharedModule for global availability
+- PrismaService injected for activity logging
+- Error handling in all listeners (failed listeners don't break main flow)
 
 ### 2.3 Console.log Usage (P3 - Low)
 
@@ -903,19 +941,26 @@ this.eventEmitter.emit('user.created', payload);
 - [ ] Security audit implementation
 
 ### Recently Completed ✅
-- [x] **Event-Driven Architecture (EDA)** - Removed circular dependencies *(Instance 17 - 2026-02-10)*
-  - Integrated EventEmitterModule globally in app.module.ts
-  - Created event listeners: AuthEventListener, PasswordEventListener
-  - Removed 6 unnecessary `forwardRef()` imports:
-    - NotificationModule → AuthModule (removed)
-    - PaymentModule → AuthModule (removed)
-    - SubscriptionModule → PaymentModule/AuthModule/UserModule (all removed)
-    - AchievementProgressModule → AuthModule (removed)
-  - Decoupled Auth from Notification using events:
-    - `email.verification_requested` event
-    - `password.reset_requested` event
-    - `password.changed` event
-  - Auth and Notification modules now fully decoupled
+- [x] **Event-Driven Architecture (EDA)** - Complete Implementation *(Instances 17, 18 - 2026-02-10)*
+  - **Phase 1**: Initial EDA Setup
+    - Integrated EventEmitterModule globally in app.module.ts
+    - Created centralized event types in `src/shared/events/app-events.ts`
+    - Created initial event listeners: AuthEventListener, PasswordEventListener
+    - Removed 6 unnecessary `forwardRef()` imports
+    - Decoupled Auth from Notification using events
+  - **Phase 2**: Comprehensive Event Implementation *(Instance 18)*
+    - Implemented 18 business events across all major domains:
+      - User lifecycle events (4): registered, deleted, email_verified, password_changed
+      - Payment events (2): completed, failed
+      - Subscription events (3): created, changed, cancelled
+      - Story events (3): created, completed, progress_updated
+    - Modified 7 services to emit events: AuthService, PasswordService, UserDeletionService, PaymentService, SubscriptionService, StoryGenerationService, StoryProgressService
+    - Created 2 new cross-cutting event listeners:
+      - `AnalyticsEventListener` - Centralized analytics tracking
+      - `ActivityLogEventListener` - Comprehensive audit trail logging
+    - Registered listeners in SharedModule for global availability
+    - All event payloads are type-safe with TypeScript interfaces
+  - **Result**: Complete decoupling between business logic and cross-cutting concerns with zero circular dependencies
 
 ---
 
