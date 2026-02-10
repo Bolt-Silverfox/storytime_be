@@ -634,3 +634,62 @@ When all instances complete their work:
 - Run `pnpm run build` before pushing
 - Lint errors should be fixed immediately
 - Update the conflict zones table when claiming new files
+
+### Instance 17 - ✅ Completed  
+**Focus**: Async Story Generation Queue System
+**Timestamp**: 2026-02-10
+**Branch**: `fix/bug-fixes`
+
+**Changes Made**:
+- `src/story/queue/story-queue.service.ts` (NEW ~600 lines) - Queue management service:
+  - Methods: queueStoryGeneration, queueStoryForKid, getJobStatus, getJobResult, cancelJob, getQueueStats, getUserPendingJobs, pause, resume
+  - Job priority support (HIGH/NORMAL/LOW)
+  - Estimated wait time and remaining time calculations
+  - Job ownership verification for cancellation
+- `src/story/queue/story.processor.ts` (NEW ~270 lines) - BullMQ processor for story generation:
+  - Concurrency: 2 (prevents overwhelming AI APIs)
+  - Progress tracking through 6 stages (queued → processing → generating_content → generating_image → generating_audio → persisting → completed)
+  - Retry logic with exponential backoff (3 attempts, 1m base delay)
+  - Non-retryable error detection
+  - Event listeners for completed, failed, active, error, and stalled events
+- `src/story/queue/story-queue.constants.ts` (NEW ~60 lines) - Queue configuration:
+  - STORY_QUEUE_NAME, STORY_JOB_NAMES constants
+  - Default job options with retry config
+  - Job retention policies (2h for completed, 24h for failed)
+  - STORY_GENERATION_STAGES progress constants
+- `src/story/queue/story-job.interface.ts` (NEW ~130 lines) - Type definitions:
+  - StoryJobData, StoryJobResult, StoryResult interfaces
+  - StoryJobStatus, StoryPriority enums
+  - StoryJobStatusResponse for client polling
+- `src/story/queue/index.ts` (NEW ~5 lines) - Barrel exports
+- `src/story/story.controller.ts` - Added 6 new async endpoints:
+  - POST `/stories/generate/async` - Queue story generation (returns jobId)
+  - GET `/stories/generate/status/:jobId` - Poll job status with progress
+  - GET `/stories/generate/result/:jobId` - Get completed story result
+  - DELETE `/stories/generate/job/:jobId` - Cancel pending job
+  - GET `/stories/generate/pending` - List user's pending jobs
+  - GET `/stories/generate/queue-stats` - Queue statistics for monitoring
+- `src/story/story.module.ts` - Registered BullMQ queue:
+  - Added BullModule.registerQueue for STORY_QUEUE_NAME
+  - Added StoryQueueService and StoryProcessor to providers
+  - Exported StoryQueueService for potential use by other modules
+
+**Technical Details**:
+- Uses existing BullMQ infrastructure (already configured in app.module.ts)
+- Leverages existing StoryGenerationService for actual story generation
+- Progress updates at each stage: Processing (10%) → Content (30%) → Image (50%) → Audio (70%) → Persisting (90%) → Complete (100%)
+- Job metadata includes client IP, user agent, and request timestamp
+- Supports both standard generation and kid-specific generation paths
+
+**Status**: Complete - Build passing, commit 078972a
+
+
+**Additional Documentation**:
+- `ASYNC_STORY_GENERATION.md` - Comprehensive architecture doc for Phase 2 mobile notifications
+
+**Phase 2 Available for Implementation** 📋:
+- Firebase Cloud Messaging (FCM) integration
+- Device token management  
+- Push notifications on job completion/failure
+- See `ASYNC_STORY_GENERATION.md` for full implementation plan
+
