@@ -1,6 +1,7 @@
 import { HttpModule } from '@nestjs/axios';
 import { Module, forwardRef } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '@/auth/auth.module';
 import { UploadModule } from '../upload/upload.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
@@ -15,6 +16,7 @@ import { StoryQuotaService } from './story-quota.service';
 import { VoiceModule } from '../voice/voice.module';
 import { StoryAccessGuard } from '@/shared/guards/story-access.guard';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
+import { STORY_QUEUE_NAME, StoryQueueService, StoryProcessor } from './queue';
 
 @Module({
   imports: [
@@ -24,6 +26,10 @@ import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle
     UploadModule,
     SubscriptionModule,
     forwardRef(() => VoiceModule),
+    // Register story generation queue
+    BullModule.registerQueue({
+      name: STORY_QUEUE_NAME,
+    }),
   ],
   controllers: [StoryController],
   providers: [
@@ -36,7 +42,18 @@ import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle
     StoryQuotaService,
     StoryAccessGuard,
     SubscriptionThrottleGuard,
+    // Queue components
+    StoryQueueService,
+    StoryProcessor,
   ],
-  exports: [StoryService, StoryProgressService, StoryRecommendationService, DailyChallengeService, StoryGenerationService, StoryQuotaService]
+  exports: [
+    StoryService,
+    StoryProgressService,
+    StoryRecommendationService,
+    DailyChallengeService,
+    StoryGenerationService,
+    StoryQuotaService,
+    StoryQueueService,
+  ]
 })
 export class StoryModule {}
