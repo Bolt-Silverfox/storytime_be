@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CreateKidDto, UpdateKidDto } from './dto/kid.dto';
 import { VoiceService } from '../voice/voice.service';
 import {
@@ -18,6 +19,11 @@ import {
   CACHE_KEYS,
   CACHE_TTL_MS,
 } from '@/shared/constants/cache-keys.constants';
+import {
+  AppEvents,
+  KidCreatedEvent,
+  KidDeletedEvent,
+} from '@/shared/events';
 
 @Injectable()
 export class KidService {
@@ -26,6 +32,7 @@ export class KidService {
     private readonly kidRepository: IKidRepository,
     private voiceService: VoiceService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -72,6 +79,15 @@ export class KidService {
 
     // Invalidate user's kids cache after creation
     await this.cacheManager.del(CACHE_KEYS.USER_KIDS(userId));
+
+    // Emit kid created event
+    this.eventEmitter.emit(AppEvents.KID_CREATED, {
+      kidId: kid.id,
+      parentId: userId,
+      name: kid.name,
+      ageRange: kid.ageRange,
+      createdAt: kid.createdAt,
+    } satisfies KidCreatedEvent);
 
     return this.transformKid(kid);
   }
@@ -187,6 +203,13 @@ export class KidService {
 
     // Invalidate caches after deletion
     await this.invalidateKidCaches(kidId, userId);
+
+    // Emit kid deleted event
+    this.eventEmitter.emit(AppEvents.KID_DELETED, {
+      kidId: kid.id,
+      parentId: userId,
+      deletedAt: new Date(),
+    } satisfies KidDeletedEvent);
 
     return result;
   }

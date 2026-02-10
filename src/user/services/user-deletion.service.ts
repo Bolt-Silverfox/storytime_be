@@ -6,6 +6,8 @@ import {
 import { Prisma, User, Profile, Kid, Avatar } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppEvents, UserDeletedEvent } from '@/shared/events';
 
 /** Response for permanent delete operation */
 export interface DeleteUserResult {
@@ -30,7 +32,10 @@ type UserWithRelations = User & {
 
 @Injectable()
 export class UserDeletionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   /**
    * Soft delete or permanently delete a user
@@ -58,6 +63,14 @@ export class UserDeletionService {
         // Delete the user and all associated data
         const deletedUser = await this.prisma.user.delete({ where: { id } });
 
+        // Emit user deleted event for GDPR compliance logging, analytics, etc.
+        this.eventEmitter.emit(AppEvents.USER_DELETED, {
+          userId: deletedUser.id,
+          email: deletedUser.email,
+          deletedAt: new Date(),
+          reason: 'permanent_deletion',
+        } satisfies UserDeletedEvent);
+
         return {
           id: deletedUser.id,
           email: deletedUser.email,
@@ -73,6 +86,14 @@ export class UserDeletionService {
             deletedAt: new Date(),
           },
         });
+
+        // Emit user deleted event for soft deletion (deactivation)
+        this.eventEmitter.emit(AppEvents.USER_DELETED, {
+          userId: updatedUser.id,
+          email: updatedUser.email,
+          deletedAt: updatedUser.deletedAt ?? new Date(),
+          reason: 'soft_deletion',
+        } satisfies UserDeletedEvent);
 
         return {
           ...updatedUser,

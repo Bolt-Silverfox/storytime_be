@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
+import { AppEvents, QuotaExhaustedEvent, QuotaTypes } from '@/shared/events';
 
 export interface StoryAccessResult {
   canAccess: boolean;
@@ -27,6 +29,7 @@ export class StoryQuotaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -60,6 +63,16 @@ export class StoryQuotaService {
       this.logger.log(
         `User ${userId} reached story limit (${usage.uniqueStoriesRead}/${totalAllowed})`,
       );
+
+      // Emit quota exhausted event
+      this.eventEmitter.emit(AppEvents.QUOTA_EXHAUSTED, {
+        userId,
+        quotaType: QuotaTypes.STORY,
+        used: usage.uniqueStoriesRead,
+        limit: totalAllowed,
+        exhaustedAt: new Date(),
+      } satisfies QuotaExhaustedEvent);
+
       return {
         canAccess: false,
         reason: 'limit_reached',
