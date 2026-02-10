@@ -15,6 +15,12 @@ import { EmailQueueService } from './queue/email-queue.service';
 import { EmailProcessor } from './queue/email.processor';
 import { AuthEventListener } from './listeners/auth-event.listener';
 import { PasswordEventListener } from './listeners/password-event.listener';
+import {
+  NOTIFICATION_PREFERENCE_REPOSITORY,
+  PrismaNotificationPreferenceRepository,
+  IN_APP_NOTIFICATION_REPOSITORY,
+  PrismaInAppNotificationRepository,
+} from './repositories';
 
 @Module({
   imports: [
@@ -42,12 +48,23 @@ import { PasswordEventListener } from './listeners/password-event.listener';
     // Event listeners (event-driven architecture)
     AuthEventListener,
     PasswordEventListener,
+    // Repository Pattern (testability, decoupling)
+    {
+      provide: NOTIFICATION_PREFERENCE_REPOSITORY,
+      useClass: PrismaNotificationPreferenceRepository,
+    },
+    {
+      provide: IN_APP_NOTIFICATION_REPOSITORY,
+      useClass: PrismaInAppNotificationRepository,
+    },
   ],
   exports: [
     NotificationService,
     NotificationPreferenceService,
     InAppNotificationService,
     EmailQueueService,
+    NOTIFICATION_PREFERENCE_REPOSITORY,
+    IN_APP_NOTIFICATION_REPOSITORY,
   ],
 })
 export class NotificationModule {}

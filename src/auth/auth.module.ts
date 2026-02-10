@@ -11,6 +11,7 @@ import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
 import { OAuthService } from './services/oauth.service';
 import { OnboardingService } from './services/onboarding.service';
+import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
 
 @Module({
   imports: [
@@ -39,8 +40,12 @@ import { OnboardingService } from './services/onboarding.service';
     GoogleStrategy,
     GoogleAuthGuard,
     GoogleOAuthStrategy,
+    {
+      provide: AUTH_REPOSITORY,
+      useClass: PrismaAuthRepository,
+    },
   ],
 
-  exports: [AuthService, TokenService, OAuthService, OnboardingService, JwtModule, PassportModule],
+  exports: [AuthService, TokenService, OAuthService, OnboardingService, JwtModule, PassportModule, AUTH_REPOSITORY],
 })
 export class AuthModule {}
