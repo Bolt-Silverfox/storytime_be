@@ -10,6 +10,30 @@ import {
 } from './story.repository.interface';
 import { Prisma, Story, RestrictedStory, Kid } from '@prisma/client';
 
+/**
+ * Select for list views - excludes textContent to reduce payload size
+ */
+export const STORY_LIST_SELECT = {
+  id: true,
+  title: true,
+  description: true,
+  coverImageUrl: true,
+  audioUrl: true,
+  isInteractive: true,
+  ageMin: true,
+  ageMax: true,
+  durationSeconds: true,
+  recommended: true,
+  featured: true,
+  featuredUntil: true,
+  isPublished: true,
+  isDeleted: true,
+  createdAt: true,
+  updatedAt: true,
+  deletedAt: true,
+  createdById: true,
+} as const;
+
 @Injectable()
 export class PrismaStoryCoreRepository implements IStoryCoreRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -53,7 +77,27 @@ export class PrismaStoryCoreRepository implements IStoryCoreRepository {
       | Prisma.StoryOrderByWithRelationInput
       | Prisma.StoryOrderByWithRelationInput[];
     include?: Prisma.StoryInclude;
+    excludeContent?: boolean;
   }): Promise<StoryWithRelations[]> {
+    // When excludeContent is true, use select to exclude textContent
+    if (params.excludeContent) {
+      return (await this.prisma.story.findMany({
+        where: params.where,
+        skip: params.skip,
+        take: params.take,
+        orderBy: params.orderBy,
+        select: {
+          ...STORY_LIST_SELECT,
+          images: true,
+          branches: true,
+          categories: true,
+          themes: true,
+          seasons: true,
+          ...params.include,
+        },
+      })) as unknown as StoryWithRelations[];
+    }
+
     return await this.prisma.story.findMany({
       where: params.where,
       skip: params.skip,

@@ -24,6 +24,7 @@ export interface IStoryCoreRepository {
       | Prisma.StoryOrderByWithRelationInput
       | Prisma.StoryOrderByWithRelationInput[];
     include?: Prisma.StoryInclude;
+    excludeContent?: boolean; // Excludes textContent for list views
   }): Promise<StoryWithRelations[]>;
 
   countStories(where: Prisma.StoryWhereInput): Promise<number>;

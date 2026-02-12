@@ -45,13 +45,35 @@ export const CACHE_TTL_MS = {
   USER_DATA: 5 * 60 * 1000, // 5 minutes for user preferences and kid profiles
 } as const;
 
-/** Keys to invalidate when story content changes */
+/**
+ * Granular cache invalidation groups for key-specific invalidation
+ */
+export const CACHE_INVALIDATION = {
+  /** Invalidate when story content changes (create/update/delete) */
+  STORY_CONTENT: [
+    CACHE_KEYS.DASHBOARD_STATS,
+    CACHE_KEYS.STORY_STATS,
+    CACHE_KEYS.CONTENT_BREAKDOWN,
+    CACHE_KEYS.TOP_PICKS_FROM_US,
+  ] as const,
+
+  /** Invalidate when metadata (categories/themes/seasons) changes */
+  METADATA: [
+    CACHE_KEYS.CATEGORIES_ALL,
+    CACHE_KEYS.THEMES_ALL,
+    CACHE_KEYS.SEASONS_ALL,
+  ] as const,
+
+  /** Invalidate admin dashboard stats only */
+  ADMIN_STATS: [
+    CACHE_KEYS.DASHBOARD_STATS,
+    CACHE_KEYS.STORY_STATS,
+    CACHE_KEYS.CONTENT_BREAKDOWN,
+  ] as const,
+} as const;
+
+/** @deprecated Use CACHE_INVALIDATION.STORY_CONTENT instead */
 export const STORY_INVALIDATION_KEYS = [
-  CACHE_KEYS.CATEGORIES_ALL,
-  CACHE_KEYS.THEMES_ALL,
-  CACHE_KEYS.SEASONS_ALL,
-  CACHE_KEYS.DASHBOARD_STATS,
-  CACHE_KEYS.STORY_STATS,
-  CACHE_KEYS.CONTENT_BREAKDOWN,
-  CACHE_KEYS.TOP_PICKS_FROM_US,
+  ...CACHE_INVALIDATION.STORY_CONTENT,
+  ...CACHE_INVALIDATION.METADATA,
 ] as const;

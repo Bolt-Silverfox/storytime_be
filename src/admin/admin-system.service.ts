@@ -20,7 +20,7 @@ import {
   defaultAgeGroups,
   systemAvatars,
 } from '../../prisma/data';
-import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
+import { CACHE_INVALIDATION } from '@/shared/constants/cache-keys.constants';
 import { PrismaService } from '../prisma/prisma.service';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
@@ -292,10 +292,13 @@ export class AdminSystemService {
         }
       }
 
-      // Invalidate caches
-      await Promise.all(
-        STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
-      );
+      // Invalidate all content caches after seeding (both story content and metadata)
+      await Promise.all([
+        ...CACHE_INVALIDATION.STORY_CONTENT.map((key) =>
+          this.cacheManager.del(key),
+        ),
+        ...CACHE_INVALIDATION.METADATA.map((key) => this.cacheManager.del(key)),
+      ]);
 
       this.logger.log('✅ Database seeded successfully!');
       return { message: 'Database seeded successfully' };

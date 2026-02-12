@@ -10,7 +10,7 @@ import {
 import { TextToSpeechService } from './text-to-speech.service';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
-import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
+import { CACHE_INVALIDATION } from '@/shared/constants/cache-keys.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, StoryCreatedEvent } from '@/shared/events';
 
@@ -45,11 +45,13 @@ export class StoryGenerationService {
     return Math.ceil((wordCount / this.WORDS_PER_MINUTE) * 60);
   }
 
-  /** Invalidate all story-related caches */
+  /** Invalidate story content caches (not metadata like categories/themes) */
   private async invalidateStoryCaches(): Promise<void> {
     try {
       await Promise.all(
-        STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
+        CACHE_INVALIDATION.STORY_CONTENT.map((key) =>
+          this.cacheManager.del(key),
+        ),
       );
     } catch (error) {
       this.logger.warn(

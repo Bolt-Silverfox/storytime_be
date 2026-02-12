@@ -65,5 +65,11 @@ export const THROTTLE_LIMITS = {
       LIMIT: 50,
     },
   },
+  DEVICE: {
+    REGISTER: {
+      TTL: 60000, // 1 minute
+      LIMIT: 10,
+    },
+  },
   PREMIUM_MULTIPLIER: 5,
 };

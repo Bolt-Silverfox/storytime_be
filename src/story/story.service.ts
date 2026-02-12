@@ -35,7 +35,7 @@ import {
 } from './repositories/story-core.repository.interface';
 import {
   CACHE_KEYS,
-  STORY_INVALIDATION_KEYS,
+  CACHE_INVALIDATION,
 } from '@/shared/constants/cache-keys.constants';
 import { AppEvents, StoryCreatedEvent } from '@/shared/events';
 import { VoiceType } from '../voice/dto/voice.dto';
@@ -60,11 +60,13 @@ export class StoryService {
     private readonly dailyChallengeService: DailyChallengeService,
   ) {}
 
-  /** Invalidate all story-related caches */
+  /** Invalidate story content caches (not metadata like categories/themes) */
   private async invalidateStoryCaches(): Promise<void> {
     try {
       await Promise.all(
-        STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
+        CACHE_INVALIDATION.STORY_CONTENT.map((key) =>
+          this.cacheManager.del(key),
+        ),
       );
     } catch (error) {
       this.logger.warn(`Failed to invalidate story caches: ${error.message}`);
@@ -116,6 +118,7 @@ export class StoryService {
           categories: true,
           themes: true,
         },
+        excludeContent: true, // Exclude textContent for list views
       }),
       this.storyRepository.countStories(where),
     ]);
@@ -140,6 +143,7 @@ export class StoryService {
       where: { creatorKidId: kidId, isDeleted: false },
       orderBy: { createdAt: 'desc' },
       include: { images: true },
+      excludeContent: true,
     });
   }
 
