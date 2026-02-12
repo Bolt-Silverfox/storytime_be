@@ -51,9 +51,7 @@ export class PasswordEventListener {
     );
 
     if (!resp.success) {
-      this.logger.error(
-        `Failed to send email verification: ${resp.error}`,
-      );
+      this.logger.error(`Failed to send email verification: ${resp.error}`);
     }
   }
 
@@ -66,7 +64,9 @@ export class PasswordEventListener {
     email: string;
     userName: string | null;
   }) {
-    this.logger.log(`Sending password changed confirmation to ${payload.email}`);
+    this.logger.log(
+      `Sending password changed confirmation to ${payload.email}`,
+    );
 
     await this.notificationService.sendNotification('PasswordChanged', {
       email: payload.email,

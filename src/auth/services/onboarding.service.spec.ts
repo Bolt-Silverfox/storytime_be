@@ -115,7 +115,9 @@ describe('OnboardingService', () => {
     it('should complete profile successfully', async () => {
       authRepository.findUserByIdWithProfile.mockResolvedValue(mockUser as any);
       authRepository.updateProfile.mockResolvedValue(mockProfile as any);
-      authRepository.findUserByIdWithLearningExpectations.mockResolvedValue(mockUser as any);
+      authRepository.findUserByIdWithLearningExpectations.mockResolvedValue(
+        mockUser as any,
+      );
       authRepository.countKidsByParentId.mockResolvedValue(2);
 
       const result = await service.completeProfile('user-1', {
@@ -140,7 +142,9 @@ describe('OnboardingService', () => {
     it('should update profile successfully', async () => {
       authRepository.findUserByIdWithProfile.mockResolvedValue(mockUser as any);
       authRepository.upsertProfile.mockResolvedValue(mockProfile as any);
-      authRepository.findUserByIdWithLearningExpectations.mockResolvedValue(mockUser as any);
+      authRepository.findUserByIdWithLearningExpectations.mockResolvedValue(
+        mockUser as any,
+      );
       authRepository.countKidsByParentId.mockResolvedValue(2);
 
       const result = await service.updateProfile('user-1', {

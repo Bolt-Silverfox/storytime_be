@@ -58,10 +58,7 @@ export interface IVoiceQuotaRepository {
   findVoiceById(voiceId: string): Promise<Voice | null>;
 
   // Find voice with user access check
-  findVoiceWithAccess(
-    voiceId: string,
-    userId: string,
-  ): Promise<Voice | null>;
+  findVoiceWithAccess(voiceId: string, userId: string): Promise<Voice | null>;
 
   // Check if user has premium subscription
   findActiveSubscription(

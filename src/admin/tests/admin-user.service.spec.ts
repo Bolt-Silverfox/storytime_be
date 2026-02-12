@@ -5,7 +5,10 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { AdminUserService } from '../admin-user.service';
-import { ADMIN_USER_REPOSITORY, IAdminUserRepository } from '../repositories/admin-user.repository.interface';
+import {
+  ADMIN_USER_REPOSITORY,
+  IAdminUserRepository,
+} from '../repositories/admin-user.repository.interface';
 import { Role } from '@prisma/client';
 import { PasswordService } from '../../auth/services/password.service';
 
@@ -96,8 +99,12 @@ describe('AdminUserService', () => {
 
   describe('getUserById', () => {
     it('should return user details', async () => {
-      adminUserRepository.findUserById.mockResolvedValue(mockUserWithRelations as any);
-      adminUserRepository.aggregatePaymentTransactions.mockResolvedValue({ _sum: { amount: 100 } });
+      adminUserRepository.findUserById.mockResolvedValue(
+        mockUserWithRelations as any,
+      );
+      adminUserRepository.aggregatePaymentTransactions.mockResolvedValue({
+        _sum: { amount: 100 },
+      });
 
       const result = await service.getUserById('user-123');
 
@@ -108,7 +115,9 @@ describe('AdminUserService', () => {
     it('should throw NotFoundException if user not found', async () => {
       adminUserRepository.findUserById.mockResolvedValue(null);
 
-      await expect(service.getUserById('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.getUserById('nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

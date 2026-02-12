@@ -71,7 +71,9 @@ export class EventNotificationService {
    * Send welcome email when user subscribes to premium
    */
   @OnEvent(AppEvents.SUBSCRIPTION_CREATED)
-  async handleSubscriptionCreated(event: SubscriptionCreatedEvent): Promise<void> {
+  async handleSubscriptionCreated(
+    event: SubscriptionCreatedEvent,
+  ): Promise<void> {
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: event.userId },

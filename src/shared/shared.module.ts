@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthSessionGuard } from './guards/auth.guard';
 import { AdminGuard } from './guards/admin.guard';
 import { EventsModule } from './events';
+import { CacheMetricsService } from './services/cache-metrics.service';
 
 @Global()
 @Module({
@@ -19,10 +20,7 @@ import { EventsModule } from './events';
       }),
     }),
   ],
-  providers: [
-    AuthSessionGuard,
-    AdminGuard,
-  ],
-  exports: [AuthSessionGuard, AdminGuard, JwtModule],
+  providers: [AuthSessionGuard, AdminGuard, CacheMetricsService],
+  exports: [AuthSessionGuard, AdminGuard, JwtModule, CacheMetricsService],
 })
 export class SharedModule {}

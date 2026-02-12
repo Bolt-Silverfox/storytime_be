@@ -24,7 +24,9 @@ export class AuthEventListener {
    */
   @OnEvent(AppEvents.USER_REGISTERED)
   async handleUserRegistered(payload: UserRegisteredEvent) {
-    this.logger.log(`Handling user.registered event for user ${payload.userId}`);
+    this.logger.log(
+      `Handling user.registered event for user ${payload.userId}`,
+    );
 
     // Send email verification notification
     // Note: This should include the verification token in the actual implementation
@@ -40,9 +42,7 @@ export class AuthEventListener {
    */
   @OnEvent(AppEvents.USER_EMAIL_VERIFIED)
   async handleEmailVerified(payload: UserEmailVerifiedEvent) {
-    this.logger.log(
-      `User ${payload.userId} verified email: ${payload.email}`,
-    );
+    this.logger.log(`User ${payload.userId} verified email: ${payload.email}`);
 
     // Future: Send welcome notification if Welcome template is added to registry
   }

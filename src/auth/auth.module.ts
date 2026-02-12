@@ -62,4 +62,4 @@ import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
     EmailVerificationService,
   ],
 })
-export class AuthModule { }
+export class AuthModule {}

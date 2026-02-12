@@ -25,6 +25,15 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  ApiQueueTextSynthesis,
+  ApiQueueStorySynthesis,
+  ApiGetJobStatus,
+  ApiGetJobResult,
+  ApiCancelJob,
+  ApiGetUserPendingJobs,
+  ApiGetQueueStats,
+} from './decorators';
 import { randomUUID } from 'crypto';
 import {
   AuthSessionGuard,
@@ -317,26 +326,7 @@ export class VoiceController {
 
   @Post('synthesize/async')
   @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Queue async text-to-speech synthesis',
-    description:
-      'Queues text for asynchronous voice synthesis. Returns a jobId for status polling.',
-  })
-  @ApiBody({ type: StoryContentAudioDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Job queued successfully',
-    schema: {
-      type: 'object',
-      properties: {
-        queued: { type: 'boolean' },
-        jobId: { type: 'string' },
-        estimatedWaitTime: { type: 'number', description: 'Seconds' },
-      },
-    },
-  })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiQueueTextSynthesis()
   async queueTextSynthesis(
     @Req() req: AuthenticatedRequest,
     @Body() dto: StoryContentAudioDto,
@@ -357,26 +347,7 @@ export class VoiceController {
 
   @Post('synthesize/story/async')
   @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Queue async story audio synthesis',
-    description:
-      'Queues a story for asynchronous audio generation. Returns a jobId for status polling.',
-  })
-  @ApiBody({ type: AsyncStorySynthesisDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Job queued successfully',
-    schema: {
-      type: 'object',
-      properties: {
-        queued: { type: 'boolean' },
-        jobId: { type: 'string' },
-        estimatedWaitTime: { type: 'number', description: 'Seconds' },
-      },
-    },
-  })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiQueueStorySynthesis()
   async queueStorySynthesis(
     @Req() req: AuthenticatedRequest,
     @Body() dto: AsyncStorySynthesisDto,
@@ -398,90 +369,21 @@ export class VoiceController {
 
   @Get('synthesize/status/:jobId')
   @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get async voice synthesis job status' })
-  @ApiParam({ name: 'jobId', type: String })
-  @ApiResponse({
-    status: 200,
-    description: 'Job status',
-    schema: {
-      type: 'object',
-      properties: {
-        jobId: { type: 'string' },
-        status: {
-          type: 'string',
-          enum: [
-            'queued',
-            'processing',
-            'synthesizing',
-            'uploading',
-            'completed',
-            'failed',
-          ],
-        },
-        progress: { type: 'number', minimum: 0, maximum: 100 },
-        progressMessage: { type: 'string' },
-        createdAt: { type: 'string', format: 'date-time' },
-        startedAt: { type: 'string', format: 'date-time' },
-        completedAt: { type: 'string', format: 'date-time' },
-        result: {
-          type: 'object',
-          properties: {
-            audioUrl: { type: 'string' },
-            durationSeconds: { type: 'number' },
-          },
-        },
-        error: { type: 'string' },
-        estimatedTimeRemaining: { type: 'number' },
-      },
-    },
-  })
-  @ApiResponse({ status: 404, description: 'Job not found' })
+  @ApiGetJobStatus()
   async getJobStatus(@Param('jobId') jobId: string) {
     return this.voiceQueueService.getJobStatus(jobId);
   }
 
   @Get('synthesize/result/:jobId')
   @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get completed job result' })
-  @ApiParam({ name: 'jobId', type: String })
-  @ApiResponse({
-    status: 200,
-    description: 'Job result (null if not completed)',
-    schema: {
-      type: 'object',
-      nullable: true,
-      properties: {
-        success: { type: 'boolean' },
-        audioUrl: { type: 'string' },
-        durationSeconds: { type: 'number' },
-        attemptsMade: { type: 'number' },
-        processingTimeMs: { type: 'number' },
-      },
-    },
-  })
-  @ApiResponse({ status: 404, description: 'Job not found' })
+  @ApiGetJobResult()
   async getJobResult(@Param('jobId') jobId: string) {
     return this.voiceQueueService.getJobResult(jobId);
   }
 
   @Delete('synthesize/job/:jobId')
   @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Cancel a pending voice synthesis job' })
-  @ApiParam({ name: 'jobId', type: String })
-  @ApiResponse({
-    status: 200,
-    description: 'Cancellation result',
-    schema: {
-      type: 'object',
-      properties: {
-        cancelled: { type: 'boolean' },
-        reason: { type: 'string' },
-      },
-    },
-  })
+  @ApiCancelJob()
   async cancelJob(
     @Req() req: AuthenticatedRequest,
     @Param('jobId') jobId: string,
@@ -491,45 +393,14 @@ export class VoiceController {
 
   @Get('synthesize/pending')
   @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get user pending voice synthesis jobs' })
-  @ApiResponse({
-    status: 200,
-    description: 'List of pending jobs',
-    schema: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          jobId: { type: 'string' },
-          status: { type: 'string' },
-          progress: { type: 'number' },
-        },
-      },
-    },
-  })
+  @ApiGetUserPendingJobs()
   async getUserPendingJobs(@Req() req: AuthenticatedRequest) {
     return this.voiceQueueService.getUserPendingJobs(req.authUserData.userId);
   }
 
   @Get('synthesize/queue-stats')
   @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get voice synthesis queue statistics' })
-  @ApiResponse({
-    status: 200,
-    description: 'Queue statistics',
-    schema: {
-      type: 'object',
-      properties: {
-        waiting: { type: 'number' },
-        active: { type: 'number' },
-        completed: { type: 'number' },
-        failed: { type: 'number' },
-        delayed: { type: 'number' },
-      },
-    },
-  })
+  @ApiGetQueueStats()
   async getQueueStats() {
     return this.voiceQueueService.getQueueStats();
   }

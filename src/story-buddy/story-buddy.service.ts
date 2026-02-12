@@ -35,7 +35,7 @@ export class StoryBuddyService {
     private readonly buddySelectionService: BuddySelectionService,
     private readonly buddyMessagingService: BuddyMessagingService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-  ) { }
+  ) {}
 
   /**
    * Invalidate story buddies cache

@@ -49,14 +49,16 @@ export class NotificationPreferenceService {
   ): Promise<NotificationPreferenceDto> {
     // Verify user or kid exists and is not soft deleted
     if (dto.userId) {
-      const user =
-        await this.notificationPreferenceRepository.findUser(dto.userId);
+      const user = await this.notificationPreferenceRepository.findUser(
+        dto.userId,
+      );
       if (!user) throw new NotFoundException('User not found');
     }
 
     if (dto.kidId) {
-      const kid =
-        await this.notificationPreferenceRepository.findKid(dto.kidId);
+      const kid = await this.notificationPreferenceRepository.findKid(
+        dto.kidId,
+      );
       if (!kid) throw new NotFoundException('Kid not found');
     }
 
@@ -84,8 +86,7 @@ export class NotificationPreferenceService {
   }
 
   async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {
-    const user =
-      await this.notificationPreferenceRepository.findUser(userId);
+    const user = await this.notificationPreferenceRepository.findUser(userId);
 
     if (!user) {
       throw new NotFoundException('User not found');

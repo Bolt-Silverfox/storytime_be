@@ -1,9 +1,6 @@
 import { Injectable, BadRequestException, Inject } from '@nestjs/common';
 import { DailyLimitDto } from '../dto/reports.dto';
-import {
-  IScreenTimeRepository,
-  SCREEN_TIME_REPOSITORY,
-} from '../repositories';
+import { IScreenTimeRepository, SCREEN_TIME_REPOSITORY } from '../repositories';
 
 @Injectable()
 export class ScreenTimeService {

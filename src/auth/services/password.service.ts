@@ -17,10 +17,7 @@ import {
 } from '../dto/auth.dto';
 import * as bcrypt from 'bcryptjs';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import {
-  AppEvents,
-  UserPasswordChangedEvent,
-} from '@/shared/events';
+import { AppEvents, UserPasswordChangedEvent } from '@/shared/events';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 
 @Injectable()
@@ -32,7 +29,7 @@ export class PasswordService {
     private readonly authRepository: IAuthRepository,
     private readonly eventEmitter: EventEmitter2,
     private readonly tokenService: TokenService,
-  ) { }
+  ) {}
 
   /**
    * Request a password reset - sends reset email to user
@@ -200,7 +197,10 @@ export class PasswordService {
       changedAt: new Date(),
       sessionsInvalidated: true, // We invalidated all other sessions
     };
-    this.eventEmitter.emit(AppEvents.USER_PASSWORD_CHANGED, passwordChangedEvent);
+    this.eventEmitter.emit(
+      AppEvents.USER_PASSWORD_CHANGED,
+      passwordChangedEvent,
+    );
 
     this.logger.log(`Password changed for user ${user.id}`);
 

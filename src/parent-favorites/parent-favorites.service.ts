@@ -18,11 +18,10 @@ export class ParentFavoritesService {
     userId: string,
     dto: CreateParentFavoriteDto,
   ): Promise<ParentFavoriteResponseDto> {
-    const favorite =
-      await this.parentFavoriteRepository.createParentFavorite(
-        userId,
-        dto.storyId,
-      );
+    const favorite = await this.parentFavoriteRepository.createParentFavorite(
+      userId,
+      dto.storyId,
+    );
 
     return {
       id: favorite.id,

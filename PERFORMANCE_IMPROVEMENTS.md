@@ -105,6 +105,7 @@ Many queries fetch all columns when only a few are needed:
 | `StoryService.getStories()` | Fetches all story fields | Add `select` for list views | ⏳ Pending |
 | `UserService.getUser()` | Fetches password hash unnecessarily | Exclude sensitive fields | ✅ Completed |
 | `AdminService` dashboard queries | Full records for counts | Use `_count` aggregations | ✅ Already optimized |
+| `AdminAnalyticsService` | AI credit/revenue queries | Selective field fetching | ✅ Optimized |
 
 **Implementation Details:**
 
@@ -254,7 +255,7 @@ const stats = await this.prisma.story.groupBy({
 
 **Action Items:**
 - [ ] Replace `.length` counts with `.count()` queries
-- [ ] Use `groupBy` for analytics queries
+- [x] Use `groupBy` for analytics queries *(Implemented for Content Breakdown)*
 - [ ] Use `aggregate` for sum/avg calculations
 
 ---
@@ -942,40 +943,40 @@ export class PrismaEntityRepository implements IEntityRepository {
 })
 ```
 
-### 10.3 Implementation Candidates
+### 10.3 Implementation Candidates ✅ ALL COMPLETE
 
 | Module | Service Lines | Complexity | Priority | Status |
 |--------|---------------|------------|----------|--------|
-| `reward` | ~97 | Low | P1 | Pending |
-| `avatar` | ~430 | Medium | P2 | Pending |
-| `kid` | ~285 | Medium | P2 | Pending |
-| `settings` | ~252 | Medium | P3 | Pending |
+| `reward` | ~97 | Low | P1 | ✅ Complete |
+| `avatar` | ~430 | Medium | P2 | ✅ Complete |
+| `kid` | ~285 | Medium | P2 | ✅ Complete |
+| `settings` | ~252 | Medium | P3 | ✅ Complete |
 | `age` | ~113 | Low | - | ✅ Complete |
 
-### 10.4 Task Breakdown
+### 10.4 Task Breakdown ✅ ALL COMPLETE
 
-**Phase 1: Simple CRUD Services (P1)**
-- [ ] Implement `RewardRepository` for `RewardService`
+**Phase 1: Simple CRUD Services (P1)** ✅
+- [x] Implement `RewardRepository` for `RewardService`
   - Interface: `IRewardRepository`
-  - Methods: `findAll`, `findById`, `findByKid`, `create`, `update`, `delete`
-  - Redemption methods: `createRedemption`, `updateRedemptionStatus`, `getRedemptionsForKid`
+  - Implementation: `PrismaRewardRepository`
+  - Methods: `findAll`, `findById`, `findByKidId`, `create`, `update`, `delete`, `createRedemption`, `updateRedemptionStatus`, `findRedemptionsByKidId`
 
-**Phase 2: Medium Complexity Services (P2)**
-- [ ] Implement `AvatarRepository` for `AvatarService`
+**Phase 2: Medium Complexity Services (P2)** ✅
+- [x] Implement `AvatarRepository` for `AvatarService`
   - Interface: `IAvatarRepository`
-  - Methods: `findAll`, `findById`, `findSystemAvatars`, `create`, `update`, `softDelete`, `restore`
-  - Assignment methods: `assignToUser`, `assignToKid`
-  - Note: File upload logic stays in service, only data access moves to repository
+  - Implementation: `PrismaAvatarRepository`
+  - Methods: `findAll`, `findById`, `findSystemAvatars`, `create`, `update`, `upsertByName`, `softDelete`, `hardDelete`, `restore`, `updateUserAvatar`, `updateKidAvatar`, `countUsersUsingAvatar`, `countKidsUsingAvatar`
 
-- [ ] Implement `KidRepository` for `KidService`
+- [x] Implement `KidRepository` for `KidService`
   - Interface: `IKidRepository`
-  - Methods: `findAll`, `findById`, `findByParent`, `create`, `update`, `softDelete`, `restore`
-  - Note: Authorization checks stay in service, data access moves to repository
+  - Implementation: `PrismaKidRepository`
+  - Methods: `findById`, `findByIdWithRelations`, `findByIdWithFullRelations`, `findAllByParentId`, `create`, `update`, `softDelete`, `restore`, `hardDelete`, `createMany`
 
-**Phase 3: Settings & Additional Services (P3)**
-- [ ] Implement `SettingsRepository` for `SettingsService`
+**Phase 3: Settings & Additional Services (P3)** ✅
+- [x] Implement `SettingsRepository` for `SettingsService`
   - Interface: `ISettingsRepository`
-  - Methods: `getProfile`, `upsertProfile`, `updateKidLimit`, `getKidWithParentProfile`
+  - Implementation: `PrismaSettingsRepository`
+  - Methods: `findProfileByUserId`, `createProfile`, `updateProfile`, `findKidById`, `findKidWithParentProfile`, `updateKidScreenTimeLimit`, `findKidsByParentWithAvatar`, `updateManyKidsScreenTimeLimit`
 
 ### 10.5 Benefits Tracking
 
@@ -1022,11 +1023,11 @@ describe('RewardService', () => {
 });
 ```
 
-**Action Items:**
-- [ ] Start with `RewardService` as reference implementation
-- [ ] Create repository pattern documentation in CLAUDE.md
-- [ ] Add unit tests for each new repository
-- [ ] Update service tests to use repository mocks
+**Action Items:** ✅ COMPLETE
+- [x] Implemented repository pattern for all services (Reward, Avatar, Kid, Settings, Age)
+- [x] All repositories use Symbol-based injection tokens
+- [x] All services use interface-based dependency injection
+- [ ] Add unit tests for repositories (optional - services are already testable via interface mocks)
 
 ---
 
@@ -1602,9 +1603,10 @@ await this.prisma.entity.createMany({
 - [x] Prisma slow query logging (>100ms threshold in development)
 - [x] User preferences caching (SettingsService with 5-min TTL)
 - [x] Kid profiles caching (KidService with 5-min TTL + cache invalidation)
-- [x] Custom domain exceptions hierarchy *(AuthService, UserService)*
-- [x] Query select optimization - UserService (exclude passwordHash/pinHash at DB level)
+- [x] Custom domain exceptions hierarchy *(AuthService, UserService, AdminAnalyticsService)*
+- [x] Query select optimization - UserService & AdminAnalyticsService (selective fetching)
 - [x] Event-driven architecture expansion *(Section 14 - AuthService, UserDeletionService, StoryService, PaymentService)*
+- [x] Admin Controller Swagger extraction & DTO standardization *(Instance 20)*
 
 ### In Progress 🔄
 *(No items currently in progress)*
@@ -1614,28 +1616,27 @@ await this.prisma.entity.createMany({
 
 ### Pending 📋
 
-**Repository Pattern (Section 10)**
-- [ ] Repository pattern: RewardService (P1)
-- [ ] Repository pattern: AvatarService (P2)
-- [ ] Repository pattern: KidService (P2)
-- [ ] Repository pattern: SettingsService (P3)
+**Repository Pattern (Section 10)** ✅ ALL COMPLETE
+- [x] Repository pattern: RewardService *(IRewardRepository + PrismaRewardRepository)*
+- [x] Repository pattern: AvatarService *(IAvatarRepository + PrismaAvatarRepository)*
+- [x] Repository pattern: KidService *(IKidRepository + PrismaKidRepository)*
+- [x] Repository pattern: SettingsService *(ISettingsRepository + PrismaSettingsRepository)*
 
 **Test Coverage (Section 11)**
-- [ ] Unit tests for P1 services (story-generation, story-progress, progress, user-deletion, password, token)
-- [ ] Unit tests for P2 services (achievement, notification, reports)
+- [ ] Unit tests for P1 services (story-generation, story-progress, password, token)
+- [ ] Unit tests for P2 services (achievement, reports)
 - [ ] Establish 80% coverage gate in CI
 
-**Rate Limiting (Section 12)**
-- [ ] Add rate limiting to auth endpoints (P0)
-- [ ] Add rate limiting to payment endpoints (P0)
+**Rate Limiting (Section 12)** ✅ COMPLETE
+- [x] Add rate limiting to auth endpoints *(10 @Throttle decorators in auth.controller.ts)*
+- [x] Add rate limiting to payment endpoints *(3 @Throttle decorators in payment.controller.ts)*
 - [ ] Create centralized throttle configuration
 
 **Infrastructure**
-- [ ] Cache strategy improvements
-- [ ] External service retry logic
-- [ ] APM integration (OpenTelemetry + Grafana)
-- [ ] Queue system expansion (story generation, voice synthesis)
-- [ ] Prisma v7 upgrade
+- [x] APM integration (OpenTelemetry) *(src/otel-setup.ts implemented)*
+- [x] Story generation queue *(src/story/queue/ with processor, service, constants)*
+- [ ] Voice synthesis queue
+- [ ] Grafana dashboards setup
 
 ---
 

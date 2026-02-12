@@ -267,7 +267,8 @@ export class NotificationService {
         if (result.success && payload.userId) {
           const notificationType = channel as 'push' | 'in_app' | 'email';
           this.eventEmitter.emit(AppEvents.NOTIFICATION_SENT, {
-            notificationId: result.messageId ?? `${payload.userId}-${Date.now()}`,
+            notificationId:
+              result.messageId ?? `${payload.userId}-${Date.now()}`,
             userId: payload.userId,
             category: payload.category,
             type: notificationType,

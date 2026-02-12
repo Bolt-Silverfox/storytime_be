@@ -105,7 +105,7 @@ export class EmailProcessor extends WorkerHost {
   onCompleted(job: Job<EmailJobData>, result: EmailJobResult): void {
     this.logger.log(
       `Job ${job.data.jobId} completed: ${job.data.category} to ${job.data.to} ` +
-      `(attempts: ${result.attemptsMade}, messageId: ${result.messageId})`,
+        `(attempts: ${result.attemptsMade}, messageId: ${result.messageId})`,
     );
   }
 
@@ -129,7 +129,7 @@ export class EmailProcessor extends WorkerHost {
     } else {
       this.logger.error(
         `Job ${jobId} permanently failed after ${job.attemptsMade} attempts: ` +
-        `${category} to ${to} - ${error.message}`,
+          `${category} to ${to} - ${error.message}`,
         error.stack,
       );
       // Here you could emit an event for alerting/monitoring

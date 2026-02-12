@@ -2,21 +2,14 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  Inject,
   Logger,
 } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import {
-  AppEvents,
-  SubscriptionCreatedEvent,
-  SubscriptionChangedEvent,
-  SubscriptionCancelledEvent,
-} from '@/shared/events';
+import { AppEvents, SubscriptionCancelledEvent } from '@/shared/events';
 import { CACHE_KEYS } from '@/shared/constants/cache-keys.constants';
+import { CacheMetricsService } from '@/shared/services/cache-metrics.service';
 
 // Re-export PLANS for backward compatibility
 export { PLANS } from './subscription.constants';
@@ -24,13 +17,16 @@ export { PLANS } from './subscription.constants';
 /** Cache TTL: 1 minute (balance between freshness and performance) */
 const SUBSCRIPTION_CACHE_TTL_MS = 60 * 1000;
 
+/** Key pattern for metrics grouping */
+const CACHE_KEY_PATTERN = 'subscription';
+
 @Injectable()
 export class SubscriptionService {
   private readonly logger = new Logger(SubscriptionService.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly cacheMetrics: CacheMetricsService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -126,7 +122,9 @@ export class SubscriptionService {
     // Invalidate cache after subscription cancellation
     await this.invalidateCache(userId);
 
-    this.logger.log(`Subscription cancelled for user ${userId.substring(0, 8)}`);
+    this.logger.log(
+      `Subscription cancelled for user ${userId.substring(0, 8)}`,
+    );
 
     return cancelled;
   }
@@ -141,40 +139,30 @@ export class SubscriptionService {
   /**
    * Check if a user has an active premium subscription.
    * Results are cached for 1 minute to reduce database load.
+   * Uses CacheMetricsService for automatic hit/miss tracking.
    */
   async isPremiumUser(userId: string): Promise<boolean> {
     const cacheKey = CACHE_KEYS.SUBSCRIPTION_STATUS(userId);
 
-    // Try to get from cache first
-    const cached = await this.cacheManager.get<boolean>(cacheKey);
-    if (cached !== undefined && cached !== null) {
-      return cached;
-    }
+    // Use getOrSet pattern with metrics tracking
+    return this.cacheMetrics.getOrSet(
+      cacheKey,
+      async () => {
+        // Query database
+        const subscription = await this.prisma.subscription.findFirst({
+          where: {
+            userId,
+            status: SUBSCRIPTION_STATUS.ACTIVE,
+            OR: [{ endsAt: { gt: new Date() } }, { endsAt: null }],
+          },
+          select: { id: true }, // Only need to know if it exists
+        });
 
-    // Query database
-    const subscription = await this.prisma.subscription.findFirst({
-      where: {
-        userId,
-        status: SUBSCRIPTION_STATUS.ACTIVE,
-        OR: [{ endsAt: { gt: new Date() } }, { endsAt: null }],
+        return !!subscription;
       },
-      select: { id: true }, // Only need to know if it exists
-    });
-
-    const isPremium = !!subscription;
-
-    // Cache the result
-    try {
-      await this.cacheManager.set(
-        cacheKey,
-        isPremium,
-        SUBSCRIPTION_CACHE_TTL_MS,
-      );
-    } catch {
-      this.logger.warn(`Failed to cache subscription status for ${userId}`);
-    }
-
-    return isPremium;
+      SUBSCRIPTION_CACHE_TTL_MS,
+      CACHE_KEY_PATTERN,
+    );
   }
 
   /**
@@ -183,10 +171,6 @@ export class SubscriptionService {
    */
   async invalidateCache(userId: string): Promise<void> {
     const cacheKey = CACHE_KEYS.SUBSCRIPTION_STATUS(userId);
-    try {
-      await this.cacheManager.del(cacheKey);
-    } catch {
-      this.logger.warn(`Failed to invalidate subscription cache for ${userId}`);
-    }
+    await this.cacheMetrics.del(cacheKey, CACHE_KEY_PATTERN);
   }
 }

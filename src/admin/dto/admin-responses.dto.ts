@@ -106,7 +106,11 @@ export class StoryImageInfo {
   @ApiProperty({ example: 'https://example.com/story.png' })
   url: string;
 
-  @ApiProperty({ example: 'Story cover image', required: false, nullable: true })
+  @ApiProperty({
+    example: 'Story cover image',
+    required: false,
+    nullable: true,
+  })
   caption?: string | null;
 }
 
@@ -130,7 +134,11 @@ export class StoryBranchInfo {
   @ApiProperty({ example: 'branch-123' })
   id: string;
 
-  @ApiProperty({ example: 'What happens next?', required: false, nullable: true })
+  @ApiProperty({
+    example: 'What happens next?',
+    required: false,
+    nullable: true,
+  })
   prompt?: string | null;
 
   @ApiProperty({ example: 'Go left', required: false, nullable: true })

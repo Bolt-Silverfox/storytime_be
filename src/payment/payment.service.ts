@@ -356,14 +356,18 @@ export class PaymentService {
     if (result.existingSub) {
       // Only emit SUBSCRIPTION_CHANGED if plan actually changed
       if (result.existingSub.plan !== plan) {
-        const changeType = this.determineChangeType(result.existingSub.plan, plan);
+        const changeType = this.determineChangeType(
+          result.existingSub.plan,
+          plan,
+        );
 
         this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CHANGED, {
           subscriptionId: result.subscription.id,
           userId,
           previousPlanId: result.existingSub.plan,
           newPlanId: plan,
-          previousPlanName: PLANS[result.existingSub.plan]?.display || result.existingSub.plan,
+          previousPlanName:
+            PLANS[result.existingSub.plan]?.display || result.existingSub.plan,
           newPlanName: PLANS[plan]?.display || plan,
           changeType,
           changedAt: now,
@@ -381,7 +385,9 @@ export class PaymentService {
       } satisfies SubscriptionCreatedEvent);
     }
 
-    this.logger.log(`Payment completed: ${result.paymentTx.id} for user ${userId.substring(0, 8)}`);
+    this.logger.log(
+      `Payment completed: ${result.paymentTx.id} for user ${userId.substring(0, 8)}`,
+    );
 
     return {
       tx: result.paymentTx,

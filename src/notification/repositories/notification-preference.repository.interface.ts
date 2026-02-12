@@ -72,12 +72,14 @@ export interface INotificationPreferenceRepository {
   ): Promise<T>;
 
   // Create many notification preferences
-  createManyNotificationPreferences(data: {
-    userId: string;
-    category: NotificationCategory;
-    type: NotificationType;
-    enabled: boolean;
-  }[]): Promise<void>;
+  createManyNotificationPreferences(
+    data: {
+      userId: string;
+      category: NotificationCategory;
+      type: NotificationType;
+      enabled: boolean;
+    }[],
+  ): Promise<void>;
 
   // Delete notification preference (permanent)
   deleteNotificationPreference(id: string): Promise<void>;

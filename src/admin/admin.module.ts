@@ -51,4 +51,4 @@ import { AdminSystemService } from './admin-system.service';
     ADMIN_ANALYTICS_REPOSITORY,
   ],
 })
-export class AdminModule { }
+export class AdminModule {}

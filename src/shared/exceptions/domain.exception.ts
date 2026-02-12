@@ -118,12 +118,9 @@ export class SubscriptionRequiredException extends DomainException {
 
 export class InvalidRoleException extends DomainException {
   constructor(role: string) {
-    super(
-      'INVALID_ROLE',
-      `Invalid role: ${role}`,
-      HttpStatus.BAD_REQUEST,
-      { role },
-    );
+    super('INVALID_ROLE', `Invalid role: ${role}`, HttpStatus.BAD_REQUEST, {
+      role,
+    });
   }
 }
 

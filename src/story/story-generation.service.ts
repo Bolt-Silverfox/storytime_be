@@ -28,7 +28,7 @@ export class StoryGenerationService {
     private readonly geminiService: GeminiService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly eventEmitter: EventEmitter2,
-  ) { }
+  ) {}
 
   /**
    * Calculate estimated reading duration in seconds based on text content or word count
@@ -144,7 +144,7 @@ export class StoryGenerationService {
       if (needCategories && availableCategories.length > 0) {
         const randomCategory =
           availableCategories[
-          Math.floor(Math.random() * availableCategories.length)
+            Math.floor(Math.random() * availableCategories.length)
           ];
         categories = [randomCategory.name];
       }
@@ -313,14 +313,14 @@ export class StoryGenerationService {
             seasons:
               seasonIds && seasonIds.length > 0
                 ? {
-                  connect: seasonIds.map((id) => ({ id })),
-                }
+                    connect: seasonIds.map((id) => ({ id })),
+                  }
                 : generatedStory.seasons
                   ? {
-                    connect: generatedStory.seasons.map((s: string) => ({
-                      name: s,
-                    })),
-                  }
+                      connect: generatedStory.seasons.map((s: string) => ({
+                        name: s,
+                      })),
+                    }
                   : undefined,
           },
           include: {

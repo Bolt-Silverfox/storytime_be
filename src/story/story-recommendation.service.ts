@@ -42,7 +42,7 @@ export class StoryRecommendationService {
     private readonly storyMetadataRepository: IStoryMetadataRepository,
     @Inject(STORY_RECOMMENDATION_REPOSITORY)
     private readonly storyRecommendationRepository: IStoryRecommendationRepository,
-  ) { }
+  ) {}
 
   // =====================
   // HOME PAGE RECOMMENDATIONS
@@ -124,13 +124,13 @@ export class StoryRecommendationService {
     const recommendedWhere =
       user.preferredCategories.length > 0
         ? {
-          isDeleted: false,
-          categories: {
-            some: {
-              id: { in: user.preferredCategories.map((c: Category) => c.id) },
+            isDeleted: false,
+            categories: {
+              some: {
+                id: { in: user.preferredCategories.map((c: Category) => c.id) },
+              },
             },
-          },
-        }
+          }
         : { isDeleted: false };
 
     // Run independent queries in parallel for better performance
@@ -164,8 +164,9 @@ export class StoryRecommendationService {
       ]);
 
     // Sequential: Get seasonal stories (depends on seasons result)
-    let seasonal: Awaited<ReturnType<typeof this.storyCoreRepository.findStories>> =
-      [];
+    let seasonal: Awaited<
+      ReturnType<typeof this.storyCoreRepository.findStories>
+    > = [];
 
     if (activeSeasons.length > 0) {
       seasonal = await this.storyCoreRepository.findStories({
@@ -307,10 +308,11 @@ export class StoryRecommendationService {
     }
     if (existing) {
       if (existing.isDeleted) {
-        const restored = await this.storyRecommendationRepository.updateParentRecommendation(
-          existing.id,
-          { isDeleted: false, deletedAt: null, message: dto.message },
-        );
+        const restored =
+          await this.storyRecommendationRepository.updateParentRecommendation(
+            existing.id,
+            { isDeleted: false, deletedAt: null, message: dto.message },
+          );
         return this.toRecommendationResponse(restored);
       }
       throw new BadRequestException(
@@ -331,10 +333,15 @@ export class StoryRecommendationService {
     kidId: string,
     userId: string,
   ): Promise<RecommendationResponseDto[]> {
-    const kid = await this.storyCoreRepository.findKidByIdAndParent(kidId, userId);
+    const kid = await this.storyCoreRepository.findKidByIdAndParent(
+      kidId,
+      userId,
+    );
     if (!kid) throw new NotFoundException('Kid not found or access denied');
     const recommendations =
-      await this.storyRecommendationRepository.findParentRecommendationsByKidId(kidId);
+      await this.storyRecommendationRepository.findParentRecommendationsByKidId(
+        kidId,
+      );
     return recommendations.map((rec) => this.toRecommendationResponse(rec));
   }
 
@@ -344,18 +351,25 @@ export class StoryRecommendationService {
     permanent: boolean = false,
   ) {
     const recommendation =
-      await this.storyRecommendationRepository.findParentRecommendationById(recommendationId);
+      await this.storyRecommendationRepository.findParentRecommendationById(
+        recommendationId,
+      );
     if (!recommendation)
       throw new NotFoundException('Recommendation not found');
     if (recommendation.userId !== userId)
       throw new ForbiddenException('Access denied');
     if (permanent) {
-      return this.storyRecommendationRepository.deleteParentRecommendation(recommendationId);
+      return this.storyRecommendationRepository.deleteParentRecommendation(
+        recommendationId,
+      );
     } else {
-      return this.storyRecommendationRepository.updateParentRecommendation(recommendationId, {
-        isDeleted: true,
-        deletedAt: new Date(),
-      });
+      return this.storyRecommendationRepository.updateParentRecommendation(
+        recommendationId,
+        {
+          isDeleted: true,
+          deletedAt: new Date(),
+        },
+      );
     }
   }
 
@@ -363,10 +377,15 @@ export class StoryRecommendationService {
     kidId: string,
     userId: string,
   ): Promise<RecommendationsStatsDto> {
-    const kid = await this.storyCoreRepository.findKidByIdAndParent(kidId, userId);
+    const kid = await this.storyCoreRepository.findKidByIdAndParent(
+      kidId,
+      userId,
+    );
     if (!kid) throw new NotFoundException('Kid not found or access denied');
     const totalCount =
-      await this.storyRecommendationRepository.countParentRecommendationsByKidId(kidId);
+      await this.storyRecommendationRepository.countParentRecommendationsByKidId(
+        kidId,
+      );
     return { totalCount };
   }
 
@@ -396,7 +415,9 @@ export class StoryRecommendationService {
 
   async getTopPicksFromParents(limit: number = 10) {
     const topStories =
-      await this.storyRecommendationRepository.groupParentRecommendationsByStory(limit);
+      await this.storyRecommendationRepository.groupParentRecommendationsByStory(
+        limit,
+      );
 
     if (topStories.length === 0) {
       return [];

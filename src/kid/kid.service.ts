@@ -19,11 +19,7 @@ import {
   CACHE_KEYS,
   CACHE_TTL_MS,
 } from '@/shared/constants/cache-keys.constants';
-import {
-  AppEvents,
-  KidCreatedEvent,
-  KidDeletedEvent,
-} from '@/shared/events';
+import { AppEvents, KidCreatedEvent, KidDeletedEvent } from '@/shared/events';
 
 @Injectable()
 export class KidService {

@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   InvalidCredentialsException,
   InvalidTokenException,
@@ -27,7 +24,7 @@ export class AuthService {
     private readonly authRepository: IAuthRepository,
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
-  ) { }
+  ) {}
 
   // ==================== AUTHENTICATION ====================
 
@@ -40,7 +37,12 @@ export class AuthService {
       throw new InvalidCredentialsException();
     }
 
-    if (!(await this.passwordService.verifyPassword(data.password, user.passwordHash))) {
+    if (
+      !(await this.passwordService.verifyPassword(
+        data.password,
+        user.passwordHash,
+      ))
+    ) {
       throw new InvalidCredentialsException();
     }
 

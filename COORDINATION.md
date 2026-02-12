@@ -469,6 +469,30 @@ git push origin integration/refactor-2026-02
 
 **Status**: Complete - All tasks done, build passing, 30 tests passing
 
+### Instance 20 (This Instance) - ✅ Completed
+**Focus**: Admin Domain Optimization & Refactoring
+**Timestamp**: 2026-02-10
+
+**Changes Made**:
+- `src/admin/admin.controller.ts`:
+  - Extracted all Swagger decorators into `/src/admin/decorators/swagger/` to improve readability.
+  - Standardized response types using `ApiResponseDto`.
+- `src/admin/dto/admin-responses.dto.ts`:
+  - Converted multiple interfaces (ProfileInfo, AvatarInfo, KidInfo, StoryImageInfo, CategoryInfo, ThemeInfo, UserListItemDto, StoryListItemDto, AdminCreatedDto, UserUpdatedDto, StoryActionResultDto) to classes with `@ApiProperty` decorators.
+- `src/admin/admin-analytics.service.ts`:
+  - Replaced generic `BadRequestException` with domain-specific `ValidationException`.
+  - Optimized method signatures to align with repository pattern.
+- `src/admin/repositories/prisma-admin-analytics.repository.ts`:
+  - Optimized `getContentBreakdown` using Prisma `groupBy` instead of in-memory aggregation.
+  - Implemented selective field fetching for AI credit and revenue analytics.
+  - Added repository-level caching for expensive analytics queries.
+- `src/shared/exceptions/index.ts`:
+  - Exported new domain exceptions.
+
+**Status**: Complete - Build passing, DTOs standardized, and queries optimized.
+
+---
+
 ### Instance 19 - ✅ Completed
 **Focus**: Repository Pattern Implementation for All Services
 **Timestamp**: 2026-02-10
@@ -617,6 +641,10 @@ Files currently being modified by other instances - avoid editing these:
 | `src/story-buddy/buddy-messaging.service.ts` | Instance 15 | ✅ Done |
 | `src/*/repositories/*` (36 new files) | Instance 19 | ✅ Done |
 | Multiple service files (91 total) | Instance 19 | ✅ Done |
+| `src/auth/auth.service.ts` | Instance 20 | ✅ Done |
+| `src/admin/admin.service.ts` | Instance 20 | ✅ Done |
+| `src/admin/admin-analytics.service.ts` | Instance 20 | ✅ Done |
+| `src/admin/admin-system.service.ts` | Instance 20 | ✅ Done |
 
 ---
 
@@ -859,4 +887,167 @@ VOICE_QUOTA_WARNING = 'voice.quota.warning', // Approaching limit
 - Both architectural improvements now coexist: Repository Pattern (testability, decoupling) + Event-Driven Architecture (analytics, audit logging)
 
 **Status**: Complete and integrated - Build passing, both architectural patterns successfully merged
+
+### Instance 21 - ✅ Completed
+**Focus**: Phase 2 Async Notifications - Push Notifications (FCM) + SSE for Web
+**Timestamp**: 2026-02-12
+**Branch**: `integration/refactor-2026-02`
+
+**Changes Made**:
+
+**Firebase Cloud Messaging (Mobile Push Notifications)**:
+- `src/notification/services/fcm.service.ts` (NEW ~260 lines) - Firebase Admin SDK integration
+  - Methods: `sendToUser()`, `sendStoryCompletionNotification()`, `sendStoryFailureNotification()`, `sendVoiceCompletionNotification()`, `sendVoiceFailureNotification()`
+  - Multicast messaging to all user devices
+  - Automatic cleanup of invalid tokens
+- `src/notification/services/device-token.service.ts` (NEW ~200 lines) - Device token management
+  - Methods: `registerDeviceToken()`, `unregisterDeviceToken()`, `getUserDeviceTokens()`, `unregisterAllUserTokens()`, `cleanupStaleTokens()`
+- `src/notification/device.controller.ts` (NEW ~130 lines) - REST endpoints for device registration
+  - `POST /devices/register` - Register device for push notifications
+  - `DELETE /devices/:token` - Unregister specific device
+  - `DELETE /devices` - Unregister all user devices
+  - `GET /devices` - List user's registered devices
+  - Includes throttling (10 requests/minute)
+
+**Server-Sent Events (Web Clients)**:
+- `src/notification/services/job-events.service.ts` (NEW ~160 lines) - SSE event broadcasting
+  - Methods: `emit()`, `emitProgress()`, `emitStoryCompleted()`, `emitVoiceCompleted()`, `emitFailed()`
+  - User-scoped and job-scoped subscriptions
+  - RxJS Observable-based streaming
+- `src/notification/sse.controller.ts` (NEW ~120 lines) - SSE endpoints
+  - `GET /events/jobs` - Subscribe to all job events for authenticated user
+  - `GET /events/jobs/:jobId` - Subscribe to specific job events
+  - Heartbeat mechanism (30s/15s intervals) to keep connections alive
+
+**Database Schema**:
+- `prisma/schema.prisma` - Added DeviceToken model and DevicePlatform enum
+  - `DevicePlatform`: ios, android, web
+  - `DeviceToken`: id, userId, token (unique), platform, isActive, timestamps
+  - Indexes on userId, token, and composite userId+isActive
+
+**Processor Integration**:
+- `src/story/queue/story.processor.ts` - Added FcmService + JobEventsService injection
+  - Emits SSE events on completion/failure
+  - Sends FCM push notifications on completion/failure
+- `src/voice/queue/voice.processor.ts` - Added FcmService + JobEventsService injection
+  - Emits SSE events on completion/failure
+  - Sends FCM push notifications on completion/failure
+
+**Module Updates**:
+- `src/notification/notification.module.ts` - Added FcmService, DeviceTokenService, JobEventsService, SseController, DeviceController
+- `src/story/story.module.ts` - Added NotificationModule import
+- `src/voice/voice.module.ts` - Added NotificationModule import
+
+**Dependencies**:
+- Added `firebase-admin@13.6.1`
+
+**Documentation**:
+- `ASYNC_STORY_GENERATION.md` - Updated to mark Phase 2 as complete, updated file structure and checklists
+
+**Status**: Complete - Build passing, Prisma schema synced
+
+---
+
+### Instance 22 - ✅ Completed
+**Focus**: Observability - Grafana Dashboard IDs + Cache Metrics Service
+**Timestamp**: 2026-02-12
+**Branch**: `integration/refactor-2026-02`
+
+**Changes Made**:
+
+**Grafana Dashboard Configuration**:
+- `GRAFANA_SETUP.md` - Enhanced with community dashboard IDs:
+  - NestJS Metrics: `12230`
+  - Node.js Application: `11159`
+  - Node.js Prometheus: `11956`
+  - HTTP Request Metrics: `12900`
+  - PostgreSQL Database: `9628`
+  - Redis: `11835`
+  - BullMQ Queues: `14538`
+  - Loki Logs: `13639`
+- Added custom metrics documentation (cache_operations_total, cache_hit_ratio, etc.)
+- Added import instructions and dashboard descriptions
+
+**Cache Metrics Service**:
+- `src/shared/services/cache-metrics.service.ts` (NEW ~200 lines) - OpenTelemetry cache metrics
+  - Wraps cache manager with automatic hit/miss tracking
+  - Prometheus counters: `cache_operations_total` (by operation, result, key_pattern)
+  - Histogram: `cache_operation_duration_seconds` (latency tracking)
+  - Observable gauge: `cache_hit_ratio` (updated on scrape)
+  - Methods: `get()`, `set()`, `del()`, `getOrSet()`, `getStats()`
+  - Key pattern labels for grouping metrics by service (e.g., 'subscription', 'story')
+- `src/shared/shared.module.ts` - Added CacheMetricsService to providers and exports
+- `src/subscription/subscription.service.ts` - Updated to use CacheMetricsService
+  - Replaced direct `CACHE_MANAGER` injection with `CacheMetricsService`
+  - Uses `getOrSet()` pattern for `isPremiumUser()` method
+  - Automatic metrics tracking for subscription cache operations
+
+**Status**: Complete - TypeScript compiles, metrics exported to Prometheus
+
+---
+
+### Instance 23 (Current) - ✅ Completed
+**Focus**: Health Module Enhancement - Queue, Firebase, Cloudinary Health Indicators
+**Timestamp**: 2026-02-12
+**Branch**: `integration/refactor-2026-02`
+
+**Changes Made**:
+
+**Queue Health Indicator Enhancement**:
+- `src/health/indicators/queue.health.ts` - Updated to monitor all 3 queues
+  - Email queue, Story queue, Voice queue
+  - Aggregate health status with per-queue stats
+  - `isHealthy()` - checks all queues
+  - `checkQueue()` - checks specific queue
+  - Tracks waiting, active, completed, failed, delayed counts per queue
+
+**New Health Indicators**:
+- `src/health/indicators/firebase.health.ts` (NEW) - Firebase/FCM health check
+  - Verifies Firebase Admin SDK initialization
+  - Checks project ID configuration match
+  - Graceful handling for unconfigured state
+- `src/health/indicators/cloudinary.health.ts` (NEW) - Cloudinary health check
+  - Uses `admin.ping()` API for connectivity check
+  - Graceful handling for rate limits and timeouts
+  - Reports cloud name and status
+
+**Health Controller Updates**:
+- `src/health/health.controller.ts` - New endpoints:
+  - `GET /health/queues` - All queues aggregate health
+  - `GET /health/queues/email` - Email queue specific
+  - `GET /health/queues/story` - Story queue specific
+  - `GET /health/queues/voice` - Voice queue specific
+  - `GET /health/firebase` - Firebase/FCM health
+  - `GET /health/cloudinary` - Cloudinary health
+  - `GET /health/external` - All external services (Firebase + Cloudinary)
+  - `GET /health/full` - Updated to include all indicators
+
+**Health Module Updates**:
+- `src/health/health.module.ts` - Updated imports:
+  - Registers all 3 queues (email, story, voice)
+  - Imports CloudinaryModule for CLOUDINARY provider
+  - Adds FirebaseHealthIndicator and CloudinaryHealthIndicator
+
+**Exports**:
+- `src/health/indicators/index.ts` - Added exports for new indicators
+
+**Health Endpoints Summary**:
+```
+GET /health          - Liveness (K8s probe)
+GET /health/ready    - Readiness (K8s probe) - DB, Redis, Queues
+GET /health/db       - Database only
+GET /health/redis    - Redis only
+GET /health/smtp     - SMTP only
+GET /health/queues   - All queues
+GET /health/queues/email  - Email queue
+GET /health/queues/story  - Story queue
+GET /health/queues/voice  - Voice queue
+GET /health/firebase      - Firebase/FCM
+GET /health/cloudinary    - Cloudinary
+GET /health/external      - All external services
+GET /health/system        - Memory + Disk
+GET /health/full          - All indicators
+```
+
+**Status**: Complete - TypeScript compiles, all health indicators integrated
 

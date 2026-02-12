@@ -23,14 +23,12 @@ export class StoryProgressService {
     @Inject(STORY_PROGRESS_REPOSITORY)
     private readonly progressRepository: IStoryProgressRepository,
     private readonly eventEmitter: EventEmitter2,
-  ) { }
+  ) {}
 
   /**
    * Set progress for a kid's story session
    */
-  async setProgress(
-    dto: StoryProgressDto & { sessionTime?: number },
-  ) {
+  async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
     const { kidId, storyId, progress, completed } = dto;
 
     const existingProgress = await this.progressRepository.findStoryProgress(
@@ -91,12 +89,16 @@ export class StoryProgressService {
   }
 
   async getProgress(kidId: string, storyId: string) {
-    const progress = await this.progressRepository.findStoryProgress(kidId, storyId);
+    const progress = await this.progressRepository.findStoryProgress(
+      kidId,
+      storyId,
+    );
     return progress || { progress: 0, completed: false };
   }
 
   async getContinueReading(kidId: string) {
-    const records = await this.progressRepository.findContinueReadingProgress(kidId);
+    const records =
+      await this.progressRepository.findContinueReadingProgress(kidId);
     return records.map((r) => r.story);
   }
 
@@ -164,9 +166,8 @@ export class StoryProgressService {
   }
 
   async getUserContinueReading(userId: string) {
-    const records = await this.progressRepository.findUserContinueReadingProgress(
-      userId,
-    );
+    const records =
+      await this.progressRepository.findUserContinueReadingProgress(userId);
 
     return records.map((record) => ({
       ...record.story,
@@ -177,9 +178,8 @@ export class StoryProgressService {
   }
 
   async getUserCompletedStories(userId: string) {
-    const records = await this.progressRepository.findUserCompletedProgress(
-      userId,
-    );
+    const records =
+      await this.progressRepository.findUserCompletedProgress(userId);
     return records.map((r) => r.story);
   }
 
