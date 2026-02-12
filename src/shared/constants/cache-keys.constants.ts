@@ -6,6 +6,11 @@ export const CACHE_KEYS = {
   DASHBOARD_STATS: 'admin:dashboard:stats',
   STORY_STATS: 'admin:story:stats',
   CONTENT_BREAKDOWN: 'admin:content:breakdown',
+  USER_GROWTH: (params: string) => `admin:user:growth:${params}`,
+  SUBSCRIPTION_ANALYTICS: (params: string) => `admin:subscription:analytics:${params}`,
+  REVENUE_ANALYTICS: (params: string) => `admin:revenue:analytics:${params}`,
+  AI_CREDIT_ANALYTICS: 'admin:ai-credit:analytics',
+  USER_GROWTH_MONTHLY: 'admin:user-growth-monthly',
 
   // Content caches (static data)
   CATEGORIES_ALL: 'categories:all',

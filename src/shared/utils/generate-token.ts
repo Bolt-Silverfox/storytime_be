@@ -1,11 +1,4 @@
-/**
- * Generates a random 6-digit token for verification purposes
- * @returns A string containing a 6-digit token
- */
-export function generateSixDigitToken(): string {
-  // Generate a random number between 100000 and 999999
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
+import * as crypto from 'crypto';
 
 /**
  * Generates a token with a specified expiration time
@@ -16,9 +9,18 @@ export function generateToken(expiresInHours = 24): {
   token: string;
   expiresAt: Date;
 } {
-  const token = generateSixDigitToken();
+  const token = generateSecureNumberToken();
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + expiresInHours);
 
   return { token, expiresAt };
+}
+
+/**
+ * Generates a cryptographically secure number token of 6 digits.
+ * @returns {string} The generated token as a string.
+ */
+function generateSecureNumberToken(): string {
+  const token = crypto.randomInt(100000, 999999);
+  return token.toString();
 }
