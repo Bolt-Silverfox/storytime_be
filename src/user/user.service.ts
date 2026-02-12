@@ -64,7 +64,7 @@ export class UserService {
         id,
         isDeleted: false,
       },
-      include: { profile: true, kids: true, avatar: true, subscriptions: true },
+      include: { profile: true, kids: true, avatar: true, subscription: true },
     });
     if (!user) return null;
 
@@ -77,7 +77,7 @@ export class UserService {
   async getUserIncludingDeleted(id: string): Promise<SafeUser | null> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { profile: true, kids: true, avatar: true, subscriptions: true },
+      include: { profile: true, kids: true, avatar: true, subscription: true },
     });
 
     if (user) {

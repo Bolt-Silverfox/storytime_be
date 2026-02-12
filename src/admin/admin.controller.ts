@@ -912,15 +912,13 @@ export class AdminController {
             publicId: 'avatar_123',
             createdAt: '2023-10-01T12:00:00Z',
           },
-          subscriptions: [
-            {
-              id: 'sub-123',
-              plan: 'monthly',
-              status: 'active',
-              startedAt: '2023-10-01T12:00:00Z',
-              endsAt: '2023-11-01T12:00:00Z',
-            },
-          ],
+          subscription: {
+            id: 'sub-123',
+            plan: 'monthly',
+            status: 'active',
+            startedAt: '2023-10-01T12:00:00Z',
+            endsAt: '2023-11-01T12:00:00Z',
+          },
           paymentTransactions: [
             {
               id: 'txn-123',
