@@ -470,11 +470,7 @@ export class AdminService {
         isDeleted: false,
       },
       include: {
-        subscriptions: {
-          where: {
-            status: 'active',
-          },
-        },
+        subscription: true,
       },
       orderBy: {
         createdAt: 'asc',
@@ -488,7 +484,7 @@ export class AdminService {
           acc[date] = { total: 0, paid: 0 };
         }
         acc[date].total += 1;
-        if (user.subscriptions.length > 0) {
+        if (user.subscription?.status === 'active') {
           acc[date].paid += 1;
         }
         return acc;
@@ -507,10 +503,8 @@ export class AdminService {
       where: {
         createdAt: { lt: startDate },
         isDeleted: false,
-        subscriptions: {
-          some: {
-            status: 'active',
-          },
+        subscription: {
+          status: 'active',
         },
       },
     });
@@ -758,15 +752,12 @@ export class AdminService {
       };
 
       if (wantsActiveSubscription) {
-        where.subscriptions = {
-          some: activeSubscriptionCriteria,
-        };
+        where.subscription = activeSubscriptionCriteria;
       } else {
-        where.NOT = {
-          subscriptions: {
-            some: activeSubscriptionCriteria,
-          },
-        };
+        where.OR = [
+          { subscription: null },
+          { subscription: { NOT: activeSubscriptionCriteria } },
+        ];
       }
     }
 
@@ -777,12 +768,7 @@ export class AdminService {
         take: limit,
         orderBy: { [sortBy]: sortOrder },
         include: {
-          subscriptions: {
-            where: {
-              status: 'active',
-              isDeleted: false,
-              OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
-            },
+          subscription: {
             select: {
               id: true,
               plan: true,
@@ -811,7 +797,6 @@ export class AdminService {
               kids: true,
               auth: true,
               parentFavorites: true,
-              subscriptions: true,
               paymentTransactions: true,
             },
           },
@@ -829,7 +814,7 @@ export class AdminService {
           kids, // eslint-disable-line @typescript-eslint/no-unused-vars
           paymentTransactions, // eslint-disable-line @typescript-eslint/no-unused-vars
           usage, // eslint-disable-line @typescript-eslint/no-unused-vars
-          subscriptions, // eslint-disable-line @typescript-eslint/no-unused-vars
+          subscription, // eslint-disable-line @typescript-eslint/no-unused-vars
           ...safeUser
         } = user;
 
@@ -849,18 +834,23 @@ export class AdminService {
           0,
         );
 
+        // Check if user has active subscription (same logic as getUserById)
+        const now = new Date();
+        const hasActiveSubscription =
+          user.subscription?.status === 'active' &&
+          (!user.subscription.endsAt || user.subscription.endsAt > now);
+
         return {
           ...safeUser,
           registrationDate: user.createdAt,
           activityLength,
           creditUsed,
           amountSpent,
-          isPaidUser: user.subscriptions.length > 0,
-          activeSubscription: user.subscriptions[0] || null,
+          isPaidUser: hasActiveSubscription,
+          activeSubscription: hasActiveSubscription ? user.subscription : null,
           kidsCount: user._count.kids,
           sessionsCount: user._count.auth,
           favoritesCount: user._count.parentFavorites,
-          subscriptionsCount: user._count.subscriptions,
           transactionsCount: user._count.paymentTransactions,
         };
       }),
@@ -889,9 +879,7 @@ export class AdminService {
           },
         },
         avatar: true,
-        subscriptions: {
-          orderBy: { startedAt: 'desc' },
-        },
+        subscription: true,
         paymentTransactions: {
           orderBy: { createdAt: 'desc' },
           take: 10,
@@ -901,7 +889,6 @@ export class AdminService {
             auth: true,
             parentFavorites: true,
             voices: true,
-            subscriptions: true,
             supportTickets: true,
             paymentTransactions: true,
           },
@@ -915,9 +902,9 @@ export class AdminService {
 
     // Check if user has active subscription
     const now = new Date();
-    const hasActiveSubscription = user.subscriptions.some(
-      (sub) => sub.status === 'active' && (!sub.endsAt || sub.endsAt > now),
-    );
+    const hasActiveSubscription =
+      user.subscription?.status === 'active' &&
+      (!user.subscription.endsAt || user.subscription.endsAt > now);
 
     const totalSpentResult = await this.prisma.paymentTransaction.aggregate({
       where: {
@@ -940,7 +927,6 @@ export class AdminService {
         sessionsCount: user._count.auth,
         favoritesCount: user._count.parentFavorites,
         voicesCount: user._count.voices,
-        subscriptionsCount: user._count.subscriptions,
         ticketsCount: user._count.supportTickets,
         transactionsCount: user._count.paymentTransactions,
       },
@@ -1831,7 +1817,7 @@ export class AdminService {
       select: {
         createdAt: true,
         id: true,
-        subscriptions: { where: { status: 'active' } },
+        subscription: true,
       },
     });
 
@@ -1857,7 +1843,7 @@ export class AdminService {
       const label = getMonthLabel(u.createdAt);
       const index = uniqueLabels.indexOf(label);
       if (index !== -1) {
-        const isPaid = u.subscriptions.length > 0;
+        const isPaid = u.subscription?.status === 'active';
         if (isPaid) paidCounts[index]++;
         else freeCounts[index]++;
       }
