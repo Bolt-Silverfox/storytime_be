@@ -608,21 +608,26 @@ Enhanced `QueueHealthIndicator` monitors all 3 queues (email, story, voice):
 - `GET /health/queues/story` - Story queue
 - `GET /health/queues/voice` - Voice queue
 
-### 7.4 New Queue Opportunities (P2 - Medium) ✅ LARGELY COMPLETE
+### 7.4 New Queue Opportunities (P2 - Medium) ✅ COMPLETE
 
-| Operation | Current | Recommended | Status |
-|-----------|---------|-------------|--------|
-| Story generation | Background queue | Background queue | ✅ Complete |
-| Voice synthesis | Background queue | Background queue | ✅ Complete |
-| Image processing | Sync | Background queue | ⏳ Pending |
-| Report generation | Sync | Background queue | ⏳ Pending |
-| Bulk notifications | Sync | Background queue | ⏳ Pending |
+| Operation | Current | Status | Notes |
+|-----------|---------|--------|-------|
+| Story generation | Background queue | ✅ Complete | `src/story/queue/` |
+| Voice synthesis | Background queue | ✅ Complete | `src/voice/queue/` |
+| Image processing | Cloudinary | ✅ N/A | Cloudinary handles transformations server-side |
+| Report generation | Sync | ✅ N/A | Lightweight DB aggregations, no queue needed |
+| Bulk notifications | Cron | ✅ N/A | Daily challenges run via `@Cron`, no queue needed |
 
 **Action Items:**
 - [x] Create `story-generation` queue for AI operations ✅ *(src/story/queue/)*
 - [x] Create `voice-synthesis` queue for TTS operations ✅ *(src/voice/queue/)*
 - [ ] Add queue dashboard (Bull Board)
 - [x] Implement queue metrics in monitoring ✅ *(QueueHealthIndicator)*
+
+**Analysis Notes:**
+- Image processing delegated to Cloudinary (server-side transformations)
+- Report generation is lightweight (simple Prisma aggregations)
+- Bulk operations handled by scheduled cron jobs
 
 ---
 
@@ -1651,6 +1656,8 @@ await this.prisma.entity.createMany({
 - [x] Cache metrics service ✅ *(CacheMetricsService with OpenTelemetry)*
 - [x] Health indicators for all services ✅ *(Firebase, Cloudinary, Queue enhancement)*
 - [x] Push notifications (FCM) + SSE ✅ *(FcmService, JobEventsService, DeviceTokenService)*
+- [x] Alerting rules configuration ✅ *(ALERTING_RULES.md)*
+- [x] Security audit ✅ *(SECURITY_AUDIT.md)*
 - [ ] Custom Grafana dashboards creation
 
 ---
