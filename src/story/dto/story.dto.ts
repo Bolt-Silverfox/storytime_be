@@ -14,6 +14,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { SanitizeHtml } from '@/shared/decorators/sanitize-html.decorator';
 export { VoiceType } from '@/voice/dto/voice.dto';
 
 export class StoryImageDto {
@@ -24,20 +25,24 @@ export class StoryImageDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @SanitizeHtml()
   caption?: string;
 }
 
 export class StoryBranchDto {
   @ApiProperty()
   @IsString()
+  @SanitizeHtml()
   prompt: string;
 
   @ApiProperty()
   @IsString()
+  @SanitizeHtml()
   optionA: string;
 
   @ApiProperty()
   @IsString()
+  @SanitizeHtml()
   optionB: string;
 
   @ApiProperty({ required: false })
@@ -55,16 +60,19 @@ export class CreateStoryDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
+  @SanitizeHtml()
   title: string;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
+  @SanitizeHtml()
   description: string;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
+  @SanitizeHtml() // Clean potential bad inputs
   language: string;
 
   @ApiProperty({ type: [String] })
@@ -96,6 +104,7 @@ export class CreateStoryDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @SanitizeHtml()
   textContent?: string;
 
   @ApiProperty({ required: false })
@@ -258,6 +267,9 @@ export class UserStoryProgressDto {
 export class UserStoryProgressResponseDto {
   @ApiProperty()
   id: string;
+
+  @ApiProperty()
+  userId: string;
 
   @ApiProperty()
   storyId: string;

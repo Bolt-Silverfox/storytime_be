@@ -6,7 +6,18 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { STORY_REPOSITORY, IStoryRepository } from './repositories';
+import {
+  STORY_CORE_REPOSITORY,
+  IStoryCoreRepository,
+} from './repositories/story-core.repository.interface';
+import {
+  STORY_METADATA_REPOSITORY,
+  IStoryMetadataRepository,
+} from './repositories/story-metadata.repository.interface';
+import {
+  STORY_RECOMMENDATION_REPOSITORY,
+  IStoryRecommendationRepository,
+} from './repositories/story-recommendation.repository.interface';
 import {
   CreateStoryDto,
   ParentRecommendationDto,
@@ -25,9 +36,13 @@ export class StoryRecommendationService {
   private readonly RECENT_SEASON_THRESHOLD_DAYS = 45;
 
   constructor(
-    @Inject(STORY_REPOSITORY)
-    private readonly storyRepository: IStoryRepository,
-  ) {}
+    @Inject(STORY_CORE_REPOSITORY)
+    private readonly storyCoreRepository: IStoryCoreRepository,
+    @Inject(STORY_METADATA_REPOSITORY)
+    private readonly storyMetadataRepository: IStoryMetadataRepository,
+    @Inject(STORY_RECOMMENDATION_REPOSITORY)
+    private readonly storyRecommendationRepository: IStoryRecommendationRepository,
+  ) { }
 
   // =====================
   // HOME PAGE RECOMMENDATIONS
@@ -41,7 +56,7 @@ export class StoryRecommendationService {
       .toString()
       .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
 
-    const allSeasons = await this.storyRepository.findAllSeasons();
+    const allSeasons = await this.storyMetadataRepository.findAllSeasons();
 
     const activeSeasons = allSeasons.filter((s) => {
       if (!s.isActive) return false;
@@ -98,7 +113,8 @@ export class StoryRecommendationService {
     limitTopLiked: number = 5,
   ) {
     // First, get user with preferences (required for recommended stories)
-    const user = await this.storyRepository.findUserByIdWithPreferences(userId);
+    const user =
+      await this.storyCoreRepository.findUserByIdWithPreferences(userId);
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -108,20 +124,25 @@ export class StoryRecommendationService {
     const recommendedWhere =
       user.preferredCategories.length > 0
         ? {
-            isDeleted: false,
-            categories: {
-              some: {
-                id: { in: user.preferredCategories.map((c: Category) => c.id) },
-              },
+          isDeleted: false,
+          categories: {
+            some: {
+              id: { in: user.preferredCategories.map((c: Category) => c.id) },
             },
-          }
+          },
+        }
         : { isDeleted: false };
 
     // Run independent queries in parallel for better performance
+    // Note: 'findStories' is in Core Repo
+    // 'getRelevantSeasons' is local (uses Metadata Repo)
+    // Top Liked needs 'parentFavorites' count logic. Does Core Repo support this?
+    // IStoryCoreRepository.findStories supports Prisma.StoryWhereInput/OrderBy.
+    // Yes, provided the input object is valid Prisma input.
     const [recommended, { activeSeasons, backfillSeasons }, topLiked] =
       await Promise.all([
         // 1. Recommended Stories (based on preferred categories)
-        this.storyRepository.findStories({
+        this.storyCoreRepository.findStories({
           where: recommendedWhere,
           take: limitRecommended,
           include: { images: true, categories: true },
@@ -130,24 +151,24 @@ export class StoryRecommendationService {
         // 2. Get relevant seasons (runs in parallel)
         this.getRelevantSeasons(),
         // 3. Top Liked by Parents (independent, runs in parallel)
-        this.storyRepository.findStories({
+        this.storyCoreRepository.findStories({
           where: { isDeleted: false },
           orderBy: {
             parentFavorites: {
               _count: 'desc',
             },
-          },
+          } as any, // Cast to any if strict typing complains about Deep Relations in OrderBy
           take: limitTopLiked,
           include: { images: true },
         }),
       ]);
 
     // Sequential: Get seasonal stories (depends on seasons result)
-    let seasonal: Awaited<ReturnType<typeof this.storyRepository.findStories>> =
+    let seasonal: Awaited<ReturnType<typeof this.storyCoreRepository.findStories>> =
       [];
 
     if (activeSeasons.length > 0) {
-      seasonal = await this.storyRepository.findStories({
+      seasonal = await this.storyCoreRepository.findStories({
         where: {
           isDeleted: false,
           seasons: {
@@ -166,7 +187,7 @@ export class StoryRecommendationService {
       const needed = limitSeasonal - seasonal.length;
       const existingIds = new Set(seasonal.map((s) => s.id));
 
-      const backfillStories = await this.storyRepository.findStories({
+      const backfillStories = await this.storyCoreRepository.findStories({
         where: {
           isDeleted: false,
           seasons: {
@@ -198,8 +219,8 @@ export class StoryRecommendationService {
   async restrictStory(dto: RestrictStoryDto & { userId: string }) {
     // Batch validation queries
     const [kid, story] = await Promise.all([
-      this.storyRepository.findKidById(dto.kidId),
-      this.storyRepository.findStoryById(dto.storyId),
+      this.storyCoreRepository.findKidById(dto.kidId),
+      this.storyCoreRepository.findStoryById(dto.storyId),
     ]);
 
     if (!kid) throw new NotFoundException('Kid not found');
@@ -210,7 +231,7 @@ export class StoryRecommendationService {
       throw new ForbiddenException('You are not the parent of this kid');
     }
 
-    return await this.storyRepository.upsertRestrictedStory(
+    return await this.storyCoreRepository.restrictStory(
       dto.kidId,
       dto.storyId,
       dto.userId,
@@ -219,14 +240,14 @@ export class StoryRecommendationService {
   }
 
   async unrestrictStory(kidId: string, storyId: string, userId: string) {
-    const kid = await this.storyRepository.findKidById(kidId);
+    const kid = await this.storyCoreRepository.findKidById(kidId);
     if (!kid) throw new NotFoundException('Kid not found');
 
     if (kid.parentId !== userId) {
       throw new ForbiddenException('You are not the parent of this kid');
     }
 
-    const restriction = await this.storyRepository.findRestrictedStory(
+    const restriction = await this.storyCoreRepository.findRestrictedStory(
       kidId,
       storyId,
     );
@@ -235,11 +256,11 @@ export class StoryRecommendationService {
       throw new NotFoundException('Story is not restricted for this kid');
     }
 
-    return await this.storyRepository.deleteRestrictedStory(kidId, storyId);
+    return await this.storyCoreRepository.unrestrictStory(kidId, storyId);
   }
 
   async getRestrictedStories(kidId: string, userId: string) {
-    const kid = await this.storyRepository.findKidById(kidId);
+    const kid = await this.storyCoreRepository.findKidById(kidId);
     if (!kid) throw new NotFoundException('Kid not found');
 
     if (kid.parentId !== userId) {
@@ -247,7 +268,7 @@ export class StoryRecommendationService {
     }
 
     const restricted =
-      await this.storyRepository.findRestrictedStoriesByKidId(kidId);
+      await this.storyCoreRepository.findRestrictedStories(kidId);
 
     return restricted.map((r) => ({
       ...r.story,
@@ -266,10 +287,10 @@ export class StoryRecommendationService {
   ): Promise<RecommendationResponseDto> {
     // Batch all validation and lookup queries
     const [kid, story, isRestricted, existing] = await Promise.all([
-      this.storyRepository.findKidByIdAndParent(dto.kidId, userId),
-      this.storyRepository.findStoryById(dto.storyId),
-      this.storyRepository.findRestrictedStory(dto.kidId, dto.storyId),
-      this.storyRepository.findParentRecommendation(
+      this.storyCoreRepository.findKidByIdAndParent(dto.kidId, userId),
+      this.storyCoreRepository.findStoryById(dto.storyId),
+      this.storyCoreRepository.findRestrictedStory(dto.kidId, dto.storyId),
+      this.storyRecommendationRepository.findParentRecommendation(
         userId,
         dto.kidId,
         dto.storyId,
@@ -286,7 +307,7 @@ export class StoryRecommendationService {
     }
     if (existing) {
       if (existing.isDeleted) {
-        const restored = await this.storyRepository.updateParentRecommendation(
+        const restored = await this.storyRecommendationRepository.updateParentRecommendation(
           existing.id,
           { isDeleted: false, deletedAt: null, message: dto.message },
         );
@@ -297,7 +318,7 @@ export class StoryRecommendationService {
       );
     }
     const recommendation =
-      await this.storyRepository.createParentRecommendation(
+      await this.storyRecommendationRepository.createParentRecommendation(
         userId,
         dto.kidId,
         dto.storyId,
@@ -310,10 +331,10 @@ export class StoryRecommendationService {
     kidId: string,
     userId: string,
   ): Promise<RecommendationResponseDto[]> {
-    const kid = await this.storyRepository.findKidByIdAndParent(kidId, userId);
+    const kid = await this.storyCoreRepository.findKidByIdAndParent(kidId, userId);
     if (!kid) throw new NotFoundException('Kid not found or access denied');
     const recommendations =
-      await this.storyRepository.findParentRecommendationsByKidId(kidId);
+      await this.storyRecommendationRepository.findParentRecommendationsByKidId(kidId);
     return recommendations.map((rec) => this.toRecommendationResponse(rec));
   }
 
@@ -323,15 +344,15 @@ export class StoryRecommendationService {
     permanent: boolean = false,
   ) {
     const recommendation =
-      await this.storyRepository.findParentRecommendationById(recommendationId);
+      await this.storyRecommendationRepository.findParentRecommendationById(recommendationId);
     if (!recommendation)
       throw new NotFoundException('Recommendation not found');
     if (recommendation.userId !== userId)
       throw new ForbiddenException('Access denied');
     if (permanent) {
-      return this.storyRepository.deleteParentRecommendation(recommendationId);
+      return this.storyRecommendationRepository.deleteParentRecommendation(recommendationId);
     } else {
-      return this.storyRepository.updateParentRecommendation(recommendationId, {
+      return this.storyRecommendationRepository.updateParentRecommendation(recommendationId, {
         isDeleted: true,
         deletedAt: new Date(),
       });
@@ -342,10 +363,10 @@ export class StoryRecommendationService {
     kidId: string,
     userId: string,
   ): Promise<RecommendationsStatsDto> {
-    const kid = await this.storyRepository.findKidByIdAndParent(kidId, userId);
+    const kid = await this.storyCoreRepository.findKidByIdAndParent(kidId, userId);
     if (!kid) throw new NotFoundException('Kid not found or access denied');
     const totalCount =
-      await this.storyRepository.countParentRecommendationsByKidId(kidId);
+      await this.storyRecommendationRepository.countParentRecommendationsByKidId(kidId);
     return { totalCount };
   }
 
@@ -375,14 +396,14 @@ export class StoryRecommendationService {
 
   async getTopPicksFromParents(limit: number = 10) {
     const topStories =
-      await this.storyRepository.groupParentRecommendationsByStory(limit);
+      await this.storyRecommendationRepository.groupParentRecommendationsByStory(limit);
 
     if (topStories.length === 0) {
       return [];
     }
 
     const storyIds = topStories.map((s) => s.storyId);
-    const stories = await this.storyRepository.findStories({
+    const stories = await this.storyCoreRepository.findStories({
       where: { id: { in: storyIds }, isDeleted: false },
       include: {
         themes: true,
@@ -412,7 +433,7 @@ export class StoryRecommendationService {
     limit: number,
     offset: number = 0,
   ): Promise<string[]> {
-    return this.storyRepository.getRandomStoryIds(limit, offset);
+    return this.storyCoreRepository.getRandomStoryIds(limit, offset);
   }
 
   /**
@@ -433,7 +454,7 @@ export class StoryRecommendationService {
     }
 
     // Fetch full story objects with relations
-    return this.storyRepository.findStories({
+    return this.storyCoreRepository.findStories({
       where: { id: { in: randomIds } },
       include: {
         themes: true,
