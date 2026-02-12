@@ -15,6 +15,7 @@ import { EmailQueueService } from './queue/email-queue.service';
 import { EmailProcessor } from './queue/email.processor';
 import { AuthEventListener } from './listeners/auth-event.listener';
 import { PasswordEventListener } from './listeners/password-event.listener';
+import { NotificationPreferenceEventListener } from './listeners/notification-preference-event.listener';
 import {
   NOTIFICATION_PREFERENCE_REPOSITORY,
   PrismaNotificationPreferenceRepository,
@@ -48,6 +49,7 @@ import {
     // Event listeners (event-driven architecture)
     AuthEventListener,
     PasswordEventListener,
+    NotificationPreferenceEventListener,
     // Repository Pattern (testability, decoupling)
     {
       provide: NOTIFICATION_PREFERENCE_REPOSITORY,
@@ -67,4 +69,4 @@ import {
     IN_APP_NOTIFICATION_REPOSITORY,
   ],
 })
-export class NotificationModule {}
+export class NotificationModule { }
