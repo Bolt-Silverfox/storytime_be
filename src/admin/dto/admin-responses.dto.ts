@@ -607,18 +607,17 @@ export class UserDetailDto {
   avatar: AvatarInfo | null;
 
   @ApiProperty({
-    description: 'User subscriptions',
-    example: [
-      {
-        id: 'sub-123',
-        plan: 'monthly',
-        status: 'active',
-        startedAt: '2023-10-01T12:00:00Z',
-        endsAt: '2023-11-01T12:00:00Z',
-      },
-    ],
+    description: 'User subscription',
+    nullable: true,
+    example: {
+      id: 'sub-123',
+      plan: 'monthly',
+      status: 'active',
+      startedAt: '2023-10-01T12:00:00Z',
+      endsAt: '2023-11-01T12:00:00Z',
+    },
   })
-  subscriptions: SubscriptionInfo[];
+  subscription: SubscriptionInfo | null;
 
   @ApiProperty({
     description: 'Payment transactions',

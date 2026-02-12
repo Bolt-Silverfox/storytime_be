@@ -81,11 +81,9 @@ describe('AdminService', () => {
       const mockUsers = [
         {
           id: '1',
-          subscriptions: [
-            { status: 'active', endsAt: new Date(Date.now() + 10000) },
-          ],
+          subscription: { status: 'active', endsAt: new Date(Date.now() + 10000) },
         }, // Paid
-        { id: '2', subscriptions: [] }, // Unpaid
+        { id: '2', subscription: null }, // Unpaid
       ];
 
       prisma.user.findMany.mockResolvedValue(mockUsers);
@@ -127,12 +125,12 @@ describe('AdminService', () => {
     it('should return user growth stats grouped by date', async () => {
       const mockDateRange = { startDate: '2023-01-01', endDate: '2023-01-02' };
       const mockUsers = [
-        { createdAt: new Date('2023-01-01T10:00:00Z'), subscriptions: [] },
+        { createdAt: new Date('2023-01-01T10:00:00Z'), subscription: null },
         {
           createdAt: new Date('2023-01-01T12:00:00Z'),
-          subscriptions: [{ status: 'active' }],
+          subscription: { status: 'active' },
         },
-        { createdAt: new Date('2023-01-02T10:00:00Z'), subscriptions: [] },
+        { createdAt: new Date('2023-01-02T10:00:00Z'), subscription: null },
       ];
 
       prisma.user.findMany.mockResolvedValue(mockUsers);
@@ -165,18 +163,15 @@ describe('AdminService', () => {
         {
           id: 'user-1',
           email: 'test@example.com',
-          subscriptions: [
-            {
-              id: 'sub-1',
-              status: 'active',
-              endsAt: new Date(Date.now() + 10000),
-            },
-          ],
+          subscription: {
+            id: 'sub-1',
+            status: 'active',
+            endsAt: new Date(Date.now() + 10000),
+          },
           _count: {
             kids: 2,
             auth: 5,
             parentFavorites: 3,
-            subscriptions: 1,
             paymentTransactions: 4,
           },
         },
@@ -199,14 +194,11 @@ describe('AdminService', () => {
       const mockUser = {
         id: userId,
         email: 'test@example.com',
-        subscriptions: [
-          { status: 'active', endsAt: new Date(Date.now() + 10000) },
-        ],
+        subscription: { status: 'active', endsAt: new Date(Date.now() + 10000) },
         _count: {
           auth: 10,
           parentFavorites: 5,
           voices: 1,
-          subscriptions: 2,
           supportTickets: 0,
           paymentTransactions: 5,
         },
