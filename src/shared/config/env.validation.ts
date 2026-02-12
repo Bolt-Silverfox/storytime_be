@@ -54,6 +54,8 @@ export const validateEnv = (config: Record<string, unknown>) => {
       result.error.message,
       result.error.format(),
     );
+    // Throwing generic Error here is acceptable as it prevents the application from starting
+    // with invalid configuration, which is a critical failure.
     throw new Error('Invalid environment variables');
   }
 
