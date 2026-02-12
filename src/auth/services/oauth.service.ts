@@ -6,7 +6,6 @@ import {
   UnauthorizedException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { NotificationPreferenceService } from '@/notification/services/notification-preference.service';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
 import { OAuth2Client } from 'google-auth-library';
@@ -37,7 +36,6 @@ export class OAuthService {
   constructor(
     @Inject(AUTH_REPOSITORY)
     private readonly authRepository: IAuthRepository,
-    private readonly notificationPreferenceService: NotificationPreferenceService,
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
   ) {
@@ -185,17 +183,7 @@ export class OAuthService {
         },
       });
 
-      // Seed default notification preferences for new OAuth users
-      try {
-        await this.notificationPreferenceService.seedDefaultPreferences(
-          user.id,
-        );
-      } catch (error) {
-        this.logger.error(
-          'Failed to seed notification preferences:',
-          error.message,
-        );
-      }
+      // side-effects are handled by event listeners
     }
 
     // 4. Handle avatar from OAuth picture

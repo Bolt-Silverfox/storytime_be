@@ -9,6 +9,9 @@ import {
   IsString,
   MaxLength,
   IsArray,
+  IsBoolean,
+  IsInt,
+  Min,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -123,13 +126,16 @@ export class CompleteProfileDto {
 }
 
 // ==================== UPDATE PROFILE (UPDATED) ====================
-export class updateProfileDto {
+export class UpdateProfileDto {
   @ApiProperty({ example: true })
   @IsOptional()
+  @IsBoolean()
   explicitContent?: boolean;
 
   @ApiProperty({ example: 50 })
   @IsOptional()
+  @IsInt()
+  @Min(0)
   maxScreenTimeMins?: number;
 
   @ApiProperty({ example: 'English', description: 'Language display name' })
@@ -150,6 +156,7 @@ export class updateProfileDto {
     typeof value === 'string' ? value.toUpperCase() : value,
   )
   @IsOptional()
+  @IsString()
   country?: string;
 }
 
@@ -267,13 +274,13 @@ export class UserDto {
 
     this.avatar = user.avatar
       ? {
-          id: user.avatar.id,
-          name: user.avatar.name,
-          url: user.avatar.url,
-          isSystemAvatar: user.avatar.isSystemAvatar,
-          publicId: user.avatar.publicId,
-          createdAt: user.avatar.createdAt,
-        }
+        id: user.avatar.id,
+        name: user.avatar.name,
+        url: user.avatar.url,
+        isSystemAvatar: user.avatar.isSystemAvatar,
+        publicId: user.avatar.publicId,
+        createdAt: user.avatar.createdAt,
+      }
       : null;
 
     this.id = user.id as string;
@@ -306,26 +313,30 @@ export class RefreshResponseDto {
   jwt: string;
 }
 
-export class kidDto {
+export class KidDto {
   @ApiProperty({ example: 'firstname lastname' })
   @Matches(/^[a-zA-Z]+(?:\s+[a-zA-Z]+)+$/, {
     message: 'Full name must contain at least two names',
   })
-  @Optional()
+  @IsString()
+  @IsNotEmpty()
   name: string;
 
   @ApiProperty({ example: 'avatar-id' })
   @IsOptional()
+  @IsString()
   avatarId?: string;
 
   @ApiProperty({ example: '1-3' })
   @IsOptional()
+  @IsString()
   ageRange?: string;
 }
 
-export class updateKidDto {
+export class UpdateKidDto {
   @ApiProperty({ example: 'eqiv989bqem' })
-  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
   id: string;
 
   @ApiProperty({ example: 'firstname lastname' })
@@ -333,14 +344,17 @@ export class updateKidDto {
     message: 'Full name must contain at least two names',
   })
   @IsOptional()
-  name: string;
+  @IsString()
+  name?: string;
 
   @ApiProperty({ example: 'avatar-id' })
   @IsOptional()
+  @IsString()
   avatarId?: string;
 
   @ApiProperty({ example: '1-3', required: false })
   @IsOptional()
+  @IsString()
   ageRange?: string;
 }
 
