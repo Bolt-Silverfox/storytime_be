@@ -6,6 +6,7 @@ import * as nodemailer from 'nodemailer';
 import { EnvConfig } from '@/shared/config/env.validation';
 import { EMAIL_QUEUE_NAME } from './email-queue.constants';
 import { EmailJobData, EmailJobResult } from './email-job.interface';
+import { EmailDeliveryException } from '@/shared/exceptions/processing.exception';
 
 /**
  * Email Queue Processor
@@ -93,7 +94,7 @@ export class EmailProcessor extends WorkerHost {
       );
 
       // Throw error to trigger retry
-      throw new Error(`Failed to send email to ${to}: ${errorMessage}`);
+      throw new EmailDeliveryException(to, errorMessage);
     }
   }
 
@@ -104,7 +105,7 @@ export class EmailProcessor extends WorkerHost {
   onCompleted(job: Job<EmailJobData>, result: EmailJobResult): void {
     this.logger.log(
       `Job ${job.data.jobId} completed: ${job.data.category} to ${job.data.to} ` +
-        `(attempts: ${result.attemptsMade}, messageId: ${result.messageId})`,
+      `(attempts: ${result.attemptsMade}, messageId: ${result.messageId})`,
     );
   }
 
@@ -128,7 +129,7 @@ export class EmailProcessor extends WorkerHost {
     } else {
       this.logger.error(
         `Job ${jobId} permanently failed after ${job.attemptsMade} attempts: ` +
-          `${category} to ${to} - ${error.message}`,
+        `${category} to ${to} - ${error.message}`,
         error.stack,
       );
       // Here you could emit an event for alerting/monitoring
