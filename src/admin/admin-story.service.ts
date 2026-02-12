@@ -14,7 +14,7 @@ import {
 import { StoryFilterDto } from './dto/admin-filters.dto';
 import {
   CACHE_KEYS,
-  STORY_INVALIDATION_KEYS,
+  CACHE_INVALIDATION,
 } from '@/shared/constants/cache-keys.constants';
 
 @Injectable()
@@ -158,10 +158,12 @@ export class AdminStoryService {
       result = await this.adminStoryRepository.softDeleteStory(storyId);
     }
 
-    // Invalidate dashboard caches for immediate accuracy
+    // Invalidate story content caches (not metadata like categories/themes)
     try {
       await Promise.all(
-        STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
+        CACHE_INVALIDATION.STORY_CONTENT.map((key) =>
+          this.cacheManager.del(key),
+        ),
       );
     } catch (error) {
       this.logger.warn(

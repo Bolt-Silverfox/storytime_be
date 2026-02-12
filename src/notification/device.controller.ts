@@ -23,6 +23,7 @@ import { DeviceTokenService } from './services/device-token.service';
 import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
 import { DevicePlatform } from '@prisma/client';
 import { Throttle } from '@nestjs/throttler';
+import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 
 class RegisterDeviceDto {
   @IsString()
@@ -40,7 +41,12 @@ export class DeviceController {
 
   @Post('register')
   @UseGuards(AuthSessionGuard)
-  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 per minute
+  @Throttle({
+    default: {
+      limit: THROTTLE_LIMITS.DEVICE.REGISTER.LIMIT,
+      ttl: THROTTLE_LIMITS.DEVICE.REGISTER.TTL,
+    },
+  })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Register device for push notifications' })
   @ApiBody({ type: RegisterDeviceDto })

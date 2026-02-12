@@ -39,6 +39,7 @@ import {
 } from './shared/config/throttle.config';
 import { AdminModule } from './admin/admin.module';
 import { HealthModule } from './health/health.module';
+import { BullBoardConfigModule } from './admin/bull-board.module';
 
 @Module({
   imports: [
@@ -140,6 +141,7 @@ import { HealthModule } from './health/health.module';
     ParentFavoriteModule,
     AdminModule,
     HealthModule,
+    BullBoardConfigModule,
   ],
   providers: [
     {
