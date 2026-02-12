@@ -55,7 +55,7 @@ export class VoiceController {
     private readonly textToSpeechService: TextToSpeechService,
     private readonly speechToTextService: SpeechToTextService,
     private readonly voiceQuotaService: VoiceQuotaService,
-  ) {}
+  ) { }
 
   @Post('upload')
   @UseGuards(AuthSessionGuard)
@@ -255,7 +255,7 @@ export class VoiceController {
     @Body() dto: StoryContentAudioDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
+    const audioUrl = await this.textToSpeechService.synthesizeStory(
       randomUUID().toString(),
       dto.content,
       dto.voiceId ?? DEFAULT_VOICE,
