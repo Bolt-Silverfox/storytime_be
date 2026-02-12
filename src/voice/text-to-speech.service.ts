@@ -1,5 +1,9 @@
 import { UploadService } from '@/upload/upload.service';
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { VoiceType } from './dto/voice.dto';
@@ -16,6 +20,7 @@ const VOICE_IDS: Record<VoiceType, string> = {
 
 @Injectable()
 export class TextToSpeechService {
+  private readonly logger = new Logger(TextToSpeechService.name);
   private readonly elevenLabsApiKey: string;
   private readonly maxRetries = 3;
   private readonly defaultVoice = VOICE_IDS[VoiceType.CHARLIE];
@@ -51,20 +56,19 @@ export class TextToSpeechService {
         audioBuffer = await this.getElevenLabsAudio(text, voiceId);
         break;
       } catch (error) {
-        console.error(
-          `TTS attempt ${attempt} failed for voice ${voiceId}:`,
-          error,
+        this.logger.error(
+          `TTS attempt ${attempt} failed for voice ${voiceId}: ${(error as Error).message}`,
         );
 
         if (attempt === this.maxRetries) {
-          console.warn('All TTS retries failed, falling back to default voice');
+          this.logger.warn('All TTS retries failed, falling back to default voice');
           try {
             audioBuffer = await this.getElevenLabsAudio(
               text,
               this.defaultVoice,
             );
           } catch (fallbackError) {
-            console.error('Fallback TTS also failed:', fallbackError);
+            this.logger.error(`Fallback TTS also failed: ${(fallbackError as Error).message}`);
             throw new InternalServerErrorException(
               'Text-to-speech failed after retries',
             );
