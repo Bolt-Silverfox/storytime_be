@@ -16,6 +16,34 @@ import { requestLogger } from './shared/middleware/request-logger.middleware';
 import { WinstonModule } from 'nest-winston';
 import { winstonConfig } from './shared/config/logger.config';
 
+const bootstrapLogger = new Logger('Bootstrap');
+const isProduction = process.env.NODE_ENV === 'production';
+
+process.on('uncaughtException', (error: Error) => {
+  bootstrapLogger.error(`Uncaught Exception: ${error.message}`, error.stack);
+  setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
+  bootstrapLogger.error(
+    `Unhandled Rejection at: ${promise}, reason: ${reason instanceof Error ? reason.message : reason}`,
+    reason instanceof Error ? reason.stack : undefined,
+  );
+  if (isProduction) {
+    setTimeout(() => process.exit(1), 1000);
+  }
+});
+
+process.on('SIGTERM', () => {
+  bootstrapLogger.log('SIGTERM received. Graceful shutdown initiated...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  bootstrapLogger.log('SIGINT received. Graceful shutdown initiated...');
+  process.exit(0);
+});
+
 async function bootstrap() {
   const logger = new Logger('Main');
   const app = await NestFactory.create(AppModule, {
