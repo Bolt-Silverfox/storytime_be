@@ -1,25 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminController } from '../admin.controller';
-import { AdminService } from '../admin.service';
 import { AdminAnalyticsService } from '../admin-analytics.service';
 import { AdminUserService } from '../admin-user.service';
 import { AdminStoryService } from '../admin-story.service';
+import { AdminSystemService } from '../admin-system.service';
 import { DateRangeDto, UserFilterDto } from '../dto/admin-filters.dto';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { AdminGuard } from '@/shared/guards/admin.guard';
-
-// Mock Admin Service (for non-extracted methods)
-const mockAdminService = {
-  getRecentActivity: jest.fn(),
-  getDeletionRequests: jest.fn(),
-  getSubscriptions: jest.fn(),
-  seedDatabase: jest.fn(),
-  createBackup: jest.fn(),
-  getSystemLogs: jest.fn(),
-  getElevenLabsBalance: jest.fn(),
-  getAllSupportTickets: jest.fn(),
-  updateSupportTicket: jest.fn(),
-};
 
 // Mock Admin Analytics Service
 const mockAdminAnalyticsService = {
@@ -55,19 +42,29 @@ const mockAdminStoryService = {
   getThemes: jest.fn(),
 };
 
+// Mock Admin System Service
+const mockAdminSystemService = {
+  getRecentActivity: jest.fn(),
+  getDeletionRequests: jest.fn(),
+  getSubscriptions: jest.fn(),
+  seedDatabase: jest.fn(),
+  createBackup: jest.fn(),
+  getSystemLogs: jest.fn(),
+  getElevenLabsBalance: jest.fn(),
+  getAllSupportTickets: jest.fn(),
+  updateSupportTicket: jest.fn(),
+};
+
 describe('AdminController', () => {
   let controller: AdminController;
   let analyticsService: typeof mockAdminAnalyticsService;
   let userService: typeof mockAdminUserService;
+  let systemService: typeof mockAdminSystemService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AdminController],
       providers: [
-        {
-          provide: AdminService,
-          useValue: mockAdminService,
-        },
         {
           provide: AdminAnalyticsService,
           useValue: mockAdminAnalyticsService,
@@ -80,6 +77,10 @@ describe('AdminController', () => {
           provide: AdminStoryService,
           useValue: mockAdminStoryService,
         },
+        {
+          provide: AdminSystemService,
+          useValue: mockAdminSystemService,
+        },
       ],
     })
       .overrideGuard(AuthSessionGuard)
@@ -91,6 +92,7 @@ describe('AdminController', () => {
     controller = module.get<AdminController>(AdminController);
     analyticsService = module.get(AdminAnalyticsService);
     userService = module.get(AdminUserService);
+    systemService = module.get(AdminSystemService);
     jest.clearAllMocks();
   });
 

@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
+import { ResourceNotFoundException } from '@/shared/exceptions';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Prisma, Story } from '@prisma/client';
@@ -27,7 +28,7 @@ export class AdminStoryService {
     @Inject(ADMIN_STORY_REPOSITORY)
     private readonly adminStoryRepository: IAdminStoryRepository,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-  ) {}
+  ) { }
 
   async getAllStories(
     filters: StoryFilterDto,
@@ -98,7 +99,7 @@ export class AdminStoryService {
     const story = await this.adminStoryRepository.findStoryById(storyId);
 
     if (!story) {
-      throw new NotFoundException(`Story with ID ${storyId} not found`);
+      throw new ResourceNotFoundException('Story', storyId);
     }
 
     const { _count, ...storyData } = story;
@@ -117,13 +118,13 @@ export class AdminStoryService {
     const storyExists = await this.adminStoryRepository.storyExists(storyId);
 
     if (!storyExists) {
-      throw new NotFoundException(`Story with ID ${storyId} not found`);
+      throw new ResourceNotFoundException('Story', storyId);
     }
 
     // Need to get current story to toggle its recommendation status
     const story = await this.adminStoryRepository.findStoryById(storyId);
     if (!story) {
-      throw new NotFoundException(`Story with ID ${storyId} not found`);
+      throw new ResourceNotFoundException('Story', storyId);
     }
 
     const result = await this.adminStoryRepository.updateStoryRecommendation({
@@ -150,7 +151,7 @@ export class AdminStoryService {
     const storyExists = await this.adminStoryRepository.storyExists(storyId);
 
     if (!storyExists) {
-      throw new NotFoundException(`Story with ID ${storyId} not found`);
+      throw new ResourceNotFoundException('Story', storyId);
     }
 
     let result;

@@ -1,16 +1,19 @@
 import {
   Injectable,
-  NotFoundException,
-  BadRequestException,
-  ConflictException,
   Inject,
 } from '@nestjs/common';
+import {
+  ResourceNotFoundException,
+  ResourceAlreadyExistsException,
+  ValidationException,
+} from '@/shared/exceptions';
 import { Role, Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {
   IAdminUserRepository,
   ADMIN_USER_REPOSITORY,
 } from './repositories';
+import { PasswordService } from '../auth/services/password.service';
 import {
   PaginatedResponseDto,
   UserListItemDto,
@@ -29,7 +32,8 @@ export class AdminUserService {
   constructor(
     @Inject(ADMIN_USER_REPOSITORY)
     private readonly adminUserRepository: IAdminUserRepository,
-  ) {}
+    private readonly passwordService: PasswordService,
+  ) { }
 
   async getAllUsers(
     filters: UserFilterDto,
@@ -179,7 +183,7 @@ export class AdminUserService {
     const user = await this.adminUserRepository.findUserById(userId);
 
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw new ResourceNotFoundException('User', userId);
     }
 
     // Check if user has active subscription
@@ -221,10 +225,10 @@ export class AdminUserService {
     const existingUser = await this.adminUserRepository.findUserByEmail(data.email);
 
     if (existingUser) {
-      throw new ConflictException('User with this email already exists');
+      throw new ResourceAlreadyExistsException('User', 'email', data.email);
     }
 
-    const passwordHash = await bcrypt.hash(data.password, 10);
+    const passwordHash = await this.passwordService.hashPassword(data.password);
 
     return this.adminUserRepository.createUser({
       email: data.email,
@@ -245,7 +249,7 @@ export class AdminUserService {
   ): Promise<UserUpdatedDto> {
     // Safety check: prevent self-demotion
     if (userId === currentAdminId && data.role && data.role !== Role.admin) {
-      throw new BadRequestException(
+      throw new ValidationException(
         'You cannot demote yourself from admin status.',
       );
     }
@@ -253,13 +257,13 @@ export class AdminUserService {
     const user = await this.adminUserRepository.findUserByIdSimple(userId);
 
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw new ResourceNotFoundException('User', userId);
     }
 
     if (data.email && data.email !== user.email) {
       const existingUser = await this.adminUserRepository.findUserByEmail(data.email);
       if (existingUser) {
-        throw new ConflictException('Email already in use');
+        throw new ResourceAlreadyExistsException('User', 'email', data.email);
       }
     }
 
@@ -289,13 +293,13 @@ export class AdminUserService {
   }> {
     // Safety check: prevent self-deletion
     if (userId === currentAdminId) {
-      throw new BadRequestException('You cannot delete your own account.');
+      throw new ValidationException('You cannot delete your own account.');
     }
 
     const user = await this.adminUserRepository.findUserByIdSimple(userId);
 
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw new ResourceNotFoundException('User', userId);
     }
 
     if (permanent) {
@@ -316,7 +320,7 @@ export class AdminUserService {
     const user = await this.adminUserRepository.findUserByIdSimple(userId);
 
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw new ResourceNotFoundException('User', userId);
     }
 
     return this.adminUserRepository.restoreUser(userId);
@@ -336,7 +340,7 @@ export class AdminUserService {
         return this.adminUserRepository.bulkVerifyUsers(userIds);
 
       default:
-        throw new BadRequestException('Invalid action');
+        throw new ValidationException('Invalid action');
     }
   }
 }
