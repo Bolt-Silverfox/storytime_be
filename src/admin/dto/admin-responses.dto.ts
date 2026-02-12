@@ -1,84 +1,173 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 // Nested type definitions for DTOs
-export interface ProfileInfo {
+export class ProfileInfo {
+  @ApiProperty({ example: 'profile-123' })
   id: string;
+
+  @ApiProperty({ example: false, required: false })
   explicitContent?: boolean;
+
+  @ApiProperty({ example: 120, required: false, nullable: true })
   maxScreenTimeMins?: number | null;
+
+  @ApiProperty({ example: 'english', required: false, nullable: true })
   language?: string | null;
+
+  @ApiProperty({ example: 'US', required: false })
   country?: string;
+
+  @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   createdAt: Date;
+
+  @ApiProperty({ example: '2023-10-15T10:30:00Z' })
   updatedAt: Date;
 }
 
-export interface AvatarInfo {
+export class AvatarInfo {
+  @ApiProperty({ example: 'avatar-123' })
   id: string;
+
+  @ApiProperty({ example: 'Default Avatar', required: false, nullable: true })
   name?: string | null;
+
+  @ApiProperty({ example: 'https://example.com/avatar.png' })
   url: string;
+
+  @ApiProperty({ example: true, required: false })
   isSystemAvatar?: boolean;
+
+  @ApiProperty({ example: 'cloudinary-id', required: false, nullable: true })
   publicId?: string | null;
+
+  @ApiProperty({ example: '2023-10-01T12:00:00Z', required: false })
   createdAt?: Date;
 }
 
-export interface KidInfo {
+export class KidInfo {
+  @ApiProperty({ example: 'kid-123' })
   id: string;
+
+  @ApiProperty({ example: 'Emma Doe', nullable: true })
   name: string | null;
+
+  @ApiProperty({ example: '6-8', required: false, nullable: true })
   ageRange?: string | null;
+
+  @ApiProperty({ example: '2023-10-05T12:00:00Z' })
   createdAt: Date;
+
+  @ApiProperty({ type: () => AvatarInfo, required: false, nullable: true })
   avatar?: AvatarInfo | null;
 }
 
-export interface SubscriptionInfo {
+export class SubscriptionInfo {
+  @ApiProperty({ example: 'sub-123' })
   id: string;
+
+  @ApiProperty({ example: 'monthly' })
   plan: string;
+
+  @ApiProperty({ example: 'active' })
   status: string;
+
+  @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   startedAt: Date;
+
+  @ApiProperty({
+    example: '2023-11-01T12:00:00Z',
+    required: false,
+    nullable: true,
+  })
   endsAt?: Date | null;
 }
 
-export interface PaymentTransactionInfo {
+export class PaymentTransactionInfo {
+  @ApiProperty({ example: 'txn-123' })
   id: string;
+
+  @ApiProperty({ example: 10.0 })
   amount: number;
+
+  @ApiProperty({ example: 'USD' })
   currency: string;
+
+  @ApiProperty({ example: 'success' })
   status: string;
+
+  @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   createdAt: Date;
 }
 
-export interface StoryImageInfo {
+export class StoryImageInfo {
+  @ApiProperty({ example: 'img-123' })
   id: string;
+
+  @ApiProperty({ example: 'https://example.com/story.png' })
   url: string;
+
+  @ApiProperty({ example: 'Story cover image', required: false, nullable: true })
   caption?: string | null;
 }
 
-export interface CategoryInfo {
+export class CategoryInfo {
+  @ApiProperty({ example: 'cat-123' })
   id: string;
+
+  @ApiProperty({ example: 'Adventure' })
   name: string;
 }
 
-export interface ThemeInfo {
+export class ThemeInfo {
+  @ApiProperty({ example: 'theme-123' })
   id: string;
+
+  @ApiProperty({ example: 'Courage' })
   name: string;
 }
 
-export interface StoryBranchInfo {
+export class StoryBranchInfo {
+  @ApiProperty({ example: 'branch-123' })
   id: string;
+
+  @ApiProperty({ example: 'What happens next?', required: false, nullable: true })
   prompt?: string | null;
+
+  @ApiProperty({ example: 'Go left', required: false, nullable: true })
   optionA?: string | null;
+
+  @ApiProperty({ example: 'Go right', required: false, nullable: true })
   optionB?: string | null;
+
+  @ApiProperty({ example: 'next-branch-a', required: false, nullable: true })
   nextA?: string | null;
+
+  @ApiProperty({ example: 'next-branch-b', required: false, nullable: true })
   nextB?: string | null;
 }
 
-export interface StoryQuestionInfo {
+export class StoryQuestionInfo {
+  @ApiProperty({ example: 'q-123' })
   id: string;
+
+  @ApiProperty({ example: 'What color was the dragon?' })
   question: string;
+
+  @ApiProperty({ example: ['Red', 'Green', 'Blue'] })
   options: string[];
+
+  @ApiProperty({ example: 0 })
   correctOption: number;
 }
 
-export interface UserBasicInfo {
+export class UserBasicInfo {
+  @ApiProperty({ example: 'user-123' })
   id: string;
+
+  @ApiProperty({ example: 'parent@example.com' })
   email: string;
+
+  @ApiProperty({ example: 'John Doe', required: false, nullable: true })
   name?: string | null;
 }
 
@@ -1028,95 +1117,217 @@ export class AiCreditAnalyticsDto {
 }
 
 export class UserGrowthMonthlyDto {
-  data: {
-    labels: string[]; // ['Jan', 'Feb', ...]
-    freeUsers: number[];
-    paidUsers: number[];
-  };
+  @ApiProperty({ example: ['Jan', 'Feb', 'Mar'] })
+  labels: string[];
+
+  @ApiProperty({ example: [100, 120, 150] })
+  freeUsers: number[];
+
+  @ApiProperty({ example: [20, 30, 40] })
+  paidUsers: number[];
 }
 
 // User list item for paginated user listing - extended from base user fields
-export interface UserListItemDto {
+export class UserListItemDto {
+  @ApiProperty({ example: 'user-123' })
   id: string;
+
+  @ApiProperty({ example: 'parent@example.com' })
   email: string;
+
+  @ApiProperty({ example: 'John Doe', nullable: true })
   name: string | null;
+
+  @ApiProperty({ example: 'parent' })
   role: string;
+
+  @ApiProperty({ example: true })
   isEmailVerified: boolean;
+
+  @ApiProperty({ example: false })
   isDeleted: boolean;
+
+  @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   createdAt: Date;
+
+  @ApiProperty({ example: '2023-10-15T10:30:00Z' })
   updatedAt: Date;
+
+  @ApiProperty({ example: null, required: false, nullable: true })
   deletedAt?: Date | null;
+
+  @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   registrationDate: Date;
+
+  @ApiProperty({ example: 30 })
   activityLength: number;
+
+  @ApiProperty({ example: 50 })
   creditUsed: number;
+
+  @ApiProperty({ example: 100.0 })
   amountSpent: number;
+
+  @ApiProperty({ example: true })
   isPaidUser: boolean;
+
+  @ApiProperty({ type: () => SubscriptionInfo, nullable: true })
   activeSubscription: Partial<SubscriptionInfo> | null;
+
+  @ApiProperty({ example: 2 })
   kidsCount: number;
+
+  @ApiProperty({ example: 10 })
   sessionsCount: number;
+
+  @ApiProperty({ example: 5 })
   favoritesCount: number;
+
+  @ApiProperty({ example: 1 })
   subscriptionsCount: number;
+
+  @ApiProperty({ example: 1 })
   transactionsCount: number;
+
+  @ApiProperty({ type: () => ProfileInfo, nullable: true })
   profile?: ProfileInfo | null;
+
+  @ApiProperty({ type: () => AvatarInfo, nullable: true })
   avatar?: AvatarInfo | null;
-  // Allow additional fields from Prisma User model
+
   [key: string]: unknown;
 }
 
 // Story list item for paginated story listing
-export interface StoryListItemDto {
+export class StoryListItemDto {
+  @ApiProperty({ example: 'story-123' })
   id: string;
+
+  @ApiProperty({ example: 'The Brave Little Tailor' })
   title: string;
+
+  @ApiProperty({ example: 'A classic fairy tale of wit and bravery.' })
   description: string;
+
+  @ApiProperty({ example: 'en' })
   language: string;
+
+  @ApiProperty({ example: 'https://example.com/cover.png' })
   coverImageUrl: string;
+
+  @ApiProperty({ example: null, required: false, nullable: true })
   audioUrl?: string | null;
+
+  @ApiProperty({ example: true })
   isInteractive: boolean;
+
+  @ApiProperty({ example: 3 })
   ageMin: number;
+
+  @ApiProperty({ example: 8 })
   ageMax: number;
+
+  @ApiProperty({ example: '#F0F0F0' })
   backgroundColor: string;
+
+  @ApiProperty({ example: true })
   recommended: boolean;
+
+  @ApiProperty({ example: false })
   aiGenerated: boolean;
+
+  @ApiProperty({ example: 2 })
   difficultyLevel: number;
+
+  @ApiProperty({ example: 1200 })
   wordCount: number;
+
+  @ApiProperty({ example: false })
   isDeleted: boolean;
+
+  @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   createdAt: Date;
+
+  @ApiProperty({ example: '2023-10-15T10:30:00Z' })
   updatedAt: Date;
+
+  @ApiProperty({ type: [CategoryInfo] })
   categories: CategoryInfo[];
+
+  @ApiProperty({ type: [ThemeInfo] })
   themes: ThemeInfo[];
+
+  @ApiProperty({ example: 150 })
   favoritesCount: number;
+
+  @ApiProperty({ example: 1200 })
   viewsCount: number;
+
+  @ApiProperty({ example: 45 })
   parentFavoritesCount: number;
+
+  @ApiProperty({ example: 85 })
   downloadsCount: number;
-  // Allow additional fields from Prisma Story model
+
   [key: string]: unknown;
 }
 
 // Admin creation response
-export interface AdminCreatedDto {
+export class AdminCreatedDto {
+  @ApiProperty({ example: 'admin-123' })
   id: string;
+
+  @ApiProperty({ example: 'admin@storytime.com' })
   email: string;
+
+  @ApiProperty({ example: 'Super Admin', nullable: true })
   name: string | null;
+
+  @ApiProperty({ example: 'admin' })
   role: string;
+
+  @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   createdAt: Date;
 }
 
 // User update response
-export interface UserUpdatedDto {
+export class UserUpdatedDto {
+  @ApiProperty({ example: 'user-123' })
   id: string;
+
+  @ApiProperty({ example: 'updated@example.com' })
   email: string;
+
+  @ApiProperty({ example: 'Updated Name', nullable: true })
   name: string | null;
+
+  @ApiProperty({ example: 'parent' })
   role: string;
+
+  @ApiProperty({ example: true })
   isEmailVerified: boolean;
+
+  @ApiProperty({ example: '2023-10-15T10:30:00Z' })
   updatedAt: Date;
 }
 
 // Story toggle/update response
-export interface StoryActionResultDto {
+export class StoryActionResultDto {
+  @ApiProperty({ example: 'story-123' })
   id: string;
+
+  @ApiProperty({ example: 'The Brave Little Tailor' })
   title: string;
+
+  @ApiProperty({ example: true })
   recommended: boolean;
+
+  @ApiProperty({ example: false })
   isDeleted: boolean;
+
+  @ApiProperty({ example: null, nullable: true })
   deletedAt: Date | null;
+
+  @ApiProperty({ example: '2023-10-15T10:30:00Z' })
   updatedAt: Date;
 }

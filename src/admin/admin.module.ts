@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
-import { AdminService } from './admin.service';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminUserService } from './admin-user.service';
 import { AdminStoryService } from './admin-story.service';
@@ -12,16 +11,21 @@ import {
   PrismaAdminStoryRepository,
   ADMIN_USER_REPOSITORY,
   PrismaAdminUserRepository,
+  ADMIN_ANALYTICS_REPOSITORY,
+  PrismaAdminAnalyticsRepository,
+  ADMIN_SYSTEM_REPOSITORY,
+  PrismaAdminSystemRepository,
 } from './repositories';
+import { AdminSystemService } from './admin-system.service';
 
 @Module({
   imports: [PrismaModule, AuthModule, VoiceModule],
   controllers: [AdminController],
   providers: [
-    AdminService,
     AdminAnalyticsService,
     AdminUserService,
     AdminStoryService,
+    AdminSystemService,
     {
       provide: ADMIN_STORY_REPOSITORY,
       useClass: PrismaAdminStoryRepository,
@@ -30,12 +34,21 @@ import {
       provide: ADMIN_USER_REPOSITORY,
       useClass: PrismaAdminUserRepository,
     },
+    {
+      provide: ADMIN_ANALYTICS_REPOSITORY,
+      useClass: PrismaAdminAnalyticsRepository,
+    },
+    {
+      provide: ADMIN_SYSTEM_REPOSITORY,
+      useClass: PrismaAdminSystemRepository,
+    },
   ],
   exports: [
-    AdminService,
     AdminAnalyticsService,
     AdminUserService,
     AdminStoryService,
+    AdminSystemService,
+    ADMIN_ANALYTICS_REPOSITORY,
   ],
 })
-export class AdminModule {}
+export class AdminModule { }
