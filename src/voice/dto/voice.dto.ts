@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export enum VoiceSourceType {
   UPLOADED = 'uploaded',
@@ -83,4 +83,32 @@ export class StoryContentAudioDto {
   })
   @IsOptional()
   voiceId?: VoiceType | string;
+}
+
+export class AsyncStorySynthesisDto {
+  @ApiProperty({
+    example: 'story-uuid-123',
+    description: 'Story ID to generate audio for',
+  })
+  @IsString()
+  @IsNotEmpty()
+  storyId: string;
+
+  @ApiProperty({
+    required: false,
+    example: 'CHARLIE',
+    description: 'Voice type (Enum value or custom voice UUID)',
+    type: 'string',
+  })
+  @IsOptional()
+  voiceId?: VoiceType | string;
+
+  @ApiProperty({
+    required: false,
+    default: false,
+    description: 'Whether to update the story record with the new audio URL',
+  })
+  @IsOptional()
+  @IsBoolean()
+  updateStory?: boolean;
 }

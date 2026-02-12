@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
+import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '@/auth/auth.module';
 import { StoryModule } from '../story/story.module';
 import { UploadModule } from '../upload/upload.module';
@@ -20,6 +21,7 @@ import {
   VOICE_QUOTA_REPOSITORY,
   PrismaVoiceQuotaRepository,
 } from './repositories';
+import { VOICE_QUEUE_NAME, VoiceQueueService, VoiceProcessor } from './queue';
 
 @Module({
   imports: [
@@ -28,6 +30,10 @@ import {
     HttpModule,
     UploadModule,
     forwardRef(() => StoryModule),
+    // Register voice synthesis queue
+    BullModule.registerQueue({
+      name: VOICE_QUEUE_NAME,
+    }),
   ],
   controllers: [VoiceController],
   providers: [
@@ -42,6 +48,8 @@ import {
     TextChunker,
     StreamConverter,
     VoiceQuotaService,
+    VoiceQueueService,
+    VoiceProcessor,
     {
       provide: VOICE_QUOTA_REPOSITORY,
       useClass: PrismaVoiceQuotaRepository,
@@ -59,6 +67,7 @@ import {
     TextChunker,
     StreamConverter,
     VoiceQuotaService,
+    VoiceQueueService,
   ],
 })
 export class VoiceModule {}
