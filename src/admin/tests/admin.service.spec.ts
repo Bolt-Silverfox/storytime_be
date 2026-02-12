@@ -81,7 +81,10 @@ describe('AdminService', () => {
       const mockUsers = [
         {
           id: '1',
-          subscription: { status: 'active', endsAt: new Date(Date.now() + 10000) },
+          subscription: {
+            status: 'active',
+            endsAt: new Date(Date.now() + 10000),
+          },
         }, // Paid
         { id: '2', subscription: null }, // Unpaid
       ];
@@ -194,7 +197,10 @@ describe('AdminService', () => {
       const mockUser = {
         id: userId,
         email: 'test@example.com',
-        subscription: { status: 'active', endsAt: new Date(Date.now() + 10000) },
+        subscription: {
+          status: 'active',
+          endsAt: new Date(Date.now() + 10000),
+        },
         _count: {
           auth: 10,
           parentFavorites: 5,
