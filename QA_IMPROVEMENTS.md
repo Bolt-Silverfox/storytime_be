@@ -945,6 +945,14 @@ this.eventEmitter.emit('user.created', payload);
 - [ ] Fix error handling (generic Error → NestJS exceptions)
 - [ ] Security audit implementation
 
+### Recently Completed (Instance 21-23) ✅
+- [x] **Push Notifications (FCM)** - FcmService, DeviceTokenService *(Instance 21)*
+- [x] **Server-Sent Events (SSE)** - JobEventsService, SseController *(Instance 21)*
+- [x] **Device Token Management** - DeviceController, DeviceToken model *(Instance 21)*
+- [x] **Cache Metrics Service** - OpenTelemetry metrics for cache operations *(Instance 22)*
+- [x] **Grafana Dashboard IDs** - GRAFANA_SETUP.md with community dashboard IDs *(Instance 22)*
+- [x] **Health Indicators** - Firebase, Cloudinary, enhanced Queue health *(Instance 23)*
+
 ### Recently Completed ✅
 - [x] **Event-Driven Architecture (EDA)** - Complete Implementation *(Instances 17, 18 - 2026-02-10)*
 - [x] **Admin Domain Optimization** - Controller thinning, DTO standardization, and query optimization *(Instance 20 - 2026-02-10)*

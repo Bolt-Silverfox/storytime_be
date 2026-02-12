@@ -412,21 +412,38 @@ Large services may cause memory issues:
 ### 6.1 Current State ✅
 
 - Request logging middleware with tracing ✅
-- Health checks for DB, Redis, SMTP, Queue ✅
+- Health checks for DB, Redis, SMTP, Queue, Firebase, Cloudinary ✅
 - Request ID propagation via `X-Request-ID` header ✅
+- OpenTelemetry metrics export ✅
+- Cache metrics tracking (hit/miss, latency) ✅
 
-### 6.2 Metrics Implementation (P1 - High)
+**Health Endpoints Available:**
+```
+GET /health          - Liveness (K8s probe)
+GET /health/ready    - Readiness (DB, Redis, Queues)
+GET /health/db       - Database only
+GET /health/redis    - Redis only
+GET /health/smtp     - SMTP only
+GET /health/queues   - All queues (email, story, voice)
+GET /health/firebase - Firebase/FCM
+GET /health/cloudinary - Cloudinary
+GET /health/external - All external services
+GET /health/system   - Memory + Disk
+GET /health/full     - All indicators
+```
+
+### 6.2 Metrics Implementation (P1 - High) ✅ LARGELY COMPLETE
 
 **Required Metrics:**
 
 | Metric | Purpose | Priority | Implementation |
 |--------|---------|----------|----------------|
-| Query execution time | Identify slow queries | P1 | Prisma middleware |
-| Cache hit/miss ratio | Cache effectiveness | P1 | Cache interceptor |
+| Query execution time | Identify slow queries | P1 | ✅ Prisma middleware |
+| Cache hit/miss ratio | Cache effectiveness | P1 | ✅ CacheMetricsService |
 | External API latency | Provider performance | P1 | HTTP interceptor |
-| Request duration | API performance | P1 | Already implemented |
-| Memory usage | Resource planning | P2 | Health check |
-| Queue depth | Processing backlog | P1 | BullMQ metrics |
+| Request duration | API performance | P1 | ✅ Already implemented |
+| Memory usage | Resource planning | P2 | ✅ Health check |
+| Queue depth | Processing backlog | P1 | ✅ QueueHealthIndicator |
 
 **Prisma Query Logging:** ✅ IMPLEMENTED
 
@@ -453,26 +470,25 @@ private setupQueryLogging(): void {
 }
 ```
 
-**Cache Metrics Interceptor:**
-```typescript
-@Injectable()
-export class CacheMetricsInterceptor implements NestInterceptor {
-  intercept(context: ExecutionContext, next: CallHandler) {
-    const cacheKey = this.getCacheKey(context);
+**Cache Metrics Service:** ✅ IMPLEMENTED
 
-    return from(this.cacheService.get(cacheKey)).pipe(
-      tap(cached => {
-        if (cached) {
-          this.metrics.increment('cache.hit');
-        } else {
-          this.metrics.increment('cache.miss');
-        }
-      }),
-      switchMap(() => next.handle())
-    );
-  }
+```typescript
+// src/shared/services/cache-metrics.service.ts
+@Injectable()
+export class CacheMetricsService implements OnModuleInit {
+  private cacheOperationsCounter!: Counter;      // cache_operations_total
+  private cacheLatencyHistogram!: Histogram;     // cache_operation_duration_seconds
+  private cacheHitRatioGauge!: ObservableGauge;  // cache_hit_ratio
+
+  async get<T>(key: string, keyPattern: string = 'default'): Promise<T | null>
+  async set<T>(key: string, value: T, ttl?: number, keyPattern?: string): Promise<void>
+  async del(key: string, keyPattern?: string): Promise<void>
+  async getOrSet<T>(key: string, fetcher: () => Promise<T>, ttl?: number, keyPattern?: string): Promise<T>
 }
 ```
+
+**Integrated Services:**
+- `SubscriptionService` - uses `CacheMetricsService.getOrSet()` for `isPremiumUser()`
 
 ### 6.3 APM Integration (P2 - Medium)
 
@@ -507,9 +523,10 @@ sdk.start();
 
 **Action Items:**
 - [x] Add Prisma query logging middleware ✅
-- [ ] Implement cache metrics
-- [ ] Set up OpenTelemetry SDK
-- [ ] Create Grafana dashboards
+- [x] Implement cache metrics ✅ *(CacheMetricsService with OpenTelemetry)*
+- [x] Set up OpenTelemetry SDK ✅ *(src/otel-setup.ts)*
+- [x] Document Grafana dashboard IDs ✅ *(GRAFANA_SETUP.md)*
+- [ ] Create custom Grafana dashboards
 - [ ] Configure alerting thresholds
 
 ---
@@ -576,42 +593,36 @@ export class StoryGenerationProcessor extends WorkerHost {
 }
 ```
 
-### 7.3 Queue Health Monitoring (P1 - High)
+### 7.3 Queue Health Monitoring (P1 - High) ✅ COMPLETE
 
-```typescript
-// health/indicators/queue.health.ts
-@Injectable()
-export class QueueHealthIndicator extends HealthIndicator {
-  async isHealthy(key: string) {
-    const stats = await this.emailQueue.getJobCounts();
+**Implementation:** `src/health/indicators/queue.health.ts`
 
-    const isHealthy = stats.waiting < 1000 && stats.failed < 100;
+Enhanced `QueueHealthIndicator` monitors all 3 queues (email, story, voice):
+- `isHealthy()` - Aggregate health check for all queues
+- `checkQueue()` - Individual queue health check
+- Tracks: waiting, active, completed, failed, delayed counts per queue
 
-    return this.getStatus(key, isHealthy, {
-      waiting: stats.waiting,
-      active: stats.active,
-      completed: stats.completed,
-      failed: stats.failed,
-    });
-  }
-}
-```
+**Health Endpoints:**
+- `GET /health/queues` - All queues aggregate
+- `GET /health/queues/email` - Email queue
+- `GET /health/queues/story` - Story queue
+- `GET /health/queues/voice` - Voice queue
 
-### 7.4 New Queue Opportunities (P2 - Medium)
+### 7.4 New Queue Opportunities (P2 - Medium) ✅ LARGELY COMPLETE
 
-| Operation | Current | Recommended |
-|-----------|---------|-------------|
-| Story generation | Sync | Background queue |
-| Voice synthesis | Sync | Background queue |
-| Image processing | Sync | Background queue |
-| Report generation | Sync | Background queue |
-| Bulk notifications | Sync | Background queue |
+| Operation | Current | Recommended | Status |
+|-----------|---------|-------------|--------|
+| Story generation | Background queue | Background queue | ✅ Complete |
+| Voice synthesis | Background queue | Background queue | ✅ Complete |
+| Image processing | Sync | Background queue | ⏳ Pending |
+| Report generation | Sync | Background queue | ⏳ Pending |
+| Bulk notifications | Sync | Background queue | ⏳ Pending |
 
 **Action Items:**
-- [ ] Create `story-generation` queue for AI operations
-- [ ] Create `voice-synthesis` queue for TTS operations
+- [x] Create `story-generation` queue for AI operations ✅ *(src/story/queue/)*
+- [x] Create `voice-synthesis` queue for TTS operations ✅ *(src/voice/queue/)*
 - [ ] Add queue dashboard (Bull Board)
-- [ ] Implement queue metrics in monitoring
+- [x] Implement queue metrics in monitoring ✅ *(QueueHealthIndicator)*
 
 ---
 
@@ -1635,8 +1646,12 @@ await this.prisma.entity.createMany({
 **Infrastructure**
 - [x] APM integration (OpenTelemetry) *(src/otel-setup.ts implemented)*
 - [x] Story generation queue *(src/story/queue/ with processor, service, constants)*
-- [ ] Voice synthesis queue
-- [ ] Grafana dashboards setup
+- [x] Voice synthesis queue ✅ *(src/voice/queue/ with processor, service, constants)*
+- [x] Grafana dashboard IDs documented ✅ *(GRAFANA_SETUP.md)*
+- [x] Cache metrics service ✅ *(CacheMetricsService with OpenTelemetry)*
+- [x] Health indicators for all services ✅ *(Firebase, Cloudinary, Queue enhancement)*
+- [x] Push notifications (FCM) + SSE ✅ *(FcmService, JobEventsService, DeviceTokenService)*
+- [ ] Custom Grafana dashboards creation
 
 ---
 
