@@ -1,3 +1,7 @@
+// CRITICAL: OpenTelemetry must be initialized BEFORE any other imports
+import './otel-setup';
+import { json, urlencoded } from 'express';
+
 import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { Logger, ValidationPipe } from '@nestjs/common';
@@ -9,11 +13,13 @@ import { SuccessResponseInterceptor } from './shared/interceptors/success-respon
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter';
 import { requestLogger } from './shared/middleware/request-logger.middleware';
+import { WinstonModule } from 'nest-winston';
+import { winstonConfig } from './shared/config/logger.config';
 
 async function bootstrap() {
   const logger = new Logger('Main');
   const app = await NestFactory.create(AppModule, {
-    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+    logger: WinstonModule.createLogger(winstonConfig),
   });
 
   const configService = app.get(ConfigService);
@@ -38,6 +44,9 @@ async function bootstrap() {
       level: 6, // Compression level (1-9, 6 is default balance of speed/ratio)
     }),
   );
+
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   app.use(helmet());
   app.use(requestLogger);

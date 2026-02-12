@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TerminusModule } from '@nestjs/terminus';
 import { BullModule } from '@nestjs/bullmq';
 import { HealthController } from './health.controller';
+import { MetricsController } from './metrics.controller';
 import {
   PrismaHealthIndicator,
   RedisHealthIndicator,
@@ -20,7 +21,7 @@ import { EMAIL_QUEUE_NAME } from '@/notification/queue/email-queue.constants';
       name: EMAIL_QUEUE_NAME,
     }),
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, MetricsController],
   providers: [
     PrismaHealthIndicator,
     RedisHealthIndicator,
@@ -28,4 +29,4 @@ import { EMAIL_QUEUE_NAME } from '@/notification/queue/email-queue.constants';
     QueueHealthIndicator,
   ],
 })
-export class HealthModule {}
+export class HealthModule { }
