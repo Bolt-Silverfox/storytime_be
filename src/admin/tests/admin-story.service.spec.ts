@@ -2,7 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { AdminStoryService } from '../admin-story.service';
-import { ADMIN_STORY_REPOSITORY, IAdminStoryRepository } from '../repositories/admin-story.repository.interface';
+import {
+  ADMIN_STORY_REPOSITORY,
+  IAdminStoryRepository,
+} from '../repositories/admin-story.repository.interface';
 
 describe('AdminStoryService', () => {
   let service: AdminStoryService;
@@ -117,7 +120,9 @@ describe('AdminStoryService', () => {
 
   describe('getStoryById', () => {
     it('should return story details', async () => {
-      adminStoryRepository.findStoryById.mockResolvedValue(mockStoryWithFullRelations as any);
+      adminStoryRepository.findStoryById.mockResolvedValue(
+        mockStoryWithFullRelations as any,
+      );
 
       const result = await service.getStoryById('story-123');
 
@@ -128,13 +133,17 @@ describe('AdminStoryService', () => {
     it('should throw NotFoundException if story not found', async () => {
       adminStoryRepository.findStoryById.mockResolvedValue(null);
 
-      await expect(service.getStoryById('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.getStoryById('nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('getCategories', () => {
     it('should return categories', async () => {
-      adminStoryRepository.findCategories.mockResolvedValue([mockCategory as any]);
+      adminStoryRepository.findCategories.mockResolvedValue([
+        mockCategory as any,
+      ]);
 
       const result = await service.getCategories();
 

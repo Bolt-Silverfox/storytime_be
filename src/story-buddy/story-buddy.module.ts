@@ -25,8 +25,8 @@ import { AuthModule } from '../auth/auth.module';
     {
       provide: STORY_BUDDY_REPOSITORY,
       useClass: PrismaStoryBuddyRepository,
-    }
+    },
   ],
   exports: [StoryBuddyService, BuddySelectionService, BuddyMessagingService],
 })
-export class StoryBuddyModule { }
+export class StoryBuddyModule {}

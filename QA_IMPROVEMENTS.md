@@ -458,6 +458,7 @@ Circular dependencies between modules have been resolved using a comprehensive e
 | `src/notification/notification.service.ts` | 79 | `throw new Error('Invalid notification type')` | `throw new BadRequestException(...)` |
 | `src/notification/notification.service.ts` | 84 | `throw new Error(...)` | `throw new BadRequestException(...)` |
 | `src/notification/queue/email.processor.ts` | 96 | `throw new Error(...)` | `throw new InternalServerErrorException(...)` |
+| `src/admin/admin-analytics.service.ts` | various | `throw new BadRequestException(...)` | `throw new ValidationException(...)` |
 | `src/voice/providers/deepgram-stt.provider.ts` | various | `throw new Error(...)` | `throw new InternalServerErrorException(...)` |
 | `src/voice/providers/eleven-labs-tts.provider.ts` | various | `throw new Error(...)` | `throw new InternalServerErrorException(...)` |
 
@@ -524,57 +525,61 @@ Manual validation after DTO parsing (should be in DTO):
 
 ## 5. Architecture Issues
 
-### 5.1 Circular Dependencies (P1 - High)
+### 5.1 Circular Dependencies (P1 - High) ✅ LARGELY RESOLVED
 
-**7 modules** using `forwardRef()`:
+**Status**: Event-driven architecture implemented. Reduced from 7 modules to 3 modules using `forwardRef()`.
 
-| Module | Depends On | Via |
-|--------|------------|-----|
-| `StoryModule` | `VoiceModule` | `forwardRef` |
-| `VoiceModule` | `StoryModule` | `forwardRef` |
-| `SubscriptionModule` | `PaymentModule`, `UserModule`, `AuthModule` | `forwardRef` |
-| `NotificationModule` | `AuthModule` | `forwardRef` |
-| `PaymentModule` | `AuthModule` | `forwardRef` |
-| `AchievementProgressModule` | `AuthModule` | `forwardRef` |
-| `AuthModule` | `NotificationModule` | `forwardRef` |
+**Remaining `forwardRef` usages** (3 modules, 6 occurrences):
 
-**Recommended Solution:**
-Use event-driven architecture with `@nestjs/event-emitter`:
+| Module | Depends On | Via | Reason |
+|--------|------------|-----|--------|
+| `StoryModule` | `VoiceModule` | `forwardRef` | Bidirectional TTS dependency |
+| `VoiceModule` | `StoryModule` | `forwardRef` | Bidirectional TTS dependency |
+| `AchievementProgressModule` | Various | `forwardRef` | Badge/progress tracking |
 
+**Resolved via Event-Driven Architecture:**
+- ✅ `AuthModule` ↔ `NotificationModule` - Now uses events
+- ✅ `PaymentModule` ↔ `AuthModule` - Now uses events
+- ✅ `SubscriptionModule` dependencies - Now uses events
+
+**Implementation (see Section 2.2 for details):**
 ```typescript
-// Instead of direct service calls
-// this.notificationService.sendEmail(...)
+// Event emission replaces direct service calls
+this.eventEmitter.emit(AppEvents.USER_REGISTERED, { userId, email });
 
-// Use events
-this.eventEmitter.emit('user.registered', { userId, email });
-
-// NotificationModule listens independently
-@OnEvent('user.registered')
+// Listeners handle cross-cutting concerns independently
+@OnEvent(AppEvents.USER_REGISTERED)
 handleUserRegistered(payload: UserRegisteredEvent) {
   await this.sendWelcomeEmail(payload.email);
 }
 ```
 
 **Action Items:**
-- [ ] Identify shared dependencies that cause cycles
-- [ ] Implement event-driven patterns for cross-module communication
-- [ ] Remove all `forwardRef` usages
+- [x] Implement event-driven patterns for cross-module communication
+- [x] Remove `forwardRef` from Auth/Notification/Payment modules
+- [ ] Consider extracting shared TTS logic to resolve Story ↔ Voice dependency (low priority)
 
 ---
 
 ## Progress Tracking
 
-### Completed
+### Completed ✅
 - [x] Initial codebase analysis
 - [x] Document all issues
+- [x] Refactor god services (ALL 4 PHASES COMPLETE - 19 services extracted)
+- [x] Event-driven architecture (20 events, 4 listeners)
+- [x] Remove most circular dependencies (reduced from 7 to 3 modules)
+- [x] Repository pattern implementation (all services)
+- [x] Rate limiting on auth and payment endpoints
+- [x] CI/CD pipeline with quality gates
 
-### In Progress
-- [ ] Test coverage improvements
+### In Progress 🔄
+- [ ] Test coverage improvements (need: story-generation, story-progress, password, token)
 
-### Pending
-- [ ] Refactor god services
-- [ ] Fix error handling
-- [ ] Remove circular dependencies
+### Pending 📋
+- [ ] E2E tests for payment/subscription flows
+- [ ] Fix remaining error handling (5 generic Error throws)
+- [ ] Voice synthesis queue
 
 ---
 
@@ -942,25 +947,10 @@ this.eventEmitter.emit('user.created', payload);
 
 ### Recently Completed ✅
 - [x] **Event-Driven Architecture (EDA)** - Complete Implementation *(Instances 17, 18 - 2026-02-10)*
-  - **Phase 1**: Initial EDA Setup
-    - Integrated EventEmitterModule globally in app.module.ts
-    - Created centralized event types in `src/shared/events/app-events.ts`
-    - Created initial event listeners: AuthEventListener, PasswordEventListener
-    - Removed 6 unnecessary `forwardRef()` imports
-    - Decoupled Auth from Notification using events
-  - **Phase 2**: Comprehensive Event Implementation *(Instance 18)*
-    - Implemented 18 business events across all major domains:
-      - User lifecycle events (4): registered, deleted, email_verified, password_changed
-      - Payment events (2): completed, failed
-      - Subscription events (3): created, changed, cancelled
-      - Story events (3): created, completed, progress_updated
-    - Modified 7 services to emit events: AuthService, PasswordService, UserDeletionService, PaymentService, SubscriptionService, StoryGenerationService, StoryProgressService
-    - Created 2 new cross-cutting event listeners:
-      - `AnalyticsEventListener` - Centralized analytics tracking
-      - `ActivityLogEventListener` - Comprehensive audit trail logging
-    - Registered listeners in SharedModule for global availability
-    - All event payloads are type-safe with TypeScript interfaces
-  - **Result**: Complete decoupling between business logic and cross-cutting concerns with zero circular dependencies
+- [x] **Admin Domain Optimization** - Controller thinning, DTO standardization, and query optimization *(Instance 20 - 2026-02-10)*
+  - Extracted Swagger decorators to dedicated files.
+  - Converted all Admin response interfaces to classes with `@ApiProperty`.
+  - Optimized analytics queries in `PrismaAdminAnalyticsRepository`.
 
 ---
 

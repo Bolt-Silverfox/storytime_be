@@ -29,7 +29,7 @@ export class TextToSpeechService {
     @Inject(STORY_REPOSITORY)
     private readonly storyRepository: IStoryRepository,
     private readonly voiceQuota: VoiceQuotaService,
-  ) { }
+  ) {}
 
   async synthesizeStory(
     storyId: string,

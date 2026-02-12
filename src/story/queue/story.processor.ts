@@ -2,6 +2,8 @@ import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { StoryGenerationService } from '../story-generation.service';
+import { FcmService } from '@/notification/services/fcm.service';
+import { JobEventsService } from '@/notification/services/job-events.service';
 import {
   STORY_QUEUE_NAME,
   STORY_GENERATION_STAGES,
@@ -29,7 +31,11 @@ import { HttpStatus } from '@nestjs/common';
 export class StoryProcessor extends WorkerHost {
   private readonly logger = new Logger(StoryProcessor.name);
 
-  constructor(private readonly storyGenerationService: StoryGenerationService) {
+  constructor(
+    private readonly storyGenerationService: StoryGenerationService,
+    private readonly fcmService: FcmService,
+    private readonly jobEventsService: JobEventsService,
+  ) {
     super();
   }
 
@@ -217,7 +223,9 @@ export class StoryProcessor extends WorkerHost {
     // Check for DomainException with 4xx status (except 429 Too Many Requests)
     if (error instanceof DomainException) {
       const status = error.getStatus();
-      return status >= 400 && status < 500 && status !== HttpStatus.TOO_MANY_REQUESTS;
+      return (
+        status >= 400 && status < 500 && status !== HttpStatus.TOO_MANY_REQUESTS
+      );
     }
 
     if (!(error instanceof Error)) return false;
@@ -238,18 +246,64 @@ export class StoryProcessor extends WorkerHost {
    * Called when a job completes successfully
    */
   @OnWorkerEvent('completed')
-  onCompleted(job: Job<StoryJobData>, result: StoryJobResult): void {
+  async onCompleted(
+    job: Job<StoryJobData>,
+    result: StoryJobResult,
+  ): Promise<void> {
     this.logger.log(
       `Job ${job.data.jobId} completed: ${job.data.type} for user ${job.data.userId} ` +
-      `(attempts: ${result.attemptsMade}, time: ${result.processingTimeMs}ms, storyId: ${result.storyId})`,
+        `(attempts: ${result.attemptsMade}, time: ${result.processingTimeMs}ms, storyId: ${result.storyId})`,
     );
+
+    // Send push notification to mobile devices
+    if (result.success && result.story) {
+      await this.sendCompletionNotification(job.data, result);
+    }
+  }
+
+  /**
+   * Send completion notification via push notification and SSE
+   */
+  private async sendCompletionNotification(
+    jobData: StoryJobData,
+    result: StoryJobResult,
+  ): Promise<void> {
+    // Emit SSE event for web clients
+    this.jobEventsService.emitStoryCompleted(
+      jobData.jobId,
+      jobData.userId,
+      result.storyId!,
+      result.story!.title,
+    );
+
+    // Send push notification to mobile devices
+    try {
+      const pushResult = await this.fcmService.sendStoryCompletionNotification(
+        jobData.userId,
+        result.storyId!,
+        result.story!.title,
+      );
+
+      this.logger.log(
+        `Push notification sent for job ${jobData.jobId}: ${pushResult.successCount} devices`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send push notification for job ${jobData.jobId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      // Push notification failures are logged but don't fail the job
+      // User can still poll for status or check their stories list
+    }
   }
 
   /**
    * Called when a job fails (before retry or permanently)
    */
   @OnWorkerEvent('failed')
-  onFailed(job: Job<StoryJobData> | undefined, error: Error): void {
+  async onFailed(
+    job: Job<StoryJobData> | undefined,
+    error: Error,
+  ): Promise<void> {
     if (!job) {
       this.logger.error('Job failed with no job data', error.stack);
       return;
@@ -265,11 +319,42 @@ export class StoryProcessor extends WorkerHost {
     } else {
       this.logger.error(
         `Job ${jobId} permanently failed after ${job.attemptsMade} attempts: ` +
-        `${type} for user ${userId} - ${error.message}`,
+          `${type} for user ${userId} - ${error.message}`,
         error.stack,
       );
-      // Here you could emit an event for alerting/monitoring
-      // this.eventEmitter.emit('story.generation.permanently_failed', { job, error });
+
+      // Send failure notification to user
+      await this.sendFailureNotification(job.data, error.message);
+    }
+  }
+
+  /**
+   * Send failure notification for permanent failures via push and SSE
+   */
+  private async sendFailureNotification(
+    jobData: StoryJobData,
+    errorMessage: string,
+  ): Promise<void> {
+    // Emit SSE event for web clients
+    this.jobEventsService.emitFailed(
+      jobData.jobId,
+      jobData.userId,
+      'story',
+      errorMessage,
+    );
+
+    // Send push notification to mobile devices
+    try {
+      await this.fcmService.sendStoryFailureNotification(
+        jobData.userId,
+        jobData.jobId,
+        errorMessage,
+      );
+      this.logger.log(`Failure notification sent for job ${jobData.jobId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send failure notification for job ${jobData.jobId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 

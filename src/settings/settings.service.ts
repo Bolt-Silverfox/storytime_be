@@ -113,7 +113,10 @@ export class SettingsService {
       return profile;
     }
 
-    const updatedProfile = await this.settingsRepository.updateProfile(userId, updateData);
+    const updatedProfile = await this.settingsRepository.updateProfile(
+      userId,
+      updateData,
+    );
 
     // Invalidate cache after update
     await this.invalidateUserPreferencesCache(userId);

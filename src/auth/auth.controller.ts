@@ -59,7 +59,7 @@ export class AuthController {
     private readonly onboardingService: OnboardingService,
     private readonly emailVerificationService: EmailVerificationService,
     private readonly passwordService: PasswordService,
-  ) { }
+  ) {}
 
   @Post('login')
   @UseGuards(AuthThrottleGuard)
@@ -289,7 +289,11 @@ export class AuthController {
   @ApiBody({ type: ValidateResetTokenDto })
   @ApiResponse({ status: 200, description: 'Token is valid.' })
   async validateResetToken(@Body() body: ValidateResetTokenDto) {
-    return this.passwordService.validateResetToken(body.token, body.email, body);
+    return this.passwordService.validateResetToken(
+      body.token,
+      body.email,
+      body,
+    );
   }
 
   @Post('reset-password')

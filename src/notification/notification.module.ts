@@ -5,9 +5,14 @@ import { NotificationService } from './notification.service';
 import { NotificationPreferenceService } from './services/notification-preference.service';
 import { InAppNotificationService } from './services/in-app-notification.service';
 import { EventNotificationService } from './services/event-notification.service';
+import { FcmService } from './services/fcm.service';
+import { DeviceTokenService } from './services/device-token.service';
+import { JobEventsService } from './services/job-events.service';
 import { NotificationController } from './notification.controller';
 import { InAppNotificationController } from './in-app-notification.controller';
 import { UserPreferencesController } from './user-preferences.controller';
+import { DeviceController } from './device.controller';
+import { SseController } from './sse.controller';
 import { InAppProvider } from './providers/in-app.provider';
 import { EmailProvider } from './providers/email.provider';
 import { EMAIL_QUEUE_NAME } from './queue/email-queue.constants';
@@ -35,12 +40,17 @@ import {
     NotificationController,
     InAppNotificationController,
     UserPreferencesController,
+    DeviceController,
+    SseController,
   ],
   providers: [
     NotificationService,
     NotificationPreferenceService,
     InAppNotificationService,
     EventNotificationService,
+    FcmService,
+    DeviceTokenService,
+    JobEventsService,
     InAppProvider,
     EmailProvider,
     // Queue components
@@ -65,8 +75,11 @@ import {
     NotificationPreferenceService,
     InAppNotificationService,
     EmailQueueService,
+    FcmService,
+    DeviceTokenService,
+    JobEventsService,
     NOTIFICATION_PREFERENCE_REPOSITORY,
     IN_APP_NOTIFICATION_REPOSITORY,
   ],
 })
-export class NotificationModule { }
+export class NotificationModule {}

@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import type {
-  INotificationPreferenceRepository,
-} from './notification-preference.repository.interface';
+import type { INotificationPreferenceRepository } from './notification-preference.repository.interface';
 import type {
   NotificationPreference,
   User,

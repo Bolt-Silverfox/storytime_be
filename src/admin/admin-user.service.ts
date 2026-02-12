@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  Inject,
-} from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import {
   ResourceNotFoundException,
   ResourceAlreadyExistsException,
@@ -9,10 +6,7 @@ import {
 } from '@/shared/exceptions';
 import { Role, Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import {
-  IAdminUserRepository,
-  ADMIN_USER_REPOSITORY,
-} from './repositories';
+import { IAdminUserRepository, ADMIN_USER_REPOSITORY } from './repositories';
 import { PasswordService } from '../auth/services/password.service';
 import {
   PaginatedResponseDto,
@@ -33,7 +27,7 @@ export class AdminUserService {
     @Inject(ADMIN_USER_REPOSITORY)
     private readonly adminUserRepository: IAdminUserRepository,
     private readonly passwordService: PasswordService,
-  ) { }
+  ) {}
 
   async getAllUsers(
     filters: UserFilterDto,
@@ -192,10 +186,11 @@ export class AdminUserService {
       (sub) => sub.status === 'active' && (!sub.endsAt || sub.endsAt > now),
     );
 
-    const totalSpentResult = await this.adminUserRepository.aggregatePaymentTransactions({
-      userId,
-      status: 'success',
-    });
+    const totalSpentResult =
+      await this.adminUserRepository.aggregatePaymentTransactions({
+        userId,
+        status: 'success',
+      });
 
     /* eslint-disable @typescript-eslint/no-unused-vars */
     const {
@@ -222,7 +217,9 @@ export class AdminUserService {
   }
 
   async createAdmin(data: CreateAdminDto): Promise<AdminCreatedDto> {
-    const existingUser = await this.adminUserRepository.findUserByEmail(data.email);
+    const existingUser = await this.adminUserRepository.findUserByEmail(
+      data.email,
+    );
 
     if (existingUser) {
       throw new ResourceAlreadyExistsException('User', 'email', data.email);
@@ -261,7 +258,9 @@ export class AdminUserService {
     }
 
     if (data.email && data.email !== user.email) {
-      const existingUser = await this.adminUserRepository.findUserByEmail(data.email);
+      const existingUser = await this.adminUserRepository.findUserByEmail(
+        data.email,
+      );
       if (existingUser) {
         throw new ResourceAlreadyExistsException('User', 'email', data.email);
       }

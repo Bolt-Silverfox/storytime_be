@@ -73,7 +73,9 @@ describe('OAuthService', () => {
     };
 
     googleClient = { verifyIdToken: jest.fn() };
-    (OAuth2Client as unknown as jest.Mock).mockImplementation(() => googleClient);
+    (OAuth2Client as unknown as jest.Mock).mockImplementation(
+      () => googleClient,
+    );
 
     process.env.GOOGLE_CLIENT_ID = 'test-google-client-id';
 
@@ -83,7 +85,10 @@ describe('OAuthService', () => {
         { provide: AUTH_REPOSITORY, useValue: mockAuthRepository },
         { provide: TokenService, useValue: mockTokenService },
         { provide: PasswordService, useValue: mockPasswordService },
-        { provide: NotificationPreferenceService, useValue: mockNotificationPreferenceService },
+        {
+          provide: NotificationPreferenceService,
+          useValue: mockNotificationPreferenceService,
+        },
       ],
     }).compile();
 
@@ -95,7 +100,9 @@ describe('OAuthService', () => {
 
   describe('loginWithGoogleIdToken', () => {
     it('should throw BadRequestException when id_token is missing', async () => {
-      await expect(service.loginWithGoogleIdToken('')).rejects.toThrow(BadRequestException);
+      await expect(service.loginWithGoogleIdToken('')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should login existing user by googleId', async () => {
@@ -118,7 +125,9 @@ describe('OAuthService', () => {
 
       expect(result).toBeDefined();
       expect(result.jwt).toBe('jwt-token');
-      expect(authRepository.findUserByGoogleId).toHaveBeenCalledWith('google-123');
+      expect(authRepository.findUserByGoogleId).toHaveBeenCalledWith(
+        'google-123',
+      );
     });
   });
 });

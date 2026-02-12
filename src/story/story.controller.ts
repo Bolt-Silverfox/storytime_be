@@ -105,7 +105,7 @@ export class StoryController {
     private readonly textToSpeechService: TextToSpeechService,
     private readonly storyQuotaService: StoryQuotaService,
     private readonly storyQueueService: StoryQueueService,
-  ) { }
+  ) {}
 
   @Get()
   @ApiOperation({

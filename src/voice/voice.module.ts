@@ -5,6 +5,7 @@ import { AuthModule } from '@/auth/auth.module';
 import { StoryModule } from '../story/story.module';
 import { UploadModule } from '../upload/upload.module';
 import { PrismaModule } from '@/prisma/prisma.module';
+import { NotificationModule } from '../notification/notification.module';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
@@ -29,6 +30,7 @@ import { VOICE_QUEUE_NAME, VoiceQueueService, VoiceProcessor } from './queue';
     AuthModule,
     HttpModule,
     UploadModule,
+    NotificationModule,
     forwardRef(() => StoryModule),
     // Register voice synthesis queue
     BullModule.registerQueue({

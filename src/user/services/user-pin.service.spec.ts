@@ -104,7 +104,10 @@ describe('UserPinService', () => {
         where: { id: 'user-123', isDeleted: false },
         data: { pinHash: 'newHashedPin', onboardingStatus: 'pin_setup' },
       });
-      expect(result).toEqual({ success: true, message: 'PIN set successfully' });
+      expect(result).toEqual({
+        success: true,
+        message: 'PIN set successfully',
+      });
     });
 
     it('should throw BadRequestException if PIN is not 6 digits', async () => {
@@ -157,8 +160,14 @@ describe('UserPinService', () => {
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: 'user-123', isDeleted: false },
       });
-      expect(pinUtil.verifyPinHash).toHaveBeenCalledWith('123456', 'hashedPin123');
-      expect(result).toEqual({ success: true, message: 'PIN verified successfully' });
+      expect(pinUtil.verifyPinHash).toHaveBeenCalledWith(
+        '123456',
+        'hashedPin123',
+      );
+      expect(result).toEqual({
+        success: true,
+        message: 'PIN verified successfully',
+      });
     });
 
     it('should throw BadRequestException if no PIN is set', async () => {
@@ -201,7 +210,9 @@ describe('UserPinService', () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
       mockPrisma.token.deleteMany.mockResolvedValue({ count: 1 });
       mockPrisma.token.create.mockResolvedValue({});
-      mockNotificationService.sendNotification.mockResolvedValue({ success: true });
+      mockNotificationService.sendNotification.mockResolvedValue({
+        success: true,
+      });
 
       const result = await service.requestPinResetOtp('user-123');
 
@@ -335,7 +346,11 @@ describe('UserPinService', () => {
       mockPrisma.user.update.mockResolvedValue({});
       mockPrisma.token.delete.mockResolvedValue({});
 
-      const result = await service.resetPinWithOtp('user-123', '123456', '654321');
+      const result = await service.resetPinWithOtp(
+        'user-123',
+        '123456',
+        '654321',
+      );
 
       expect(pinUtil.hashPin).toHaveBeenCalledWith('654321');
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
@@ -428,7 +443,11 @@ describe('UserPinService', () => {
       mockPrisma.user.update.mockResolvedValue({});
       mockPrisma.token.delete.mockResolvedValue({});
 
-      const result = await service.resetPinWithOtp('user-123', '123456', '654321');
+      const result = await service.resetPinWithOtp(
+        'user-123',
+        '123456',
+        '654321',
+      );
 
       expect(result).toEqual({
         success: true,

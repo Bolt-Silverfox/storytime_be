@@ -1,9 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service';
-import {
-  BadRequestException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import {
   InvalidCredentialsException,
   InvalidTokenException,
@@ -66,7 +63,9 @@ describe('AuthService', () => {
 
   describe('login', () => {
     it('should login successfully with valid credentials', async () => {
-      authRepository.findUserByEmailWithRelations.mockResolvedValue(mockUser as any);
+      authRepository.findUserByEmailWithRelations.mockResolvedValue(
+        mockUser as any,
+      );
       passwordService.verifyPassword.mockResolvedValue(true);
       tokenService.createTokenPair.mockResolvedValue({
         jwt: 'jwt-token',
@@ -82,7 +81,9 @@ describe('AuthService', () => {
       expect(result?.jwt).toBe('jwt-token');
       expect(result?.refreshToken).toBe('refresh-token');
       expect(result?.user.email).toBe('test@example.com');
-      expect(authRepository.findUserByEmailWithRelations).toHaveBeenCalledWith('test@example.com');
+      expect(authRepository.findUserByEmailWithRelations).toHaveBeenCalledWith(
+        'test@example.com',
+      );
     });
 
     it('should throw InvalidCredentialsException for invalid email', async () => {
@@ -94,7 +95,9 @@ describe('AuthService', () => {
     });
 
     it('should throw InvalidCredentialsException for invalid password', async () => {
-      authRepository.findUserByEmailWithRelations.mockResolvedValue(mockUser as any);
+      authRepository.findUserByEmailWithRelations.mockResolvedValue(
+        mockUser as any,
+      );
       passwordService.verifyPassword.mockResolvedValue(false);
 
       await expect(
@@ -104,7 +107,9 @@ describe('AuthService', () => {
 
     it('should throw EmailNotVerifiedException for unverified email', async () => {
       const unverifiedUser = { ...mockUser, isEmailVerified: false };
-      authRepository.findUserByEmailWithRelations.mockResolvedValue(unverifiedUser as any);
+      authRepository.findUserByEmailWithRelations.mockResolvedValue(
+        unverifiedUser as any,
+      );
       passwordService.verifyPassword.mockResolvedValue(true);
 
       await expect(

@@ -8,11 +8,7 @@ import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
 
 @Module({
-  imports: [
-    PrismaModule,
-    ConfigModule,
-    SubscriptionModule,
-  ],
+  imports: [PrismaModule, ConfigModule, SubscriptionModule],
   providers: [
     PaymentService,
     GoogleVerificationService,

@@ -50,7 +50,7 @@ export class AdminController {
     private readonly adminUserService: AdminUserService,
     private readonly adminStoryService: AdminStoryService,
     private readonly adminSystemService: AdminSystemService,
-  ) { }
+  ) {}
 
   // =====================
   // DASHBOARD & ANALYTICS
@@ -523,7 +523,11 @@ export class AdminController {
     @Query('status') status?: string,
   ) {
     const { page: p, limit: l } = PaginationUtil.sanitize(page, limit);
-    const result = await this.adminSystemService.getAllSupportTickets(p, l, status);
+    const result = await this.adminSystemService.getAllSupportTickets(
+      p,
+      l,
+      status,
+    );
     return {
       statusCode: 200,
       message: 'Support tickets retrieved',
@@ -538,7 +542,10 @@ export class AdminController {
     @Param('id') id: string,
     @Body('status') status: string,
   ) {
-    const result = await this.adminSystemService.updateSupportTicket(id, status);
+    const result = await this.adminSystemService.updateSupportTicket(
+      id,
+      status,
+    );
     return {
       statusCode: 200,
       message: 'Support ticket updated',

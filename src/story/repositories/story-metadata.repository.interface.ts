@@ -1,34 +1,34 @@
 import {
-    Category,
-    Theme,
-    StoryImage,
-    StoryBranch,
-    Season,
-    Prisma,
+  Category,
+  Theme,
+  StoryImage,
+  StoryBranch,
+  Season,
+  Prisma,
 } from '@prisma/client';
 
 export type CategoryWithCount = Category & {
-    _count: { stories: number };
+  _count: { stories: number };
 };
 
 export interface IStoryMetadataRepository {
-    findAllCategories(): Promise<CategoryWithCount[]>;
+  findAllCategories(): Promise<CategoryWithCount[]>;
 
-    findCategoriesByIds(ids: string[]): Promise<Category[]>;
+  findCategoriesByIds(ids: string[]): Promise<Category[]>;
 
-    findAllThemes(): Promise<Theme[]>;
+  findAllThemes(): Promise<Theme[]>;
 
-    findThemesByIds(ids: string[]): Promise<Theme[]>;
+  findThemesByIds(ids: string[]): Promise<Theme[]>;
 
-    findAllSeasons(): Promise<Season[]>;
+  findAllSeasons(): Promise<Season[]>;
 
-    getSeasons(): Promise<Season[]>;
+  getSeasons(): Promise<Season[]>;
 
-    findSeasonsByIds(ids: string[]): Promise<Season[]>;
+  findSeasonsByIds(ids: string[]): Promise<Season[]>;
 
-    createStoryImage(data: Prisma.StoryImageCreateInput): Promise<StoryImage>;
+  createStoryImage(data: Prisma.StoryImageCreateInput): Promise<StoryImage>;
 
-    createStoryBranch(data: Prisma.StoryBranchCreateInput): Promise<StoryBranch>;
+  createStoryBranch(data: Prisma.StoryBranchCreateInput): Promise<StoryBranch>;
 }
 
 export const STORY_METADATA_REPOSITORY = Symbol('STORY_METADATA_REPOSITORY');

@@ -3,7 +3,14 @@ import {
   ResourceNotFoundException,
   InvalidRoleException,
 } from '@/shared/exceptions';
-import { Prisma, User, Profile, Kid, Avatar, Subscription } from '@prisma/client';
+import {
+  Prisma,
+  User,
+  Profile,
+  Kid,
+  Avatar,
+  Subscription,
+} from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { UserRole } from './user.controller';
 import { UpdateUserDto } from './dto/user.dto';
@@ -143,7 +150,8 @@ export class UserService {
     if (data.country !== undefined) profileUpdate.country = data.country;
 
     // Avatar logic - handled inside transaction if custom URL provided
-    const needsCustomAvatar = data.avatarId === undefined && data.avatarUrl !== undefined;
+    const needsCustomAvatar =
+      data.avatarId === undefined && data.avatarUrl !== undefined;
     if (data.avatarId !== undefined) {
       updateData.avatarId = data.avatarId;
     }

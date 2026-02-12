@@ -181,7 +181,48 @@ For production, use Grafana Cloud:
 
 ## Dashboards
 
-Import pre-built dashboards in Grafana:
-- **NestJS Metrics**: Dashboard ID `12230`
-- **Node.js Application**: Dashboard ID `11159`
-- **Loki Logs**: Dashboard ID `13639`
+Import pre-built community dashboards in Grafana by ID:
+
+### How to Import
+
+1. Go to **Dashboards → Import**
+2. Enter the dashboard ID
+3. Click **Load**
+4. Select your data source (Prometheus/Loki/Tempo)
+5. Click **Import**
+
+### Recommended Dashboard IDs
+
+| Dashboard | ID | Description |
+|-----------|------|-------------|
+| **NestJS Metrics** | `12230` | NestJS-specific metrics, request rates, response times |
+| **Node.js Application** | `11159` | Event loop lag, memory, CPU, GC metrics |
+| **Node.js Prometheus** | `11956` | Detailed Node.js runtime metrics |
+| **HTTP Request Metrics** | `12900` | Request rate, latency percentiles (P50/P95/P99) |
+| **PostgreSQL Database** | `9628` | DB connections, query performance, table stats |
+| **Redis** | `11835` | Cache hit/miss ratio, memory usage, connections |
+| **BullMQ Queues** | `14538` | Queue depth, job processing rates, failures |
+| **Loki Logs** | `13639` | Log aggregation, error rates, log search |
+
+### Custom Metrics (Storytime API)
+
+The API exposes custom Prometheus metrics at `http://localhost:9464/metrics`:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `http_request_duration_seconds` | Histogram | Request duration by route |
+| `http_requests_total` | Counter | Total requests by method, route, status |
+| `cache_operations_total` | Counter | Cache hits/misses by key pattern |
+| `cache_hit_ratio` | Gauge | Cache hit ratio (updated periodically) |
+| `bullmq_job_duration_seconds` | Histogram | Job processing time by queue |
+| `bullmq_jobs_total` | Counter | Total jobs by queue, status |
+| `bullmq_queue_depth` | Gauge | Current queue depth by queue |
+
+### Dashboard Screenshots
+
+After importing, you should see:
+
+1. **Overview Dashboard**: Request rate, error rate, latency percentiles
+2. **Database Dashboard**: Connection pool usage, slow queries, table sizes
+3. **Cache Dashboard**: Hit/miss ratio, memory usage, evictions
+4. **Queue Dashboard**: Job throughput, processing times, failure rates

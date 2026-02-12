@@ -39,9 +39,7 @@ export class ActivityLogEventListener {
         },
       });
     } catch (error) {
-      this.logger.error(
-        `Failed to log user registration: ${error.message}`,
-      );
+      this.logger.error(`Failed to log user registration: ${error.message}`);
     }
   }
 
@@ -60,9 +58,7 @@ export class ActivityLogEventListener {
         },
       });
     } catch (error) {
-      this.logger.error(
-        `Failed to log user deletion: ${error.message}`,
-      );
+      this.logger.error(`Failed to log user deletion: ${error.message}`);
     }
   }
 
@@ -81,9 +77,7 @@ export class ActivityLogEventListener {
         },
       });
     } catch (error) {
-      this.logger.error(
-        `Failed to log email verification: ${error.message}`,
-      );
+      this.logger.error(`Failed to log email verification: ${error.message}`);
     }
   }
 
@@ -104,9 +98,7 @@ export class ActivityLogEventListener {
         },
       });
     } catch (error) {
-      this.logger.error(
-        `Failed to log password change: ${error.message}`,
-      );
+      this.logger.error(`Failed to log password change: ${error.message}`);
     }
   }
 
@@ -125,9 +117,7 @@ export class ActivityLogEventListener {
         },
       });
     } catch (error) {
-      this.logger.error(
-        `Failed to log payment completion: ${error.message}`,
-      );
+      this.logger.error(`Failed to log payment completion: ${error.message}`);
     }
   }
 
@@ -146,9 +136,7 @@ export class ActivityLogEventListener {
         },
       });
     } catch (error) {
-      this.logger.error(
-        `Failed to log payment failure: ${error.message}`,
-      );
+      this.logger.error(`Failed to log payment failure: ${error.message}`);
     }
   }
 
@@ -188,9 +176,7 @@ export class ActivityLogEventListener {
         },
       });
     } catch (error) {
-      this.logger.error(
-        `Failed to log subscription change: ${error.message}`,
-      );
+      this.logger.error(`Failed to log subscription change: ${error.message}`);
     }
   }
 

@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  Inject,
-} from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ValidationException } from '@/shared/exceptions';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
@@ -42,7 +38,7 @@ export class AdminAnalyticsService {
     private readonly adminAnalyticsRepository: IAdminAnalyticsRepository,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager: Cache,
-  ) { }
+  ) {}
 
   // =====================
   // DASHBOARD STATISTICS
@@ -187,9 +183,8 @@ export class AdminAnalyticsService {
     const cacheKey = CACHE_KEYS.SUBSCRIPTION_ANALYTICS(
       JSON.stringify(dateRange || {}),
     );
-    const cached = await this.cacheManager.get<SubscriptionAnalyticsDto>(
-      cacheKey,
-    );
+    const cached =
+      await this.cacheManager.get<SubscriptionAnalyticsDto>(cacheKey);
     if (cached) return cached;
 
     const result =

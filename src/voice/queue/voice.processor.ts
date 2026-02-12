@@ -3,6 +3,8 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { TextToSpeechService } from '@/story/text-to-speech.service';
 import { PrismaService } from '@/prisma/prisma.service';
+import { FcmService } from '@/notification/services/fcm.service';
+import { JobEventsService } from '@/notification/services/job-events.service';
 import {
   VOICE_QUEUE_NAME,
   VOICE_SYNTHESIS_STAGES,
@@ -28,6 +30,8 @@ export class VoiceProcessor extends WorkerHost {
   constructor(
     private readonly textToSpeechService: TextToSpeechService,
     private readonly prisma: PrismaService,
+    private readonly fcmService: FcmService,
+    private readonly jobEventsService: JobEventsService,
   ) {
     super();
   }
@@ -238,18 +242,61 @@ export class VoiceProcessor extends WorkerHost {
    * Called when a job completes successfully
    */
   @OnWorkerEvent('completed')
-  onCompleted(job: Job<VoiceJobData>, result: VoiceJobResult): void {
+  async onCompleted(
+    job: Job<VoiceJobData>,
+    result: VoiceJobResult,
+  ): Promise<void> {
     this.logger.log(
       `Job ${job.data.jobId} completed: ${job.data.type} for user ${job.data.userId} ` +
         `(attempts: ${result.attemptsMade}, time: ${result.processingTimeMs}ms)`,
     );
+
+    // Send push notification to mobile devices
+    if (result.success && result.audioUrl) {
+      await this.sendCompletionNotification(job.data, result);
+    }
+  }
+
+  /**
+   * Send completion notification via push notification and SSE
+   */
+  private async sendCompletionNotification(
+    jobData: VoiceJobData,
+    result: VoiceJobResult,
+  ): Promise<void> {
+    // Emit SSE event for web clients
+    this.jobEventsService.emitVoiceCompleted(
+      jobData.jobId,
+      jobData.userId,
+      result.audioUrl!,
+    );
+
+    // Send push notification to mobile devices
+    try {
+      const pushResult = await this.fcmService.sendVoiceCompletionNotification(
+        jobData.userId,
+        jobData.jobId,
+        result.audioUrl!,
+      );
+
+      this.logger.log(
+        `Push notification sent for voice job ${jobData.jobId}: ${pushResult.successCount} devices`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send push notification for voice job ${jobData.jobId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
   }
 
   /**
    * Called when a job fails (before retry or permanently)
    */
   @OnWorkerEvent('failed')
-  onFailed(job: Job<VoiceJobData> | undefined, error: Error): void {
+  async onFailed(
+    job: Job<VoiceJobData> | undefined,
+    error: Error,
+  ): Promise<void> {
     if (!job) {
       this.logger.error('Job failed with no job data', error.stack);
       return;
@@ -267,6 +314,39 @@ export class VoiceProcessor extends WorkerHost {
         `Job ${jobId} permanently failed after ${job.attemptsMade} attempts: ` +
           `${type} for user ${userId} - ${error.message}`,
         error.stack,
+      );
+
+      // Send failure notification to user
+      await this.sendFailureNotification(job.data, error.message);
+    }
+  }
+
+  /**
+   * Send failure notification for permanent failures via push and SSE
+   */
+  private async sendFailureNotification(
+    jobData: VoiceJobData,
+    errorMessage: string,
+  ): Promise<void> {
+    // Emit SSE event for web clients
+    this.jobEventsService.emitFailed(
+      jobData.jobId,
+      jobData.userId,
+      'voice',
+      errorMessage,
+    );
+
+    // Send push notification to mobile devices
+    try {
+      await this.fcmService.sendVoiceFailureNotification(
+        jobData.userId,
+        jobData.jobId,
+        errorMessage,
+      );
+      this.logger.log(`Failure notification sent for voice job ${jobData.jobId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send failure notification for voice job ${jobData.jobId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }

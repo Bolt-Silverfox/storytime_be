@@ -15,8 +15,16 @@ import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Role, NotificationCategory, NotificationType, OnboardingStatus } from '@prisma/client';
-import { ResourceAlreadyExistsException, InvalidAdminSecretException } from '@/shared/exceptions';
+import {
+  Role,
+  NotificationCategory,
+  NotificationType,
+  OnboardingStatus,
+} from '@prisma/client';
+import {
+  ResourceAlreadyExistsException,
+  InvalidAdminSecretException,
+} from '@/shared/exceptions';
 import { AppEvents, UserRegisteredEvent } from '@/shared/events';
 
 @Injectable()
@@ -27,7 +35,7 @@ export class OnboardingService {
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
     private readonly eventEmitter: EventEmitter2,
-  ) { }
+  ) {}
 
   async register(data: RegisterDto): Promise<LoginResponseDto | null> {
     const existingUser = await this.authRepository.findUserByEmail(data.email);
@@ -43,7 +51,9 @@ export class OnboardingService {
       role = Role.admin;
     }
 
-    const hashedPassword = await this.passwordService.hashPassword(data.password);
+    const hashedPassword = await this.passwordService.hashPassword(
+      data.password,
+    );
 
     // Ensure transaction support in repository
     const user = await this.authRepository.createUser({

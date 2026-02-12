@@ -8,7 +8,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProgressHomeResponseDto } from './dto/progress-response.dto';
 import { ProgressOverviewResponseDto } from './dto/progress-response.dto';
 import { ProgressStatsDto } from './dto/progress-response.dto';
-import { CACHE_KEYS, CACHE_TTL_MS } from '@/shared/constants/cache-keys.constants';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+} from '@/shared/constants/cache-keys.constants';
 
 @Injectable()
 export class ProgressService {

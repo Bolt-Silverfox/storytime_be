@@ -3,10 +3,7 @@ import { ResourceNotFoundException } from '@/shared/exceptions';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Prisma, Story } from '@prisma/client';
-import {
-  IAdminStoryRepository,
-  ADMIN_STORY_REPOSITORY,
-} from './repositories';
+import { IAdminStoryRepository, ADMIN_STORY_REPOSITORY } from './repositories';
 import {
   PaginatedResponseDto,
   StoryListItemDto,
@@ -28,7 +25,7 @@ export class AdminStoryService {
     @Inject(ADMIN_STORY_REPOSITORY)
     private readonly adminStoryRepository: IAdminStoryRepository,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-  ) { }
+  ) {}
 
   async getAllStories(
     filters: StoryFilterDto,

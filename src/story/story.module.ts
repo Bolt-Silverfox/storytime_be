@@ -5,6 +5,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '@/auth/auth.module';
 import { UploadModule } from '../upload/upload.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { NotificationModule } from '../notification/notification.module';
 import { GeminiService } from './gemini.service';
 import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
@@ -52,6 +53,7 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
     AuthModule,
     UploadModule,
     SubscriptionModule,
+    NotificationModule,
     PrismaModule,
     forwardRef(() => VoiceModule),
     // Register story generation queue
@@ -130,4 +132,4 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
     StoryQueueService,
   ],
 })
-export class StoryModule { }
+export class StoryModule {}

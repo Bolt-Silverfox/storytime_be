@@ -7,7 +7,8 @@ export const CACHE_KEYS = {
   STORY_STATS: 'admin:story:stats',
   CONTENT_BREAKDOWN: 'admin:content:breakdown',
   USER_GROWTH: (params: string) => `admin:user:growth:${params}`,
-  SUBSCRIPTION_ANALYTICS: (params: string) => `admin:subscription:analytics:${params}`,
+  SUBSCRIPTION_ANALYTICS: (params: string) =>
+    `admin:subscription:analytics:${params}`,
   REVENUE_ANALYTICS: (params: string) => `admin:revenue:analytics:${params}`,
   AI_CREDIT_ANALYTICS: 'admin:ai-credit:analytics',
   USER_GROWTH_MONTHLY: 'admin:user-growth-monthly',

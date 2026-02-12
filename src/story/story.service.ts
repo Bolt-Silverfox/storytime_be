@@ -58,7 +58,7 @@ export class StoryService {
     private readonly pathService: StoryPathService,
     private readonly metadataService: StoryMetadataService,
     private readonly dailyChallengeService: DailyChallengeService,
-  ) { }
+  ) {}
 
   /** Invalidate all story-related caches */
   private async invalidateStoryCaches(): Promise<void> {
@@ -176,16 +176,13 @@ export class StoryService {
       { images: true },
     );
 
-    this.eventEmitter.emit(
-      AppEvents.STORY_CREATED,
-      {
-        storyId: story.id,
-        title: story.title,
-        creatorKidId: story.creatorKidId,
-        aiGenerated: false, // Default since manual creation
-        createdAt: story.createdAt,
-      } as StoryCreatedEvent,
-    );
+    this.eventEmitter.emit(AppEvents.STORY_CREATED, {
+      storyId: story.id,
+      title: story.title,
+      creatorKidId: story.creatorKidId,
+      aiGenerated: false, // Default since manual creation
+      createdAt: story.createdAt,
+    } as StoryCreatedEvent);
     await this.invalidateStoryCaches();
 
     return story;
@@ -198,11 +195,9 @@ export class StoryService {
     delete updateData.categories; // Handle relations separately if needed
     delete updateData.themes;
 
-    const story = await this.storyRepository.updateStory(
-      id,
-      updateData,
-      { images: true },
-    );
+    const story = await this.storyRepository.updateStory(id, updateData, {
+      images: true,
+    });
 
     await this.invalidateStoryCaches();
     return story;
@@ -241,8 +236,18 @@ export class StoryService {
 
   // ==================== Restriction Methods ====================
 
-  async restrictStory(kidId: string, storyId: string, userId: string, reason?: string) {
-    return await this.storyRepository.restrictStory(kidId, storyId, userId, reason);
+  async restrictStory(
+    kidId: string,
+    storyId: string,
+    userId: string,
+    reason?: string,
+  ) {
+    return await this.storyRepository.restrictStory(
+      kidId,
+      storyId,
+      userId,
+      reason,
+    );
   }
 
   async unrestrictStory(kidId: string, storyId: string) {

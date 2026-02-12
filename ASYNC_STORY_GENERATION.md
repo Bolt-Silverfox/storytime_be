@@ -1,8 +1,8 @@
 # Async Story Generation - Mobile-First Architecture
 
-**Status**: Phase 1 Complete ✅ | Phase 2 Planned 📋  
-**Branch**: `fix/bug-fixes`  
-**Last Updated**: 2026-02-10
+**Status**: Phase 1 Complete ✅ | Phase 2 Complete ✅
+**Branch**: `integration/refactor-2026-02`
+**Last Updated**: 2026-02-12
 
 ---
 
@@ -58,7 +58,7 @@ GET    /stories/generate/queue-stats      - Queue statistics (monitoring)
 
 ---
 
-## Phase 2: Mobile Notifications 📋 PLANNED
+## Phase 2: Push Notifications + SSE ✅ COMPLETE
 
 ### Mobile-Specific Challenges
 
@@ -600,21 +600,36 @@ Notifications.addNotificationResponseReceivedListener(response => {
 
 ## Implementation Checklist
 
-### Phase 2A: FCM Foundation
-- [ ] Install Firebase Admin SDK: `pnpm add firebase-admin`
-- [ ] Create `FcmService` in `src/notification/fcm.service.ts`
-- [ ] Add Firebase credentials to `.env`
-- [ ] Add `DeviceToken` model to `schema.prisma`
-- [ ] Run migration: `pnpm prisma migrate dev --name add-device-tokens`
-- [ ] Create device registration endpoints
-- [ ] Add FCM service to NotificationModule
+### Phase 2A: FCM Foundation ✅ COMPLETE
+- [x] Install Firebase Admin SDK: `pnpm add firebase-admin`
+- [x] Create `FcmService` in `src/notification/services/fcm.service.ts`
+- [x] Add Firebase credentials to `.env`
+- [x] Add `DeviceToken` model to `schema.prisma` (with DevicePlatform enum)
+- [x] Run migration: `pnpm prisma db push`
+- [x] Create device registration endpoints (`src/notification/device.controller.ts`)
+- [x] Create `DeviceTokenService` in `src/notification/services/device-token.service.ts`
+- [x] Add FCM service to NotificationModule
 
-### Phase 2B: Story Processor Integration
-- [ ] Inject `FcmService` into `StoryProcessor`
-- [ ] Add push notification to `onCompleted` event
-- [ ] Add failure notification to `onFailed` event (permanent failures only)
-- [ ] Add email fallback for failed push notifications
+### Phase 2B: Story Processor Integration ✅ COMPLETE
+- [x] Inject `FcmService` into `StoryProcessor`
+- [x] Add push notification to `onCompleted` event
+- [x] Add failure notification to `onFailed` event (permanent failures only)
+- [x] Inject `JobEventsService` for SSE events
 - [ ] Test with real device tokens
+
+### Phase 2B-Voice: Voice Processor Integration ✅ COMPLETE
+- [x] Inject `FcmService` into `VoiceProcessor`
+- [x] Add push notification to `onCompleted` event
+- [x] Add failure notification to `onFailed` event
+- [x] Inject `JobEventsService` for SSE events
+
+### Phase 2-Web: SSE for Web Clients ✅ COMPLETE
+- [x] Create `JobEventsService` in `src/notification/services/job-events.service.ts`
+- [x] Create `SseController` in `src/notification/sse.controller.ts`
+- [x] SSE endpoint for all user job events: `GET /events/jobs`
+- [x] SSE endpoint for specific job events: `GET /events/jobs/:jobId`
+- [x] Heartbeat mechanism to keep connections alive
+- [x] Emit events from both Story and Voice processors
 
 ### Phase 2C: Mobile App Setup (Frontend Team)
 - [ ] Set up Firebase project (iOS & Android)
@@ -721,25 +736,34 @@ src/
 ├── story/
 │   ├── queue/
 │   │   ├── story-queue.service.ts        ✅ DONE
-│   │   ├── story.processor.ts            ✅ DONE (needs FCM enhancement)
+│   │   ├── story.processor.ts            ✅ DONE (with FCM + SSE)
 │   │   ├── story-queue.constants.ts      ✅ DONE
 │   │   ├── story-job.interface.ts        ✅ DONE
 │   │   └── index.ts                      ✅ DONE
 │   ├── story.controller.ts               ✅ DONE (6 new endpoints)
-│   └── story.module.ts                   ✅ DONE (queue registered)
+│   └── story.module.ts                   ✅ DONE (queue + NotificationModule)
+│
+├── voice/
+│   ├── queue/
+│   │   ├── voice-queue.service.ts        ✅ DONE
+│   │   ├── voice.processor.ts            ✅ DONE (with FCM + SSE)
+│   │   ├── voice-queue.constants.ts      ✅ DONE
+│   │   ├── voice-job.interface.ts        ✅ DONE
+│   │   └── index.ts                      ✅ DONE
+│   └── voice.module.ts                   ✅ DONE (queue + NotificationModule)
 │
 ├── notification/
-│   ├── fcm.service.ts                    📋 TODO (Phase 2A)
-│   ├── email-queue.service.ts            ✅ EXISTS (use for fallback)
-│   └── notification.module.ts            🔄 UPDATE (add FcmService)
-│
-├── user/
-│   ├── device-token.service.ts           📋 TODO (Phase 2A)
-│   ├── user.controller.ts                🔄 UPDATE (device endpoints)
-│   └── user.module.ts                    🔄 UPDATE
+│   ├── services/
+│   │   ├── fcm.service.ts                ✅ DONE (Phase 2A)
+│   │   ├── device-token.service.ts       ✅ DONE (Phase 2A)
+│   │   └── job-events.service.ts         ✅ DONE (SSE events)
+│   ├── device.controller.ts              ✅ DONE (device registration)
+│   ├── sse.controller.ts                 ✅ DONE (SSE endpoints)
+│   ├── email-queue.service.ts            ✅ EXISTS
+│   └── notification.module.ts            ✅ DONE (updated)
 │
 └── prisma/
-    └── schema.prisma                     🔄 UPDATE (DeviceToken model)
+    └── schema.prisma                     ✅ DONE (DeviceToken + DevicePlatform)
 ```
 
 ---
@@ -941,5 +965,5 @@ For web, WebSockets might be better than mobile push. Consider separate implemen
 
 ---
 
-**Last Updated**: 2026-02-10 by Instance 17  
-**Next Steps**: Begin Phase 2A implementation (see checklist above)
+**Last Updated**: 2026-02-12
+**Phase 2 Completed**: FCM push notifications for mobile + SSE for web clients

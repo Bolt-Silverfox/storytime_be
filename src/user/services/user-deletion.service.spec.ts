@@ -1,8 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { UserDeletionService } from './user-deletion.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
@@ -154,7 +151,8 @@ describe('UserDeletionService', () => {
             userId: 'user-123',
             action: 'SESSION_TERMINATION',
             status: 'SUCCESS',
-            details: 'All sessions terminated due to permanent account deletion',
+            details:
+              'All sessions terminated due to permanent account deletion',
             createdAt: expect.any(Date),
           },
         });
