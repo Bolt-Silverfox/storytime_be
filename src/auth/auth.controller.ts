@@ -18,12 +18,14 @@ import {
 import { AuthService } from './auth.service';
 import { OAuthService } from './services/oauth.service';
 import { OnboardingService } from './services/onboarding.service';
+import { EmailVerificationService } from './services/email-verification.service';
+import { PasswordService } from './services/password.service';
 import {
   LoginDto,
   LoginResponseDto,
   RefreshResponseDto,
   RegisterDto,
-  updateProfileDto,
+  UpdateProfileDto,
   RequestResetDto,
   ValidateResetTokenDto,
   ResetPasswordDto,
@@ -55,7 +57,9 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly oAuthService: OAuthService,
     private readonly onboardingService: OnboardingService,
-  ) {}
+    private readonly emailVerificationService: EmailVerificationService,
+    private readonly passwordService: PasswordService,
+  ) { }
 
   @Post('login')
   @UseGuards(AuthThrottleGuard)
@@ -104,7 +108,7 @@ export class AuthController {
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
   async register(@Body() body: RegisterDto) {
-    return this.authService.register(body);
+    return this.onboardingService.register(body);
   }
 
   // ==================== COMPLETE PROFILE (NEW) ====================
@@ -194,7 +198,7 @@ export class AuthController {
   @ApiResponse({ status: 500, description: 'Internal server error.' })
   @ApiBody({ type: VerifyEmailDto })
   async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
-    return this.authService.verifyEmail(verifyEmailDto.token);
+    return this.emailVerificationService.verifyEmail(verifyEmailDto.token);
   }
 
   @Post('send-verification')
@@ -210,18 +214,18 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Verification email sent.' })
   @ApiBody({ type: SendEmailVerificationDto })
   async sendVerification(@Body() dto: SendEmailVerificationDto) {
-    return this.authService.sendEmailVerification(dto.email);
+    return this.emailVerificationService.sendEmailVerification(dto.email);
   }
 
   @Put('profile')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update user profile' })
-  @ApiBody({ type: updateProfileDto })
+  @ApiBody({ type: UpdateProfileDto })
   @ApiResponse({ status: 200, description: 'Profile updated.' })
   async updateProfile(
     @Req() req: AuthenticatedRequest,
-    @Body() data: updateProfileDto,
+    @Body() data: UpdateProfileDto,
   ) {
     return this.onboardingService.updateProfile(
       req.authUserData['userId'],
@@ -241,7 +245,7 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Body() body: ChangePasswordDto,
   ) {
-    return this.authService.changePassword(
+    return this.passwordService.changePassword(
       req.authUserData['userId'],
       body,
       req.authUserData['authSessionId']!,
@@ -270,7 +274,7 @@ export class AuthController {
     const ip =
       req.ip || req.headers['x-forwarded-for']?.toString().split(',')[0].trim();
     const userAgent = req.headers['user-agent'];
-    return this.authService.requestPasswordReset(body, ip, userAgent);
+    return this.passwordService.requestPasswordReset(body, ip, userAgent);
   }
 
   @Post('validate-reset-token')
@@ -285,7 +289,7 @@ export class AuthController {
   @ApiBody({ type: ValidateResetTokenDto })
   @ApiResponse({ status: 200, description: 'Token is valid.' })
   async validateResetToken(@Body() body: ValidateResetTokenDto) {
-    return this.authService.validateResetToken(body.token, body.email, body);
+    return this.passwordService.validateResetToken(body.token, body.email, body);
   }
 
   @Post('reset-password')
@@ -301,7 +305,7 @@ export class AuthController {
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
   async resetPassword(@Body() body: ResetPasswordDto) {
-    return this.authService.resetPassword(
+    return this.passwordService.resetPassword(
       body.token,
       body.email,
       body.newPassword,

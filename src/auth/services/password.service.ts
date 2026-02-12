@@ -7,7 +7,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { TokenService } from './token.service';
-import { generateToken } from '@/utils/generate-token';
+import { generateToken } from '@/shared/utils/generate-token';
 import {
   TokenType,
   RequestResetDto,
@@ -32,7 +32,7 @@ export class PasswordService {
     private readonly authRepository: IAuthRepository,
     private readonly eventEmitter: EventEmitter2,
     private readonly tokenService: TokenService,
-  ) {}
+  ) { }
 
   /**
    * Request a password reset - sends reset email to user
@@ -221,6 +221,6 @@ export class PasswordService {
    * Hash a password
    */
   async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, 10);
+    return bcrypt.hash(password, 12);
   }
 }

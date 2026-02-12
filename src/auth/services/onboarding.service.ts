@@ -4,22 +4,82 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { CompleteProfileDto, updateProfileDto, UserDto } from '../dto/auth.dto';
+import {
+  CompleteProfileDto,
+  UpdateProfileDto,
+  UserDto,
+  RegisterDto,
+  LoginResponseDto,
+} from '../dto/auth.dto';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
+import { PasswordService } from './password.service';
+import { TokenService } from './token.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Role, NotificationCategory, NotificationType, OnboardingStatus } from '@prisma/client';
+import { ResourceAlreadyExistsException, InvalidAdminSecretException } from '@/shared/exceptions';
+import { AppEvents, UserRegisteredEvent } from '@/shared/events';
 
 @Injectable()
 export class OnboardingService {
   constructor(
     @Inject(AUTH_REPOSITORY)
     private readonly authRepository: IAuthRepository,
-  ) {}
+    private readonly passwordService: PasswordService,
+    private readonly tokenService: TokenService,
+    private readonly eventEmitter: EventEmitter2,
+  ) { }
+
+  async register(data: RegisterDto): Promise<LoginResponseDto | null> {
+    const existingUser = await this.authRepository.findUserByEmail(data.email);
+    if (existingUser) {
+      throw new ResourceAlreadyExistsException('User', 'email', data.email);
+    }
+
+    let role: Role = Role.parent;
+    if (data.role === Role.admin) {
+      if (data.adminSecret !== process.env.ADMIN_SECRET) {
+        throw new InvalidAdminSecretException();
+      }
+      role = Role.admin;
+    }
+
+    const hashedPassword = await this.passwordService.hashPassword(data.password);
+
+    // Ensure transaction support in repository
+    const user = await this.authRepository.createUser({
+      name: data.fullName,
+      email: data.email,
+      passwordHash: hashedPassword,
+      role: role.toString(),
+      onboardingStatus: OnboardingStatus.account_created,
+    });
+
+    // side-effects (notification preferences, etc.) are handled by activity-log and notification-preference listeners
+
+    // Emit user registration event
+    this.eventEmitter.emit(AppEvents.USER_REGISTERED, {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      registeredAt: user.createdAt,
+    } satisfies UserRegisteredEvent);
+
+    const tokenData = await this.tokenService.createTokenPair(user);
+
+    return {
+      user: new UserDto({ ...user, numberOfKids: 0 }),
+      jwt: tokenData.jwt,
+      refreshToken: tokenData.refreshToken,
+    };
+  }
 
   async completeProfile(userId: string, data: CompleteProfileDto) {
     const user = await this.authRepository.findUserByIdWithProfile(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    if (user.onboardingStatus === 'pin_setup') {
+    if (user.onboardingStatus === OnboardingStatus.pin_setup) {
       throw new BadRequestException('Onboarding already completed');
     }
 
@@ -71,7 +131,7 @@ export class OnboardingService {
     }
 
     await this.authRepository.updateUser(userId, {
-      onboardingStatus: 'profile_setup',
+      onboardingStatus: OnboardingStatus.profile_setup,
     });
 
     const updatedUser =
@@ -93,7 +153,7 @@ export class OnboardingService {
     return this.authRepository.findActiveLearningExpectations();
   }
 
-  async updateProfile(userId: string, data: updateProfileDto) {
+  async updateProfile(userId: string, data: UpdateProfileDto) {
     const user = await this.authRepository.findUserByIdWithProfile(userId);
     if (!user) {
       throw new NotFoundException('User not found');

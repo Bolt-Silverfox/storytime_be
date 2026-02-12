@@ -11,6 +11,7 @@ import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
 import { OAuthService } from './services/oauth.service';
 import { OnboardingService } from './services/onboarding.service';
+import { EmailVerificationService } from './services/email-verification.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
 
@@ -42,6 +43,7 @@ import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
     GoogleStrategy,
     GoogleAuthGuard,
     GoogleOAuthStrategy,
+    EmailVerificationService,
     {
       provide: AUTH_REPOSITORY,
       useClass: PrismaAuthRepository,
@@ -51,11 +53,13 @@ import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
   exports: [
     AuthService,
     TokenService,
+    PasswordService,
     OAuthService,
     OnboardingService,
     JwtModule,
     PassportModule,
     AUTH_REPOSITORY,
+    EmailVerificationService,
   ],
 })
-export class AuthModule {}
+export class AuthModule { }
