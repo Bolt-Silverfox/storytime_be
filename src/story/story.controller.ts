@@ -105,7 +105,7 @@ export class StoryController {
     private readonly textToSpeechService: TextToSpeechService,
     private readonly storyQuotaService: StoryQuotaService,
     private readonly storyQueueService: StoryQueueService,
-  ) {}
+  ) { }
 
   @Get()
   @ApiOperation({
@@ -283,6 +283,8 @@ export class StoryController {
   }
 
   @Post()
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new story' })
   @ApiBody({ type: CreateStoryDto })
   @ApiOkResponse({ description: 'Created story', type: CreateStoryDto })
@@ -306,6 +308,8 @@ export class StoryController {
   }
 
   @Patch(':id')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a story' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: UpdateStoryDto })
@@ -330,6 +334,8 @@ export class StoryController {
   }
 
   @Delete(':id')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a story' })
   @ApiParam({ name: 'id', type: String })
   @ApiQuery({
@@ -362,6 +368,8 @@ export class StoryController {
   }
 
   @Post(':id/undo-delete')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Restore a soft deleted story' })
   @ApiParam({ name: 'id', type: String })
   @ApiOkResponse({
@@ -389,6 +397,8 @@ export class StoryController {
 
   // --- Images ---
   @Post(':id/images')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Add an image to a story' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: StoryImageDto })
@@ -414,6 +424,8 @@ export class StoryController {
 
   // --- Branches ---
   @Post(':id/branches')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Add a branch to a story' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: StoryBranchDto })
@@ -940,7 +952,7 @@ export class StoryController {
   @ApiBody({ type: UpdateStoryPathDto })
   @ApiResponse({ status: 200, type: StoryPathDto })
   async updateStoryPath(@Body() dto: UpdateStoryPathDto) {
-    return this.storyService.updateStoryPath(dto);
+    return this.storyService.updateStoryPath(dto.pathId, dto);
   }
 
   @Get('story-path/kid/:kidId')
@@ -1018,8 +1030,8 @@ export class StoryController {
     @Body() dto: StoryContentAudioDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
-      randomUUID().toString(),
+    const audioUrl = await this.textToSpeechService.synthesizeStory(
+      randomUUID().toString(), // Helper ID since no storyId provided for check
       dto.content,
       dto.voiceId,
       req.authUserData.userId,
@@ -1406,7 +1418,7 @@ export class StoryController {
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [StoryDto] })
   async getCreated(@Param('kidId') kidId: string) {
-    return this.storyProgressService.getCreatedStories(kidId);
+    return this.storyService.getCreatedStories(kidId);
   }
 
   @Get('library/:kidId/downloads')
@@ -1414,7 +1426,7 @@ export class StoryController {
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [StoryDto] })
   async getDownloads(@Param('kidId') kidId: string) {
-    return this.storyProgressService.getDownloads(kidId);
+    return this.storyService.getDownloads(kidId);
   }
 
   @Post('library/:kidId/download/:storyId')
@@ -1426,7 +1438,7 @@ export class StoryController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyProgressService.addDownload(kidId, storyId);
+    return this.storyService.addDownload(kidId, storyId);
   }
 
   @Delete('library/:kidId/download/:storyId')
@@ -1438,7 +1450,7 @@ export class StoryController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyProgressService.removeDownload(kidId, storyId);
+    return this.storyService.removeDownload(kidId, storyId);
   }
 
   @Delete('library/:kidId/remove/:storyId')
@@ -1455,7 +1467,7 @@ export class StoryController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    await this.storyProgressService.removeFromLibrary(kidId, storyId);
+    await this.storyService.removeFromLibrary(kidId, storyId);
     return { message: 'Story removed from library successfully' };
   }
 

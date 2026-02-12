@@ -29,9 +29,9 @@ export class TextToSpeechService {
     @Inject(STORY_REPOSITORY)
     private readonly storyRepository: IStoryRepository,
     private readonly voiceQuota: VoiceQuotaService,
-  ) {}
+  ) { }
 
-  async textToSpeechCloudUrl(
+  async synthesizeStory(
     storyId: string,
     text: string,
     voicetype?: VoiceType | string, // Allow string (UUID)

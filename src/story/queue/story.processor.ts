@@ -11,6 +11,12 @@ import {
   StoryJobResult,
   StoryResult,
 } from './story-job.interface';
+import {
+  NonRetryableProcessingException,
+  StoryGenerationException,
+} from '@/shared/exceptions/processing.exception';
+import { DomainException } from '@/shared/exceptions/domain.exception';
+import { HttpStatus } from '@nestjs/common';
 
 /**
  * Story Queue Processor
@@ -51,7 +57,10 @@ export class StoryProcessor extends WorkerHost {
       } else if (type === 'generate-for-kid') {
         story = await this.processGenerateForKid(job);
       } else {
-        throw new Error(`Unknown job type: ${String(type)}`);
+        throw new NonRetryableProcessingException(
+          `Unknown job type: ${String(type)}`,
+          { type },
+        );
       }
 
       // Stage: Completed
@@ -91,8 +100,8 @@ export class StoryProcessor extends WorkerHost {
         };
       }
 
-      // Throw error to trigger retry
-      throw new Error(`Failed to generate story: ${errorMessage}`);
+      // Throw error to trigger retry (if retryable)
+      throw new StoryGenerationException(errorMessage);
     }
   }
 
@@ -105,7 +114,9 @@ export class StoryProcessor extends WorkerHost {
     const { options } = job.data;
 
     if (!options) {
-      throw new Error('Missing options for story generation');
+      throw new NonRetryableProcessingException(
+        'Missing options for story generation',
+      );
     }
 
     // Stage: Generating Content
@@ -140,7 +151,9 @@ export class StoryProcessor extends WorkerHost {
     const { kidGeneration } = job.data;
 
     if (!kidGeneration) {
-      throw new Error('Missing kidGeneration data for generate-for-kid job');
+      throw new NonRetryableProcessingException(
+        'Missing kidGeneration data for generate-for-kid job',
+      );
     }
 
     // Stage: Generating Content
@@ -199,6 +212,14 @@ export class StoryProcessor extends WorkerHost {
    * Check if error should not trigger retry
    */
   private isNonRetryableError(error: unknown): boolean {
+    if (error instanceof NonRetryableProcessingException) return true;
+
+    // Check for DomainException with 4xx status (except 429 Too Many Requests)
+    if (error instanceof DomainException) {
+      const status = error.getStatus();
+      return status >= 400 && status < 500 && status !== HttpStatus.TOO_MANY_REQUESTS;
+    }
+
     if (!(error instanceof Error)) return false;
 
     const nonRetryablePatterns = [
@@ -220,7 +241,7 @@ export class StoryProcessor extends WorkerHost {
   onCompleted(job: Job<StoryJobData>, result: StoryJobResult): void {
     this.logger.log(
       `Job ${job.data.jobId} completed: ${job.data.type} for user ${job.data.userId} ` +
-        `(attempts: ${result.attemptsMade}, time: ${result.processingTimeMs}ms, storyId: ${result.storyId})`,
+      `(attempts: ${result.attemptsMade}, time: ${result.processingTimeMs}ms, storyId: ${result.storyId})`,
     );
   }
 
@@ -244,7 +265,7 @@ export class StoryProcessor extends WorkerHost {
     } else {
       this.logger.error(
         `Job ${jobId} permanently failed after ${job.attemptsMade} attempts: ` +
-          `${type} for user ${userId} - ${error.message}`,
+        `${type} for user ${userId} - ${error.message}`,
         error.stack,
       );
       // Here you could emit an event for alerting/monitoring

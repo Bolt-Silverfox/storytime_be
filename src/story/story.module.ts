@@ -17,6 +17,33 @@ import { VoiceModule } from '../voice/voice.module';
 import { StoryAccessGuard } from '@/shared/guards/story-access.guard';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
 import { STORY_QUEUE_NAME, StoryQueueService, StoryProcessor } from './queue';
+import { PrismaModule } from '../prisma/prisma.module';
+import { TextToSpeechService } from './text-to-speech.service';
+import { ElevenLabsService } from './elevenlabs.service';
+
+// New Services
+import { StoryFavoriteService } from './story-favorite.service';
+import { StoryDownloadService } from './story-download.service';
+import { StoryPathService } from './story-path.service';
+import { StoryMetadataService } from './story-metadata.service';
+
+// Repositories
+import { STORY_CORE_REPOSITORY } from './repositories/story-core.repository.interface';
+import { PrismaStoryCoreRepository } from './repositories/prisma-story-core.repository';
+import { STORY_FAVORITE_REPOSITORY } from './repositories/story-favorite.repository.interface';
+import { PrismaStoryFavoriteRepository } from './repositories/prisma-story-favorite.repository';
+import { STORY_DOWNLOAD_REPOSITORY } from './repositories/story-download.repository.interface';
+import { PrismaStoryDownloadRepository } from './repositories/prisma-story-download.repository';
+import { STORY_PROGRESS_REPOSITORY } from './repositories/story-progress.repository.interface';
+import { PrismaStoryProgressRepository } from './repositories/prisma-story-progress.repository';
+import { STORY_PATH_REPOSITORY } from './repositories/story-path.repository.interface';
+import { PrismaStoryPathRepository } from './repositories/prisma-story-path.repository';
+import { STORY_METADATA_REPOSITORY } from './repositories/story-metadata.repository.interface';
+import { PrismaStoryMetadataRepository } from './repositories/prisma-story-metadata.repository';
+import { STORY_REPOSITORY } from './repositories/story.repository.interface';
+import { PrismaStoryRepository } from './repositories/prisma-story.repository';
+import { STORY_RECOMMENDATION_REPOSITORY } from './repositories/story-recommendation.repository.interface';
+import { PrismaStoryRecommendationRepository } from './repositories/prisma-story-recommendation.repository';
 
 @Module({
   imports: [
@@ -25,6 +52,7 @@ import { STORY_QUEUE_NAME, StoryQueueService, StoryProcessor } from './queue';
     AuthModule,
     UploadModule,
     SubscriptionModule,
+    PrismaModule,
     forwardRef(() => VoiceModule),
     // Register story generation queue
     BullModule.registerQueue({
@@ -40,11 +68,53 @@ import { STORY_QUEUE_NAME, StoryQueueService, StoryProcessor } from './queue';
     StoryGenerationService,
     GeminiService,
     StoryQuotaService,
+    TextToSpeechService,
+    ElevenLabsService,
     StoryAccessGuard,
     SubscriptionThrottleGuard,
-    // Queue components
     StoryQueueService,
     StoryProcessor,
+
+    // New Services
+    StoryFavoriteService,
+    StoryDownloadService,
+    StoryPathService,
+    StoryMetadataService,
+
+    // Repositories
+    {
+      provide: STORY_CORE_REPOSITORY,
+      useClass: PrismaStoryCoreRepository,
+    },
+    {
+      provide: STORY_FAVORITE_REPOSITORY,
+      useClass: PrismaStoryFavoriteRepository,
+    },
+    {
+      provide: STORY_DOWNLOAD_REPOSITORY,
+      useClass: PrismaStoryDownloadRepository,
+    },
+    {
+      provide: STORY_PROGRESS_REPOSITORY,
+      useClass: PrismaStoryProgressRepository,
+    },
+    {
+      provide: STORY_PATH_REPOSITORY,
+      useClass: PrismaStoryPathRepository,
+    },
+    {
+      provide: STORY_METADATA_REPOSITORY,
+      useClass: PrismaStoryMetadataRepository,
+    },
+    // Keep old repo for backward compatibility or strict migration
+    {
+      provide: STORY_REPOSITORY,
+      useClass: PrismaStoryRepository,
+    },
+    {
+      provide: STORY_RECOMMENDATION_REPOSITORY,
+      useClass: PrismaStoryRecommendationRepository,
+    },
   ],
   exports: [
     StoryService,
@@ -53,7 +123,11 @@ import { STORY_QUEUE_NAME, StoryQueueService, StoryProcessor } from './queue';
     DailyChallengeService,
     StoryGenerationService,
     StoryQuotaService,
+    StoryFavoriteService,
+    StoryDownloadService,
+    StoryPathService,
+    StoryMetadataService,
     StoryQueueService,
-  ]
+  ],
 })
-export class StoryModule {}
+export class StoryModule { }
