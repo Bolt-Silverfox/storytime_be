@@ -23,7 +23,7 @@ export interface UserWithRelations {
   biometricsEnabled?: boolean;
   createdAt: Date;
   updatedAt: Date;
-  subscriptions?: Subscription[];
+  subscription?: Subscription | null;
 }
 
 export function mapParentProfile(user: UserWithRelations | null) {
@@ -54,15 +54,13 @@ export function mapParentProfile(user: UserWithRelations | null) {
     biometricsEnabled: !!user.biometricsEnabled,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
-    subscriptionStatus: getSubscriptionStatus(user.subscriptions ?? []),
+    subscriptionStatus: getSubscriptionStatus(user.subscription),
   };
 }
 
-function getSubscriptionStatus(subscriptions: Subscription[]): string {
-  if (!subscriptions || subscriptions.length === 0)
-    return SUBSCRIPTION_STATUS.FREE;
-  const activeSub = subscriptions.find(
-    (sub) => sub.status === SUBSCRIPTION_STATUS.ACTIVE,
-  );
-  return activeSub ? SUBSCRIPTION_STATUS.ACTIVE : SUBSCRIPTION_STATUS.FREE;
+function getSubscriptionStatus(subscription?: Subscription | null): string {
+  if (!subscription) return SUBSCRIPTION_STATUS.FREE;
+  return subscription.status === SUBSCRIPTION_STATUS.ACTIVE
+    ? SUBSCRIPTION_STATUS.ACTIVE
+    : SUBSCRIPTION_STATUS.FREE;
 }
