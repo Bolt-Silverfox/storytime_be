@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
 import { BuddySelectionService } from './buddy-selection.service';
 import { BuddyMessagingService } from './buddy-messaging.service';
@@ -20,18 +19,23 @@ import {
   CACHE_KEYS,
   CACHE_TTL_MS,
 } from '../shared/constants/cache-keys.constants';
+import {
+  STORY_BUDDY_REPOSITORY,
+  IStoryBuddyRepository,
+} from './repositories/story-buddy.repository.interface';
 
 @Injectable()
 export class StoryBuddyService {
   private readonly logger = new Logger(StoryBuddyService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(STORY_BUDDY_REPOSITORY)
+    private readonly storyBuddyRepository: IStoryBuddyRepository,
     private readonly uploadService: UploadService,
     private readonly buddySelectionService: BuddySelectionService,
     private readonly buddyMessagingService: BuddyMessagingService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-  ) {}
+  ) { }
 
   /**
    * Invalidate story buddies cache
@@ -51,13 +55,7 @@ export class StoryBuddyService {
       return cached;
     }
 
-    const buddies = await this.prisma.storyBuddy.findMany({
-      where: {
-        isActive: true,
-        isDeleted: false, // EXCLUDE SOFT DELETED BUDDIES
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    const buddies = await this.storyBuddyRepository.findActiveBuddies();
 
     // Cache for 1 hour (static content)
     await this.cacheManager.set(
@@ -73,40 +71,14 @@ export class StoryBuddyService {
    * Get all story buddies including inactive (admin only)
    */
   async getAllBuddies() {
-    return await this.prisma.storyBuddy.findMany({
-      where: {
-        isDeleted: false, // EXCLUDE SOFT DELETED BUDDIES
-      },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        _count: {
-          select: {
-            kids: true,
-            buddyInteractions: true,
-          },
-        },
-      },
-    });
+    return await this.storyBuddyRepository.findAllBuddies();
   }
 
   /**
    * Get single story buddy by ID
    */
   async getBuddyById(buddyId: string) {
-    const buddy = await this.prisma.storyBuddy.findUnique({
-      where: {
-        id: buddyId,
-        isDeleted: false, // EXCLUDE SOFT DELETED BUDDIES
-      },
-      include: {
-        _count: {
-          select: {
-            kids: true,
-            buddyInteractions: true,
-          },
-        },
-      },
-    });
+    const buddy = await this.storyBuddyRepository.findBuddyById(buddyId);
 
     if (!buddy) {
       throw new NotFoundException('Story buddy not found');
@@ -123,12 +95,11 @@ export class StoryBuddyService {
     file?: Express.Multer.File,
   ) {
     // Check if buddy with same name already exists (including soft deleted)
-    const existingBuddy = await this.prisma.storyBuddy.findFirst({
-      where: {
-        name: createDto.name.toLowerCase(),
-        isDeleted: false, // ONLY CHECK NON-DELETED BUDDIES
-      },
-    });
+    // findBuddyByName(name, includeDeleted) -> true to include deleted
+    const existingBuddy = await this.storyBuddyRepository.findBuddyByName(
+      createDto.name.toLowerCase(),
+      true,
+    );
 
     if (existingBuddy) {
       throw new ConflictException(
@@ -169,19 +140,17 @@ export class StoryBuddyService {
     }
 
     // Create the buddy
-    const buddy = await this.prisma.storyBuddy.create({
-      data: {
-        name: createDto.name.toLowerCase(),
-        displayName: createDto.displayName,
-        type: createDto.type,
-        description: createDto.description,
-        imageUrl,
-        profileAvatarUrl: createDto.profileAvatarUrl,
-        isActive: createDto.isActive ?? true,
-        themeColor: createDto.themeColor,
-        ageGroupMin: createDto.ageGroupMin ?? 3,
-        ageGroupMax: createDto.ageGroupMax ?? 12,
-      },
+    const buddy = await this.storyBuddyRepository.createBuddy({
+      name: createDto.name.toLowerCase(),
+      displayName: createDto.displayName,
+      type: createDto.type,
+      description: createDto.description,
+      imageUrl,
+      profileAvatarUrl: createDto.profileAvatarUrl,
+      isActive: createDto.isActive ?? true,
+      themeColor: createDto.themeColor,
+      ageGroupMin: createDto.ageGroupMin ?? 3,
+      ageGroupMax: createDto.ageGroupMax ?? 12,
     });
 
     // Invalidate cache
@@ -235,19 +204,16 @@ export class StoryBuddyService {
       }
     }
 
-    const updatedBuddy = await this.prisma.storyBuddy.update({
-      where: { id: buddyId },
-      data: {
-        displayName: updateDto.displayName,
-        type: updateDto.type,
-        description: updateDto.description,
-        imageUrl: imageUrl || buddy.imageUrl,
-        profileAvatarUrl: updateDto.profileAvatarUrl,
-        isActive: updateDto.isActive,
-        themeColor: updateDto.themeColor,
-        ageGroupMin: updateDto.ageGroupMin,
-        ageGroupMax: updateDto.ageGroupMax,
-      },
+    const updatedBuddy = await this.storyBuddyRepository.updateBuddy(buddyId, {
+      displayName: updateDto.displayName,
+      type: updateDto.type,
+      description: updateDto.description,
+      imageUrl: imageUrl || buddy.imageUrl,
+      profileAvatarUrl: updateDto.profileAvatarUrl,
+      isActive: updateDto.isActive,
+      themeColor: updateDto.themeColor,
+      ageGroupMin: updateDto.ageGroupMin,
+      ageGroupMax: updateDto.ageGroupMax,
     });
 
     // Invalidate cache
@@ -265,11 +231,9 @@ export class StoryBuddyService {
     const buddy = await this.getBuddyById(buddyId);
 
     // Check if any kids are using this buddy
-    const kidsCount = await this.prisma.kid.count({
-      where: {
-        storyBuddyId: buddyId,
-        isDeleted: false, // ONLY COUNT NON-DELETED KIDS
-      },
+    const kidsCount = await this.storyBuddyRepository.countKidsWithBuddies({
+      storyBuddyId: buddyId,
+      isDeleted: false, // ONLY COUNT NON-DELETED KIDS
     });
 
     if (kidsCount > 0) {
@@ -289,13 +253,9 @@ export class StoryBuddyService {
       }
 
       // Delete all associated interactions
-      await this.prisma.buddyInteraction.deleteMany({
-        where: { buddyId },
-      });
+      await this.storyBuddyRepository.deleteInteractionsByBuddyId(buddyId);
 
-      const deletedBuddy = await this.prisma.storyBuddy.delete({
-        where: { id: buddyId },
-      });
+      const deletedBuddy = await this.storyBuddyRepository.deleteBuddy(buddyId);
 
       // Invalidate cache
       await this.invalidateBuddiesCache();
@@ -303,13 +263,13 @@ export class StoryBuddyService {
       return deletedBuddy;
     } else {
       // Soft delete
-      const softDeletedBuddy = await this.prisma.storyBuddy.update({
-        where: { id: buddyId },
-        data: {
+      const softDeletedBuddy = await this.storyBuddyRepository.updateBuddy(
+        buddyId,
+        {
           isDeleted: true,
           deletedAt: new Date(),
         },
-      });
+      );
 
       // Invalidate cache
       await this.invalidateBuddiesCache();
@@ -323,9 +283,8 @@ export class StoryBuddyService {
    * @param buddyId Story buddy ID
    */
   async undoDeleteBuddy(buddyId: string) {
-    const buddy = await this.prisma.storyBuddy.findUnique({
-      where: { id: buddyId },
-    });
+    // Find buddy including deleted
+    const buddy = await this.storyBuddyRepository.findBuddyById(buddyId, true);
 
     if (!buddy) {
       throw new NotFoundException('Story buddy not found');
@@ -335,12 +294,9 @@ export class StoryBuddyService {
       throw new BadRequestException('Story buddy is not deleted');
     }
 
-    const restoredBuddy = await this.prisma.storyBuddy.update({
-      where: { id: buddyId },
-      data: {
-        isDeleted: false,
-        deletedAt: null,
-      },
+    const restoredBuddy = await this.storyBuddyRepository.updateBuddy(buddyId, {
+      isDeleted: false,
+      deletedAt: null,
     });
 
     // Invalidate cache
@@ -397,46 +353,7 @@ export class StoryBuddyService {
    * Get buddy statistics (for admin dashboard)
    */
   async getBuddyStats() {
-    const buddies = await this.prisma.storyBuddy.findMany({
-      where: {
-        isDeleted: false, // ONLY COUNT NON-DELETED BUDDIES
-      },
-      include: {
-        _count: {
-          select: {
-            kids: true,
-            buddyInteractions: true,
-          },
-        },
-      },
-    });
-
-    const totalInteractions = await this.prisma.buddyInteraction.count({
-      where: {
-        isDeleted: false, // ONLY COUNT NON-DELETED INTERACTIONS
-      },
-    });
-
-    const totalKidsWithBuddies = await this.prisma.kid.count({
-      where: {
-        storyBuddyId: { not: null },
-        isDeleted: false, // ONLY COUNT NON-DELETED KIDS
-      },
-    });
-
-    return {
-      totalBuddies: buddies.length,
-      totalInteractions,
-      totalKidsWithBuddies,
-      buddies: buddies.map((buddy) => ({
-        id: buddy.id,
-        name: buddy.name,
-        displayName: buddy.displayName,
-        isActive: buddy.isActive,
-        kidCount: buddy._count.kids,
-        interactionCount: buddy._count.buddyInteractions,
-      })),
-    };
+    return this.storyBuddyRepository.getBuddyStats();
   }
 
   /**
