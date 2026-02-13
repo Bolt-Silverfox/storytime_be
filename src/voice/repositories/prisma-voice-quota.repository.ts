@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import type {
   IVoiceQuotaRepository,
-  UserWithSubscriptionsAndUsage,
+  UserWithSubscriptionAndUsage,
 } from './voice-quota.repository.interface';
 import type {
   UserUsage,
@@ -17,20 +17,14 @@ import { SUBSCRIPTION_STATUS } from '@/subscription/subscription.constants';
 export class PrismaVoiceQuotaRepository implements IVoiceQuotaRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findUserWithSubscriptionsAndUsage(
+  async findUserWithSubscriptionAndUsage(
     userId: string,
     currentDate: Date,
-  ): Promise<UserWithSubscriptionsAndUsage | null> {
+  ): Promise<UserWithSubscriptionAndUsage | null> {
     return this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        subscriptions: {
-          where: {
-            status: SUBSCRIPTION_STATUS.ACTIVE,
-            OR: [{ endsAt: { gt: currentDate } }, { endsAt: null }],
-          },
-          take: 1,
-        },
+        subscription: true,
         usage: true,
       },
     });

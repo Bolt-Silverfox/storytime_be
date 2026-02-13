@@ -37,7 +37,7 @@ export class PrismaUserRepository implements IUserRepository {
         profile: true,
         kids: true,
         avatar: true,
-        subscriptions: true,
+        subscription: true,
       },
     });
   }
@@ -75,7 +75,7 @@ export class PrismaUserRepository implements IUserRepository {
         profile: true,
         kids: true,
         avatar: true,
-        subscriptions: true,
+        subscription: true,
       },
     });
   }
@@ -121,7 +121,7 @@ export class PrismaUserRepository implements IUserRepository {
         profile: true,
         kids: true,
         avatar: true,
-        subscriptions: true,
+        subscription: true,
       },
     });
   }
@@ -179,7 +179,7 @@ export class PrismaUserRepository implements IUserRepository {
         profile: true,
         kids: true,
         avatar: true,
-        subscriptions: true,
+        subscription: true,
       },
     });
   }

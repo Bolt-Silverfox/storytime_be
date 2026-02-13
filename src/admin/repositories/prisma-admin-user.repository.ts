@@ -57,10 +57,10 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
             kids: true,
             auth: true,
             parentFavorites: true,
-            subscriptions: true,
             paymentTransactions: true,
           },
         },
+        subscription: true,
       },
     }) as Promise<UserWithRelations[]>;
   }
@@ -97,11 +97,11 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
             auth: true,
             parentFavorites: true,
             voices: true,
-            subscriptions: true,
             supportTickets: true,
             paymentTransactions: true,
           },
         },
+        subscription: true,
       },
     }) as Promise<UserDetail | null>;
   }

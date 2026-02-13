@@ -82,13 +82,13 @@ export class AdminUserService {
       };
 
       if (wantsActiveSubscription) {
-        where.subscriptions = {
-          some: activeSubscriptionCriteria,
+        where.subscription = {
+          is: activeSubscriptionCriteria,
         };
       } else {
         where.NOT = {
-          subscriptions: {
-            some: activeSubscriptionCriteria,
+          subscription: {
+            is: activeSubscriptionCriteria,
           },
         };
       }
