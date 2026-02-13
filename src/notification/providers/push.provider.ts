@@ -326,7 +326,8 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
 
     const serialized: Record<string, string> = {};
     for (const [key, value] of Object.entries(data)) {
-      serialized[key] = typeof value === 'string' ? value : JSON.stringify(value);
+      serialized[key] =
+        typeof value === 'string' ? value : JSON.stringify(value);
     }
     return serialized;
   }
