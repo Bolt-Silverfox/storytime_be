@@ -72,7 +72,8 @@ export class DeviceTokenController {
   @Get()
   @ApiOperation({
     summary: 'Get all registered devices for the current user',
-    description: 'Returns a list of all active device tokens registered by the user.',
+    description:
+      'Returns a list of all active device tokens registered by the user.',
   })
   @ApiResponse({
     status: 200,
@@ -91,14 +92,17 @@ export class DeviceTokenController {
   @ApiOperation({
     summary: 'Unregister a device token',
     description:
-      'Removes a device token from the user\'s registered devices. ' +
+      "Removes a device token from the user's registered devices. " +
       'Use this when the user logs out or disables push notifications.',
   })
   @ApiParam({
     name: 'token',
     description: 'The FCM device token to unregister',
   })
-  @ApiResponse({ status: 204, description: 'Device token removed successfully' })
+  @ApiResponse({
+    status: 204,
+    description: 'Device token removed successfully',
+  })
   @ApiResponse({ status: 404, description: 'Device token not found' })
   async unregisterDevice(
     @Req() req: AuthenticatedRequest,
@@ -112,7 +116,7 @@ export class DeviceTokenController {
   @ApiOperation({
     summary: 'Send a test push notification',
     description:
-      'Sends a test push notification to the authenticated user\'s devices. ' +
+      "Sends a test push notification to the authenticated user's devices. " +
       'Useful for verifying that push notifications are configured correctly.',
   })
   @ApiResponse({ status: 200, description: 'Test notification sent' })

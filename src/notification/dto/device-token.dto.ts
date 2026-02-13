@@ -93,7 +93,8 @@ export class DeviceTokenListResponseDto {
  */
 export class TestPushNotificationDto {
   @ApiPropertyOptional({
-    description: 'Target device token (if not provided, sends to all user devices)',
+    description:
+      'Target device token (if not provided, sends to all user devices)',
   })
   @IsString()
   @IsOptional()

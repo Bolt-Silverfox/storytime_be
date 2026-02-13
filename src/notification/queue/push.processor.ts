@@ -54,7 +54,12 @@ export class PushProcessor extends WorkerHost {
 
       if (tokens && tokens.length > 0) {
         // Send to specific tokens
-        result = await this.pushProvider.sendToTokens(tokens, title, body, data);
+        result = await this.pushProvider.sendToTokens(
+          tokens,
+          title,
+          body,
+          data,
+        );
       } else {
         // Send via notification payload (user lookup)
         result = await this.pushProvider.send({
@@ -106,7 +111,12 @@ export class PushProcessor extends WorkerHost {
     );
 
     try {
-      const result = await this.pushProvider.sendToTopic(topic, title, body, data);
+      const result = await this.pushProvider.sendToTopic(
+        topic,
+        title,
+        body,
+        data,
+      );
 
       if (!result.success) {
         throw new Error(result.error || 'Topic push failed');
@@ -145,7 +155,9 @@ export class PushProcessor extends WorkerHost {
     result: PushJobResult,
   ): void {
     const jobId =
-      'jobId' in job.data ? job.data.jobId : (job.data as PushTopicJobData).jobId;
+      'jobId' in job.data
+        ? job.data.jobId
+        : (job.data as PushTopicJobData).jobId;
 
     this.logger.log(
       `Job ${jobId} completed (attempts: ${result.attemptsMade}, messageId: ${result.messageId})`,
@@ -166,7 +178,9 @@ export class PushProcessor extends WorkerHost {
     }
 
     const jobId =
-      'jobId' in job.data ? job.data.jobId : (job.data as PushTopicJobData).jobId;
+      'jobId' in job.data
+        ? job.data.jobId
+        : (job.data as PushTopicJobData).jobId;
     const willRetry = job.attemptsMade < (job.opts.attempts || 0);
 
     if (willRetry) {
@@ -187,7 +201,9 @@ export class PushProcessor extends WorkerHost {
   @OnWorkerEvent('active')
   onActive(job: Job<PushJobData | PushTopicJobData>): void {
     const jobId =
-      'jobId' in job.data ? job.data.jobId : (job.data as PushTopicJobData).jobId;
+      'jobId' in job.data
+        ? job.data.jobId
+        : (job.data as PushTopicJobData).jobId;
     this.logger.debug(`Processing job ${jobId}`);
   }
 

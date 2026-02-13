@@ -886,18 +886,16 @@ export class NotificationService {
     return this.pushProvider.isReady();
   }
 
-  private toDeviceTokenResponse(
-    token: {
-      id: string;
-      userId: string;
-      token: string;
-      platform: string;
-      deviceName: string | null;
-      isActive: boolean;
-      createdAt: Date;
-      updatedAt: Date;
-    },
-  ): DeviceTokenResponseDto {
+  private toDeviceTokenResponse(token: {
+    id: string;
+    userId: string;
+    token: string;
+    platform: string;
+    deviceName: string | null;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }): DeviceTokenResponseDto {
     return {
       id: token.id,
       userId: token.userId,

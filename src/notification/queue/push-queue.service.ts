@@ -150,13 +150,17 @@ export class PushQueueService {
   /**
    * Queue multiple push notifications (batch)
    */
-  async queueBatch(notifications: QueuePushOptions[]): Promise<QueuedPushResult[]> {
+  async queueBatch(
+    notifications: QueuePushOptions[],
+  ): Promise<QueuedPushResult[]> {
     const results = await Promise.all(
       notifications.map((notification) => this.queuePush(notification)),
     );
 
     const successful = results.filter((r) => r.queued).length;
-    this.logger.log(`Batch queued: ${successful}/${notifications.length} push notifications`);
+    this.logger.log(
+      `Batch queued: ${successful}/${notifications.length} push notifications`,
+    );
 
     return results;
   }
