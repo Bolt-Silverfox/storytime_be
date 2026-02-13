@@ -108,7 +108,7 @@ model User {
   appleId  String?    @unique
 
   //PAYMENT MODELS RESTORED
-  subscriptions         Subscription[]
+  subscription          Subscription?
   supportTickets        SupportTicket[]
   paymentMethods        PaymentMethod[]
   paymentTransactions   PaymentTransaction[]
@@ -496,7 +496,7 @@ model UserStoryProgress {
 // -------------------------
 model Subscription {
   id        String    @id @default(uuid())
-  userId    String
+  userId    String    @unique
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan      String
   status    String    @default("active")
@@ -506,7 +506,6 @@ model Subscription {
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  @@index([userId])
   @@index([userId, status])
   @@index([status, isDeleted])
   @@index([isDeleted])
