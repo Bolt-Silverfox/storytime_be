@@ -59,7 +59,7 @@ export class DeviceTokenResponseDto {
     description: 'Device platform',
     enum: DevicePlatform,
   })
-  platform: string;
+  platform: DevicePlatform;
 
   @ApiPropertyOptional({ description: 'Device name' })
   deviceName?: string;
@@ -86,6 +86,19 @@ export class DeviceTokenListResponseDto {
 
   @ApiProperty({ description: 'Total number of devices' })
   total: number;
+}
+
+/**
+ * DTO for unregistering a device token
+ */
+export class UnregisterDeviceDto {
+  @ApiProperty({
+    description: 'FCM device token to unregister',
+    example: 'dGhpcyBpcyBhIHNhbXBsZSB0b2tlbg...',
+  })
+  @IsString()
+  @IsNotEmpty()
+  token: string;
 }
 
 /**

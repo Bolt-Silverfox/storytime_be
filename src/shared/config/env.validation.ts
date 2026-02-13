@@ -44,7 +44,21 @@ export const envSchema = z.object({
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_CLIENT_EMAIL: z.string().email().optional(),
   FIREBASE_PRIVATE_KEY: z.string().optional(),
-});
+}).refine(
+  (data) => {
+    const firebaseVars = [
+      data.FIREBASE_PROJECT_ID,
+      data.FIREBASE_CLIENT_EMAIL,
+      data.FIREBASE_PRIVATE_KEY,
+    ];
+    const defined = firebaseVars.filter(Boolean).length;
+    return defined === 0 || defined === 3;
+  },
+  {
+    message:
+      'Firebase credentials must be either all provided or all omitted (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY)',
+  },
+);
 
 export type EnvConfig = z.infer<typeof envSchema>;
 

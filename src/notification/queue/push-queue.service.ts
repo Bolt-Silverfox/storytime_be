@@ -51,7 +51,7 @@ export class PushQueueService {
 
   constructor(
     @InjectQueue(PUSH_QUEUE_NAME)
-    private readonly pushQueue: Queue<PushJobData>,
+    private readonly pushQueue: Queue<PushJobData | PushTopicJobData>,
   ) {}
 
   /**
@@ -124,16 +124,12 @@ export class PushQueueService {
         data,
       };
 
-      await this.pushQueue.add(
-        PUSH_JOB_NAMES.SEND_PUSH_TOPIC,
-        jobData as unknown as PushJobData,
-        {
-          ...PUSH_QUEUE_DEFAULT_OPTIONS,
-          priority: PushPriority.NORMAL,
-          delay,
-          jobId,
-        },
-      );
+      await this.pushQueue.add(PUSH_JOB_NAMES.SEND_PUSH_TOPIC, jobData, {
+        ...PUSH_QUEUE_DEFAULT_OPTIONS,
+        priority: PushPriority.NORMAL,
+        delay,
+        jobId,
+      });
 
       this.logger.log(`Topic push queued: ${jobId} to topic ${topic}`);
 
