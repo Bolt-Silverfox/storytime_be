@@ -112,6 +112,8 @@ model User {
   supportTickets        SupportTicket[]
   paymentMethods        PaymentMethod[]
   paymentTransactions   PaymentTransaction[]
+  // FCM device tokens for push notifications
+  deviceTokens          DeviceToken[]
   // ADDED: Parent recommendations
   parentRecommendations ParentRecommendation[]
   // ADDED: Restricted stories
@@ -1119,4 +1121,27 @@ model UserUsage {
   updatedAt DateTime @updatedAt
 
   @@map("user_usages")
+}
+
+// -------------------------
+// FCM DEVICE TOKENS
+// -------------------------
+model DeviceToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String    @unique
+  platform   String // "ios", "android", "web"
+  deviceName String? // Optional device identifier
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  // SOFT DELETE FIELDS
+  isDeleted  Boolean   @default(false)
+  deletedAt  DateTime?
+
+  @@index([userId, isActive])
+  @@index([token])
+  @@index([isDeleted])
+  @@map("device_tokens")
 }
