@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { InAppProvider } from './providers/in-app.provider';
 import { EmailProvider } from './providers/email.provider';
+import { PushProvider } from './providers/push.provider';
 import {
   INotificationProvider,
   NotificationPayload,
@@ -34,6 +35,7 @@ export class NotificationService {
     private readonly inAppProvider: InAppProvider,
     private readonly emailProvider: EmailProvider,
     private readonly emailQueueService: EmailQueueService,
+    private readonly pushProvider: PushProvider,
     private readonly eventEmitter: EventEmitter2,
   ) {
     // Initialize legacy email transporter (for backward compatibility / sync sends)
@@ -54,6 +56,7 @@ export class NotificationService {
     this.providers = new Map<string, INotificationProvider>();
     this.providers.set('email', this.emailProvider);
     this.providers.set('in_app', this.inAppProvider);
+    this.providers.set('push', this.pushProvider);
   }
 
   async sendNotification(
@@ -119,13 +122,17 @@ export class NotificationService {
         error: results.find((r) => !r.success)?.error,
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
       this.logger.error(
-        `Failed to send notification: ${error.message}`,
-        error.stack,
+        `Failed to send notification: ${errorMessage}`,
+        errorStack,
       );
       return {
         success: false,
-        error: error?.message || 'Unknown error',
+        error: errorMessage,
       };
     }
   }
@@ -276,13 +283,17 @@ export class NotificationService {
           } satisfies NotificationSentEvent);
         }
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        const errorStack = error instanceof Error ? error.stack : undefined;
+
         this.logger.error(
-          `Failed to send via ${channel}: ${error.message}`,
-          error.stack,
+          `Failed to send via ${channel}: ${errorMessage}`,
+          errorStack,
         );
         results.push({
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errorMessage,
         });
       }
     }

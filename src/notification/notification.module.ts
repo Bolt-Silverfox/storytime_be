@@ -15,9 +15,13 @@ import { DeviceController } from './device.controller';
 import { SseController } from './sse.controller';
 import { InAppProvider } from './providers/in-app.provider';
 import { EmailProvider } from './providers/email.provider';
+import { PushProvider } from './providers/push.provider';
 import { EMAIL_QUEUE_NAME } from './queue/email-queue.constants';
+import { PUSH_QUEUE_NAME } from './queue/push-queue.constants';
 import { EmailQueueService } from './queue/email-queue.service';
 import { EmailProcessor } from './queue/email.processor';
+import { PushQueueService } from './queue/push-queue.service';
+import { PushProcessor } from './queue/push.processor';
 import { AuthEventListener } from './listeners/auth-event.listener';
 import { PasswordEventListener } from './listeners/password-event.listener';
 import { NotificationPreferenceEventListener } from './listeners/notification-preference-event.listener';
@@ -34,6 +38,10 @@ import {
     // Register email queue
     BullModule.registerQueue({
       name: EMAIL_QUEUE_NAME,
+    }),
+    // Register push notification queue
+    BullModule.registerQueue({
+      name: PUSH_QUEUE_NAME,
     }),
   ],
   controllers: [
@@ -53,9 +61,13 @@ import {
     JobEventsService,
     InAppProvider,
     EmailProvider,
-    // Queue components
+    PushProvider,
+    // Email queue components
     EmailQueueService,
     EmailProcessor,
+    // Push queue components
+    PushQueueService,
+    PushProcessor,
     // Event listeners (event-driven architecture)
     AuthEventListener,
     PasswordEventListener,
@@ -75,6 +87,7 @@ import {
     NotificationPreferenceService,
     InAppNotificationService,
     EmailQueueService,
+    PushQueueService,
     FcmService,
     DeviceTokenService,
     JobEventsService,
