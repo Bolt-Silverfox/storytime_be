@@ -359,7 +359,7 @@ export class PrismaAdminAnalyticsRepository
 
     const users = await this.prisma.user.findMany({
       where: { createdAt: { gte: startDate, lte: endDate }, isDeleted: false },
-      include: { subscriptions: { where: { status: 'active' } } },
+      include: { subscription: true },
       orderBy: { createdAt: 'asc' },
     });
 
@@ -368,7 +368,7 @@ export class PrismaAdminAnalyticsRepository
         const date = user.createdAt.toISOString().split('T')[0];
         if (!acc[date]) acc[date] = { total: 0, paid: 0 };
         acc[date].total += 1;
-        if (user.subscriptions.length > 0) acc[date].paid += 1;
+        if (user.subscription && user.subscription.status === 'active') acc[date].paid += 1;
         return acc;
       },
       {} as Record<string, { total: number; paid: number }>,
@@ -381,7 +381,7 @@ export class PrismaAdminAnalyticsRepository
       where: {
         createdAt: { lt: startDate },
         isDeleted: false,
-        subscriptions: { some: { status: 'active' } },
+        subscription: { is: { status: 'active' } },
       },
     });
 
@@ -489,7 +489,7 @@ export class PrismaAdminAnalyticsRepository
       ? new Date(dateRange.endDate)
       : new Date();
 
-    const [subscriptions, revenue, planBreakdown] = await Promise.all([
+    const [subscription, revenue, planBreakdown] = await Promise.all([
       this.prisma.subscription.groupBy({
         by: ['startedAt'],
         where: { startedAt: { gte: startDate, lte: endDate } },
@@ -516,7 +516,7 @@ export class PrismaAdminAnalyticsRepository
     const churnRate = await this.calculateChurnRate(startDate, endDate);
 
     return {
-      subscriptionGrowth: subscriptions.map((sub) => ({
+      subscriptionGrowth: subscription.map((sub) => ({
         date: sub.startedAt.toISOString().split('T')[0],
         count: sub._count,
       })),
@@ -601,7 +601,7 @@ export class PrismaAdminAnalyticsRepository
       );
     });
 
-    const subscriptionsWithRevenue = await this.prisma.subscription.findMany({
+    const subscriptionWithRevenue = await this.prisma.subscription.findMany({
       where: { status: 'active' },
       include: {
         user: {
@@ -620,7 +620,7 @@ export class PrismaAdminAnalyticsRepository
       { subscription_count: number; total_revenue: number }
     >();
 
-    subscriptionsWithRevenue.forEach((sub) => {
+    subscriptionWithRevenue.forEach((sub) => {
       const current = planRevenueMap.get(sub.plan) || {
         subscription_count: 0,
         total_revenue: 0,
@@ -719,7 +719,7 @@ export class PrismaAdminAnalyticsRepository
       select: {
         createdAt: true,
         id: true,
-        subscriptions: { where: { status: 'active' }, select: { id: true } },
+        subscription: { select: { id: true, status: true } },
       },
     });
 
@@ -738,7 +738,7 @@ export class PrismaAdminAnalyticsRepository
       const label = u.createdAt.toLocaleString('default', { month: 'short' });
       const index = uniqueLabels.indexOf(label);
       if (index !== -1) {
-        if (u.subscriptions.length > 0) paidCounts[index]++;
+        if (u.subscription && u.subscription.status === 'active') paidCounts[index]++;
         else freeCounts[index]++;
       }
     });

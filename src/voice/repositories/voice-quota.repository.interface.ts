@@ -8,18 +8,18 @@ import type {
 } from '@prisma/client';
 
 // ==================== Types ====================
-export interface UserWithSubscriptionsAndUsage extends User {
-  subscriptions: Subscription[];
+export interface UserWithSubscriptionAndUsage extends User {
+  subscription: Subscription | null;
   usage: UserUsage | null;
 }
 
 // ==================== Repository Interface ====================
 export interface IVoiceQuotaRepository {
-  // Find user with active subscriptions and usage
-  findUserWithSubscriptionsAndUsage(
+  // Find user with active subscription and usage
+  findUserWithSubscriptionAndUsage(
     userId: string,
     currentDate: Date,
-  ): Promise<UserWithSubscriptionsAndUsage | null>;
+  ): Promise<UserWithSubscriptionAndUsage | null>;
 
   // Find usage for a user
   findUserUsage(userId: string): Promise<UserUsage | null>;

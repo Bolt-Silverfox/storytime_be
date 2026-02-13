@@ -64,7 +64,7 @@ export class UserService {
         profile: true,
         kids: true,
         avatar: true,
-        subscriptions: true,
+        subscription: true,
       },
     });
     if (!user) return null;
@@ -83,7 +83,7 @@ export class UserService {
         profile: true,
         kids: true,
         avatar: true,
-        subscriptions: true,
+        subscription: true,
       },
     });
 

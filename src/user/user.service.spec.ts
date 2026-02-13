@@ -5,6 +5,7 @@ import { UserRole } from './user.controller';
 import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { NotificationService } from '@/notification/notification.service';
+import { ResourceNotFoundException } from '@/shared/exceptions';
 
 // Type-safe mock for PrismaService
 type MockPrismaService = {
