@@ -100,7 +100,10 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Create .env file
-        run: echo "${{ secrets.ENV_FILE }}" > .env
+        run: |
+          cat > .env << 'EOF'
+          ${{ secrets.ENV_FILE }}
+          EOF
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -187,7 +190,10 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Create .env file
-        run: echo "${{ secrets.ENV_FILE }}" > .env
+        run: |
+          cat > .env << 'EOF'
+          ${{ secrets.ENV_FILE }}
+          EOF
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -291,7 +297,10 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Create .env file
-        run: echo "${{ secrets.ENV_FILE }}" > .env
+        run: |
+          cat > .env << 'EOF'
+          ${{ secrets.ENV_FILE }}
+          EOF
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
