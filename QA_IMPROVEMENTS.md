@@ -23,23 +23,40 @@ This document tracks quality assurance issues, testing gaps, and code quality im
 
 ## 1. Testing Gaps
 
-### 1.1 Missing Unit Tests (P0 - Critical)
+### 1.1 Unit Test Status (P0 - Critical)
 
-Current coverage: **~9%** (20 spec files out of 220+ TypeScript files)
+Current coverage: **31 test files** covering major services
 
-| Service | Lines | Has Tests | Priority |
-|---------|-------|-----------|----------|
-| `AuthService` | ~264 | ✅ YES (31 tests) | ~~P0~~ ✅ |
-| `UserService` | ~256 | ✅ YES (45 tests) | ~~P0~~ ✅ |
-| `NotificationService` | ~323 | ✅ YES (34 tests) | ~~P0~~ ✅ |
-| `SubscriptionService` | ~300 | ✅ YES (15 tests) | ~~P0~~ ✅ |
-| `OAuthService` | ~250 | ✅ YES (21 tests) | ~~P0~~ ✅ |
-| `OnboardingService` | ~190 | ✅ YES (22 tests) | ~~P0~~ ✅ |
-| `UserDeletionService` | ~280 | ✅ YES (18 tests) | ~~P0~~ ✅ |
-| `UserPinService` | ~200 | ✅ YES (23 tests) | ~~P0~~ ✅ |
-| `AvatarService` | 422 | ❌ NO | P1 |
-| `ReportsService` | ~337 | ❌ NO | P1 |
-| `StoryBuddyService` | ~300 | ❌ NO | P1 |
+**Core Services with Tests ✅:**
+| Service | Lines | Has Tests | Status |
+|---------|-------|-----------|--------|
+| `AuthService` | ~264 | ✅ YES (31 tests) | Complete |
+| `UserService` | ~256 | ✅ YES (45 tests) | Complete |
+| `NotificationService` | ~323 | ✅ YES (34 tests) | Complete |
+| `SubscriptionService` | ~300 | ✅ YES (15 tests) | Complete |
+| `OAuthService` | ~250 | ✅ YES (21 tests) | Complete |
+| `OnboardingService` | ~190 | ✅ YES (22 tests) | Complete |
+| `UserDeletionService` | ~280 | ✅ YES (18 tests) | Complete |
+| `UserPinService` | ~200 | ✅ YES (23 tests) | Complete |
+| `PaymentService` | ~400 | ✅ YES | Complete |
+| `StoryService` | ~1500 | ✅ YES | Complete |
+| `StoryGenerationService` | ~340 | ✅ YES | Complete |
+| `VoiceService` | ~500 | ✅ YES | Complete |
+| `KidService` | ~300 | ✅ YES | Complete |
+| `HelpSupportService` | ~200 | ✅ YES | Complete |
+| `ParentFavoritesService` | ~150 | ✅ YES | Complete |
+| `AdminController` | - | ✅ YES | Complete |
+| `AdminStoryService` | ~240 | ✅ YES | Complete |
+| `AdminUserService` | ~370 | ✅ YES | Complete |
+
+**Services Still Needing Tests:**
+| Service | Lines | Priority |
+|---------|-------|----------|
+| `AdminAnalyticsService` | ~600 | P2 |
+| `PasswordService` | ~150 | P2 |
+| `TokenService` | ~200 | P2 |
+| `BadgeService` | ~200 | P3 |
+| `ProgressService` | ~250 | P3 |
 
 **Action Items:**
 - [x] Add unit tests for `AuthService` (login, register, password reset, OAuth flows) ✅ *Instance 4*
@@ -445,27 +462,23 @@ Circular dependencies between modules have been resolved using a comprehensive e
 
 ## 3. Error Handling
 
-### 3.1 Generic Error Throws (P1 - High)
+### 3.1 Generic Error Throws ✅ LARGELY COMPLETE
 
-**18+ instances** of plain `Error` instead of NestJS exceptions:
+**Status**: Production code cleaned up. Only 2 remaining instances:
+1. `src/story/story-generation.service.spec.ts` - Test file (acceptable)
+2. `src/shared/config/env.validation.ts` - Environment validation (acceptable for startup errors)
 
-| File | Line | Current | Should Be |
-|------|------|---------|-----------|
-| `src/user/utils/pin.util.ts` | 10 | `throw new Error('PIN must be exactly 6 digits')` | `throw new BadRequestException('PIN must be exactly 6 digits')` |
-| `src/user/user.service.ts` | 415 | `throw new Error('Invalid role')` | `throw new BadRequestException('Invalid role')` |
-| `src/story/gemini.service.ts` | 152 | `throw new Error(...)` | `throw new InternalServerErrorException(...)` |
-| `src/story/gemini.service.ts` | 181 | `throw new Error(...)` | `throw new InternalServerErrorException(...)` |
-| `src/notification/notification.service.ts` | 79 | `throw new Error('Invalid notification type')` | `throw new BadRequestException(...)` |
-| `src/notification/notification.service.ts` | 84 | `throw new Error(...)` | `throw new BadRequestException(...)` |
-| `src/notification/queue/email.processor.ts` | 96 | `throw new Error(...)` | `throw new InternalServerErrorException(...)` |
-| `src/admin/admin-analytics.service.ts` | various | `throw new BadRequestException(...)` | `throw new ValidationException(...)` |
-| `src/voice/providers/deepgram-stt.provider.ts` | various | `throw new Error(...)` | `throw new InternalServerErrorException(...)` |
-| `src/voice/providers/eleven-labs-tts.provider.ts` | various | `throw new Error(...)` | `throw new InternalServerErrorException(...)` |
+All service-level generic `Error` throws have been replaced with appropriate NestJS exceptions:
+- ✅ `DomainException` hierarchy implemented
+- ✅ Auth exceptions (InvalidCredentials, TokenExpired, etc.)
+- ✅ Resource exceptions (NotFound, AlreadyExists)
+- ✅ Business logic exceptions (QuotaExceeded, SubscriptionRequired, ValidationException)
+- ✅ Error codes added for client-side handling
 
 **Action Items:**
-- [ ] Replace all `throw new Error()` with appropriate NestJS exceptions
-- [ ] Add error codes for client-side handling
-- [ ] Ensure all errors are caught by exception filters
+- [x] Replace all service-level `throw new Error()` with NestJS exceptions
+- [x] Add error codes for client-side handling
+- [x] Ensure all errors are caught by exception filters
 
 ### 3.2 Low Try-Catch Coverage (P2 - Medium)
 
@@ -725,9 +738,30 @@ describe('Auth E2E', () => {
 
 ## 7. CI/CD Integration
 
-### 7.1 GitHub Actions Workflow (P0 - Critical)
+### 7.1 GitHub Actions Workflow ✅ IMPLEMENTED
 
-**Recommended CI Pipeline:**
+**Status**: 3 GitHub Actions workflows active:
+
+1. **Development Pipeline** (`.github/workflows/dev-deploy.yml`)
+   - Triggers: PRs to `develop-v*.*.*` branches
+   - Jobs: Code quality, build, test, auto-format, deploy to dev
+   - Services: PostgreSQL 16, Redis 7
+   - Node: v22, pnpm
+   - Health checks after deployment
+
+2. **Staging Pipeline** (`.github/workflows/staging-deploy.yml`)
+   - Triggers: PRs to `release-v*.*.*` branches
+   - Jobs: Build, test, deploy to EC2
+   - Deployment: `/home/ubuntu/storytime/staging/storytime-api`
+
+3. **Production Pipeline** (`.github/workflows/deploy-prod.yml`)
+   - Triggers: PRs to `main` branch
+   - Jobs: Build, test, deploy to EC2
+   - Deployment: `/home/ubuntu/storytime/production/storytime-api`
+
+### 7.1.1 Example CI Pipeline (Reference)
+
+**For future enhancements:**
 ```yaml
 # .github/workflows/ci.yml
 name: CI
@@ -928,22 +962,27 @@ this.eventEmitter.emit('user.created', payload);
 - [x] Add testing strategy section
 - [x] Add CI/CD integration section
 - [x] Add code review standards
-- [x] **Unit tests for core services** - 209+ tests *(Instance 4 & 12)*
+- [x] **Unit tests for core services** - 31 test files covering major services
   - AuthService (31), UserService (45), NotificationService (34), SubscriptionService (15)
   - OAuthService (21), OnboardingService (22), UserDeletionService (18), UserPinService (23)
+  - StoryService, StoryGenerationService, VoiceService, KidService, PaymentService, etc.
 - [x] **E2E tests for authentication flows** - 41 tests *(Instance 9)*
 - [x] **Type safety improvements** - Production `any` types eliminated *(Instance 4 & 5)*
 - [x] **God service refactoring** - ALL 4 PHASES COMPLETE *(Instances 6, 7, 8, 10, 11, 13, 14, 15)*
   - 19 focused services extracted from 7 god services
+- [x] **CI/CD pipeline setup** - 3 GitHub Actions workflows (dev, staging, production)
+- [x] **Error handling** - Generic Error throws replaced with NestJS exceptions
+- [x] **Rate limiting** - Implemented on auth, payment, story, device controllers
+- [x] **Event-driven architecture** - 18+ events with typed payloads
 
 ### In Progress 🔄
-- [ ] CI/CD pipeline setup
-- [ ] Test coverage improvements (need: AvatarService, ReportsService, StoryBuddyService)
+- [ ] Verify coverage threshold configuration in CI (need to confirm 80% gate)
 
 ### Pending 📋
-- [ ] E2E tests for payment/subscription flows
-- [ ] Fix error handling (generic Error → NestJS exceptions)
-- [ ] Security audit implementation
+- [ ] E2E tests for payment/subscription flows (P1)
+- [ ] Unit tests for remaining services (AdminAnalyticsService, PasswordService, TokenService) - P2/P3
+- [ ] Pre-commit hooks (husky + lint-staged) - P2
+- [ ] Coverage badges in README - P3
 
 ### Recently Completed (Instance 21-23) ✅
 - [x] **Push Notifications (FCM)** - FcmService, DeviceTokenService *(Instance 21)*

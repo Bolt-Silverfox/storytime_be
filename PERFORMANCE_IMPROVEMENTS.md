@@ -1638,27 +1638,45 @@ await this.prisma.entity.createMany({
 - [x] Repository pattern: KidService *(IKidRepository + PrismaKidRepository)*
 - [x] Repository pattern: SettingsService *(ISettingsRepository + PrismaSettingsRepository)*
 
-**Test Coverage (Section 11)**
-- [ ] Unit tests for P1 services (story-generation, story-progress, password, token)
-- [ ] Unit tests for P2 services (achievement, reports)
-- [ ] Establish 80% coverage gate in CI
+**Test Coverage (Section 11)** ✅ LARGELY COMPLETE
+- [x] Unit tests for core services (31 test files including auth, user, story, payment, voice, notification)
+- [x] Unit tests for story-generation.service.ts
+- [x] CI/CD pipeline established (3 GitHub Actions workflows)
+- [ ] Verify 80% coverage threshold configured in CI
 
 **Rate Limiting (Section 12)** ✅ COMPLETE
-- [x] Add rate limiting to auth endpoints *(10 @Throttle decorators in auth.controller.ts)*
-- [x] Add rate limiting to payment endpoints *(3 @Throttle decorators in payment.controller.ts)*
-- [ ] Create centralized throttle configuration
+- [x] Add rate limiting to auth endpoints *(auth.controller.ts)*
+- [x] Add rate limiting to payment endpoints *(payment.controller.ts)*
+- [x] Add rate limiting to story endpoints *(story.controller.ts)*
+- [x] Add rate limiting to device endpoints *(device.controller.ts)*
+- [ ] Create centralized throttle configuration file (optional consolidation)
 
-**Infrastructure**
+**Infrastructure** ✅ LARGELY COMPLETE
 - [x] APM integration (OpenTelemetry) *(src/otel-setup.ts implemented)*
 - [x] Story generation queue *(src/story/queue/ with processor, service, constants)*
-- [x] Voice synthesis queue ✅ *(src/voice/queue/ with processor, service, constants)*
-- [x] Grafana dashboard IDs documented ✅ *(GRAFANA_SETUP.md)*
-- [x] Cache metrics service ✅ *(CacheMetricsService with OpenTelemetry)*
-- [x] Health indicators for all services ✅ *(Firebase, Cloudinary, Queue enhancement)*
-- [x] Push notifications (FCM) + SSE ✅ *(FcmService, JobEventsService, DeviceTokenService)*
-- [x] Alerting rules configuration ✅ *(ALERTING_RULES.md)*
-- [x] Security audit ✅ *(SECURITY_AUDIT.md)*
-- [ ] Custom Grafana dashboards creation
+- [x] Voice synthesis queue *(src/voice/queue/ with processor, service, constants)*
+- [x] Grafana dashboard IDs documented *(GRAFANA_SETUP.md)*
+- [x] Cache metrics service *(CacheMetricsService with OpenTelemetry)*
+- [x] Health indicators for all services *(Firebase, Cloudinary, Queue enhancement)*
+- [x] Push notifications (FCM) + SSE *(FcmService, JobEventsService, DeviceTokenService)*
+- [x] Alerting rules configuration *(ALERTING_RULES.md)*
+- [x] Security audit *(SECURITY_AUDIT.md)*
+- [ ] Custom Grafana dashboards creation (optional - community dashboards available)
+
+**Database & Query Optimizations**
+- [ ] Implement cursor-based pagination for list endpoints (P2)
+- [ ] Add `select` to StoryService list queries to exclude `textContent` (P2)
+- [ ] Document cache invalidation patterns (P3)
+- [ ] Configure database connection pool limits (P2)
+
+**External Services**
+- [ ] Add request timeouts to ElevenLabs/Deepgram (30s max) - P2
+- [ ] Move large Cloudinary uploads to background jobs - P3
+- [ ] Configure Cloudinary auto-optimization - P3
+
+**Documentation & Configuration**
+- [ ] Create centralized throttle configuration file (optional consolidation) - P3
+- [ ] Document transaction patterns in CLAUDE.md - P3
 
 ---
 
