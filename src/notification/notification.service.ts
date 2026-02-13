@@ -21,6 +21,7 @@ import {
 } from './dto/notification.dto';
 import { InAppProvider } from './providers/in-app.provider';
 import { EmailProvider } from './providers/email.provider';
+import { PushProvider } from './providers/push.provider';
 import {
   INotificationProvider,
   NotificationPayload,
@@ -30,6 +31,11 @@ import {
   EmailQueueService,
   QueuedEmailResult,
 } from './queue/email-queue.service';
+import {
+  DeviceTokenResponseDto,
+  DeviceTokenListResponseDto,
+  DevicePlatform,
+} from './dto/device-token.dto';
 
 @Injectable()
 export class NotificationService {
@@ -43,6 +49,7 @@ export class NotificationService {
     private readonly inAppProvider: InAppProvider,
     private readonly emailProvider: EmailProvider,
     private readonly emailQueueService: EmailQueueService,
+    private readonly pushProvider: PushProvider,
   ) {
     // Initialize legacy email transporter (for backward compatibility / sync sends)
     this.transporter = nodemailer.createTransport({
@@ -62,11 +69,12 @@ export class NotificationService {
     this.providers = new Map<string, INotificationProvider>();
     this.providers.set('email', this.emailProvider);
     this.providers.set('in_app', this.inAppProvider);
+    this.providers.set('push', this.pushProvider);
   }
 
   async sendNotification(
     type: Notifications,
-    data: Record<string, any>,
+    data: Record<string, unknown>,
     targetUserId?: string,
   ): Promise<{
     success: boolean;
@@ -127,13 +135,17 @@ export class NotificationService {
         error: results.find((r) => !r.success)?.error,
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
       this.logger.error(
-        `Failed to send notification: ${error.message}`,
-        error.stack,
+        `Failed to send notification: ${errorMessage}`,
+        errorStack,
       );
       return {
         success: false,
-        error: error?.message || 'Unknown error',
+        error: errorMessage,
       };
     }
   }
@@ -271,13 +283,17 @@ export class NotificationService {
         const result = await provider.send(payload);
         results.push(result);
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        const errorStack = error instanceof Error ? error.stack : undefined;
+
         this.logger.error(
-          `Failed to send via ${channel}: ${error.message}`,
-          error.stack,
+          `Failed to send via ${channel}: ${errorMessage}`,
+          errorStack,
         );
         results.push({
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errorMessage,
         });
       }
     }
@@ -733,5 +749,197 @@ export class NotificationService {
     });
 
     return this.toNotificationPreferenceDto(restored);
+  }
+
+  // ============================================
+  // Device Token Management
+  // ============================================
+
+  /**
+   * Register a device token for push notifications.
+   * If the token already exists for this user, update it.
+   * If the token exists for a different user, reassign it.
+   */
+  async registerDeviceToken(
+    userId: string,
+    token: string,
+    platform: DevicePlatform,
+    deviceName?: string,
+  ): Promise<DeviceTokenResponseDto> {
+    // Validate platform enum
+    if (!Object.values(DevicePlatform).includes(platform)) {
+      throw new BadRequestException(
+        `Invalid platform. Must be one of: ${Object.values(DevicePlatform).join(', ')}`,
+      );
+    }
+
+    // Check if token exists
+    const existingToken = await this.prisma.deviceToken.findUnique({
+      where: { token },
+    });
+
+    if (existingToken) {
+      // If same user, just update
+      if (existingToken.userId === userId) {
+        const updated = await this.prisma.deviceToken.update({
+          where: { token },
+          data: {
+            platform,
+            deviceName,
+            isActive: true,
+            isDeleted: false,
+            deletedAt: null,
+          },
+        });
+        this.logger.log(`Updated device token for user ${userId}`);
+        return this.toDeviceTokenResponse(updated);
+      }
+
+      // Different user - reassign the token
+      const updated = await this.prisma.deviceToken.update({
+        where: { token },
+        data: {
+          userId,
+          platform,
+          deviceName,
+          isActive: true,
+          isDeleted: false,
+          deletedAt: null,
+        },
+      });
+      this.logger.log(
+        `Reassigned device token from user ${existingToken.userId} to ${userId}`,
+      );
+      return this.toDeviceTokenResponse(updated);
+    }
+
+    // Create new token
+    const newToken = await this.prisma.deviceToken.create({
+      data: {
+        userId,
+        token,
+        platform,
+        deviceName,
+      },
+    });
+    this.logger.log(`Registered new device token for user ${userId}`);
+    return this.toDeviceTokenResponse(newToken);
+  }
+
+  /**
+   * Get all active devices for a user.
+   */
+  async getUserDevices(userId: string): Promise<DeviceTokenListResponseDto> {
+    const devices = await this.prisma.deviceToken.findMany({
+      where: {
+        userId,
+        isActive: true,
+        isDeleted: false,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      devices: devices.map((d) => this.toDeviceTokenResponse(d)),
+      total: devices.length,
+    };
+  }
+
+  /**
+   * Unregister a device token (soft delete).
+   */
+  async unregisterDeviceToken(userId: string, token: string): Promise<void> {
+    const deviceToken = await this.prisma.deviceToken.findFirst({
+      where: {
+        userId,
+        token,
+        isDeleted: false,
+      },
+    });
+
+    if (!deviceToken) {
+      throw new NotFoundException('Device token not found');
+    }
+
+    await this.prisma.deviceToken.update({
+      where: { id: deviceToken.id },
+      data: {
+        isActive: false,
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+    });
+
+    this.logger.log(`Unregistered device token for user ${userId}`);
+  }
+
+  /**
+   * Send a test push notification to verify setup.
+   */
+  async sendTestPush(
+    userId: string,
+    title: string,
+    body: string,
+    specificToken?: string,
+  ): Promise<NotificationResult> {
+    if (specificToken) {
+      // Verify token ownership before sending
+      const deviceToken = await this.prisma.deviceToken.findFirst({
+        where: {
+          userId,
+          token: specificToken,
+          isDeleted: false,
+        },
+      });
+
+      if (!deviceToken) {
+        throw new NotFoundException(
+          'Device token not found or does not belong to this user',
+        );
+      }
+
+      return this.pushProvider.sendToTokens([specificToken], title, body);
+    }
+
+    // Send to all user devices
+    return this.pushProvider.send({
+      userId,
+      category: PrismaCategory.SYSTEM_ALERT,
+      title,
+      body,
+    });
+  }
+
+  /**
+   * Check if push notifications are properly configured.
+   */
+  isPushReady(): boolean {
+    return this.pushProvider.isReady();
+  }
+
+  private toDeviceTokenResponse(token: {
+    id: string;
+    userId: string;
+    token: string;
+    platform: string;
+    deviceName: string | null;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }): DeviceTokenResponseDto {
+    return {
+      id: token.id,
+      userId: token.userId,
+      // Mask token for security - show first 8 and last 4 chars
+      token:
+        token.token.length > 12
+          ? `${token.token.substring(0, 8)}...${token.token.substring(token.token.length - 4)}`
+          : token.token,
+      platform: token.platform as DevicePlatform,
+      deviceName: token.deviceName || undefined,
+      isActive: token.isActive,
+      createdAt: token.createdAt,
+      updatedAt: token.updatedAt,
+    };
   }
 }
