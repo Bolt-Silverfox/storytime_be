@@ -22,6 +22,15 @@ export class PushProcessor extends WorkerHost {
   }
 
   /**
+   * Extract jobId from job data (handles both PushJobData and PushTopicJobData)
+   */
+  private getJobId(job: Job<PushJobData | PushTopicJobData>): string {
+    return 'jobId' in job.data
+      ? job.data.jobId
+      : (job.data as PushTopicJobData).jobId;
+  }
+
+  /**
    * Process push notification job
    * This method is called by BullMQ for each job
    */
@@ -154,10 +163,7 @@ export class PushProcessor extends WorkerHost {
     job: Job<PushJobData | PushTopicJobData>,
     result: PushJobResult,
   ): void {
-    const jobId =
-      'jobId' in job.data
-        ? job.data.jobId
-        : (job.data as PushTopicJobData).jobId;
+    const jobId = this.getJobId(job);
 
     this.logger.log(
       `Job ${jobId} completed (attempts: ${result.attemptsMade}, messageId: ${result.messageId})`,
@@ -177,10 +183,7 @@ export class PushProcessor extends WorkerHost {
       return;
     }
 
-    const jobId =
-      'jobId' in job.data
-        ? job.data.jobId
-        : (job.data as PushTopicJobData).jobId;
+    const jobId = this.getJobId(job);
     const willRetry = job.attemptsMade < (job.opts.attempts || 0);
 
     if (willRetry) {
@@ -200,10 +203,7 @@ export class PushProcessor extends WorkerHost {
    */
   @OnWorkerEvent('active')
   onActive(job: Job<PushJobData | PushTopicJobData>): void {
-    const jobId =
-      'jobId' in job.data
-        ? job.data.jobId
-        : (job.data as PushTopicJobData).jobId;
+    const jobId = this.getJobId(job);
     this.logger.debug(`Processing job ${jobId}`);
   }
 

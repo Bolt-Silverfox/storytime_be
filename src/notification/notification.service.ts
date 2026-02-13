@@ -34,6 +34,7 @@ import {
 import {
   DeviceTokenResponseDto,
   DeviceTokenListResponseDto,
+  DevicePlatform,
 } from './dto/device-token.dto';
 
 @Injectable()
@@ -73,7 +74,7 @@ export class NotificationService {
 
   async sendNotification(
     type: Notifications,
-    data: Record<string, any>,
+    data: Record<string, unknown>,
     targetUserId?: string,
   ): Promise<{
     success: boolean;
@@ -134,13 +135,17 @@ export class NotificationService {
         error: results.find((r) => !r.success)?.error,
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
       this.logger.error(
-        `Failed to send notification: ${error.message}`,
-        error.stack,
+        `Failed to send notification: ${errorMessage}`,
+        errorStack,
       );
       return {
         success: false,
-        error: error?.message || 'Unknown error',
+        error: errorMessage,
       };
     }
   }
@@ -278,13 +283,17 @@ export class NotificationService {
         const result = await provider.send(payload);
         results.push(result);
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        const errorStack = error instanceof Error ? error.stack : undefined;
+
         this.logger.error(
-          `Failed to send via ${channel}: ${error.message}`,
-          error.stack,
+          `Failed to send via ${channel}: ${errorMessage}`,
+          errorStack,
         );
         results.push({
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errorMessage,
         });
       }
     }
@@ -754,9 +763,16 @@ export class NotificationService {
   async registerDeviceToken(
     userId: string,
     token: string,
-    platform: string,
+    platform: DevicePlatform,
     deviceName?: string,
   ): Promise<DeviceTokenResponseDto> {
+    // Validate platform enum
+    if (!Object.values(DevicePlatform).includes(platform)) {
+      throw new BadRequestException(
+        `Invalid platform. Must be one of: ${Object.values(DevicePlatform).join(', ')}`,
+      );
+    }
+
     // Check if token exists
     const existingToken = await this.prisma.deviceToken.findUnique({
       where: { token },
@@ -867,6 +883,21 @@ export class NotificationService {
     specificToken?: string,
   ): Promise<NotificationResult> {
     if (specificToken) {
+      // Verify token ownership before sending
+      const deviceToken = await this.prisma.deviceToken.findFirst({
+        where: {
+          userId,
+          token: specificToken,
+          isDeleted: false,
+        },
+      });
+
+      if (!deviceToken) {
+        throw new NotFoundException(
+          'Device token not found or does not belong to this user',
+        );
+      }
+
       return this.pushProvider.sendToTokens([specificToken], title, body);
     }
 
@@ -904,7 +935,7 @@ export class NotificationService {
         token.token.length > 12
           ? `${token.token.substring(0, 8)}...${token.token.substring(token.token.length - 4)}`
           : token.token,
-      platform: token.platform,
+      platform: token.platform as DevicePlatform,
       deviceName: token.deviceName || undefined,
       isActive: token.isActive,
       createdAt: token.createdAt,

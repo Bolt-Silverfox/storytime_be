@@ -4,7 +4,6 @@ import {
   Get,
   Delete,
   Body,
-  Param,
   Req,
   UseGuards,
   HttpCode,
@@ -15,7 +14,6 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
-  ApiParam,
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
@@ -25,6 +23,7 @@ import {
   DeviceTokenResponseDto,
   DeviceTokenListResponseDto,
   TestPushNotificationDto,
+  UnregisterDeviceDto,
 } from './dto/device-token.dto';
 
 interface AuthenticatedRequest extends Request {
@@ -87,17 +86,13 @@ export class DeviceTokenController {
     return this.notificationService.getUserDevices(userId);
   }
 
-  @Delete(':token')
+  @Delete()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Unregister a device token',
     description:
       "Removes a device token from the user's registered devices. " +
       'Use this when the user logs out or disables push notifications.',
-  })
-  @ApiParam({
-    name: 'token',
-    description: 'The FCM device token to unregister',
   })
   @ApiResponse({
     status: 204,
@@ -106,10 +101,10 @@ export class DeviceTokenController {
   @ApiResponse({ status: 404, description: 'Device token not found' })
   async unregisterDevice(
     @Req() req: AuthenticatedRequest,
-    @Param('token') token: string,
+    @Body() dto: UnregisterDeviceDto,
   ): Promise<void> {
     const userId = req.user.userId;
-    await this.notificationService.unregisterDeviceToken(userId, token);
+    await this.notificationService.unregisterDeviceToken(userId, dto.token);
   }
 
   @Post('test')

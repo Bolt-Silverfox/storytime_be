@@ -13,11 +13,12 @@ export const PUSH_JOB_NAMES = {
 
 /**
  * Retry configuration with exponential backoff
- * Attempts: 1 (immediate) + 3 retries = 4 total attempts
- * Backoff: 10s, 30s, 1m (faster than email since push is more time-sensitive)
+ * Attempts: 4 total (1 initial + 3 retries)
+ * Backoff delays: 10s, 20s, 40s (exponential from 10s base)
+ * Faster than email since push notifications are more time-sensitive
  */
 export const PUSH_QUEUE_DEFAULT_OPTIONS = {
-  attempts: 3,
+  attempts: 4,
   backoff: {
     type: 'exponential' as const,
     delay: 10000, // Start with 10 seconds
