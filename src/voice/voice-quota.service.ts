@@ -30,26 +30,22 @@ export class VoiceQuotaService {
   async checkUsage(userId: string): Promise<boolean> {
     const currentMonth = this.getCurrentMonth();
 
-    // Single query: Get user with subscriptions AND usage in one call
+    // Single query: Get user with subscription AND usage in one call
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        subscriptions: {
-          where: {
-            status: SUBSCRIPTION_STATUS.ACTIVE,
-            // Include lifetime subscriptions (null endsAt) and active ones
-            OR: [{ endsAt: { gt: new Date() } }, { endsAt: null }],
-          },
-          take: 1, // Only need to know if one exists
-        },
+        subscription: true,
         usage: true,
       },
     });
 
     if (!user) return false;
 
-    // Determine plan from included subscription
-    const isPremium = user.subscriptions.length > 0;
+    // Determine if user has active premium subscription
+    const now = new Date();
+    const isPremium =
+      user.subscription?.status === SUBSCRIPTION_STATUS.ACTIVE &&
+      (user.subscription.endsAt === null || user.subscription.endsAt > now);
     const limit = isPremium
       ? VOICE_CONFIG_SETTINGS.QUOTAS.PREMIUM
       : VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
