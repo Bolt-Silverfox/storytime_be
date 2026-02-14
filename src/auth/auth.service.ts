@@ -494,9 +494,7 @@ export class AuthService {
     ].filter((id): id is string => Boolean(id)); // Remove undefined values
 
     if (validAudiences.length === 0) {
-      throw new ServiceUnavailableException(
-        'No Google client IDs configured',
-      );
+      throw new ServiceUnavailableException('No Google client IDs configured');
     }
 
     let ticket;
