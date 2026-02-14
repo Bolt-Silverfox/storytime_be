@@ -485,14 +485,43 @@ export class AuthService {
       throw new ServiceUnavailableException('Google client not configured');
     }
 
+    // Build array of valid audience values (all platforms)
+    const validAudiences = [
+      process.env.GOOGLE_CLIENT_ID, // Original/backend client ID
+      process.env.GOOGLE_WEB_CLIENT_ID, // Web app client ID
+      process.env.GOOGLE_ANDROID_CLIENT_ID, // Android app client ID
+      process.env.GOOGLE_IOS_CLIENT_ID, // iOS app client ID
+    ].filter((id): id is string => Boolean(id)); // Remove undefined values
+
+    if (validAudiences.length === 0) {
+      throw new ServiceUnavailableException(
+        'No Google client IDs configured',
+      );
+    }
+
     let ticket;
     try {
       ticket = await this.googleClient.verifyIdToken({
         idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience: validAudiences,
       });
     } catch (err) {
-      this.logger.error('Google id_token verification failed', err);
+      this.logger.error('Google id_token verification failed');
+      this.logger.error(`Error: ${err.message}`);
+
+      // Decode token to show actual audience for debugging
+      try {
+        const decoded = JSON.parse(
+          Buffer.from(idToken.split('.')[1], 'base64').toString(),
+        );
+        this.logger.error(`Token audience (aud): ${decoded.aud}`);
+        this.logger.error(
+          `Valid audiences configured: ${validAudiences.join(', ')}`,
+        );
+      } catch {
+        // Ignore decode errors
+      }
+
       throw new UnauthorizedException('Invalid Google id_token');
     }
 
