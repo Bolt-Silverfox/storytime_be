@@ -120,8 +120,6 @@ model User {
   restrictedStories     RestrictedStory[]
   // NEW: Learning expectations (marketing data)
   learningExpectations  UserLearningExpectation[]
-  // NEW: Device tokens for push notifications
-  deviceTokens          DeviceToken[]
 
   @@index([isDeleted])
   @@index([email, isDeleted])
@@ -222,30 +220,6 @@ model Session {
 // -------------------------
 // DEVICE TOKEN MODEL (Push Notifications)
 // -------------------------
-enum DevicePlatform {
-  ios
-  android
-  web
-}
-
-model DeviceToken {
-  id        String         @id @default(cuid())
-  userId    String
-  token     String         @unique
-  platform  DevicePlatform
-  isActive  Boolean        @default(true)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  lastUsed  DateTime       @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([userId, isActive])
-  @@index([token])
-  @@map("device_tokens")
-}
-
 model Token {
   id        String    @id @default(uuid())
   userId    String
@@ -1126,18 +1100,25 @@ model UserUsage {
 // -------------------------
 // FCM DEVICE TOKENS
 // -------------------------
+enum DevicePlatform {
+  ios
+  android
+  web
+}
+
 model DeviceToken {
-  id         String    @id @default(uuid())
+  id         String         @id @default(uuid())
   userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token      String    @unique
-  platform   String // "ios", "android", "web"
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String         @unique
+  platform   DevicePlatform
   deviceName String? // Optional device identifier
-  isActive   Boolean   @default(true)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  isActive   Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  lastUsed   DateTime       @default(now())
   // SOFT DELETE FIELDS
-  isDeleted  Boolean   @default(false)
+  isDeleted  Boolean        @default(false)
   deletedAt  DateTime?
 
   @@index([userId, isActive])

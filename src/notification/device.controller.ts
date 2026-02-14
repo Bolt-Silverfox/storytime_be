@@ -21,16 +21,16 @@ import {
 import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { DeviceTokenService } from './services/device-token.service';
 import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
-import { DevicePlatform } from '@prisma/client';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
+import { DevicePlatform } from '@prisma/client';
 
 class RegisterDeviceDto {
   @IsString()
   @IsNotEmpty()
   token: string;
 
-  @IsEnum(['ios', 'android', 'web'])
+  @IsEnum(DevicePlatform)
   platform: DevicePlatform;
 }
 
