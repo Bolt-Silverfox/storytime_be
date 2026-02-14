@@ -6,7 +6,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { DevicePlatform, DeviceToken } from '@prisma/client';
+import { DeviceToken, DevicePlatform } from '@prisma/client';
 
 export interface RegisterDeviceDto {
   token: string;

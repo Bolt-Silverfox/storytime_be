@@ -23,19 +23,7 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
       take: params.take,
       orderBy: params.orderBy,
       include: {
-        subscriptions: {
-          where: {
-            status: 'active',
-            isDeleted: false,
-            OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
-          },
-          select: {
-            id: true,
-            plan: true,
-            status: true,
-            endsAt: true,
-          },
-        },
+        subscription: true,
         profile: true,
         avatar: true,
         usage: {
@@ -60,7 +48,6 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
             paymentTransactions: true,
           },
         },
-        subscription: true,
       },
     }) as Promise<UserWithRelations[]>;
   }
@@ -85,9 +72,7 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
           },
         },
         avatar: true,
-        subscriptions: {
-          orderBy: { startedAt: 'desc' },
-        },
+        subscription: true,
         paymentTransactions: {
           orderBy: { createdAt: 'desc' },
           take: 10,
@@ -101,7 +86,6 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
             paymentTransactions: true,
           },
         },
-        subscription: true,
       },
     }) as Promise<UserDetail | null>;
   }

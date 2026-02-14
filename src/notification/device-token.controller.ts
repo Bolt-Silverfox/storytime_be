@@ -17,7 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
-import { NotificationService } from './notification.service';
+import { DeviceTokenService } from './services/device-token.service';
 import {
   RegisterDeviceTokenDto,
   DeviceTokenResponseDto,
@@ -39,7 +39,7 @@ interface AuthenticatedRequest extends Request {
 @UseGuards(AuthSessionGuard)
 @Controller('devices')
 export class DeviceTokenController {
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(private readonly deviceTokenService: DeviceTokenService) {}
 
   @Post('register')
   @ApiOperation({
@@ -60,7 +60,7 @@ export class DeviceTokenController {
     @Body() dto: RegisterDeviceTokenDto,
   ): Promise<DeviceTokenResponseDto> {
     const userId = req.user.userId;
-    return this.notificationService.registerDeviceToken(
+    return this.deviceTokenService.registerDeviceToken(
       userId,
       dto.token,
       dto.platform,
@@ -83,7 +83,7 @@ export class DeviceTokenController {
     @Req() req: AuthenticatedRequest,
   ): Promise<DeviceTokenListResponseDto> {
     const userId = req.user.userId;
-    return this.notificationService.getUserDevices(userId);
+    return this.deviceTokenService.getUserDevices(userId);
   }
 
   @Delete()
@@ -104,7 +104,7 @@ export class DeviceTokenController {
     @Body() dto: UnregisterDeviceDto,
   ): Promise<void> {
     const userId = req.user.userId;
-    await this.notificationService.unregisterDeviceToken(userId, dto.token);
+    await this.deviceTokenService.unregisterDeviceToken(userId, dto.token);
   }
 
   @Post('test')
@@ -120,7 +120,7 @@ export class DeviceTokenController {
     @Body() dto: TestPushNotificationDto,
   ): Promise<{ success: boolean; message: string }> {
     const userId = req.user.userId;
-    const result = await this.notificationService.sendTestPush(
+    const result = await this.deviceTokenService.sendTestPush(
       userId,
       dto.title,
       dto.body,
