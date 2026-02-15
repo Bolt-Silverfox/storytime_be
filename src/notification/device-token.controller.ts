@@ -15,8 +15,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { Request } from 'express';
-import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { NotificationService } from './notification.service';
 import {
   RegisterDeviceTokenDto,
@@ -25,14 +24,6 @@ import {
   TestPushNotificationDto,
   UnregisterDeviceDto,
 } from './dto/device-token.dto';
-
-interface AuthenticatedRequest extends Request {
-  user: {
-    id: string;
-    userId: string;
-    email: string;
-  };
-}
 
 @ApiTags('device-tokens')
 @ApiBearerAuth()
@@ -59,7 +50,7 @@ export class DeviceTokenController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: RegisterDeviceTokenDto,
   ): Promise<DeviceTokenResponseDto> {
-    const userId = req.user.userId;
+    const userId = req.authUserData.userId;
     return this.notificationService.registerDeviceToken(
       userId,
       dto.token,
@@ -82,7 +73,7 @@ export class DeviceTokenController {
   async getDevices(
     @Req() req: AuthenticatedRequest,
   ): Promise<DeviceTokenListResponseDto> {
-    const userId = req.user.userId;
+    const userId = req.authUserData.userId;
     return this.notificationService.getUserDevices(userId);
   }
 
@@ -103,7 +94,7 @@ export class DeviceTokenController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: UnregisterDeviceDto,
   ): Promise<void> {
-    const userId = req.user.userId;
+    const userId = req.authUserData.userId;
     await this.notificationService.unregisterDeviceToken(userId, dto.token);
   }
 
@@ -119,7 +110,7 @@ export class DeviceTokenController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: TestPushNotificationDto,
   ): Promise<{ success: boolean; message: string }> {
-    const userId = req.user.userId;
+    const userId = req.authUserData.userId;
     const result = await this.notificationService.sendTestPush(
       userId,
       dto.title,
