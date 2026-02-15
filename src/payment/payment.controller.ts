@@ -1,5 +1,6 @@
 import { Controller, Post, Body, UseGuards, Req, Get } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody, ApiOkResponse } from '@nestjs/swagger';
+import { SubscriptionStatusResponseDto } from './dto/subscription-status-response.dto';
 import { PaymentService } from './payment.service';
 import {
   AuthSessionGuard,
@@ -40,6 +41,7 @@ export class PaymentController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current subscription status' })
+  @ApiOkResponse({ type: SubscriptionStatusResponseDto })
   async status(@Req() req: AuthenticatedRequest) {
     return this.paymentService.getSubscription(req.authUserData.userId);
   }

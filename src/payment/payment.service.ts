@@ -271,7 +271,30 @@ export class PaymentService {
   }
 
   async getSubscription(userId: string) {
-    return this.prisma.subscription.findFirst({ where: { userId } });
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { userId },
+    });
+    if (!subscription) return null;
+
+    const latestTransaction = await this.prisma.paymentTransaction.findFirst({
+      where: { userId, status: 'success' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const planDef = PLANS[subscription.plan];
+    const price = latestTransaction?.amount ?? planDef?.amount ?? 0;
+    const currency = latestTransaction?.currency ?? 'USD';
+
+    return {
+      id: subscription.id,
+      plan: subscription.plan,
+      status: subscription.status,
+      startedAt: subscription.startedAt,
+      endsAt: subscription.endsAt,
+      platform: (subscription as Record<string, unknown>).platform as string | null ?? null,
+      price,
+      currency,
+    };
   }
 
   async cancelSubscription(userId: string) {
