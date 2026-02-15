@@ -235,9 +235,9 @@ export class GoogleVerificationService {
   }
 
   async cancelSubscription(params: CancelParams): Promise<GoogleCancelResult> {
-    const packageName = params.packageName.trim();
-    const productId = params.productId.trim();
-    const purchaseToken = params.purchaseToken.trim();
+    const packageName = (params?.packageName ?? '').trim();
+    const productId = (params?.productId ?? '').trim();
+    const purchaseToken = (params?.purchaseToken ?? '').trim();
 
     if (!packageName || !productId || !purchaseToken) {
       return {

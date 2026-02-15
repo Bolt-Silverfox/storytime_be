@@ -415,8 +415,25 @@ export class NotificationService {
   }
 
   async bulkUpdate(
+    userId: string,
     dtos: BulkUpdateNotificationPreferenceDto[],
   ): Promise<NotificationPreferenceDto[]> {
+    const ids = dtos.map((dto) => dto.id);
+
+    // Verify all preferences belong to the requesting user
+    const owned = await this.prisma.notificationPreference.findMany({
+      where: { id: { in: ids }, userId, isDeleted: false },
+      select: { id: true },
+    });
+
+    const ownedIds = new Set(owned.map((p) => p.id));
+    const unauthorized = ids.filter((id) => !ownedIds.has(id));
+    if (unauthorized.length > 0) {
+      throw new NotFoundException(
+        `Notification preferences not found: ${unauthorized.join(', ')}`,
+      );
+    }
+
     const updates = dtos.map((dto) =>
       this.prisma.notificationPreference.update({
         where: {

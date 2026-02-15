@@ -7,6 +7,8 @@ import {
   Body,
   Delete,
   Query,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,7 +17,12 @@ import {
   ApiParam,
   ApiBody,
   ApiQuery,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import { NotificationService } from './notification.service';
 import {
   CreateNotificationPreferenceDto,
@@ -38,11 +45,16 @@ export class NotificationController {
   }
 
   @Patch()
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Update multiple notification preferences' })
   @ApiBody({ type: [BulkUpdateNotificationPreferenceDto] })
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
-  async bulkUpdate(@Body() dtos: BulkUpdateNotificationPreferenceDto[]) {
-    return this.notificationService.bulkUpdate(dtos);
+  async bulkUpdate(
+    @Req() req: AuthenticatedRequest,
+    @Body() dtos: BulkUpdateNotificationPreferenceDto[],
+  ) {
+    return this.notificationService.bulkUpdate(req.authUserData.userId, dtos);
   }
 
   @Patch(':id')

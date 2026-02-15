@@ -238,31 +238,34 @@ export class AppleVerificationService {
                   }>;
                 };
 
-                // Find the latest renewal info across all subscription groups
+                // Find the transaction with the latest expiration across all groups
+                let latest: AppleSubscriptionStatus | null = null;
+                let latestExpMs = -1;
+
                 for (const group of response.data) {
                   for (const tx of group.lastTransactions) {
                     const renewalInfo = this.decodeJWS(
                       tx.signedRenewalInfo,
-                    ) as {
-                      autoRenewStatus: number;
-                      expirationIntent?: number;
-                    };
-                    const txInfo = this.decodeJWS(tx.signedTransactionInfo) as {
-                      expiresDate?: number;
-                    };
+                    ) as { autoRenewStatus: number };
+                    const txInfo = this.decodeJWS(
+                      tx.signedTransactionInfo,
+                    ) as { expiresDate?: number };
 
-                    // autoRenewStatus: 1 = active, 0 = off
-                    resolve({
-                      autoRenewActive: renewalInfo.autoRenewStatus === 1,
-                      expirationTime: txInfo.expiresDate
-                        ? new Date(txInfo.expiresDate)
-                        : null,
-                    });
-                    return;
+                    const expMs = txInfo.expiresDate ?? -1;
+
+                    if (expMs > latestExpMs || !latest) {
+                      latestExpMs = expMs;
+                      latest = {
+                        autoRenewActive: renewalInfo.autoRenewStatus === 1,
+                        expirationTime: txInfo.expiresDate
+                          ? new Date(txInfo.expiresDate)
+                          : null,
+                      };
+                    }
                   }
                 }
 
-                resolve(null);
+                resolve(latest);
               } catch {
                 reject(new Error('Failed to parse Apple subscription status'));
               }
