@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
@@ -31,6 +32,7 @@ export class PaymentService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     private readonly googleVerificationService: GoogleVerificationService,
     private readonly appleVerificationService: AppleVerificationService,
   ) {}
@@ -109,6 +111,12 @@ export class PaymentService {
       };
     }
 
+    const googleDetails = {
+      platform: 'google',
+      productId: dto.productId,
+      purchaseToken: dto.purchaseToken,
+    };
+
     // For subscriptions, use the expiration time from Google
     if (result.isSubscription && result.expirationTime) {
       return this.upsertSubscriptionWithExpiry(
@@ -116,10 +124,11 @@ export class PaymentService {
         plan,
         tx,
         result.expirationTime,
+        googleDetails,
       );
     }
 
-    return this.upsertSubscription(userId, plan, tx);
+    return this.upsertSubscription(userId, plan, tx, googleDetails);
   }
 
   private async verifyApplePurchase(userId: string, dto: VerifyPurchaseDto) {
@@ -165,16 +174,24 @@ export class PaymentService {
       };
     }
 
+    const appleDetails = {
+      platform: 'apple',
+      productId: dto.productId,
+      // Store originalTransactionId for subscription status lookups
+      purchaseToken: result.originalTxId ?? dto.purchaseToken,
+    };
+
     if (result.isSubscription && result.expirationTime) {
       return this.upsertSubscriptionWithExpiry(
         userId,
         plan,
         tx,
         result.expirationTime,
+        appleDetails,
       );
     }
 
-    return this.upsertSubscription(userId, plan, tx);
+    return this.upsertSubscription(userId, plan, tx, appleDetails);
   }
 
   private mapProductIdToPlan(productId: string): string {
@@ -196,12 +213,13 @@ export class PaymentService {
     userId: string,
     plan: string,
     transaction: TransactionRecord,
+    platformDetails?: { platform: string; productId: string; purchaseToken: string },
   ) {
     const planDef = PLANS[plan];
     const now = new Date();
     const endsAt = new Date(now.getTime() + planDef.days * 24 * 60 * 60 * 1000);
 
-    return this.upsertSubscriptionWithExpiry(userId, plan, transaction, endsAt);
+    return this.upsertSubscriptionWithExpiry(userId, plan, transaction, endsAt, platformDetails);
   }
 
   private async upsertSubscriptionWithExpiry(
@@ -209,29 +227,34 @@ export class PaymentService {
     plan: string,
     transaction: TransactionRecord,
     endsAt: Date,
+    platformDetails?: { platform: string; productId: string; purchaseToken: string },
   ) {
     const now = new Date();
     const existingSub = await this.prisma.subscription.findFirst({
       where: { userId },
     });
 
+    const data = {
+      plan,
+      status: 'active',
+      startedAt: now,
+      endsAt,
+      ...(platformDetails && {
+        platform: platformDetails.platform,
+        productId: platformDetails.productId,
+        purchaseToken: platformDetails.purchaseToken,
+      }),
+    };
+
     const subscription = existingSub
       ? await this.prisma.subscription.update({
           where: { id: existingSub.id },
-          data: {
-            plan,
-            status: 'active',
-            startedAt: now,
-            endsAt,
-          },
+          data,
         })
       : await this.prisma.subscription.create({
           data: {
             userId,
-            plan,
-            status: 'active',
-            startedAt: now,
-            endsAt,
+            ...data,
           },
         });
 
@@ -257,14 +280,85 @@ export class PaymentService {
     });
     if (!existing) throw new NotFoundException('No subscription to cancel');
 
+    // Cancel on Google Play if this is a Google subscription with stored tokens
+    if (
+      existing.platform === 'google' &&
+      existing.productId &&
+      existing.purchaseToken
+    ) {
+      const packageName =
+        this.configService.get<string>('GOOGLE_PLAY_PACKAGE_NAME') || '';
+
+      if (packageName) {
+        const cancelResult =
+          await this.googleVerificationService.cancelSubscription({
+            packageName,
+            productId: existing.productId,
+            purchaseToken: existing.purchaseToken,
+          });
+
+        if (!cancelResult.success) {
+          this.logger.warn(
+            `Google Play cancellation failed for user ${userId.substring(0, 8)}: ${cancelResult.error ?? 'unknown error'}. Proceeding with local cancel.`,
+          );
+        } else {
+          this.logger.log(
+            `Google Play subscription cancelled for user ${userId.substring(0, 8)}`,
+          );
+        }
+      } else {
+        this.logger.warn(
+          'GOOGLE_PLAY_PACKAGE_NAME not configured, skipping Play Store cancellation',
+        );
+      }
+    }
+
+    // Check Apple subscription auto-renewal status
+    let appleAutoRenewWarning: string | undefined;
+    if (
+      existing.platform === 'apple' &&
+      existing.purchaseToken
+    ) {
+      const statusResult =
+        await this.appleVerificationService.getSubscriptionStatus(
+          existing.purchaseToken,
+        );
+
+      if (statusResult.error) {
+        this.logger.warn(
+          `Apple subscription status check failed for user ${userId.substring(0, 8)}: ${statusResult.error}`,
+        );
+      } else if (statusResult.autoRenewActive) {
+        appleAutoRenewWarning =
+          'Auto-renewal is still active on Apple. To stop being charged, cancel your subscription in Settings > Subscriptions on your Apple device.';
+        this.logger.warn(
+          `Apple auto-renewal still active for user ${userId.substring(0, 8)}`,
+        );
+      } else {
+        this.logger.log(
+          `Apple auto-renewal already off for user ${userId.substring(0, 8)}`,
+        );
+      }
+    }
+
     const now = new Date();
     const endsAt =
       existing.endsAt && existing.endsAt > now ? existing.endsAt : now;
 
-    return this.prisma.subscription.update({
+    const subscription = await this.prisma.subscription.update({
       where: { id: existing.id },
       data: { status: 'cancelled', endsAt },
     });
+
+    if (appleAutoRenewWarning) {
+      return {
+        ...subscription,
+        warning: appleAutoRenewWarning,
+        manageUrl: 'https://apps.apple.com/account/subscriptions',
+      };
+    }
+
+    return subscription;
   }
 
   private getErrorMessage(error: unknown): string {

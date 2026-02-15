@@ -468,16 +468,19 @@ model UserStoryProgress {
 // PAYMENT MODELS (RESTORED)
 // -------------------------
 model Subscription {
-  id        String    @id @default(uuid())
-  userId    String    @unique
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan      String
-  status    String    @default("active")
-  startedAt DateTime  @default(now())
-  endsAt    DateTime?
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan          String
+  status        String    @default("active")
+  startedAt     DateTime  @default(now())
+  endsAt        DateTime?
+  platform      String? // "google" or "apple"
+  productId     String? // e.g. "com.storytime.monthly"
+  purchaseToken String? // token from the platform
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted     Boolean   @default(false)
+  deletedAt     DateTime?
 
   @@index([userId, status])
   @@index([status, isDeleted])

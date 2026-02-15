@@ -19,6 +19,19 @@ export interface GoogleVerificationResult {
   metadata?: Record<string, unknown>;
 }
 
+/** Result from Google subscription cancellation */
+export interface GoogleCancelResult {
+  success: boolean;
+  error?: string;
+}
+
+/** Parameters for cancellation */
+export interface CancelParams {
+  packageName: string;
+  productId: string;
+  purchaseToken: string;
+}
+
 /** Parameters for verification */
 export interface VerifyParams {
   purchaseToken: string;
@@ -129,7 +142,7 @@ export class GoogleVerificationService {
       this.logger.debug('Executing Python verification script');
       const { stdout, stderr } = await execFileAsync(
         this.pythonPath,
-        [this.scriptPath, packageName, productId, purchaseToken],
+        [this.scriptPath, 'verify', packageName, productId, purchaseToken],
         {
           timeout: 10000, // 10 second timeout (reduced from 30s)
           encoding: 'utf8',
@@ -218,6 +231,51 @@ export class GoogleVerificationService {
         'Failed to verify Google Play purchase',
         HttpStatus.BAD_REQUEST,
       );
+    }
+  }
+
+  async cancelSubscription(params: CancelParams): Promise<GoogleCancelResult> {
+    const packageName = params.packageName.trim();
+    const productId = params.productId.trim();
+    const purchaseToken = params.purchaseToken.trim();
+
+    if (!packageName || !productId || !purchaseToken) {
+      return {
+        success: false,
+        error: 'packageName, productId, and purchaseToken are required',
+      };
+    }
+
+    this.logger.log(
+      `Cancelling Google subscription for package ${this.sanitizeForLog(packageName)} product ${this.sanitizeForLog(productId)}`,
+    );
+
+    try {
+      const { stdout, stderr } = await execFileAsync(
+        this.pythonPath,
+        [this.scriptPath, 'cancel', packageName, productId, purchaseToken],
+        {
+          timeout: 10000,
+          encoding: 'utf8',
+        },
+      );
+
+      if (stderr) {
+        this.logger.warn(
+          `Python cancel script stderr received (len=${stderr.length})`,
+        );
+      }
+
+      const result = JSON.parse(stdout.trim()) as GoogleCancelResult;
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Google cancel failed: ${this.errorMessage(error)}`,
+      );
+      return {
+        success: false,
+        error: this.errorMessage(error),
+      };
     }
   }
 
