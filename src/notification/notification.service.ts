@@ -900,6 +900,10 @@ export class NotificationService {
     body: string,
     specificToken?: string,
   ): Promise<NotificationResult> {
+    this.logger.log(
+      `sendTestPush called for user=${userId.substring(0, 8)}, specificToken=${specificToken ? 'yes' : 'no'}, pushReady=${this.pushProvider.isReady()}`,
+    );
+
     if (specificToken) {
       // Verify token ownership before sending
       const deviceToken = await this.prisma.deviceToken.findFirst({
@@ -911,21 +915,36 @@ export class NotificationService {
       });
 
       if (!deviceToken) {
+        this.logger.warn(
+          `sendTestPush: token not found for user=${userId.substring(0, 8)}, isActive=${deviceToken}`,
+        );
         throw new NotFoundException(
           'Device token not found or does not belong to this user',
         );
       }
 
-      return this.pushProvider.sendToTokens([specificToken], title, body);
+      this.logger.log(
+        `sendTestPush: sending to specific token id=${deviceToken.id}, isActive=${deviceToken.isActive}`,
+      );
+      const result = await this.pushProvider.sendToTokens([specificToken], title, body);
+      this.logger.log(
+        `sendTestPush result: success=${result.success}, error=${result.error ?? 'none'}, messageId=${result.messageId ?? 'none'}`,
+      );
+      return result;
     }
 
     // Send to all user devices
-    return this.pushProvider.send({
+    this.logger.log(`sendTestPush: sending to all devices for user=${userId.substring(0, 8)}`);
+    const result = await this.pushProvider.send({
       userId,
       category: PrismaCategory.SYSTEM_ALERT,
       title,
       body,
     });
+    this.logger.log(
+      `sendTestPush result: success=${result.success}, error=${result.error ?? 'none'}, messageId=${result.messageId ?? 'none'}`,
+    );
+    return result;
   }
 
   /**

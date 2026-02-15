@@ -68,7 +68,12 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
   }
 
   async send(payload: NotificationPayload): Promise<NotificationResult> {
+    this.logger.log(
+      `send() called for user=${payload.userId.substring(0, 8)}, title="${payload.title}", isInitialized=${this.isInitialized}`,
+    );
+
     if (!this.isInitialized) {
+      this.logger.error('send() aborted: Firebase not initialized');
       return {
         success: false,
         error: 'Firebase not initialized. Check configuration.',
@@ -86,8 +91,12 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
         select: { id: true, token: true },
       });
 
+      this.logger.log(
+        `send() found ${deviceTokens.length} active token(s) for user=${payload.userId.substring(0, 8)}`,
+      );
+
       if (deviceTokens.length === 0) {
-        this.logger.debug(`No active device tokens for user ${payload.userId}`);
+        this.logger.warn(`No active device tokens for user ${payload.userId.substring(0, 8)}`);
         return {
           success: true,
           messageId: 'no_tokens',
@@ -127,6 +136,15 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
         `Push notification sent: ${response.successCount} success, ${response.failureCount} failures`,
       );
 
+      // Log individual token errors for debugging
+      response.responses.forEach((resp, i) => {
+        if (!resp.success) {
+          this.logger.error(
+            `send() token[${i}] (id=${deviceTokens[i].id}) failed: code=${resp.error?.code}, message=${resp.error?.message}`,
+          );
+        }
+      });
+
       // Handle failed tokens (mark as inactive)
       await this.handleFailedTokens(deviceTokens, response.responses);
 
@@ -163,7 +181,12 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
     body: string,
     data?: Record<string, string>,
   ): Promise<NotificationResult> {
+    this.logger.log(
+      `sendToTokens() called with ${tokens.length} token(s), isInitialized=${this.isInitialized}`,
+    );
+
     if (!this.isInitialized) {
+      this.logger.error('sendToTokens() aborted: Firebase not initialized');
       return {
         success: false,
         error: 'Firebase not initialized',
@@ -193,11 +216,28 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
 
       const response = await admin.messaging().sendEachForMulticast(message);
 
+      this.logger.log(
+        `sendToTokens() FCM response: successCount=${response.successCount}, failureCount=${response.failureCount}`,
+      );
+
+      // Log individual token errors for debugging
+      response.responses.forEach((resp, i) => {
+        if (!resp.success) {
+          this.logger.error(
+            `sendToTokens() token[${i}] failed: code=${resp.error?.code}, message=${resp.error?.message}`,
+          );
+        }
+      });
+
       return {
         success: response.successCount > 0,
         messageId: `direct_${response.successCount}/${tokens.length}`,
       };
     } catch (error) {
+      this.logger.error(
+        `sendToTokens() exception: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       return {
         success: false,
         error:
