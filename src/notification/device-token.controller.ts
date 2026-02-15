@@ -15,7 +15,10 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import { NotificationService } from './notification.service';
 import {
   RegisterDeviceTokenDto,
