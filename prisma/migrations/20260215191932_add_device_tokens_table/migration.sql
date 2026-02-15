@@ -24,9 +24,6 @@ CREATE UNIQUE INDEX "device_tokens_token_key" ON "device_tokens"("token");
 CREATE INDEX "device_tokens_userId_isActive_idx" ON "device_tokens"("userId", "isActive");
 
 -- CreateIndex
-CREATE INDEX "device_tokens_token_idx" ON "device_tokens"("token");
-
--- CreateIndex
 CREATE INDEX "device_tokens_isDeleted_idx" ON "device_tokens"("isDeleted");
 
 -- AddForeignKey
