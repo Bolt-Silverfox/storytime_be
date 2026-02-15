@@ -247,9 +247,9 @@ export class AppleVerificationService {
                     const renewalInfo = this.decodeJWS(
                       tx.signedRenewalInfo,
                     ) as { autoRenewStatus: number };
-                    const txInfo = this.decodeJWS(
-                      tx.signedTransactionInfo,
-                    ) as { expiresDate?: number };
+                    const txInfo = this.decodeJWS(tx.signedTransactionInfo) as {
+                      expiresDate?: number;
+                    };
 
                     const expMs = txInfo.expiresDate ?? -1;
 
