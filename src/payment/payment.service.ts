@@ -329,20 +329,26 @@ export class PaymentService {
         this.configService.get<string>('GOOGLE_PLAY_PACKAGE_NAME') || '';
 
       if (packageName) {
-        const cancelResult =
-          await this.googleVerificationService.cancelSubscription({
-            packageName,
-            productId: existing.productId,
-            purchaseToken: existing.purchaseToken,
-          });
+        try {
+          const cancelResult =
+            await this.googleVerificationService.cancelSubscription({
+              packageName,
+              productId: existing.productId,
+              purchaseToken: existing.purchaseToken,
+            });
 
-        if (!cancelResult.success) {
-          this.logger.warn(
-            `Google Play cancellation failed for user ${userId.substring(0, 8)}: ${cancelResult.error ?? 'unknown error'}. Proceeding with local cancel.`,
-          );
-        } else {
-          this.logger.log(
-            `Google Play subscription cancelled for user ${userId.substring(0, 8)}`,
+          if (!cancelResult.success) {
+            this.logger.warn(
+              `Google Play cancellation failed for user ${userId.substring(0, 8)}: ${cancelResult.error ?? 'unknown error'}. Proceeding with local cancel.`,
+            );
+          } else {
+            this.logger.log(
+              `Google Play subscription cancelled for user ${userId.substring(0, 8)}`,
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            `Google Play cancellation threw for user ${userId.substring(0, 8)}: ${error instanceof Error ? error.message : String(error)}. Proceeding with local cancel.`,
           );
         }
       } else {
