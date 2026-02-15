@@ -179,8 +179,14 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
           priority: 'high',
         },
         apns: {
+          headers: {
+            'apns-priority': '10',
+          },
           payload: {
-            aps: { sound: 'default' },
+            aps: {
+              sound: 'default',
+              badge: 1,
+            },
           },
         },
       };

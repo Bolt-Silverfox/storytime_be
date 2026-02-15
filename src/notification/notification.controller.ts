@@ -20,6 +20,7 @@ import { NotificationService } from './notification.service';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
+  BulkUpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
 } from './dto/notification.dto';
 
@@ -34,6 +35,14 @@ export class NotificationController {
   @ApiResponse({ status: 201, type: [NotificationPreferenceDto] })
   async create(@Body() dtos: CreateNotificationPreferenceDto[]) {
     return Promise.all(dtos.map((dto) => this.notificationService.create(dto)));
+  }
+
+  @Patch()
+  @ApiOperation({ summary: 'Update multiple notification preferences' })
+  @ApiBody({ type: [BulkUpdateNotificationPreferenceDto] })
+  @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
+  async bulkUpdate(@Body() dtos: BulkUpdateNotificationPreferenceDto[]) {
+    return this.notificationService.bulkUpdate(dtos);
   }
 
   @Patch(':id')

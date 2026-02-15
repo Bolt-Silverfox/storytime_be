@@ -17,6 +17,7 @@ import {
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
+  BulkUpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
 } from './dto/notification.dto';
 import { InAppProvider } from './providers/in-app.provider';
@@ -411,6 +412,23 @@ export class NotificationService {
       data: dto,
     });
     return this.toNotificationPreferenceDto(pref);
+  }
+
+  async bulkUpdate(
+    dtos: BulkUpdateNotificationPreferenceDto[],
+  ): Promise<NotificationPreferenceDto[]> {
+    const updates = dtos.map((dto) =>
+      this.prisma.notificationPreference.update({
+        where: {
+          id: dto.id,
+          isDeleted: false,
+        },
+        data: { enabled: dto.enabled },
+      }),
+    );
+
+    const results = await this.prisma.$transaction(updates);
+    return results.map((pref) => this.toNotificationPreferenceDto(pref));
   }
 
   async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {
