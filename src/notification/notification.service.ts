@@ -933,7 +933,7 @@ export class NotificationService {
 
       if (!deviceToken) {
         this.logger.warn(
-          `sendTestPush: token not found for user=${userId.substring(0, 8)}, isActive=${deviceToken}`,
+          `sendTestPush: token not found for user=${userId.substring(0, 8)}, hasToken=false`,
         );
         throw new NotFoundException(
           'Device token not found or does not belong to this user',
