@@ -926,7 +926,11 @@ export class NotificationService {
       this.logger.log(
         `sendTestPush: sending to specific token id=${deviceToken.id}, isActive=${deviceToken.isActive}`,
       );
-      const result = await this.pushProvider.sendToTokens([specificToken], title, body);
+      const result = await this.pushProvider.sendToTokens(
+        [specificToken],
+        title,
+        body,
+      );
       this.logger.log(
         `sendTestPush result: success=${result.success}, error=${result.error ?? 'none'}, messageId=${result.messageId ?? 'none'}`,
       );
@@ -934,7 +938,9 @@ export class NotificationService {
     }
 
     // Send to all user devices
-    this.logger.log(`sendTestPush: sending to all devices for user=${userId.substring(0, 8)}`);
+    this.logger.log(
+      `sendTestPush: sending to all devices for user=${userId.substring(0, 8)}`,
+    );
     const result = await this.pushProvider.send({
       userId,
       category: PrismaCategory.SYSTEM_ALERT,

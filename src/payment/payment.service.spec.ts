@@ -26,14 +26,26 @@ const createMockPrismaService = (): MockPrismaService => ({
 describe('PaymentService', () => {
   let service: PaymentService;
   let mockPrisma: MockPrismaService;
-  let mockGoogleVerification: { verify: jest.Mock; cancelSubscription: jest.Mock };
-  let mockAppleVerification: { verify: jest.Mock; getSubscriptionStatus: jest.Mock };
+  let mockGoogleVerification: {
+    verify: jest.Mock;
+    cancelSubscription: jest.Mock;
+  };
+  let mockAppleVerification: {
+    verify: jest.Mock;
+    getSubscriptionStatus: jest.Mock;
+  };
   let mockConfigService: { get: jest.Mock };
 
   beforeEach(async () => {
     mockPrisma = createMockPrismaService();
-    mockGoogleVerification = { verify: jest.fn(), cancelSubscription: jest.fn() };
-    mockAppleVerification = { verify: jest.fn(), getSubscriptionStatus: jest.fn() };
+    mockGoogleVerification = {
+      verify: jest.fn(),
+      cancelSubscription: jest.fn(),
+    };
+    mockAppleVerification = {
+      verify: jest.fn(),
+      getSubscriptionStatus: jest.fn(),
+    };
     mockConfigService = {
       get: jest.fn((key: string) => {
         const config: Record<string, string> = {
@@ -391,7 +403,9 @@ describe('PaymentService', () => {
 
       expect(result.status).toBe('cancelled');
       expect(mockGoogleVerification.cancelSubscription).not.toHaveBeenCalled();
-      expect(mockAppleVerification.getSubscriptionStatus).not.toHaveBeenCalled();
+      expect(
+        mockAppleVerification.getSubscriptionStatus,
+      ).not.toHaveBeenCalled();
       expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
         where: { id: 'sub-1' },
         data: { status: 'cancelled', endsAt: futureDate },
@@ -411,7 +425,9 @@ describe('PaymentService', () => {
       };
 
       mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
-      mockGoogleVerification.cancelSubscription.mockResolvedValue({ success: true });
+      mockGoogleVerification.cancelSubscription.mockResolvedValue({
+        success: true,
+      });
       mockPrisma.subscription.update.mockResolvedValue({
         ...mockSub,
         status: 'cancelled',
@@ -481,7 +497,10 @@ describe('PaymentService', () => {
         'original-tx-123',
       );
       expect(result).toHaveProperty('warning');
-      expect(result).toHaveProperty('manageUrl', 'https://apps.apple.com/account/subscriptions');
+      expect(result).toHaveProperty(
+        'manageUrl',
+        'https://apps.apple.com/account/subscriptions',
+      );
     });
 
     it('should not return warning when Apple auto-renewal is already off', async () => {

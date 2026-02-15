@@ -8,5 +8,6 @@ export class SubscriptionStatusResponseDto {
   @ApiPropertyOptional() endsAt: Date | null;
   @ApiPropertyOptional() platform: string | null;
   @ApiProperty({ description: 'Amount paid', example: 4.99 }) price: number;
-  @ApiProperty({ description: 'Currency code', example: 'USD' }) currency: string;
+  @ApiProperty({ description: 'Currency code', example: 'USD' })
+  currency: string;
 }

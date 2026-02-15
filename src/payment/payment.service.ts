@@ -213,13 +213,23 @@ export class PaymentService {
     userId: string,
     plan: string,
     transaction: TransactionRecord,
-    platformDetails?: { platform: string; productId: string; purchaseToken: string },
+    platformDetails?: {
+      platform: string;
+      productId: string;
+      purchaseToken: string;
+    },
   ) {
     const planDef = PLANS[plan];
     const now = new Date();
     const endsAt = new Date(now.getTime() + planDef.days * 24 * 60 * 60 * 1000);
 
-    return this.upsertSubscriptionWithExpiry(userId, plan, transaction, endsAt, platformDetails);
+    return this.upsertSubscriptionWithExpiry(
+      userId,
+      plan,
+      transaction,
+      endsAt,
+      platformDetails,
+    );
   }
 
   private async upsertSubscriptionWithExpiry(
@@ -227,7 +237,11 @@ export class PaymentService {
     plan: string,
     transaction: TransactionRecord,
     endsAt: Date,
-    platformDetails?: { platform: string; productId: string; purchaseToken: string },
+    platformDetails?: {
+      platform: string;
+      productId: string;
+      purchaseToken: string;
+    },
   ) {
     const now = new Date();
     const existingSub = await this.prisma.subscription.findFirst({
@@ -291,7 +305,9 @@ export class PaymentService {
       status: subscription.status,
       startedAt: subscription.startedAt,
       endsAt: subscription.endsAt,
-      platform: (subscription as Record<string, unknown>).platform as string | null ?? null,
+      platform:
+        ((subscription as Record<string, unknown>).platform as string | null) ??
+        null,
       price,
       currency,
     };
@@ -338,10 +354,7 @@ export class PaymentService {
 
     // Check Apple subscription auto-renewal status
     let appleAutoRenewWarning: string | undefined;
-    if (
-      existing.platform === 'apple' &&
-      existing.purchaseToken
-    ) {
+    if (existing.platform === 'apple' && existing.purchaseToken) {
       const statusResult =
         await this.appleVerificationService.getSubscriptionStatus(
           existing.purchaseToken,

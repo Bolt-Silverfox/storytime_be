@@ -269,9 +269,7 @@ export class GoogleVerificationService {
       const result = JSON.parse(stdout.trim()) as GoogleCancelResult;
       return result;
     } catch (error) {
-      this.logger.error(
-        `Google cancel failed: ${this.errorMessage(error)}`,
-      );
+      this.logger.error(`Google cancel failed: ${this.errorMessage(error)}`);
       return {
         success: false,
         error: this.errorMessage(error),

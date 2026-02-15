@@ -170,13 +170,11 @@ export class AppleVerificationService {
   async getSubscriptionStatus(
     originalTransactionId: string,
   ): Promise<AppleSubscriptionStatus> {
-    if (
-      !this.keyId ||
-      !this.issuerId ||
-      !this.bundleId ||
-      !this.privateKey
-    ) {
-      return { autoRenewActive: false, error: 'Apple credentials not configured' };
+    if (!this.keyId || !this.issuerId || !this.bundleId || !this.privateKey) {
+      return {
+        autoRenewActive: false,
+        error: 'Apple credentials not configured',
+      };
     }
 
     this.logger.log(
@@ -243,7 +241,9 @@ export class AppleVerificationService {
                 // Find the latest renewal info across all subscription groups
                 for (const group of response.data) {
                   for (const tx of group.lastTransactions) {
-                    const renewalInfo = this.decodeJWS(tx.signedRenewalInfo) as {
+                    const renewalInfo = this.decodeJWS(
+                      tx.signedRenewalInfo,
+                    ) as {
                       autoRenewStatus: number;
                       expirationIntent?: number;
                     };
@@ -270,7 +270,9 @@ export class AppleVerificationService {
               resolve(null);
             } else {
               reject(
-                new Error(`Apple subscription status API returned ${res.statusCode}`),
+                new Error(
+                  `Apple subscription status API returned ${res.statusCode}`,
+                ),
               );
             }
           });

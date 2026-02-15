@@ -96,7 +96,9 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
       );
 
       if (deviceTokens.length === 0) {
-        this.logger.warn(`No active device tokens for user ${payload.userId.substring(0, 8)}`);
+        this.logger.warn(
+          `No active device tokens for user ${payload.userId.substring(0, 8)}`,
+        );
         return {
           success: true,
           messageId: 'no_tokens',
