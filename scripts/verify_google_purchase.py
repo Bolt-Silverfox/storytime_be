@@ -4,6 +4,7 @@ Python script to verify Google Play purchases using WIF
 Called by Node.js backend as a subprocess
 """
 import sys
+import os
 import json
 from google.auth import aws
 from google.auth.transport.requests import Request
@@ -11,8 +12,10 @@ import requests
 
 def _get_credentials():
     """Get authenticated Google credentials using WIF"""
-    WORKLOAD_POOL_PROVIDER = "projects/483343108270/locations/global/workloadIdentityPools/deenai-aws-pool/providers/deenai-aws-provider"
-    SERVICE_ACCOUNT_EMAIL = "app-distribution@deen-ai-481006.iam.gserviceaccount.com"
+    WORKLOAD_POOL_PROVIDER = os.environ.get("GOOGLE_WIF_PROVIDER",
+        "projects/483343108270/locations/global/workloadIdentityPools/deenai-aws-pool/providers/deenai-aws-provider")
+    SERVICE_ACCOUNT_EMAIL = os.environ.get("GOOGLE_SERVICE_ACCOUNT_EMAIL",
+        "app-distribution@deen-ai-481006.iam.gserviceaccount.com")
     SCOPES = ["https://www.googleapis.com/auth/androidpublisher"]
 
     # Get AWS region
@@ -29,7 +32,6 @@ def _get_credentials():
     ).text.strip()
 
     # Set AWS region
-    import os
     os.environ['AWS_REGION'] = region
     os.environ['AWS_DEFAULT_REGION'] = region
 

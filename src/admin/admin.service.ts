@@ -1750,11 +1750,11 @@ export class AdminService {
         for (let i = 0; i < 24; i++) {
           const h = new Date(startDate.getTime() + i * 60 * 60 * 1000);
           labels.push(
-            h.toLocaleString('default', { hour: '2-digit', hour12: true }),
+            h.toLocaleString('en-US', { hour: '2-digit', hour12: true }),
           );
         }
         getKey = (d: Date) =>
-          d.toLocaleString('default', { hour: '2-digit', hour12: true });
+          d.toLocaleString('en-US', { hour: '2-digit', hour12: true });
         break;
       }
       case 'weekly': {
@@ -1764,11 +1764,11 @@ export class AdminService {
         for (let i = 0; i < 7; i++) {
           const day = new Date(startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
           labels.push(
-            day.toLocaleString('default', { weekday: 'short', month: 'short', day: 'numeric' }),
+            day.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
           );
         }
         getKey = (d: Date) =>
-          d.toLocaleString('default', { weekday: 'short', month: 'short', day: 'numeric' });
+          d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
         break;
       }
       case 'monthly': {
@@ -1778,11 +1778,11 @@ export class AdminService {
         for (let i = 0; i < 30; i++) {
           const day = new Date(startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
           labels.push(
-            day.toLocaleString('default', { month: 'short', day: 'numeric' }),
+            day.toLocaleString('en-US', { month: 'short', day: 'numeric' }),
           );
         }
         getKey = (d: Date) =>
-          d.toLocaleString('default', { month: 'short', day: 'numeric' });
+          d.toLocaleString('en-US', { month: 'short', day: 'numeric' });
         break;
       }
       case 'quarterly': {
@@ -1804,7 +1804,7 @@ export class AdminService {
           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
         ];
         getKey = (d: Date) =>
-          d.toLocaleString('default', { month: 'short' });
+          d.toLocaleString('en-US', { month: 'short' });
         break;
       }
     }
@@ -1871,7 +1871,7 @@ export class AdminService {
       case 'last_week': {
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         getLabel = (d: Date) =>
-          d.toLocaleString('default', { weekday: 'short', month: 'short', day: 'numeric' });
+          d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
         genLabels = () => {
           const labels: string[] = [];
           for (let i = 0; i < 7; i++) {
@@ -1885,7 +1885,7 @@ export class AdminService {
       case 'last_month': {
         startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         getLabel = (d: Date) =>
-          d.toLocaleString('default', { month: 'short', day: 'numeric' });
+          d.toLocaleString('en-US', { month: 'short', day: 'numeric' });
         genLabels = () => {
           const labels: string[] = [];
           for (let i = 0; i < 30; i++) {
@@ -1900,7 +1900,7 @@ export class AdminService {
       default: {
         startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
         getLabel = (d: Date) =>
-          d.toLocaleString('default', { month: 'short' });
+          d.toLocaleString('en-US', { month: 'short' });
         genLabels = () => {
           const labels: string[] = [];
           const d = new Date(startDate);

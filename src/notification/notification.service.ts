@@ -848,6 +848,20 @@ export class NotificationService {
       return this.toDeviceTokenResponse(updated);
     }
 
+    // Deactivate any existing tokens for the same device (same user + platform + deviceName)
+    if (deviceName) {
+      await this.prisma.deviceToken.updateMany({
+        where: {
+          userId,
+          platform,
+          deviceName,
+          isDeleted: false,
+          token: { not: token },
+        },
+        data: { isActive: false, isDeleted: true, deletedAt: new Date() },
+      });
+    }
+
     // Create new token
     const newToken = await this.prisma.deviceToken.create({
       data: {
