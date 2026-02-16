@@ -2158,6 +2158,14 @@ export class AdminService {
   // EXPORT ENDPOINTS
   // =====================
 
+  private sanitizeCsv(value: string | null | undefined): string {
+    const escaped = (value || '').replace(/"/g, '""');
+    if (/^[=+\-@\t\r]/.test(escaped)) {
+      return `\t${escaped}`;
+    }
+    return escaped;
+  }
+
   async exportUsersAsCsv(filters: UserFilterDto): Promise<string> {
     // Remove pagination to get all matching users
     const modifiedFilters = { ...filters, page: 1, limit: 100000 };
@@ -2178,8 +2186,8 @@ export class AdminService {
 
     const rows = result.data.map((user: any) => [
       user.id,
-      `"${(user.email || '').replace(/"/g, '""')}"`,
-      `"${(user.name || '').replace(/"/g, '""')}"`,
+      `"${this.sanitizeCsv(user.email)}"`,
+      `"${this.sanitizeCsv(user.name)}"`,
       user.role,
       user.isEmailVerified,
       user.isPaidUser,
@@ -2207,7 +2215,7 @@ export class AdminService {
     const dateRange = { startDate, endDate };
 
     let rawData: any;
-    let csvContent: string;
+    let csvContent = '';
     let filename: string;
 
     switch (type) {
@@ -2275,7 +2283,7 @@ export class AdminService {
     }
 
     return {
-      data: csvContent!,
+      data: csvContent,
       contentType: 'text/csv',
       filename: `${filename}.csv`,
     };
