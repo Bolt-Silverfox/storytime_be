@@ -298,6 +298,13 @@ export class LoginResponseDto {
   refreshToken: string;
 }
 
+export class RefreshTokenDto {
+  @ApiProperty({ description: 'Refresh token', example: 'eyJhbGci...' })
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+}
+
 export class RefreshResponseDto {
   @ApiProperty({ type: UserDto })
   user: UserDto;
