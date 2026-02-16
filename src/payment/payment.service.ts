@@ -303,9 +303,7 @@ export class PaymentService {
       status: subscription.status,
       startedAt: subscription.startedAt,
       endsAt: subscription.endsAt,
-      platform:
-        ((subscription as Record<string, unknown>).platform as string | null) ??
-        null,
+      platform: subscription.platform ?? null,
       price,
       currency,
     };
