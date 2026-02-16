@@ -606,7 +606,14 @@ export class AdminController {
     description: 'Filter by subscription status',
   })
   @ApiOkResponse({ description: 'Users exported as CSV' })
-  async exportUsers(@Query() filters: UserFilterDto, @Res() res: Response) {
+  async exportUsers(
+    @Query() filters: UserFilterDto,
+    @Res() res: Response,
+    @Query('hasActiveSubscription') rawHasActiveSub?: string,
+  ) {
+    if (rawHasActiveSub !== undefined) {
+      filters.hasActiveSubscription = rawHasActiveSub === 'true';
+    }
     const csv = await this.adminService.exportUsersAsCsv(filters);
 
     const filename = `users-export-${new Date().toISOString().split('T')[0]}.csv`;

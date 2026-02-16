@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsString } from 'class-validator';
+import { IsOptional, IsEnum, IsDateString } from 'class-validator';
 
 export class ExportAnalyticsDto {
   @IsEnum(['users', 'revenue', 'subscriptions'])
@@ -9,10 +9,10 @@ export class ExportAnalyticsDto {
   format?: 'csv' | 'json' = 'csv';
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   startDate?: string;
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   endDate?: string;
 }

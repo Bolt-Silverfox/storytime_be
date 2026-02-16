@@ -848,28 +848,28 @@ export class NotificationService {
       return this.toDeviceTokenResponse(updated);
     }
 
-    // Deactivate any existing tokens for the same device (same user + platform + deviceName)
-    if (deviceName) {
-      await this.prisma.deviceToken.updateMany({
-        where: {
+    // Deactivate old tokens and create new one atomically
+    const newToken = await this.prisma.$transaction(async (tx) => {
+      if (deviceName) {
+        await tx.deviceToken.updateMany({
+          where: {
+            userId,
+            platform,
+            deviceName,
+            isDeleted: false,
+            token: { not: token },
+          },
+          data: { isActive: false, isDeleted: true, deletedAt: new Date() },
+        });
+      }
+      return tx.deviceToken.create({
+        data: {
           userId,
+          token,
           platform,
           deviceName,
-          isDeleted: false,
-          token: { not: token },
         },
-        data: { isActive: false, isDeleted: true, deletedAt: new Date() },
       });
-    }
-
-    // Create new token
-    const newToken = await this.prisma.deviceToken.create({
-      data: {
-        userId,
-        token,
-        platform,
-        deviceName,
-      },
     });
     this.logger.log(`Registered new device token for user ${userId}`);
     return this.toDeviceTokenResponse(newToken);

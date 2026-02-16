@@ -1767,9 +1767,7 @@ export class AdminService {
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         labels = [];
         for (let i = 0; i < 7; i++) {
-          const day = new Date(
-            startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000,
-          );
+          const day = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
           labels.push(
             day.toLocaleString('en-US', {
               weekday: 'short',
@@ -1791,9 +1789,7 @@ export class AdminService {
         startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         labels = [];
         for (let i = 0; i < 30; i++) {
-          const day = new Date(
-            startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000,
-          );
+          const day = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
           labels.push(
             day.toLocaleString('en-US', { month: 'short', day: 'numeric' }),
           );
@@ -1905,9 +1901,7 @@ export class AdminService {
         genLabels = () => {
           const labels: string[] = [];
           for (let i = 0; i < 7; i++) {
-            const day = new Date(
-              startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000,
-            );
+            const day = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
             labels.push(getLabel(day));
           }
           return labels;
@@ -1921,9 +1915,7 @@ export class AdminService {
         genLabels = () => {
           const labels: string[] = [];
           for (let i = 0; i < 30; i++) {
-            const day = new Date(
-              startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000,
-            );
+            const day = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
             labels.push(getLabel(day));
           }
           return labels;
