@@ -1749,8 +1749,10 @@ export class AdminService {
 
     switch (duration) {
       case 'daily': {
-        // Last 24 hours, grouped by hour
-        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        // Last 24 hours, grouped by hour (aligned to hour boundary)
+        const hourAligned = new Date(now);
+        hourAligned.setMinutes(0, 0, 0);
+        startDate = new Date(hourAligned.getTime() - 24 * 60 * 60 * 1000);
         labels = [];
         for (let i = 0; i < 24; i++) {
           const h = new Date(startDate.getTime() + i * 60 * 60 * 1000);
@@ -1763,8 +1765,10 @@ export class AdminService {
         break;
       }
       case 'weekly': {
-        // Last 7 days, grouped by day
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        // Last 7 days, grouped by day (aligned to start of day)
+        const weekStart = new Date(now);
+        weekStart.setHours(0, 0, 0, 0);
+        startDate = new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000);
         labels = [];
         for (let i = 0; i < 7; i++) {
           const day = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
@@ -1785,8 +1789,10 @@ export class AdminService {
         break;
       }
       case 'monthly': {
-        // Last 30 days, grouped by day
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        // Last 30 days, grouped by day (aligned to start of day)
+        const monthStart = new Date(now);
+        monthStart.setHours(0, 0, 0, 0);
+        startDate = new Date(monthStart.getTime() - 30 * 24 * 60 * 60 * 1000);
         labels = [];
         for (let i = 0; i < 30; i++) {
           const day = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
@@ -2167,9 +2173,20 @@ export class AdminService {
   }
 
   async exportUsersAsCsv(filters: UserFilterDto): Promise<string> {
-    // Remove pagination to get all matching users
-    const modifiedFilters = { ...filters, page: 1, limit: 100000 };
-    const result = await this.getAllUsers(modifiedFilters);
+    // Paginate through all matching users
+    const pageSize = 1000;
+    let page = 1;
+    const allUsers: any[] = [];
+    while (true) {
+      const result = await this.getAllUsers({
+        ...filters,
+        page,
+        limit: pageSize,
+      });
+      allUsers.push(...result.data);
+      if (result.data.length < pageSize) break;
+      page++;
+    }
 
     const headers = [
       'ID',
@@ -2184,7 +2201,7 @@ export class AdminService {
       'Is Suspended',
     ];
 
-    const rows = result.data.map((user: any) => [
+    const rows = allUsers.map((user: any) => [
       user.id,
       `"${this.sanitizeCsv(user.email)}"`,
       `"${this.sanitizeCsv(user.name)}"`,
