@@ -2263,7 +2263,7 @@ export class AdminService {
         break;
       }
       default:
-        throw new BadRequestException(`Invalid export type: ${type}`);
+        throw new BadRequestException(`Invalid export type: ${type as string}`);
     }
 
     if (format === 'json') {
