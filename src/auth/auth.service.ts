@@ -28,9 +28,12 @@ import { GoogleOAuthProfile } from '@/shared/types';
 import * as crypto from 'crypto';
 import { NotificationService } from '@/notification/notification.service';
 import { OAuth2Client } from 'google-auth-library';
+import { ConfigService } from '@nestjs/config';
+import { EnvConfig } from '@/shared/config/env.validation';
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
 import appleSigninAuth from 'apple-signin-auth';
+import { Role, OnboardingStatus } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -42,8 +45,9 @@ export class AuthService {
     private readonly notificationService: NotificationService,
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
+    private readonly configService: ConfigService<EnvConfig, true>,
   ) {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (clientId) {
       this.googleClient = new OAuth2Client(clientId);
     }
@@ -126,12 +130,12 @@ export class AuthService {
       throw new BadRequestException('Email already exists');
     }
 
-    let role = 'parent';
-    if (data.role === 'admin') {
-      if (data.adminSecret !== process.env.ADMIN_SECRET) {
+    let role: Role = Role.parent;
+    if (data.role === Role.admin) {
+      if (data.adminSecret !== this.configService.get<string>('ADMIN_SECRET')) {
         throw new ForbiddenException('Invalid admin secret');
       }
-      role = 'admin';
+      role = Role.admin;
     }
 
     const hashedPassword = await this.passwordService.hashPassword(
@@ -143,8 +147,8 @@ export class AuthService {
         name: data.fullName,
         email: data.email,
         passwordHash: hashedPassword,
-        role: role as any,
-        onboardingStatus: 'account_created',
+        role,
+        onboardingStatus: OnboardingStatus.account_created,
       },
       include: {
         profile: true,
@@ -234,7 +238,7 @@ export class AuthService {
       where: { id: verificationToken.userId },
       data: {
         isEmailVerified: true,
-        onboardingStatus: 'email_verified',
+        onboardingStatus: OnboardingStatus.email_verified,
       },
     });
     await this.prisma.token.delete({ where: { id: verificationToken.id } });
@@ -252,7 +256,7 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    if (user.onboardingStatus === 'pin_setup') {
+    if (user.onboardingStatus === OnboardingStatus.pin_setup) {
       throw new BadRequestException('Onboarding already completed');
     }
 
@@ -324,7 +328,7 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: userId },
-      data: { onboardingStatus: 'profile_setup' },
+      data: { onboardingStatus: OnboardingStatus.profile_setup },
     });
 
     const updatedUser = await this.prisma.user.findUnique({
@@ -487,11 +491,11 @@ export class AuthService {
 
     // Build array of valid audience values (all platforms)
     const validAudiences = [
-      process.env.GOOGLE_CLIENT_ID, // Original/backend client ID
-      process.env.GOOGLE_WEB_CLIENT_ID, // Web app client ID
-      process.env.GOOGLE_ANDROID_CLIENT_ID, // Android app client ID
-      process.env.GOOGLE_IOS_CLIENT_ID, // iOS app client ID
-    ].filter((id): id is string => Boolean(id)); // Remove undefined values
+      this.configService.get<string>('GOOGLE_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_WEB_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_ANDROID_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_IOS_CLIENT_ID'),
+    ].filter((id): id is string => Boolean(id));
 
     if (validAudiences.length === 0) {
       throw new ServiceUnavailableException('No Google client IDs configured');
@@ -572,8 +576,10 @@ export class AuthService {
         email,
         email_verified,
       } = await appleSigninAuth.verifyIdToken(idToken, {
-        audience: [process.env.APPLE_CLIENT_ID, process.env.APPLE_SERVICE_ID],
-        nonce: 'NONCE',
+        audience: [
+          this.configService.get<string>('APPLE_CLIENT_ID'),
+          this.configService.get<string>('APPLE_SERVICE_ID'),
+        ],
         ignoreExpiration: false,
       });
 
@@ -651,7 +657,7 @@ export class AuthService {
           isEmailVerified: emailVerified === true,
           googleId: googleId || null,
           appleId: appleId || null,
-          role: 'parent',
+          role: Role.parent,
           profile: {
             create: {
               country: 'NG',
