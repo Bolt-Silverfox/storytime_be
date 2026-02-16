@@ -423,6 +423,13 @@ export class AdminController {
     description: 'Number of activity logs to return (default: 50, max: 100)',
     example: 50,
   })
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    type: String,
+    description: 'Filter activity logs by a specific user ID',
+    example: 'user-123',
+  })
   @ApiOkResponse({
     description: 'Recent activity logs retrieved successfully',
     schema: {
@@ -457,9 +464,12 @@ export class AdminController {
       },
     },
   })
-  async getRecentActivity(@Query('limit') limit?: number) {
+  async getRecentActivity(
+    @Query('limit') limit?: number,
+    @Query('userId') userId?: string,
+  ) {
     const { limit: l } = PaginationUtil.sanitize(1, limit, 100);
-    const data = await this.adminService.getRecentActivity(l);
+    const data = await this.adminService.getRecentActivity(l, userId);
     return {
       statusCode: 200,
       message: 'Recent activity logs retrieved successfully',
