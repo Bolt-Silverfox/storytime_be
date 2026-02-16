@@ -471,7 +471,7 @@ export class AdminController {
   @ApiOperation({
     summary: 'Get AI credit analytics',
     description:
-      'Returns usage stats for AI services (ElevenLabs, Gemini), grouped by month for the current year',
+      'Returns usage stats for AI services (ElevenLabs, Gemini), grouped by the selected duration (daily/weekly/monthly/quarterly/yearly).',
   })
   @ApiOkResponse({
     description: 'AI credit analytics retrieved successfully',
@@ -498,7 +498,7 @@ export class AdminController {
   @ApiOperation({
     summary: 'Get monthly user growth (Free vs Paid)',
     description:
-      'Returns user growth data for the last 12 months, split by subscription status',
+      'Returns user growth data for the selected duration (last_week/last_month/last_year), split by subscription status',
   })
   @ApiOkResponse({
     description: 'User growth data retrieved successfully',
