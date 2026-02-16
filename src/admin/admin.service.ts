@@ -1981,9 +1981,12 @@ export class AdminService {
     };
   }
 
-  async getRecentActivity(limit: number = 50): Promise<ActivityLogDto[]> {
+  async getRecentActivity(
+    limit: number = 50,
+    userId?: string,
+  ): Promise<ActivityLogDto[]> {
     const activities = await this.prisma.activityLog.findMany({
-      where: { isDeleted: false },
+      where: { isDeleted: false, ...(userId && { userId }) },
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
