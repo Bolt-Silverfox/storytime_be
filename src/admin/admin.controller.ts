@@ -11,7 +11,10 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  Res,
+  Header,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { AdminService } from './admin.service';
 import { Admin } from './decorators/admin.decorator';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
@@ -26,6 +29,7 @@ import {
   UpdateUserRoleDto,
   BulkActionDto,
 } from './dto/user-management.dto';
+import { ExportAnalyticsDto } from './dto/admin-export.dto';
 import { PaginationUtil } from '../shared/utils/pagination.util';
 import {
   DashboardStatsDto,
@@ -473,8 +477,11 @@ export class AdminController {
   @ApiOkResponse({
     description: 'AI credit analytics retrieved successfully',
   })
-  async getAiCreditStats() {
-    const data = await this.adminService.getAiCreditAnalytics();
+  async getAiCreditStats(
+    @Query('duration')
+    duration: 'yearly' | 'quarterly' | 'monthly' | 'weekly' | 'daily' = 'yearly',
+  ) {
+    const data = await this.adminService.getAiCreditAnalytics(duration);
     return {
       statusCode: 200,
       message: 'AI credit analytics retrieved successfully',
@@ -492,8 +499,11 @@ export class AdminController {
   @ApiOkResponse({
     description: 'User growth data retrieved successfully',
   })
-  async getUserGrowthMonthly() {
-    const data = await this.adminService.getUserGrowthMonthly();
+  async getUserGrowthMonthly(
+    @Query('duration')
+    duration: 'last_year' | 'last_month' | 'last_week' = 'last_year',
+  ) {
+    const data = await this.adminService.getUserGrowthMonthly(duration);
     return {
       statusCode: 200,
       message: 'User growth data retrieved successfully',
@@ -502,8 +512,110 @@ export class AdminController {
   }
 
   // =====================
+  // EXPORT ENDPOINTS
+  // =====================
+
+  @Get('dashboard/export')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Export analytics data',
+    description:
+      'Export analytics data (users, revenue, subscriptions) as CSV or JSON.',
+  })
+  @ApiQuery({
+    name: 'type',
+    required: true,
+    enum: ['users', 'revenue', 'subscriptions'],
+    description: 'Type of analytics data to export',
+  })
+  @ApiQuery({
+    name: 'format',
+    required: false,
+    enum: ['csv', 'json'],
+    description: 'Export format (default: csv)',
+  })
+  @ApiQuery({
+    name: 'startDate',
+    required: false,
+    type: String,
+    description: 'Start date for analytics (ISO format)',
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: false,
+    type: String,
+    description: 'End date for analytics (ISO format)',
+  })
+  @ApiOkResponse({ description: 'Analytics data exported successfully' })
+  async exportAnalytics(
+    @Query() exportDto: ExportAnalyticsDto,
+    @Res() res: Response,
+  ) {
+    const result = await this.adminService.exportAnalyticsData(
+      exportDto.type,
+      exportDto.format || 'csv',
+      exportDto.startDate,
+      exportDto.endDate,
+    );
+
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"`,
+    );
+    res.send(result.data);
+  }
+
+  // =====================
   // USER MANAGEMENT
   // =====================
+
+  @Get('users/export')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Export users as CSV',
+    description:
+      'Export all users matching the given filters as a CSV file. Supports the same filters as the users list endpoint.',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for email or name',
+  })
+  @ApiQuery({
+    name: 'role',
+    required: false,
+    enum: ['admin', 'parent', 'kid'],
+    description: 'Filter by user role',
+  })
+  @ApiQuery({
+    name: 'isEmailVerified',
+    required: false,
+    type: Boolean,
+    description: 'Filter by email verification status',
+  })
+  @ApiQuery({
+    name: 'hasActiveSubscription',
+    required: false,
+    type: Boolean,
+    description: 'Filter by subscription status',
+  })
+  @ApiOkResponse({ description: 'Users exported as CSV' })
+  async exportUsers(
+    @Query() filters: UserFilterDto,
+    @Res() res: Response,
+  ) {
+    const csv = await this.adminService.exportUsersAsCsv(filters);
+
+    const filename = `users-export-${new Date().toISOString().split('T')[0]}.csv`;
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`,
+    );
+    res.send(csv);
+  }
 
   @Get('users')
   @ApiBearerAuth()
@@ -1203,6 +1315,92 @@ export class AdminController {
     return {
       statusCode: 200,
       message: 'User restored successfully',
+      data,
+    };
+  }
+
+  @Patch('users/:userId/suspend')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Suspend a user',
+    description:
+      'Suspends a user account, preventing them from accessing the platform. Cannot suspend admin users.',
+  })
+  @ApiParam({
+    name: 'userId',
+    type: String,
+    description: 'User ID',
+    example: 'user-123-uuid',
+  })
+  @ApiOkResponse({
+    description: 'User suspended successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'User suspended successfully',
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          name: 'John Doe',
+          role: 'parent',
+          isSuspended: true,
+          suspendedAt: '2023-10-15T10:30:00Z',
+          updatedAt: '2023-10-15T10:30:00Z',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'User is already suspended or is an admin',
+  })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async suspendUser(@Param('userId') userId: string) {
+    const data = await this.adminService.suspendUser(userId);
+    return {
+      statusCode: 200,
+      message: 'User suspended successfully',
+      data,
+    };
+  }
+
+  @Patch('users/:userId/unsuspend')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Unsuspend a user',
+    description: 'Removes suspension from a user account, restoring their access.',
+  })
+  @ApiParam({
+    name: 'userId',
+    type: String,
+    description: 'User ID',
+    example: 'user-123-uuid',
+  })
+  @ApiOkResponse({
+    description: 'User unsuspended successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'User unsuspended successfully',
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          name: 'John Doe',
+          role: 'parent',
+          isSuspended: false,
+          suspendedAt: null,
+          updatedAt: '2023-10-15T10:30:00Z',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'User is not suspended' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async unsuspendUser(@Param('userId') userId: string) {
+    const data = await this.adminService.unsuspendUser(userId);
+    return {
+      statusCode: 200,
+      message: 'User unsuspended successfully',
       data,
     };
   }

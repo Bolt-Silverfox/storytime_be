@@ -1734,46 +1734,100 @@ export class AdminService {
   // AI ANALYTICS
   // =====================
 
-  async getAiCreditAnalytics(): Promise<AiCreditAnalyticsDto> {
-    const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+  async getAiCreditAnalytics(
+    duration: 'yearly' | 'quarterly' | 'monthly' | 'weekly' | 'daily' = 'yearly',
+  ): Promise<AiCreditAnalyticsDto> {
+    const now = new Date();
+    let startDate: Date;
+    let labels: string[];
+    let getKey: (d: Date) => string;
+
+    switch (duration) {
+      case 'daily': {
+        // Last 24 hours, grouped by hour
+        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        labels = [];
+        for (let i = 0; i < 24; i++) {
+          const h = new Date(startDate.getTime() + i * 60 * 60 * 1000);
+          labels.push(
+            h.toLocaleString('default', { hour: '2-digit', hour12: true }),
+          );
+        }
+        getKey = (d: Date) =>
+          d.toLocaleString('default', { hour: '2-digit', hour12: true });
+        break;
+      }
+      case 'weekly': {
+        // Last 7 days, grouped by day
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        labels = [];
+        for (let i = 0; i < 7; i++) {
+          const day = new Date(startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
+          labels.push(
+            day.toLocaleString('default', { weekday: 'short', month: 'short', day: 'numeric' }),
+          );
+        }
+        getKey = (d: Date) =>
+          d.toLocaleString('default', { weekday: 'short', month: 'short', day: 'numeric' });
+        break;
+      }
+      case 'monthly': {
+        // Last 30 days, grouped by day
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        labels = [];
+        for (let i = 0; i < 30; i++) {
+          const day = new Date(startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
+          labels.push(
+            day.toLocaleString('default', { month: 'short', day: 'numeric' }),
+          );
+        }
+        getKey = (d: Date) =>
+          d.toLocaleString('default', { month: 'short', day: 'numeric' });
+        break;
+      }
+      case 'quarterly': {
+        // Current year grouped by quarter
+        startDate = new Date(now.getFullYear(), 0, 1);
+        labels = ['Q1', 'Q2', 'Q3', 'Q4'];
+        getKey = (d: Date) => {
+          const q = Math.floor(d.getMonth() / 3) + 1;
+          return `Q${q}`;
+        };
+        break;
+      }
+      case 'yearly':
+      default: {
+        // 12 months of current year
+        startDate = new Date(now.getFullYear(), 0, 1);
+        labels = [
+          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+        ];
+        getKey = (d: Date) =>
+          d.toLocaleString('default', { month: 'short' });
+        break;
+      }
+    }
 
     const logs = await this.prisma.activityLog.findMany({
       where: {
         action: 'AI_GENERATION',
-        createdAt: { gte: startOfYear },
+        createdAt: { gte: startDate },
       },
     });
-
-    // Helper to format month
-    const getMonthKey = (d: Date) =>
-      d.toLocaleString('default', { month: 'short' });
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
 
     // Initialize map
     const dataMap = new Map<
       string,
       { elevenLabs: number; gemini: number; total: number }
     >();
-    months.forEach((m) => {
-      dataMap.set(m, { elevenLabs: 0, gemini: 0, total: 0 });
+    labels.forEach((label) => {
+      dataMap.set(label, { elevenLabs: 0, gemini: 0, total: 0 });
     });
 
     logs.forEach((log) => {
-      const month = getMonthKey(log.createdAt);
-      if (!dataMap.has(month)) return; // Should allow current year only
+      const key = getKey(log.createdAt);
+      if (!dataMap.has(key)) return;
 
       let credits = 1;
       let provider = '';
@@ -1785,16 +1839,17 @@ export class AdminService {
         // Fallback
       }
 
-      const entry = dataMap.get(month)!;
+      const entry = dataMap.get(key)!;
       if (provider === String(AiProviders.ElevenLabs))
         entry.elevenLabs += credits;
       if (provider === String(AiProviders.Gemini)) entry.gemini += credits;
       entry.total += credits;
     });
 
-    const yearly = months.map((m) => ({
-      month: m,
-      ...dataMap.get(m)!,
+    const yearly = labels.map((label) => ({
+      label,
+      month: label,
+      ...dataMap.get(label)!,
     }));
 
     return { yearly };
@@ -1804,10 +1859,62 @@ export class AdminService {
   // CUSTOM USER ANALYTICS
   // =====================
 
-  async getUserGrowthMonthly(): Promise<UserGrowthMonthlyDto> {
+  async getUserGrowthMonthly(
+    duration: 'last_year' | 'last_month' | 'last_week' = 'last_year',
+  ): Promise<UserGrowthMonthlyDto> {
     const now = new Date();
-    // 12 months ago from 1st of current month
-    const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1); // Go back 11 months + current = 12
+    let startDate: Date;
+    let genLabels: () => string[];
+    let getLabel: (d: Date) => string;
+
+    switch (duration) {
+      case 'last_week': {
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        getLabel = (d: Date) =>
+          d.toLocaleString('default', { weekday: 'short', month: 'short', day: 'numeric' });
+        genLabels = () => {
+          const labels: string[] = [];
+          for (let i = 0; i < 7; i++) {
+            const day = new Date(startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
+            labels.push(getLabel(day));
+          }
+          return labels;
+        };
+        break;
+      }
+      case 'last_month': {
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        getLabel = (d: Date) =>
+          d.toLocaleString('default', { month: 'short', day: 'numeric' });
+        genLabels = () => {
+          const labels: string[] = [];
+          for (let i = 0; i < 30; i++) {
+            const day = new Date(startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
+            labels.push(getLabel(day));
+          }
+          return labels;
+        };
+        break;
+      }
+      case 'last_year':
+      default: {
+        startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+        getLabel = (d: Date) =>
+          d.toLocaleString('default', { month: 'short' });
+        genLabels = () => {
+          const labels: string[] = [];
+          const d = new Date(startDate);
+          while (d <= now) {
+            labels.push(getLabel(d));
+            d.setMonth(d.getMonth() + 1);
+          }
+          return [...new Set(labels)];
+        };
+        break;
+      }
+    }
+
+    const labels = genLabels();
 
     const users = await this.prisma.user.findMany({
       where: {
@@ -1821,27 +1928,12 @@ export class AdminService {
       },
     });
 
-    const getMonthLabel = (d: Date) => {
-      return d.toLocaleString('default', { month: 'short' });
-    };
-
-    // Generate last 12 month labels
-    const labels: string[] = [];
-    const d = new Date(startDate);
-    while (d <= now) {
-      labels.push(getMonthLabel(d));
-      d.setMonth(d.getMonth() + 1);
-    }
-    // De-dupe labels if 'now' pushes slightly into next month logic or loop edge case
-    const uniqueLabels = [...new Set(labels)];
-
-    // Buckets
-    const freeCounts = new Array(uniqueLabels.length).fill(0);
-    const paidCounts = new Array(uniqueLabels.length).fill(0);
+    const freeCounts = new Array(labels.length).fill(0);
+    const paidCounts = new Array(labels.length).fill(0);
 
     users.forEach((u) => {
-      const label = getMonthLabel(u.createdAt);
-      const index = uniqueLabels.indexOf(label);
+      const label = getLabel(u.createdAt);
+      const index = labels.indexOf(label);
       if (index !== -1) {
         const isPaid = u.subscription?.status === 'active';
         if (isPaid) paidCounts[index]++;
@@ -1851,7 +1943,7 @@ export class AdminService {
 
     return {
       data: {
-        labels: uniqueLabels,
+        labels,
         freeUsers: freeCounts,
         paidUsers: paidCounts,
       },
@@ -2034,6 +2126,192 @@ export class AdminService {
     return this.prisma.supportTicket.update({
       where: { id },
       data: { status },
+    });
+  }
+
+  // =====================
+  // EXPORT ENDPOINTS
+  // =====================
+
+  async exportUsersAsCsv(filters: UserFilterDto): Promise<string> {
+    // Remove pagination to get all matching users
+    const modifiedFilters = { ...filters, page: 1, limit: 100000 };
+    const result = await this.getAllUsers(modifiedFilters);
+
+    const headers = [
+      'ID',
+      'Email',
+      'Name',
+      'Role',
+      'Email Verified',
+      'Is Paid',
+      'Subscription Plan',
+      'Registration Date',
+      'Is Deleted',
+      'Is Suspended',
+    ];
+
+    const rows = result.data.map((user: any) => [
+      user.id,
+      `"${(user.email || '').replace(/"/g, '""')}"`,
+      `"${(user.name || '').replace(/"/g, '""')}"`,
+      user.role,
+      user.isEmailVerified,
+      user.isPaidUser,
+      user.activeSubscription?.plan || '',
+      user.registrationDate
+        ? new Date(user.registrationDate).toISOString()
+        : '',
+      user.isDeleted,
+      user.isSuspended || false,
+    ]);
+
+    const csv = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join(
+      '\n',
+    );
+    return csv;
+  }
+
+  async exportAnalyticsData(
+    type: 'users' | 'revenue' | 'subscriptions',
+    format: 'csv' | 'json' = 'csv',
+    startDate?: string,
+    endDate?: string,
+  ): Promise<{ data: any; contentType: string; filename: string }> {
+    const dateRange = { startDate, endDate };
+
+    let rawData: any;
+    let csvContent: string;
+    let filename: string;
+
+    switch (type) {
+      case 'users': {
+        const growth = await this.getUserGrowth(dateRange);
+        rawData = growth;
+        filename = `users-analytics-${new Date().toISOString().split('T')[0]}`;
+        if (format === 'csv') {
+          const headers = [
+            'Date',
+            'New Users',
+            'Paid Users',
+            'Total Users',
+            'Total Paid Users',
+          ];
+          const rows = growth.map((g) =>
+            [g.date, g.newUsers, g.paidUsers, g.totalUsers, g.totalPaidUsers].join(','),
+          );
+          csvContent = [headers.join(','), ...rows].join('\n');
+        }
+        break;
+      }
+      case 'revenue': {
+        const revenue = await this.getRevenueAnalytics(dateRange);
+        rawData = revenue;
+        filename = `revenue-analytics-${new Date().toISOString().split('T')[0]}`;
+        if (format === 'csv') {
+          const headers = ['Date', 'Amount'];
+          const rows = revenue.dailyRevenue.map((r) =>
+            [r.date, r.amount].join(','),
+          );
+          csvContent = [headers.join(','), ...rows].join('\n');
+        }
+        break;
+      }
+      case 'subscriptions': {
+        const subs = await this.getSubscriptionAnalytics(dateRange);
+        rawData = subs;
+        filename = `subscriptions-analytics-${new Date().toISOString().split('T')[0]}`;
+        if (format === 'csv') {
+          const headers = ['Date', 'Count'];
+          const rows = subs.subscriptionGrowth.map((s) =>
+            [s.date, s.count].join(','),
+          );
+          csvContent = [headers.join(','), ...rows].join('\n');
+        }
+        break;
+      }
+      default:
+        throw new BadRequestException(`Invalid export type: ${type}`);
+    }
+
+    if (format === 'json') {
+      return {
+        data: rawData,
+        contentType: 'application/json',
+        filename: `${filename}.json`,
+      };
+    }
+
+    return {
+      data: csvContent!,
+      contentType: 'text/csv',
+      filename: `${filename}.csv`,
+    };
+  }
+
+  // =====================
+  // USER SUSPENSION
+  // =====================
+
+  async suspendUser(userId: string): Promise<any> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    if (user.isSuspended) {
+      throw new BadRequestException('User is already suspended');
+    }
+
+    if (user.role === Role.admin) {
+      throw new BadRequestException('Cannot suspend an admin user');
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isSuspended: true,
+        suspendedAt: new Date(),
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isSuspended: true,
+        suspendedAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async unsuspendUser(userId: string): Promise<any> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    if (!user.isSuspended) {
+      throw new BadRequestException('User is not suspended');
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isSuspended: false,
+        suspendedAt: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isSuspended: true,
+        suspendedAt: true,
+        updatedAt: true,
+      },
     });
   }
 
