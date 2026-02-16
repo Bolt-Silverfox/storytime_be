@@ -253,11 +253,9 @@ export class PaymentService {
       status: 'active',
       startedAt: now,
       endsAt,
-      ...(platformDetails && {
-        platform: platformDetails.platform,
-        productId: platformDetails.productId,
-        purchaseToken: platformDetails.purchaseToken,
-      }),
+      platform: platformDetails?.platform ?? null,
+      productId: platformDetails?.productId ?? null,
+      purchaseToken: platformDetails?.purchaseToken ?? null,
     };
 
     const subscription = existingSub
