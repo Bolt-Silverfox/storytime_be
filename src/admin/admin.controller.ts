@@ -12,7 +12,6 @@ import {
   HttpStatus,
   Req,
   Res,
-  Header,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AdminService } from './admin.service';
