@@ -479,7 +479,12 @@ export class AdminController {
   })
   async getAiCreditStats(
     @Query('duration')
-    duration: 'yearly' | 'quarterly' | 'monthly' | 'weekly' | 'daily' = 'yearly',
+    duration:
+      | 'yearly'
+      | 'quarterly'
+      | 'monthly'
+      | 'weekly'
+      | 'daily' = 'yearly',
   ) {
     const data = await this.adminService.getAiCreditAnalytics(duration);
     return {
@@ -602,18 +607,12 @@ export class AdminController {
     description: 'Filter by subscription status',
   })
   @ApiOkResponse({ description: 'Users exported as CSV' })
-  async exportUsers(
-    @Query() filters: UserFilterDto,
-    @Res() res: Response,
-  ) {
+  async exportUsers(@Query() filters: UserFilterDto, @Res() res: Response) {
     const csv = await this.adminService.exportUsersAsCsv(filters);
 
     const filename = `users-export-${new Date().toISOString().split('T')[0]}.csv`;
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${filename}"`,
-    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(csv);
   }
 
@@ -1368,7 +1367,8 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Unsuspend a user',
-    description: 'Removes suspension from a user account, restoring their access.',
+    description:
+      'Removes suspension from a user account, restoring their access.',
   })
   @ApiParam({
     name: 'userId',

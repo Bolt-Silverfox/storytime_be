@@ -1735,7 +1735,12 @@ export class AdminService {
   // =====================
 
   async getAiCreditAnalytics(
-    duration: 'yearly' | 'quarterly' | 'monthly' | 'weekly' | 'daily' = 'yearly',
+    duration:
+      | 'yearly'
+      | 'quarterly'
+      | 'monthly'
+      | 'weekly'
+      | 'daily' = 'yearly',
   ): Promise<AiCreditAnalyticsDto> {
     const now = new Date();
     let startDate: Date;
@@ -1762,13 +1767,23 @@ export class AdminService {
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         labels = [];
         for (let i = 0; i < 7; i++) {
-          const day = new Date(startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
+          const day = new Date(
+            startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000,
+          );
           labels.push(
-            day.toLocaleString('default', { weekday: 'short', month: 'short', day: 'numeric' }),
+            day.toLocaleString('default', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+            }),
           );
         }
         getKey = (d: Date) =>
-          d.toLocaleString('default', { weekday: 'short', month: 'short', day: 'numeric' });
+          d.toLocaleString('default', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+          });
         break;
       }
       case 'monthly': {
@@ -1776,7 +1791,9 @@ export class AdminService {
         startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         labels = [];
         for (let i = 0; i < 30; i++) {
-          const day = new Date(startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
+          const day = new Date(
+            startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000,
+          );
           labels.push(
             day.toLocaleString('default', { month: 'short', day: 'numeric' }),
           );
@@ -1800,11 +1817,20 @@ export class AdminService {
         // 12 months of current year
         startDate = new Date(now.getFullYear(), 0, 1);
         labels = [
-          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
         ];
-        getKey = (d: Date) =>
-          d.toLocaleString('default', { month: 'short' });
+        getKey = (d: Date) => d.toLocaleString('default', { month: 'short' });
         break;
       }
     }
@@ -1871,11 +1897,17 @@ export class AdminService {
       case 'last_week': {
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         getLabel = (d: Date) =>
-          d.toLocaleString('default', { weekday: 'short', month: 'short', day: 'numeric' });
+          d.toLocaleString('default', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+          });
         genLabels = () => {
           const labels: string[] = [];
           for (let i = 0; i < 7; i++) {
-            const day = new Date(startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
+            const day = new Date(
+              startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000,
+            );
             labels.push(getLabel(day));
           }
           return labels;
@@ -1889,7 +1921,9 @@ export class AdminService {
         genLabels = () => {
           const labels: string[] = [];
           for (let i = 0; i < 30; i++) {
-            const day = new Date(startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
+            const day = new Date(
+              startDate.getTime() + (i + 1) * 24 * 60 * 60 * 1000,
+            );
             labels.push(getLabel(day));
           }
           return labels;
@@ -1899,8 +1933,7 @@ export class AdminService {
       case 'last_year':
       default: {
         startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-        getLabel = (d: Date) =>
-          d.toLocaleString('default', { month: 'short' });
+        getLabel = (d: Date) => d.toLocaleString('default', { month: 'short' });
         genLabels = () => {
           const labels: string[] = [];
           const d = new Date(startDate);
@@ -2166,9 +2199,10 @@ export class AdminService {
       user.isSuspended || false,
     ]);
 
-    const csv = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join(
-      '\n',
-    );
+    const csv = [
+      headers.join(','),
+      ...rows.map((r: any[]) => r.join(',')),
+    ].join('\n');
     return csv;
   }
 
@@ -2198,7 +2232,13 @@ export class AdminService {
             'Total Paid Users',
           ];
           const rows = growth.map((g) =>
-            [g.date, g.newUsers, g.paidUsers, g.totalUsers, g.totalPaidUsers].join(','),
+            [
+              g.date,
+              g.newUsers,
+              g.paidUsers,
+              g.totalUsers,
+              g.totalPaidUsers,
+            ].join(','),
           );
           csvContent = [headers.join(','), ...rows].join('\n');
         }
