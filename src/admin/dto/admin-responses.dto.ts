@@ -1019,6 +1019,7 @@ export class ActivityLogDto {
 
 export class AiCreditAnalyticsDto {
   yearly: {
+    label: string;
     month: string;
     elevenLabs: number;
     gemini: number;

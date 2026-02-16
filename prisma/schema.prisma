@@ -87,6 +87,9 @@ model User {
   // SOFT DELETE FIELDS
   isDeleted               Boolean                  @default(false)
   deletedAt               DateTime?
+  // SUSPENSION FIELDS
+  isSuspended             Boolean                  @default(false)
+  suspendedAt             DateTime?
   profile                 Profile?
   auth                    Session[]
   Token                   Token[]
