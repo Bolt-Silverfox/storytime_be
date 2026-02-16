@@ -12,6 +12,7 @@ import {
   HttpStatus,
   Req,
   Res,
+  BadRequestException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AdminService } from './admin.service';
@@ -478,14 +479,17 @@ export class AdminController {
   })
   async getAiCreditStats(
     @Query('duration')
-    duration:
-      | 'yearly'
-      | 'quarterly'
-      | 'monthly'
-      | 'weekly'
-      | 'daily' = 'yearly',
+    duration: string = 'yearly',
   ) {
-    const data = await this.adminService.getAiCreditAnalytics(duration);
+    const valid = ['yearly', 'quarterly', 'monthly', 'weekly', 'daily'];
+    if (!valid.includes(duration)) {
+      throw new BadRequestException(
+        `Invalid duration. Must be one of: ${valid.join(', ')}`,
+      );
+    }
+    const data = await this.adminService.getAiCreditAnalytics(
+      duration as 'yearly' | 'quarterly' | 'monthly' | 'weekly' | 'daily',
+    );
     return {
       statusCode: 200,
       message: 'AI credit analytics retrieved successfully',
@@ -505,9 +509,17 @@ export class AdminController {
   })
   async getUserGrowthMonthly(
     @Query('duration')
-    duration: 'last_year' | 'last_month' | 'last_week' = 'last_year',
+    duration: string = 'last_year',
   ) {
-    const data = await this.adminService.getUserGrowthMonthly(duration);
+    const valid = ['last_year', 'last_month', 'last_week'];
+    if (!valid.includes(duration)) {
+      throw new BadRequestException(
+        `Invalid duration. Must be one of: ${valid.join(', ')}`,
+      );
+    }
+    const data = await this.adminService.getUserGrowthMonthly(
+      duration as 'last_year' | 'last_month' | 'last_week',
+    );
     return {
       statusCode: 200,
       message: 'User growth data retrieved successfully',
