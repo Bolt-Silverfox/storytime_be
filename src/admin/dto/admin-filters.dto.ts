@@ -98,6 +98,7 @@ export class StoryFilterDto extends PaginationDto {
   @IsOptional()
   @Transform(({ value, obj }) => {
     const v = value ?? obj?.isAiGenerated;
+    if (v === undefined || v === null) return undefined;
     return v === 'true' || v === true;
   })
   aiGenerated?: boolean;
