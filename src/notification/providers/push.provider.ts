@@ -234,6 +234,13 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
       return {
         success: response.successCount > 0,
         messageId: `direct_${response.successCount}/${tokens.length}`,
+        error:
+          response.failureCount > 0
+            ? `${response.failureCount} token(s) failed: ${response.responses
+                .filter((r) => !r.success)
+                .map((r) => r.error?.code ?? 'unknown')
+                .join(', ')}`
+            : undefined,
       };
     } catch (error) {
       this.logger.error(
