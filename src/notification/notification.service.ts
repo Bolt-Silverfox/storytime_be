@@ -17,6 +17,7 @@ import {
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
+  BulkUpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
 } from './dto/notification.dto';
 import { InAppProvider } from './providers/in-app.provider';
@@ -411,6 +412,40 @@ export class NotificationService {
       data: dto,
     });
     return this.toNotificationPreferenceDto(pref);
+  }
+
+  async bulkUpdate(
+    userId: string,
+    dtos: BulkUpdateNotificationPreferenceDto[],
+  ): Promise<NotificationPreferenceDto[]> {
+    const ids = dtos.map((dto) => dto.id);
+
+    // Verify all preferences belong to the requesting user
+    const owned = await this.prisma.notificationPreference.findMany({
+      where: { id: { in: ids }, userId, isDeleted: false },
+      select: { id: true },
+    });
+
+    const ownedIds = new Set(owned.map((p) => p.id));
+    const unauthorized = ids.filter((id) => !ownedIds.has(id));
+    if (unauthorized.length > 0) {
+      throw new NotFoundException(
+        `Notification preferences not found: ${unauthorized.join(', ')}`,
+      );
+    }
+
+    const updates = dtos.map((dto) =>
+      this.prisma.notificationPreference.update({
+        where: {
+          id: dto.id,
+          isDeleted: false,
+        },
+        data: { enabled: dto.enabled },
+      }),
+    );
+
+    const results = await this.prisma.$transaction(updates);
+    return results.map((pref) => this.toNotificationPreferenceDto(pref));
   }
 
   async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {
@@ -882,6 +917,10 @@ export class NotificationService {
     body: string,
     specificToken?: string,
   ): Promise<NotificationResult> {
+    this.logger.log(
+      `sendTestPush called for user=${userId.substring(0, 8)}, specificToken=${specificToken ? 'yes' : 'no'}, pushReady=${this.pushProvider.isReady()}`,
+    );
+
     if (specificToken) {
       // Verify token ownership before sending
       const deviceToken = await this.prisma.deviceToken.findFirst({
@@ -893,21 +932,42 @@ export class NotificationService {
       });
 
       if (!deviceToken) {
+        this.logger.warn(
+          `sendTestPush: token not found for user=${userId.substring(0, 8)}, hasToken=false`,
+        );
         throw new NotFoundException(
           'Device token not found or does not belong to this user',
         );
       }
 
-      return this.pushProvider.sendToTokens([specificToken], title, body);
+      this.logger.log(
+        `sendTestPush: sending to specific token id=${deviceToken.id}, isActive=${deviceToken.isActive}`,
+      );
+      const result = await this.pushProvider.sendToTokens(
+        [specificToken],
+        title,
+        body,
+      );
+      this.logger.log(
+        `sendTestPush result: success=${result.success}, error=${result.error ?? 'none'}, messageId=${result.messageId ?? 'none'}`,
+      );
+      return result;
     }
 
     // Send to all user devices
-    return this.pushProvider.send({
+    this.logger.log(
+      `sendTestPush: sending to all devices for user=${userId.substring(0, 8)}`,
+    );
+    const result = await this.pushProvider.send({
       userId,
       category: PrismaCategory.SYSTEM_ALERT,
       title,
       body,
     });
+    this.logger.log(
+      `sendTestPush result: success=${result.success}, error=${result.error ?? 'none'}, messageId=${result.messageId ?? 'none'}`,
+    );
+    return result;
   }
 
   /**

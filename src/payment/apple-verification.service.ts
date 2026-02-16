@@ -18,6 +18,13 @@ export interface AppleVerificationResult {
   metadata?: Record<string, unknown>;
 }
 
+/** Result from Apple subscription status check */
+export interface AppleSubscriptionStatus {
+  autoRenewActive: boolean;
+  expirationTime?: Date | null;
+  error?: string;
+}
+
 /** Parameters for verification */
 export interface AppleVerifyParams {
   transactionId: string;
@@ -158,6 +165,130 @@ export class AppleVerificationService {
         HttpStatus.BAD_REQUEST,
       );
     }
+  }
+
+  async getSubscriptionStatus(
+    originalTransactionId: string,
+  ): Promise<AppleSubscriptionStatus> {
+    if (!this.keyId || !this.issuerId || !this.bundleId || !this.privateKey) {
+      return {
+        autoRenewActive: false,
+        error: 'Apple credentials not configured',
+      };
+    }
+
+    this.logger.log(
+      `Checking Apple subscription status for ${this.sanitizeForLog(originalTransactionId)}`,
+    );
+
+    try {
+      const token = this.generateJWT();
+      const statusData = await this.fetchSubscriptionStatus(
+        originalTransactionId,
+        token,
+      );
+
+      if (!statusData) {
+        return { autoRenewActive: false, error: 'Subscription not found' };
+      }
+
+      return statusData;
+    } catch (error) {
+      this.logger.error(
+        `Apple subscription status check failed: ${this.errorMessage(error)}`,
+      );
+      return { autoRenewActive: false, error: this.errorMessage(error) };
+    }
+  }
+
+  private async fetchSubscriptionStatus(
+    originalTransactionId: string,
+    token: string,
+  ): Promise<AppleSubscriptionStatus | null> {
+    const baseUrl =
+      this.environment === 'production'
+        ? 'api.storekit.itunes.apple.com'
+        : 'api.storekit-sandbox.itunes.apple.com';
+
+    const requestPath = `/inApps/v1/subscriptions/${originalTransactionId}`;
+
+    return new Promise((resolve, reject) => {
+      const req = https.request(
+        {
+          hostname: baseUrl,
+          path: requestPath,
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk: string) => (data += chunk));
+          res.on('end', () => {
+            if (res.statusCode === 200) {
+              try {
+                const response = JSON.parse(data) as {
+                  data: Array<{
+                    lastTransactions: Array<{
+                      signedRenewalInfo: string;
+                      signedTransactionInfo: string;
+                    }>;
+                  }>;
+                };
+
+                // Find the transaction with the latest expiration across all groups
+                let latest: AppleSubscriptionStatus | null = null;
+                let latestExpMs = -1;
+
+                for (const group of response.data) {
+                  for (const tx of group.lastTransactions) {
+                    const renewalInfo = this.decodeJWS(
+                      tx.signedRenewalInfo,
+                    ) as { autoRenewStatus: number };
+                    const txInfo = this.decodeJWS(tx.signedTransactionInfo) as {
+                      expiresDate?: number;
+                    };
+
+                    const expMs = txInfo.expiresDate ?? -1;
+
+                    if (expMs > latestExpMs || !latest) {
+                      latestExpMs = expMs;
+                      latest = {
+                        autoRenewActive: renewalInfo.autoRenewStatus === 1,
+                        expirationTime: txInfo.expiresDate
+                          ? new Date(txInfo.expiresDate)
+                          : null,
+                      };
+                    }
+                  }
+                }
+
+                resolve(latest);
+              } catch {
+                reject(new Error('Failed to parse Apple subscription status'));
+              }
+            } else if (res.statusCode === 404) {
+              resolve(null);
+            } else {
+              reject(
+                new Error(
+                  `Apple subscription status API returned ${res.statusCode}`,
+                ),
+              );
+            }
+          });
+        },
+      );
+
+      req.on('error', reject);
+      req.setTimeout(15000, () => {
+        req.destroy();
+        reject(new Error('Apple subscription status request timeout'));
+      });
+      req.end();
+    });
   }
 
   private generateJWT(): string {

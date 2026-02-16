@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsBoolean, IsOptional, IsUUID } from 'class-validator';
 import {
   NotificationCategory as PrismaCategory,
   NotificationType as PrismaType,
@@ -35,6 +36,19 @@ export class CreateNotificationPreferenceDto {
 
 export class UpdateNotificationPreferenceDto {
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+}
+
+export class BulkUpdateNotificationPreferenceDto {
+  @ApiProperty()
+  @IsUUID()
+  id: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
   enabled?: boolean;
 }
 
