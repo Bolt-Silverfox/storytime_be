@@ -1630,6 +1630,12 @@ export class AdminController {
     description: 'Maximum age filter',
     example: 12,
   })
+  @ApiQuery({
+    name: 'categoryId',
+    required: false,
+    type: String,
+    description: 'Filter stories by category ID',
+  })
   @ApiOkResponse({
     description: 'Stories retrieved successfully',
     schema: {

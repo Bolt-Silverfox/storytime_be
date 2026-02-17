@@ -1120,6 +1120,7 @@ export class AdminService {
       language,
       minAge,
       maxAge,
+      categoryId,
     } = filters;
 
     const skip = (page - 1) * limit;
@@ -1139,6 +1140,7 @@ export class AdminService {
     if (language) where.language = language;
     if (minAge) where.ageMin = { gte: minAge };
     if (maxAge) where.ageMax = { lte: maxAge };
+    if (categoryId) where.categories = { some: { id: categoryId } };
 
     const [stories, total] = await Promise.all([
       this.prisma.story.findMany({
@@ -2157,7 +2159,7 @@ export class AdminService {
   }
 
   async updateSupportTicket(id: string, status: string) {
-    return this.prisma.supportTicket.update({
+    return await this.prisma.supportTicket.update({
       where: { id },
       data: { status },
     });
