@@ -469,7 +469,8 @@ export class AdminController {
     @Query('userId') userId?: string,
   ) {
     const { limit: l } = PaginationUtil.sanitize(1, limit, 100);
-    const data = await this.adminService.getRecentActivity(l, userId);
+    const trimmedUserId = userId?.trim() || undefined;
+    const data = await this.adminService.getRecentActivity(l, trimmedUserId);
     return {
       statusCode: 200,
       message: 'Recent activity logs retrieved successfully',

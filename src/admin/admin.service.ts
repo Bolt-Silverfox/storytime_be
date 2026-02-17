@@ -1987,8 +1987,10 @@ export class AdminService {
     limit: number = 50,
     userId?: string,
   ): Promise<ActivityLogDto[]> {
+    const trimmed = userId?.trim();
+    if (userId !== undefined && !trimmed) return [];
     const activities = await this.prisma.activityLog.findMany({
-      where: { isDeleted: false, ...(userId && { userId }) },
+      where: { isDeleted: false, ...(trimmed && { userId: trimmed }) },
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
