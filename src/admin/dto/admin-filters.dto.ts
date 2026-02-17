@@ -123,6 +123,10 @@ export class StoryFilterDto extends PaginationDto {
   @Type(() => Number)
   @IsInt()
   maxAge?: number;
+
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
 }
 
 export class DateRangeDto {
