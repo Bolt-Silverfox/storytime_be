@@ -24,13 +24,18 @@ import { VOICE_CONFIG_SETTINGS } from '../voice/voice.config';
  * Preserves prosody-affecting punctuation (.,!?…—).
  */
 function preprocessTextForTTS(text: string): string {
-  return text
-    // Remove double-quote variants (never used as apostrophes)
-    .replace(/[\u201C\u201D\u201E\u201F"]/g, '')
-    // Remove single-quote variants only at word boundaries (preserves contractions: don't, it's, I'm)
-    .replace(/(?<!\w)[\u2018\u2019\u201A\u201B']|[\u2018\u2019\u201A\u201B'](?!\w)/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    text
+      // Remove double-quote variants (never used as apostrophes)
+      .replace(/[\u201C\u201D\u201E\u201F"]/g, '')
+      // Remove single-quote variants only at word boundaries (preserves contractions: don't, it's, I'm)
+      .replace(
+        /(?<!\w)[\u2018\u2019\u201A\u201B']|[\u2018\u2019\u201A\u201B'](?!\w)/g,
+        '',
+      )
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 @Injectable()
