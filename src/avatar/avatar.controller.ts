@@ -22,6 +22,10 @@ import {
   ApiConsumes,
   ApiBody,
 } from '@nestjs/swagger';
+import {
+  ALLOWED_IMAGE_TYPES,
+  MAX_IMAGE_SIZE,
+} from '@/shared/constants/upload.constants';
 import { AvatarService } from './avatar.service';
 import {
   CreateAvatarDto,
@@ -406,8 +410,8 @@ export class AvatarController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|gif|webp)' }),
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
         ],
       }),
     )
@@ -513,8 +517,8 @@ export class AvatarController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|gif|webp)' }),
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
         ],
       }),
     )
@@ -616,8 +620,8 @@ export class AvatarController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|gif|webp)' }),
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
         ],
         fileIsRequired: false,
       }),

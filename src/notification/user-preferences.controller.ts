@@ -1,14 +1,25 @@
-import { Controller, Get, Patch, Param, Body } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Param,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
   ApiBody,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
+import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { NotificationService } from './notification.service';
 
 @ApiTags('users')
+@ApiBearerAuth()
+@UseGuards(AuthSessionGuard)
 @Controller('users')
 export class UserPreferencesController {
   constructor(private readonly notificationService: NotificationService) {}
