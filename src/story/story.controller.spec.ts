@@ -1,8 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
-import { TextToSpeechService } from './text-to-speech.service';
-
 // Mock the Service so we test the Controller in isolation
 const mockStoryService = {
   generateStoryForKid: jest.fn(),
@@ -14,8 +12,6 @@ const mockStoryService = {
   getTopPicksFromParents: jest.fn(),
 };
 
-const mockTextToSpeechService = {}; // Mock dependency
-
 describe('StoryController', () => {
   let controller: StoryController;
   let service: typeof mockStoryService;
@@ -25,7 +21,6 @@ describe('StoryController', () => {
       controllers: [StoryController],
       providers: [
         { provide: StoryService, useValue: mockStoryService },
-        { provide: TextToSpeechService, useValue: mockTextToSpeechService },
         {
           provide: 'CACHE_MANAGER',
           useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() },
