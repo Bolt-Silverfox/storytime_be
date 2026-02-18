@@ -11,146 +11,148 @@ import { ProgressStatsDto } from './dto/progress-response.dto';
 
 @Injectable()
 export class ProgressService {
-    private readonly logger = new Logger(ProgressService.name);
+  private readonly logger = new Logger(ProgressService.name);
 
-    constructor(
-        @Inject(CACHE_MANAGER) private cacheManager: Cache,
-        private streakService: StreakService,
-        private badgeService: BadgeService,
-        private prisma: PrismaService,
-    ) { }
+  constructor(
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private streakService: StreakService,
+    private badgeService: BadgeService,
+    private prisma: PrismaService,
+  ) {}
 
+  // Get aggregated home screen data
 
-    // Get aggregated home screen data
+  async getHomeScreenData(userId: string): Promise<ProgressHomeResponseDto> {
+    const cacheKey = `progress:home:${userId}`;
 
-    async getHomeScreenData(userId: string): Promise<ProgressHomeResponseDto> {
-        const cacheKey = `progress:home:${userId}`;
-
-        // Try cache first
-        const cached = await this.cacheManager.get<ProgressHomeResponseDto>(cacheKey);
-        if (cached) {
-            return cached;
-        }
-
-        try {
-            const [streak, badgesPreview, progressStats] = await Promise.all([
-                this.streakService.getStreakSummary(userId),
-                this.badgeService.getBadgePreview(userId),
-                this.getProgressStats(userId),
-            ]);
-
-            const result: ProgressHomeResponseDto = {
-                streak,
-                badgesPreview,
-                progressStats,
-            };
-
-            // Cache for 5 minutes
-            await this.cacheManager.set(cacheKey, result, 300000);
-
-            return result;
-        } catch (error) {
-            this.logger.error(`Error getting home screen data:`, error);
-            throw error;
-        }
+    // Try cache first
+    const cached =
+      await this.cacheManager.get<ProgressHomeResponseDto>(cacheKey);
+    if (cached) {
+      return cached;
     }
 
-    // Get progress overview (lightweight)
+    try {
+      const [streak, badgesPreview, progressStats] = await Promise.all([
+        this.streakService.getStreakSummary(userId),
+        this.badgeService.getBadgePreview(userId),
+        this.getProgressStats(userId),
+      ]);
 
-    async getOverview(userId: string): Promise<ProgressOverviewResponseDto> {
-        const cacheKey = `progress:overview:${userId}`;
+      const result: ProgressHomeResponseDto = {
+        streak,
+        badgesPreview,
+        progressStats,
+      };
 
-        const cached = await this.cacheManager.get<ProgressOverviewResponseDto>(cacheKey);
-        if (cached) {
-            return cached;
-        }
+      // Cache for 5 minutes
+      await this.cacheManager.set(cacheKey, result, 300000);
 
-        try {
-            const [streak, badgesPreview, stats] = await Promise.all([
-                this.streakService.getStreakSummary(userId),
-                this.badgeService.getBadgePreview(userId),
-                this.getProgressStats(userId),
-            ]);
+      return result;
+    } catch (error) {
+      this.logger.error(`Error getting home screen data:`, error);
+      throw error;
+    }
+  }
 
-            const result: ProgressOverviewResponseDto = {
-                streak,
-                badgesPreview,
-                storiesCompleted: stats.storiesCompleted,
-                challengesCompleted: stats.challengesCompleted,
-            };
+  // Get progress overview (lightweight)
 
-            await this.cacheManager.set(cacheKey, result, 300000);
+  async getOverview(userId: string): Promise<ProgressOverviewResponseDto> {
+    const cacheKey = `progress:overview:${userId}`;
 
-            return result;
-        } catch (error) {
-            this.logger.error(`Error getting progress overview:`, error);
-            throw error;
-        }
+    const cached =
+      await this.cacheManager.get<ProgressOverviewResponseDto>(cacheKey);
+    if (cached) {
+      return cached;
     }
 
+    try {
+      const [streak, badgesPreview, stats] = await Promise.all([
+        this.streakService.getStreakSummary(userId),
+        this.badgeService.getBadgePreview(userId),
+        this.getProgressStats(userId),
+      ]);
 
-    // Calculate progress stats for a user
+      const result: ProgressOverviewResponseDto = {
+        streak,
+        badgesPreview,
+        storiesCompleted: stats.storiesCompleted,
+        challengesCompleted: stats.challengesCompleted,
+      };
 
-    private async getProgressStats(userId: string): Promise<ProgressStatsDto> {
-        try {
-            // Get user's kids
-            const kids = await this.prisma.kid.findMany({
-                where: { parentId: userId },
-                select: { id: true },
-            });
+      await this.cacheManager.set(cacheKey, result, 300000);
 
-            const kidIds = kids.map((k) => k.id);
-
-            // Stories completed (from StoryProgress)
-            const storiesCompleted = await this.prisma.storyProgress.count({
-                where: {
-                    kidId: { in: kidIds },
-                    completed: true,
-                },
-            });
-
-            // Challenges completed
-            const challengesCompleted = await this.prisma.dailyChallengeAssignment.count({
-                where: {
-                    kidId: { in: kidIds },
-                    completed: true,
-                },
-            });
-
-            // Total reading time from screen time sessions
-            const sessions = await this.prisma.screenTimeSession.aggregate({
-                where: {
-                    kidId: { in: kidIds },
-                    endTime: { not: null },
-                },
-                _sum: {
-                    duration: true,
-                },
-            });
-
-            const totalReadingTimeMins = Math.floor((sessions._sum.duration || 0) / 60);
-
-            return {
-                storiesCompleted,
-                challengesCompleted,
-                totalReadingTimeMins,
-            };
-        } catch (error) {
-            this.logger.error(`Error calculating progress stats:`, error);
-            return {
-                storiesCompleted: 0,
-                challengesCompleted: 0,
-                totalReadingTimeMins: 0,
-            };
-        }
+      return result;
+    } catch (error) {
+      this.logger.error(`Error getting progress overview:`, error);
+      throw error;
     }
+  }
 
+  // Calculate progress stats for a user
 
-    // Invalidate user cache (call when progress changes)
+  private async getProgressStats(userId: string): Promise<ProgressStatsDto> {
+    try {
+      // Get user's kids
+      const kids = await this.prisma.kid.findMany({
+        where: { parentId: userId },
+        select: { id: true },
+      });
 
-    async invalidateCache(userId: string): Promise<void> {
-        await this.cacheManager.del(`progress:home:${userId}`);
-        await this.cacheManager.del(`progress:overview:${userId}`);
-        this.logger.log(`Invalidated progress cache for user ${userId}`);
+      const kidIds = kids.map((k) => k.id);
+
+      // Stories completed (from StoryProgress)
+      const storiesCompleted = await this.prisma.storyProgress.count({
+        where: {
+          kidId: { in: kidIds },
+          completed: true,
+        },
+      });
+
+      // Challenges completed
+      const challengesCompleted =
+        await this.prisma.dailyChallengeAssignment.count({
+          where: {
+            kidId: { in: kidIds },
+            completed: true,
+          },
+        });
+
+      // Total reading time from screen time sessions
+      const sessions = await this.prisma.screenTimeSession.aggregate({
+        where: {
+          kidId: { in: kidIds },
+          endTime: { not: null },
+        },
+        _sum: {
+          duration: true,
+        },
+      });
+
+      const totalReadingTimeMins = Math.floor(
+        (sessions._sum.duration || 0) / 60,
+      );
+
+      return {
+        storiesCompleted,
+        challengesCompleted,
+        totalReadingTimeMins,
+      };
+    } catch (error) {
+      this.logger.error(`Error calculating progress stats:`, error);
+      return {
+        storiesCompleted: 0,
+        challengesCompleted: 0,
+        totalReadingTimeMins: 0,
+      };
     }
+  }
+
+  // Invalidate user cache (call when progress changes)
+
+  async invalidateCache(userId: string): Promise<void> {
+    await this.cacheManager.del(`progress:home:${userId}`);
+    await this.cacheManager.del(`progress:overview:${userId}`);
+    this.logger.log(`Invalidated progress cache for user ${userId}`);
+  }
 }

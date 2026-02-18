@@ -96,8 +96,15 @@ export class StoryFilterDto extends PaginationDto {
   recommended?: boolean;
 
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @Transform(({ value, obj }) => {
+    const v = value ?? obj?.isAiGenerated;
+    if (v === undefined || v === null) return undefined;
+    return v === 'true' || v === true;
+  })
   aiGenerated?: boolean;
+
+  @IsOptional()
+  isAiGenerated?: boolean;
 
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
@@ -116,6 +123,10 @@ export class StoryFilterDto extends PaginationDto {
   @Type(() => Number)
   @IsInt()
   maxAge?: number;
+
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
 }
 
 export class DateRangeDto {

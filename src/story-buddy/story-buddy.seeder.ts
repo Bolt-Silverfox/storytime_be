@@ -4,8 +4,6 @@ import { storyBuddiesData } from '../../prisma/data';
 
 const prisma = new PrismaClient();
 
-
-
 @Injectable()
 export class StoryBuddySeederService implements OnModuleInit {
   private readonly logger = new Logger(StoryBuddySeederService.name);
@@ -30,18 +28,24 @@ export class StoryBuddySeederService implements OnModuleInit {
         select: { name: true },
       });
 
-      const existingBuddyNames = new Set(existingBuddies.map(buddy => buddy.name));
+      const existingBuddyNames = new Set(
+        existingBuddies.map((buddy) => buddy.name),
+      );
 
       const buddiesToCreate = storyBuddiesData.filter(
-        buddyData => !existingBuddyNames.has(buddyData.name)
+        (buddyData) => !existingBuddyNames.has(buddyData.name),
       );
 
       if (buddiesToCreate.length === 0) {
-        this.logger.log('✅ All story buddies already exist, skipping creation.');
+        this.logger.log(
+          '✅ All story buddies already exist, skipping creation.',
+        );
         return;
       }
 
-      this.logger.log(`📝 Creating ${buddiesToCreate.length} new story buddies...`);
+      this.logger.log(
+        `📝 Creating ${buddiesToCreate.length} new story buddies...`,
+      );
 
       for (const buddyData of buddiesToCreate) {
         try {
@@ -50,11 +54,16 @@ export class StoryBuddySeederService implements OnModuleInit {
           });
           this.logger.log(`✅ Created buddy: ${buddy.displayName}`);
         } catch (error) {
-          this.logger.error(`❌ Error creating buddy ${buddyData.name}:`, error);
+          this.logger.error(
+            `❌ Error creating buddy ${buddyData.name}:`,
+            error,
+          );
         }
       }
 
-      this.logger.log(`✨ Story buddies seeding completed! Created ${buddiesToCreate.length} new buddies.`);
+      this.logger.log(
+        `✨ Story buddies seeding completed! Created ${buddiesToCreate.length} new buddies.`,
+      );
     } catch (error) {
       this.logger.error('❌ Error during story buddies seeding:', error);
       throw error;
@@ -73,10 +82,12 @@ export async function seedStoryBuddies() {
       select: { name: true },
     });
 
-    const existingBuddyNames = new Set(existingBuddies.map(buddy => buddy.name));
+    const existingBuddyNames = new Set(
+      existingBuddies.map((buddy) => buddy.name),
+    );
 
     const buddiesToCreate = storyBuddiesData.filter(
-      buddyData => !existingBuddyNames.has(buddyData.name)
+      (buddyData) => !existingBuddyNames.has(buddyData.name),
     );
 
     if (buddiesToCreate.length === 0) {
@@ -97,7 +108,9 @@ export async function seedStoryBuddies() {
       }
     }
 
-    logger.log(`✨ Story buddies seeding completed! Created ${buddiesToCreate.length} new buddies.`);
+    logger.log(
+      `✨ Story buddies seeding completed! Created ${buddiesToCreate.length} new buddies.`,
+    );
   } catch (error) {
     logger.error('❌ Error during story buddies seeding:', error);
     throw error;

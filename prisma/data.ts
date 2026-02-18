@@ -5,139 +5,14 @@ export const categories = [
         description: 'Stories featuring animals as main characters.',
     },
     {
-        name: 'Fairytales',
-        image: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9',
-        description: 'Classic fairy tales with magical elements.',
-    },
-    {
-        name: 'Fables and Folktales',
-        image: 'https://images.unsplash.com/photo-1464983953574-0892a716854b',
-        description: 'Stories with morals and lessons from folklore.',
-    },
-    {
-        name: 'Myths and Legends',
-        image: 'https://images.unsplash.com/photo-1464983953574-0892a716854b',
-        description: 'Mythical and legendary tales.',
-    },
-    {
-        name: 'Adventures and Action',
-        image: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca',
-        description: 'Exciting stories full of adventure and action.',
-    },
-    {
-        name: 'Fantasy and Magical Stories',
+        name: 'Fantasy & Magic',
         image: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429',
         description: 'Stories set in magical or fantastical worlds.',
     },
     {
-        name: 'Funny Stories',
-        image: 'https://images.unsplash.com/photo-1519125323398-675f0ddb6308',
-        description: 'Humorous and funny stories.',
-    },
-    {
-        name: 'Educational and Learning',
-        image: 'https://images.unsplash.com/photo-1465101178521-c1a9136a3b99',
-        description: 'Stories that teach lessons or facts.',
-    },
-    {
-        name: 'Bedtime',
-        image: 'https://images.unsplash.com/photo-1519125323398-675f0ddb6308',
-        description: 'Gentle stories perfect for sleeping.',
-    },
-    {
-        name: 'Friendship and Emotions',
-        image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9',
-        description: 'Stories about friends and feelings.',
-    },
-    {
-        name: 'Courage and Bravery',
-        image: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9',
-        description: 'Stories inspiring courage and bravery.',
-    },
-    {
-        name: 'Morals and Values',
-        image: 'https://images.unsplash.com/photo-1465101178521-c1a9136a3b99',
-        description: 'Stories that teach good values.',
-    },
-    {
-        name: 'Coming of Age',
-        image: 'https://images.unsplash.com/photo-1519125323398-675f0ddb6308',
-        description: 'Stories about growing up.',
-    },
-    {
-        name: 'Toddler Stories',
-        image: 'https://images.unsplash.com/photo-1519125323398-675f0ddb6308',
-        description: 'Simple stories perfect for toddlers.',
-    },
-    {
-        name: 'Ocean and Seas',
-        image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e',
-        description: 'Stories set in the ocean.',
-    },
-    {
-        name: 'Nature and Environment',
-        image: 'https://images.unsplash.com/photo-1465101178521-c1a9136a3b99',
-        description: 'Stories about nature and the environment.',
-    },
-    {
-        name: 'Science and Discovery',
-        image: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564',
-        description: 'Stories about science and new discoveries.',
-    },
-    {
-        name: 'Spooky & Mystery',
-        image: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9',
-        description: 'Stories with a touch of mystery or spookiness.',
-    },
-    {
-        name: 'Robots & Future',
-        image: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97',
-        description: 'Stories featuring robots and the future.',
-    },
-    {
-        name: 'History & Heroes',
+        name: 'Adventure & Action',
         image: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca',
-        description: 'Stories about historical events and heroes.',
-    },
-    {
-        name: 'Holiday/Seasonal',
-        image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
-        description: 'Stories for holidays and special seasons.',
-    },
-    {
-        name: 'Original Creations',
-        image: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429',
-        description: 'Unique and original stories.',
-    },
-    {
-        name: 'Family and Love',
-        image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9',
-        description: 'Stories about family bonds and love.',
-    },
-    {
-        name: 'Space and Planets',
-        image: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564',
-        description: 'Stories set in outer space.',
-    },
-    {
-        name: 'Health and Body',
-        image: 'https://images.unsplash.com/photo-1465101178521-c1a9136a3b99',
-        description: 'Stories about health and the human body.',
-    },
-    {
-        name: 'Math and Numbers',
-        image: 'https://images.unsplash.com/photo-1465101178521-c1a9136a3b99',
-        description: 'Stories involving math and numbers.',
-    },
-    {
-        name: 'Princesses and Castles',
-        image: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9',
-        description: 'Stories about princesses and castles.',
-    },
-    {
-        name: 'Pirates and Treasures',
-        image: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca',
-        description: 'Adventures with pirates and buried treasure.',
+        description: 'Exciting stories full of adventure and action.',
     },
     {
         name: 'Superheroes',
@@ -145,9 +20,64 @@ export const categories = [
         description: 'Action-packed superhero stories.',
     },
     {
-        name: 'Dragons & Knights',
-        image: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429',
-        description: 'Epic tales of dragons and knights.',
+        name: 'Fairytales & Folktales',
+        image: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9',
+        description: 'Classic fairy tales and stories with morals from folklore.',
+    },
+    {
+        name: 'Funny Stories',
+        image: 'https://images.unsplash.com/photo-1519125323398-675f0ddb6308',
+        description: 'Humorous and funny stories.',
+    },
+    {
+        name: 'Friendship & Feelings',
+        image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9',
+        description: 'Stories about friends, emotions, and relationships.',
+    },
+    {
+        name: 'Values & Life Lessons',
+        image: 'https://images.unsplash.com/photo-1465101178521-c1a9136a3b99',
+        description: 'Stories that teach good values and important life lessons.',
+    },
+    {
+        name: 'Bedtime Stories',
+        image: 'https://images.unsplash.com/photo-1519125323398-675f0ddb6308',
+        description: 'Gentle stories perfect for sleeping.',
+    },
+    {
+        name: 'Science & Discovery',
+        image: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564',
+        description: 'Stories about science, space, and new discoveries.',
+    },
+    {
+        name: 'Nature & Ocean',
+        image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e',
+        description: 'Stories about nature, the environment, and ocean life.',
+    },
+    {
+        name: 'Mystery & Spooky',
+        image: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9',
+        description: 'Stories with a touch of mystery or spookiness.',
+    },
+    {
+        name: 'History & Real Heroes',
+        image: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca',
+        description: 'Stories about historical events and real-life heroes.',
+    },
+    {
+        name: 'Holiday & Seasonal',
+        image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
+        description: 'Stories for holidays and special seasons.',
+    },
+    {
+        name: 'Educational',
+        image: 'https://images.unsplash.com/photo-1465101178521-c1a9136a3b99',
+        description: 'Stories that teach lessons, facts, and skills.',
+    },
+    {
+        name: 'Fun and Adventure',
+        image: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca',
+        description: 'Light-hearted stories full of exciting journeys and thrilling explorations.',
     },
 ];
 

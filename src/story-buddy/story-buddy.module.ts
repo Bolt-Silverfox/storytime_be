@@ -8,9 +8,9 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    PrismaModule, 
+    PrismaModule,
     UploadModule, // Make sure this is properly imported
-    AuthModule, 
+    AuthModule,
   ],
   controllers: [StoryBuddyController],
   providers: [StoryBuddyService, StoryBuddySeederService],

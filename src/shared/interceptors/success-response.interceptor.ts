@@ -21,7 +21,7 @@ export class SuccessResponseInterceptor<T>
     return next.handle().pipe(
       map((data) => {
         const response = context.switchToHttp().getResponse();
-        const statusCode = response.statusCode || HttpStatus.OK;
+        const statusCode = (response.statusCode as number) || HttpStatus.OK;
 
         // Handle cases where NestJS returns only a status code (e.g., 204 No Content).
         // If data is explicitly null/undefined, we might just return the status code without a body.

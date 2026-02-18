@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UpdateSettingsDto {
@@ -51,7 +58,8 @@ export class UpdateSettingsDto {
 export class SetKidDailyLimitDto {
   @ApiProperty({
     example: 120,
-    description: 'Daily screen time limit in minutes. Set null to use parent default.',
+    description:
+      'Daily screen time limit in minutes. Set null to use parent default.',
     required: false,
   })
   @IsOptional()
@@ -93,7 +101,8 @@ export class KidDailyLimitResponseDto {
 
   @ApiProperty({
     example: 'kid',
-    description: 'Source of the limit: "kid" (custom), "parent" (default), or "none"',
+    description:
+      'Source of the limit: "kid" (custom), "parent" (default), or "none"',
   })
   source: 'kid' | 'parent' | 'none';
 }
@@ -108,10 +117,16 @@ export class KidScreenTimeSettingDto {
   @ApiProperty({ example: 'https://storage.com/avatar.jpg' })
   avatarUrl: string | null;
 
-  @ApiProperty({ example: 120, description: 'Custom limit set for this kid, null if using parent default' })
+  @ApiProperty({
+    example: 120,
+    description: 'Custom limit set for this kid, null if using parent default',
+  })
   customLimit: number | null;
 
-  @ApiProperty({ example: 120, description: 'The actual limit being used (custom or parent default)' })
+  @ApiProperty({
+    example: 120,
+    description: 'The actual limit being used (custom or parent default)',
+  })
   effectiveLimit: number | null;
 
   @ApiProperty({ example: true, description: 'Whether kid has a custom limit' })

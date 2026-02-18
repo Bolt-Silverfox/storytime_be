@@ -30,11 +30,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Format and Lint
+        run: |
+          pnpm run format
+          pnpm run lint
+
+      - name: Commit formatting changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: auto-fix formatting and linting issues"
+          branch: ${{ github.head_ref }}
+
       - name: Build
-        run: pnpm generate && pnpm build
+        run: pnpm db:generate && pnpm build
 
     # - name: Run tests
     #   run: pnpm test
+
+      - name: Cleanup sensitive files
+        if: always()
+        run: rm -f .env
 
   deploy:
     needs: build-and-test
@@ -63,7 +78,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm generate && pnpm build && npx prisma migrate deploy
+        run: pnpm db:generate && pnpm build && pnpm db:migrate:deploy
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@master
@@ -86,6 +101,10 @@ jobs:
 
           ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-            'bash -l -c "source ~/.nvm/nvm.sh && cd /home/ubuntu/storytime/production/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:prod"'
+            'bash -l -c "source ~/.nvm/nvm.sh && cd /home/ubuntu/storytime/production/storytime-api && pnpm install --frozen-lockfile && cd scripts && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && cd .. && pnpm deploy:prod"'
 
+      - name: Cleanup sensitive files
+        if: always()
+        run: |
           rm -f /tmp/ssh_key
+          rm -f .env

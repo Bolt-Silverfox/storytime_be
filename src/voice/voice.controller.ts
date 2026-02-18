@@ -25,7 +25,10 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { randomUUID } from 'crypto';
-import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import { StoryService } from '../story/story.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
@@ -40,6 +43,7 @@ import {
 } from './dto/voice.dto';
 import { SpeechToTextService } from './speech-to-text.service';
 import { VoiceService } from './voice.service';
+import { VoiceQuotaService } from './voice-quota.service';
 
 @ApiTags('Voice')
 @Controller('voice')
@@ -50,7 +54,8 @@ export class VoiceController {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly speechToTextService: SpeechToTextService,
-  ) { }
+    private readonly voiceQuotaService: VoiceQuotaService,
+  ) {}
 
   @Post('upload')
   @UseGuards(AuthSessionGuard)
@@ -145,6 +150,60 @@ export class VoiceController {
     return this.voiceService.getPreferredVoice(req.authUserData.userId);
   }
 
+  // --- Free tier second voice selection ---
+  @Patch('second-voice')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Set second voice for free tier user',
+    description:
+      'Free users can select one additional voice beyond the default. Premium users have unlimited access.',
+  })
+  @ApiBody({ type: SetPreferredVoiceDto })
+  @ApiResponse({ status: 200, description: 'Second voice set successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Premium users do not need to set a second voice',
+  })
+  @ApiResponse({ status: 404, description: 'Voice not found' })
+  async setSecondVoice(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: SetPreferredVoiceDto,
+  ) {
+    await this.voiceQuotaService.setSecondVoice(
+      req.authUserData.userId,
+      body.voiceId,
+    );
+    return { message: 'Second voice set successfully', voiceId: body.voiceId };
+  }
+
+  // --- Get voice access status ---
+  @Get('access')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get voice access status for the user',
+    description:
+      'Returns information about which voices the user can access based on their subscription tier.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Voice access status',
+    schema: {
+      type: 'object',
+      properties: {
+        isPremium: { type: 'boolean' },
+        unlimited: { type: 'boolean' },
+        defaultVoice: { type: 'string' },
+        selectedSecondVoice: { type: 'string', nullable: true },
+        maxVoices: { type: 'number' },
+      },
+    },
+  })
+  async getVoiceAccess(@Req() req: AuthenticatedRequest) {
+    return this.voiceQuotaService.getVoiceAccess(req.authUserData.userId);
+  }
+
   // --- List available ElevenLabs voices ---
   @Get('available')
   @UseGuards(AuthSessionGuard)
@@ -160,7 +219,12 @@ export class VoiceController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate audio for stored text using ID' })
   @ApiParam({ name: 'id', type: String })
-  @ApiQuery({ name: 'voiceId', required: false, type: String, description: 'VoiceType enum value or Voice UUID' })
+  @ApiQuery({
+    name: 'voiceId',
+    required: false,
+    type: String,
+    description: 'VoiceType enum value or Voice UUID',
+  })
   @ApiResponse({ status: 200, description: 'Audio generated successfully' })
   async getTextToSpeechById(
     @Param('id') id: string,
@@ -226,7 +290,8 @@ export class VoiceController {
     @UploadedFile(
       new ParseFilePipeBuilder()
         .addFileTypeValidator({
-          fileType: /(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/ogg|audio\/webm)/,
+          fileType:
+            /(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/ogg|audio\/webm)/,
         })
         .addMaxSizeValidator({
           maxSize: 50 * 1024 * 1024, // 50MB

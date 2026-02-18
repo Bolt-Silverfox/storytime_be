@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -19,7 +20,7 @@ export class StoryBuddyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploadService: UploadService,
-  ) { }
+  ) {}
 
   /**
    * Get all active story buddies (public access)
@@ -59,9 +60,9 @@ export class StoryBuddyService {
    */
   async getBuddyById(buddyId: string) {
     const buddy = await this.prisma.storyBuddy.findUnique({
-      where: { 
+      where: {
         id: buddyId,
-        isDeleted: false // EXCLUDE SOFT DELETED BUDDIES
+        isDeleted: false, // EXCLUDE SOFT DELETED BUDDIES
       },
       include: {
         _count: {
@@ -89,9 +90,9 @@ export class StoryBuddyService {
   ) {
     // Check if buddy with same name already exists (including soft deleted)
     const existingBuddy = await this.prisma.storyBuddy.findFirst({
-      where: { 
+      where: {
         name: createDto.name.toLowerCase(),
-        isDeleted: false // ONLY CHECK NON-DELETED BUDDIES
+        isDeleted: false, // ONLY CHECK NON-DELETED BUDDIES
       },
     });
 
@@ -119,7 +120,9 @@ export class StoryBuddyService {
     }
 
     if (!imageUrl) {
-      throw new BadRequestException('Either image file or imageUrl is required');
+      throw new BadRequestException(
+        'Either image file or imageUrl is required',
+      );
     }
 
     // Validate age ranges
@@ -219,9 +222,9 @@ export class StoryBuddyService {
 
     // Check if any kids are using this buddy
     const kidsCount = await this.prisma.kid.count({
-      where: { 
+      where: {
         storyBuddyId: buddyId,
-        isDeleted: false // ONLY COUNT NON-DELETED KIDS
+        isDeleted: false, // ONLY COUNT NON-DELETED KIDS
       },
     });
 
@@ -253,9 +256,9 @@ export class StoryBuddyService {
       // Soft delete
       return await this.prisma.storyBuddy.update({
         where: { id: buddyId },
-        data: { 
-          isDeleted: true, 
-          deletedAt: new Date() 
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
         },
       });
     }
@@ -280,22 +283,25 @@ export class StoryBuddyService {
 
     return await this.prisma.storyBuddy.update({
       where: { id: buddyId },
-      data: { 
-        isDeleted: false, 
-        deletedAt: null 
+      data: {
+        isDeleted: false,
+        deletedAt: null,
       },
     });
   }
 
   /**
    * Select a story buddy for a kid
+   * @param kidId - The kid's ID
+   * @param buddyId - The story buddy's ID
+   * @param userId - The authenticated user's ID (parent)
    */
-  async selectBuddyForKid(kidId: string, buddyId: string) {
+  async selectBuddyForKid(kidId: string, buddyId: string, userId: string) {
     // Verify kid exists and is not soft deleted
     const kid = await this.prisma.kid.findUnique({
-      where: { 
+      where: {
         id: kidId,
-        isDeleted: false // CANNOT SELECT BUDDY FOR SOFT DELETED KIDS
+        isDeleted: false, // CANNOT SELECT BUDDY FOR SOFT DELETED KIDS
       },
     });
 
@@ -303,11 +309,16 @@ export class StoryBuddyService {
       throw new NotFoundException('Kid not found');
     }
 
+    // Verify parent ownership
+    if (kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
+    }
+
     // Verify buddy exists, is active, and not soft deleted
     const buddy = await this.prisma.storyBuddy.findUnique({
-      where: { 
+      where: {
         id: buddyId,
-        isDeleted: false // CANNOT SELECT SOFT DELETED BUDDIES
+        isDeleted: false, // CANNOT SELECT SOFT DELETED BUDDIES
       },
     });
 
@@ -356,12 +367,14 @@ export class StoryBuddyService {
 
   /**
    * Get welcome message from kid's buddy
+   * @param kidId - The kid's ID
+   * @param userId - The authenticated user's ID (parent)
    */
-  async getBuddyWelcome(kidId: string) {
+  async getBuddyWelcome(kidId: string, userId: string) {
     const kid = await this.prisma.kid.findUnique({
-      where: { 
+      where: {
         id: kidId,
-        isDeleted: false // CANNOT GET WELCOME FOR SOFT DELETED KIDS
+        isDeleted: false, // CANNOT GET WELCOME FOR SOFT DELETED KIDS
       },
       include: {
         storyBuddy: {
@@ -379,6 +392,11 @@ export class StoryBuddyService {
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
+    }
+
+    // Verify parent ownership
+    if (kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
     }
 
     if (!kid.storyBuddy) {
@@ -410,17 +428,23 @@ export class StoryBuddyService {
 
   /**
    * Get buddy message for specific context
+   * @param kidId - The kid's ID
+   * @param context - The message context (e.g., 'greeting', 'challenge')
+   * @param contextId - Optional context ID (e.g., story ID, challenge ID)
+   * @param message - Optional custom message from frontend
+   * @param userId - The authenticated user's ID (parent)
    */
   async getBuddyMessage(
     kidId: string,
     context: string,
     contextId?: string,
     message?: string,
+    userId?: string,
   ) {
     const kid = await this.prisma.kid.findUnique({
-      where: { 
+      where: {
         id: kidId,
-        isDeleted: false // CANNOT GET MESSAGE FOR SOFT DELETED KIDS
+        isDeleted: false, // CANNOT GET MESSAGE FOR SOFT DELETED KIDS
       },
       include: {
         storyBuddy: {
@@ -440,6 +464,11 @@ export class StoryBuddyService {
       throw new NotFoundException('Kid not found');
     }
 
+    // Verify parent ownership
+    if (userId && kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
+    }
+
     if (!kid.storyBuddy) {
       throw new NotFoundException('No story buddy selected for this kid');
     }
@@ -450,11 +479,11 @@ export class StoryBuddyService {
     // Prepare context data if needed
     if (contextId) {
       switch (context) {
-        case 'challenge':
+        case 'challenge': {
           const challenge = await this.prisma.dailyChallenge.findUnique({
-            where: { 
+            where: {
               id: contextId,
-              isDeleted: false // ONLY USE NON-DELETED CHALLENGES
+              isDeleted: false, // ONLY USE NON-DELETED CHALLENGES
             },
             select: { wordOfTheDay: true, meaning: true },
           });
@@ -465,23 +494,25 @@ export class StoryBuddyService {
             };
           }
           break;
+        }
 
         case 'story_start':
-        case 'story_complete':
+        case 'story_complete': {
           const story = await this.prisma.story.findUnique({
-            where: { 
+            where: {
               id: contextId,
-              isDeleted: false // ONLY USE NON-DELETED STORIES
+              isDeleted: false, // ONLY USE NON-DELETED STORIES
             },
             select: { title: true },
           });
           if (story) {
             contextData = {
               storyId: contextId,
-              storyTitle: story.title
+              storyTitle: story.title,
             };
           }
           break;
+        }
       }
     }
 
@@ -532,12 +563,14 @@ export class StoryBuddyService {
 
   /**
    * Get kid's current buddy
+   * @param kidId - The kid's ID
+   * @param userId - The authenticated user's ID (parent)
    */
-  async getKidCurrentBuddy(kidId: string) {
+  async getKidCurrentBuddy(kidId: string, userId: string) {
     const kid = await this.prisma.kid.findUnique({
-      where: { 
+      where: {
         id: kidId,
-        isDeleted: false // CANNOT GET BUDDY FOR SOFT DELETED KIDS
+        isDeleted: false, // CANNOT GET BUDDY FOR SOFT DELETED KIDS
       },
       include: {
         storyBuddy: {
@@ -557,6 +590,11 @@ export class StoryBuddyService {
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
+    }
+
+    // Verify parent ownership
+    if (kid.parentId !== userId) {
+      throw new ForbiddenException('You are not the parent of this kid');
     }
 
     if (!kid.storyBuddy) {
@@ -591,9 +629,9 @@ export class StoryBuddyService {
     });
 
     const totalKidsWithBuddies = await this.prisma.kid.count({
-      where: { 
+      where: {
         storyBuddyId: { not: null },
-        isDeleted: false // ONLY COUNT NON-DELETED KIDS
+        isDeleted: false, // ONLY COUNT NON-DELETED KIDS
       },
     });
 
@@ -634,7 +672,7 @@ export class StoryBuddyService {
         return publicIdWithVersion.split('.')[0];
       }
       return null;
-    } catch (error) {
+    } catch {
       this.logger.warn('Failed to extract public ID from URL:', imageUrl);
       return null;
     }

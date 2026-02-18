@@ -4,7 +4,6 @@ import { GoogleOAuthProfile } from '@/shared/types';
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Post,
   Put,
@@ -18,12 +17,11 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
-  kidDto,
   LoginDto,
   LoginResponseDto,
+  RefreshTokenDto,
   RefreshResponseDto,
   RegisterDto,
-  updateKidDto,
   updateProfileDto,
   RequestResetDto,
   ValidateResetTokenDto,
@@ -40,7 +38,10 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { AuthenticatedRequest, AuthSessionGuard } from '@/shared/guards/auth.guard';
+import {
+  AuthenticatedRequest,
+  AuthSessionGuard,
+} from '@/shared/guards/auth.guard';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
 import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
@@ -49,7 +50,7 @@ import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 @Controller('auth')
 @SkipThrottle() // Skip default throttling, apply specific guards per endpoint
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Post('login')
   @UseGuards(AuthThrottleGuard)
@@ -69,9 +70,10 @@ export class AuthController {
 
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
+  @ApiBody({ type: RefreshTokenDto })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
-  async refresh(@Body('token') token: string) {
-    return this.authService.refresh(token);
+  async refresh(@Body() body: RefreshTokenDto) {
+    return this.authService.refresh(body.token);
   }
 
   @Post('register')
@@ -85,7 +87,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',
-    description: 'Register with just full name, email, and password. Default role: parent.',
+    description:
+      'Register with just full name, email, and password. Default role: parent.',
   })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 200, type: LoginResponseDto })
@@ -128,7 +131,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Get available learning expectations',
-    description: 'Fetch all active learning expectations that users can select during profile completion. No authentication required.',
+    description:
+      'Fetch all active learning expectations that users can select during profile completion. No authentication required.',
   })
   @ApiResponse({
     status: 200,
@@ -226,8 +230,7 @@ export class AuthController {
   ) {
     // Extract IP and user agent for security checking
     const ip =
-      req.ip ||
-      req.headers['x-forwarded-for']?.toString().split(',')[0].trim();
+      req.ip || req.headers['x-forwarded-for']?.toString().split(',')[0].trim();
     const userAgent = req.headers['user-agent'];
     return this.authService.requestPasswordReset(body, ip, userAgent);
   }
@@ -277,16 +280,23 @@ export class AuthController {
   @ApiOperation({ summary: 'Apple sign-in (id_token) — mobile/web' })
   @ApiBody({
     description: 'Apple id_token and optional user info',
-    schema: { example: { id_token: '...', firstName: 'John', lastName: 'Doe' } },
+    schema: {
+      example: { id_token: '...', firstName: 'John', lastName: 'Doe' },
+    },
   })
-  async appleIdToken(@Body() body: { id_token: string; firstName?: string; lastName?: string }) {
+  async appleIdToken(
+    @Body() body: { id_token: string; firstName?: string; lastName?: string },
+  ) {
     if (!body.id_token) {
       throw new BadRequestException('id_token is required');
     }
 
-    return this.authService.loginWithAppleIdToken(body.id_token, body.firstName, body.lastName);
+    return this.authService.loginWithAppleIdToken(
+      body.id_token,
+      body.firstName,
+      body.lastName,
+    );
   }
-
 
   // ===== GOOGLE OAUTH (web redirect flow) =====
   @Get('google/oauth')
@@ -298,7 +308,10 @@ export class AuthController {
   // ===== GOOGLE OAUTH CALLBACK =====
   @Get('google/oauth/callback')
   @UseGuards(GoogleAuthGuard)
-  async googleCallback(@Req() req: Request & { user: GoogleOAuthProfile }, @Res() res: Response) {
+  async googleCallback(
+    @Req() req: Request & { user: GoogleOAuthProfile },
+    @Res() res: Response,
+  ) {
     const payload = req.user;
     const result = await this.authService.handleGoogleOAuthPayload(payload);
 
