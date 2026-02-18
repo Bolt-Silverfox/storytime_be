@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Extend Express Request to include requestId
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       requestId?: string;
@@ -169,11 +170,16 @@ export function requestLogger(
   const { method, originalUrl, ip } = req;
 
   // Skip health checks
-  if (originalUrl.startsWith('/health') || originalUrl.startsWith('/api/v1/health')) {
+  if (
+    originalUrl.startsWith('/health') ||
+    originalUrl.startsWith('/api/v1/health')
+  ) {
     return next();
   }
 
-  logger.log(`→ ${method} ${originalUrl} [${requestId.slice(0, 8)}] from ${ip}`);
+  logger.log(
+    `→ ${method} ${originalUrl} [${requestId.slice(0, 8)}] from ${ip}`,
+  );
 
   res.on('finish', () => {
     const duration = Date.now() - startTime;

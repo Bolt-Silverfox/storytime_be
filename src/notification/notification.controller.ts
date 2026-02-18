@@ -1,4 +1,15 @@
-import { Controller, Post, Patch, Get, Param, Body, Delete, Query } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Patch,
+  Get,
+  Param,
+  Body,
+  Delete,
+  Query,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -6,18 +17,24 @@ import {
   ApiParam,
   ApiBody,
   ApiQuery,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import { NotificationService } from './notification.service';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
+  BulkUpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
 } from './dto/notification.dto';
 
 @ApiTags('notification-preferences')
 @Controller('notification-preferences')
 export class NotificationController {
-  constructor(private readonly notificationService: NotificationService) { }
+  constructor(private readonly notificationService: NotificationService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create notification preferences (bulk)' })
@@ -25,6 +42,19 @@ export class NotificationController {
   @ApiResponse({ status: 201, type: [NotificationPreferenceDto] })
   async create(@Body() dtos: CreateNotificationPreferenceDto[]) {
     return Promise.all(dtos.map((dto) => this.notificationService.create(dto)));
+  }
+
+  @Patch()
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update multiple notification preferences' })
+  @ApiBody({ type: [BulkUpdateNotificationPreferenceDto] })
+  @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
+  async bulkUpdate(
+    @Req() req: AuthenticatedRequest,
+    @Body() dtos: BulkUpdateNotificationPreferenceDto[],
+  ) {
+    return this.notificationService.bulkUpdate(req.authUserData.userId, dtos);
   }
 
   @Patch(':id')
@@ -46,12 +76,16 @@ export class NotificationController {
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the notification preference (default: false - soft delete)'
+    description:
+      'Permanently delete the notification preference (default: false - soft delete)',
   })
-  @ApiResponse({ status: 200, description: 'Notification preference deleted successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Notification preference deleted successfully',
+  })
   async delete(
     @Param('id') id: string,
-    @Query('permanent') permanent: boolean = false
+    @Query('permanent') permanent: boolean = false,
   ) {
     await this.notificationService.delete(id, permanent);
     return { message: 'Notification preference deleted successfully' };
@@ -66,7 +100,9 @@ export class NotificationController {
   }
 
   @Get('users/:userId')
-  @ApiOperation({ summary: 'Get notification preferences for a user (raw records)' })
+  @ApiOperation({
+    summary: 'Get notification preferences for a user (raw records)',
+  })
   @ApiParam({ name: 'userId', type: String })
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
   async getForUser(@Param('userId') userId: string) {
@@ -74,7 +110,9 @@ export class NotificationController {
   }
 
   @Get('kids/:kidId')
-  @ApiOperation({ summary: 'Get notification preferences for a kid (raw records)' })
+  @ApiOperation({
+    summary: 'Get notification preferences for a kid (raw records)',
+  })
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
   async getForKid(@Param('kidId') kidId: string) {

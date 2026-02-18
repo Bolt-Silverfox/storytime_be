@@ -9,13 +9,11 @@ import {
   Post,
   Query,
   Req,
-  UploadedFile,
   UseGuards,
   UseInterceptors,
   DefaultValuePipe,
   ParseIntPipe,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -27,7 +25,10 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { randomUUID } from 'crypto';
-import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 
 import {
   AssignDailyChallengeDto,
@@ -49,7 +50,6 @@ import {
   UpdateStoryPathDto,
   PaginatedStoriesDto,
   DownloadedStoryDto,
-  LibraryStatsDto,
   ParentRecommendationDto,
   RecommendationResponseDto,
   RecommendationsStatsDto,
@@ -60,11 +60,7 @@ import {
   UserStoryProgressDto,
   UserStoryProgressResponseDto,
 } from './dto/story.dto';
-import {
-
-  VoiceType,
-  StoryContentAudioDto,
-} from '../voice/dto/voice.dto';
+import { VoiceType, StoryContentAudioDto } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { StoryService } from './story.service';
 import { VoiceService } from '../voice/voice.service';
@@ -72,8 +68,18 @@ import { TextToSpeechService } from './text-to-speech.service';
 
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
+import {
+  StoryAccessGuard,
+  RequestWithStoryAccess,
+} from '@/shared/guards/story-access.guard';
+import { CheckStoryQuota } from '@/shared/decorators/story-quota.decorator';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+} from '@/shared/constants/cache-keys.constants';
+import { StoryQuotaService } from './story-quota.service';
 
 @ApiTags('stories')
 @Controller('stories')
@@ -83,7 +89,8 @@ export class StoryController {
     private readonly storyService: StoryService,
     private readonly voiceService: VoiceService,
     private readonly textToSpeechService: TextToSpeechService,
-  ) { }
+    private readonly storyQuotaService: StoryQuotaService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -96,6 +103,12 @@ export class StoryController {
   @ApiQuery({ name: 'recommended', required: false, type: String })
   @ApiQuery({ name: 'isMostLiked', required: false, type: String })
   @ApiQuery({ name: 'isSeasonal', required: false, type: String })
+  @ApiQuery({
+    name: 'topPicksFromUs',
+    required: false,
+    type: String,
+    description: 'Get random top picks from us',
+  })
   @ApiQuery({ name: 'kidId', required: false, type: String })
   @ApiQuery({ name: 'age', required: false, type: String })
   @ApiQuery({ name: 'minAge', required: false, type: String })
@@ -120,7 +133,9 @@ export class StoryController {
     description: 'Not Found',
     type: ErrorResponseDto,
   })
-  @Throttle({ long: { limit: THROTTLE_LIMITS.LONG.LIMIT, ttl: THROTTLE_LIMITS.LONG.TTL } }) // 100 per minute
+  @Throttle({
+    long: { limit: THROTTLE_LIMITS.LONG.LIMIT, ttl: THROTTLE_LIMITS.LONG.TTL },
+  }) // 100 per minute
   async getStories(
     @Query('theme') theme?: string,
     @Query('category') category?: string,
@@ -128,6 +143,7 @@ export class StoryController {
     @Query('recommended') recommended?: string,
     @Query('isMostLiked') isMostLiked?: string,
     @Query('isSeasonal') isSeasonal?: string,
+    @Query('topPicksFromUs') topPicksFromUs?: string,
     @Query('kidId') kidId?: string,
     @Query('age') age?: string,
     @Query('minAge') minAge?: string,
@@ -145,6 +161,7 @@ export class StoryController {
       recommended: recommended === 'true',
       isMostLiked: isMostLiked === 'true',
       isSeasonal: isSeasonal === 'true',
+      topPicksFromUs: topPicksFromUs === 'true',
       kidId,
       age: age ? parseInt(age, 10) : undefined,
       minAge: minAge ? parseInt(minAge, 10) : undefined,
@@ -157,16 +174,24 @@ export class StoryController {
   @Get('homepage/parent')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get parent homepage stories (Recommended, Seasonal, Top Liked)' })
-  @ApiResponse({ status: 200, description: 'Homepage stories retrieved successfully.' })
+  @ApiOperation({
+    summary: 'Get parent homepage stories (Recommended, Seasonal, Top Liked)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Homepage stories retrieved successfully.',
+  })
   @ApiQuery({ name: 'limitRecommended', required: false, type: Number })
   @ApiQuery({ name: 'limitSeasonal', required: false, type: Number })
   @ApiQuery({ name: 'limitTopLiked', required: false, type: Number })
   async getParentHomepage(
     @Req() req: AuthenticatedRequest,
-    @Query('limitRecommended', new DefaultValuePipe(5), ParseIntPipe) limitRecommended: number,
-    @Query('limitSeasonal', new DefaultValuePipe(5), ParseIntPipe) limitSeasonal: number,
-    @Query('limitTopLiked', new DefaultValuePipe(5), ParseIntPipe) limitTopLiked: number,
+    @Query('limitRecommended', new DefaultValuePipe(5), ParseIntPipe)
+    limitRecommended: number,
+    @Query('limitSeasonal', new DefaultValuePipe(5), ParseIntPipe)
+    limitSeasonal: number,
+    @Query('limitTopLiked', new DefaultValuePipe(5), ParseIntPipe)
+    limitTopLiked: number,
   ) {
     return this.storyService.getHomePageStories(
       req.authUserData.userId,
@@ -528,7 +553,6 @@ export class StoryController {
     );
   }
 
-
   // --- Progress ---
   @Post('progress')
   @UseGuards(AuthSessionGuard)
@@ -587,19 +611,59 @@ export class StoryController {
   // --- USER STORY PROGRESS (Parent/User - non-kid specific) ---
 
   @Post('user/progress')
-  @UseGuards(AuthSessionGuard)
+  @UseGuards(AuthSessionGuard, StoryAccessGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Record story progress for authenticated user (parent account)' })
+  @CheckStoryQuota()
+  @ApiOperation({
+    summary: 'Record story progress for authenticated user (parent account)',
+  })
   @ApiBody({ type: UserStoryProgressDto })
-  @ApiOkResponse({ description: 'Progress recorded', type: UserStoryProgressResponseDto })
-  @ApiResponse({ status: 400, description: 'Bad Request', type: ErrorResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
-  @ApiResponse({ status: 404, description: 'Not Found', type: ErrorResponseDto })
+  @ApiOkResponse({
+    description: 'Progress recorded',
+    type: UserStoryProgressResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Story limit reached',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async setUserProgress(
-    @Req() req: AuthenticatedRequest,
+    @Req() req: RequestWithStoryAccess,
     @Body() body: UserStoryProgressDto,
   ) {
-    return this.storyService.setUserProgress(req.authUserData.userId, body);
+    // Execute the operation first, then record quota on success
+    const result = await this.storyService.setUserProgress(
+      req.authUserData!.userId,
+      body,
+    );
+
+    // Record access only after successful operation to avoid consuming quota on failures
+    if (
+      req.authUserData?.userId &&
+      req.storyAccessResult?.reason !== 'already_read'
+    ) {
+      await this.storyQuotaService.recordNewStoryAccess(
+        req.authUserData.userId,
+        body.storyId,
+      );
+    }
+
+    return result;
   }
 
   @Get('user/progress/:storyId')
@@ -607,10 +671,25 @@ export class StoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get story progress for authenticated user' })
   @ApiParam({ name: 'storyId', type: String })
-  @ApiOkResponse({ description: 'Progress for story', type: UserStoryProgressResponseDto })
-  @ApiResponse({ status: 400, description: 'Bad Request', type: ErrorResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
-  @ApiResponse({ status: 404, description: 'Not Found', type: ErrorResponseDto })
+  @ApiOkResponse({
+    description: 'Progress for story',
+    type: UserStoryProgressResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async getUserProgress(
     @Req() req: AuthenticatedRequest,
     @Param('storyId') storyId: string,
@@ -622,8 +701,16 @@ export class StoryController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get in-progress stories for authenticated user' })
-  @ApiOkResponse({ description: 'List of in-progress stories', type: StoryWithProgressDto, isArray: true })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  @ApiOkResponse({
+    description: 'List of in-progress stories',
+    type: StoryWithProgressDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
   async getUserContinueReading(@Req() req: AuthenticatedRequest) {
     return this.storyService.getUserContinueReading(req.authUserData.userId);
   }
@@ -632,8 +719,16 @@ export class StoryController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get completed stories for authenticated user' })
-  @ApiOkResponse({ description: 'List of completed stories', type: StoryDto, isArray: true })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  @ApiOkResponse({
+    description: 'List of completed stories',
+    type: StoryDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
   async getUserCompletedStories(@Req() req: AuthenticatedRequest) {
     return this.storyService.getUserCompletedStories(req.authUserData.userId);
   }
@@ -641,16 +736,53 @@ export class StoryController {
   @Delete('user/library/remove/:storyId')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Remove story from user library (resets progress and favorites)' })
+  @ApiOperation({
+    summary: 'Remove story from user library (resets progress and favorites)',
+  })
   @ApiParam({ name: 'storyId', type: String })
   @ApiOkResponse({ description: 'Story removed from library successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
   async removeFromUserLibrary(
     @Req() req: AuthenticatedRequest,
     @Param('storyId') storyId: string,
   ) {
-    await this.storyService.removeFromUserLibrary(req.authUserData.userId, storyId);
+    await this.storyService.removeFromUserLibrary(
+      req.authUserData.userId,
+      storyId,
+    );
     return { message: 'Story removed from library successfully' };
+  }
+
+  @Get('user/quota')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get story quota status for authenticated user' })
+  @ApiOkResponse({
+    description: 'Quota status',
+    schema: {
+      type: 'object',
+      properties: {
+        isPremium: { type: 'boolean' },
+        unlimited: { type: 'boolean' },
+        used: { type: 'number' },
+        baseLimit: { type: 'number' },
+        bonusStories: { type: 'number' },
+        totalAllowed: { type: 'number' },
+        remaining: { type: 'number' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  async getQuotaStatus(@Req() req: AuthenticatedRequest) {
+    return this.storyQuotaService.getQuotaStatus(req.authUserData.userId);
   }
 
   // --- Daily Challenge ---
@@ -770,8 +902,6 @@ export class StoryController {
     );
   }
 
-
-
   // --- Story Path / Choice Tracking ---
   @Post('story-path/start')
   @ApiOperation({ summary: 'Start a story path for a kid' })
@@ -806,22 +936,45 @@ export class StoryController {
   }
 
   @Get('story/audio/:id')
-  @UseGuards(AuthSessionGuard)
+  @UseGuards(AuthSessionGuard, StoryAccessGuard)
   @ApiBearerAuth()
+  @CheckStoryQuota()
   @ApiOperation({ summary: 'Get audio for a story path by id' })
   @ApiParam({ name: 'id', type: String })
-  @ApiQuery({ name: 'voiceId', required: false, type: String, description: 'VoiceType enum value or Voice UUID' })
+  @ApiQuery({
+    name: 'voiceId',
+    required: false,
+    type: String,
+    description: 'VoiceType enum value or Voice UUID',
+  })
   @ApiResponse({ status: 200, type: StoryPathDto })
+  @ApiResponse({
+    status: 403,
+    description: 'Story limit reached',
+    type: ErrorResponseDto,
+  })
   async getStoryPathAudioById(
     @Param('id') id: string,
-    @Req() req: AuthenticatedRequest,
+    @Req() req: RequestWithStoryAccess,
     @Query('voiceId') voiceId?: VoiceType | string,
   ) {
+    // Execute the operation first to ensure it succeeds
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
       voiceId ?? DEFAULT_VOICE,
-      req.authUserData.userId,
+      req.authUserData!.userId,
     );
+
+    // Record access only after successful operation to avoid consuming quota on failures
+    if (
+      req.authUserData?.userId &&
+      req.storyAccessResult?.reason !== 'already_read'
+    ) {
+      await this.storyQuotaService.recordNewStoryAccess(
+        req.authUserData.userId,
+        id,
+      );
+    }
 
     return {
       message: 'Audio generated successfully',
@@ -873,7 +1026,6 @@ export class StoryController {
     description: 'Bad Request',
     type: ErrorResponseDto,
   })
-
   async generateStory(@Body() body: GenerateStoryDto) {
     // If kidId is provided, use the specialized method
     if (body.kidId) {
@@ -937,6 +1089,9 @@ export class StoryController {
   }
 
   @Get(':id')
+  @UseGuards(AuthSessionGuard, StoryAccessGuard)
+  @ApiBearerAuth()
+  @CheckStoryQuota()
   @ApiOperation({ summary: 'Get a story by id' })
   @ApiParam({ name: 'id', type: String })
   @ApiOkResponse({ description: 'Story', type: CreateStoryDto })
@@ -951,12 +1106,33 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   @ApiResponse({
+    status: 403,
+    description: 'Story limit reached',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
     status: 404,
     description: 'Not Found',
     type: ErrorResponseDto,
   })
-  async getStoryById(@Param('id') id: string) {
-    return await this.storyService.getStoryById(id);
+  async getStoryById(
+    @Param('id') id: string,
+    @Req() req: RequestWithStoryAccess,
+  ) {
+    const story = await this.storyService.getStoryById(id);
+
+    // Record access if this is a new story for the user
+    if (
+      req.authUserData?.userId &&
+      req.storyAccessResult?.reason !== 'already_read'
+    ) {
+      await this.storyQuotaService.recordNewStoryAccess(
+        req.authUserData.userId,
+        id,
+      );
+    }
+
+    return story;
   }
 
   // --- LIBRARY ENDPOINTS ---
@@ -1018,10 +1194,15 @@ export class StoryController {
   }
 
   @Delete('library/:kidId/remove/:storyId')
-  @ApiOperation({ summary: 'Remove from library (Resets progress, favs, downloads)' })
+  @ApiOperation({
+    summary: 'Remove from library (Resets progress, favs, downloads)',
+  })
   @ApiParam({ name: 'kidId', type: String })
   @ApiParam({ name: 'storyId', type: String })
-  @ApiResponse({ status: 200, description: 'Story removed from library successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Story removed from library successfully',
+  })
   async removeFromLibrary(
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
@@ -1039,7 +1220,7 @@ export class StoryController {
   @ApiBody({ type: ParentRecommendationDto })
   @ApiOkResponse({
     description: 'Story recommended successfully',
-    type: RecommendationResponseDto
+    type: RecommendationResponseDto,
   })
   @ApiResponse({
     status: 400,
@@ -1092,7 +1273,10 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
   ) {
-    return this.storyService.getKidRecommendations(kidId, req.authUserData.userId);
+    return this.storyService.getKidRecommendations(
+      kidId,
+      req.authUserData.userId,
+    );
   }
 
   @Delete('recommendations/:recommendationId')
@@ -1127,7 +1311,11 @@ export class StoryController {
     @Param('recommendationId') recommendationId: string,
     @Query('permanent') permanent: boolean = false,
   ) {
-    return this.storyService.deleteRecommendation(recommendationId, req.authUserData.userId, permanent);
+    return this.storyService.deleteRecommendation(
+      recommendationId,
+      req.authUserData.userId,
+      permanent,
+    );
   }
 
   @Get('recommendations/kid/:kidId/stats')
@@ -1158,15 +1346,25 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
   ) {
-    return this.storyService.getRecommendationStats(kidId, req.authUserData.userId);
+    return this.storyService.getRecommendationStats(
+      kidId,
+      req.authUserData.userId,
+    );
   }
 
   @Get('recommendations/top-picks')
   @UseInterceptors(CacheInterceptor)
   @CacheKey('recommendations:top-picks')
   @CacheTTL(30 * 60 * 1000) // 30 minutes
-  @ApiOperation({ summary: 'Get top picked stories by parents (most recommended)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of stories to return (default: 10)' })
+  @ApiOperation({
+    summary: 'Get top picked stories by parents (most recommended)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of stories to return (default: 10)',
+  })
   @ApiOkResponse({
     description: 'List of top picked stories with recommendation counts',
     type: TopPickStoryDto,
@@ -1174,7 +1372,31 @@ export class StoryController {
   })
   async getTopPicksFromParents(
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-  ): Promise<TopPickStoryDto[]> {
+  ) {
     return this.storyService.getTopPicksFromParents(Math.min(limit, 50));
+  }
+
+  @Get('top-picks-from-us')
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey(CACHE_KEYS.TOP_PICKS_FROM_US)
+  @CacheTTL(CACHE_TTL_MS.TOP_PICKS_FROM_US)
+  @ApiOperation({
+    summary: 'Get curated random stories (refreshes every 24 hours)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of stories to return (default: 10)',
+  })
+  @ApiOkResponse({
+    description: 'List of random curated stories',
+    type: StoryDto,
+    isArray: true,
+  })
+  async getTopPicksFromUs(
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ) {
+    return this.storyService.getTopPicksFromUs(Math.min(limit, 20));
   }
 }

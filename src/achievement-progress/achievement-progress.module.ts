@@ -11,32 +11,32 @@ import { NotificationModule } from '../notification/notification.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
-    imports: [
-        CacheModule.register({
-            ttl: 300, // 5 minutes default TTL
-            max: 100, // Max items in cache
-        }),
-        EventEmitterModule.forRoot({
-            // Global event emitter configuration
-            wildcard: false,
-            delimiter: '.',
-            newListener: false,
-            removeListener: false,
-            maxListeners: 10,
-            verboseMemoryLeak: true,
-            ignoreErrors: false,
-        }),
-        forwardRef(() => AuthModule),
-        NotificationModule,
-    ],
-    controllers: [ProgressController],
-    providers: [
-        ProgressService,
-        StreakService,
-        BadgeService,
-        BadgeProgressEngine,
-        BadgeConstants,
-    ],
-    exports: [BadgeProgressEngine, BadgeService],
+  imports: [
+    CacheModule.register({
+      ttl: 300, // 5 minutes default TTL
+      max: 100, // Max items in cache
+    }),
+    EventEmitterModule.forRoot({
+      // Global event emitter configuration
+      wildcard: false,
+      delimiter: '.',
+      newListener: false,
+      removeListener: false,
+      maxListeners: 10,
+      verboseMemoryLeak: true,
+      ignoreErrors: false,
+    }),
+    forwardRef(() => AuthModule),
+    NotificationModule,
+  ],
+  controllers: [ProgressController],
+  providers: [
+    ProgressService,
+    StreakService,
+    BadgeService,
+    BadgeProgressEngine,
+    BadgeConstants,
+  ],
+  exports: [BadgeProgressEngine, BadgeService],
 })
-export class AchievementProgressModule { }
+export class AchievementProgressModule {}

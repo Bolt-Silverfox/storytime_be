@@ -9,7 +9,6 @@ import {
   IsString,
   MaxLength,
   IsArray,
-  ArrayMinSize,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -73,7 +72,7 @@ export class CompleteProfileDto {
   @ApiProperty({
     example: 'English',
     description: 'Language display name',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -81,7 +80,7 @@ export class CompleteProfileDto {
   @ApiProperty({
     example: 'en',
     description: 'Language code for i18n',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -92,7 +91,8 @@ export class CompleteProfileDto {
 
   @ApiProperty({
     example: ['expectation-uuid-1', 'expectation-uuid-2'],
-    description: 'Learning expectation IDs - character values parents want kids to learn',
+    description:
+      'Learning expectation IDs - character values parents want kids to learn',
     required: false,
     type: [String],
   })
@@ -145,14 +145,12 @@ export class updateProfileDto {
   )
   languageCode?: string;
 
-
   @ApiProperty({ example: 'NG' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.toUpperCase() : value,
   )
   @IsOptional()
   country?: string;
-
 }
 
 export class LoginDto {
@@ -259,19 +257,23 @@ export class UserDto {
   numberOfKids?: number;
 
   constructor(
-    user: Partial<UserDto> & { profile?: any; avatar?: any; kids?: any[] },
+    user: Partial<UserDto> & {
+      profile?: Partial<ProfileDto> | null;
+      avatar?: Partial<AvatarDto> | null;
+      kids?: { id: string }[];
+    },
   ) {
     this.profile = user.profile ? new ProfileDto(user.profile) : null;
 
     this.avatar = user.avatar
       ? {
-        id: user.avatar.id,
-        name: user.avatar.name,
-        url: user.avatar.url,
-        isSystemAvatar: user.avatar.isSystemAvatar,
-        publicId: user.avatar.publicId,
-        createdAt: user.avatar.createdAt,
-      }
+          id: user.avatar.id,
+          name: user.avatar.name,
+          url: user.avatar.url,
+          isSystemAvatar: user.avatar.isSystemAvatar,
+          publicId: user.avatar.publicId,
+          createdAt: user.avatar.createdAt,
+        }
       : null;
 
     this.id = user.id as string;
@@ -296,6 +298,13 @@ export class LoginResponseDto {
   refreshToken: string;
 }
 
+export class RefreshTokenDto {
+  @ApiProperty({ description: 'Refresh token', example: 'eyJhbGci...' })
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+}
+
 export class RefreshResponseDto {
   @ApiProperty({ type: UserDto })
   user: UserDto;
@@ -303,8 +312,6 @@ export class RefreshResponseDto {
   @ApiProperty({ example: 'token' })
   jwt: string;
 }
-
-
 
 export class kidDto {
   @ApiProperty({ example: 'firstname lastname' })

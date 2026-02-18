@@ -4,13 +4,52 @@ import {
   BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  Prisma,
+  User,
+  Profile,
+  Kid,
+  Avatar,
+  Subscription,
+} from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { UserRole } from './user.controller';
 import { UpdateUserDto } from './dto/user.dto';
+import { UpdateParentProfileDto } from './dto/update-parent-profile.dto';
+import { UpdateAvatarDto } from './dto/update-avatar.dto';
 import { hashPin, verifyPinHash } from './utils/pin.util';
 import * as bcrypt from 'bcrypt';
 import { NotificationService } from '@/notification/notification.service';
+
+/** User with relations but sensitive fields excluded */
+export type SafeUser = Omit<User, 'passwordHash' | 'pinHash'> & {
+  profile?: Profile | null;
+  kids?: Kid[];
+  avatar?: Avatar | null;
+  subscriptions?: Subscription[];
+  numberOfKids?: number;
+};
+
+/** Response for permanent delete operation */
+export interface DeleteUserResult {
+  id: string;
+  email: string;
+  message: string;
+  permanent: boolean;
+}
+
+/** Response for soft delete operation */
+export type SoftDeleteUserResult = User & {
+  message: string;
+  permanent: boolean;
+};
+
+/** User with relations after restore */
+type UserWithRelations = User & {
+  profile?: Profile | null;
+  kids?: Kid[];
+  avatar?: Avatar | null;
+};
 
 @Injectable()
 export class UserService {
@@ -19,13 +58,13 @@ export class UserService {
     private readonly notificationService: NotificationService,
   ) {}
 
-  async getUser(id: string): Promise<any> {
+  async getUser(id: string): Promise<SafeUser | null> {
     const user = await this.prisma.user.findUnique({
       where: {
         id,
         isDeleted: false,
       },
-      include: { profile: true, kids: true, avatar: true, subscriptions: true },
+      include: { profile: true, kids: true, avatar: true, subscription: true },
     });
     if (!user) return null;
 
@@ -35,10 +74,10 @@ export class UserService {
   /**
    * Get user including deleted ones (for checking account status)
    */
-  async getUserIncludingDeleted(id: string): Promise<any> {
+  async getUserIncludingDeleted(id: string): Promise<SafeUser | null> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { profile: true, kids: true, avatar: true, subscriptions: true },
+      include: { profile: true, kids: true, avatar: true, subscription: true },
     });
 
     if (user) {
@@ -50,7 +89,7 @@ export class UserService {
   /**
    * Get all users (admin only) - includes both active and soft deleted users
    */
-  async getAllUsers(): Promise<any[]> {
+  async getAllUsers(): Promise<SafeUser[]> {
     const users = await this.prisma.user.findMany({
       include: {
         profile: true,
@@ -59,7 +98,8 @@ export class UserService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return users.map(user => {
+    return users.map((user) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { passwordHash, pinHash, ...safeUser } = user;
       return safeUser;
     });
@@ -68,7 +108,7 @@ export class UserService {
   /**
    * Get only active users (non-admin)
    */
-  async getActiveUsers(): Promise<any[]> {
+  async getActiveUsers(): Promise<SafeUser[]> {
     const users = await this.prisma.user.findMany({
       where: {
         isDeleted: false,
@@ -76,7 +116,8 @@ export class UserService {
       include: { profile: true, avatar: true },
     });
 
-    return users.map(user => {
+    return users.map((user) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { passwordHash, pinHash, ...safeUser } = user;
       return safeUser;
     });
@@ -87,7 +128,10 @@ export class UserService {
    * @param id User ID
    * @param permanent Whether to permanently delete (default: false)
    */
-  async deleteUser(id: string, permanent: boolean = false): Promise<any> {
+  async deleteUser(
+    id: string,
+    permanent: boolean = false,
+  ): Promise<DeleteUserResult | SoftDeleteUserResult> {
     try {
       if (permanent) {
         // Check if user exists first
@@ -136,7 +180,7 @@ export class UserService {
           // Foreign key constraint - cascade delete not properly set up
           throw new BadRequestException(
             'Cannot permanently delete account with associated data. ' +
-            'Please use soft delete (deactivation) or contact support to delete all associated data first.',
+              'Please use soft delete (deactivation) or contact support to delete all associated data first.',
           );
         }
       }
@@ -194,7 +238,7 @@ export class UserService {
   async deleteUserAccount(
     id: string,
     permanent: boolean = false,
-  ): Promise<any> {
+  ): Promise<DeleteUserResult | SoftDeleteUserResult> {
     return this.deleteUser(id, permanent);
   }
 
@@ -272,7 +316,7 @@ export class UserService {
    * Restore a soft deleted user
    * @param id User ID
    */
-  async undoDeleteUser(id: string): Promise<any> {
+  async undoDeleteUser(id: string): Promise<UserWithRelations> {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
     if (!user.isDeleted) throw new BadRequestException('User is not deleted');
@@ -302,7 +346,7 @@ export class UserService {
    * Restore the current user's account
    * @param userId Current user ID
    */
-  async undoDeleteMyAccount(userId: string): Promise<any> {
+  async undoDeleteMyAccount(userId: string): Promise<UserWithRelations> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
     if (!user.isDeleted)
@@ -329,7 +373,7 @@ export class UserService {
     return restoredUser;
   }
 
-  async updateUser(id: string, data: UpdateUserDto): Promise<any> {
+  async updateUser(id: string, data: UpdateUserDto): Promise<unknown> {
     const user = await this.prisma.user.findUnique({
       where: {
         id,
@@ -338,12 +382,14 @@ export class UserService {
     });
     if (!user) throw new NotFoundException('User not found');
 
-    const updateData: any = {};
-    const profileUpdate: any = {};
+    const updateData: Record<string, any> = {};
+
+    const profileUpdate: Record<string, any> = {};
 
     // -------- USER FIELDS --------
     if (data.name !== undefined) updateData.name = data.name;
-    if (data.biometricsEnabled !== undefined) updateData.biometricsEnabled = data.biometricsEnabled;
+    if (data.biometricsEnabled !== undefined)
+      updateData.biometricsEnabled = data.biometricsEnabled;
 
     // Avatar logic
     if (data.avatarId !== undefined) {
@@ -383,13 +429,13 @@ export class UserService {
             },
           },
         }),
-      },
+      } as Prisma.UserUpdateInput,
       include: { profile: true, kids: true, avatar: true },
     });
 
     return {
       ...updatedUser,
-      numberOfKids: updatedUser.kids.length,
+      numberOfKids: updatedUser.kids?.length ?? 0,
     };
   }
 
@@ -424,7 +470,7 @@ export class UserService {
   // PARENT PROFILE
   // ----------------------------------------------------------
 
-  async updateParentProfile(userId: string, data: any) {
+  async updateParentProfile(userId: string, data: UpdateParentProfileDto) {
     const existing = await this.prisma.user.findUnique({
       where: {
         id: userId,
@@ -433,12 +479,13 @@ export class UserService {
     });
     if (!existing) throw new NotFoundException('User not found');
 
-    const updateUser: any = {};
-    const updateProfile: any = {};
+    const updateUser: Record<string, any> = {};
+
+    const updateProfile: Record<string, any> = {};
 
     if (data.name !== undefined) updateUser.name = data.name;
-    if (data.title !== undefined) updateUser.title = data.title;
-    if (data.biometricsEnabled !== undefined) updateUser.biometricsEnabled = data.biometricsEnabled;
+    if (data.biometricsEnabled !== undefined)
+      updateUser.biometricsEnabled = data.biometricsEnabled;
     if (data.language !== undefined) updateProfile.language = data.language;
     if (data.country !== undefined) updateProfile.country = data.country;
 
@@ -471,14 +518,12 @@ export class UserService {
             },
           },
         }),
-      },
+      } as Prisma.UserUpdateInput,
       include: { profile: true, avatar: true, preferredCategories: true },
     });
   }
 
-  async updateAvatarForParent(userId: string, body: any) {
-    if (!body.avatarId) throw new BadRequestException('avatarId is required');
-
+  async updateAvatarForParent(userId: string, body: UpdateAvatarDto) {
     return this.prisma.user.update({
       where: {
         id: userId,

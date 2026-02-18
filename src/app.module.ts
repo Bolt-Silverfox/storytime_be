@@ -32,7 +32,10 @@ import { AchievementProgressModule } from './achievement-progress/achievement-pr
 import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
-import { throttleConfig } from './shared/config/throttle.config';
+import {
+  throttleConfig,
+  ThrottlerConfig,
+} from './shared/config/throttle.config';
 import { AdminModule } from './admin/admin.module';
 import { HealthModule } from './health/health.module';
 
@@ -68,11 +71,18 @@ import { HealthModule } from './health/health.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const isDev = config.get('NODE_ENV') === 'development';
-        const multiplier = isDev ? 100 : 1; // 100x limit in dev
+        const nodeEnv = (
+          config.get<string>('NODE_ENV') ?? 'production'
+        ).toLowerCase();
+        const nonProdEnvs = ['development', 'staging', 'test', 'local'];
+        const isNonProd = nonProdEnvs.includes(nodeEnv);
+
+        // Only relax rate limits for explicit non-prod environments
+        // Unknown or missing NODE_ENV defaults to strict (production) limits
+        const multiplier = isNonProd ? 100 : 1;
 
         return {
-          throttlers: (throttleConfig as any).throttlers.map((t: any) => ({
+          throttlers: throttleConfig.throttlers.map((t: ThrottlerConfig) => ({
             ...t,
             limit: t.limit * multiplier,
           })),
@@ -125,4 +135,4 @@ import { HealthModule } from './health/health.module';
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

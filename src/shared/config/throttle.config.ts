@@ -1,7 +1,15 @@
 import { ThrottlerModuleOptions } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '../constants/throttle.constants';
 
-export const throttleConfig: ThrottlerModuleOptions = {
+export interface ThrottlerConfig {
+  name: string;
+  ttl: number;
+  limit: number;
+}
+
+export const throttleConfig: ThrottlerModuleOptions & {
+  throttlers: ThrottlerConfig[];
+} = {
   throttlers: [
     {
       name: 'short',

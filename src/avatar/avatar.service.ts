@@ -18,11 +18,12 @@ export class AvatarService {
   ) {}
 
   // Helper Methods
+
   private async handleCustomAvatarUpload(
     entityId: string,
     entityType: 'user' | 'kid',
     file: Express.Multer.File,
-    entityName: string,
+    entityName: string, // eslint-disable-line @typescript-eslint/no-unused-vars
   ) {
     let uploadResult;
     try {
@@ -84,8 +85,8 @@ export class AvatarService {
 
   async getAllSystemAvatars() {
     return await this.prisma.avatar.findMany({
-      where: { 
-        isSystemAvatar: true 
+      where: {
+        isSystemAvatar: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -93,9 +94,9 @@ export class AvatarService {
 
   async getSystemAvatars() {
     return await this.prisma.avatar.findMany({
-      where: { 
+      where: {
         isSystemAvatar: true,
-        isDeleted: false 
+        isDeleted: false,
       },
       orderBy: { name: 'asc' },
     });
@@ -103,7 +104,7 @@ export class AvatarService {
 
   async getAllAvatars(includeDeleted: boolean = false) {
     const where = includeDeleted ? {} : { isDeleted: false };
-    
+
     return await this.prisma.avatar.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -116,7 +117,7 @@ export class AvatarService {
     isSystemAvatar: boolean = false,
     createdByUserId?: string,
   ) {
-    let uploadResult: any;
+    let uploadResult: { secure_url: string; public_id: string } | undefined;
 
     if (file) {
       try {
@@ -127,20 +128,33 @@ export class AvatarService {
       }
     } else if (!createAvatarDto.url && isSystemAvatar) {
       // For system avatars, either file or URL is required
-      throw new BadRequestException('Either image file or URL is required for system avatars');
+      throw new BadRequestException(
+        'Either image file or URL is required for system avatars',
+      );
     } else if (!file && !isSystemAvatar) {
       // For custom avatars, file is required
-      throw new BadRequestException('Image file is required for custom avatars');
+      throw new BadRequestException(
+        'Image file is required for custom avatars',
+      );
     }
 
     // Generate avatar name
-    const avatarName = createAvatarDto.name || 
-      (isSystemAvatar ? 'System Avatar' : `Custom Avatar - ${new Date().toISOString()}`);
+    const avatarName =
+      createAvatarDto.name ||
+      (isSystemAvatar
+        ? 'System Avatar'
+        : `Custom Avatar - ${new Date().toISOString()}`);
+
+    // URL is guaranteed by validation above (file upload or provided URL)
+    const avatarUrl = uploadResult?.secure_url || createAvatarDto.url;
+    if (!avatarUrl) {
+      throw new BadRequestException('Avatar URL is required');
+    }
 
     return this.prisma.avatar.create({
       data: {
         name: avatarName,
-        url: uploadResult?.secure_url || createAvatarDto.url,
+        url: avatarUrl,
         publicId: uploadResult?.public_id || null,
         isSystemAvatar: isSystemAvatar,
         isDeleted: false,
@@ -156,25 +170,30 @@ export class AvatarService {
     updateAvatarDto: UpdateAvatarDto,
     file?: Express.Multer.File,
   ) {
-    const avatar = await this.prisma.avatar.findUnique({ 
-      where: { 
+    const avatar = await this.prisma.avatar.findUnique({
+      where: {
         id,
-        isDeleted: false 
-      } 
+        isDeleted: false,
+      },
     });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
     }
 
-    let uploadResult: any;
-    let data: any = { ...updateAvatarDto };
+    let uploadResult: { secure_url: string; public_id: string } | undefined;
+    const data: { name?: string; url?: string; publicId?: string } = {
+      ...updateAvatarDto,
+    };
 
     if (file) {
       if (avatar.publicId) {
         try {
           await this.uploadService.deleteImage(avatar.publicId);
         } catch (error) {
-          this.logger.warn('Failed to delete old image from Cloudinary:', error);
+          this.logger.warn(
+            'Failed to delete old image from Cloudinary:',
+            error,
+          );
         }
       }
 
@@ -199,11 +218,11 @@ export class AvatarService {
     updateAvatarDto: UpdateAvatarDto,
     file?: Express.Multer.File,
   ) {
-    const avatar = await this.prisma.avatar.findUnique({ 
-      where: { 
+    const avatar = await this.prisma.avatar.findUnique({
+      where: {
         id,
-        isDeleted: false 
-      } 
+        isDeleted: false,
+      },
     });
     if (!avatar) {
       throw new NotFoundException('System avatar not found');
@@ -217,11 +236,11 @@ export class AvatarService {
   }
 
   async softDeleteAvatar(id: string) {
-    const avatar = await this.prisma.avatar.findUnique({ 
-      where: { 
+    const avatar = await this.prisma.avatar.findUnique({
+      where: {
         id,
-        isDeleted: false 
-      } 
+        isDeleted: false,
+      },
     });
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
@@ -232,7 +251,9 @@ export class AvatarService {
       const usersUsing = await this.prisma.user.count({
         where: { avatarId: id },
       });
-      const kidsUsing = await this.prisma.kid.count({ where: { avatarId: id } });
+      const kidsUsing = await this.prisma.kid.count({
+        where: { avatarId: id },
+      });
 
       if (usersUsing > 0 || kidsUsing > 0) {
         throw new BadRequestException(
@@ -261,7 +282,9 @@ export class AvatarService {
       const usersUsing = await this.prisma.user.count({
         where: { avatarId: id },
       });
-      const kidsUsing = await this.prisma.kid.count({ where: { avatarId: id } });
+      const kidsUsing = await this.prisma.kid.count({
+        where: { avatarId: id },
+      });
 
       if (usersUsing > 0 || kidsUsing > 0) {
         throw new BadRequestException(
@@ -282,10 +305,10 @@ export class AvatarService {
   }
 
   async restoreAvatar(id: string) {
-    const avatar = await this.prisma.avatar.findUnique({ 
-      where: { id } 
+    const avatar = await this.prisma.avatar.findUnique({
+      where: { id },
     });
-    
+
     if (!avatar) {
       throw new NotFoundException('Avatar not found');
     }
@@ -310,9 +333,9 @@ export class AvatarService {
     }
 
     const avatar = await this.prisma.avatar.findUnique({
-      where: { 
+      where: {
         id: avatarId,
-        isDeleted: false 
+        isDeleted: false,
       },
     });
     if (!avatar) {
@@ -333,9 +356,9 @@ export class AvatarService {
     }
 
     const avatar = await this.prisma.avatar.findUnique({
-      where: { 
+      where: {
         id: avatarId,
-        isDeleted: false 
+        isDeleted: false,
       },
     });
     if (!avatar) {
