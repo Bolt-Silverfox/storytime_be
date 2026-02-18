@@ -17,6 +17,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { VOICE_CONFIG_SETTINGS } from '../voice/voice.config';
 
+/**
+ * Strip quotation marks and normalize whitespace for ElevenLabs TTS.
+ * ElevenLabs handles dialogue naturally without literal quote characters;
+ * leaving them in causes the engine to read "quote" aloud.
+ * Preserves prosody-affecting punctuation (.,!?…—).
+ */
+function preprocessTextForTTS(text: string): string {
+  return text
+    .replace(/[\u201C\u201D\u201E\u201F\u2018\u2019\u201A\u201B"']/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 @Injectable()
 export class TextToSpeechService {
   private readonly logger = new Logger(TextToSpeechService.name);
@@ -107,8 +120,9 @@ export class TextToSpeechService {
         this.logger.log(
           `Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${elevenLabsId}) using model ${labsModel}`,
         );
+        const cleanedText = preprocessTextForTTS(text);
         const audioBuffer = await this.elevenLabsProvider.generateAudio(
-          text,
+          cleanedText,
           elevenLabsId,
           labsModel,
           settings,
@@ -151,8 +165,9 @@ export class TextToSpeechService {
         speed: VOICE_CONFIG_SETTINGS.DEEPGRAM.DEFAULT_SPEED, // Slower pace for storytelling
       };
 
+      const cleanedText = preprocessTextForTTS(text);
       const audioBuffer = await this.deepgramProvider.generateAudio(
-        text,
+        cleanedText,
         undefined,
         model,
         deepgramSettings,
