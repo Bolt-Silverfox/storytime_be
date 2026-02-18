@@ -78,7 +78,7 @@ export class StoryService {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
-  ) { }
+  ) {}
 
   /**
    * Calculate estimated reading duration in seconds based on text content or word count
@@ -250,8 +250,6 @@ export class StoryService {
       where.id = { in: recommendedStoryIds };
     }
 
-
-
     // Handle topPicksFromUs filter - get random stories using shared helper
     if (filter.topPicksFromUs) {
       const randomStoryIds = await this.getRandomStoryIds(limit, skip);
@@ -274,10 +272,10 @@ export class StoryService {
 
     const orderBy = filter.isMostLiked
       ? [
-        { parentFavorites: { _count: 'desc' as const } },
-        { createdAt: 'desc' as const },
-        { id: 'asc' as const },
-      ]
+          { parentFavorites: { _count: 'desc' as const } },
+          { createdAt: 'desc' as const },
+          { id: 'asc' as const },
+        ]
       : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
     // Run count and findMany in parallel to reduce latency by ~50%
@@ -1302,7 +1300,7 @@ export class StoryService {
       });
       const randomCategory =
         availableCategories[
-        Math.floor(Math.random() * availableCategories.length)
+          Math.floor(Math.random() * availableCategories.length)
         ];
       categories = [randomCategory.name];
     }
@@ -1454,14 +1452,14 @@ export class StoryService {
         seasons:
           seasonIds && seasonIds.length > 0
             ? {
-              connect: seasonIds.map((id) => ({ id })),
-            }
+                connect: seasonIds.map((id) => ({ id })),
+              }
             : generatedStory.seasons
               ? {
-                connect: generatedStory.seasons.map((s: string) => ({
-                  name: s,
-                })),
-              }
+                  connect: generatedStory.seasons.map((s: string) => ({
+                    name: s,
+                  })),
+                }
               : undefined,
       },
       include: { images: true, branches: true, categories: true, themes: true },
