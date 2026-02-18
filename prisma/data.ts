@@ -1,73 +1,8 @@
 export const categories = [
     {
-        name: 'Animal Stories',
+        name: 'Animal',
         image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
         description: 'Stories featuring animals as main characters.',
-    },
-    {
-        name: 'Fantasy & Magic',
-        image: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429',
-        description: 'Stories set in magical or fantastical worlds.',
-    },
-    {
-        name: 'Adventure & Action',
-        image: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca',
-        description: 'Exciting stories full of adventure and action.',
-    },
-    {
-        name: 'Superheroes',
-        image: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca',
-        description: 'Action-packed superhero stories.',
-    },
-    {
-        name: 'Fairytales & Folktales',
-        image: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9',
-        description: 'Classic fairy tales and stories with morals from folklore.',
-    },
-    {
-        name: 'Funny Stories',
-        image: 'https://images.unsplash.com/photo-1519125323398-675f0ddb6308',
-        description: 'Humorous and funny stories.',
-    },
-    {
-        name: 'Friendship & Feelings',
-        image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9',
-        description: 'Stories about friends, emotions, and relationships.',
-    },
-    {
-        name: 'Values & Life Lessons',
-        image: 'https://images.unsplash.com/photo-1465101178521-c1a9136a3b99',
-        description: 'Stories that teach good values and important life lessons.',
-    },
-    {
-        name: 'Bedtime Stories',
-        image: 'https://images.unsplash.com/photo-1519125323398-675f0ddb6308',
-        description: 'Gentle stories perfect for sleeping.',
-    },
-    {
-        name: 'Science & Discovery',
-        image: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564',
-        description: 'Stories about science, space, and new discoveries.',
-    },
-    {
-        name: 'Nature & Ocean',
-        image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e',
-        description: 'Stories about nature, the environment, and ocean life.',
-    },
-    {
-        name: 'Mystery & Spooky',
-        image: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9',
-        description: 'Stories with a touch of mystery or spookiness.',
-    },
-    {
-        name: 'History & Real Heroes',
-        image: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca',
-        description: 'Stories about historical events and real-life heroes.',
-    },
-    {
-        name: 'Holiday & Seasonal',
-        image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
-        description: 'Stories for holidays and special seasons.',
     },
     {
         name: 'Educational',
@@ -75,9 +10,69 @@ export const categories = [
         description: 'Stories that teach lessons, facts, and skills.',
     },
     {
-        name: 'Fun and Adventure',
+        name: 'Bedtime',
+        image: 'https://images.unsplash.com/photo-1519125323398-675f0ddb6308',
+        description: 'Gentle stories perfect for sleeping.',
+    },
+    {
+        name: 'Fairytales & Folktales',
+        image: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9',
+        description: 'Classic fairy tales and stories with morals from folklore.',
+    },
+    {
+        name: 'Adventures and Action',
         image: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca',
-        description: 'Light-hearted stories full of exciting journeys and thrilling explorations.',
+        description: 'Exciting stories full of adventure and action.',
+    },
+    {
+        name: 'Fantasy and Magical Stories',
+        image: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429',
+        description: 'Stories set in magical or fantastical worlds.',
+    },
+    {
+        name: 'Funny Stories',
+        image: 'https://images.unsplash.com/photo-1519125323398-675f0ddb6308',
+        description: 'Humorous and funny stories.',
+    },
+    {
+        name: 'Friendship and Feelings',
+        image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9',
+        description: 'Stories about friends, emotions, and relationships.',
+    },
+    {
+        name: 'Nature and Oceans',
+        image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e',
+        description: 'Stories about nature, the environment, and ocean life.',
+    },
+    {
+        name: 'Science and Discovery',
+        image: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564',
+        description: 'Stories about science, space, and new discoveries.',
+    },
+    {
+        name: 'Mystery & Spooky',
+        image: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9',
+        description: 'Stories with a touch of mystery or spookiness.',
+    },
+    {
+        name: 'History & Heroes',
+        image: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca',
+        description: 'Stories about historical events and real-life heroes.',
+    },
+    {
+        name: 'Holiday/Seasonal',
+        image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
+        description: 'Stories for holidays and special seasons.',
+    },
+    {
+        name: 'Superheroes',
+        image: 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca',
+        description: 'Action-packed superhero stories.',
+    },
+    {
+        name: 'Value and Life Lessons',
+        image: 'https://images.unsplash.com/photo-1465101178521-c1a9136a3b99',
+        description: 'Stories that teach good values and important life lessons.',
     },
 ];
 
