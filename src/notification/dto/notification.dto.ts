@@ -1,11 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsArray,
-  IsBoolean,
-  IsOptional,
-  IsString,
-  IsUUID,
-} from 'class-validator';
+import { IsArray, IsBoolean, IsOptional, IsUUID } from 'class-validator';
 import {
   NotificationCategory as PrismaCategory,
   NotificationType as PrismaType,
@@ -113,7 +107,7 @@ export class NotificationDto {
 export class MarkReadDto {
   @ApiProperty({ type: [String] })
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID('4', { each: true })
   notificationIds: string[];
 }
 
