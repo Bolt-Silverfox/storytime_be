@@ -18,10 +18,9 @@ import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { VOICE_CONFIG_SETTINGS } from '../voice/voice.config';
 
 /**
- * Strip quotation marks and normalize whitespace for ElevenLabs TTS.
- * ElevenLabs handles dialogue naturally without literal quote characters;
- * leaving them in causes the engine to read "quote" aloud.
- * Preserves prosody-affecting punctuation (.,!?…—).
+ * Normalize text for TTS providers by stripping literal quote characters
+ * and collapsing whitespace. Without this, engines may read "quote" aloud.
+ * Preserves contractions (don't, it's) and prosody-affecting punctuation (.,!?…—).
  */
 function preprocessTextForTTS(text: string): string {
   return (
@@ -109,6 +108,8 @@ export class TextToSpeechService {
       useElevenLabs = false;
     }
 
+    const cleanedText = preprocessTextForTTS(text);
+
     // Priority 1: ElevenLabs
     if (useElevenLabs && elevenLabsId) {
       try {
@@ -128,7 +129,6 @@ export class TextToSpeechService {
         this.logger.log(
           `Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${elevenLabsId}) using model ${labsModel}`,
         );
-        const cleanedText = preprocessTextForTTS(text);
         const audioBuffer = await this.elevenLabsProvider.generateAudio(
           cleanedText,
           elevenLabsId,
@@ -173,7 +173,6 @@ export class TextToSpeechService {
         speed: VOICE_CONFIG_SETTINGS.DEEPGRAM.DEFAULT_SPEED, // Slower pace for storytelling
       };
 
-      const cleanedText = preprocessTextForTTS(text);
       const audioBuffer = await this.deepgramProvider.generateAudio(
         cleanedText,
         undefined,
