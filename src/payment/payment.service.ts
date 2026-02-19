@@ -226,9 +226,7 @@ export class PaymentService {
     const plan = PRODUCT_ID_TO_PLAN[productId];
     if (!plan) {
       this.logger.error(`Unknown product ID: ${productId}`);
-      throw new BadRequestException(
-        `Unknown product ID: ${productId}. Valid IDs: ${Object.keys(PRODUCT_ID_TO_PLAN).join(', ')}`,
-      );
+      throw new BadRequestException('Unknown or unsupported product ID');
     }
     return plan;
   }
