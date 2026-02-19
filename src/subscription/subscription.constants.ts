@@ -26,4 +26,6 @@ export const PRODUCT_ID_TO_PLAN: Record<string, string> = {
   weekly_subscription: 'weekly',
   monthly_subscription: 'monthly',
   yearly_subscription: 'yearly',
+  '1_month_subscription': 'monthly',
+  '1_year_subscription': 'yearly',
 };
