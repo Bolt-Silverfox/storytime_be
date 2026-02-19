@@ -1,4 +1,12 @@
-import { Controller, Get, Patch, Body, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Body,
+  Req,
+  UseGuards,
+  BadRequestException,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -84,6 +92,13 @@ export class UserPreferencesController {
     @Req() req: AuthenticatedRequest,
     @Body() preferences: Record<string, boolean>,
   ) {
+    const hasNonBoolean = Object.values(preferences).some(
+      (v) => typeof v !== 'boolean',
+    );
+    if (hasNonBoolean) {
+      throw new BadRequestException('All preference values must be booleans');
+    }
+
     return this.notificationService.updateUserPreferences(
       req.authUserData.userId,
       preferences,

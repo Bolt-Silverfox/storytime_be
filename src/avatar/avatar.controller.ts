@@ -649,7 +649,7 @@ export class AvatarController {
 
   // ADMIN ONLY ENDPOINTS
 
-  @Get()
+  @Get('system/all')
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'List all system avatars',
