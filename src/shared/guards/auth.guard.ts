@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -25,6 +26,8 @@ export interface AuthenticatedRequest extends Request {
 
 @Injectable()
 export class AuthSessionGuard implements CanActivate {
+  private readonly logger = new Logger(AuthSessionGuard.name);
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly reflector: Reflector,
@@ -79,6 +82,7 @@ export class AuthSessionGuard implements CanActivate {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
+      this.logger.error('AuthGuard error', error);
       throw new UnauthorizedException('Authentication failed');
     }
   }
