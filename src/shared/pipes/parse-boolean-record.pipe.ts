@@ -1,8 +1,4 @@
-import {
-  PipeTransform,
-  Injectable,
-  BadRequestException,
-} from '@nestjs/common';
+import { PipeTransform, Injectable, BadRequestException } from '@nestjs/common';
 
 /**
  * Validates that the input is a plain object with all values being booleans.
