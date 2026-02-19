@@ -240,7 +240,9 @@ export class GoogleVerificationService {
     }
   }
 
-  async cancelSubscription(params: GooglePurchaseParams): Promise<GoogleCancelResult> {
+  async cancelSubscription(
+    params: GooglePurchaseParams,
+  ): Promise<GoogleCancelResult> {
     const packageName = (params?.packageName ?? '').trim();
     const productId = (params?.productId ?? '').trim();
     const purchaseToken = (params?.purchaseToken ?? '').trim();

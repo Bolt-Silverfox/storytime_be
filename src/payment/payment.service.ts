@@ -81,9 +81,7 @@ export class PaymentService {
     }
 
     // Acknowledge the purchase to prevent auto-refund after 3 days
-    const acknowledgementState = (
-      result.metadata as Record<string, unknown> | undefined
-    )?.acknowledgementState;
+    const acknowledgementState = result.metadata?.acknowledgementState;
     if (acknowledgementState !== 1) {
       const configPackageName =
         this.configService.get<string>('GOOGLE_PLAY_PACKAGE_NAME') || '';
