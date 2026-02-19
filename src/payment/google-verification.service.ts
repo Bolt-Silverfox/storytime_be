@@ -31,8 +31,8 @@ export interface GoogleAcknowledgeResult {
   error?: string;
 }
 
-/** Parameters for cancellation */
-export interface CancelParams {
+/** Parameters for Google Play purchase operations (verify, cancel, acknowledge) */
+export interface GooglePurchaseParams {
   packageName: string;
   productId: string;
   purchaseToken: string;
@@ -240,7 +240,7 @@ export class GoogleVerificationService {
     }
   }
 
-  async cancelSubscription(params: CancelParams): Promise<GoogleCancelResult> {
+  async cancelSubscription(params: GooglePurchaseParams): Promise<GoogleCancelResult> {
     const packageName = (params?.packageName ?? '').trim();
     const productId = (params?.productId ?? '').trim();
     const purchaseToken = (params?.purchaseToken ?? '').trim();
@@ -287,7 +287,7 @@ export class GoogleVerificationService {
    * Acknowledge a Google Play purchase to prevent auto-refund after 3 days.
    */
   async acknowledgePurchase(
-    params: CancelParams,
+    params: GooglePurchaseParams,
     isSubscription: boolean,
   ): Promise<GoogleAcknowledgeResult> {
     const packageName = (params?.packageName ?? '').trim();
