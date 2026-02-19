@@ -80,6 +80,36 @@ export class PaymentService {
       throw new BadRequestException('Google Play purchase verification failed');
     }
 
+    // Acknowledge the purchase to prevent auto-refund after 3 days
+    const acknowledgementState = (
+      result.metadata as Record<string, unknown> | undefined
+    )?.acknowledgementState;
+    if (acknowledgementState !== 1) {
+      const configPackageName =
+        this.configService.get<string>('GOOGLE_PLAY_PACKAGE_NAME') || '';
+      const packageName = (dto.packageName || configPackageName).trim();
+
+      const ackResult =
+        await this.googleVerificationService.acknowledgePurchase(
+          {
+            packageName,
+            productId: dto.productId,
+            purchaseToken: dto.purchaseToken,
+          },
+          result.isSubscription ?? true,
+        );
+
+      if (!ackResult.success) {
+        this.logger.warn(
+          `Google Play acknowledgement failed for user ${userId.substring(0, 8)}: ${ackResult.error ?? 'unknown'}. Purchase is valid but must be acknowledged within 3 days.`,
+        );
+      } else {
+        this.logger.log(
+          `Google Play purchase acknowledged for user ${userId.substring(0, 8)}`,
+        );
+      }
+    }
+
     const plan = this.mapProductIdToPlan(dto.productId);
     const planDef = PLANS[plan];
     const receiptHash = this.hashReceipt(dto.purchaseToken);
