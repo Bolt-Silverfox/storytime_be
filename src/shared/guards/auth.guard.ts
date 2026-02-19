@@ -79,9 +79,7 @@ export class AuthSessionGuard implements CanActivate {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      throw new UnauthorizedException(
-        error instanceof Error ? error.message : 'Authentication failed',
-      );
+      throw new UnauthorizedException('Authentication failed');
     }
   }
 }
