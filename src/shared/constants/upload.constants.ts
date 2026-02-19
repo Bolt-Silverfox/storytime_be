@@ -4,8 +4,7 @@
  */
 
 /** Regex matching allowed image MIME types for file uploads. */
-export const ALLOWED_IMAGE_TYPES =
-  /^image\/(png|jpeg|gif|webp)$/;
+export const ALLOWED_IMAGE_TYPES = /^image\/(png|jpeg|gif|webp)$/;
 
 /** Maximum upload file size in bytes (5 MB). */
 export const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
