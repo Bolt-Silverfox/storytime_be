@@ -5,7 +5,6 @@ import {
   Body,
   Req,
   UseGuards,
-  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,6 +17,7 @@ import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
+import { ParseBooleanRecordPipe } from '@/shared/pipes';
 import { NotificationService } from './notification.service';
 
 @ApiTags('users')
@@ -90,15 +90,8 @@ export class UserPreferencesController {
   })
   async updateUserPreferences(
     @Req() req: AuthenticatedRequest,
-    @Body() preferences: Record<string, boolean>,
+    @Body(ParseBooleanRecordPipe) preferences: Record<string, boolean>,
   ) {
-    const hasNonBoolean = Object.values(preferences).some(
-      (v) => typeof v !== 'boolean',
-    );
-    if (hasNonBoolean) {
-      throw new BadRequestException('All preference values must be booleans');
-    }
-
     return this.notificationService.updateUserPreferences(
       req.authUserData.userId,
       preferences,
