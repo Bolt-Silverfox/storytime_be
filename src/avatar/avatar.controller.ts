@@ -820,7 +820,16 @@ export class AvatarController {
   async updateAvatar(
     @Param('id') id: string,
     @Body() updateAvatarDto: UpdateAvatarDto,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
+        ],
+        fileIsRequired: false,
+      }),
+    )
+    file?: Express.Multer.File,
   ) {
     const avatar = await this.avatarService.updateAvatar(
       id,
