@@ -196,12 +196,8 @@ describe('TextToSpeechService', () => {
     it('should throw error if all providers fail for premium user', async () => {
       mockIsPremiumUser.mockResolvedValue(true);
       mockCheckUsage.mockResolvedValue(true);
-      mockElevenLabsGenerate.mockRejectedValue(
-        new Error('ElevenLabs Error'),
-      );
-      mockStyleTts2Generate.mockRejectedValue(
-        new Error('StyleTTS2 Error'),
-      );
+      mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs Error'));
+      mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 Error'));
       mockEdgeTtsGenerate.mockRejectedValue(new Error('Edge TTS Error'));
 
       await expect(
