@@ -7,8 +7,16 @@ export const VOICE_CONFIG_SETTINGS = {
     FREE: 2,
     PREMIUM: 20,
   },
-  DEEPGRAM: {
-    DEFAULT_SPEED: '0.9',
+  STYLE_TTS2: {
+    SPACE_ID: 'Wismut/StyleTTS2_Studio',
+    SPEED: 120,
+    TIMEOUT_MS: 30_000,
+    CHUNK_SIZE: 3000,
+  },
+  EDGE_TTS: {
+    RATE: -10,
+    OUTPUT_FORMAT: 'audio-24khz-96kbitrate-mono-mp3',
+    CHUNK_SIZE: 3000,
   },
   ELEVEN_LABS: {
     DEFAULT_SETTINGS: {

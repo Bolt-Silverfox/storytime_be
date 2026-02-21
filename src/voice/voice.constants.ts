@@ -44,7 +44,8 @@ export const VOICE_CONFIG = {
   [VoiceType.CHARLIE]: {
     id: VoiceType.CHARLIE,
     name: 'Charlie',
-    model: 'aura-orion-en',
+    edgeTtsVoice: 'en-US-AndrewMultilingualNeural',
+    styleTts2Voice: 'Richard_Male_EN_US',
     gender: 'Male',
     elevenLabsId: 'IKne3meq5aSn9XLyUdCD',
     previewUrl: VOICE_PREVIEWS[VoiceType.CHARLIE],
@@ -60,7 +61,8 @@ export const VOICE_CONFIG = {
   [VoiceType.JESSICA]: {
     id: VoiceType.JESSICA,
     name: 'Jessica',
-    model: 'aura-asteria-en',
+    edgeTtsVoice: 'en-US-EmmaMultilingualNeural',
+    styleTts2Voice: 'Sol_Female_EN_US',
     gender: 'Female',
     elevenLabsId: 'cgSgspJ2msm6clMCkdW9',
     previewUrl: VOICE_PREVIEWS[VoiceType.JESSICA],
@@ -76,7 +78,8 @@ export const VOICE_CONFIG = {
   [VoiceType.WILL]: {
     id: VoiceType.WILL,
     name: 'Will',
-    model: 'aura-arcas-en',
+    edgeTtsVoice: 'en-US-BrianMultilingualNeural',
+    styleTts2Voice: 'Jack_Male_EN_US',
     gender: 'Male',
     elevenLabsId: 'bIHbv24MWmeRgasZH58o',
     previewUrl: VOICE_PREVIEWS[VoiceType.WILL],
@@ -92,7 +95,8 @@ export const VOICE_CONFIG = {
   [VoiceType.LILY]: {
     id: VoiceType.LILY,
     name: 'Lily',
-    model: 'aura-luna-en',
+    edgeTtsVoice: 'en-US-AvaMultilingualNeural',
+    styleTts2Voice: 'Georgia_Female_EN_US',
     gender: 'Female',
     elevenLabsId: 'pFZP5JQG7iQjIQuC4Bku',
     previewUrl: VOICE_PREVIEWS[VoiceType.LILY],
@@ -108,7 +112,8 @@ export const VOICE_CONFIG = {
   [VoiceType.BILL]: {
     id: VoiceType.BILL,
     name: 'Bill',
-    model: 'aura-angus-en',
+    edgeTtsVoice: 'en-US-RogerNeural',
+    styleTts2Voice: 'Samuel_Male_EN_US',
     gender: 'Male',
     elevenLabsId: 'pqHfZKP75CvOlQylNhV4',
     previewUrl: VOICE_PREVIEWS[VoiceType.BILL],
@@ -124,7 +129,8 @@ export const VOICE_CONFIG = {
   [VoiceType.LAURA]: {
     id: VoiceType.LAURA,
     name: 'Laura',
-    model: 'aura-perseus-en',
+    edgeTtsVoice: 'en-US-AriaNeural',
+    styleTts2Voice: 'Lisa_Female_EN_US',
     gender: 'Female',
     elevenLabsId: 'FGY2WhTYpPnrIDTdsKH5',
     previewUrl: VOICE_PREVIEWS[VoiceType.LAURA],
