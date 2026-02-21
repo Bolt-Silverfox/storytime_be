@@ -72,21 +72,22 @@ export class VoiceQuotaService {
 
   async incrementUsage(userId: string): Promise<void> {
     const currentMonth = this.getCurrentMonth();
-    await this.prisma.userUsage.upsert({
-      where: { userId },
-      create: {
-        userId,
-        currentMonth,
-        elevenLabsCount: 1,
-      },
-      update: {
-        elevenLabsCount: { increment: 1 },
-      },
+    // Use transaction to handle month rollover atomically (matches checkUsage pattern)
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userUsage.updateMany({
+        where: { userId, currentMonth: { not: currentMonth } },
+        data: { currentMonth, elevenLabsCount: 0 },
+      });
+      await tx.userUsage.upsert({
+        where: { userId },
+        create: { userId, currentMonth, elevenLabsCount: 1 },
+        update: { currentMonth, elevenLabsCount: { increment: 1 } },
+      });
     });
     await this.logAiActivity(
       userId,
       AiProviders.ElevenLabs,
-      'voice_cloning',
+      'tts_generation',
       1,
     );
   }

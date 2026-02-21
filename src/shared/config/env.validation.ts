@@ -45,6 +45,8 @@ export const envSchema = z
     GOOGLE_ANDROID_CLIENT_ID: z.string().optional(),
     GOOGLE_IOS_CLIENT_ID: z.string().optional(),
     BACKEND_BASE_URL: z.string().url('BACKEND_BASE_URL must be a valid URL'),
+    // StyleTTS2 HuggingFace Space (optional — defaults to built-in value)
+    STYLE_TTS2_SPACE_ID: z.string().optional(),
     APPLE_CLIENT_ID: z.string().min(1, 'APPLE_CLIENT_ID is required'),
     APPLE_SERVICE_ID: z.string().min(1, 'APPLE_SERVICE_ID is required'),
     // Firebase Cloud Messaging (optional - required for push notifications)

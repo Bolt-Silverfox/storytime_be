@@ -44,13 +44,6 @@ import { VoiceQuotaService } from './voice-quota.service';
     TextToSpeechService,
     SpeechToTextService,
     ElevenLabsTTSProvider,
-    StyleTTS2TTSProvider,
-    EdgeTTSProvider,
-    ElevenLabsSTTProvider,
-    DeepgramSTTProvider,
-    SSMLFormatter,
-    TextChunker,
-    StreamConverter,
     VoiceQuotaService,
   ],
 })

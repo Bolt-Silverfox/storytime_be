@@ -68,7 +68,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       similarity_boost: 0.85,
       style: 0.65,
       use_speaker_boost: true,
-    } as VoiceSettings,
+    },
   },
   [VoiceType.JESSICA]: {
     id: VoiceType.JESSICA,
@@ -85,7 +85,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       similarity_boost: 0.8,
       style: 0.6,
       use_speaker_boost: true,
-    } as VoiceSettings,
+    },
   },
   [VoiceType.WILL]: {
     id: VoiceType.WILL,
@@ -102,7 +102,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       similarity_boost: 0.85,
       style: 0.7,
       use_speaker_boost: true,
-    } as VoiceSettings,
+    },
   },
   [VoiceType.LILY]: {
     id: VoiceType.LILY,
@@ -119,7 +119,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       similarity_boost: 0.8,
       style: 0.55,
       use_speaker_boost: true,
-    } as VoiceSettings,
+    },
   },
   [VoiceType.BILL]: {
     id: VoiceType.BILL,
@@ -136,7 +136,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       similarity_boost: 0.75,
       style: 0.5,
       use_speaker_boost: true,
-    } as VoiceSettings,
+    },
   },
   [VoiceType.LAURA]: {
     id: VoiceType.LAURA,
@@ -153,6 +153,6 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       similarity_boost: 0.8,
       style: 0.6,
       use_speaker_boost: true,
-    } as VoiceSettings,
+    },
   },
 };

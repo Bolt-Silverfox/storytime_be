@@ -1,3 +1,6 @@
+/** Max character length accepted for TTS input */
+export const MAX_TTS_TEXT_LENGTH = 50_000;
+
 export const VOICE_CONFIG_SETTINGS = {
   MODELS: {
     DEFAULT: 'eleven_multilingual_v2',

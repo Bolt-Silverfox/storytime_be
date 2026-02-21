@@ -4,6 +4,23 @@ import { EdgeTTS } from '@andresaya/edge-tts';
 import { TextChunker } from '../utils/text-chunker';
 import { VOICE_CONFIG_SETTINGS } from '../voice.config';
 
+/** Race a promise against a timeout, clearing the timer on settle */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timeout`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
 @Injectable()
 export class EdgeTTSProvider implements ITextToSpeechProvider {
   private readonly logger = new Logger(EdgeTTSProvider.name);
@@ -11,11 +28,7 @@ export class EdgeTTSProvider implements ITextToSpeechProvider {
 
   constructor(private readonly chunker: TextChunker) {}
 
-  async generateAudio(
-    text: string,
-    voiceId?: string,
-    _model?: string,
-  ): Promise<Buffer> {
+  async generateAudio(text: string, voiceId?: string): Promise<Buffer> {
     const config = VOICE_CONFIG_SETTINGS.EDGE_TTS;
     const voice = voiceId ?? 'en-US-AndrewMultilingualNeural';
 
@@ -32,18 +45,14 @@ export class EdgeTTSProvider implements ITextToSpeechProvider {
       try {
         // Create a fresh instance per chunk (internal buffer accumulates)
         const tts = new EdgeTTS();
-        await Promise.race([
+        await withTimeout(
           tts.synthesize(chunk, voice, {
             rate: config.RATE,
             outputFormat: config.OUTPUT_FORMAT,
           }),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error('Edge TTS synthesis timeout')),
-              config.TIMEOUT_MS,
-            ),
-          ),
-        ]);
+          config.TIMEOUT_MS,
+          'Edge TTS synthesis',
+        );
         audioBuffers.push(tts.toBuffer());
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);

@@ -17,14 +17,17 @@ import { EdgeTTSProvider } from '../voice/providers/edge-tts.provider';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { VoiceQuotaService } from '../voice/voice-quota.service';
-import { VOICE_CONFIG_SETTINGS } from '../voice/voice.config';
+import {
+  VOICE_CONFIG_SETTINGS,
+  MAX_TTS_TEXT_LENGTH,
+} from '../voice/voice.config';
 
 /**
  * Normalize text for TTS providers by stripping literal quote characters
  * and collapsing whitespace. Without this, engines may read "quote" aloud.
  * Preserves contractions (don't, it's) and prosody-affecting punctuation (.,!?…—).
  */
-function preprocessTextForTTS(text: string): string {
+export function preprocessTextForTTS(text: string): string {
   return (
     text
       // Remove double-quote variants (never used as apostrophes)
@@ -94,6 +97,13 @@ export class TextToSpeechService {
     userId?: string, // Added userId for quota tracking
   ): Promise<string> {
     const type = voicetype ?? DEFAULT_VOICE;
+
+    // Guard against unbounded input
+    if (text.length > MAX_TTS_TEXT_LENGTH) {
+      throw new InternalServerErrorException(
+        `Text exceeds maximum TTS length of ${MAX_TTS_TEXT_LENGTH} characters`,
+      );
+    }
 
     // Check paragraph-level cache first
     const cachedUrl = await this.getCachedParagraphAudio(storyId, text, type);
