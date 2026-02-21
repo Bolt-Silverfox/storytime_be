@@ -36,8 +36,10 @@
     "deploy:prod": "pnpm db:migrate:deploy && pnpm db:generate && pnpm start:pm2:prod"
   },
   "dependencies": {
-    "@deepgram/sdk": "^4.11.2",
+    "@andresaya/edge-tts": "^1.8.0",
+    "@deepgram/sdk": "^4.11.3",
     "@google/generative-ai": "^0.24.1",
+    "@gradio/client": "^2.0.4",
     "@hng-sdk/email": "^0.0.0",
     "@keyv/redis": "^5.1.4",
     "@nestjs/axios": "^4.0.0",
