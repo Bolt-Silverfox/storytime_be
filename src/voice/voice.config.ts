@@ -7,8 +7,11 @@ export const VOICE_CONFIG_SETTINGS = {
     FREE: 2,
     PREMIUM: 20,
   },
-  DEEPGRAM: {
-    DEFAULT_SPEED: '0.9',
+  GOOGLE_CLOUD: {
+    SPEAKING_RATE: 0.9,
+    PITCH: 0,
+    AUDIO_ENCODING: 'MP3',
+    CHUNK_SIZE: 4800,
   },
   ELEVEN_LABS: {
     DEFAULT_SETTINGS: {

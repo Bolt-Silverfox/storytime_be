@@ -8,7 +8,7 @@ import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
 import { SpeechToTextService } from './speech-to-text.service';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
-import { DeepgramTTSProvider } from './providers/deepgram-tts.provider';
+import { GoogleCloudTTSProvider } from './providers/google-cloud-tts.provider';
 import { ElevenLabsSTTProvider } from './providers/eleven-labs-stt.provider';
 import { DeepgramSTTProvider } from './providers/deepgram-stt.provider';
 import { SSMLFormatter } from './utils/ssml-formatter';
@@ -29,7 +29,7 @@ import { VoiceQuotaService } from './voice-quota.service';
     TextToSpeechService,
     SpeechToTextService,
     ElevenLabsTTSProvider,
-    DeepgramTTSProvider,
+    GoogleCloudTTSProvider,
     ElevenLabsSTTProvider,
     DeepgramSTTProvider,
     SSMLFormatter,
@@ -42,7 +42,7 @@ import { VoiceQuotaService } from './voice-quota.service';
     TextToSpeechService,
     SpeechToTextService,
     ElevenLabsTTSProvider,
-    DeepgramTTSProvider,
+    GoogleCloudTTSProvider,
     ElevenLabsSTTProvider,
     DeepgramSTTProvider,
     SSMLFormatter,

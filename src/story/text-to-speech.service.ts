@@ -12,7 +12,7 @@ import {
   VoiceSettings,
 } from '../voice/voice.constants';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
-import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';
+import { GoogleCloudTTSProvider } from '../voice/providers/google-cloud-tts.provider';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { VoiceQuotaService } from '../voice/voice-quota.service';
@@ -45,7 +45,7 @@ export class TextToSpeechService {
   constructor(
     private readonly uploadService: UploadService,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
-    private readonly deepgramProvider: DeepgramTTSProvider,
+    private readonly googleCloudProvider: GoogleCloudTTSProvider,
     private readonly prisma: PrismaService,
     private readonly voiceQuota: VoiceQuotaService,
   ) {}
@@ -104,14 +104,12 @@ export class TextToSpeechService {
 
     // Resolve ElevenLabs ID and per-voice settings
     let elevenLabsId: string | undefined;
-    let model = 'aura-asteria-en'; // Default Deepgram model (Asteria)
     let voiceSettings: VoiceSettings | undefined;
 
     // Check if it's a known System Voice (Enum)
     if (Object.values(VoiceType).includes(type as VoiceType)) {
       const config = VOICE_CONFIG[type as VoiceType];
       elevenLabsId = config.elevenLabsId;
-      model = config.model;
       voiceSettings = config.voiceSettings;
     } else {
       // Assume dynamic UUID (Custom Voice)
@@ -121,14 +119,10 @@ export class TextToSpeechService {
         elevenLabsId = voice.elevenLabsVoiceId;
         // Custom voices use default settings optimized for storytelling
         voiceSettings = undefined;
-      } else if (voice?.type === 'deepgram') {
-        // If we ever support custom deepgram voices
-        // model = voice.externalId ...
       } else {
         // Unrecognized ID, fallback to default
         const defaultConfig = VOICE_CONFIG[DEFAULT_VOICE];
         elevenLabsId = defaultConfig.elevenLabsId;
-        model = defaultConfig.model;
         voiceSettings = defaultConfig.voiceSettings;
         this.logger.warn(
           `Voice ID ${type} not found. Falling back to default.`,
@@ -139,12 +133,20 @@ export class TextToSpeechService {
     // Determine if we should use ElevenLabs based on ID presence AND Quota
     let useElevenLabs = !!elevenLabsId;
 
+    // Free users skip ElevenLabs entirely — use Google Cloud TTS
     if (useElevenLabs && userId) {
-      const allowed = await this.voiceQuota.checkUsage(userId);
-      if (!allowed) {
-        this.logger.log(`User ${userId} quota exceeded. Fallback to Deepgram.`);
+      const isPremium = await this.voiceQuota.isPremiumUser(userId);
+      if (!isPremium) {
+        this.logger.log(`Free user ${userId}. Using Google Cloud TTS.`);
         useElevenLabs = false;
-        // Fallback to Deepgram model
+      } else {
+        const allowed = await this.voiceQuota.checkUsage(userId);
+        if (!allowed) {
+          this.logger.log(
+            `User ${userId} quota exceeded. Falling back to Google Cloud TTS.`,
+          );
+          useElevenLabs = false;
+        }
       }
     } else if (useElevenLabs && !userId) {
       this.logger.warn(
@@ -200,7 +202,7 @@ export class TextToSpeechService {
         return elAudioUrl;
       } catch (error) {
         this.logger.warn(
-          `ElevenLabs generation failed for story ${storyId}: ${error.message}. Falling back to Deepgram.`,
+          `ElevenLabs generation failed for story ${storyId}: ${error.message}. Falling back to Google Cloud TTS.`,
         );
         // Proceed to fallback
       }
@@ -216,37 +218,34 @@ export class TextToSpeechService {
       }
     }
 
-    // Priority 2: Deepgram Fallback
+    // Priority 2: Google Cloud TTS Fallback
     try {
       this.logger.log(
-        `Attempting Deepgram generation for story ${storyId} with voice ${type}`,
+        `Attempting Google Cloud TTS generation for story ${storyId} with voice ${type}`,
       );
 
-      const deepgramSettings = {
-        speed: VOICE_CONFIG_SETTINGS.DEEPGRAM.DEFAULT_SPEED, // Slower pace for storytelling
-      };
+      const googleVoice =
+        VOICE_CONFIG[type as VoiceType]?.googleCloudVoice ?? 'en-US-Neural2-D';
 
-      const audioBuffer = await this.deepgramProvider.generateAudio(
+      const audioBuffer = await this.googleCloudProvider.generateAudio(
         cleanedText,
-        undefined,
-        model,
-        deepgramSettings,
+        googleVoice,
       );
-      const dgAudioUrl = await this.uploadService.uploadAudioBuffer(
+      const gcAudioUrl = await this.uploadService.uploadAudioBuffer(
         audioBuffer,
-        `story_${storyId}_deepgram_${Date.now()}.wav`,
+        `story_${storyId}_gcloud_${Date.now()}.mp3`,
       );
       try {
-        await this.cacheParagraphAudio(storyId, text, type, dgAudioUrl);
+        await this.cacheParagraphAudio(storyId, text, type, gcAudioUrl);
       } catch (cacheErr) {
         this.logger.warn(
           `Failed to cache paragraph audio for story ${storyId}: ${cacheErr.message}`,
         );
       }
-      return dgAudioUrl;
+      return gcAudioUrl;
     } catch (error) {
       this.logger.error(
-        `Deepgram fallback failed for story ${storyId}: ${error.message}`,
+        `Google Cloud TTS fallback failed for story ${storyId}: ${error.message}`,
       );
       throw new InternalServerErrorException(
         'Voice generation failed on both providers',
