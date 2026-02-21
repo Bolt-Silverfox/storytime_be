@@ -123,6 +123,10 @@ export class TextToSpeechService {
       if (voice && voice.elevenLabsVoiceId) {
         elevenLabsId = voice.elevenLabsVoiceId;
         voiceSettings = undefined;
+        // Custom voices are ElevenLabs clones; use default voice for free-tier fallback
+        const defaultConfig = VOICE_CONFIG[DEFAULT_VOICE];
+        edgeTtsVoice = defaultConfig.edgeTtsVoice;
+        styleTts2Voice = defaultConfig.styleTts2Voice;
       } else {
         // Unrecognized ID, fallback to default
         const defaultConfig = VOICE_CONFIG[DEFAULT_VOICE];
@@ -199,14 +203,17 @@ export class TextToSpeechService {
         try {
           await this.cacheParagraphAudio(storyId, text, type, elAudioUrl);
         } catch (cacheErr) {
+          const cacheMsg =
+            cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
           this.logger.warn(
-            `Failed to cache paragraph audio for story ${storyId}: ${cacheErr.message}`,
+            `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
           );
         }
         return elAudioUrl;
       } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
         this.logger.warn(
-          `ElevenLabs generation failed for story ${storyId}: ${error.message}. Falling back to StyleTTS2.`,
+          `ElevenLabs generation failed for story ${storyId}: ${msg}. Falling back to StyleTTS2.`,
         );
       }
     }
@@ -228,14 +235,17 @@ export class TextToSpeechService {
       try {
         await this.cacheParagraphAudio(storyId, text, type, stAudioUrl);
       } catch (cacheErr) {
+        const cacheMsg =
+          cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
         this.logger.warn(
-          `Failed to cache paragraph audio for story ${storyId}: ${cacheErr.message}`,
+          `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
         );
       }
       return stAudioUrl;
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        `StyleTTS2 failed for story ${storyId}: ${error.message}. Falling back to Edge TTS.`,
+        `StyleTTS2 failed for story ${storyId}: ${msg}. Falling back to Edge TTS.`,
       );
     }
 
@@ -256,14 +266,17 @@ export class TextToSpeechService {
       try {
         await this.cacheParagraphAudio(storyId, text, type, edgeAudioUrl);
       } catch (cacheErr) {
+        const cacheMsg =
+          cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
         this.logger.warn(
-          `Failed to cache paragraph audio for story ${storyId}: ${cacheErr.message}`,
+          `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
         );
       }
       return edgeAudioUrl;
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Edge TTS fallback failed for story ${storyId}: ${error.message}`,
+        `Edge TTS fallback failed for story ${storyId}: ${msg}`,
       );
       throw new InternalServerErrorException(
         'Voice generation failed on all providers',

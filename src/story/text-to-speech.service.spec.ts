@@ -110,6 +110,8 @@ describe('TextToSpeechService', () => {
       expect(result).toBe('https://uploaded-audio.com/eleven.mp3');
       expect(mockStyleTts2Generate).not.toHaveBeenCalled();
       expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
+      expect(mockIncrementUsage).toHaveBeenCalledWith(userId);
+      expect(mockPrisma.paragraphAudioCache.upsert).toHaveBeenCalled();
     });
 
     it('should skip ElevenLabs for free users and try StyleTTS2', async () => {
@@ -170,6 +172,41 @@ describe('TextToSpeechService', () => {
       expect(mockStyleTts2Generate).toHaveBeenCalled();
       expect(mockEdgeTtsGenerate).toHaveBeenCalled();
       expect(result).toBe('https://uploaded-audio.com/edge.mp3');
+      expect(mockIncrementUsage).not.toHaveBeenCalled();
+    });
+
+    it('should return cached URL without calling any provider', async () => {
+      mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue({
+        audioUrl: 'https://cached.com/audio.mp3',
+      });
+
+      const result = await service.textToSpeechCloudUrl(
+        storyId,
+        text,
+        voiceType,
+        userId,
+      );
+
+      expect(result).toBe('https://cached.com/audio.mp3');
+      expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
+      expect(mockStyleTts2Generate).not.toHaveBeenCalled();
+      expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
+    });
+
+    it('should throw error if all providers fail for premium user', async () => {
+      mockIsPremiumUser.mockResolvedValue(true);
+      mockCheckUsage.mockResolvedValue(true);
+      mockElevenLabsGenerate.mockRejectedValue(
+        new Error('ElevenLabs Error'),
+      );
+      mockStyleTts2Generate.mockRejectedValue(
+        new Error('StyleTTS2 Error'),
+      );
+      mockEdgeTtsGenerate.mockRejectedValue(new Error('Edge TTS Error'));
+
+      await expect(
+        service.textToSpeechCloudUrl(storyId, text, voiceType, userId),
+      ).rejects.toThrow('Voice generation failed on all providers');
     });
 
     it('should throw error if all providers fail', async () => {

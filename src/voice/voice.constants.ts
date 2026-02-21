@@ -40,7 +40,19 @@ export interface VoiceSettings {
   use_speaker_boost: boolean;
 }
 
-export const VOICE_CONFIG = {
+export interface VoiceConfigEntry {
+  id: VoiceType;
+  name: string;
+  edgeTtsVoice: string;
+  styleTts2Voice: string;
+  gender: string;
+  elevenLabsId: string;
+  previewUrl: string;
+  voiceAvatar: string;
+  voiceSettings: VoiceSettings;
+}
+
+export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
   [VoiceType.CHARLIE]: {
     id: VoiceType.CHARLIE,
     name: 'Charlie',

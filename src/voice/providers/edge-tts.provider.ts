@@ -32,14 +32,24 @@ export class EdgeTTSProvider implements ITextToSpeechProvider {
       try {
         // Create a fresh instance per chunk (internal buffer accumulates)
         const tts = new EdgeTTS();
-        await tts.synthesize(chunk, voice, {
-          rate: config.RATE,
-          outputFormat: config.OUTPUT_FORMAT,
-        });
+        await Promise.race([
+          tts.synthesize(chunk, voice, {
+            rate: config.RATE,
+            outputFormat: config.OUTPUT_FORMAT,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error('Edge TTS synthesis timeout')),
+              config.TIMEOUT_MS,
+            ),
+          ),
+        ]);
         audioBuffers.push(tts.toBuffer());
       } catch (error) {
+        const msg =
+          error instanceof Error ? error.message : String(error);
         this.logger.error(
-          `Edge TTS failed on chunk ${i + 1}/${chunks.length}: ${error.message}`,
+          `Edge TTS failed on chunk ${i + 1}/${chunks.length}: ${msg}`,
         );
         throw error;
       }
