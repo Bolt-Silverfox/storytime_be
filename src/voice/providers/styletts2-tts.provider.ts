@@ -32,20 +32,21 @@ export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
       `Generating ${chunks.length} chunk(s) via StyleTTS2 with voice ${voice}`,
     );
 
+    // Connect once, reuse for all chunks
+    const app = await Promise.race([
+      Client.connect(config.SPACE_ID),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('StyleTTS2 connection timeout')),
+          config.TIMEOUT_MS,
+        ),
+      ),
+    ]);
+
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
 
       try {
-        const app = await Promise.race([
-          Client.connect(config.SPACE_ID),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error('StyleTTS2 connection timeout')),
-              config.TIMEOUT_MS,
-            ),
-          ),
-        ]);
-
         const result = await Promise.race([
           app.predict('/synthesize', {
             text: chunk,
@@ -60,7 +61,6 @@ export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
           ),
         ]);
 
-        // Result contains a URL to the generated audio file
         const data = result.data as Array<{ url: string }>;
         if (!data?.[0]?.url) {
           throw new Error('No audio URL returned from StyleTTS2');
@@ -69,12 +69,15 @@ export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
         const { data: audioData } = await firstValueFrom(
           this.httpService.get<ArrayBuffer>(data[0].url, {
             responseType: 'arraybuffer',
+            timeout: config.TIMEOUT_MS,
           }),
         );
         audioBuffers.push(Buffer.from(audioData));
       } catch (error) {
+        const msg =
+          error instanceof Error ? error.message : String(error);
         this.logger.error(
-          `StyleTTS2 failed on chunk ${i + 1}/${chunks.length}: ${error.message}`,
+          `StyleTTS2 failed on chunk ${i + 1}/${chunks.length}: ${msg}`,
         );
         throw error;
       }
