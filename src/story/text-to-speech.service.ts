@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { UploadService } from '../upload/upload.service';
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -100,7 +101,7 @@ export class TextToSpeechService {
 
     // Guard against unbounded input
     if (text.length > MAX_TTS_TEXT_LENGTH) {
-      throw new InternalServerErrorException(
+      throw new BadRequestException(
         `Text exceeds maximum TTS length of ${MAX_TTS_TEXT_LENGTH} characters`,
       );
     }

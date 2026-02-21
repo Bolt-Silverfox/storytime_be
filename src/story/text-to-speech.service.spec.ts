@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import {
   TextToSpeechService,
   preprocessTextForTTS,
@@ -348,7 +348,7 @@ describe('TextToSpeechService', () => {
 
       await expect(
         service.textToSpeechCloudUrl(storyId, longText, voiceType, userId),
-      ).rejects.toThrow(InternalServerErrorException);
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should use default voice when voicetype is not provided', async () => {

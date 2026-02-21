@@ -40,6 +40,56 @@ async function withTimeout<T>(
   }
 }
 
+/** Standard WAV header size (RIFF + fmt + data sub-chunk header) */
+const WAV_HEADER_SIZE = 44;
+
+/**
+ * Merge multiple WAV buffers into a single valid WAV file.
+ * Each buffer from Gradio is a complete WAV with its own RIFF header.
+ * Naive concatenation produces corrupt audio — we strip headers from
+ * chunks 2+ and patch the first header's size fields.
+ */
+function mergeWavBuffers(buffers: Buffer[]): Buffer {
+  if (buffers.length === 0) return Buffer.alloc(0);
+  if (buffers.length === 1) return buffers[0];
+
+  // Verify the first buffer looks like a WAV (RIFF header)
+  const first = buffers[0];
+  if (
+    first.length < WAV_HEADER_SIZE ||
+    first.toString('ascii', 0, 4) !== 'RIFF'
+  ) {
+    // Not WAV — fall back to simple concatenation (shouldn't happen)
+    return Buffer.concat(buffers);
+  }
+
+  // Extract PCM data from each chunk (skip 44-byte header on chunks 2+)
+  const pcmChunks: Buffer[] = [first.subarray(WAV_HEADER_SIZE)];
+  for (let i = 1; i < buffers.length; i++) {
+    const buf = buffers[i];
+    if (
+      buf.length > WAV_HEADER_SIZE &&
+      buf.toString('ascii', 0, 4) === 'RIFF'
+    ) {
+      pcmChunks.push(buf.subarray(WAV_HEADER_SIZE));
+    } else {
+      // Not a WAV — append as-is (raw PCM)
+      pcmChunks.push(buf);
+    }
+  }
+
+  const totalPcmLength = pcmChunks.reduce((sum, b) => sum + b.length, 0);
+
+  // Clone the first header and patch size fields
+  const header = Buffer.from(first.subarray(0, WAV_HEADER_SIZE));
+  // Bytes 4-7: RIFF chunk size = total file size - 8
+  header.writeUInt32LE(totalPcmLength + WAV_HEADER_SIZE - 8, 4);
+  // Bytes 40-43: data sub-chunk size = total PCM length
+  header.writeUInt32LE(totalPcmLength, 40);
+
+  return Buffer.concat([header, ...pcmChunks]);
+}
+
 @Injectable()
 export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
   private readonly logger = new Logger(StyleTTS2TTSProvider.name);
@@ -96,9 +146,7 @@ export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
 
           const audioUrl = data[0].url;
           if (!isAllowedAudioUrl(audioUrl)) {
-            throw new Error(
-              `Untrusted audio URL from StyleTTS2: ${new URL(audioUrl).hostname}`,
-            );
+            throw new Error(`Untrusted audio URL from StyleTTS2: ${audioUrl}`);
           }
 
           const { data: audioData } = await firstValueFrom(
@@ -129,6 +177,6 @@ export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
       }
     }
 
-    return Buffer.concat(audioBuffers);
+    return mergeWavBuffers(audioBuffers);
   }
 }

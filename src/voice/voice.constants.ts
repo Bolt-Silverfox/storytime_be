@@ -108,7 +108,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     id: VoiceType.LILY,
     name: 'Lily',
     edgeTtsVoice: 'en-US-AvaMultilingualNeural',
-    styleTts2Voice: 'Georgia_Female_EN_US',
+    styleTts2Voice: 'Nelly_Female_EN_US',
     gender: 'Female',
     elevenLabsId: 'pFZP5JQG7iQjIQuC4Bku',
     previewUrl: VOICE_PREVIEWS[VoiceType.LILY],
