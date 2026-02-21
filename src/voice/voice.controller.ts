@@ -24,7 +24,6 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { randomUUID } from 'crypto';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -256,7 +255,7 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
   ) {
     const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
-      randomUUID().toString(),
+      dto.storyId,
       dto.content,
       dto.voiceId ?? DEFAULT_VOICE,
       req.authUserData.userId,
