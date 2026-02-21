@@ -190,7 +190,13 @@ export class TextToSpeechService {
           audioBuffer,
           `story_${storyId}_elevenlabs_${Date.now()}.mp3`,
         );
-        await this.cacheParagraphAudio(storyId, text, type, elAudioUrl);
+        try {
+          await this.cacheParagraphAudio(storyId, text, type, elAudioUrl);
+        } catch (cacheErr) {
+          this.logger.warn(
+            `Failed to cache paragraph audio for story ${storyId}: ${cacheErr.message}`,
+          );
+        }
         return elAudioUrl;
       } catch (error) {
         this.logger.warn(
@@ -230,7 +236,13 @@ export class TextToSpeechService {
         audioBuffer,
         `story_${storyId}_deepgram_${Date.now()}.wav`,
       );
-      await this.cacheParagraphAudio(storyId, text, type, dgAudioUrl);
+      try {
+        await this.cacheParagraphAudio(storyId, text, type, dgAudioUrl);
+      } catch (cacheErr) {
+        this.logger.warn(
+          `Failed to cache paragraph audio for story ${storyId}: ${cacheErr.message}`,
+        );
+      }
       return dgAudioUrl;
     } catch (error) {
       this.logger.error(
