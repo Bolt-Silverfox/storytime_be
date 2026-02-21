@@ -71,9 +71,7 @@ export class GoogleCloudTTSProvider implements ITextToSpeechProvider {
 
         audioBuffers.push(buffer);
       } catch (innerError) {
-        this.logger.error(
-          `Failed on chunk ${i + 1}: ${innerError.message}`,
-        );
+        this.logger.error(`Failed on chunk ${i + 1}: ${innerError.message}`);
         throw innerError;
       }
     }
