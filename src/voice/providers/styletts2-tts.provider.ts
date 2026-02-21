@@ -11,19 +11,13 @@ import { VOICE_CONFIG_SETTINGS } from '../voice.config';
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
 /** Hostnames trusted for fetching generated audio from HuggingFace */
-const ALLOWED_AUDIO_HOSTS = [
-  '.hf.space',
-  '.huggingface.co',
-  '.gradio.live',
-];
+const ALLOWED_AUDIO_HOSTS = ['.hf.space', '.huggingface.co', '.gradio.live'];
 
 function isAllowedAudioUrl(raw: string): boolean {
   try {
     const url = new URL(raw);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
-    return ALLOWED_AUDIO_HOSTS.some((suffix) =>
-      url.hostname.endsWith(suffix),
-    );
+    return ALLOWED_AUDIO_HOSTS.some((suffix) => url.hostname.endsWith(suffix));
   } catch {
     return false;
   }
@@ -117,8 +111,7 @@ export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
           );
           audioBuffers.push(Buffer.from(audioData));
         } catch (error) {
-          const msg =
-            error instanceof Error ? error.message : String(error);
+          const msg = error instanceof Error ? error.message : String(error);
           this.logger.error(
             `StyleTTS2 failed on chunk ${i + 1}/${chunks.length}: ${msg}`,
           );
