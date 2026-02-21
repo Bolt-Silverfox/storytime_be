@@ -114,9 +114,7 @@ describe('TextToSpeechService', () => {
 
     it('should skip ElevenLabs for free users and try StyleTTS2', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockResolvedValue(
-        Buffer.from('styletts2-audio'),
-      );
+      mockStyleTts2Generate.mockResolvedValue(Buffer.from('styletts2-audio'));
       mockUploadAudio.mockResolvedValue(
         'https://uploaded-audio.com/styletts2.wav',
       );
@@ -136,13 +134,9 @@ describe('TextToSpeechService', () => {
 
     it('should fallback to Edge TTS if StyleTTS2 fails', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockRejectedValue(
-        new Error('StyleTTS2 timeout'),
-      );
+      mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 timeout'));
       mockEdgeTtsGenerate.mockResolvedValue(Buffer.from('edge-audio'));
-      mockUploadAudio.mockResolvedValue(
-        'https://uploaded-audio.com/edge.mp3',
-      );
+      mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/edge.mp3');
 
       const result = await service.textToSpeechCloudUrl(
         storyId,
@@ -160,16 +154,10 @@ describe('TextToSpeechService', () => {
     it('should fallback through all 3 tiers for premium users', async () => {
       mockIsPremiumUser.mockResolvedValue(true);
       mockCheckUsage.mockResolvedValue(true);
-      mockElevenLabsGenerate.mockRejectedValue(
-        new Error('ElevenLabs Error'),
-      );
-      mockStyleTts2Generate.mockRejectedValue(
-        new Error('StyleTTS2 Error'),
-      );
+      mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs Error'));
+      mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 Error'));
       mockEdgeTtsGenerate.mockResolvedValue(Buffer.from('edge-audio'));
-      mockUploadAudio.mockResolvedValue(
-        'https://uploaded-audio.com/edge.mp3',
-      );
+      mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/edge.mp3');
 
       const result = await service.textToSpeechCloudUrl(
         storyId,
@@ -186,9 +174,7 @@ describe('TextToSpeechService', () => {
 
     it('should throw error if all providers fail', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockRejectedValue(
-        new Error('StyleTTS2 Error'),
-      );
+      mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 Error'));
       mockEdgeTtsGenerate.mockRejectedValue(new Error('Edge TTS Error'));
 
       await expect(
