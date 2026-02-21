@@ -46,8 +46,7 @@ export class EdgeTTSProvider implements ITextToSpeechProvider {
         ]);
         audioBuffers.push(tts.toBuffer());
       } catch (error) {
-        const msg =
-          error instanceof Error ? error.message : String(error);
+        const msg = error instanceof Error ? error.message : String(error);
         this.logger.error(
           `Edge TTS failed on chunk ${i + 1}/${chunks.length}: ${msg}`,
         );

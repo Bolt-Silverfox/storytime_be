@@ -74,8 +74,7 @@ export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
         );
         audioBuffers.push(Buffer.from(audioData));
       } catch (error) {
-        const msg =
-          error instanceof Error ? error.message : String(error);
+        const msg = error instanceof Error ? error.message : String(error);
         this.logger.error(
           `StyleTTS2 failed on chunk ${i + 1}/${chunks.length}: ${msg}`,
         );
