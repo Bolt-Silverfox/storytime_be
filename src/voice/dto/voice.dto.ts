@@ -76,6 +76,14 @@ export class StoryContentAudioDto {
   content: string;
 
   @ApiProperty({
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    description: 'Story ID for caching paragraph audio',
+  })
+  @IsString()
+  @IsNotEmpty()
+  storyId: string;
+
+  @ApiProperty({
     required: false,
     example: 'MILO',
     description: 'Preferred voice ID (Enum value or UUID)',

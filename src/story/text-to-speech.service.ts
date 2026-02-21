@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { UploadService } from '../upload/upload.service';
 import {
   Injectable,
@@ -49,6 +50,41 @@ export class TextToSpeechService {
     private readonly voiceQuota: VoiceQuotaService,
   ) {}
 
+  private hashText(text: string): string {
+    const cleaned = preprocessTextForTTS(text);
+    return createHash('sha256').update(cleaned).digest('hex');
+  }
+
+  private async getCachedParagraphAudio(
+    storyId: string,
+    text: string,
+    voiceId: string,
+  ): Promise<string | null> {
+    const textHash = this.hashText(text);
+    const cached = await this.prisma.paragraphAudioCache.findUnique({
+      where: {
+        storyId_textHash_voiceId: { storyId, textHash, voiceId },
+      },
+    });
+    return cached?.audioUrl ?? null;
+  }
+
+  private async cacheParagraphAudio(
+    storyId: string,
+    text: string,
+    voiceId: string,
+    audioUrl: string,
+  ): Promise<void> {
+    const textHash = this.hashText(text);
+    await this.prisma.paragraphAudioCache.upsert({
+      where: {
+        storyId_textHash_voiceId: { storyId, textHash, voiceId },
+      },
+      create: { storyId, textHash, voiceId, audioUrl },
+      update: { audioUrl },
+    });
+  }
+
   async textToSpeechCloudUrl(
     storyId: string,
     text: string,
@@ -56,6 +92,15 @@ export class TextToSpeechService {
     userId?: string, // Added userId for quota tracking
   ): Promise<string> {
     const type = voicetype ?? DEFAULT_VOICE;
+
+    // Check paragraph-level cache first
+    const cachedUrl = await this.getCachedParagraphAudio(storyId, text, type);
+    if (cachedUrl) {
+      this.logger.log(
+        `Paragraph cache hit for story ${storyId}, voice ${type}`,
+      );
+      return cachedUrl;
+    }
 
     // Resolve ElevenLabs ID and per-voice settings
     let elevenLabsId: string | undefined;
@@ -141,10 +186,12 @@ export class TextToSpeechService {
           await this.voiceQuota.incrementUsage(userId);
         }
 
-        return await this.uploadService.uploadAudioBuffer(
+        const elAudioUrl = await this.uploadService.uploadAudioBuffer(
           audioBuffer,
           `story_${storyId}_elevenlabs_${Date.now()}.mp3`,
         );
+        await this.cacheParagraphAudio(storyId, text, type, elAudioUrl);
+        return elAudioUrl;
       } catch (error) {
         this.logger.warn(
           `ElevenLabs generation failed for story ${storyId}: ${error.message}. Falling back to Deepgram.`,
@@ -179,10 +226,12 @@ export class TextToSpeechService {
         model,
         deepgramSettings,
       );
-      return await this.uploadService.uploadAudioBuffer(
+      const dgAudioUrl = await this.uploadService.uploadAudioBuffer(
         audioBuffer,
         `story_${storyId}_deepgram_${Date.now()}.wav`,
       );
+      await this.cacheParagraphAudio(storyId, text, type, dgAudioUrl);
+      return dgAudioUrl;
     } catch (error) {
       this.logger.error(
         `Deepgram fallback failed for story ${storyId}: ${error.message}`,
