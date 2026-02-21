@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export enum VoiceSourceType {
   UPLOADED = 'uploaded',
@@ -81,6 +81,7 @@ export class StoryContentAudioDto {
   })
   @IsString()
   @IsNotEmpty()
+  @IsUUID()
   storyId: string;
 
   @ApiProperty({
