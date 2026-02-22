@@ -1,4 +1,4 @@
-import { VoiceType } from '@/voice/dto/voice.dto';
+import { DEFAULT_VOICE } from '@/voice/voice.constants';
 
 export const FREE_TIER_LIMITS = {
   STORIES: {
@@ -6,7 +6,7 @@ export const FREE_TIER_LIMITS = {
     WEEKLY_BONUS: 1, // +1 bonus story per week
   },
   VOICES: {
-    DEFAULT_VOICE: VoiceType.LILY,
+    DEFAULT_VOICE,
     CUSTOM_SLOTS: 0, // Free users can only use the default voice
   },
 };
