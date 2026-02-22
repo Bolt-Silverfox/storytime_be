@@ -130,11 +130,7 @@ export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
 
         try {
           const result = await withTimeout(
-            app.predict('/synthesize', {
-              text: chunk,
-              voice: voice,
-              speed: config.SPEED,
-            }),
+            app.predict('/on_generate_tts', [chunk, voice, config.SPEED]),
             config.TIMEOUT_MS,
             'StyleTTS2 prediction',
           );
