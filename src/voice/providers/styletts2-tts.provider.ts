@@ -129,8 +129,9 @@ export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
         const chunk = chunks[i];
 
         try {
+          // Gradio positional args: [text, voice, speed]
           const result = await withTimeout(
-            app.predict('/on_generate_tts', [chunk, voice, config.SPEED]),
+            app.predict(config.ENDPOINT, [chunk, voice, config.SPEED]),
             config.TIMEOUT_MS,
             'StyleTTS2 prediction',
           );
