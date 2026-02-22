@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
@@ -157,7 +152,7 @@ export class VoiceQuotaService {
   /**
    * Check if a user can use a specific voice
    * Premium users can use any voice
-   * Free users can only use DEFAULT_VOICE + their selected second voice
+   * Free users can only use the default voice (LILY)
    */
   async canUseVoice(userId: string, voiceId: string): Promise<boolean> {
     const isPremium = await this.isPremiumUser(userId);
@@ -181,70 +176,21 @@ export class VoiceQuotaService {
       }
     }
 
-    // Check if it's their selected second voice
-    const usage = await this.prisma.userUsage.findUnique({
-      where: { userId },
-    });
-
-    if (!usage?.selectedSecondVoiceId) return false;
-
-    // Check if voiceId matches the selected second voice (by ID or elevenLabsId)
-    if (usage.selectedSecondVoiceId === voiceId) return true;
-
-    // Also check if it matches via the Voice table
-    const selectedVoice = await this.prisma.voice.findUnique({
-      where: { id: usage.selectedSecondVoiceId },
-    });
-
-    return selectedVoice?.elevenLabsVoiceId === voiceId;
+    return false;
   }
 
   /**
    * Set the second voice for a free user
+   * @deprecated Second voice selection is no longer available. Free users only get the default voice.
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   async setSecondVoice(userId: string, voiceId: string): Promise<void> {
-    const isPremium = await this.isPremiumUser(userId);
-    if (isPremium) {
-      throw new BadRequestException(
-        'Premium users have unlimited voice access and do not need to set a second voice',
-      );
-    }
-
-    // Validate voice exists and user has access (owned by user or public/system voice)
-    const voice = await this.prisma.voice.findFirst({
-      where: {
-        id: voiceId,
-        OR: [{ userId }, { userId: null }],
-      },
-    });
-    if (!voice) {
-      throw new NotFoundException('Voice not found');
-    }
-
-    const currentMonth = this.getCurrentMonth();
-    await this.prisma.userUsage.upsert({
-      where: { userId },
-      create: {
-        userId,
-        currentMonth,
-        selectedSecondVoiceId: voiceId,
-      },
-      update: {
-        selectedSecondVoiceId: voiceId,
-      },
-    });
-
-    this.logger.log(`User ${userId} set second voice to ${voiceId}`);
-  }
-
-  /**
-   * Get the user's selected second voice ID
-   */
-  async getSecondVoice(userId: string): Promise<string | null> {
-    const usage = await this.prisma.userUsage.findUnique({
-      where: { userId },
-    });
-    return usage?.selectedSecondVoiceId ?? null;
+    this.logger.warn(
+      `User ${userId} attempted to set second voice to ${voiceId}, but this feature is disabled`,
+    );
+    throw new BadRequestException(
+      'Second voice selection is no longer available. Free users can only use the default voice. Upgrade to premium for access to all voices.',
+    );
   }
 
   /**
@@ -254,7 +200,6 @@ export class VoiceQuotaService {
     isPremium: boolean;
     unlimited: boolean;
     defaultVoice: string;
-    selectedSecondVoice: string | null;
     maxVoices: number;
   }> {
     const isPremium = await this.isPremiumUser(userId);
@@ -264,21 +209,15 @@ export class VoiceQuotaService {
         isPremium: true,
         unlimited: true,
         defaultVoice: FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE,
-        selectedSecondVoice: null,
         maxVoices: -1, // unlimited
       };
     }
-
-    const usage = await this.prisma.userUsage.findUnique({
-      where: { userId },
-    });
 
     return {
       isPremium: false,
       unlimited: false,
       defaultVoice: FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE,
-      selectedSecondVoice: usage?.selectedSecondVoiceId ?? null,
-      maxVoices: 1 + FREE_TIER_LIMITS.VOICES.CUSTOM_SLOTS, // default + 1 custom
+      maxVoices: 1, // only the default voice
     };
   }
 

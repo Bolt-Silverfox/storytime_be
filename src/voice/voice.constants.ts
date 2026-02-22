@@ -1,6 +1,6 @@
 import { VoiceType } from './dto/voice.dto';
 
-export const DEFAULT_VOICE = VoiceType.CHARLIE;
+export const DEFAULT_VOICE = VoiceType.LILY;
 
 export const VOICE_AVATARS: Record<VoiceType, string> = {
   [VoiceType.CHARLIE]:
@@ -12,14 +12,13 @@ export const VOICE_AVATARS: Record<VoiceType, string> = {
   [VoiceType.LILY]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772690/storytime/voice_avatars/nimbus.png',
   [VoiceType.BILL]:
-    'https://res.cloudinary.com/billmal/image/upload/v1768772691/storytime/voice_avatars/grandpa_jo.png',
+    'https://res.cloudinary.com/billmal/image/upload/v1771776487/storytime/voice_avatars/fanice.png',
   [VoiceType.LAURA]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772693/storytime/voice_avatars/chip.png',
-  // TODO: Replace placeholder avatar URLs with actual assets from design
   [VoiceType.ROSIE]:
-    'https://res.cloudinary.com/billmal/image/upload/v1768772694/storytime/voice_avatars/rosie.png',
+    'https://res.cloudinary.com/billmal/image/upload/v1771776416/storytime/voice_avatars/rosie.png',
   [VoiceType.PIXIE]:
-    'https://res.cloudinary.com/billmal/image/upload/v1768772695/storytime/voice_avatars/pixie.png',
+    'https://res.cloudinary.com/billmal/image/upload/v1771776416/storytime/voice_avatars/pixie.png',
 };
 
 export const VOICE_PREVIEWS: Record<VoiceType, string> = {
@@ -64,14 +63,14 @@ export interface VoiceConfigEntry {
 export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
   [VoiceType.CHARLIE]: {
     id: VoiceType.CHARLIE,
-    name: 'Charlie',
+    name: 'Milo',
     edgeTtsVoice: 'en-US-AndrewMultilingualNeural',
     styleTts2Voice: 'Richard_Male_EN_US',
     gender: 'Male',
     elevenLabsId: 'IKne3meq5aSn9XLyUdCD',
     previewUrl: VOICE_PREVIEWS[VoiceType.CHARLIE],
     voiceAvatar: VOICE_AVATARS[VoiceType.CHARLIE],
-    // Charlie: warm, friendly male - needs more expressiveness for storytelling
+    // Milo: warm, friendly male - needs more expressiveness for storytelling
     voiceSettings: {
       stability: 0.3,
       similarity_boost: 0.85,
@@ -81,14 +80,14 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
   },
   [VoiceType.JESSICA]: {
     id: VoiceType.JESSICA,
-    name: 'Jessica',
+    name: 'Bella',
     edgeTtsVoice: 'en-US-EmmaMultilingualNeural',
     styleTts2Voice: 'Sol_Female_EN_US',
     gender: 'Female',
     elevenLabsId: 'cgSgspJ2msm6clMCkdW9',
     previewUrl: VOICE_PREVIEWS[VoiceType.JESSICA],
     voiceAvatar: VOICE_AVATARS[VoiceType.JESSICA],
-    // Jessica: young, energetic female - balance expressiveness with clarity
+    // Bella: young, energetic female - balance expressiveness with clarity
     voiceSettings: {
       stability: 0.35,
       similarity_boost: 0.8,
@@ -98,14 +97,14 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
   },
   [VoiceType.WILL]: {
     id: VoiceType.WILL,
-    name: 'Will',
+    name: 'Cosmo',
     edgeTtsVoice: 'en-US-BrianMultilingualNeural',
     styleTts2Voice: 'Jack_Male_EN_US',
     gender: 'Male',
     elevenLabsId: 'bIHbv24MWmeRgasZH58o',
     previewUrl: VOICE_PREVIEWS[VoiceType.WILL],
     voiceAvatar: VOICE_AVATARS[VoiceType.WILL],
-    // Will: young male - more dynamic for engaging storytelling
+    // Cosmo: young male - more dynamic for engaging storytelling
     voiceSettings: {
       stability: 0.3,
       similarity_boost: 0.85,
@@ -115,14 +114,14 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
   },
   [VoiceType.LILY]: {
     id: VoiceType.LILY,
-    name: 'Lily',
+    name: 'Nimbus',
     edgeTtsVoice: 'en-US-AvaMultilingualNeural',
     styleTts2Voice: 'Nelly_Female_EN_US',
     gender: 'Female',
     elevenLabsId: 'pFZP5JQG7iQjIQuC4Bku',
     previewUrl: VOICE_PREVIEWS[VoiceType.LILY],
     voiceAvatar: VOICE_AVATARS[VoiceType.LILY],
-    // Lily: narrative female - already reads naturally, optimized for storytelling
+    // Nimbus: narrative female - already reads naturally, optimized for storytelling
     voiceSettings: {
       stability: 0.35,
       similarity_boost: 0.8,
@@ -132,14 +131,14 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
   },
   [VoiceType.BILL]: {
     id: VoiceType.BILL,
-    name: 'Bill',
+    name: 'Fanice',
     edgeTtsVoice: 'en-US-RogerNeural',
     styleTts2Voice: 'Samuel_Male_EN_US',
     gender: 'Male',
     elevenLabsId: 'pqHfZKP75CvOlQylNhV4',
     previewUrl: VOICE_PREVIEWS[VoiceType.BILL],
     voiceAvatar: VOICE_AVATARS[VoiceType.BILL],
-    // Bill: older, grandfatherly male - warm and expressive for bedtime stories
+    // Fanice: warm and expressive for bedtime stories
     voiceSettings: {
       stability: 0.4,
       similarity_boost: 0.75,
@@ -149,14 +148,14 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
   },
   [VoiceType.LAURA]: {
     id: VoiceType.LAURA,
-    name: 'Laura',
+    name: 'Chip',
     edgeTtsVoice: 'en-US-AriaNeural',
     styleTts2Voice: 'Lisa_Female_EN_US',
     gender: 'Female',
     elevenLabsId: 'FGY2WhTYpPnrIDTdsKH5',
     previewUrl: VOICE_PREVIEWS[VoiceType.LAURA],
     voiceAvatar: VOICE_AVATARS[VoiceType.LAURA],
-    // Laura: mature female - expressive with good pacing for narration
+    // Chip: mature female - expressive with good pacing for narration
     voiceSettings: {
       stability: 0.35,
       similarity_boost: 0.8,
@@ -173,7 +172,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     elevenLabsId: 'ThT5KcBeYPX3keUQqHPh',
     previewUrl: VOICE_PREVIEWS[VoiceType.ROSIE],
     voiceAvatar: VOICE_AVATARS[VoiceType.ROSIE],
-    // Rosie (Dorothy): young British child voice - calmer for storytelling
+    // Rosie: young child voice - calmer for storytelling
     voiceSettings: {
       stability: 0.45,
       similarity_boost: 0.75,
@@ -190,7 +189,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     elevenLabsId: 'jBpfuIE2acCO8z3wKNLl',
     previewUrl: VOICE_PREVIEWS[VoiceType.PIXIE],
     voiceAvatar: VOICE_AVATARS[VoiceType.PIXIE],
-    // Pixie (Gigi): animated childish American voice - more expressive
+    // Pixie: animated childish voice - more expressive
     voiceSettings: {
       stability: 0.3,
       similarity_boost: 0.85,

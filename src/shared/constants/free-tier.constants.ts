@@ -6,7 +6,7 @@ export const FREE_TIER_LIMITS = {
     WEEKLY_BONUS: 1, // +1 bonus story per week
   },
   VOICES: {
-    DEFAULT_VOICE: VoiceType.CHARLIE,
-    CUSTOM_SLOTS: 1, // Free users can select 1 additional voice
+    DEFAULT_VOICE: VoiceType.LILY,
+    CUSTOM_SLOTS: 0, // Free users can only use the default voice
   },
 };
