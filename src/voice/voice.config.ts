@@ -12,6 +12,7 @@ export const VOICE_CONFIG_SETTINGS = {
   },
   STYLE_TTS2: {
     SPACE_ID: 'Wismut/StyleTTS2_Studio',
+    ENDPOINT: '/on_generate_tts',
     SPEED: 120,
     TIMEOUT_MS: 30_000,
     CHUNK_SIZE: 3000,
