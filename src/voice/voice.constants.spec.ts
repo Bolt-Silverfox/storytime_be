@@ -1,8 +1,17 @@
 import { VoiceType } from './dto/voice.dto';
-import { VOICE_AVATARS, VOICE_CONFIG, VOICE_PREVIEWS } from './voice.constants';
+import {
+  DEFAULT_VOICE,
+  VOICE_AVATARS,
+  VOICE_CONFIG,
+  VOICE_PREVIEWS,
+} from './voice.constants';
 
 describe('Voice constants', () => {
   const allVoiceTypes = Object.values(VoiceType);
+
+  it('should have LILY as the default voice', () => {
+    expect(DEFAULT_VOICE).toBe(VoiceType.LILY);
+  });
 
   it('should have a VOICE_CONFIG entry for every VoiceType', () => {
     for (const voice of allVoiceTypes) {

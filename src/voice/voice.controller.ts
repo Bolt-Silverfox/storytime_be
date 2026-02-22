@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -194,7 +195,6 @@ export class VoiceController {
         isPremium: { type: 'boolean' },
         unlimited: { type: 'boolean' },
         defaultVoice: { type: 'string' },
-        selectedSecondVoice: { type: 'string', nullable: true },
         maxVoices: { type: 'number' },
       },
     },
@@ -230,16 +230,27 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Query('voiceId') voiceId?: VoiceType | string,
   ) {
+    const resolvedVoice = voiceId ?? DEFAULT_VOICE;
+    const canUse = await this.voiceQuotaService.canUseVoice(
+      req.authUserData.userId,
+      resolvedVoice,
+    );
+    if (!canUse) {
+      throw new ForbiddenException(
+        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+      );
+    }
+
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
-      voiceId ?? DEFAULT_VOICE,
+      resolvedVoice,
       req.authUserData.userId,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceId: voiceId || DEFAULT_VOICE,
+      voiceId: resolvedVoice,
       statusCode: 200,
     };
   }
@@ -254,17 +265,28 @@ export class VoiceController {
     @Body() dto: StoryContentAudioDto,
     @Req() req: AuthenticatedRequest,
   ) {
+    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
+    const canUse = await this.voiceQuotaService.canUseVoice(
+      req.authUserData.userId,
+      resolvedVoice,
+    );
+    if (!canUse) {
+      throw new ForbiddenException(
+        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+      );
+    }
+
     const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
       dto.storyId,
       dto.content,
-      dto.voiceId ?? DEFAULT_VOICE,
+      resolvedVoice,
       req.authUserData.userId,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceId: dto.voiceId || DEFAULT_VOICE,
+      voiceId: resolvedVoice,
       statusCode: 200,
     };
   }
