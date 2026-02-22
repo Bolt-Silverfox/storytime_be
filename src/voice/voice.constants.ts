@@ -2,7 +2,7 @@ import { VoiceType } from './dto/voice.dto';
 
 export const DEFAULT_VOICE = VoiceType.CHARLIE;
 
-export const VOICE_AVATARS = {
+export const VOICE_AVATARS: Record<VoiceType, string> = {
   [VoiceType.CHARLIE]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772687/storytime/voice_avatars/milo.png',
   [VoiceType.JESSICA]:
@@ -15,13 +15,14 @@ export const VOICE_AVATARS = {
     'https://res.cloudinary.com/billmal/image/upload/v1768772691/storytime/voice_avatars/grandpa_jo.png',
   [VoiceType.LAURA]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772693/storytime/voice_avatars/chip.png',
+  // TODO: Replace placeholder avatar URLs with actual assets from design
   [VoiceType.ROSIE]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772694/storytime/voice_avatars/rosie.png',
   [VoiceType.PIXIE]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772695/storytime/voice_avatars/pixie.png',
 };
 
-export const VOICE_PREVIEWS = {
+export const VOICE_PREVIEWS: Record<VoiceType, string> = {
   [VoiceType.CHARLIE]:
     'https://storage.googleapis.com/eleven-public-prod/premade/voices/IKne3meq5aSn9XLyUdCD/102de6f2-22ed-43e0-a1f1-111fa75c5481.mp3',
   [VoiceType.JESSICA]:
@@ -183,7 +184,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
   [VoiceType.PIXIE]: {
     id: VoiceType.PIXIE,
     name: 'Pixie',
-    edgeTtsVoice: 'en-US-AnaNeural',
+    edgeTtsVoice: 'en-US-JennyNeural',
     styleTts2Voice: 'Marry_Female_EN_US',
     gender: 'Female',
     elevenLabsId: 'jBpfuIE2acCO8z3wKNLl',
