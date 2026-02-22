@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
@@ -177,20 +177,6 @@ export class VoiceQuotaService {
     }
 
     return false;
-  }
-
-  /**
-   * Set the second voice for a free user
-   * @deprecated Second voice selection is no longer available. Free users only get the default voice.
-   */
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async setSecondVoice(userId: string, voiceId: string): Promise<void> {
-    this.logger.warn(
-      `User ${userId} attempted to set second voice to ${voiceId}, but this feature is disabled`,
-    );
-    throw new BadRequestException(
-      'Second voice selection is no longer available. Free users can only use the default voice. Upgrade to premium for access to all voices.',
-    );
   }
 
   /**
