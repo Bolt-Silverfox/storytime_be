@@ -41,6 +41,9 @@ export class VoiceResponseDto {
   @ApiProperty()
   name: string;
 
+  @ApiProperty({ required: false, description: 'User-facing display name' })
+  displayName?: string;
+
   @ApiProperty({
     description: "'uploaded' or 'elevenlabs'",
     enum: VoiceSourceType,
