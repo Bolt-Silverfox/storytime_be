@@ -150,33 +150,6 @@ export class VoiceController {
     return this.voiceService.getPreferredVoice(req.authUserData.userId);
   }
 
-  // --- Free tier second voice selection ---
-  @Patch('second-voice')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Set second voice for free tier user',
-    description:
-      'Free users can select one additional voice beyond the default. Premium users have unlimited access.',
-  })
-  @ApiBody({ type: SetPreferredVoiceDto })
-  @ApiResponse({ status: 200, description: 'Second voice set successfully' })
-  @ApiResponse({
-    status: 400,
-    description: 'Premium users do not need to set a second voice',
-  })
-  @ApiResponse({ status: 404, description: 'Voice not found' })
-  async setSecondVoice(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: SetPreferredVoiceDto,
-  ) {
-    await this.voiceQuotaService.setSecondVoice(
-      req.authUserData.userId,
-      body.voiceId,
-    );
-    return { message: 'Second voice set successfully', voiceId: body.voiceId };
-  }
-
   // --- Get voice access status ---
   @Get('access')
   @UseGuards(AuthSessionGuard)

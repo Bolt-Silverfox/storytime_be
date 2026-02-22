@@ -60,6 +60,14 @@ export interface VoiceConfigEntry {
   voiceSettings: VoiceSettings;
 }
 
+/**
+ * VoiceType enum keys (CHARLIE, JESSICA, etc.) are stable internal identifiers
+ * used in the database and API. The `name` field is the user-facing display name
+ * shown in the mobile app (Milo, Bella, etc.). Keep these decoupled — update
+ * `name` for UI changes without touching enum keys or stored references.
+ * When adding new voices, add the enum in dto/voice.dto.ts, then add entries
+ * here in VOICE_AVATARS, VOICE_PREVIEWS, and VOICE_CONFIG.
+ */
 export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
   [VoiceType.CHARLIE]: {
     id: VoiceType.CHARLIE,
