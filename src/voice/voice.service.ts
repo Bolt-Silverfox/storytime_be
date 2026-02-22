@@ -158,10 +158,12 @@ export class VoiceService {
         voiceAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${voice.name}`;
       }
     } else if (voice.type === (VoiceSourceType.ELEVENLABS as string)) {
-      // For ElevenLabs, 'url' might be the preview URL if we saved it
-      previewUrl = voice.url ?? undefined;
+      // For ElevenLabs, fall back to VOICE_CONFIG, then dicebear
+      previewUrl = voice.url || config?.previewUrl;
       if (!voiceAvatar) {
-        voiceAvatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${voice.elevenLabsVoiceId}`;
+        voiceAvatar =
+          config?.voiceAvatar ??
+          `https://api.dicebear.com/7.x/identicon/svg?seed=${voice.elevenLabsVoiceId}`;
       }
     }
 
@@ -277,23 +279,7 @@ export class VoiceService {
       },
     });
 
-    // Map DB voices to response, enriching with config data (avatar, preview) if needed
-    const voices = dbVoices.map((voice) => {
-      // Find matching config to get extra metadata if missing in DB
-      const config = Object.values(VOICE_CONFIG).find(
-        (c) => c.elevenLabsId === voice.elevenLabsVoiceId,
-      );
-
-      return {
-        id: voice.id,
-        name: voice.name,
-        displayName: config?.name ?? voice.name,
-        type: voice.type,
-        previewUrl: voice.url || config?.previewUrl,
-        voiceAvatar: voice.voiceAvatar || config?.voiceAvatar,
-        elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
-      };
-    });
+    const voices = dbVoices.map((voice) => this.toVoiceResponse(voice));
 
     // Cache the result
     await this.cacheManager.set(
