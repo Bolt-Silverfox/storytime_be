@@ -64,6 +64,8 @@ export enum VoiceType {
   LILY = 'LILY',
   BILL = 'BILL',
   LAURA = 'LAURA',
+  ROSIE = 'ROSIE',
+  PIXIE = 'PIXIE',
 }
 
 export class StoryContentAudioDto {

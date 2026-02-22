@@ -15,6 +15,10 @@ export const VOICE_AVATARS = {
     'https://res.cloudinary.com/billmal/image/upload/v1768772691/storytime/voice_avatars/grandpa_jo.png',
   [VoiceType.LAURA]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772693/storytime/voice_avatars/chip.png',
+  [VoiceType.ROSIE]:
+    'https://res.cloudinary.com/billmal/image/upload/v1768772694/storytime/voice_avatars/rosie.png',
+  [VoiceType.PIXIE]:
+    'https://res.cloudinary.com/billmal/image/upload/v1768772695/storytime/voice_avatars/pixie.png',
 };
 
 export const VOICE_PREVIEWS = {
@@ -30,6 +34,10 @@ export const VOICE_PREVIEWS = {
     'https://storage.googleapis.com/eleven-public-prod/premade/voices/pqHfZKP75CvOlQylNhV4/d782b3ff-84ba-4029-848c-acf01285524d.mp3',
   [VoiceType.LAURA]:
     'https://storage.googleapis.com/eleven-public-prod/premade/voices/FGY2WhTYpPnrIDTdsKH5/67341759-ad08-41a5-be6e-de12fe448618.mp3',
+  [VoiceType.ROSIE]:
+    'https://storage.googleapis.com/eleven-public-prod/premade/voices/ThT5KcBeYPX3keUQqHPh/981f0855-6598-48d2-9f8f-b6d92fbbe3fc.mp3',
+  [VoiceType.PIXIE]:
+    'https://storage.googleapis.com/eleven-public-prod/premade/voices/jBpfuIE2acCO8z3wKNLl/3a7e4339-78fa-404e-8d10-c3ef5587935b.mp3',
 };
 
 /** Per-voice ElevenLabs settings tuned for natural storytelling */
@@ -152,6 +160,40 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       stability: 0.35,
       similarity_boost: 0.8,
       style: 0.6,
+      use_speaker_boost: true,
+    },
+  },
+  [VoiceType.ROSIE]: {
+    id: VoiceType.ROSIE,
+    name: 'Rosie',
+    edgeTtsVoice: 'en-US-AnaNeural',
+    styleTts2Voice: 'Georgia_Female_EN_US',
+    gender: 'Female',
+    elevenLabsId: 'ThT5KcBeYPX3keUQqHPh',
+    previewUrl: VOICE_PREVIEWS[VoiceType.ROSIE],
+    voiceAvatar: VOICE_AVATARS[VoiceType.ROSIE],
+    // Rosie (Dorothy): young British child voice - calmer for storytelling
+    voiceSettings: {
+      stability: 0.45,
+      similarity_boost: 0.75,
+      style: 0.4,
+      use_speaker_boost: true,
+    },
+  },
+  [VoiceType.PIXIE]: {
+    id: VoiceType.PIXIE,
+    name: 'Pixie',
+    edgeTtsVoice: 'en-US-AnaNeural',
+    styleTts2Voice: 'Marry_Female_EN_US',
+    gender: 'Female',
+    elevenLabsId: 'jBpfuIE2acCO8z3wKNLl',
+    previewUrl: VOICE_PREVIEWS[VoiceType.PIXIE],
+    voiceAvatar: VOICE_AVATARS[VoiceType.PIXIE],
+    // Pixie (Gigi): animated childish American voice - more expressive
+    voiceSettings: {
+      stability: 0.3,
+      similarity_boost: 0.85,
+      style: 0.7,
       use_speaker_boost: true,
     },
   },
