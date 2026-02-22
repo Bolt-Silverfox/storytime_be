@@ -203,7 +203,7 @@ export class VoiceQuotaService {
       isPremium: false,
       unlimited: false,
       defaultVoice: FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE,
-      maxVoices: FREE_TIER_LIMITS.VOICES.CUSTOM_SLOTS + 1,
+      maxVoices: FREE_TIER_LIMITS.VOICES.CUSTOM_SLOTS + 1, // +1 for the always-available default voice
     };
   }
 
