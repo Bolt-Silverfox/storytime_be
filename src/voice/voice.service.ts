@@ -127,6 +127,7 @@ export class VoiceService {
       return {
         id: '',
         name: '',
+        displayName: '',
         type: '',
         previewUrl: undefined,
         voiceAvatar: undefined,
@@ -141,6 +142,13 @@ export class VoiceService {
   private toVoiceResponse(voice: Voice): VoiceResponseDto {
     let previewUrl = voice.url ?? undefined;
     let voiceAvatar = voice.voiceAvatar ?? undefined;
+
+    // Lookup VOICE_CONFIG for display name
+    const config = voice.elevenLabsVoiceId
+      ? Object.values(VOICE_CONFIG).find(
+          (c) => c.elevenLabsId === voice.elevenLabsVoiceId,
+        )
+      : undefined;
 
     // If it's an uploaded voice, the 'url' is the preview/audio itself
     if (voice.type === (VoiceSourceType.UPLOADED as string)) {
@@ -160,6 +168,7 @@ export class VoiceService {
     return {
       id: voice.id,
       name: voice.name,
+      displayName: config?.name ?? voice.name,
       type: voice.type,
       previewUrl,
       voiceAvatar,
