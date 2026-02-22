@@ -278,6 +278,7 @@ export class VoiceService {
       return {
         id: voice.id,
         name: voice.name,
+        displayName: config?.name ?? voice.name,
         type: voice.type,
         previewUrl: voice.url || config?.previewUrl,
         voiceAvatar: voice.voiceAvatar || config?.voiceAvatar,
