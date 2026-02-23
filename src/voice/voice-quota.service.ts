@@ -210,5 +210,4 @@ export class VoiceQuotaService {
       maxVoices: FREE_TIER_LIMITS.VOICES.CUSTOM_SLOTS + 1, // +1 for the always-available default voice
     };
   }
-
 }
