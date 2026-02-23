@@ -4,12 +4,12 @@ import type { Prisma, User } from '@prisma/client';
 
 // Type for User with all relations for list view
 export type UserWithRelations = User & {
-  subscriptions: Array<{
+  subscription: {
     id: string;
     plan: string;
     status: string;
     endsAt: Date | null;
-  }>;
+  } | null;
   profile: any;
   avatar: any;
   usage: {
@@ -27,7 +27,6 @@ export type UserWithRelations = User & {
     kids: number;
     auth: number;
     parentFavorites: number;
-    subscriptions: number;
     paymentTransactions: number;
   };
 };
@@ -43,13 +42,12 @@ export type UserDetail = User & {
     avatar: any;
   }>;
   avatar: any;
-  subscriptions: any[];
+  subscription: any | null;
   paymentTransactions: any[];
   _count: {
     auth: number;
     parentFavorites: number;
     voices: number;
-    subscriptions: number;
     supportTickets: number;
     paymentTransactions: number;
   };
