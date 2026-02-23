@@ -29,12 +29,7 @@ Current coverage: **31+ test files** covering major services.
 
 **Core Services with Tests:** AuthService (31), UserService (45), NotificationService (34), SubscriptionService (15), OAuthService (21), OnboardingService (22), UserDeletionService (18), UserPinService (23), PaymentService, StoryService, StoryGenerationService, VoiceService, KidService, HelpSupportService, ParentFavoritesService, AdminController, AdminStoryService, AdminUserService, AdminAnalyticsService (40), AdminSystemService (32), PasswordService (22), TokenService (24), EmailVerificationService (7), DeviceTokenService (18), NotificationPreferenceService (25).
 
-**Services Still Needing Tests:**
-
-| Service | Priority |
-|---------|----------|
-| `BadgeService` | P3 |
-| `ProgressService` | P3 |
+**All target services now have tests.** BadgeService (34 tests) and ProgressService (15 tests) added.
 
 ### 1.2 Missing E2E Tests (P1 - High)
 
@@ -286,7 +281,7 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 ## Progress Summary
 
 ### Completed ✅
-- Unit tests: 40 test suites, 441 passing tests covering all major services
+- Unit tests: 42 test suites, 490 passing tests covering all services
 - E2E tests: Authentication flows (41 tests)
 - Type safety: Production `any` types eliminated
 - God service refactoring: 7 → 19 focused services
@@ -313,9 +308,8 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 
 ### Pending 📋
 - [ ] E2E tests for payment/subscription flows (P1)
-- [ ] Unit tests for remaining services: BadgeService, ProgressService (P3)
-- [ ] Coverage badges in README (P3)
 - [ ] Enable `noImplicitAny` in tsconfig (P2)
+- [ ] Coverage badges in README (P3)
 
 ---
 
