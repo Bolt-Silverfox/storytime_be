@@ -307,7 +307,10 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 - Input validation: Avatar controller DTOs with class-validator
 - Console.log cleanup: All replaced with NestJS Logger
 - Alerting thresholds config: `src/shared/config/alerting.config.ts`
-- Test spec modernization: All 42 unit test suites updated for refactored services
+- Test spec modernization: All 49 test suites updated for refactored services
+- Lint cleanup: 638 → 162 errors (remaining: Swagger decorator warnings, test file patterns)
+- Session validation: OAuth callbacks, AuthSessionGuard, token refresh all implemented
+- Unused imports/variables: Removed across 16+ production files
 
 ### Pending 📋
 - [ ] Coverage badges in README (P3 — requires Codecov CI integration)
