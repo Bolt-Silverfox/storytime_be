@@ -1,6 +1,6 @@
 import { Client } from '@gradio/client';
 import { ITextToSpeechProvider } from '../interfaces/speech-provider.interface';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
@@ -16,7 +16,7 @@ const ALLOWED_AUDIO_HOSTS = ['.hf.space', '.huggingface.co', '.gradio.live'];
 function isAllowedAudioUrl(raw: string): boolean {
   try {
     const url = new URL(raw);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+    if (url.protocol !== 'https:') return false;
     return ALLOWED_AUDIO_HOSTS.some((suffix) => url.hostname.endsWith(suffix));
   } catch {
     return false;
@@ -84,14 +84,28 @@ function mergeWavBuffers(buffers: Buffer[]): Buffer {
   const header = Buffer.from(first.subarray(0, WAV_HEADER_SIZE));
   // Bytes 4-7: RIFF chunk size = total file size - 8
   header.writeUInt32LE(totalPcmLength + WAV_HEADER_SIZE - 8, 4);
-  // Bytes 40-43: data sub-chunk size = total PCM length
-  header.writeUInt32LE(totalPcmLength, 40);
+  // Scan for the "data" sub-chunk ID instead of assuming fixed offset 40
+  let dataChunkOffset = -1;
+  for (let i = 12; i < header.length - 4; i++) {
+    if (header.toString('ascii', i, i + 4) === 'data') {
+      dataChunkOffset = i + 4;
+      break;
+    }
+  }
+  if (dataChunkOffset !== -1) {
+    header.writeUInt32LE(totalPcmLength, dataChunkOffset);
+  } else {
+    // Fallback: standard WAV layout has data size at byte 40
+    header.writeUInt32LE(totalPcmLength, 40);
+  }
 
   return Buffer.concat([header, ...pcmChunks]);
 }
 
 @Injectable()
-export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
+export class StyleTTS2TTSProvider
+  implements ITextToSpeechProvider, OnModuleInit
+{
   private readonly logger = new Logger(StyleTTS2TTSProvider.name);
   public readonly name = 'StyleTTS2';
   private readonly spaceId: string;
@@ -104,6 +118,21 @@ export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
     this.spaceId =
       this.configService.get<string>('STYLE_TTS2_SPACE_ID') ??
       VOICE_CONFIG_SETTINGS.STYLE_TTS2.SPACE_ID;
+  }
+
+  /** Wake the HF Space on startup so it's warm for real requests */
+  onModuleInit(): void {
+    Client.connect(this.spaceId)
+      .then((app) => {
+        this.logger.log(`StyleTTS2 Space (${this.spaceId}) is awake`);
+        if (typeof (app as { close?: () => unknown }).close === 'function') {
+          (app as { close: () => unknown }).close();
+        }
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`StyleTTS2 warm-up ping failed: ${msg}`);
+      });
   }
 
   async generateAudio(text: string, voiceId?: string): Promise<Buffer> {
@@ -166,8 +195,8 @@ export class StyleTTS2TTSProvider implements ITextToSpeechProvider {
     } finally {
       // Best-effort cleanup of the Gradio client connection
       try {
-        if (typeof (app as { close?: () => void }).close === 'function') {
-          (app as { close: () => void }).close();
+        if (typeof (app as { close?: () => unknown }).close === 'function') {
+          await (app as { close: () => unknown }).close();
         }
       } catch {
         // Ignore cleanup errors
