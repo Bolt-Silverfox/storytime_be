@@ -314,8 +314,13 @@ export class TextToSpeechService {
     fullText: string,
     voiceType?: VoiceType | string,
     userId?: string,
-  ): Promise<Array<{ index: number; text: string; audioUrl: string | null }>> {
-    if (!fullText?.trim()) return [];
+  ): Promise<{
+    results: Array<{ index: number; text: string; audioUrl: string | null }>;
+    totalParagraphs: number;
+    wasTruncated: boolean;
+  }> {
+    if (!fullText?.trim())
+      return { results: [], totalParagraphs: 0, wasTruncated: false };
 
     const type = voiceType ?? DEFAULT_VOICE;
     const allParagraphs = splitByWordCountPreservingSentences(
@@ -323,7 +328,8 @@ export class TextToSpeechService {
       WORDS_PER_CHUNK,
     );
 
-    if (allParagraphs.length > MAX_BATCH_PARAGRAPHS) {
+    const wasTruncated = allParagraphs.length > MAX_BATCH_PARAGRAPHS;
+    if (wasTruncated) {
       this.logger.warn(
         `Story ${storyId} has ${allParagraphs.length} paragraphs, capping at ${MAX_BATCH_PARAGRAPHS}`,
       );
@@ -381,7 +387,11 @@ export class TextToSpeechService {
     );
 
     if (uncached.length === 0) {
-      return cached.sort((a, b) => a.index - b.index);
+      return {
+        results: cached.sort((a, b) => a.index - b.index),
+        totalParagraphs: allParagraphs.length,
+        wasTruncated,
+      };
     }
 
     // Resolve premium status once for the entire batch
@@ -485,8 +495,12 @@ export class TextToSpeechService {
       await this.voiceQuota.releaseReservedUsage(userId, creditsToRelease);
     }
 
-    return [...cached, ...generated, ...duplicates].sort(
-      (a, b) => a.index - b.index,
-    );
+    return {
+      results: [...cached, ...generated, ...duplicates].sort(
+        (a, b) => a.index - b.index,
+      ),
+      totalParagraphs: allParagraphs.length,
+      wasTruncated,
+    };
   }
 }
