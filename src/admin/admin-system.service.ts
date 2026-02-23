@@ -38,8 +38,9 @@ export class AdminSystemService {
   ) {}
 
   async getRecentActivity(limit: number = 50, userId?: string): Promise<ActivityLogDto[]> {
+    const normalizedUserId = userId?.trim() || undefined;
     const where: Prisma.ActivityLogWhereInput = { isDeleted: false };
-    if (userId) where.userId = userId;
+    if (normalizedUserId) where.userId = normalizedUserId;
 
     return this.adminSystemRepository.findActivityLogs({
       where,

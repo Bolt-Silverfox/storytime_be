@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -163,33 +164,6 @@ export class VoiceController {
     return this.voiceService.getPreferredVoice(req.authUserData.userId);
   }
 
-  // --- Free tier second voice selection ---
-  @Patch('second-voice')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Set second voice for free tier user',
-    description:
-      'Free users can select one additional voice beyond the default. Premium users have unlimited access.',
-  })
-  @ApiBody({ type: SetPreferredVoiceDto })
-  @ApiResponse({ status: 200, description: 'Second voice set successfully' })
-  @ApiResponse({
-    status: 400,
-    description: 'Premium users do not need to set a second voice',
-  })
-  @ApiResponse({ status: 404, description: 'Voice not found' })
-  async setSecondVoice(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: SetPreferredVoiceDto,
-  ) {
-    await this.voiceQuotaService.setSecondVoice(
-      req.authUserData.userId,
-      body.voiceId,
-    );
-    return { message: 'Second voice set successfully', voiceId: body.voiceId };
-  }
-
   // --- Get voice access status ---
   @Get('access')
   @UseGuards(AuthSessionGuard)
@@ -244,16 +218,27 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Query('voiceId') voiceId?: VoiceType | string,
   ) {
+    const resolvedVoice = voiceId ?? DEFAULT_VOICE;
+    const canUse = await this.voiceQuotaService.canUseVoice(
+      req.authUserData.userId,
+      resolvedVoice,
+    );
+    if (!canUse) {
+      throw new ForbiddenException(
+        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+      );
+    }
+
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
-      voiceId ?? DEFAULT_VOICE,
+      resolvedVoice,
       req.authUserData.userId,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceId: voiceId || DEFAULT_VOICE,
+      voiceId: resolvedVoice,
       statusCode: 200,
     };
   }
@@ -268,17 +253,28 @@ export class VoiceController {
     @Body() dto: StoryContentAudioDto,
     @Req() req: AuthenticatedRequest,
   ) {
+    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
+    const canUse = await this.voiceQuotaService.canUseVoice(
+      req.authUserData.userId,
+      resolvedVoice,
+    );
+    if (!canUse) {
+      throw new ForbiddenException(
+        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+      );
+    }
+
     const audioUrl = await this.textToSpeechService.synthesizeStory(
       randomUUID().toString(),
       dto.content,
-      dto.voiceId ?? DEFAULT_VOICE,
+      resolvedVoice,
       req.authUserData.userId,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceId: dto.voiceId || DEFAULT_VOICE,
+      voiceId: resolvedVoice,
       statusCode: 200,
     };
   }

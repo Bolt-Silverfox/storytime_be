@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
@@ -211,54 +206,6 @@ export class VoiceQuotaService {
     });
 
     return selectedVoice?.elevenLabsVoiceId === voiceId;
-  }
-
-  /**
-   * Set the second voice for a free user
-   */
-  async setSecondVoice(userId: string, voiceId: string): Promise<void> {
-    const isPremium = await this.isPremiumUser(userId);
-    if (isPremium) {
-      throw new BadRequestException(
-        'Premium users have unlimited voice access and do not need to set a second voice',
-      );
-    }
-
-    // Validate voice exists and user has access (owned by user or public/system voice)
-    const voice = await this.prisma.voice.findFirst({
-      where: {
-        id: voiceId,
-        OR: [{ userId }, { userId: null }],
-      },
-    });
-    if (!voice) {
-      throw new NotFoundException('Voice not found');
-    }
-
-    const currentMonth = this.getCurrentMonth();
-    await this.prisma.userUsage.upsert({
-      where: { userId },
-      create: {
-        userId,
-        currentMonth,
-        selectedSecondVoiceId: voiceId,
-      },
-      update: {
-        selectedSecondVoiceId: voiceId,
-      },
-    });
-
-    this.logger.log(`User ${userId} set second voice to ${voiceId}`);
-  }
-
-  /**
-   * Get the user's selected second voice ID
-   */
-  async getSecondVoice(userId: string): Promise<string | null> {
-    const usage = await this.prisma.userUsage.findUnique({
-      where: { userId },
-    });
-    return usage?.selectedSecondVoiceId ?? null;
   }
 
   /**

@@ -7,6 +7,7 @@ import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provid
 import { StyleTTS2TTSProvider } from '../voice/providers/styletts2-tts.provider';
 import { EdgeTTSProvider } from '../voice/providers/edge-tts.provider';
 import { STORY_REPOSITORY } from './repositories';
+import { PrismaService } from '../prisma/prisma.service';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 
 describe('TextToSpeechService', () => {
@@ -59,6 +60,15 @@ describe('TextToSpeechService', () => {
           provide: STORY_REPOSITORY,
           useValue: {
             findVoiceById: jest.fn(),
+          },
+        },
+        {
+          provide: PrismaService,
+          useValue: {
+            paragraphAudioCache: {
+              findUnique: jest.fn(),
+              create: jest.fn(),
+            },
           },
         },
         {

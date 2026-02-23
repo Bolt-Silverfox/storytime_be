@@ -1,5 +1,7 @@
+import { createHash } from 'crypto';
 import { UploadService } from '../upload/upload.service';
 import {
+  BadRequestException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -14,6 +16,7 @@ import {
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import { StyleTTS2TTSProvider } from '../voice/providers/styletts2-tts.provider';
 import { EdgeTTSProvider } from '../voice/providers/edge-tts.provider';
+import { PrismaService } from '../prisma/prisma.service';
 import { STORY_REPOSITORY, IStoryRepository } from './repositories';
 
 import { VoiceQuotaService } from '../voice/voice-quota.service';
@@ -54,8 +57,50 @@ export class TextToSpeechService {
     private readonly edgeTtsProvider: EdgeTTSProvider,
     @Inject(STORY_REPOSITORY)
     private readonly storyRepository: IStoryRepository,
+    private readonly prisma: PrismaService,
     private readonly voiceQuota: VoiceQuotaService,
   ) {}
+
+  private hashText(text: string): string {
+    return createHash('sha256').update(text).digest('hex').substring(0, 64);
+  }
+
+  private async getCachedParagraphAudio(
+    storyId: string,
+    text: string,
+    voiceId: string,
+  ): Promise<string | null> {
+    const textHash = this.hashText(text);
+    const cached = await this.prisma.paragraphAudioCache.findUnique({
+      where: {
+        storyId_textHash_voiceId: { storyId, textHash, voiceId },
+      },
+    });
+    return cached?.audioUrl ?? null;
+  }
+
+  private async cacheParagraphAudio(
+    storyId: string,
+    text: string,
+    voiceId: string,
+    audioUrl: string,
+  ): Promise<void> {
+    try {
+      const textHash = this.hashText(text);
+      await this.prisma.paragraphAudioCache.upsert({
+        where: {
+          storyId_textHash_voiceId: { storyId, textHash, voiceId },
+        },
+        create: { storyId, textHash, voiceId, audioUrl },
+        update: { audioUrl },
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to cache paragraph audio for story ${storyId}: ${msg}`,
+      );
+    }
+  }
 
   async synthesizeStory(
     storyId: string,
@@ -63,8 +108,24 @@ export class TextToSpeechService {
     voicetype?: VoiceType | string, // Allow string (UUID)
     userId?: string, // Added userId for quota tracking
   ): Promise<string> {
+    // Guard against unbounded input
+    if (text.length > MAX_TTS_TEXT_LENGTH) {
+      throw new BadRequestException(
+        `Text exceeds maximum TTS length of ${MAX_TTS_TEXT_LENGTH} characters`,
+      );
+    }
+
     const cleanedText = preprocessTextForTTS(text);
     const type = voicetype ?? DEFAULT_VOICE;
+
+    // Check paragraph-level cache first
+    const cachedUrl = await this.getCachedParagraphAudio(storyId, cleanedText, type);
+    if (cachedUrl) {
+      this.logger.log(
+        `Paragraph cache hit for story ${storyId}, voice ${type}`,
+      );
+      return cachedUrl;
+    }
 
     // Resolve ElevenLabs ID and per-voice settings
     let elevenLabsId: string | undefined;
@@ -100,9 +161,8 @@ export class TextToSpeechService {
     if (useElevenLabs && userId) {
       const allowed = await this.voiceQuota.checkUsage(userId);
       if (!allowed) {
-        this.logger.log(`User ${userId} quota exceeded. Fallback to Deepgram.`);
+        this.logger.log(`User ${userId} quota exceeded. Fallback to StyleTTS2.`);
         useElevenLabs = false;
-        // Fallback to Deepgram model
       }
     } else if (useElevenLabs && !userId) {
       this.logger.warn(
@@ -142,13 +202,16 @@ export class TextToSpeechService {
           await this.voiceQuota.incrementUsage(userId);
         }
 
-        return await this.uploadService.uploadAudioBuffer(
+        const audioUrl = await this.uploadService.uploadAudioBuffer(
           audioBuffer,
           `story_${storyId}_elevenlabs_${Date.now()}.mp3`,
         );
+        await this.cacheParagraphAudio(storyId, cleanedText, type, audioUrl);
+        return audioUrl;
       } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
         this.logger.warn(
-          `ElevenLabs generation failed for story ${storyId}: ${error.message}. Falling back to Deepgram.`,
+          `ElevenLabs generation failed for story ${storyId}: ${msg}. Falling back to StyleTTS2.`,
         );
         // Proceed to fallback
       }
@@ -173,10 +236,12 @@ export class TextToSpeechService {
       const audioBuffer = await this.styleTts2Provider.generateAudio(
         cleanedText,
       );
-      return await this.uploadService.uploadAudioBuffer(
+      const audioUrl = await this.uploadService.uploadAudioBuffer(
         audioBuffer,
         `story_${storyId}_styletts2_${Date.now()}.wav`,
       );
+      await this.cacheParagraphAudio(storyId, cleanedText, type, audioUrl);
+      return audioUrl;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(
@@ -193,10 +258,12 @@ export class TextToSpeechService {
       const audioBuffer = await this.edgeTtsProvider.generateAudio(
         cleanedText,
       );
-      return await this.uploadService.uploadAudioBuffer(
+      const audioUrl = await this.uploadService.uploadAudioBuffer(
         audioBuffer,
         `story_${storyId}_edgetts_${Date.now()}.mp3`,
       );
+      await this.cacheParagraphAudio(storyId, cleanedText, type, audioUrl);
+      return audioUrl;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(

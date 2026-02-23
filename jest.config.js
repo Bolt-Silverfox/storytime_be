@@ -17,5 +17,7 @@ module.exports = {
       '^src/(.*)$': '<rootDir>/src/$1',
       '^googleapis$': '<rootDir>/__mocks__/googleapis.ts',
       '^uuid$': '<rootDir>/__mocks__/uuid.ts',
+      '^@gradio/client$': '<rootDir>/__mocks__/@gradio/client.ts',
+      '^@andresaya/edge-tts$': '<rootDir>/__mocks__/@andresaya/edge-tts.ts',
     },
   };

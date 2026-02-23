@@ -45,9 +45,6 @@ export interface GooglePurchaseParams {
   purchaseToken: string;
 }
 
-/** Parameters for cancellation (alias for backward compatibility) */
-export type CancelParams = GooglePurchaseParams;
-
 /** Google subscription purchase data */
 interface GoogleSubscriptionPurchase {
   orderId?: string;
@@ -244,7 +241,7 @@ export class GoogleVerificationService {
   }
 
   async cancelSubscription(
-    params: CancelParams,
+    params: GooglePurchaseParams,
   ): Promise<GoogleCancelResult> {
     const packageName = (params.packageName || '').trim();
     const productId = (params.productId || '').trim();
