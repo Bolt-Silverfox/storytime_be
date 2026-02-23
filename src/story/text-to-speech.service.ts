@@ -330,10 +330,16 @@ export class TextToSpeechService {
     }
     const paragraphs = allParagraphs.slice(0, MAX_BATCH_PARAGRAPHS);
 
-    // Pre-check cache with a single bulk query instead of N individual lookups
-    const hashMap = new Map(
-      paragraphs.map((text, index) => [this.hashText(text), { index, text }]),
-    );
+    // Pre-check cache with a single bulk query instead of N individual lookups.
+    // Group by hash to handle duplicate paragraph text (e.g. repeated refrains).
+    const hashMap = new Map<string, Array<{ index: number; text: string }>>();
+    for (let idx = 0; idx < paragraphs.length; idx++) {
+      const hash = this.hashText(paragraphs[idx]);
+      const entries = hashMap.get(hash) ?? [];
+      entries.push({ index: idx, text: paragraphs[idx] });
+      hashMap.set(hash, entries);
+    }
+
     const cachedEntries = await this.prisma.paragraphAudioCache.findMany({
       where: {
         storyId,
@@ -346,13 +352,23 @@ export class TextToSpeechService {
     );
 
     const cached: Array<{ index: number; text: string; audioUrl: string }> = [];
-    const uncached: Array<{ index: number; text: string }> = [];
-    for (const [hash, { index, text }] of hashMap) {
+    const uncached: Array<{ index: number; text: string; hash: string }> = [];
+    // Track which hashes we've already queued for generation (only generate once per unique text)
+    const uncachedHashes = new Set<string>();
+
+    for (const [hash, entries] of hashMap) {
       const cachedUrl = cacheMap.get(hash);
       if (cachedUrl) {
-        cached.push({ index, text, audioUrl: cachedUrl });
+        // All paragraphs with this hash get the cached URL
+        for (const { index, text } of entries) {
+          cached.push({ index, text, audioUrl: cachedUrl });
+        }
       } else {
-        uncached.push({ index, text });
+        // Only generate for the first entry; duplicates will be filled in after generation
+        if (!uncachedHashes.has(hash)) {
+          uncachedHashes.add(hash);
+          uncached.push({ index: entries[0].index, text: entries[0].text, hash });
+        }
       }
     }
 
@@ -382,17 +398,19 @@ export class TextToSpeechService {
 
     // Generate uncached paragraphs in batches of MAX_CONCURRENT.
     // Only skip per-call quota for paragraphs within the reserved budget.
+    // Each entry in `uncached` is unique by hash — duplicates are replicated after.
     const generated: Array<{
       index: number;
       text: string;
       audioUrl: string | null;
+      hash: string;
     }> = [];
     let reservedUsed = 0;
 
     for (let i = 0; i < uncached.length; i += MAX_CONCURRENT) {
       const batch = uncached.slice(i, i + MAX_CONCURRENT);
       const batchResults = await Promise.all(
-        batch.map(async ({ index, text }, batchIndex) => {
+        batch.map(async ({ index, text, hash }, batchIndex) => {
           const seqPos = i + batchIndex;
           const withinReserved = isPremium && seqPos < reservedCredits;
           try {
@@ -403,13 +421,13 @@ export class TextToSpeechService {
               userId,
               { skipQuotaCheck: withinReserved, isPremium },
             );
-            return { index, text, audioUrl };
+            return { index, text, audioUrl, hash };
           } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
             this.logger.warn(
               `Batch TTS failed for paragraph ${index} of story ${storyId}: ${msg}`,
             );
-            return { index, text, audioUrl: null };
+            return { index, text, audioUrl: null, hash };
           }
         }),
       );
@@ -431,6 +449,26 @@ export class TextToSpeechService {
       generated.push(...batchResults);
     }
 
+    // Replicate generated audioUrls to duplicate paragraphs (same hash, different indices)
+    const generatedUrlByHash = new Map<string, string | null>();
+    for (const { hash, audioUrl } of generated) {
+      generatedUrlByHash.set(hash, audioUrl);
+    }
+
+    const duplicates: Array<{
+      index: number;
+      text: string;
+      audioUrl: string | null;
+    }> = [];
+    for (const [hash, entries] of hashMap) {
+      const url = generatedUrlByHash.get(hash);
+      if (url === undefined) continue; // hash was cached, not generated
+      // Skip the first entry (already in `generated`), replicate to the rest
+      for (let i = 1; i < entries.length; i++) {
+        duplicates.push({ index: entries[i].index, text: entries[i].text, audioUrl: url });
+      }
+    }
+
     // Release unused reserved credits — only paragraphs that actually used
     // ElevenLabs (identified by URL filename pattern) keep their reserved credits.
     // This prevents quota leaks when ElevenLabs fails but a fallback succeeds.
@@ -439,6 +477,6 @@ export class TextToSpeechService {
       await this.voiceQuota.releaseReservedUsage(userId, creditsToRelease);
     }
 
-    return [...cached, ...generated].sort((a, b) => a.index - b.index);
+    return [...cached, ...generated, ...duplicates].sort((a, b) => a.index - b.index);
   }
 }
