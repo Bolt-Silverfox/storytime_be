@@ -3,6 +3,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -34,6 +35,7 @@ import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { DEFAULT_VOICE } from './voice.constants';
 import {
+  BatchStoryAudioDto,
   CreateElevenLabsVoiceDto,
   SetPreferredVoiceDto,
   StoryContentAudioDto,
@@ -259,6 +261,52 @@ export class VoiceController {
     return {
       message: 'Audio generated successfully',
       audioUrl,
+      voiceId: resolvedVoice,
+      statusCode: 200,
+    };
+  }
+
+  @Post('story/audio/batch')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate audio for all paragraphs of a story' })
+  @ApiResponse({
+    status: 200,
+    description: 'Batch audio generated successfully',
+  })
+  @ApiBody({ type: BatchStoryAudioDto })
+  async batchTextToSpeech(
+    @Body() dto: BatchStoryAudioDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
+    const canUse = await this.voiceQuotaService.canUseVoice(
+      req.authUserData.userId,
+      resolvedVoice,
+    );
+    if (!canUse) {
+      throw new ForbiddenException(
+        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+      );
+    }
+
+    const story = await this.storyService.getStoryById(dto.storyId);
+    if (!story || !story.textContent) {
+      throw new NotFoundException('Story not found or has no content.');
+    }
+
+    const paragraphs =
+      await this.textToSpeechService.batchTextToSpeechCloudUrls(
+        dto.storyId,
+        story.textContent,
+        resolvedVoice,
+        req.authUserData.userId,
+      );
+
+    return {
+      message: 'Batch audio generated successfully',
+      paragraphs,
+      totalParagraphs: paragraphs.length,
       voiceId: resolvedVoice,
       statusCode: 200,
     };

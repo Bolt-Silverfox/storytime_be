@@ -98,3 +98,24 @@ export class StoryContentAudioDto {
   @IsOptional()
   voiceId?: VoiceType | string;
 }
+
+export class BatchStoryAudioDto {
+  @ApiProperty({
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    description: 'Story ID to generate batch audio for',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @IsUUID()
+  storyId: string;
+
+  @ApiProperty({
+    required: false,
+    example: 'LILY',
+    description: 'Preferred voice ID (Enum value or UUID)',
+    type: 'string',
+  })
+  @IsOptional()
+  @IsString()
+  voiceId?: VoiceType | string;
+}
