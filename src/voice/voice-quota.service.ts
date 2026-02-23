@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
-import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants';
+
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { VOICE_CONFIG } from './voice.constants';
 
@@ -24,22 +24,7 @@ export class VoiceQuotaService {
   async checkUsage(userId: string): Promise<boolean> {
     const currentMonth = this.getCurrentMonth();
 
-    // Single query: Get user with subscription AND usage in one call
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        subscription: true,
-        usage: true,
-      },
-    });
-
-    if (!user) return false;
-
-    // Determine if user has active premium subscription
-    const now = new Date();
-    const isPremium =
-      user.subscription?.status === SUBSCRIPTION_STATUS.ACTIVE &&
-      (user.subscription.endsAt === null || user.subscription.endsAt > now);
+    const isPremium = await this.subscriptionService.isPremiumUser(userId);
     const limit = isPremium
       ? VOICE_CONFIG_SETTINGS.QUOTAS.PREMIUM
       : VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
