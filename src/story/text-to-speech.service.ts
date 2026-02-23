@@ -303,9 +303,7 @@ export class TextToSpeechService {
     fullText: string,
     voiceType?: VoiceType | string,
     userId?: string,
-  ): Promise<
-    Array<{ index: number; text: string; audioUrl: string | null }>
-  > {
+  ): Promise<Array<{ index: number; text: string; audioUrl: string | null }>> {
     const WORDS_PER_CHUNK = 30;
     const MAX_CONCURRENT = 5;
     const paragraphs = splitByWordCountPreservingSentences(
@@ -334,8 +332,7 @@ export class TextToSpeechService {
             );
             return { index, text, audioUrl };
           } catch (error) {
-            const msg =
-              error instanceof Error ? error.message : String(error);
+            const msg = error instanceof Error ? error.message : String(error);
             this.logger.warn(
               `Batch TTS failed for paragraph ${index} of story ${storyId}: ${msg}`,
             );
