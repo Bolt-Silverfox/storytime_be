@@ -104,8 +104,8 @@ export class TextToSpeechService {
   async textToSpeechCloudUrl(
     storyId: string,
     text: string,
-    voicetype?: VoiceType | string, // Allow string (UUID)
-    userId?: string, // Added userId for quota tracking
+    voicetype?: VoiceType | string,
+    userId?: string,
     options?: { skipQuotaCheck?: boolean; isPremium?: boolean },
   ): Promise<string> {
     const type = voicetype ?? DEFAULT_VOICE;
@@ -374,25 +374,28 @@ export class TextToSpeechService {
       }
     }
 
-    // Generate uncached paragraphs in batches of MAX_CONCURRENT
+    // Generate uncached paragraphs in batches of MAX_CONCURRENT.
+    // Only skip per-call quota for paragraphs within the reserved budget.
     const generated: Array<{
       index: number;
       text: string;
       audioUrl: string | null;
     }> = [];
-    let failedCount = 0;
+    let reservedUsed = 0;
 
     for (let i = 0; i < uncached.length; i += MAX_CONCURRENT) {
       const batch = uncached.slice(i, i + MAX_CONCURRENT);
       const batchResults = await Promise.all(
-        batch.map(async ({ index, text }) => {
+        batch.map(async ({ index, text }, batchIndex) => {
+          const seqPos = i + batchIndex;
+          const withinReserved = isPremium && seqPos < reservedCredits;
           try {
             const audioUrl = await this.textToSpeechCloudUrl(
               storyId,
               text,
               voiceType,
               userId,
-              { skipQuotaCheck: true, isPremium },
+              { skipQuotaCheck: withinReserved, isPremium },
             );
             return { index, text, audioUrl };
           } catch (error) {
@@ -400,19 +403,34 @@ export class TextToSpeechService {
             this.logger.warn(
               `Batch TTS failed for paragraph ${index} of story ${storyId}: ${msg}`,
             );
-            failedCount++;
             return { index, text, audioUrl: null };
           }
         }),
       );
 
+      // Count how many reserved-budget paragraphs actually used ElevenLabs
+      // (URL filename encodes provider: _elevenlabs_, _styletts2_, _edgetts_)
+      for (let j = 0; j < batch.length; j++) {
+        const seqPos = i + j;
+        const url = batchResults[j].audioUrl;
+        if (
+          isPremium &&
+          seqPos < reservedCredits &&
+          url?.includes('_elevenlabs_')
+        ) {
+          reservedUsed++;
+        }
+      }
+
       generated.push(...batchResults);
     }
 
-    // Release reserved credits for paragraphs that failed generation
-    if (failedCount > 0 && reservedCredits > 0 && userId) {
-      const toRelease = Math.min(failedCount, reservedCredits);
-      await this.voiceQuota.releaseReservedUsage(userId, toRelease);
+    // Release unused reserved credits — only paragraphs that actually used
+    // ElevenLabs (identified by URL filename pattern) keep their reserved credits.
+    // This prevents quota leaks when ElevenLabs fails but a fallback succeeds.
+    const creditsToRelease = reservedCredits - reservedUsed;
+    if (creditsToRelease > 0 && userId) {
+      await this.voiceQuota.releaseReservedUsage(userId, creditsToRelease);
     }
 
     return [...cached, ...generated].sort((a, b) => a.index - b.index);
