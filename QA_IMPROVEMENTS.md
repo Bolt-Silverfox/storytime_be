@@ -25,7 +25,7 @@ This document tracks quality assurance issues, testing gaps, and code quality im
 
 ### 1.1 Unit Test Status (P0 - Critical) ✅ COMPLETE
 
-Current coverage: **47 test suites, 578 passing tests** covering all services.
+Current coverage: **47 test suites, 642 passing tests** covering all services.
 
 **Core Services with Tests:** AuthService (31), UserService (45), NotificationService (34), SubscriptionService (15), OAuthService (21), OnboardingService (22), UserDeletionService (18), UserPinService (23), PaymentService, StoryService, StoryGenerationService, VoiceService, KidService, HelpSupportService, ParentFavoritesService, AdminController, AdminStoryService, AdminUserService, AdminAnalyticsService (40), AdminSystemService (32), PasswordService (22), TokenService (24), EmailVerificationService (7), DeviceTokenService (18), NotificationPreferenceService (25), BadgeService (34), ProgressService (15).
 
@@ -42,11 +42,11 @@ Current coverage: **47 test suites, 578 passing tests** covering all services.
 
 ### 1.3 Existing Tests Needing Review (P2)
 
-| Test File | Issue |
-|-----------|-------|
-| `src/admin/tests/admin.service.spec.ts` | Review mock completeness |
-| `src/story/story.service.spec.ts` | Add edge case coverage |
-| `src/payment/payment.service.spec.ts` | Add failure scenario tests |
+| Test File | Tests | Coverage | Status |
+|-----------|-------|----------|--------|
+| `src/admin/tests/admin-user.service.spec.ts` | 39 | ✅ All methods (getAllUsers, updateUser, deleteUser, suspendUser, bulkAction, CSV export) | Done |
+| `src/story/story.service.spec.ts` | 34 | ✅ CRUD, metadata, favorites, progress, audio, delegation | Done |
+| `src/payment/payment.service.spec.ts` | 14 | ✅ All methods covered | Done |
 
 ---
 
@@ -151,11 +151,12 @@ All service-level generic `Error` throws replaced with NestJS exceptions:
 
 `AuthenticatedRequest` interface created and applied to all guards (`admin.guard.ts`, `auth.guard.ts`).
 
-### 4.3 Session Validation (P2)
+### 4.3 Session Validation (P2) ✅ COMPLETE
 
-- [ ] Review OAuth callback session handling
-- [ ] Add session validation to all auth flows
-- [ ] Implement token refresh mechanism
+All session validation is fully implemented:
+- ✅ OAuth callback session handling: Both Google/Apple OAuth flows create proper token pairs with sessions via `tokenService.createTokenPair()`
+- ✅ Session validation in all auth flows: `AuthSessionGuard` validates session exists, not soft-deleted, and not expired on all protected endpoints
+- ✅ Token refresh mechanism: `POST /auth/refresh` with SHA-256 hashed refresh tokens, 7-day expiration, database session lookup
 
 ### 4.4 Rate Limiting ✅ COMPLETE
 
@@ -283,7 +284,7 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 ## Progress Summary
 
 ### Completed ✅
-- Unit tests: 47 test suites, 578 passing tests covering all services
+- Unit tests: 47 test suites, 642 passing tests covering all services
 - E2E tests: Authentication (41), Payment (19), Subscription (23), App health (1), Global handlers (5)
 - Type safety: Production `any` types eliminated
 - God service refactoring: 7 → 19 focused services
