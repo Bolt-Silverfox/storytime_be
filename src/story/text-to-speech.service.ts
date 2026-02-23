@@ -396,8 +396,7 @@ export class TextToSpeechService {
             );
             return { index, text, audioUrl };
           } catch (error) {
-            const msg =
-              error instanceof Error ? error.message : String(error);
+            const msg = error instanceof Error ? error.message : String(error);
             this.logger.warn(
               `Batch TTS failed for paragraph ${index} of story ${storyId}: ${msg}`,
             );
