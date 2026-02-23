@@ -9,6 +9,7 @@ import { StoryService } from '../story/story.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { SpeechToTextService } from './speech-to-text.service';
+import { VoiceQuotaService } from './voice-quota.service';
 
 const mockVoiceService = {
   listVoices: jest.fn(),
@@ -19,6 +20,10 @@ const mockStoryService = {};
 const mockUploadService = {};
 const mockTextToSpeechService = {};
 const mockSpeechToTextService = {};
+const mockVoiceQuotaService = {
+  canUseVoice: jest.fn().mockResolvedValue(true),
+  getVoiceAccess: jest.fn(),
+};
 
 describe('VoiceController', () => {
   let controller: VoiceController;
@@ -37,6 +42,7 @@ describe('VoiceController', () => {
         { provide: UploadService, useValue: mockUploadService },
         { provide: TextToSpeechService, useValue: mockTextToSpeechService },
         { provide: SpeechToTextService, useValue: mockSpeechToTextService },
+        { provide: VoiceQuotaService, useValue: mockVoiceQuotaService },
       ],
     })
       .overrideGuard(AuthSessionGuard)
