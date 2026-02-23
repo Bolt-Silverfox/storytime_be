@@ -367,7 +367,11 @@ export class TextToSpeechService {
         // Only generate for the first entry; duplicates will be filled in after generation
         if (!uncachedHashes.has(hash)) {
           uncachedHashes.add(hash);
-          uncached.push({ index: entries[0].index, text: entries[0].text, hash });
+          uncached.push({
+            index: entries[0].index,
+            text: entries[0].text,
+            hash,
+          });
         }
       }
     }
@@ -465,7 +469,11 @@ export class TextToSpeechService {
       if (url === undefined) continue; // hash was cached, not generated
       // Skip the first entry (already in `generated`), replicate to the rest
       for (let i = 1; i < entries.length; i++) {
-        duplicates.push({ index: entries[i].index, text: entries[i].text, audioUrl: url });
+        duplicates.push({
+          index: entries[i].index,
+          text: entries[i].text,
+          audioUrl: url,
+        });
       }
     }
 
@@ -477,6 +485,8 @@ export class TextToSpeechService {
       await this.voiceQuota.releaseReservedUsage(userId, creditsToRelease);
     }
 
-    return [...cached, ...generated, ...duplicates].sort((a, b) => a.index - b.index);
+    return [...cached, ...generated, ...duplicates].sort(
+      (a, b) => a.index - b.index,
+    );
   }
 }
