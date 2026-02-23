@@ -1,4 +1,5 @@
 import { Controller, Get, Patch, Body, Req, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiOperation,
@@ -11,6 +12,7 @@ import {
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
 import { ParseBooleanRecordPipe } from '@/shared/pipes';
+import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 import { NotificationService } from './notification.service';
 
 @ApiTags('users')
@@ -51,6 +53,12 @@ export class UserPreferencesController {
   }
 
   @Patch('notification-preferences')
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.NOTIFICATION_PREFERENCES.LIMIT,
+      ttl: THROTTLE_LIMITS.NOTIFICATION_PREFERENCES.TTL,
+    },
+  })
   @ApiOperation({
     summary: 'Update notification preferences for the authenticated user',
     description:

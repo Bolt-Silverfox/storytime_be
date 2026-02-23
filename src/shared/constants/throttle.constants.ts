@@ -31,5 +31,9 @@ export const THROTTLE_LIMITS = {
       LIMIT: 50,
     },
   },
+  NOTIFICATION_PREFERENCES: {
+    TTL: 60000, // 1 minute
+    LIMIT: 5,
+  },
   PREMIUM_MULTIPLIER: 5,
 };
