@@ -1,27 +1,33 @@
-import { Controller, Get, Patch, Param, Body } from '@nestjs/common';
+import { Controller, Get, Patch, Body, Req, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiParam,
   ApiBody,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
+import { ParseBooleanRecordPipe } from '@/shared/pipes';
 import { NotificationPreferenceService } from './services/notification-preference.service';
 
 @ApiTags('users')
-@Controller('users')
+@ApiBearerAuth()
+@UseGuards(AuthSessionGuard)
+@Controller('users/me')
 export class UserPreferencesController {
   constructor(
     private readonly notificationPreferenceService: NotificationPreferenceService,
   ) {}
 
-  @Get(':userId/notification-preferences')
+  @Get('notification-preferences')
   @ApiOperation({
-    summary: 'Get notification preferences for a user',
+    summary: 'Get notification preferences for the authenticated user',
     description:
       'Returns a grouped map of categories to per-channel status. Example: {"NEW_STORY": {"push": true, "in_app": true}}',
   })
-  @ApiParam({ name: 'userId', type: String })
   @ApiResponse({
     status: 200,
     description: 'User notification preferences in grouped format',
@@ -40,17 +46,18 @@ export class UserPreferencesController {
       },
     },
   })
-  async getUserPreferences(@Param('userId') userId: string) {
-    return this.notificationPreferenceService.getUserPreferencesGrouped(userId);
+  async getUserPreferences(@Req() req: AuthenticatedRequest) {
+    return this.notificationPreferenceService.getUserPreferencesGrouped(
+      req.authUserData.userId,
+    );
   }
 
-  @Patch(':userId/notification-preferences')
+  @Patch('notification-preferences')
   @ApiOperation({
-    summary: 'Update notification preferences for a user',
+    summary: 'Update notification preferences for the authenticated user',
     description:
       'Updates preferences for one or more categories. Body: {"NEW_STORY": true}. Each category update affects both push and in_app channels.',
   })
-  @ApiParam({ name: 'userId', type: String })
   @ApiBody({
     schema: {
       type: 'object',
@@ -77,11 +84,11 @@ export class UserPreferencesController {
     },
   })
   async updateUserPreferences(
-    @Param('userId') userId: string,
-    @Body() preferences: Record<string, boolean>,
+    @Req() req: AuthenticatedRequest,
+    @Body(ParseBooleanRecordPipe) preferences: Record<string, boolean>,
   ) {
     return this.notificationPreferenceService.updateUserPreferences(
-      userId,
+      req.authUserData.userId,
       preferences,
     );
   }

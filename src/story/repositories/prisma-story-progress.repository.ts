@@ -54,7 +54,7 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
         isDeleted: false,
       },
       orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
+      include: { story: { include: { categories: true } } },
     });
   }
 
@@ -64,7 +64,7 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
     return await this.prisma.storyProgress.findMany({
       where: { kidId, completed: true, isDeleted: false },
       orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
+      include: { story: { include: { categories: true } } },
     });
   }
 
@@ -122,7 +122,7 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
         isDeleted: false,
       },
       orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
+      include: { story: { include: { categories: true } } },
     });
   }
 
@@ -132,7 +132,7 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
     return await this.prisma.userStoryProgress.findMany({
       where: { userId, completed: true, isDeleted: false },
       orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
+      include: { story: { include: { categories: true } } },
     });
   }
 
