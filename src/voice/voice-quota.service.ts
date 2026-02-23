@@ -211,6 +211,12 @@ export class VoiceQuotaService {
    * Check if user has an active premium subscription
    */
   async isPremiumUser(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    if (user?.role === 'admin') return true;
+
     const subscription = await this.prisma.subscription.findFirst({
       where: {
         userId,
