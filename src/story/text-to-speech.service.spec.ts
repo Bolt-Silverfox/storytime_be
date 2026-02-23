@@ -528,9 +528,7 @@ describe('TextToSpeechService', () => {
         async (_userId: string, credits: number) => credits,
       );
       // ElevenLabs fails for all — so all reserved credits should be released
-      mockElevenLabsGenerate.mockRejectedValue(
-        new Error('ElevenLabs timeout'),
-      );
+      mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs timeout'));
       mockStyleTts2Generate.mockResolvedValue(Buffer.from('fallback-audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded.com/fallback.wav');
 
@@ -561,10 +559,9 @@ describe('TextToSpeechService', () => {
     it('should cap paragraphs at MAX_BATCH_PARAGRAPHS (50)', async () => {
       // Generate text with way more than 50 words to produce many paragraphs
       // Each word-count chunk is ~30 words, so 60 chunks = ~1800 words
-      const words = Array.from(
-        { length: 1800 },
-        (_, i) => `word${i}`,
-      ).join(' ');
+      const words = Array.from({ length: 1800 }, (_, i) => `word${i}`).join(
+        ' ',
+      );
 
       mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
       mockIsPremiumUser.mockResolvedValue(false);
