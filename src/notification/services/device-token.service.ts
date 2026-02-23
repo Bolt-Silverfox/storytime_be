@@ -11,6 +11,7 @@ import { DeviceToken, DevicePlatform } from '@prisma/client';
 export interface RegisterDeviceDto {
   token: string;
   platform: DevicePlatform;
+  deviceName?: string;
 }
 
 export interface DeviceTokenResponse {
@@ -35,7 +36,7 @@ export class DeviceTokenService {
     userId: string,
     dto: RegisterDeviceDto,
   ): Promise<DeviceTokenResponse> {
-    const { token, platform } = dto;
+    const { token, platform, deviceName } = dto;
 
     // Check if token already exists
     const existingToken = await this.prisma.deviceToken.findUnique({
@@ -51,6 +52,7 @@ export class DeviceTokenService {
             isActive: true,
             platform,
             lastUsed: new Date(),
+            ...(deviceName !== undefined && { deviceName }),
           },
         });
 
@@ -69,6 +71,7 @@ export class DeviceTokenService {
           platform,
           isActive: true,
           lastUsed: new Date(),
+          ...(deviceName !== undefined && { deviceName }),
         },
       });
 
@@ -78,14 +81,24 @@ export class DeviceTokenService {
       return this.toResponse(reassigned);
     }
 
-    // Create new token
-    const created = await this.prisma.deviceToken.create({
-      data: {
-        userId,
-        token,
-        platform,
-        isActive: true,
-      },
+    // Create new token (with deduplication for same device)
+    const created = await this.prisma.$transaction(async (tx) => {
+      // Deactivate old tokens for same device
+      if (deviceName) {
+        await tx.deviceToken.updateMany({
+          where: {
+            userId,
+            platform,
+            deviceName,
+            isDeleted: false,
+            token: { not: token },
+          },
+          data: { isActive: false, isDeleted: true, deletedAt: new Date() },
+        });
+      }
+      return tx.deviceToken.create({
+        data: { userId, token, platform, isActive: true, deviceName },
+      });
     });
 
     this.logger.log(
