@@ -34,8 +34,9 @@ export class SubscriptionThrottleGuard extends ThrottlerGuard {
     const user = request.authUserData;
 
     const userId = (user as { userId?: string } | undefined)?.userId;
+    // Gracefully degrade to free-tier limits on DB errors
     const isPremium = userId
-      ? await this.subscriptionService.isPremiumUser(userId)
+      ? await this.subscriptionService.isPremiumUser(userId).catch(() => false)
       : false;
 
     // Adjust limits based on subscription
