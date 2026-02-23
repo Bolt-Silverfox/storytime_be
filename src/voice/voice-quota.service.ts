@@ -156,19 +156,15 @@ export class VoiceQuotaService {
    */
   async releaseReservedUsage(userId: string, credits: number): Promise<void> {
     if (credits <= 0) return;
-    await this.prisma.$transaction(async (tx) => {
-      const usage = await tx.userUsage.findUnique({ where: { userId } });
-      if (!usage) return;
-      const toRelease = Math.min(credits, usage.elevenLabsCount);
-      if (toRelease <= 0) return;
-      await tx.userUsage.update({
-        where: { userId },
-        data: { elevenLabsCount: { decrement: toRelease } },
-      });
+    // Atomic decrement floored at zero — avoids read-then-update race that
+    // could push elevenLabsCount negative under concurrent requests.
+    const affected = await this.prisma
+      .$executeRaw`UPDATE "UserUsage" SET "elevenLabsCount" = GREATEST("elevenLabsCount" - ${credits}, 0) WHERE "userId" = ${userId}`;
+    if (affected > 0) {
       this.logger.log(
-        `Released ${toRelease} ElevenLabs credits for user ${userId}`,
+        `Released up to ${credits} ElevenLabs credits for user ${userId}`,
       );
-    });
+    }
   }
 
   async trackGeminiStory(userId: string): Promise<void> {

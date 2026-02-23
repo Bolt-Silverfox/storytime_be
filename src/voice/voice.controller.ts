@@ -297,7 +297,7 @@ export class VoiceController {
       throw new NotFoundException('Story not found or has no content.');
     }
 
-    const paragraphs =
+    const { results: paragraphs, totalParagraphs, wasTruncated } =
       await this.textToSpeechService.batchTextToSpeechCloudUrls(
         dto.storyId,
         story.textContent,
@@ -308,7 +308,8 @@ export class VoiceController {
     return {
       message: 'Batch audio generated successfully',
       paragraphs,
-      totalParagraphs: paragraphs.length,
+      totalParagraphs,
+      wasTruncated,
       voiceId: resolvedVoice,
       statusCode: 200,
     };

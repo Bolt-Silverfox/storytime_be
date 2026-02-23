@@ -421,25 +421,25 @@ describe('TextToSpeechService', () => {
       shortParagraph3,
     ]);
 
-    it('should return empty array for empty text', async () => {
+    it('should return empty results for empty text', async () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         '',
         VoiceType.LILY,
         userId,
       );
-      expect(result).toEqual([]);
+      expect(result).toEqual({ results: [], totalParagraphs: 0, wasTruncated: false });
       expect(mockPrisma.paragraphAudioCache.findMany).not.toHaveBeenCalled();
     });
 
-    it('should return empty array for whitespace-only text', async () => {
+    it('should return empty results for whitespace-only text', async () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         '   \n\t  ',
         VoiceType.LILY,
         userId,
       );
-      expect(result).toEqual([]);
+      expect(result).toEqual({ results: [], totalParagraphs: 0, wasTruncated: false });
     });
 
     it('should return cached results without reserving quota when all cached', async () => {
@@ -464,8 +464,8 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      expect(result.length).toBeGreaterThan(0);
-      expect(result.every((r) => r.audioUrl !== null)).toBe(true);
+      expect(result.results.length).toBeGreaterThan(0);
+      expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
       // No quota should be reserved
       expect(mockCheckAndReserveUsage).not.toHaveBeenCalled();
       // No providers should be called
@@ -503,9 +503,9 @@ describe('TextToSpeechService', () => {
       );
 
       // Should have results for all paragraphs
-      expect(result.length).toBeGreaterThan(1);
+      expect(result.results.length).toBeGreaterThan(1);
       // First paragraph should be cached
-      const sorted = [...result].sort((a, b) => a.index - b.index);
+      const sorted = [...result.results].sort((a, b) => a.index - b.index);
       expect(sorted[0].audioUrl).toBe('https://cached.com/first.mp3');
       // Other paragraphs should have been generated
       for (let i = 1; i < sorted.length; i++) {
@@ -515,7 +515,7 @@ describe('TextToSpeechService', () => {
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
       // StyleTTS2 should be called for uncached paragraphs only
       expect(mockStyleTts2Generate).toHaveBeenCalledTimes(
-        result.length - 1, // minus 1 cached
+        result.results.length - 1, // minus 1 cached
       );
     });
 
@@ -540,7 +540,7 @@ describe('TextToSpeechService', () => {
       );
 
       // All paragraphs should have fallback audio
-      expect(result.every((r) => r.audioUrl !== null)).toBe(true);
+      expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
       // Quota was reserved
       expect(mockCheckAndReserveUsage).toHaveBeenCalledWith(
         userId,
@@ -575,7 +575,9 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      expect(result.length).toBeLessThanOrEqual(50);
+      expect(result.results.length).toBeLessThanOrEqual(50);
+      expect(result.wasTruncated).toBe(true);
+      expect(result.totalParagraphs).toBeGreaterThan(50);
     });
 
     it('should return all indices when paragraphs have duplicate text', async () => {
@@ -607,8 +609,9 @@ describe('TextToSpeechService', () => {
       );
 
       // Group results by text to find duplicates
-      const textToResults = new Map<string, typeof result>();
-      for (const r of result) {
+      const { results } = result;
+      const textToResults = new Map<string, typeof results>();
+      for (const r of results) {
         const existing = textToResults.get(r.text) ?? [];
         existing.push(r);
         textToResults.set(r.text, existing);
@@ -628,13 +631,13 @@ describe('TextToSpeechService', () => {
       }
 
       // All results should have audio
-      expect(result.every((r) => r.audioUrl !== null)).toBe(true);
+      expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
 
       // Provider should be called once per unique text, not once per chunk
-      const uniqueTexts = new Set(result.map((r) => r.text)).size;
+      const uniqueTexts = new Set(result.results.map((r) => r.text)).size;
       expect(mockStyleTts2Generate).toHaveBeenCalledTimes(uniqueTexts);
       expect(mockStyleTts2Generate.mock.calls.length).toBeLessThan(
-        result.length,
+        result.results.length,
       );
     });
 
@@ -672,8 +675,8 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      expect(result.length).toBe(3);
-      const sorted = [...result].sort((a, b) => a.index - b.index);
+      expect(result.results.length).toBe(3);
+      const sorted = [...result.results].sort((a, b) => a.index - b.index);
       // First and third (refrain) should both have the cached URL
       expect(sorted[0].audioUrl).toBe('https://cached.com/refrain.mp3');
       expect(sorted[2].audioUrl).toBe('https://cached.com/refrain.mp3');
@@ -696,8 +699,8 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      for (let i = 1; i < result.length; i++) {
-        expect(result[i].index).toBeGreaterThan(result[i - 1].index);
+      for (let i = 1; i < result.results.length; i++) {
+        expect(result.results[i].index).toBeGreaterThan(result.results[i - 1].index);
       }
     });
   });
