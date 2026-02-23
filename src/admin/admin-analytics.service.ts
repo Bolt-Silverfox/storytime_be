@@ -294,9 +294,21 @@ export class AdminAnalyticsService {
 
     const result = await this.adminAnalyticsRepository.getUserGrowthMonthly();
 
-    // TODO: Duration-based filtering for user growth
-    // The UserGrowthMonthlyDto[] structure needs repository-level filtering
-    // rather than in-memory filtering. Pass duration to repository when implemented.
+    // Filter parallel arrays by duration (repository always fetches 12 months)
+    if (duration && result.data?.length > 0) {
+      const monthsToKeep =
+        duration === 'last_week' ? 1 :
+        duration === 'last_month' ? 1 :
+        12; // last_year = all 12 months
+      const dto = result.data[0];
+      const len = dto.labels.length;
+      const start = Math.max(0, len - monthsToKeep);
+      result.data = [{
+        labels: dto.labels.slice(start),
+        freeUsers: dto.freeUsers.slice(start),
+        paidUsers: dto.paidUsers.slice(start),
+      }];
+    }
 
     await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.DASHBOARD);
     return result;
