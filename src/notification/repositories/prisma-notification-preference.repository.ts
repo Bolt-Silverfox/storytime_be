@@ -132,6 +132,19 @@ export class PrismaNotificationPreferenceRepository
     });
   }
 
+  async findManyNotificationPreferencesByIds(
+    ids: string[],
+    userId: string,
+  ): Promise<NotificationPreference[]> {
+    return this.prisma.notificationPreference.findMany({
+      where: {
+        id: { in: ids },
+        userId,
+        isDeleted: false,
+      },
+    });
+  }
+
   async deleteNotificationPreference(id: string): Promise<void> {
     await this.prisma.notificationPreference.delete({
       where: { id },

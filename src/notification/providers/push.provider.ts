@@ -111,36 +111,58 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
           },
         },
         apns: {
+          headers: {
+            'apns-priority': '10',
+          },
           payload: {
             aps: {
               sound: 'default',
               badge: 1,
+              'content-available': 1,
             },
           },
         },
       };
 
       // Send to all devices
+      this.logger.debug(
+        `Sending push notification to ${tokens.length} devices for user ${payload.userId}`,
+      );
       const response = await admin.messaging().sendEachForMulticast(message);
 
       this.logger.log(
-        `Push notification sent: ${response.successCount} success, ${response.failureCount} failures`,
+        `Push notification sent to user ${payload.userId}: ${response.successCount}/${tokens.length} success, ${response.failureCount} failures`,
       );
 
       // Handle failed tokens (mark as inactive)
       await this.handleFailedTokens(deviceTokens, response.responses);
 
+      // Collect detailed error information from failed sends
+      const errorDetails: string[] = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success && resp.error) {
+          errorDetails.push(
+            `token[${idx}]: ${resp.error.code} - ${resp.error.message}`,
+          );
+          this.logger.warn(
+            `FCM send failed for token[${idx}]: ${resp.error.code} - ${resp.error.message}`,
+          );
+        }
+      });
+
       return {
         success: response.successCount > 0,
         messageId: `batch_${response.successCount}/${tokens.length}`,
         error:
-          response.failureCount > 0
-            ? `${response.failureCount} tokens failed`
+          errorDetails.length > 0
+            ? `${response.failureCount} token(s) failed: ${errorDetails.join('; ')}`
             : undefined,
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
-        `Failed to send push notification: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to send push notification to user ${payload.userId}: ${errorMessage}`,
         error instanceof Error ? error.stack : undefined,
       );
       return {
@@ -179,19 +201,56 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
           priority: 'high',
         },
         apns: {
+          headers: {
+            'apns-priority': '10',
+          },
           payload: {
-            aps: { sound: 'default' },
+            aps: {
+              sound: 'default',
+              badge: 1,
+              'content-available': 1,
+            },
           },
         },
       };
 
+      this.logger.debug(
+        `Sending direct push notification to ${tokens.length} tokens`,
+      );
       const response = await admin.messaging().sendEachForMulticast(message);
+
+      this.logger.log(
+        `Direct push sent: ${response.successCount}/${tokens.length} success`,
+      );
+
+      // Collect error details for failed sends
+      const errorDetails: string[] = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success && resp.error) {
+          errorDetails.push(
+            `token[${idx}]: ${resp.error.code} - ${resp.error.message}`,
+          );
+          this.logger.warn(
+            `Direct FCM send failed for token[${idx}]: ${resp.error.code} - ${resp.error.message}`,
+          );
+        }
+      });
 
       return {
         success: response.successCount > 0,
         messageId: `direct_${response.successCount}/${tokens.length}`,
+        error:
+          errorDetails.length > 0
+            ? `${response.failureCount} token(s) failed: ${errorDetails.join('; ')}`
+            : undefined,
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `Failed to send direct push notification: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       return {
         success: false,
         error:

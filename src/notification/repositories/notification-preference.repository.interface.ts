@@ -81,6 +81,12 @@ export interface INotificationPreferenceRepository {
     }[],
   ): Promise<void>;
 
+  // Find many notification preferences by IDs and userId
+  findManyNotificationPreferencesByIds(
+    ids: string[],
+    userId: string,
+  ): Promise<NotificationPreference[]>;
+
   // Delete notification preference (permanent)
   deleteNotificationPreference(id: string): Promise<void>;
 }

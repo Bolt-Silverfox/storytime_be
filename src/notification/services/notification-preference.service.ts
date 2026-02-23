@@ -13,6 +13,7 @@ import {
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
+  BulkUpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
 } from '../dto/notification.dto';
 import {
@@ -83,6 +84,44 @@ export class NotificationPreferenceService {
         dto,
       );
     return this.toNotificationPreferenceDto(pref);
+  }
+
+  async bulkUpdate(
+    userId: string,
+    dtos: BulkUpdateNotificationPreferenceDto[],
+  ): Promise<NotificationPreferenceDto[]> {
+    // Verify all preferences belong to the user
+    const prefIds = dtos.map((d) => d.id);
+    const existing =
+      await this.notificationPreferenceRepository.findManyNotificationPreferencesByIds(
+        prefIds,
+        userId,
+      );
+
+    if (existing.length !== prefIds.length) {
+      throw new NotFoundException(
+        'One or more notification preferences not found for this user',
+      );
+    }
+
+    // Perform atomic update via transaction
+    const updatedPrefs =
+      await this.notificationPreferenceRepository.executeTransaction(
+        async (tx) => {
+          const results = [];
+          for (const dto of dtos) {
+            const updated =
+              await this.notificationPreferenceRepository.updateNotificationPreference(
+                dto.id,
+                { enabled: dto.enabled },
+              );
+            results.push(updated);
+          }
+          return results;
+        },
+      );
+
+    return updatedPrefs.map((p) => this.toNotificationPreferenceDto(p));
   }
 
   async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {

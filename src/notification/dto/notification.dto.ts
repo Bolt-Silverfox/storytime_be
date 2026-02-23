@@ -41,6 +41,17 @@ export class UpdateNotificationPreferenceDto {
   enabled?: boolean;
 }
 
+export class BulkUpdateNotificationPreferenceDto {
+  @ApiProperty()
+  @IsUUID()
+  id: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+}
+
 export class NotificationPreferenceDto {
   @ApiProperty()
   id: string;
