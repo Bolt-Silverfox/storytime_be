@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { ResourceNotFoundException } from '@/shared/exceptions';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { AdminStoryService } from '../admin-story.service';
 import {
@@ -56,18 +56,6 @@ describe('AdminStoryService', () => {
     _count: {
       stories: 15,
       preferredByKids: 8,
-    },
-  };
-
-  const mockTheme = {
-    id: 'theme-1',
-    name: 'Friendship',
-    image: 'https://example.com/friendship.jpg',
-    description: 'Stories about friendship',
-    isDeleted: false,
-    deletedAt: null,
-    _count: {
-      stories: 20,
     },
   };
 
@@ -134,7 +122,7 @@ describe('AdminStoryService', () => {
       adminStoryRepository.findStoryById.mockResolvedValue(null);
 
       await expect(service.getStoryById('nonexistent')).rejects.toThrow(
-        NotFoundException,
+        ResourceNotFoundException,
       );
     });
   });

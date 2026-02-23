@@ -8,7 +8,7 @@ import {
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
 import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
-import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
+import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 
 @ApiTags('payment')
 @Controller('payment')
@@ -19,8 +19,8 @@ export class PaymentController {
   @UseGuards(AuthSessionGuard, ThrottlerGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.PAYMENT.VERIFY_PURCHASE.LIMIT,
-      ttl: THROTTLE_LIMITS.PAYMENT.VERIFY_PURCHASE.TTL,
+      limit: THROTTLE_LIMITS.RESOURCE_CREATE.limit,
+      ttl: THROTTLE_LIMITS.RESOURCE_CREATE.ttl,
     },
   })
   @ApiBearerAuth()
@@ -41,8 +41,8 @@ export class PaymentController {
   @UseGuards(AuthSessionGuard, ThrottlerGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.PAYMENT.CANCEL.LIMIT,
-      ttl: THROTTLE_LIMITS.PAYMENT.CANCEL.TTL,
+      limit: THROTTLE_LIMITS.AUTH_PASSWORD_RESET.limit,
+      ttl: THROTTLE_LIMITS.AUTH_PASSWORD_RESET.ttl,
     },
   })
   @ApiBearerAuth()
@@ -55,8 +55,8 @@ export class PaymentController {
   @UseGuards(AuthSessionGuard, ThrottlerGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.PAYMENT.STATUS.LIMIT,
-      ttl: THROTTLE_LIMITS.PAYMENT.STATUS.TTL,
+      limit: THROTTLE_LIMITS.DEFAULT.limit,
+      ttl: THROTTLE_LIMITS.DEFAULT.ttl,
     },
   })
   @ApiBearerAuth()

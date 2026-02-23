@@ -1,11 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OnboardingService } from './onboarding.service';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { UserDto } from '../dto/auth.dto';
+import { NotFoundException } from '@nestjs/common';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ConfigService } from '@nestjs/config';
 import { Role, OnboardingStatus } from '@prisma/client';
 
 describe('OnboardingService', () => {
@@ -72,6 +72,10 @@ describe('OnboardingService', () => {
       emit: jest.fn(),
     };
 
+    const mockConfigService = {
+      get: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OnboardingService,
@@ -79,6 +83,7 @@ describe('OnboardingService', () => {
         { provide: PasswordService, useValue: mockPasswordService },
         { provide: TokenService, useValue: mockTokenService },
         { provide: EventEmitter2, useValue: mockEventEmitter },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 

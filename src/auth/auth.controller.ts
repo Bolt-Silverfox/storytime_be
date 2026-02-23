@@ -48,7 +48,7 @@ import {
 } from '@/shared/guards/auth.guard';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
-import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
+import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 import { ConfigService } from '@nestjs/config';
 
 @ApiTags('Auth')
@@ -68,8 +68,8 @@ export class AuthController {
   @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.AUTH.LOGIN.LIMIT,
-      ttl: THROTTLE_LIMITS.AUTH.LOGIN.TTL,
+      limit: THROTTLE_LIMITS.AUTH_LOGIN.limit,
+      ttl: THROTTLE_LIMITS.AUTH_LOGIN.ttl,
     },
   })
   @HttpCode(200)
@@ -84,8 +84,8 @@ export class AuthController {
   @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.AUTH.REFRESH.LIMIT,
-      ttl: THROTTLE_LIMITS.AUTH.REFRESH.TTL,
+      limit: THROTTLE_LIMITS.AUTH_LOGIN.limit,
+      ttl: THROTTLE_LIMITS.AUTH_LOGIN.ttl,
     },
   })
   @ApiOperation({ summary: 'Refresh access token' })
@@ -99,8 +99,8 @@ export class AuthController {
   @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.AUTH.REGISTER.LIMIT,
-      ttl: THROTTLE_LIMITS.AUTH.REGISTER.TTL,
+      limit: THROTTLE_LIMITS.AUTH_REGISTER.limit,
+      ttl: THROTTLE_LIMITS.AUTH_REGISTER.ttl,
     },
   })
   @HttpCode(HttpStatus.OK)
@@ -191,8 +191,8 @@ export class AuthController {
   @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.AUTH.EMAIL_VERIFICATION.LIMIT,
-      ttl: THROTTLE_LIMITS.AUTH.EMAIL_VERIFICATION.TTL,
+      limit: THROTTLE_LIMITS.AUTH_OTP.limit,
+      ttl: THROTTLE_LIMITS.AUTH_OTP.ttl,
     },
   })
   @HttpCode(HttpStatus.OK)
@@ -209,8 +209,8 @@ export class AuthController {
   @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.AUTH.EMAIL_VERIFICATION.LIMIT,
-      ttl: THROTTLE_LIMITS.AUTH.EMAIL_VERIFICATION.TTL,
+      limit: THROTTLE_LIMITS.AUTH_OTP.limit,
+      ttl: THROTTLE_LIMITS.AUTH_OTP.ttl,
     },
   })
   @HttpCode(HttpStatus.OK)
@@ -261,8 +261,8 @@ export class AuthController {
   @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.AUTH.PASSWORD_RESET_REQUEST.LIMIT,
-      ttl: THROTTLE_LIMITS.AUTH.PASSWORD_RESET_REQUEST.TTL,
+      limit: THROTTLE_LIMITS.AUTH_PASSWORD_RESET.limit,
+      ttl: THROTTLE_LIMITS.AUTH_PASSWORD_RESET.ttl,
     },
   })
   @HttpCode(HttpStatus.OK)
@@ -285,8 +285,8 @@ export class AuthController {
   @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.AUTH.PASSWORD_RESET.LIMIT,
-      ttl: THROTTLE_LIMITS.AUTH.PASSWORD_RESET.TTL,
+      limit: THROTTLE_LIMITS.AUTH_PASSWORD_RESET.limit,
+      ttl: THROTTLE_LIMITS.AUTH_PASSWORD_RESET.ttl,
     },
   })
   @ApiOperation({ summary: 'Validate password reset token' })
@@ -304,8 +304,8 @@ export class AuthController {
   @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.AUTH.PASSWORD_RESET.LIMIT,
-      ttl: THROTTLE_LIMITS.AUTH.PASSWORD_RESET.TTL,
+      limit: THROTTLE_LIMITS.AUTH_PASSWORD_RESET.limit,
+      ttl: THROTTLE_LIMITS.AUTH_PASSWORD_RESET.ttl,
     },
   })
   @HttpCode(HttpStatus.OK)
@@ -327,8 +327,8 @@ export class AuthController {
   @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.AUTH.OAUTH.LIMIT,
-      ttl: THROTTLE_LIMITS.AUTH.OAUTH.TTL,
+      limit: THROTTLE_LIMITS.AUTH_LOGIN.limit,
+      ttl: THROTTLE_LIMITS.AUTH_LOGIN.ttl,
     },
   })
   @HttpCode(HttpStatus.OK)
@@ -350,8 +350,8 @@ export class AuthController {
   @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
-      limit: THROTTLE_LIMITS.AUTH.OAUTH.LIMIT,
-      ttl: THROTTLE_LIMITS.AUTH.OAUTH.TTL,
+      limit: THROTTLE_LIMITS.AUTH_LOGIN.limit,
+      ttl: THROTTLE_LIMITS.AUTH_LOGIN.ttl,
     },
   })
   @HttpCode(HttpStatus.OK)

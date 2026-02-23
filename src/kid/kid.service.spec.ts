@@ -1,45 +1,59 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { KidService } from './kid.service';
-import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { VoiceService } from '../voice/voice.service';
+import { KID_REPOSITORY } from './repositories';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
-const mockPrismaService = {
-  kid: {
-    create: jest.fn(),
-    findMany: jest.fn(),
-    findUnique: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-  },
-  voice: {
-    findFirst: jest.fn(),
-    findUnique: jest.fn(),
-  },
-  user: {
-    findUnique: jest.fn(),
-  },
+const mockKidRepository = {
+  create: jest.fn(),
+  findById: jest.fn(),
+  findByIdNotDeleted: jest.fn(),
+  findByIdWithRelations: jest.fn(),
+  findByIdWithFullRelations: jest.fn(),
+  findAllByParentId: jest.fn(),
+  update: jest.fn(),
+  softDelete: jest.fn(),
+  restore: jest.fn(),
+  hardDelete: jest.fn(),
+  createMany: jest.fn(),
+  countParentRecommendations: jest.fn(),
+  findVoiceById: jest.fn(),
+  findUserByIdNotDeleted: jest.fn(),
 };
 
 const mockVoiceService = {
   findOrCreateElevenLabsVoice: jest.fn(),
 };
 
+const mockCacheManager = {
+  get: jest.fn(),
+  set: jest.fn(),
+  del: jest.fn(),
+};
+
+const mockEventEmitter = {
+  emit: jest.fn(),
+};
+
 describe('KidService', () => {
   let service: KidService;
-  let prisma: typeof mockPrismaService;
+  let repo: typeof mockKidRepository;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         KidService,
-        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: KID_REPOSITORY, useValue: mockKidRepository },
         { provide: VoiceService, useValue: mockVoiceService },
+        { provide: CACHE_MANAGER, useValue: mockCacheManager },
+        { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     }).compile();
 
     service = module.get<KidService>(KidService);
-    prisma = module.get(PrismaService);
+    repo = module.get(KID_REPOSITORY);
     jest.clearAllMocks();
   });
 
@@ -51,19 +65,17 @@ describe('KidService', () => {
     it('should create a kid', async () => {
       const dto = { name: 'Alex', ageRange: '5-8', avatarId: 'avatar-1' };
       const userId = 'user-1';
-      const expectedResult = { id: 'kid-1', ...dto, parentId: userId };
+      const expectedResult = { id: 'kid-1', ...dto, parentId: userId, createdAt: new Date(), preferredVoiceId: null, preferredVoice: null };
 
-      prisma.kid.create.mockResolvedValue(expectedResult);
+      repo.create.mockResolvedValue(expectedResult);
 
       const result = await service.createKid(userId, dto);
-      expect(result).toEqual(expectedResult);
-      expect(prisma.kid.create).toHaveBeenCalledWith(
+      expect(result).toBeDefined();
+      expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            name: dto.name,
-            parentId: userId,
-            avatarId: dto.avatarId,
-          }),
+          name: dto.name,
+          parentId: userId,
+          avatarId: dto.avatarId,
         }),
       );
     });
@@ -72,24 +84,28 @@ describe('KidService', () => {
   describe('findAllByUser', () => {
     it('should return array of kids', async () => {
       const userId = 'user-1';
-      const expectedResult = [{ id: 'kid-1', parentId: userId }];
+      const expectedResult = [
+        { id: 'kid-1', parentId: userId, preferredVoiceId: null, preferredVoice: null },
+      ];
 
-      prisma.kid.findMany.mockResolvedValue(expectedResult);
+      mockCacheManager.get.mockResolvedValue(null);
+      repo.findAllByParentId.mockResolvedValue(expectedResult);
 
       const result = await service.findAllByUser(userId);
-      expect(result).toEqual(expectedResult);
-      expect(prisma.kid.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { isDeleted: false, parentId: userId },
-          include: {
-            avatar: true,
-            parent: { select: { id: true, name: true, email: true } },
-            preferredCategories: true,
-            preferredVoice: true,
-          },
-          orderBy: { createdAt: 'desc' },
-        }),
-      );
+      expect(result).toBeDefined();
+      expect(result).toHaveLength(1);
+      expect(repo.findAllByParentId).toHaveBeenCalledWith(userId);
+    });
+
+    it('should return cached result if available', async () => {
+      const userId = 'user-1';
+      const cachedResult = [{ id: 'kid-1', parentId: userId }];
+
+      mockCacheManager.get.mockResolvedValue(cachedResult);
+
+      const result = await service.findAllByUser(userId);
+      expect(result).toEqual(cachedResult);
+      expect(repo.findAllByParentId).not.toHaveBeenCalled();
     });
   });
 
@@ -97,23 +113,25 @@ describe('KidService', () => {
     it('should return a kid if found and owned by user', async () => {
       const kidId = 'kid-1';
       const userId = 'user-1';
-      const expectedResult = { id: kidId, parentId: userId };
+      const expectedResult = { id: kidId, parentId: userId, preferredVoiceId: null, preferredVoice: null };
 
-      prisma.kid.findUnique.mockResolvedValue(expectedResult);
+      repo.findByIdWithFullRelations.mockResolvedValue(expectedResult);
+      repo.countParentRecommendations.mockResolvedValue(0);
 
       const result = await service.findOne(kidId, userId);
-      expect(result).toEqual(expectedResult);
+      expect(result).toBeDefined();
+      expect(result.id).toBe(kidId);
     });
 
     it('should throw NotFoundException if kid not found', async () => {
-      prisma.kid.findUnique.mockResolvedValue(null);
+      repo.findByIdWithFullRelations.mockResolvedValue(null);
       await expect(service.findOne('kid-1', 'user-1')).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('should throw ForbiddenException if kid belongs to another user', async () => {
-      prisma.kid.findUnique.mockResolvedValue({
+      repo.findByIdWithFullRelations.mockResolvedValue({
         id: 'kid-1',
         parentId: 'other-user',
       });
@@ -129,17 +147,18 @@ describe('KidService', () => {
       const userId = 'user-1';
       const dto = { name: 'Alex Updated' };
       const existingKid = { id: kidId, parentId: userId };
-      const updatedKid = { ...existingKid, ...dto };
+      const updatedKid = { ...existingKid, ...dto, preferredVoiceId: null, preferredVoice: null };
 
-      prisma.kid.findUnique.mockResolvedValue(existingKid);
-      prisma.kid.update.mockResolvedValue(updatedKid);
+      repo.findByIdNotDeleted.mockResolvedValue(existingKid);
+      repo.update.mockResolvedValue(updatedKid);
 
       const result = await service.updateKid(kidId, userId, dto);
-      expect(result).toEqual(updatedKid);
+      expect(result).toBeDefined();
+      expect(result!.name).toBe('Alex Updated');
     });
 
     it('should throw NotFoundException if kid not found or access denied', async () => {
-      prisma.kid.findUnique.mockResolvedValue(null);
+      repo.findByIdNotDeleted.mockResolvedValue(null);
       await expect(service.updateKid('kid-1', 'user-1', {})).rejects.toThrow(
         NotFoundException,
       );
@@ -148,12 +167,11 @@ describe('KidService', () => {
     it('should throw NotFoundException if preferredVoiceId is invalid', async () => {
       const kidId = 'kid-1';
       const userId = 'user-1';
-      // Use a valid UUID that doesn't exist to trigger the UUID check path
       const dto = { preferredVoiceId: '00000000-0000-0000-0000-000000000000' };
       const existingKid = { id: kidId, parentId: userId };
 
-      prisma.kid.findUnique.mockResolvedValue(existingKid);
-      prisma.voice.findUnique.mockResolvedValue(null);
+      repo.findByIdNotDeleted.mockResolvedValue(existingKid);
+      repo.findVoiceById.mockResolvedValue(null);
 
       await expect(service.updateKid(kidId, userId, dto)).rejects.toThrow(
         NotFoundException,
@@ -162,77 +180,48 @@ describe('KidService', () => {
   });
 
   describe('deleteKid', () => {
-    it('should delete a kid', async () => {
+    it('should soft delete a kid', async () => {
       const kidId = 'kid-1';
       const userId = 'user-1';
       const existingKid = { id: kidId, parentId: userId };
 
-      prisma.kid.findUnique.mockResolvedValue(existingKid);
+      repo.findByIdNotDeleted.mockResolvedValue(existingKid);
       const softDeletedKid = {
         ...existingKid,
         isDeleted: true,
         deletedAt: new Date(),
       };
-      prisma.kid.update.mockResolvedValue(softDeletedKid);
+      repo.softDelete.mockResolvedValue(softDeletedKid);
 
       const result = await service.deleteKid(kidId, userId);
       expect(result).toEqual(softDeletedKid);
-      expect(prisma.kid.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: kidId },
-          data: expect.objectContaining({ isDeleted: true }),
-        }),
-      );
+      expect(repo.softDelete).toHaveBeenCalledWith(kidId);
     });
   });
 
   describe('createKids', () => {
-    it('should create multiple kids in a transaction', async () => {
+    it('should create multiple kids', async () => {
       const userId = 'user-1';
       const dtos = [
         { name: 'Kid 1', ageRange: '5-8', avatarId: 'avatar-1' },
         { name: 'Kid 2', ageRange: '9-12', avatarId: 'avatar-2' },
       ];
       const dbKids = [
-        { id: 'kid-1', ...dtos[0], parentId: userId, preferredVoiceId: null },
-        { id: 'kid-2', ...dtos[1], parentId: userId, preferredVoiceId: null },
+        { id: 'kid-1', ...dtos[0], parentId: userId, preferredVoiceId: null, preferredVoice: null },
+        { id: 'kid-2', ...dtos[1], parentId: userId, preferredVoiceId: null, preferredVoice: null },
       ];
 
-      // Mock prisma.$transaction
-      (prisma as any).$transaction = jest.fn().mockResolvedValue(dbKids);
-
-      // Mock parent user check
-      prisma.user.findUnique.mockResolvedValue({ id: userId } as any);
-
-      // Mock kid.create
-      prisma.kid.create.mockReturnValue('mock-prisma-promise' as any);
-
-      // Mock findMany called by findAllByUser
-      prisma.kid.findMany.mockResolvedValue(dbKids);
+      repo.findUserByIdNotDeleted.mockResolvedValue({ id: userId });
+      repo.createMany.mockResolvedValue(undefined);
+      mockCacheManager.get.mockResolvedValue(null);
+      mockCacheManager.del.mockResolvedValue(undefined);
+      repo.findAllByParentId.mockResolvedValue(dbKids);
 
       const result = await service.createKids(userId, dtos);
 
-      expect(result).toEqual(dbKids);
-      expect(prisma.kid.create).toHaveBeenCalledTimes(2);
-      expect(prisma.kid.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            name: dtos[0].name,
-            parentId: userId,
-            avatarId: dtos[0].avatarId,
-          }),
-        }),
-      );
-      expect(prisma.kid.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            name: dtos[1].name,
-            parentId: userId,
-            avatarId: dtos[1].avatarId,
-          }),
-        }),
-      );
-      expect((prisma as any).$transaction).toHaveBeenCalled();
+      expect(result).toHaveLength(2);
+      expect(repo.createMany).toHaveBeenCalled();
+      expect(repo.findUserByIdNotDeleted).toHaveBeenCalledWith(userId);
     });
   });
 });

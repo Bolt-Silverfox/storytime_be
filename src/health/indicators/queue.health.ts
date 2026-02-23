@@ -10,6 +10,7 @@ import { Queue } from 'bullmq';
 import { EMAIL_QUEUE_NAME } from '@/notification/queue/email-queue.constants';
 import { STORY_QUEUE_NAME } from '@/story/queue/story-queue.constants';
 import { VOICE_QUEUE_NAME } from '@/voice/queue/voice-queue.constants';
+import { ALERTING_THRESHOLDS } from '@/shared/config/alerting.config';
 
 interface QueueStats {
   name: string;
@@ -132,7 +133,9 @@ export class QueueHealthIndicator extends HealthIndicator {
     try {
       const stats = await this.getQueueStats(queueName, queue);
       const duration = Date.now() - startTime;
-      const isHealthy = !stats.paused && stats.failed < 100;
+      const isHealthy =
+        !stats.paused &&
+        stats.failed < ALERTING_THRESHOLDS.QUEUE_FAILED_JOBS.CRITICAL;
 
       if (!isHealthy) {
         throw new HealthCheckError(
@@ -194,7 +197,11 @@ export class QueueHealthIndicator extends HealthIndicator {
 
   private getUnhealthyQueues(stats: QueueStats[]): string[] {
     return stats
-      .filter((q) => q.paused || q.failed >= 100)
+      .filter(
+        (q) =>
+          q.paused ||
+          q.failed >= ALERTING_THRESHOLDS.QUEUE_FAILED_JOBS.CRITICAL,
+      )
       .map((q) => q.name);
   }
 }

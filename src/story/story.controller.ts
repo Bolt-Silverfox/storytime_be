@@ -73,7 +73,7 @@ import {
 } from '@/shared/guards/story-access.guard';
 import { CheckStoryQuota } from '@/shared/decorators/story-quota.decorator';
 import { Throttle } from '@nestjs/throttler';
-import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
+import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 import {
   CACHE_KEYS,
   CACHE_TTL_MS,
@@ -142,7 +142,7 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   @Throttle({
-    long: { limit: THROTTLE_LIMITS.LONG.LIMIT, ttl: THROTTLE_LIMITS.LONG.TTL },
+    long: { limit: THROTTLE_LIMITS.DEFAULT.limit, ttl: THROTTLE_LIMITS.DEFAULT.ttl },
   }) // 100 per minute
   async getStories(
     @Query('theme') theme?: string,
@@ -972,8 +972,8 @@ export class StoryController {
   @ApiOkResponse({ description: 'Generated story', type: CreateStoryDto })
   @Throttle({
     medium: {
-      limit: THROTTLE_LIMITS.GENERATION.FREE.LIMIT,
-      ttl: THROTTLE_LIMITS.GENERATION.FREE.TTL,
+      limit: THROTTLE_LIMITS.AI_GENERATION.limit,
+      ttl: THROTTLE_LIMITS.AI_GENERATION.ttl,
     },
   })
   @ApiResponse({
@@ -1070,8 +1070,8 @@ export class StoryController {
   })
   @Throttle({
     medium: {
-      limit: THROTTLE_LIMITS.GENERATION.FREE.LIMIT,
-      ttl: THROTTLE_LIMITS.GENERATION.FREE.TTL,
+      limit: THROTTLE_LIMITS.AI_GENERATION.limit,
+      ttl: THROTTLE_LIMITS.AI_GENERATION.ttl,
     },
   })
   @ApiResponse({
