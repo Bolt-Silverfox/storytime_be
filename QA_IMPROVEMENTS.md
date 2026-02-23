@@ -25,7 +25,7 @@ This document tracks quality assurance issues, testing gaps, and code quality im
 
 ### 1.1 Unit Test Status (P0 - Critical) ✅ COMPLETE
 
-Current coverage: **47 test suites, 642 passing tests** covering all services.
+Current coverage: **49 test suites, 686 passing tests** covering all services.
 
 **Core Services with Tests:** AuthService (31), UserService (45), NotificationService (34), SubscriptionService (15), OAuthService (21), OnboardingService (22), UserDeletionService (18), UserPinService (23), PaymentService, StoryService, StoryGenerationService, VoiceService, KidService, HelpSupportService, ParentFavoritesService, AdminController, AdminStoryService, AdminUserService, AdminAnalyticsService (40), AdminSystemService (32), PasswordService (22), TokenService (24), EmailVerificationService (7), DeviceTokenService (18), NotificationPreferenceService (25), BadgeService (34), ProgressService (15).
 
@@ -37,8 +37,8 @@ Current coverage: **47 test suites, 642 passing tests** covering all services.
 | OAuth (Google/Apple) | ✅ included | Done |
 | Payment processing | ✅ 19 tests | Done |
 | Subscription management | ✅ 23 tests | Done |
-| Story CRUD operations | ❌ | P2 |
-| Kid profile management | ❌ | P2 |
+| Story CRUD operations | ✅ 27 tests | Done |
+| Kid profile management | ✅ 17 tests | Done |
 
 ### 1.3 Existing Tests Needing Review (P2)
 
@@ -284,8 +284,8 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 ## Progress Summary
 
 ### Completed ✅
-- Unit tests: 47 test suites, 642 passing tests covering all services
-- E2E tests: Authentication (41), Payment (19), Subscription (23), App health (1), Global handlers (5)
+- Unit tests: 49 test suites, 686 passing tests covering all services
+- E2E tests: Authentication (41), Payment (19), Subscription (23), Story CRUD (27), Kid profiles (17), App health (1), Global handlers (5)
 - Type safety: Production `any` types eliminated
 - God service refactoring: 7 → 19 focused services
 - Event-driven architecture: 18+ events, 7 listeners
@@ -310,7 +310,6 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 - Test spec modernization: All 42 unit test suites updated for refactored services
 
 ### Pending 📋
-- [ ] E2E tests for story CRUD and kid profile flows (P2)
 - [ ] Coverage badges in README (P3 — requires Codecov CI integration)
 
 ---
