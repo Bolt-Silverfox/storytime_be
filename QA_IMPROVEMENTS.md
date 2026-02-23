@@ -23,13 +23,11 @@ This document tracks quality assurance issues, testing gaps, and code quality im
 
 ## 1. Testing Gaps
 
-### 1.1 Unit Test Status (P0 - Critical) ✅ LARGELY COMPLETE
+### 1.1 Unit Test Status (P0 - Critical) ✅ COMPLETE
 
-Current coverage: **31+ test files** covering major services.
+Current coverage: **42 test suites, 490 passing tests** covering all services.
 
-**Core Services with Tests:** AuthService (31), UserService (45), NotificationService (34), SubscriptionService (15), OAuthService (21), OnboardingService (22), UserDeletionService (18), UserPinService (23), PaymentService, StoryService, StoryGenerationService, VoiceService, KidService, HelpSupportService, ParentFavoritesService, AdminController, AdminStoryService, AdminUserService, AdminAnalyticsService (40), AdminSystemService (32), PasswordService (22), TokenService (24), EmailVerificationService (7), DeviceTokenService (18), NotificationPreferenceService (25).
-
-**All target services now have tests.** BadgeService (34 tests) and ProgressService (15 tests) added.
+**Core Services with Tests:** AuthService (31), UserService (45), NotificationService (34), SubscriptionService (15), OAuthService (21), OnboardingService (22), UserDeletionService (18), UserPinService (23), PaymentService, StoryService, StoryGenerationService, VoiceService, KidService, HelpSupportService, ParentFavoritesService, AdminController, AdminStoryService, AdminUserService, AdminAnalyticsService (40), AdminSystemService (32), PasswordService (22), TokenService (24), EmailVerificationService (7), DeviceTokenService (18), NotificationPreferenceService (25), BadgeService (34), ProgressService (15).
 
 ### 1.2 Missing E2E Tests (P1 - High)
 
@@ -226,8 +224,7 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 - ✅ CI workflows updated to run `pnpm test --coverage`
 
 **Pending:**
-- [ ] Add coverage badges to README (P3)
-- [ ] Create test files for remaining services: BadgeService, ProgressService (P3)
+- [ ] Add coverage badges to README (P3 — requires Codecov or similar CI integration)
 
 ---
 
@@ -304,7 +301,7 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 - Input validation: Avatar controller DTOs with class-validator
 - Console.log cleanup: All replaced with NestJS Logger
 - Alerting thresholds config: `src/shared/config/alerting.config.ts`
-- Test spec modernization: All 40 unit test suites updated for refactored services
+- Test spec modernization: All 42 unit test suites updated for refactored services
 
 ### Pending 📋
 - [ ] E2E tests for payment/subscription flows (P1)
