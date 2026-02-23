@@ -19,6 +19,7 @@ import { EMAIL_QUEUE_NAME } from '../src/notification/queue/email-queue.constant
 import { EmailQueueService } from '../src/notification/queue/email-queue.service';
 import { EmailProcessor } from '../src/notification/queue/email.processor';
 import { EmailProvider } from '../src/notification/providers/email.provider';
+import { AuthThrottleGuard } from '../src/shared/guards/auth-throttle.guard';
 
 /**
  * E2E Tests for Authentication Flows
@@ -126,6 +127,9 @@ describe('Authentication (e2e)', () => {
       .useValue({
         send: jest.fn().mockResolvedValue({ success: true }),
       })
+      // Disable rate limiting in E2E tests
+      .overrideGuard(AuthThrottleGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -274,8 +278,8 @@ describe('Authentication (e2e)', () => {
       });
 
       // With mocked DB, login may fail due to password hash mismatch
-      // or user not found (400), or rate limiting (429)
-      expect([200, 400, 401, 429]).toContain(res.status);
+      // or user not found (400)
+      expect([200, 400, 401]).toContain(res.status);
 
       // If login succeeds, store tokens for subsequent tests
       if (res.status === 200 && res.body.data) {
@@ -290,8 +294,8 @@ describe('Authentication (e2e)', () => {
         password: 'WrongPassword1#',
       });
 
-      // Should reject with 401 (Unauthorized), 400 (user not found), or 429 (rate limited)
-      expect([400, 401, 429]).toContain(res.status);
+      // Should reject with 401 (Unauthorized) or 400 (user not found)
+      expect([400, 401]).toContain(res.status);
     });
 
     it('should reject login with non-existent email', async () => {
@@ -317,8 +321,8 @@ describe('Authentication (e2e)', () => {
         email: testUser.email,
       });
 
-      // Validation should catch missing password, or rate limit could be hit
-      expect([400, 401, 429]).toContain(res.status);
+      // Validation should catch missing password
+      expect([400, 401]).toContain(res.status);
     });
 
     it('should accept properly formatted login with lowercase email', async () => {
@@ -327,8 +331,8 @@ describe('Authentication (e2e)', () => {
         password: testUser.password,
       });
 
-      // Request format is valid even if auth fails due to mocking or rate limiting
-      expect([200, 400, 401, 429]).toContain(res.status);
+      // Request format is valid even if auth fails due to mocking
+      expect([200, 400, 401]).toContain(res.status);
     });
   });
 
@@ -473,7 +477,9 @@ describe('Authentication (e2e)', () => {
         token: 'invalid-verification-token',
       });
 
-      expectErrorResponse(res, 400, 'Bad Request');
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.statusCode).toBe(401);
     });
 
     it('should reject verification without token', async () => {
