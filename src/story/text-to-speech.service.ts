@@ -23,6 +23,7 @@ import {
   VOICE_CONFIG_SETTINGS,
   MAX_TTS_TEXT_LENGTH,
 } from '../voice/voice.config';
+import { splitByWordCountPreservingSentences } from '../voice/utils/paragraph-splitter';
 
 /**
  * Normalize text for TTS providers by stripping literal quote characters
@@ -295,5 +296,61 @@ export class TextToSpeechService {
         'Voice generation failed on all providers',
       );
     }
+  }
+
+  async batchTextToSpeechCloudUrls(
+    storyId: string,
+    fullText: string,
+    voiceType?: VoiceType | string,
+    userId?: string,
+  ): Promise<
+    Array<{ index: number; text: string; audioUrl: string | null }>
+  > {
+    const WORDS_PER_CHUNK = 30;
+    const MAX_CONCURRENT = 5;
+    const paragraphs = splitByWordCountPreservingSentences(
+      fullText,
+      WORDS_PER_CHUNK,
+    );
+
+    const results: Array<{
+      index: number;
+      text: string;
+      audioUrl: string | null;
+    }> = [];
+
+    // Process in batches of MAX_CONCURRENT
+    for (let i = 0; i < paragraphs.length; i += MAX_CONCURRENT) {
+      const batch = paragraphs.slice(i, i + MAX_CONCURRENT);
+      const batchResults = await Promise.allSettled(
+        batch.map(async (text, batchIndex) => {
+          const index = i + batchIndex;
+          try {
+            const audioUrl = await this.textToSpeechCloudUrl(
+              storyId,
+              text,
+              voiceType,
+              userId,
+            );
+            return { index, text, audioUrl };
+          } catch (error) {
+            const msg =
+              error instanceof Error ? error.message : String(error);
+            this.logger.warn(
+              `Batch TTS failed for paragraph ${index} of story ${storyId}: ${msg}`,
+            );
+            return { index, text, audioUrl: null };
+          }
+        }),
+      );
+
+      for (const result of batchResults) {
+        if (result.status === 'fulfilled') {
+          results.push(result.value);
+        }
+      }
+    }
+
+    return results.sort((a, b) => a.index - b.index);
   }
 }
