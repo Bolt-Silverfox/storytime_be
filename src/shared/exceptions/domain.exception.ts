@@ -124,6 +124,20 @@ export class InvalidRoleException extends DomainException {
   }
 }
 
+// ==================== ACTION EXCEPTIONS ====================
+
+export class ForbiddenActionException extends DomainException {
+  constructor(message: string) {
+    super('FORBIDDEN_ACTION', message, HttpStatus.FORBIDDEN);
+  }
+}
+
+export class ConflictException extends DomainException {
+  constructor(message: string) {
+    super('CONFLICT', message, HttpStatus.CONFLICT);
+  }
+}
+
 // ==================== VALIDATION EXCEPTIONS ====================
 
 export class ValidationException extends DomainException {

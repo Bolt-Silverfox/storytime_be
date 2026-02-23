@@ -361,6 +361,28 @@ export class AdminController {
     };
   }
 
+  @Patch('users/:userId/suspend')
+  @Swagger.ApiAdminSuspendUser()
+  async suspendUser(@Param('userId') userId: string) {
+    const data = await this.adminUserService.suspendUser(userId);
+    return {
+      statusCode: 200,
+      message: 'User suspended successfully',
+      data,
+    };
+  }
+
+  @Patch('users/:userId/unsuspend')
+  @Swagger.ApiAdminUnsuspendUser()
+  async unsuspendUser(@Param('userId') userId: string) {
+    const data = await this.adminUserService.unsuspendUser(userId);
+    return {
+      statusCode: 200,
+      message: 'User unsuspended successfully',
+      data,
+    };
+  }
+
   // =====================
   // STORY MANAGEMENT
   // =====================
