@@ -30,6 +30,13 @@ export interface AppleVerifyParams {
   productId: string;
 }
 
+/** Result from Apple subscription status check */
+export interface AppleSubscriptionStatus {
+  autoRenewActive: boolean;
+  expirationTime?: Date | null;
+  error?: string;
+}
+
 /** Decoded transaction info from Apple */
 interface AppleTransactionInfo {
   transactionId: string;
@@ -164,6 +171,130 @@ export class AppleVerificationService {
         HttpStatus.BAD_REQUEST,
       );
     }
+  }
+
+  async getSubscriptionStatus(
+    originalTransactionId: string,
+  ): Promise<AppleSubscriptionStatus> {
+    if (!this.keyId || !this.issuerId || !this.bundleId || !this.privateKey) {
+      this.logger.error(
+        'Apple App Store credentials not configured for subscription status check',
+      );
+      return {
+        autoRenewActive: false,
+        error: 'Apple App Store verification not configured',
+      };
+    }
+
+    this.logger.log(
+      `Checking Apple subscription status for original transaction ${this.sanitizeForLog(originalTransactionId)}`,
+    );
+
+    try {
+      const token = this.generateJWT();
+      return await this.fetchSubscriptionStatus(originalTransactionId, token);
+    } catch (error) {
+      this.logger.error(
+        `Apple subscription status check failed: ${this.errorMessage(error)}`,
+      );
+      return {
+        autoRenewActive: false,
+        error: this.errorMessage(error),
+      };
+    }
+  }
+
+  private async fetchSubscriptionStatus(
+    originalTransactionId: string,
+    token: string,
+  ): Promise<AppleSubscriptionStatus> {
+    const hostname = 'api.storekit.itunes.apple.com';
+    const reqPath = `/inApps/v1/subscriptions/${originalTransactionId}`;
+
+    return new Promise((resolve, reject) => {
+      const req = https.request(
+        {
+          hostname,
+          path: reqPath,
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => {
+            if (res.statusCode === 200) {
+              try {
+                const response = JSON.parse(data) as {
+                  data: Array<{
+                    lastTransactions: Array<{
+                      signedTransactionInfo: string;
+                      signedRenewalInfo: string;
+                    }>;
+                  }>;
+                };
+
+                // Get the most recent transaction info
+                const lastTx =
+                  response.data?.[0]?.lastTransactions?.[0];
+                if (!lastTx) {
+                  resolve({ autoRenewActive: false, expirationTime: null });
+                  return;
+                }
+
+                // Decode the signed transaction info (JWS: header.payload.signature)
+                const txParts = lastTx.signedTransactionInfo.split('.');
+                if (txParts.length !== 3) {
+                  reject(new Error('Invalid JWS format in transaction info'));
+                  return;
+                }
+                const txPayload = JSON.parse(
+                  Buffer.from(txParts[1], 'base64').toString('utf8'),
+                ) as { expiresDate?: number };
+
+                // Decode the signed renewal info
+                const renewalParts = lastTx.signedRenewalInfo.split('.');
+                if (renewalParts.length !== 3) {
+                  reject(new Error('Invalid JWS format in renewal info'));
+                  return;
+                }
+                const renewalPayload = JSON.parse(
+                  Buffer.from(renewalParts[1], 'base64').toString('utf8'),
+                ) as { autoRenewStatus?: number };
+
+                const autoRenewActive = renewalPayload.autoRenewStatus === 1;
+                const expirationTime = txPayload.expiresDate
+                  ? new Date(txPayload.expiresDate)
+                  : null;
+
+                resolve({ autoRenewActive, expirationTime });
+              } catch {
+                reject(new Error('Failed to parse Apple subscription status response'));
+              }
+            } else {
+              this.logger.error(
+                `Apple subscription status API error: ${res.statusCode} - ${data}`,
+              );
+              reject(
+                new Error(
+                  `Apple subscription status API returned ${res.statusCode}`,
+                ),
+              );
+            }
+          });
+        },
+      );
+
+      req.on('error', reject);
+      req.setTimeout(15000, () => {
+        req.destroy();
+        reject(new Error('Apple subscription status API request timeout'));
+      });
+      req.end();
+    });
   }
 
   private generateJWT(): string {
