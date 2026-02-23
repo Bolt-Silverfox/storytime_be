@@ -76,6 +76,84 @@ export class VoiceQuotaService {
     );
   }
 
+  /**
+   * Atomically check remaining ElevenLabs quota and reserve credits.
+   * Returns the number of credits actually reserved (may be less than
+   * requested if the user doesn't have enough remaining).
+   */
+  async checkAndReserveUsage(
+    userId: string,
+    credits: number,
+  ): Promise<number> {
+    const currentMonth = this.getCurrentMonth();
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { subscription: true, usage: true },
+    });
+    if (!user) return 0;
+
+    const now = new Date();
+    const isPremium =
+      user.subscription?.status === SUBSCRIPTION_STATUS.ACTIVE &&
+      (user.subscription.endsAt === null || user.subscription.endsAt > now);
+    const limit = isPremium
+      ? VOICE_CONFIG_SETTINGS.QUOTAS.PREMIUM
+      : VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
+
+    // Atomic reservation in a transaction
+    const reserved = await this.prisma.$transaction(async (tx) => {
+      await tx.userUsage.updateMany({
+        where: { userId, currentMonth: { not: currentMonth } },
+        data: { currentMonth, elevenLabsCount: 0 },
+      });
+      const usage = await tx.userUsage.upsert({
+        where: { userId },
+        create: { userId, currentMonth, elevenLabsCount: 0 },
+        update: { currentMonth },
+      });
+
+      const remaining = Math.max(0, limit - usage.elevenLabsCount);
+      const toReserve = Math.min(credits, remaining);
+      if (toReserve > 0) {
+        await tx.userUsage.update({
+          where: { userId },
+          data: { elevenLabsCount: { increment: toReserve } },
+        });
+      }
+      return toReserve;
+    });
+
+    if (reserved > 0) {
+      await this.logAiActivity(
+        userId,
+        AiProviders.ElevenLabs,
+        'tts_batch_reservation',
+        reserved,
+      );
+    }
+
+    return reserved;
+  }
+
+  /**
+   * Release previously reserved ElevenLabs credits (e.g. when batch
+   * paragraphs fail after quota was reserved).
+   */
+  async releaseReservedUsage(
+    userId: string,
+    credits: number,
+  ): Promise<void> {
+    if (credits <= 0) return;
+    await this.prisma.userUsage.update({
+      where: { userId },
+      data: { elevenLabsCount: { decrement: credits } },
+    });
+    this.logger.log(
+      `Released ${credits} ElevenLabs credits for user ${userId}`,
+    );
+  }
+
   async trackGeminiStory(userId: string): Promise<void> {
     const currentMonth = this.getCurrentMonth();
     // Use transaction to handle monthly rollover for Gemini counters

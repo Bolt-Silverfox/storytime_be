@@ -25,6 +25,13 @@ import {
 } from '../voice/voice.config';
 import { splitByWordCountPreservingSentences } from '../voice/utils/paragraph-splitter';
 
+/** Must match mobile StoryContentContainer's wordsPerChunk */
+const WORDS_PER_CHUNK = 30;
+/** Max concurrent TTS provider calls in a batch */
+const MAX_CONCURRENT = 5;
+/** Max paragraphs allowed in a single batch request */
+const MAX_BATCH_PARAGRAPHS = 50;
+
 /**
  * Normalize text for TTS providers by stripping literal quote characters
  * and collapsing whitespace. Without this, engines may read "quote" aloud.
@@ -99,6 +106,7 @@ export class TextToSpeechService {
     text: string,
     voicetype?: VoiceType | string, // Allow string (UUID)
     userId?: string, // Added userId for quota tracking
+    options?: { skipQuotaCheck?: boolean },
   ): Promise<string> {
     const type = voicetype ?? DEFAULT_VOICE;
 
@@ -163,7 +171,8 @@ export class TextToSpeechService {
       if (!isPremium) {
         this.logger.log(`Free user ${userId}. Skipping ElevenLabs.`);
         useElevenLabs = false;
-      } else {
+      } else if (!options?.skipQuotaCheck) {
+        // Per-call quota check (skipped in batch mode where quota is reserved upfront)
         const allowed = await this.voiceQuota.checkUsage(userId);
         if (!allowed) {
           this.logger.log(
@@ -206,7 +215,7 @@ export class TextToSpeechService {
           settings,
         );
 
-        if (userId) {
+        if (userId && !options?.skipQuotaCheck) {
           await this.voiceQuota.incrementUsage(userId);
         }
 
@@ -303,19 +312,42 @@ export class TextToSpeechService {
     fullText: string,
     voiceType?: VoiceType | string,
     userId?: string,
-  ): Promise<Array<{ index: number; text: string; audioUrl: string | null }>> {
-    const WORDS_PER_CHUNK = 30;
-    const MAX_CONCURRENT = 5;
+  ): Promise<
+    Array<{ index: number; text: string; audioUrl: string | null }>
+  > {
     const paragraphs = splitByWordCountPreservingSentences(
       fullText,
       WORDS_PER_CHUNK,
     );
+
+    if (paragraphs.length > MAX_BATCH_PARAGRAPHS) {
+      this.logger.warn(
+        `Story ${storyId} has ${paragraphs.length} paragraphs, capping at ${MAX_BATCH_PARAGRAPHS}`,
+      );
+      paragraphs.length = MAX_BATCH_PARAGRAPHS;
+    }
+
+    // Reserve ElevenLabs quota upfront so concurrent calls don't race
+    let reservedCredits = 0;
+    if (userId) {
+      const isPremium = await this.voiceQuota.isPremiumUser(userId);
+      if (isPremium) {
+        reservedCredits = await this.voiceQuota.checkAndReserveUsage(
+          userId,
+          paragraphs.length,
+        );
+        this.logger.log(
+          `Reserved ${reservedCredits}/${paragraphs.length} ElevenLabs credits for batch story ${storyId}`,
+        );
+      }
+    }
 
     const results: Array<{
       index: number;
       text: string;
       audioUrl: string | null;
     }> = [];
+    let failedCount = 0;
 
     // Process in batches of MAX_CONCURRENT
     for (let i = 0; i < paragraphs.length; i += MAX_CONCURRENT) {
@@ -329,6 +361,7 @@ export class TextToSpeechService {
               text,
               voiceType,
               userId,
+              { skipQuotaCheck: true },
             );
             return { index, text, audioUrl };
           } catch (error) {
@@ -336,12 +369,19 @@ export class TextToSpeechService {
             this.logger.warn(
               `Batch TTS failed for paragraph ${index} of story ${storyId}: ${msg}`,
             );
+            failedCount++;
             return { index, text, audioUrl: null };
           }
         }),
       );
 
       results.push(...batchResults);
+    }
+
+    // Release reserved credits for paragraphs that failed
+    if (failedCount > 0 && reservedCredits > 0 && userId) {
+      const toRelease = Math.min(failedCount, reservedCredits);
+      await this.voiceQuota.releaseReservedUsage(userId, toRelease);
     }
 
     return results.sort((a, b) => a.index - b.index);
