@@ -26,6 +26,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -268,6 +269,7 @@ export class VoiceController {
 
   @Post('story/audio/batch')
   @UseGuards(AuthSessionGuard)
+  @Throttle({ short: { limit: 3, ttl: 60_000 } })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate audio for all paragraphs of a story' })
   @ApiResponse({
