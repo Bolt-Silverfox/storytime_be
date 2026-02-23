@@ -13,6 +13,8 @@ import { GoogleOAuthProfile } from '@/shared/types';
 import { UserDto } from '../dto/auth.dto';
 import appleSigninAuth from 'apple-signin-auth';
 import * as crypto from 'crypto';
+import { ConfigService } from '@nestjs/config';
+import { Role } from '@prisma/client';
 import {
   AUTH_REPOSITORY,
   IAuthRepository,
@@ -38,8 +40,9 @@ export class OAuthService {
     private readonly authRepository: IAuthRepository,
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
+    private readonly configService: ConfigService,
   ) {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (clientId) {
       this.googleClient = new OAuth2Client(clientId);
     }
@@ -56,14 +59,24 @@ export class OAuthService {
       throw new ServiceUnavailableException('Google client not configured');
     }
 
+    const validAudiences = [
+      this.configService.get<string>('GOOGLE_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_WEB_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_ANDROID_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_IOS_CLIENT_ID'),
+    ].filter((id): id is string => Boolean(id));
+
     let ticket;
     try {
       ticket = await this.googleClient.verifyIdToken({
         idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience: validAudiences,
       });
     } catch (err) {
       this.logger.error('Google id_token verification failed', err);
+      this.logger.debug(
+        `Expected audiences: ${JSON.stringify(validAudiences)}`,
+      );
       throw new UnauthorizedException('Invalid Google id_token');
     }
 
@@ -110,13 +123,17 @@ export class OAuthService {
     }
 
     try {
+      const appleAudience = [
+        this.configService.get<string>('APPLE_CLIENT_ID'),
+        this.configService.get<string>('APPLE_SERVICE_ID'),
+      ].filter((id): id is string => Boolean(id));
+
       const {
         sub: appleId,
         email,
         email_verified,
       } = await appleSigninAuth.verifyIdToken(idToken, {
-        audience: [process.env.APPLE_CLIENT_ID, process.env.APPLE_SERVICE_ID],
-        nonce: 'NONCE',
+        audience: appleAudience,
         ignoreExpiration: false,
       });
 
@@ -175,7 +192,7 @@ export class OAuthService {
         isEmailVerified: emailVerified === true,
         googleId: googleId || null,
         appleId: appleId || null,
-        role: 'parent',
+        role: Role.parent,
         profile: {
           create: {
             country: 'NG',
