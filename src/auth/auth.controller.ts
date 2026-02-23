@@ -24,6 +24,7 @@ import {
   LoginDto,
   LoginResponseDto,
   RefreshResponseDto,
+  RefreshTokenDto,
   RegisterDto,
   UpdateProfileDto,
   RequestResetDto,
@@ -86,9 +87,10 @@ export class AuthController {
     },
   })
   @ApiOperation({ summary: 'Refresh access token' })
+  @ApiBody({ type: RefreshTokenDto })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
-  async refresh(@Body('token') token: string) {
-    return this.authService.refresh(token);
+  async refresh(@Body() body: RefreshTokenDto) {
+    return this.authService.refresh(body.token);
   }
 
   @Post('register')

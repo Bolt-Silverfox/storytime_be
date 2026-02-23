@@ -45,6 +45,9 @@ export const envSchema = z
     DEEPGRAM_API_KEY: z.string().min(1, 'GOOGLE_TTS_API_KEY is required'),
     APPLE_CLIENT_ID: z.string().min(1, 'APPLE_CLIENT_ID is required'),
     APPLE_SERVICE_ID: z.string().min(1, 'APPLE_SERVICE_ID is required'),
+    GOOGLE_WEB_CLIENT_ID: z.string().optional(),
+    GOOGLE_ANDROID_CLIENT_ID: z.string().optional(),
+    GOOGLE_IOS_CLIENT_ID: z.string().optional(),
     // Firebase Cloud Messaging (optional - required for push notifications)
     FIREBASE_PROJECT_ID: z.string().optional(),
     FIREBASE_CLIENT_EMAIL: z.string().email().optional(),

@@ -21,6 +21,7 @@ import {
   NotificationType,
   OnboardingStatus,
 } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import {
   ResourceAlreadyExistsException,
   InvalidAdminSecretException,
@@ -35,6 +36,7 @@ export class OnboardingService {
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(data: RegisterDto): Promise<LoginResponseDto | null> {
@@ -45,7 +47,7 @@ export class OnboardingService {
 
     let role: Role = Role.parent;
     if (data.role === Role.admin) {
-      if (data.adminSecret !== process.env.ADMIN_SECRET) {
+      if (data.adminSecret !== this.configService.get<string>('ADMIN_SECRET')) {
         throw new InvalidAdminSecretException();
       }
       role = Role.admin;
