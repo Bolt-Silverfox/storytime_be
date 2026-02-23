@@ -20,7 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { DeviceTokenService } from './services/device-token.service';
-import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
 import { DevicePlatform } from '@prisma/client';
@@ -32,6 +32,10 @@ class RegisterDeviceDto {
 
   @IsEnum(DevicePlatform)
   platform: DevicePlatform;
+
+  @IsString()
+  @IsOptional()
+  deviceName?: string;
 }
 
 @ApiTags('Devices')
