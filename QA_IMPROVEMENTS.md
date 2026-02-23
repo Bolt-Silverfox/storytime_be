@@ -52,11 +52,19 @@ Current coverage: **31 test files** covering major services
 **Services Still Needing Tests:**
 | Service | Lines | Priority |
 |---------|-------|----------|
-| `AdminAnalyticsService` | ~600 | P2 |
-| `PasswordService` | ~150 | P2 |
-| `TokenService` | ~200 | P2 |
 | `BadgeService` | ~200 | P3 |
 | `ProgressService` | ~250 | P3 |
+
+**Recently Added Tests (Integration Session - 2026-02-23):**
+| Service | Tests | Instance |
+|---------|-------|----------|
+| `AdminAnalyticsService` | 40 tests | Integration session |
+| `AdminSystemService` | 32 tests | Integration session |
+| `PasswordService` | 22 tests | Integration session |
+| `TokenService` | 24 tests | Integration session |
+| `EmailVerificationService` | 7 tests | Integration session |
+| `DeviceTokenService` | 18 tests | Integration session |
+| `NotificationPreferenceService` | 25 tests | Integration session |
 
 **Action Items:**
 - [x] Add unit tests for `AuthService` (login, register, password reset, OAuth flows) ✅ *Instance 4*
@@ -587,12 +595,10 @@ handleUserRegistered(payload: UserRegisteredEvent) {
 - [x] CI/CD pipeline with quality gates
 
 ### In Progress 🔄
-- [ ] Test coverage improvements (need: story-generation, story-progress, password, token)
+- [ ] Test coverage improvements (need: story-progress, badge, progress services)
 
 ### Pending 📋
 - [ ] E2E tests for payment/subscription flows
-- [ ] Fix remaining error handling (5 generic Error throws)
-- [ ] Voice synthesis queue
 
 ---
 
@@ -980,7 +986,7 @@ this.eventEmitter.emit('user.created', payload);
 
 ### Pending 📋
 - [ ] E2E tests for payment/subscription flows (P1)
-- [ ] Unit tests for remaining services (AdminAnalyticsService, PasswordService, TokenService) - P2/P3
+- [ ] Unit tests for remaining services (BadgeService, ProgressService) - P3
 - [ ] Pre-commit hooks (husky + lint-staged) - P2
 - [ ] Coverage badges in README - P3
 
@@ -991,6 +997,12 @@ this.eventEmitter.emit('user.created', payload);
 - [x] **Cache Metrics Service** - OpenTelemetry metrics for cache operations *(Instance 22)*
 - [x] **Grafana Dashboard IDs** - GRAFANA_SETUP.md with community dashboard IDs *(Instance 22)*
 - [x] **Health Indicators** - Firebase, Cloudinary, enhanced Queue health *(Instance 23)*
+
+### Recently Completed (Integration Session - 2026-02-23) ✅
+- [x] **168 new unit tests** across 7 new spec files (AdminAnalytics 40, AdminSystem 32, Password 22, Token 24, EmailVerification 7, DeviceToken 18, NotificationPreference 25)
+- [x] **Payment spec fixes** - Fixed DI (ConfigService, SubscriptionService, EventEmitter2), added 6 platform-aware cancellation tests, fixed getSubscription test for enhanced return shape
+- [x] **Auth module alignment** - Replaced `process.env` with ConfigService, string literals with Prisma enums (Role, OnboardingStatus)
+- [x] **Admin userId filter** - Added userId filter to activity logs endpoint (controller + service)
 
 ### Recently Completed ✅
 - [x] **Event-Driven Architecture (EDA)** - Complete Implementation *(Instances 17, 18 - 2026-02-10)*

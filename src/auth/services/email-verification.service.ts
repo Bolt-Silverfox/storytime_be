@@ -10,6 +10,7 @@ import { generateToken } from '@/shared/utils/generate-token';
 import { TokenType } from '../dto/auth.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, UserEmailVerifiedEvent } from '@/shared/events';
+import { OnboardingStatus } from '@prisma/client';
 
 @Injectable()
 export class EmailVerificationService {
@@ -70,7 +71,7 @@ export class EmailVerificationService {
 
     await this.authRepository.updateUser(verificationToken.userId, {
       isEmailVerified: true,
-      onboardingStatus: 'email_verified',
+      onboardingStatus: OnboardingStatus.email_verified,
     });
 
     await this.authRepository.deleteToken(verificationToken.id);

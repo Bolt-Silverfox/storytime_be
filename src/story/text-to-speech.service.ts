@@ -12,11 +12,15 @@ import {
   VoiceSettings,
 } from '../voice/voice.constants';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
-import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';
+import { StyleTTS2TTSProvider } from '../voice/providers/styletts2-tts.provider';
+import { EdgeTTSProvider } from '../voice/providers/edge-tts.provider';
 import { STORY_REPOSITORY, IStoryRepository } from './repositories';
 
 import { VoiceQuotaService } from '../voice/voice-quota.service';
-import { VOICE_CONFIG_SETTINGS } from '../voice/voice.config';
+import {
+  VOICE_CONFIG_SETTINGS,
+  MAX_TTS_TEXT_LENGTH,
+} from '../voice/voice.config';
 
 /**
  * Normalize text for TTS providers by stripping literal quote characters
@@ -46,7 +50,8 @@ export class TextToSpeechService {
   constructor(
     private readonly uploadService: UploadService,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
-    private readonly deepgramProvider: DeepgramTTSProvider,
+    private readonly styleTts2Provider: StyleTTS2TTSProvider,
+    private readonly edgeTtsProvider: EdgeTTSProvider,
     @Inject(STORY_REPOSITORY)
     private readonly storyRepository: IStoryRepository,
     private readonly voiceQuota: VoiceQuotaService,
@@ -63,14 +68,12 @@ export class TextToSpeechService {
 
     // Resolve ElevenLabs ID and per-voice settings
     let elevenLabsId: string | undefined;
-    let model = 'aura-asteria-en'; // Default Deepgram model (Asteria)
     let voiceSettings: VoiceSettings | undefined;
 
     // Check if it's a known System Voice (Enum)
     if (Object.values(VoiceType).includes(type as VoiceType)) {
       const config = VOICE_CONFIG[type as VoiceType];
       elevenLabsId = config.elevenLabsId;
-      model = config.model;
       voiceSettings = config.voiceSettings;
     } else {
       // Assume dynamic UUID (Custom Voice)
@@ -80,14 +83,10 @@ export class TextToSpeechService {
         elevenLabsId = voice.elevenLabsVoiceId;
         // Custom voices use default settings optimized for storytelling
         voiceSettings = undefined;
-      } else if (voice?.type === 'deepgram') {
-        // If we ever support custom deepgram voices
-        // model = voice.externalId ...
       } else {
         // Unrecognized ID, fallback to default
         const defaultConfig = VOICE_CONFIG[DEFAULT_VOICE];
         elevenLabsId = defaultConfig.elevenLabsId;
-        model = defaultConfig.model;
         voiceSettings = defaultConfig.voiceSettings;
         this.logger.warn(
           `Voice ID ${type} not found. Falling back to default.`,
@@ -165,32 +164,46 @@ export class TextToSpeechService {
       }
     }
 
-    // Priority 2: Deepgram Fallback
+    // Priority 2: StyleTTS2 Fallback
     try {
       this.logger.log(
-        `Attempting Deepgram generation for story ${storyId} with voice ${type}`,
+        `Attempting StyleTTS2 generation for story ${storyId} with voice ${type}`,
       );
 
-      const deepgramSettings = {
-        speed: VOICE_CONFIG_SETTINGS.DEEPGRAM.DEFAULT_SPEED, // Slower pace for storytelling
-      };
-
-      const audioBuffer = await this.deepgramProvider.generateAudio(
+      const audioBuffer = await this.styleTts2Provider.generateAudio(
         cleanedText,
-        undefined,
-        model,
-        deepgramSettings,
       );
       return await this.uploadService.uploadAudioBuffer(
         audioBuffer,
-        `story_${storyId}_deepgram_${Date.now()}.wav`,
+        `story_${storyId}_styletts2_${Date.now()}.wav`,
       );
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `StyleTTS2 failed for story ${storyId}: ${msg}. Falling back to Edge TTS.`,
+      );
+    }
+
+    // Priority 3: Edge TTS (final fallback)
+    try {
+      this.logger.log(
+        `Attempting Edge TTS generation for story ${storyId} with voice ${type}`,
+      );
+
+      const audioBuffer = await this.edgeTtsProvider.generateAudio(
+        cleanedText,
+      );
+      return await this.uploadService.uploadAudioBuffer(
+        audioBuffer,
+        `story_${storyId}_edgetts_${Date.now()}.mp3`,
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Deepgram fallback failed for story ${storyId}: ${error.message}`,
+        `Edge TTS fallback failed for story ${storyId}: ${msg}`,
       );
       throw new InternalServerErrorException(
-        'Voice generation failed on both providers',
+        'Voice generation failed on all providers',
       );
     }
   }

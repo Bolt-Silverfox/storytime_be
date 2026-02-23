@@ -345,6 +345,7 @@ model Story {
   parentRecommendations ParentRecommendation[]
   // ADDED: Restricted stories
   restrictedStories     RestrictedStory[]
+  paragraphAudioCaches  ParagraphAudioCache[]
 
   @@index([isDeleted])
   @@index([createdAt])
@@ -797,6 +798,24 @@ model StoryAudioCache {
   @@index([storyId])
   @@index([isDeleted])
   @@map("story_audio_cache")
+}
+
+// -------------------------
+// PARAGRAPH AUDIO CACHE
+// -------------------------
+model ParagraphAudioCache {
+  id        String   @id @default(uuid())
+  storyId   String
+  textHash  String
+  voiceId   String
+  audioUrl  String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storyId, textHash, voiceId])
+  @@index([storyId])
+  @@map("paragraph_audio_cache")
 }
 
 model StoryQuestion {

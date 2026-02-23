@@ -11,6 +11,8 @@ import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { NotificationPreferenceService } from '@/notification/services/notification-preference.service';
 import { OAuth2Client } from 'google-auth-library';
 import appleSigninAuth from 'apple-signin-auth';
+import { ConfigService } from '@nestjs/config';
+import { Role } from '@prisma/client';
 
 // Mock google-auth-library
 jest.mock('google-auth-library', () => ({
@@ -40,7 +42,7 @@ describe('OAuthService', () => {
     name: 'Test User',
     passwordHash: 'hashed_password',
     isEmailVerified: true,
-    role: 'parent',
+    role: Role.parent,
     googleId: 'google-123',
     appleId: null,
     avatarId: null,
@@ -77,7 +79,14 @@ describe('OAuthService', () => {
       () => googleClient,
     );
 
-    process.env.GOOGLE_CLIENT_ID = 'test-google-client-id';
+    const mockConfigService = {
+      get: jest.fn((key: string) => {
+        const config: Record<string, string> = {
+          GOOGLE_CLIENT_ID: 'test-google-client-id',
+        };
+        return config[key];
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -85,6 +94,7 @@ describe('OAuthService', () => {
         { provide: AUTH_REPOSITORY, useValue: mockAuthRepository },
         { provide: TokenService, useValue: mockTokenService },
         { provide: PasswordService, useValue: mockPasswordService },
+        { provide: ConfigService, useValue: mockConfigService },
         {
           provide: NotificationPreferenceService,
           useValue: mockNotificationPreferenceService,

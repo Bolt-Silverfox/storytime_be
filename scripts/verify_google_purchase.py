@@ -126,6 +126,79 @@ def verify_purchase(package_name, product_id, purchase_token):
         }
 
 
+def acknowledge_subscription(package_name, product_id, purchase_token):
+    """Acknowledge a Google Play subscription purchase using WIF"""
+    try:
+        credentials = _get_credentials()
+
+        url = (
+            f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+            f"{package_name}/purchases/subscriptions/{product_id}/tokens/{purchase_token}:acknowledge"
+        )
+        response = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {credentials.token}",
+                "Content-Type": "application/json"
+            },
+            timeout=10
+        )
+
+        # 204 No Content = success, 200 also acceptable
+        if response.status_code in (200, 204):
+            return {"success": True}
+        else:
+            return {
+                "success": False,
+                "error": f"Acknowledge failed with status {response.status_code}",
+                "statusCode": response.status_code,
+                "details": response.text
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "errorType": type(e).__name__
+        }
+
+
+def acknowledge_product(package_name, product_id, purchase_token):
+    """Acknowledge a Google Play one-time product purchase using WIF"""
+    try:
+        credentials = _get_credentials()
+
+        url = (
+            f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+            f"{package_name}/purchases/products/{product_id}/tokens/{purchase_token}:acknowledge"
+        )
+        response = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {credentials.token}",
+                "Content-Type": "application/json"
+            },
+            timeout=10
+        )
+
+        if response.status_code in (200, 204):
+            return {"success": True}
+        else:
+            return {
+                "success": False,
+                "error": f"Acknowledge failed with status {response.status_code}",
+                "statusCode": response.status_code,
+                "details": response.text
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "errorType": type(e).__name__
+        }
+
+
 def cancel_subscription(package_name, product_id, purchase_token):
     """Cancel a Google Play subscription using WIF"""
     try:
@@ -177,12 +250,25 @@ if __name__ == "__main__":
         else:
             result = {
                 "success": False,
-                "error": f"Unknown action: {action}. Expected 'verify' or 'cancel'"
+                "error": f"Unknown action: {action}. Expected 'verify', 'cancel', or 'acknowledge'"
+            }
+    elif len(args) == 5 and args[0] == 'acknowledge':
+        ack_type = args[1]  # "subscription" or "product"
+        package_name, product_id, purchase_token = args[2], args[3], args[4]
+
+        if ack_type == 'subscription':
+            result = acknowledge_subscription(package_name, product_id, purchase_token)
+        elif ack_type == 'product':
+            result = acknowledge_product(package_name, product_id, purchase_token)
+        else:
+            result = {
+                "success": False,
+                "error": f"Unknown acknowledge type: {ack_type}. Use 'subscription' or 'product'."
             }
     else:
         result = {
             "success": False,
-            "error": "Usage: verify_google_purchase.py [verify|cancel] <package_name> <product_id> <purchase_token>"
+            "error": "Usage: verify_google_purchase.py [verify|cancel|acknowledge] <args...>"
         }
 
     print(json.dumps(result))

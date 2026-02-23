@@ -4,7 +4,10 @@ import { UploadService } from '../upload/upload.service';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { VOICE_CONFIG } from '../voice/voice.constants';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
-import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';
+import { StyleTTS2TTSProvider } from '../voice/providers/styletts2-tts.provider';
+import { EdgeTTSProvider } from '../voice/providers/edge-tts.provider';
+import { STORY_REPOSITORY } from './repositories';
+import { VoiceQuotaService } from '../voice/voice-quota.service';
 
 describe('TextToSpeechService', () => {
   let service: TextToSpeechService;
@@ -13,11 +16,14 @@ describe('TextToSpeechService', () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let elevenLabsProvider: ElevenLabsTTSProvider;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  let deepgramProvider: DeepgramTTSProvider;
+  let styleTts2Provider: StyleTTS2TTSProvider;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  let edgeTtsProvider: EdgeTTSProvider;
 
   const mockUploadAudio = jest.fn();
   const mockElevenLabsGenerate = jest.fn();
-  const mockDeepgramGenerate = jest.fn();
+  const mockStyleTts2Generate = jest.fn();
+  const mockEdgeTtsGenerate = jest.fn();
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -38,9 +44,28 @@ describe('TextToSpeechService', () => {
           },
         },
         {
-          provide: DeepgramTTSProvider,
+          provide: StyleTTS2TTSProvider,
           useValue: {
-            generateAudio: mockDeepgramGenerate,
+            generateAudio: mockStyleTts2Generate,
+          },
+        },
+        {
+          provide: EdgeTTSProvider,
+          useValue: {
+            generateAudio: mockEdgeTtsGenerate,
+          },
+        },
+        {
+          provide: STORY_REPOSITORY,
+          useValue: {
+            findVoiceById: jest.fn(),
+          },
+        },
+        {
+          provide: VoiceQuotaService,
+          useValue: {
+            checkUsage: jest.fn().mockResolvedValue(true),
+            incrementUsage: jest.fn(),
           },
         },
       ],
@@ -51,14 +76,15 @@ describe('TextToSpeechService', () => {
     elevenLabsProvider = module.get<ElevenLabsTTSProvider>(
       ElevenLabsTTSProvider,
     );
-    deepgramProvider = module.get<DeepgramTTSProvider>(DeepgramTTSProvider);
+    styleTts2Provider = module.get<StyleTTS2TTSProvider>(StyleTTS2TTSProvider);
+    edgeTtsProvider = module.get<EdgeTTSProvider>(EdgeTTSProvider);
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
-  describe('textToSpeechCloudUrl', () => {
+  describe('synthesizeStory', () => {
     const storyId = 'story-123';
     const text = 'Once upon a time';
     const voiceType = VoiceType.CHARLIE;
@@ -69,66 +95,81 @@ describe('TextToSpeechService', () => {
         'https://uploaded-audio.com/eleven.mp3',
       );
 
-      const result = await service.textToSpeechCloudUrl(
+      const result = await service.synthesizeStory(
         storyId,
         text,
         voiceType,
+        'user-123',
       );
 
-      expect(mockElevenLabsGenerate).toHaveBeenCalledWith(
-        text,
-        VOICE_CONFIG[voiceType].elevenLabsId,
-      );
+      expect(mockElevenLabsGenerate).toHaveBeenCalled();
       expect(mockUploadAudio).toHaveBeenCalledWith(
         Buffer.from('eleven-audio'),
         expect.stringContaining('elevenlabs'),
       );
       expect(result).toBe('https://uploaded-audio.com/eleven.mp3');
-      expect(mockDeepgramGenerate).not.toHaveBeenCalled();
+      expect(mockStyleTts2Generate).not.toHaveBeenCalled();
+      expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
     });
 
-    it('should fallback to Deepgram if ElevenLabs fails', async () => {
-      // Mock ElevenLabs failure
+    it('should fallback to StyleTTS2 if ElevenLabs fails', async () => {
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs Error'));
-      // Mock Deepgram success
-      mockDeepgramGenerate.mockResolvedValue(Buffer.from('deepgram-audio'));
+      mockStyleTts2Generate.mockResolvedValue(
+        Buffer.from('styletts2-audio'),
+      );
       mockUploadAudio.mockResolvedValue(
-        'https://uploaded-audio.com/deepgram.wav',
+        'https://uploaded-audio.com/styletts2.wav',
       );
 
-      const result = await service.textToSpeechCloudUrl(
+      const result = await service.synthesizeStory(
         storyId,
         text,
         voiceType,
+        'user-123',
       );
 
       expect(mockElevenLabsGenerate).toHaveBeenCalled();
-      expect(mockDeepgramGenerate).toHaveBeenCalledWith(
-        text,
-        undefined,
-        VOICE_CONFIG[voiceType].model,
-      );
+      expect(mockStyleTts2Generate).toHaveBeenCalled();
       expect(mockUploadAudio).toHaveBeenCalledWith(
-        Buffer.from('deepgram-audio'),
-        expect.stringContaining('deepgram'),
+        Buffer.from('styletts2-audio'),
+        expect.stringContaining('styletts2'),
       );
-      expect(result).toBe('https://uploaded-audio.com/deepgram.wav');
+      expect(result).toBe('https://uploaded-audio.com/styletts2.wav');
     });
 
-    it('should fallback to Deepgram if ElevenLabs ID is not configured', async () => {
-      // Force a voice type that might not have elevenLabsId if applicable,
-      // but assuming MILO has it. Let's mock the config lookup if possible?
-      // actually we are testing the service logic which reads from the import.
-      // Let's rely on the fact that if it throws strict errors (it doesn't, it just logs and skips).
-    });
-
-    it('should throw error if both providers fail', async () => {
+    it('should fallback to Edge TTS if both ElevenLabs and StyleTTS2 fail', async () => {
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs Error'));
-      mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram Error'));
+      mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 Error'));
+      mockEdgeTtsGenerate.mockResolvedValue(Buffer.from('edge-audio'));
+      mockUploadAudio.mockResolvedValue(
+        'https://uploaded-audio.com/edge.mp3',
+      );
+
+      const result = await service.synthesizeStory(
+        storyId,
+        text,
+        voiceType,
+        'user-123',
+      );
+
+      expect(mockElevenLabsGenerate).toHaveBeenCalled();
+      expect(mockStyleTts2Generate).toHaveBeenCalled();
+      expect(mockEdgeTtsGenerate).toHaveBeenCalled();
+      expect(mockUploadAudio).toHaveBeenCalledWith(
+        Buffer.from('edge-audio'),
+        expect.stringContaining('edgetts'),
+      );
+      expect(result).toBe('https://uploaded-audio.com/edge.mp3');
+    });
+
+    it('should throw error if all providers fail', async () => {
+      mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs Error'));
+      mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 Error'));
+      mockEdgeTtsGenerate.mockRejectedValue(new Error('Edge TTS Error'));
 
       await expect(
-        service.textToSpeechCloudUrl(storyId, text, voiceType),
-      ).rejects.toThrow('Voice generation failed on both providers');
+        service.synthesizeStory(storyId, text, voiceType, 'user-123'),
+      ).rejects.toThrow('Voice generation failed on all providers');
     });
   });
 });

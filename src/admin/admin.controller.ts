@@ -142,9 +142,12 @@ export class AdminController {
 
   @Get('dashboard/recent-activity')
   @Swagger.ApiAdminGetRecentActivity()
-  async getRecentActivity(@Query('limit') limit?: number) {
+  async getRecentActivity(
+    @Query('limit') limit?: number,
+    @Query('userId') userId?: string,
+  ) {
     const { limit: l } = PaginationUtil.sanitize(1, limit, 100);
-    const data = await this.adminSystemService.getRecentActivity(l);
+    const data = await this.adminSystemService.getRecentActivity(l, userId);
     return {
       statusCode: 200,
       message: 'Recent activity logs retrieved successfully',

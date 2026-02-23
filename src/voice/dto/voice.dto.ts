@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export enum VoiceSourceType {
   UPLOADED = 'uploaded',
@@ -41,6 +47,9 @@ export class VoiceResponseDto {
   @ApiProperty()
   name: string;
 
+  @ApiProperty({ description: 'User-facing display name' })
+  displayName: string;
+
   @ApiProperty({
     description: "'uploaded' or 'elevenlabs'",
     enum: VoiceSourceType,
@@ -64,6 +73,8 @@ export enum VoiceType {
   LILY = 'LILY',
   BILL = 'BILL',
   LAURA = 'LAURA',
+  ROSIE = 'ROSIE',
+  PIXIE = 'PIXIE',
 }
 
 export class StoryContentAudioDto {
@@ -74,6 +85,15 @@ export class StoryContentAudioDto {
   @IsString()
   @IsNotEmpty()
   content: string;
+
+  @ApiProperty({
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    description: 'Story ID for caching paragraph audio',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @IsUUID()
+  storyId: string;
 
   @ApiProperty({
     required: false,

@@ -2,8 +2,23 @@
 
 **Date:** 2026-02-23
 **Branch:** integration/refactor-2026-02
-**Source:** develop-v0.0.1 (40 commits to port)
+**Source:** develop-v0.0.1 (40+ commits to port)
 **Timeline:** 1-2 weeks to complete, then this branch becomes the standard
+
+### Completion Status
+- [x] Phase 0: Schema & Migrations (done)
+- [x] Phase 1: Payment Module (done)
+- [x] Phase 2: Notification Module (done)
+- [x] Phase 3: Auth Module (done)
+- [x] Phase 4: Admin Module (done)
+- [x] Phase 5: Story Module (done)
+- [x] Phase 6: Shared/Config Cleanup (done)
+- [x] Phase 7: Voice — New TTS Providers (done 2026-02-23)
+- [x] Phase 8: Voice — TTS Service & Constants (done 2026-02-23)
+- [x] Phase 9: Payment — Google Play Acknowledgement & Mobile IDs (done 2026-02-23)
+- [x] Phase 10: Auth Guard & Session Improvements (done 2026-02-23)
+- [ ] Phase 11: Story — Categories & Library Endpoints
+- [ ] Phase 12: Cleanup & Dead Code Removal
 
 ---
 
@@ -302,6 +317,251 @@ Already covered in Phase 3 (Google platform client IDs).
 
 ---
 
+## Phase 7: Voice Module Overhaul — New TTS Providers
+
+### Priority: CRITICAL
+### Source Commits: `df7fb7d`, `736eb6f`, `d3d18ba`, `1b2bcb4`, `b6c443a`, `c59fc63`, `05622d7`, `f9b6077`
+
+### Context
+Develop replaced Deepgram TTS with StyleTTS2 (HuggingFace Gradio) and Edge TTS (Microsoft). Our branch has a voice queue (BullMQ) and repository pattern that develop never had — these must be preserved while porting the new providers.
+
+### Changes to Port
+
+#### 7.1 Add StyleTTS2 TTS Provider
+**New file:** `src/voice/providers/styletts2-tts.provider.ts`
+- Uses `@gradio/client` to connect to HuggingFace Space (configurable via STYLE_TTS2.SPACE_ID)
+- Implements `ITextToSpeechProvider` interface + `OnModuleInit` (warm-up ping)
+- WAV buffer merging for multi-chunk audio (custom `mergeWavBuffers`)
+- `withTimeout` helper for Gradio operations
+- URL validation via `isAllowedAudioUrl` (trusted HuggingFace hosts only)
+- MAX_AUDIO_BYTES = 10MB limit
+- Dependencies: `TextChunker`, `HttpService`, `ConfigService`
+- Config from `VOICE_CONFIG_SETTINGS.STYLE_TTS2`
+
+**NPM package required:** `@gradio/client`
+
+#### 7.2 Add Edge TTS Provider
+**New file:** `src/voice/providers/edge-tts.provider.ts`
+- Uses `@andresaya/edge-tts` npm package
+- Implements `ITextToSpeechProvider` interface
+- Creates fresh EdgeTTS instance per chunk to avoid buffer accumulation
+- Dependencies: `TextChunker`
+- Config from `VOICE_CONFIG_SETTINGS.EDGE_TTS`
+
+**NPM package required:** `@andresaya/edge-tts`
+
+#### 7.3 Remove Deepgram TTS Provider
+- Remove `src/voice/providers/deepgram-tts.provider.ts`
+- Remove `DeepgramTTSProvider` from `voice.module.ts` providers and exports
+- Keep `DeepgramSTTProvider` (Speech-to-Text still uses Deepgram)
+- Remove `DEEPGRAM` section from `voice.config.ts`
+
+#### 7.4 Update Voice Config
+**File:** `src/voice/voice.config.ts`
+- Add `MAX_TTS_TEXT_LENGTH = 50_000`
+- Add `STYLE_TTS2` config section: `{ SPACE_ID, ENDPOINT: '/on_generate_tts', SPEED: 120, TIMEOUT_MS: 30_000, CHUNK_SIZE: 3000 }`
+- Add `EDGE_TTS` config section: `{ RATE: -10, OUTPUT_FORMAT: 'audio-24khz-96kbitrate-mono-mp3', CHUNK_SIZE: 3000, TIMEOUT_MS: 30_000 }`
+- Remove `DEEPGRAM` config section
+
+#### 7.5 Update Voice Module
+**File:** `src/voice/voice.module.ts`
+- Add `StyleTTS2TTSProvider` and `EdgeTTSProvider` to providers
+- Remove `DeepgramTTSProvider` from providers and exports
+- Add `StyleTTS2TTSProvider` and `EdgeTTSProvider` to exports
+- Keep voice queue (BullMQ) — our branch improvement
+- Keep repository pattern for voice-quota — our branch improvement
+
+### Architectural Notes
+- Our voice queue processor (`voice.processor.ts`) uses `TextToSpeechService` — it will automatically pick up the new 3-tier chain once the TTS service is updated in Phase 8
+- Both new providers implement `ITextToSpeechProvider` interface for consistency
+
+---
+
+## Phase 8: Voice Module Overhaul — TTS Service & Constants
+
+### Priority: CRITICAL
+### Source Commits: `865480f`, `e85f416`, `6d2dde8`, `ba72de5`, `73815ab`, `ce7b6e8`, `0c6c845`, `0480f85`
+
+### Changes to Port
+
+#### 8.1 Update Voice Constants
+**File:** `src/voice/voice.constants.ts`
+
+Major changes:
+- Change `DEFAULT_VOICE` from `VoiceType.CHARLIE` to `VoiceType.LILY`
+- Add `VoiceConfigEntry` interface with new fields: `edgeTtsVoice`, `styleTts2Voice`
+- Update all 6 existing voice configs with `edgeTtsVoice` and `styleTts2Voice` mappings
+- Add display names (CHARLIE→Milo, JESSICA→Bella, WILL→Cosmo, LILY→Nimbus, BILL→Fanice, LAURA→Chip)
+- Add ROSIE and PIXIE voice configs (child voices)
+- Update BILL avatar URL (new Fanice avatar)
+- Add ROSIE and PIXIE to VOICE_AVATARS and VOICE_PREVIEWS
+- Type `VOICE_AVATARS` and `VOICE_PREVIEWS` as `Record<VoiceType, string>`
+
+#### 8.2 Update VoiceType Enum
+**File:** `src/voice/dto/voice.dto.ts`
+- Add `ROSIE = 'ROSIE'` and `PIXIE = 'PIXIE'` to VoiceType enum
+- Add `displayName` field to `VoiceResponseDto`
+- Add `storyId` field to `StoryContentAudioDto` with `@IsUUID()` validation
+
+#### 8.3 Update Text-to-Speech Service (3-Tier Chain)
+**File:** `src/story/text-to-speech.service.ts`
+
+Major rewrite:
+- Replace 2-tier chain (ElevenLabs → Deepgram) with 3-tier chain (ElevenLabs → StyleTTS2 → Edge TTS)
+- Replace `DeepgramTTSProvider` dependency with `StyleTTS2TTSProvider` + `EdgeTTSProvider`
+- Add `PrismaService` dependency for paragraph audio caching
+- Add text length guard (`MAX_TTS_TEXT_LENGTH`)
+- Free users skip ElevenLabs entirely (uses `isPremiumUser` check)
+- Per-voice `edgeTtsVoice` and `styleTts2Voice` resolution from VOICE_CONFIG
+- Remove `STORY_REPOSITORY` injection and `IStoryRepository` dependency (voice lookup moves elsewhere)
+
+#### 8.4 Paragraph Audio Caching
+**Files:** `src/story/text-to-speech.service.ts`, `prisma/schema.prisma`
+
+Schema change:
+```prisma
+model ParagraphAudioCache {
+  id        String   @id @default(uuid())
+  storyId   String
+  textHash  String
+  voiceId   String
+  audioUrl  String
+  createdAt DateTime @default(now())
+  story     Story    @relation(fields: [storyId], references: [id])
+  @@unique([storyId, textHash, voiceId])
+  @@index([storyId])
+}
+```
+
+Add `paragraphAudioCaches ParagraphAudioCache[]` relation to Story model.
+
+New methods in TTS service:
+- `getCachedParagraphAudio(storyId, text, voiceId)` — SHA-256 text hash lookup
+- `cacheParagraphAudio(storyId, text, voiceId, audioUrl)` — cache write (non-fatal on error)
+
+#### 8.5 Voice Constants Tests
+**New file:** `src/voice/voice.constants.spec.ts`
+- Tests for completeness: every VoiceType has config, avatar, preview
+- Tests for uniqueness: Edge TTS voices, ElevenLabs IDs, StyleTTS2 voices
+
+#### 8.6 Voice Service Updates
+**File:** `src/voice/voice.service.ts`
+- Add `toVoiceResponse()` private helper for Voice→VoiceResponseDto mapping
+- Add `displayName` from VOICE_CONFIG lookup in all response builders
+- Add caching to `fetchAvailableVoices()` (5-minute TTL)
+- Add `findOrCreateElevenLabsVoice()` for voice cloning integration
+
+#### 8.7 VoiceQuotaService — Admin Premium
+**File:** `src/voice/voice-quota.service.ts`
+- `isPremiumUser()`: Also treat admin users as premium (check `user.role === 'admin'`)
+
+---
+
+## Phase 9: Payment Module — Google Play Acknowledgement & Mobile IDs
+
+### Priority: HIGH
+### Source Commits: `52d59d3`, `b39e54c`, `9dc8e18`
+
+### Changes to Port
+
+#### 9.1 Google Play Purchase Acknowledgement
+**File:** `src/payment/google-verification.service.ts`
+
+New method: `acknowledgePurchase(params)` — Calls Python script with 'acknowledge' action
+
+**File:** `src/payment/payment.service.ts`
+
+In `verifyGooglePurchase()` after successful verification:
+- Check `result.metadata?.acknowledgementState !== 1`
+- If unacknowledged, call `googleVerificationService.acknowledgePurchase()`
+- Log warning if ack fails (non-fatal — purchase is still valid but must be acknowledged within 3 days)
+
+**File:** `scripts/verify_google_purchase.py`
+- Add `acknowledge_purchase()` function calling `subscriptions.acknowledge()` Google API
+
+#### 9.2 Mobile Product IDs
+**File:** `src/subscription/subscription.constants.ts`
+
+Add to `PRODUCT_ID_TO_PLAN`:
+```typescript
+'1_month_subscription': 'monthly',
+'1_year_subscription': 'yearly',
+```
+
+#### 9.3 Remove Product ID Enumeration from Error
+**File:** `src/payment/payment.service.ts`
+
+In `mapProductIdToPlan()`, change error message:
+```typescript
+// Before: `Unknown product ID: ${productId}. Valid IDs: ${Object.keys(PRODUCT_ID_TO_PLAN).join(', ')}`
+// After: `Unknown product ID: ${productId}`
+```
+(Security fix: don't enumerate valid product IDs to clients)
+
+---
+
+## Phase 10: Auth Guard & Session Improvements
+
+### Priority: MEDIUM
+### Source Commits: `f6f50a3`, `d970b28`, `9a59826`, `534b3de`
+
+### Changes to Port
+
+#### 10.1 Session Soft-Delete & Expiry Validation
+**File:** `src/shared/guards/auth.guard.ts`
+
+In the auth guard's `canActivate()`:
+- After finding the session, check `session.deletedAt !== null` (soft-deleted)
+- Check `session.expiresAt && session.expiresAt < new Date()` (expired)
+- Return 401 for both cases with appropriate messages
+
+#### 10.2 Logger in Auth Guard
+Add `private readonly logger = new Logger(AuthSessionGuard.name)` to auth guard for server-side diagnostics (login failures, invalid tokens, expired sessions).
+
+#### 10.3 Type Safety Improvements
+- Rename `CancelParams` → `SubscriptionCancelParams` (if not already done)
+- Add proper typing to auth guard response
+
+---
+
+## Phase 11: Story Module — Categories & Library Endpoints
+
+### Priority: LOW-MEDIUM
+### Source Commits: `466e1fe`
+
+### Changes to Port
+
+#### 11.1 Include Categories in Library Endpoints
+**File:** `src/story/story.service.ts` (or relevant repository)
+
+In `continue-reading` and `completed` library queries:
+- Add `include: { categories: true }` to Prisma queries
+- Map categories in response DTOs
+
+---
+
+## Phase 12: Cleanup & Dead Code Removal
+
+### Priority: LOW
+### Source Commits: `a9ff226`, `61837b7`, `c9e8548`, `6d76c19`, `7bb7d04`
+
+### Changes to Port
+
+#### 12.1 Remove Dead Code
+- Remove commented-out services and unused DTOs from develop
+- Check if any of these exist in our branch and clean up
+
+#### 12.2 Preferences Validation
+- Use `ParseBooleanRecordPipe` for preferences validation if applicable
+
+#### 12.3 Remove Duplicate Audio Endpoints
+- Verify no duplicate endpoints exist between story and voice controllers
+
+#### 12.4 File Validation on Transcribe
+Already implemented in our branch (ParseFilePipeBuilder on transcribe endpoint).
+
+---
+
 ## Risk Mitigation
 
 1. **After each phase:** Run `pnpm build` to catch compile errors
@@ -309,6 +569,8 @@ Already covered in Phase 3 (Google platform client IDs).
 3. **Schema changes first:** All subsequent phases depend on correct schema
 4. **Commit per phase:** Each module gets its own commit for easy rollback
 5. **Auth guard alignment:** Do a project-wide audit after all modules are ported
+6. **NPM packages:** Install `@gradio/client` and `@andresaya/edge-tts` before Phase 7
+7. **Prisma migration:** Add ParagraphAudioCache model before Phase 8
 
 ---
 
@@ -320,3 +582,8 @@ Already covered in Phase 3 (Google platform client IDs).
 - Existing tests pass
 - New tests from develop are ported and pass
 - No regression in refactored architecture (repositories, events, exceptions intact)
+- New TTS providers (StyleTTS2, Edge TTS) work with existing voice queue
+- Paragraph audio caching functional with ParagraphAudioCache model
+- Child voices (ROSIE, PIXIE) available with proper config
+- Google Play purchase acknowledgement prevents auto-refunds
+- Mobile product IDs recognized for IAP verification
