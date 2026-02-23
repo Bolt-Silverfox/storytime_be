@@ -42,6 +42,7 @@ export class ElevenLabsService {
               'Content-Type': 'application/json',
             },
             responseType: 'arraybuffer',
+            timeout: 30000,
           },
         ),
       );
@@ -62,6 +63,7 @@ export class ElevenLabsService {
     const response = await firstValueFrom(
       this.httpService.get('https://api.elevenlabs.io/v1/voices', {
         headers: { 'xi-api-key': apiKey },
+        timeout: 30000,
       }),
     );
     return response.data.voices;

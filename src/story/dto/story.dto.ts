@@ -530,14 +530,44 @@ export class PaginationMetaDto {
   totalCount: number;
 }
 
+export class StoryListItemDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  title: string;
+
+  @ApiPropertyOptional()
+  coverImageUrl?: string;
+
+  @ApiPropertyOptional()
+  language?: string;
+
+  @ApiPropertyOptional()
+  minAge?: number;
+
+  @ApiPropertyOptional()
+  maxAge?: number;
+
+  @ApiProperty()
+  aiGenerated: boolean;
+
+  @ApiPropertyOptional()
+  recommended?: boolean;
+
+  @ApiPropertyOptional()
+  durationSeconds?: number | null;
+
+  @ApiProperty()
+  createdAt: Date;
+}
+
 export class PaginatedStoriesDto {
   @ApiProperty({
-    description: 'Array of stories',
-    type: 'array',
-    isArray: true,
+    description: 'Array of stories (lightweight list view)',
+    type: [StoryListItemDto],
   })
-  @IsArray()
-  data: Record<string, unknown>[];
+  data: (StoryListItemDto & Record<string, unknown>)[];
 
   @ApiProperty({
     description: 'Pagination metadata',

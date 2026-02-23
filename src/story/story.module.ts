@@ -21,6 +21,7 @@ import { STORY_QUEUE_NAME, StoryQueueService, StoryProcessor } from './queue';
 import { PrismaModule } from '../prisma/prisma.module';
 import { TextToSpeechService } from './text-to-speech.service';
 import { ElevenLabsService } from './elevenlabs.service';
+import { HttpLatencyInterceptor } from '@/shared/interceptors/http-latency.interceptor';
 
 // New Services
 import { StoryFavoriteService } from './story-favorite.service';
@@ -72,6 +73,7 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
     StoryQuotaService,
     TextToSpeechService,
     ElevenLabsService,
+    HttpLatencyInterceptor,
     StoryAccessGuard,
     SubscriptionThrottleGuard,
     StoryQueueService,

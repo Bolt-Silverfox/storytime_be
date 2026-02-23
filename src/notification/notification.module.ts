@@ -25,6 +25,7 @@ import { PushProcessor } from './queue/push.processor';
 import { AuthEventListener } from './listeners/auth-event.listener';
 import { PasswordEventListener } from './listeners/password-event.listener';
 import { NotificationPreferenceEventListener } from './listeners/notification-preference-event.listener';
+import { HttpLatencyInterceptor } from '@/shared/interceptors/http-latency.interceptor';
 import {
   NOTIFICATION_PREFERENCE_REPOSITORY,
   PrismaNotificationPreferenceRepository,
@@ -52,6 +53,7 @@ import {
     SseController,
   ],
   providers: [
+    HttpLatencyInterceptor,
     NotificationService,
     NotificationPreferenceService,
     InAppNotificationService,

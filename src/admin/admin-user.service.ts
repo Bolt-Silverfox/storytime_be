@@ -7,7 +7,6 @@ import {
   ConflictException,
 } from '@/shared/exceptions';
 import { Role, Prisma, User } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
 import { IAdminUserRepository, ADMIN_USER_REPOSITORY } from './repositories';
 import { PasswordService } from '../auth/services/password.service';
 import {
@@ -374,19 +373,7 @@ export class AdminUserService {
   }
 
   async exportUsersAsCsv(): Promise<string> {
-    const users = await this.adminUserRepository.findUsers({
-      where: {},
-      skip: 0,
-      take: 10000,
-      orderBy: { createdAt: 'desc' },
-    });
-
-    // CSV injection prevention helper
-    const sanitizeCsvValue = (val: string): string => {
-      if (/^[=+\-@\t\r]/.test(val)) return `\t${val}`;
-      return val;
-    };
-
+    const CHUNK_SIZE = 1000;
     const headers = [
       'ID',
       'Email',
@@ -396,18 +383,43 @@ export class AdminUserService {
       'Created',
       'Suspended',
     ];
-    const rows = users.map((u) =>
-      [
-        u.id,
-        sanitizeCsvValue(u.email),
-        sanitizeCsvValue(u.name || ''),
-        u.role,
-        u.isEmailVerified ? 'Yes' : 'No',
-        u.createdAt.toISOString(),
-        u.isSuspended ? 'Yes' : 'No',
-      ].join(','),
-    );
 
-    return [headers.join(','), ...rows].join('\n');
+    const csvParts: string[] = [headers.join(',')];
+    let skip = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const users = await this.adminUserRepository.findUsers({
+        where: {},
+        skip,
+        take: CHUNK_SIZE,
+        orderBy: { createdAt: 'desc' },
+      });
+
+      for (const u of users) {
+        csvParts.push(
+          [
+            u.id,
+            this.sanitizeCsvValue(u.email),
+            this.sanitizeCsvValue(u.name || ''),
+            u.role,
+            u.isEmailVerified ? 'Yes' : 'No',
+            u.createdAt.toISOString(),
+            u.isSuspended ? 'Yes' : 'No',
+          ].join(','),
+        );
+      }
+
+      hasMore = users.length === CHUNK_SIZE;
+      skip += CHUNK_SIZE;
+    }
+
+    return csvParts.join('\n');
+  }
+
+  /** CSV injection prevention helper */
+  private sanitizeCsvValue(val: string): string {
+    if (/^[=+\-@\t\r]/.test(val)) return `\t${val}`;
+    return val;
   }
 }

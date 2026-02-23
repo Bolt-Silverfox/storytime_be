@@ -79,6 +79,7 @@ export class ElevenLabsTTSProvider
       const audioStream = await this.client.textToSpeech.convert(
         voiceId,
         convertOptions,
+        { timeoutInSeconds: 30 },
       );
 
       return await this.converter.toBuffer(audioStream);
@@ -168,12 +169,14 @@ export class ElevenLabsTTSProvider
         type: 'audio/mpeg',
       });
 
-      const response = await this.client.voices.add({
-        name,
-
-        files: [blob as unknown as File],
-        description: 'Cloned via StoryTime App',
-      });
+      const response = await this.client.voices.add(
+        {
+          name,
+          files: [blob as unknown as File],
+          description: 'Cloned via StoryTime App',
+        },
+        { timeoutInSeconds: 30 },
+      );
 
       return response.voice_id;
     } catch (error) {
@@ -192,7 +195,7 @@ export class ElevenLabsTTSProvider
     }
 
     try {
-      return await this.client.user.getSubscription();
+      return await this.client.user.getSubscription({ timeoutInSeconds: 30 });
     } catch (error) {
       this.logger.error(
         `Failed to fetch ElevenLabs subscription info: ${(error as Error).message}`,
