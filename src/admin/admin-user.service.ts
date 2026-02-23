@@ -372,4 +372,42 @@ export class AdminUserService {
         throw new ValidationException('Invalid action');
     }
   }
+
+  async exportUsersAsCsv(): Promise<string> {
+    const users = await this.adminUserRepository.findUsers({
+      where: {},
+      skip: 0,
+      take: 10000,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // CSV injection prevention helper
+    const sanitizeCsvValue = (val: string): string => {
+      if (/^[=+\-@\t\r]/.test(val)) return `\t${val}`;
+      return val;
+    };
+
+    const headers = [
+      'ID',
+      'Email',
+      'Name',
+      'Role',
+      'Verified',
+      'Created',
+      'Suspended',
+    ];
+    const rows = users.map((u) =>
+      [
+        u.id,
+        sanitizeCsvValue(u.email),
+        sanitizeCsvValue(u.name || ''),
+        u.role,
+        u.isEmailVerified ? 'Yes' : 'No',
+        u.createdAt.toISOString(),
+        u.isSuspended ? 'Yes' : 'No',
+      ].join(','),
+    );
+
+    return [headers.join(','), ...rows].join('\n');
+  }
 }
