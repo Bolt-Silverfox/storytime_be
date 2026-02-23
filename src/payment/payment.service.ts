@@ -4,7 +4,9 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { SubscriptionService } from '@/subscription/subscription.service';
 import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
 import { GoogleVerificationService } from './google-verification.service';
@@ -39,6 +41,7 @@ export class PaymentService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     private readonly subscriptionService: SubscriptionService,
     private readonly googleVerificationService: GoogleVerificationService,
     private readonly appleVerificationService: AppleVerificationService,
@@ -127,6 +130,12 @@ export class PaymentService {
       endsAt = new Date(now.getTime() + planDef.days * 24 * 60 * 60 * 1000);
     }
 
+    const googleDetails = {
+      platform: 'google',
+      productId: dto.productId,
+      purchaseToken: dto.purchaseToken,
+    };
+
     // Atomically process payment and subscription together
     const { tx, subscription, alreadyProcessed } =
       await this.processPaymentAndSubscriptionAtomic(
@@ -136,6 +145,7 @@ export class PaymentService {
         result.currency ?? 'USD',
         plan,
         endsAt,
+        googleDetails,
       );
 
     return {
@@ -171,6 +181,12 @@ export class PaymentService {
       endsAt = new Date(now.getTime() + planDef.days * 24 * 60 * 60 * 1000);
     }
 
+    const appleDetails = {
+      platform: 'apple',
+      productId: dto.productId,
+      purchaseToken: result.originalTxId ?? dto.purchaseToken,
+    };
+
     // Atomically process payment and subscription together
     const { tx, subscription, alreadyProcessed } =
       await this.processPaymentAndSubscriptionAtomic(
@@ -180,6 +196,7 @@ export class PaymentService {
         result.currency ?? 'USD',
         plan,
         endsAt,
+        appleDetails,
       );
 
     return {
@@ -206,7 +223,28 @@ export class PaymentService {
   }
 
   async getSubscription(userId: string) {
-    return this.prisma.subscription.findFirst({ where: { userId } });
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { userId },
+    });
+
+    if (!subscription) return null;
+
+    // Fetch the latest successful payment transaction for price/currency
+    const latestPayment = await this.prisma.paymentTransaction.findFirst({
+      where: { userId, status: 'success' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      id: subscription.id,
+      plan: subscription.plan,
+      status: subscription.status,
+      startedAt: subscription.startedAt,
+      endsAt: subscription.endsAt,
+      platform: subscription.platform ?? null,
+      price: latestPayment?.amount ?? 0,
+      currency: latestPayment?.currency ?? 'USD',
+    };
   }
 
   async cancelSubscription(userId: string) {
@@ -215,6 +253,41 @@ export class PaymentService {
     });
     if (!existing) throw new NotFoundException('No subscription to cancel');
 
+    let platformWarning: string | undefined;
+    let manageUrl: string | undefined;
+
+    // Attempt platform-specific cancellation
+    if (existing.platform === 'google' && existing.productId && existing.purchaseToken) {
+      try {
+        await this.googleVerificationService.cancelSubscription({
+          packageName: this.configService.get<string>('GOOGLE_PLAY_PACKAGE_NAME') ?? '',
+          productId: existing.productId,
+          purchaseToken: existing.purchaseToken,
+        });
+        this.logger.log(`Google subscription cancelled for user ${userId.substring(0, 8)}`);
+      } catch (error) {
+        this.logger.warn(
+          `Google cancellation API failed for user ${userId.substring(0, 8)}: ${this.getErrorMessage(error)}`,
+        );
+      }
+    } else if (existing.platform === 'apple' && existing.purchaseToken) {
+      try {
+        const appleStatus = await this.appleVerificationService.getSubscriptionStatus(
+          existing.purchaseToken,
+        );
+        if (appleStatus.autoRenewActive) {
+          platformWarning =
+            'Apple subscription auto-renewal is still active. Please manage your subscription through your Apple ID settings.';
+          manageUrl = 'https://apps.apple.com/account/subscriptions';
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Apple subscription status check failed for user ${userId.substring(0, 8)}: ${this.getErrorMessage(error)}`,
+        );
+      }
+    }
+
+    // Always perform local cancellation regardless of platform API results
     const now = new Date();
     const endsAt =
       existing.endsAt && existing.endsAt > now ? existing.endsAt : now;
@@ -227,7 +300,11 @@ export class PaymentService {
     // Invalidate subscription cache after cancellation
     await this.subscriptionService.invalidateCache(userId);
 
-    return cancelled;
+    return {
+      ...cancelled,
+      ...(platformWarning && { platformWarning }),
+      ...(manageUrl && { manageUrl }),
+    };
   }
 
   private getErrorMessage(error: unknown): string {
@@ -248,6 +325,7 @@ export class PaymentService {
     currency: string,
     plan: string,
     endsAt: Date,
+    platformDetails?: { platform: string; productId: string; purchaseToken: string },
   ): Promise<{
     tx: TransactionRecord;
     subscription: {
@@ -321,6 +399,9 @@ export class PaymentService {
             status: 'active',
             startedAt: now,
             endsAt,
+            platform: platformDetails?.platform ?? null,
+            productId: platformDetails?.productId ?? null,
+            purchaseToken: platformDetails?.purchaseToken ?? null,
           },
         });
       } else {
@@ -331,6 +412,9 @@ export class PaymentService {
             status: 'active',
             startedAt: now,
             endsAt,
+            platform: platformDetails?.platform ?? null,
+            productId: platformDetails?.productId ?? null,
+            purchaseToken: platformDetails?.purchaseToken ?? null,
           },
         });
       }
@@ -417,6 +501,30 @@ export class PaymentService {
       return 'upgrade';
     } else {
       return 'downgrade';
+    }
+  }
+
+  /**
+   * Race-condition-safe transaction creation.
+   * Handles Prisma P2002 unique constraint errors by fetching the existing record.
+   */
+  private async createTransactionAtomic(data: Prisma.PaymentTransactionCreateInput) {
+    try {
+      return await this.prisma.paymentTransaction.create({ data });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        this.logger.warn('Duplicate transaction detected, fetching existing');
+        return this.prisma.paymentTransaction.findFirst({
+          where: {
+            userId: data.user?.connect?.id,
+            reference: data.reference as string,
+          },
+        });
+      }
+      throw error;
     }
   }
 }
