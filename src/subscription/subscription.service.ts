@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
 
@@ -16,19 +17,15 @@ export class SubscriptionService {
   async isPremiumUser(userId: string): Promise<boolean> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true },
+      select: { role: true, subscription: true },
     });
-    if (user?.role === 'admin') return true;
+    if (!user) return false;
+    if (user.role === Role.admin) return true;
 
-    const subscription = await this.prisma.subscription.findFirst({
-      where: {
-        userId,
-        status: SUBSCRIPTION_STATUS.ACTIVE,
-        OR: [{ endsAt: { gt: new Date() } }, { endsAt: null }],
-      },
-    });
+    const sub = user.subscription;
+    if (!sub || sub.status !== SUBSCRIPTION_STATUS.ACTIVE) return false;
 
-    return !!subscription;
+    return sub.endsAt === null || sub.endsAt > new Date();
   }
 
   getPlans() {
