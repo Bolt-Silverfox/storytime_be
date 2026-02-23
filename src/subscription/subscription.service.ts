@@ -13,6 +13,24 @@ export { PLANS } from './subscription.constants';
 export class SubscriptionService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async isPremiumUser(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    if (user?.role === 'admin') return true;
+
+    const subscription = await this.prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: SUBSCRIPTION_STATUS.ACTIVE,
+        OR: [{ endsAt: { gt: new Date() } }, { endsAt: null }],
+      },
+    });
+
+    return !!subscription;
+  }
+
   getPlans() {
     return PLANS;
   }

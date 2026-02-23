@@ -11,6 +11,7 @@ import { StyleTTS2TTSProvider } from '../voice/providers/styletts2-tts.provider'
 import { EdgeTTSProvider } from '../voice/providers/edge-tts.provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import { MAX_TTS_TEXT_LENGTH } from '../voice/voice.config';
 
 describe('TextToSpeechService', () => {
@@ -75,9 +76,14 @@ describe('TextToSpeechService', () => {
         {
           provide: VoiceQuotaService,
           useValue: {
-            isPremiumUser: mockIsPremiumUser,
             checkUsage: mockCheckUsage,
             incrementUsage: mockIncrementUsage,
+          },
+        },
+        {
+          provide: SubscriptionService,
+          useValue: {
+            isPremiumUser: mockIsPremiumUser,
           },
         },
       ],

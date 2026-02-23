@@ -18,6 +18,7 @@ import { EdgeTTSProvider } from '../voice/providers/edge-tts.provider';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { VoiceQuotaService } from '../voice/voice-quota.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import {
   VOICE_CONFIG_SETTINGS,
   MAX_TTS_TEXT_LENGTH,
@@ -54,6 +55,7 @@ export class TextToSpeechService {
     private readonly edgeTtsProvider: EdgeTTSProvider,
     private readonly prisma: PrismaService,
     private readonly voiceQuota: VoiceQuotaService,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
 
   private hashText(text: string): string {
@@ -156,7 +158,7 @@ export class TextToSpeechService {
 
     if (useElevenLabs && userId) {
       // Premium gate: free users skip ElevenLabs entirely
-      const isPremium = await this.voiceQuota.isPremiumUser(userId);
+      const isPremium = await this.subscriptionService.isPremiumUser(userId);
       if (!isPremium) {
         this.logger.log(`Free user ${userId}. Skipping ElevenLabs.`);
         useElevenLabs = false;

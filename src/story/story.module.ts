@@ -2,6 +2,7 @@ import { HttpModule } from '@nestjs/axios';
 import { Module, forwardRef } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from '@/auth/auth.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 import { UploadModule } from '../upload/upload.module';
 import { GeminiService } from './gemini.service';
 import { StoryController } from './story.controller';
@@ -15,6 +16,7 @@ import { StoryAccessGuard } from '@/shared/guards/story-access.guard';
     HttpModule,
     ScheduleModule.forRoot(),
     AuthModule,
+    SubscriptionModule,
     UploadModule,
     forwardRef(() => VoiceModule),
   ],

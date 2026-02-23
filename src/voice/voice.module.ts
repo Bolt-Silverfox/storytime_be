@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { AuthModule } from '@/auth/auth.module';
 import { StoryModule } from '../story/story.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 import { UploadModule } from '../upload/upload.module';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { VoiceController } from './voice.controller';
@@ -21,6 +22,7 @@ import { VoiceQuotaService } from './voice-quota.service';
   imports: [
     AuthModule,
     HttpModule,
+    SubscriptionModule,
     UploadModule,
     forwardRef(() => StoryModule),
   ],
