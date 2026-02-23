@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '@/auth/auth.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 import { StoryModule } from '../story/story.module';
 import { UploadModule } from '../upload/upload.module';
 import { PrismaModule } from '@/prisma/prisma.module';
@@ -32,6 +33,7 @@ import { VOICE_QUEUE_NAME, VoiceQueueService, VoiceProcessor } from './queue';
     HttpModule,
     UploadModule,
     NotificationModule,
+    SubscriptionModule,
     forwardRef(() => StoryModule),
     // Register voice synthesis queue
     BullModule.registerQueue({

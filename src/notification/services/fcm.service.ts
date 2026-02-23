@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -60,7 +61,7 @@ export class FcmService implements OnModuleInit {
       this.logger.log('Firebase Admin SDK initialized successfully');
     } catch (error) {
       this.logger.error(
-        `Failed to initialize Firebase Admin SDK: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to initialize Firebase Admin SDK: ${ErrorHandler.extractMessage(error)}`,
       );
     }
   }
@@ -175,7 +176,7 @@ export class FcmService implements OnModuleInit {
       };
     } catch (error) {
       this.logger.error(
-        `Failed to send FCM notification to user ${payload.userId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to send FCM notification to user ${payload.userId}: ${ErrorHandler.extractMessage(error)}`,
       );
       throw error;
     }
@@ -278,7 +279,7 @@ export class FcmService implements OnModuleInit {
       this.logger.log(`Deactivated ${tokens.length} invalid device tokens`);
     } catch (error) {
       this.logger.error(
-        `Failed to deactivate tokens: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to deactivate tokens: ${ErrorHandler.extractMessage(error)}`,
       );
     }
   }

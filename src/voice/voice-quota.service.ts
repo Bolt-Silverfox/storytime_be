@@ -1,12 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ErrorHandler } from '@/shared/utils/error-handler.util';
+import { DateFormatUtil } from '@/shared/utils/date-format.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
+import { SubscriptionService } from '../subscription/subscription.service';
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { VOICE_CONFIG } from './voice.constants';
-import { AppEvents, QuotaExhaustedEvent, QuotaTypes } from '@/shared/events';
+import {
+  AppEvents,
+  AiUsageTrackedEvent,
+  QuotaExhaustedEvent,
+  QuotaTypes,
+} from '@/shared/events';
 
 @Injectable()
 export class VoiceQuotaService {
@@ -15,15 +23,11 @@ export class VoiceQuotaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
 
-  private getCurrentMonth(): string {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  }
-
   async checkUsage(userId: string): Promise<boolean> {
-    const currentMonth = this.getCurrentMonth();
+    const currentMonth = DateFormatUtil.getCurrentMonthString();
 
     // Single query: Get user with subscription AND usage in one call
     const user = await this.prisma.user.findUnique({
@@ -81,7 +85,7 @@ export class VoiceQuotaService {
   }
 
   async incrementUsage(userId: string): Promise<void> {
-    const currentMonth = this.getCurrentMonth();
+    const currentMonth = DateFormatUtil.getCurrentMonthString();
     await this.prisma.userUsage.upsert({
       where: { userId },
       create: {
@@ -93,16 +97,17 @@ export class VoiceQuotaService {
         elevenLabsCount: { increment: 1 },
       },
     });
-    await this.logAiActivity(
+    this.eventEmitter.emit(AppEvents.AI_USAGE_TRACKED, {
       userId,
-      AiProviders.ElevenLabs,
-      'voice_cloning',
-      1,
-    );
+      provider: AiProviders.ElevenLabs,
+      type: 'voice_cloning',
+      credits: 1,
+      trackedAt: new Date(),
+    } satisfies AiUsageTrackedEvent);
   }
 
   async trackGeminiStory(userId: string): Promise<void> {
-    const currentMonth = this.getCurrentMonth();
+    const currentMonth = DateFormatUtil.getCurrentMonthString();
     // Use transaction to handle monthly rollover for Gemini counters
     await this.prisma.$transaction(async (tx) => {
       // Reset Gemini counters if month changed
@@ -116,11 +121,17 @@ export class VoiceQuotaService {
         update: { currentMonth, geminiStoryCount: { increment: 1 } },
       });
     });
-    await this.logAiActivity(userId, AiProviders.Gemini, 'story_generation', 1);
+    this.eventEmitter.emit(AppEvents.AI_USAGE_TRACKED, {
+      userId,
+      provider: AiProviders.Gemini,
+      type: 'story_generation',
+      credits: 1,
+      trackedAt: new Date(),
+    } satisfies AiUsageTrackedEvent);
   }
 
   async trackGeminiImage(userId: string): Promise<void> {
-    const currentMonth = this.getCurrentMonth();
+    const currentMonth = DateFormatUtil.getCurrentMonthString();
     // Use transaction to handle monthly rollover for Gemini counters
     await this.prisma.$transaction(async (tx) => {
       // Reset Gemini counters if month changed
@@ -134,31 +145,13 @@ export class VoiceQuotaService {
         update: { currentMonth, geminiImageCount: { increment: 1 } },
       });
     });
-    await this.logAiActivity(userId, AiProviders.Gemini, 'image_generation', 1);
-  }
-
-  private async logAiActivity(
-    userId: string,
-    provider: string,
-    type: string,
-    credits: number,
-  ) {
-    try {
-      await this.prisma.activityLog.create({
-        data: {
-          userId,
-          action: 'AI_GENERATION',
-          status: 'SUCCESS',
-          details: JSON.stringify({ provider, type, credits }),
-        },
-      });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `Failed to log AI activity for user ${userId}: ${errorMessage}`,
-      );
-    }
+    this.eventEmitter.emit(AppEvents.AI_USAGE_TRACKED, {
+      userId,
+      provider: AiProviders.Gemini,
+      type: 'image_generation',
+      credits: 1,
+      trackedAt: new Date(),
+    } satisfies AiUsageTrackedEvent);
   }
 
   // ========== FREE TIER VOICE LIMITS ==========
@@ -169,7 +162,7 @@ export class VoiceQuotaService {
    * Free users can only use DEFAULT_VOICE + their selected second voice
    */
   async canUseVoice(userId: string, voiceId: string): Promise<boolean> {
-    const isPremium = await this.isPremiumUser(userId);
+    const isPremium = await this.subscriptionService.isPremiumUser(userId);
     if (isPremium) return true;
 
     const defaultVoiceType = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE;
@@ -218,7 +211,7 @@ export class VoiceQuotaService {
     selectedSecondVoice: string | null;
     maxVoices: number;
   }> {
-    const isPremium = await this.isPremiumUser(userId);
+    const isPremium = await this.subscriptionService.isPremiumUser(userId);
 
     if (isPremium) {
       return {
@@ -243,24 +236,4 @@ export class VoiceQuotaService {
     };
   }
 
-  /**
-   * Check if user has an active premium subscription or is an admin
-   */
-  async isPremiumUser(userId: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    });
-    if (user?.role === 'admin') return true;
-
-    const subscription = await this.prisma.subscription.findFirst({
-      where: {
-        userId,
-        status: SUBSCRIPTION_STATUS.ACTIVE,
-        OR: [{ endsAt: { gt: new Date() } }, { endsAt: null }],
-      },
-    });
-
-    return !!subscription;
-  }
 }

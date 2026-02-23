@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '@/prisma/prisma.service';
 import { NotificationService } from '../notification.service';
@@ -62,7 +63,7 @@ export class EventNotificationService {
       // Log but don't throw - we don't want to block event processing
       this.logger.error(
         `Failed to send quota exhausted email to user ${event.userId}`,
-        error instanceof Error ? error.stack : String(error),
+        ErrorHandler.extractStack(error) ?? String(error),
       );
     }
   }
@@ -103,7 +104,7 @@ export class EventNotificationService {
     } catch (error) {
       this.logger.error(
         `Failed to send subscription welcome email to user ${event.userId}`,
-        error instanceof Error ? error.stack : String(error),
+        ErrorHandler.extractStack(error) ?? String(error),
       );
     }
   }
@@ -140,7 +141,7 @@ export class EventNotificationService {
     } catch (error) {
       this.logger.error(
         `Failed to send payment failed email to user ${event.userId}`,
-        error instanceof Error ? error.stack : String(error),
+        ErrorHandler.extractStack(error) ?? String(error),
       );
     }
   }

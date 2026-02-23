@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
@@ -116,7 +117,7 @@ export class StoryQueueService {
       return { queued: true, jobId, estimatedWaitTime };
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+        ErrorHandler.extractMessage(error);
       this.logger.error(
         `Failed to queue story generation ${jobId}: ${errorMessage}`,
       );
@@ -176,7 +177,7 @@ export class StoryQueueService {
       return { queued: true, jobId, estimatedWaitTime };
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+        ErrorHandler.extractMessage(error);
       this.logger.error(
         `Failed to queue story for kid ${jobId}: ${errorMessage}`,
       );

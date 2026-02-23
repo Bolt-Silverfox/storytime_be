@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { DateFormatUtil } from '@/shared/utils/date-format.util';
 import { STORY_REPOSITORY, IStoryRepository } from './repositories';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -91,7 +92,7 @@ export class StoryQuotaService {
    * Should be called after user successfully accesses a story for the first time
    */
   async recordNewStoryAccess(userId: string, storyId: string): Promise<void> {
-    const currentMonth = this.getCurrentMonth();
+    const currentMonth = DateFormatUtil.getCurrentMonthString();
 
     // Use interactive transaction to handle race condition atomically
     await this.storyRepository.executeTransaction(async (tx) => {
@@ -163,7 +164,7 @@ export class StoryQuotaService {
    */
   private async getOrCreateUsageWithBonus(userId: string) {
     const now = new Date();
-    const currentMonth = this.getCurrentMonth();
+    const currentMonth = DateFormatUtil.getCurrentMonthString();
     const baseLimit = FREE_TIER_LIMITS.STORIES.BASE_LIMIT;
 
     return await this.storyRepository.executeTransaction(async (tx) => {
@@ -248,8 +249,4 @@ export class StoryQuotaService {
     return this.subscriptionService.isPremiumUser(userId);
   }
 
-  private getCurrentMonth(): string {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  }
 }

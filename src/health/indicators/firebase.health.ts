@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import {
   HealthIndicator,
   HealthIndicatorResult,
@@ -74,7 +75,7 @@ export class FirebaseHealthIndicator extends HealthIndicator {
 
       const duration = Date.now() - startTime;
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+        ErrorHandler.extractMessage(error);
 
       this.logger.warn(`Firebase health check failed: ${errorMessage}`);
 

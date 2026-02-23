@@ -1,4 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common';
+import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import {
   HealthIndicator,
   HealthIndicatorResult,
@@ -100,7 +101,7 @@ export class QueueHealthIndicator extends HealthIndicator {
 
       const duration = Date.now() - startTime;
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+        ErrorHandler.extractMessage(error);
 
       throw new HealthCheckError(
         'Queue health check failed',
@@ -155,7 +156,7 @@ export class QueueHealthIndicator extends HealthIndicator {
 
       const duration = Date.now() - startTime;
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+        ErrorHandler.extractMessage(error);
 
       throw new HealthCheckError(
         `Queue '${queueName}' health check failed`,
