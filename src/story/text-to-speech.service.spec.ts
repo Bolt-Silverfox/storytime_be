@@ -578,6 +578,111 @@ describe('TextToSpeechService', () => {
       expect(result.length).toBeLessThanOrEqual(50);
     });
 
+    it('should return all indices when paragraphs have duplicate text', async () => {
+      // Construct text where a refrain repeats, creating duplicate chunks.
+      // The refrain is exactly one chunk (~30 words); a middle section separates them.
+      // We join with ' ' so the splitter sees: [refrain chunk] [middle chunk] [refrain chunk].
+      const refrain = Array.from({ length: 30 }, (_, i) => `refrain${i}`).join(
+        ' ',
+      );
+      const middle = Array.from({ length: 30 }, (_, i) => `middle${i}`).join(
+        ' ',
+      );
+      const textWithDuplicates = `${refrain} ${middle} ${refrain}`;
+
+      mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
+      mockIsPremiumUser.mockResolvedValue(false);
+      let callCount = 0;
+      mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
+      mockUploadAudio.mockImplementation(async () => {
+        callCount++;
+        return `https://uploaded.com/audio-${callCount}.wav`;
+      });
+
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        textWithDuplicates,
+        VoiceType.LILY,
+        userId,
+      );
+
+      // Group results by text to find duplicates
+      const textToResults = new Map<string, typeof result>();
+      for (const r of result) {
+        const existing = textToResults.get(r.text) ?? [];
+        existing.push(r);
+        textToResults.set(r.text, existing);
+      }
+
+      // Find groups with duplicate text
+      const duplicateGroups = [...textToResults.values()].filter(
+        (g) => g.length > 1,
+      );
+      // There should be at least one group of duplicates (the refrain)
+      expect(duplicateGroups.length).toBeGreaterThan(0);
+
+      // All entries in each duplicate group should share the same audioUrl
+      for (const group of duplicateGroups) {
+        const urls = group.map((r) => r.audioUrl);
+        expect(new Set(urls).size).toBe(1);
+      }
+
+      // All results should have audio
+      expect(result.every((r) => r.audioUrl !== null)).toBe(true);
+
+      // Provider should be called once per unique text, not once per chunk
+      const uniqueTexts = new Set(result.map((r) => r.text)).size;
+      expect(mockStyleTts2Generate).toHaveBeenCalledTimes(uniqueTexts);
+      expect(mockStyleTts2Generate.mock.calls.length).toBeLessThan(
+        result.length,
+      );
+    });
+
+    it('should reuse cached URL for all duplicate paragraphs', async () => {
+      const refrain =
+        'Twinkle twinkle little star how I wonder what you are up above the world so high like a diamond in the sky shining bright throughout the night.';
+      const middle =
+        'When the blazing sun is gone when he nothing shines upon then you show your little light twinkle twinkle all the night in the dark blue sky you keep.';
+      const textWithDuplicates = [refrain, middle, refrain].join(' ');
+
+      // Cache hit for the refrain hash
+      mockPrisma.paragraphAudioCache.findMany.mockImplementation(
+        async (args: { where: { textHash: { in: string[] } } }) => {
+          const hashes = args.where.textHash.in;
+          // Return cache for first hash only (which is the refrain)
+          return [
+            {
+              storyId,
+              textHash: hashes[0],
+              voiceId: 'LILY',
+              audioUrl: 'https://cached.com/refrain.mp3',
+            },
+          ];
+        },
+      );
+
+      mockIsPremiumUser.mockResolvedValue(false);
+      mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
+      mockUploadAudio.mockResolvedValue('https://uploaded.com/middle.wav');
+
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        textWithDuplicates,
+        VoiceType.LILY,
+        userId,
+      );
+
+      expect(result.length).toBe(3);
+      const sorted = [...result].sort((a, b) => a.index - b.index);
+      // First and third (refrain) should both have the cached URL
+      expect(sorted[0].audioUrl).toBe('https://cached.com/refrain.mp3');
+      expect(sorted[2].audioUrl).toBe('https://cached.com/refrain.mp3');
+      // Middle should be generated
+      expect(sorted[1].audioUrl).toBe('https://uploaded.com/middle.wav');
+      // Only 1 paragraph should be generated (the middle one)
+      expect(mockStyleTts2Generate).toHaveBeenCalledTimes(1);
+    });
+
     it('should return results sorted by index', async () => {
       mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
       mockIsPremiumUser.mockResolvedValue(false);

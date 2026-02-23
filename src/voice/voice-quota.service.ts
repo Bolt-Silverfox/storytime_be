@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
@@ -6,6 +7,9 @@ import { VOICE_CONFIG_SETTINGS } from './voice.config';
 
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { VOICE_CONFIG } from './voice.constants';
+
+/** Max retries for Prisma serialization failures (P2034) */
+const MAX_SERIALIZATION_RETRIES = 3;
 
 @Injectable()
 export class VoiceQuotaService {
@@ -89,28 +93,50 @@ export class VoiceQuotaService {
       ? VOICE_CONFIG_SETTINGS.QUOTAS.PREMIUM
       : VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
 
-    // Atomic reservation in a transaction
-    const reserved = await this.prisma.$transaction(async (tx) => {
-      await tx.userUsage.updateMany({
-        where: { userId, currentMonth: { not: currentMonth } },
-        data: { currentMonth, elevenLabsCount: 0 },
-      });
-      const usage = await tx.userUsage.upsert({
-        where: { userId },
-        create: { userId, currentMonth, elevenLabsCount: 0 },
-        update: { currentMonth },
-      });
+    // Atomic reservation with Serializable isolation to prevent TOCTOU races
+    // where concurrent batch requests both read the same count and both reserve.
+    let reserved = 0;
+    for (let attempt = 1; attempt <= MAX_SERIALIZATION_RETRIES; attempt++) {
+      try {
+        reserved = await this.prisma.$transaction(
+          async (tx) => {
+            await tx.userUsage.updateMany({
+              where: { userId, currentMonth: { not: currentMonth } },
+              data: { currentMonth, elevenLabsCount: 0 },
+            });
+            const usage = await tx.userUsage.upsert({
+              where: { userId },
+              create: { userId, currentMonth, elevenLabsCount: 0 },
+              update: { currentMonth },
+            });
 
-      const remaining = Math.max(0, limit - usage.elevenLabsCount);
-      const toReserve = Math.min(credits, remaining);
-      if (toReserve > 0) {
-        await tx.userUsage.update({
-          where: { userId },
-          data: { elevenLabsCount: { increment: toReserve } },
-        });
+            const remaining = Math.max(0, limit - usage.elevenLabsCount);
+            const toReserve = Math.min(credits, remaining);
+            if (toReserve > 0) {
+              await tx.userUsage.update({
+                where: { userId },
+                data: { elevenLabsCount: { increment: toReserve } },
+              });
+            }
+            return toReserve;
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        break; // success — exit retry loop
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2034' &&
+          attempt < MAX_SERIALIZATION_RETRIES
+        ) {
+          this.logger.warn(
+            `Serialization conflict reserving quota for user ${userId} (attempt ${attempt}/${MAX_SERIALIZATION_RETRIES}), retrying…`,
+          );
+          continue;
+        }
+        throw error;
       }
-      return toReserve;
-    });
+    }
 
     if (reserved > 0) {
       await this.logAiActivity(
