@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants';
@@ -10,7 +11,10 @@ import { VOICE_CONFIG } from './voice.constants';
 export class VoiceQuotaService {
   private readonly logger = new Logger(VoiceQuotaService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subscriptionService: SubscriptionService,
+  ) {}
 
   private getCurrentMonth(): string {
     const now = new Date();
@@ -155,7 +159,7 @@ export class VoiceQuotaService {
    * Free users can only use the default voice (LILY)
    */
   async canUseVoice(userId: string, voiceId: string): Promise<boolean> {
-    const isPremium = await this.isPremiumUser(userId);
+    const isPremium = await this.subscriptionService.isPremiumUser(userId);
     if (isPremium) return true;
 
     const defaultVoiceType = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE;
@@ -188,7 +192,7 @@ export class VoiceQuotaService {
     defaultVoice: string;
     maxVoices: number;
   }> {
-    const isPremium = await this.isPremiumUser(userId);
+    const isPremium = await this.subscriptionService.isPremiumUser(userId);
 
     if (isPremium) {
       return {
@@ -207,24 +211,4 @@ export class VoiceQuotaService {
     };
   }
 
-  /**
-   * Check if user has an active premium subscription
-   */
-  async isPremiumUser(userId: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    });
-    if (user?.role === 'admin') return true;
-
-    const subscription = await this.prisma.subscription.findFirst({
-      where: {
-        userId,
-        status: SUBSCRIPTION_STATUS.ACTIVE,
-        OR: [{ endsAt: { gt: new Date() } }, { endsAt: null }],
-      },
-    });
-
-    return !!subscription;
-  }
 }
