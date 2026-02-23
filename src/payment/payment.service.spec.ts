@@ -24,30 +24,50 @@ const createMockPrismaService = (): MockPrismaService => {
       create: jest.fn(),
       findFirst: jest.fn(),
     },
-    subscription: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+    subscription: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
     $transaction: jest.fn(),
   };
   // $transaction delegates to a callback with the same mock models
-  svc.$transaction.mockImplementation((fn) => fn({
-    paymentTransaction: svc.paymentTransaction,
-    subscription: svc.subscription,
-  }));
+  svc.$transaction.mockImplementation((fn) =>
+    fn({
+      paymentTransaction: svc.paymentTransaction,
+      subscription: svc.subscription,
+    }),
+  );
   return svc;
 };
 
 describe('PaymentService', () => {
   let service: PaymentService;
   let mockPrisma: MockPrismaService;
-  let mockGoogleVerification: { verify: jest.Mock; cancelSubscription: jest.Mock; acknowledgePurchase: jest.Mock };
-  let mockAppleVerification: { verify: jest.Mock; getSubscriptionStatus: jest.Mock };
+  let mockGoogleVerification: {
+    verify: jest.Mock;
+    cancelSubscription: jest.Mock;
+    acknowledgePurchase: jest.Mock;
+  };
+  let mockAppleVerification: {
+    verify: jest.Mock;
+    getSubscriptionStatus: jest.Mock;
+  };
   let mockConfigService: { get: jest.Mock };
   let mockSubscriptionService: { invalidateCache: jest.Mock };
   let mockEventEmitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     mockPrisma = createMockPrismaService();
-    mockGoogleVerification = { verify: jest.fn(), cancelSubscription: jest.fn(), acknowledgePurchase: jest.fn().mockResolvedValue({ success: true }) };
-    mockAppleVerification = { verify: jest.fn(), getSubscriptionStatus: jest.fn() };
+    mockGoogleVerification = {
+      verify: jest.fn(),
+      cancelSubscription: jest.fn(),
+      acknowledgePurchase: jest.fn().mockResolvedValue({ success: true }),
+    };
+    mockAppleVerification = {
+      verify: jest.fn(),
+      getSubscriptionStatus: jest.fn(),
+    };
     mockConfigService = { get: jest.fn() };
     mockSubscriptionService = { invalidateCache: jest.fn() };
     mockEventEmitter = { emit: jest.fn() };
@@ -477,7 +497,9 @@ describe('PaymentService', () => {
         where: { id: 'sub-1' },
         data: { status: 'cancelled', endsAt: futureDate },
       });
-      expect(mockSubscriptionService.invalidateCache).toHaveBeenCalledWith('u1');
+      expect(mockSubscriptionService.invalidateCache).toHaveBeenCalledWith(
+        'u1',
+      );
     });
 
     it('should check Apple subscription status when platform is apple', async () => {
@@ -565,7 +587,9 @@ describe('PaymentService', () => {
 
       expect(result.status).toBe('cancelled');
       expect(mockGoogleVerification.cancelSubscription).not.toHaveBeenCalled();
-      expect(mockAppleVerification.getSubscriptionStatus).not.toHaveBeenCalled();
+      expect(
+        mockAppleVerification.getSubscriptionStatus,
+      ).not.toHaveBeenCalled();
     });
 
     it('should always complete local cancellation regardless of platform API errors', async () => {
@@ -596,7 +620,9 @@ describe('PaymentService', () => {
         where: { id: 'sub-1' },
         data: { status: 'cancelled', endsAt: futureDate },
       });
-      expect(mockSubscriptionService.invalidateCache).toHaveBeenCalledWith('u1');
+      expect(mockSubscriptionService.invalidateCache).toHaveBeenCalledWith(
+        'u1',
+      );
     });
   });
 });

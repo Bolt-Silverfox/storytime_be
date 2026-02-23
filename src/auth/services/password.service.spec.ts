@@ -282,11 +282,16 @@ describe('PasswordService', () => {
 
       // Act & Assert
       await expect(
-        service.resetPassword('invalid-token', 'test@example.com', 'NewPass1#', {
-          token: 'invalid-token',
-          email: 'test@example.com',
-          newPassword: 'NewPass1#',
-        }),
+        service.resetPassword(
+          'invalid-token',
+          'test@example.com',
+          'NewPass1#',
+          {
+            token: 'invalid-token',
+            email: 'test@example.com',
+            newPassword: 'NewPass1#',
+          },
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -465,9 +470,7 @@ describe('PasswordService', () => {
       // Arrange
       authRepository.findUserById.mockResolvedValue(mockUser as any);
       const mockTxUpdateUser = jest.fn().mockResolvedValue({} as any);
-      const mockTxDeleteOtherSessions = jest
-        .fn()
-        .mockResolvedValue(undefined);
+      const mockTxDeleteOtherSessions = jest.fn().mockResolvedValue(undefined);
       authRepository.transaction.mockImplementation(async (fn) => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
           updateUser: mockTxUpdateUser,

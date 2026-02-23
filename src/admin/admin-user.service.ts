@@ -345,8 +345,7 @@ export class AdminUserService {
   async unsuspendUser(userId: string) {
     const user = await this.adminUserRepository.findUserByIdSimple(userId);
     if (!user) throw new ResourceNotFoundException('User', userId);
-    if (!user.isSuspended)
-      throw new ConflictException('User is not suspended');
+    if (!user.isSuspended) throw new ConflictException('User is not suspended');
 
     return this.adminUserRepository.updateUser({
       userId,

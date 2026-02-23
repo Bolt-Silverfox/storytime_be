@@ -1,13 +1,6 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ConfigService } from '@nestjs/config';
 import {
   CreateStoryDto,
   UpdateStoryDto,
@@ -19,7 +12,6 @@ import {
   UserStoryProgressDto,
   StartStoryPathDto,
   UpdateStoryPathDto,
-  StoryPathDto,
 } from './dto/story.dto';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from './text-to-speech.service';
@@ -33,13 +25,9 @@ import {
   IStoryCoreRepository,
   STORY_CORE_REPOSITORY,
 } from './repositories/story-core.repository.interface';
-import {
-  CACHE_KEYS,
-  CACHE_INVALIDATION,
-} from '@/shared/constants/cache-keys.constants';
+import { CACHE_INVALIDATION } from '@/shared/constants/cache-keys.constants';
 import { AppEvents, StoryCreatedEvent } from '@/shared/events';
 import { VoiceType } from '../voice/dto/voice.dto';
-import { Story } from '@prisma/client';
 
 @Injectable()
 export class StoryService {
@@ -120,13 +108,9 @@ export class StoryService {
           if (!s.isActive || !s.startDate || !s.endDate) return false;
           if (s.startDate > s.endDate) {
             // Wraps across year boundary (e.g. Dec-Jan)
-            return (
-              currentDateStr >= s.startDate || currentDateStr <= s.endDate
-            );
+            return currentDateStr >= s.startDate || currentDateStr <= s.endDate;
           }
-          return (
-            currentDateStr >= s.startDate && currentDateStr <= s.endDate
-          );
+          return currentDateStr >= s.startDate && currentDateStr <= s.endDate;
         })
         .map((s: any) => s.id);
 

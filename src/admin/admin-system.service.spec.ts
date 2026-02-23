@@ -56,7 +56,8 @@ describe('AdminSystemService', () => {
     id: 'ticket-2',
     userId: 'user-456',
     subject: 'Delete Account Request',
-    message: 'Reasons: Too expensive, Not useful\nNotes: Please hurry\nPermanent deletion requested',
+    message:
+      'Reasons: Too expensive, Not useful\nNotes: Please hurry\nPermanent deletion requested',
     status: 'open',
     createdAt: new Date('2025-02-10'),
     user: {

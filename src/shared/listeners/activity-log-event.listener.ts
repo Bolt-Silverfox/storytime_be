@@ -50,7 +50,11 @@ export class ActivityLogEventListener {
    */
   @OnEvent(AppEvents.USER_REGISTERED)
   async handleUserRegistered(payload: UserRegisteredEvent) {
-    await this.logActivity(payload.userId, 'USER_REGISTERED', `User registered: ${payload.email}`);
+    await this.logActivity(
+      payload.userId,
+      'USER_REGISTERED',
+      `User registered: ${payload.email}`,
+    );
   }
 
   /**
@@ -58,7 +62,11 @@ export class ActivityLogEventListener {
    */
   @OnEvent(AppEvents.USER_DELETED)
   async handleUserDeleted(payload: UserDeletedEvent) {
-    await this.logActivity(payload.userId, 'USER_DELETED', `User deleted: ${payload.email} (reason: ${payload.reason || 'not specified'})`);
+    await this.logActivity(
+      payload.userId,
+      'USER_DELETED',
+      `User deleted: ${payload.email} (reason: ${payload.reason || 'not specified'})`,
+    );
   }
 
   /**
@@ -66,7 +74,11 @@ export class ActivityLogEventListener {
    */
   @OnEvent(AppEvents.USER_EMAIL_VERIFIED)
   async handleEmailVerified(payload: UserEmailVerifiedEvent) {
-    await this.logActivity(payload.userId, 'EMAIL_VERIFIED', `Email verified: ${payload.email}`);
+    await this.logActivity(
+      payload.userId,
+      'EMAIL_VERIFIED',
+      `Email verified: ${payload.email}`,
+    );
   }
 
   /**
@@ -88,7 +100,11 @@ export class ActivityLogEventListener {
    */
   @OnEvent(AppEvents.PAYMENT_COMPLETED)
   async handlePaymentCompleted(payload: PaymentCompletedEvent) {
-    await this.logActivity(payload.userId, 'PAYMENT_COMPLETED', `Payment: ${payload.amount} ${payload.currency} via ${payload.provider}`);
+    await this.logActivity(
+      payload.userId,
+      'PAYMENT_COMPLETED',
+      `Payment: ${payload.amount} ${payload.currency} via ${payload.provider}`,
+    );
   }
 
   /**
@@ -96,7 +112,12 @@ export class ActivityLogEventListener {
    */
   @OnEvent(AppEvents.PAYMENT_FAILED)
   async handlePaymentFailed(payload: PaymentFailedEvent) {
-    await this.logActivity(payload.userId, 'PAYMENT_FAILED', `Payment failed: ${payload.errorMessage || 'Unknown error'} (${payload.errorCode || 'no code'})`, 'FAILED');
+    await this.logActivity(
+      payload.userId,
+      'PAYMENT_FAILED',
+      `Payment failed: ${payload.errorMessage || 'Unknown error'} (${payload.errorCode || 'no code'})`,
+      'FAILED',
+    );
   }
 
   /**
@@ -104,7 +125,11 @@ export class ActivityLogEventListener {
    */
   @OnEvent(AppEvents.SUBSCRIPTION_CREATED)
   async handleSubscriptionCreated(payload: SubscriptionCreatedEvent) {
-    await this.logActivity(payload.userId, 'SUBSCRIPTION_CREATED', `Subscribed to ${payload.planName} via ${payload.provider}`);
+    await this.logActivity(
+      payload.userId,
+      'SUBSCRIPTION_CREATED',
+      `Subscribed to ${payload.planName} via ${payload.provider}`,
+    );
   }
 
   /**
@@ -112,7 +137,11 @@ export class ActivityLogEventListener {
    */
   @OnEvent(AppEvents.SUBSCRIPTION_CHANGED)
   async handleSubscriptionChanged(payload: SubscriptionChangedEvent) {
-    await this.logActivity(payload.userId, 'SUBSCRIPTION_CHANGED', `Subscription ${payload.changeType}: ${payload.previousPlanName} → ${payload.newPlanName}`);
+    await this.logActivity(
+      payload.userId,
+      'SUBSCRIPTION_CHANGED',
+      `Subscription ${payload.changeType}: ${payload.previousPlanName} → ${payload.newPlanName}`,
+    );
   }
 
   /**
@@ -120,7 +149,11 @@ export class ActivityLogEventListener {
    */
   @OnEvent(AppEvents.SUBSCRIPTION_CANCELLED)
   async handleSubscriptionCancelled(payload: SubscriptionCancelledEvent) {
-    await this.logActivity(payload.userId, 'SUBSCRIPTION_CANCELLED', `Subscription cancelled: ${payload.planId} (reason: ${payload.reason || 'not specified'})`);
+    await this.logActivity(
+      payload.userId,
+      'SUBSCRIPTION_CANCELLED',
+      `Subscription cancelled: ${payload.planId} (reason: ${payload.reason || 'not specified'})`,
+    );
   }
 
   /**

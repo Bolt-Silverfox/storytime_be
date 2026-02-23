@@ -341,9 +341,7 @@ describe('AdminUserService', () => {
   // ─── updateUser ─────────────────────────────────────────────────────
   describe('updateUser', () => {
     it('should update user successfully', async () => {
-      adminUserRepository.findUserByIdSimple.mockResolvedValue(
-        mockUser as any,
-      );
+      adminUserRepository.findUserByIdSimple.mockResolvedValue(mockUser as any);
       adminUserRepository.updateUser.mockResolvedValue({
         ...mockUser,
         name: 'Updated Name',
@@ -375,9 +373,7 @@ describe('AdminUserService', () => {
     });
 
     it('should throw ResourceAlreadyExistsException if new email is taken', async () => {
-      adminUserRepository.findUserByIdSimple.mockResolvedValue(
-        mockUser as any,
-      );
+      adminUserRepository.findUserByIdSimple.mockResolvedValue(mockUser as any);
       adminUserRepository.findUserByEmail.mockResolvedValue({
         ...mockUser,
         id: 'other-user',
@@ -390,9 +386,7 @@ describe('AdminUserService', () => {
     });
 
     it('should allow updating email when it matches current email', async () => {
-      adminUserRepository.findUserByIdSimple.mockResolvedValue(
-        mockUser as any,
-      );
+      adminUserRepository.findUserByIdSimple.mockResolvedValue(mockUser as any);
       adminUserRepository.updateUser.mockResolvedValue(mockUser as any);
 
       await service.updateUser('user-123', { email: 'test@example.com' });
@@ -402,9 +396,7 @@ describe('AdminUserService', () => {
     });
 
     it('should allow admin role update for a different user', async () => {
-      adminUserRepository.findUserByIdSimple.mockResolvedValue(
-        mockUser as any,
-      );
+      adminUserRepository.findUserByIdSimple.mockResolvedValue(mockUser as any);
       adminUserRepository.updateUser.mockResolvedValue({
         ...mockUser,
         role: 'admin',
@@ -428,12 +420,8 @@ describe('AdminUserService', () => {
         isDeleted: true,
         deletedAt: new Date(),
       };
-      adminUserRepository.findUserByIdSimple.mockResolvedValue(
-        mockUser as any,
-      );
-      adminUserRepository.softDeleteUser.mockResolvedValue(
-        deletedUser as any,
-      );
+      adminUserRepository.findUserByIdSimple.mockResolvedValue(mockUser as any);
+      adminUserRepository.softDeleteUser.mockResolvedValue(deletedUser as any);
 
       const result = await service.deleteUser('user-123');
 
@@ -445,9 +433,7 @@ describe('AdminUserService', () => {
     });
 
     it('should hard delete user when permanent is true', async () => {
-      adminUserRepository.findUserByIdSimple.mockResolvedValue(
-        mockUser as any,
-      );
+      adminUserRepository.findUserByIdSimple.mockResolvedValue(mockUser as any);
       adminUserRepository.hardDeleteUser.mockResolvedValue(mockUser as any);
 
       await service.deleteUser('user-123', true);
@@ -495,9 +481,7 @@ describe('AdminUserService', () => {
 
       expect(result.isDeleted).toBe(false);
       expect(result.deletedAt).toBeNull();
-      expect(adminUserRepository.restoreUser).toHaveBeenCalledWith(
-        'user-123',
-      );
+      expect(adminUserRepository.restoreUser).toHaveBeenCalledWith('user-123');
     });
 
     it('should throw ResourceNotFoundException if user not found', async () => {
@@ -512,9 +496,7 @@ describe('AdminUserService', () => {
   // ─── suspendUser ────────────────────────────────────────────────────
   describe('suspendUser', () => {
     it('should suspend a regular user', async () => {
-      adminUserRepository.findUserByIdSimple.mockResolvedValue(
-        mockUser as any,
-      );
+      adminUserRepository.findUserByIdSimple.mockResolvedValue(mockUser as any);
       adminUserRepository.updateUser.mockResolvedValue({
         ...mockUser,
         isSuspended: true,
@@ -584,9 +566,7 @@ describe('AdminUserService', () => {
     });
 
     it('should throw ConflictException when user is not suspended', async () => {
-      adminUserRepository.findUserByIdSimple.mockResolvedValue(
-        mockUser as any,
-      );
+      adminUserRepository.findUserByIdSimple.mockResolvedValue(mockUser as any);
 
       await expect(service.unsuspendUser('user-123')).rejects.toThrow(
         ConflictException,
@@ -643,9 +623,7 @@ describe('AdminUserService', () => {
       });
 
       expect(result.count).toBe(3);
-      expect(adminUserRepository.bulkVerifyUsers).toHaveBeenCalledWith(
-        userIds,
-      );
+      expect(adminUserRepository.bulkVerifyUsers).toHaveBeenCalledWith(userIds);
     });
 
     it('should throw ValidationException for invalid action', async () => {

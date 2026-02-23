@@ -124,9 +124,7 @@ describe('TextToSpeechService', () => {
 
     it('should fallback to StyleTTS2 if ElevenLabs fails', async () => {
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs Error'));
-      mockStyleTts2Generate.mockResolvedValue(
-        Buffer.from('styletts2-audio'),
-      );
+      mockStyleTts2Generate.mockResolvedValue(Buffer.from('styletts2-audio'));
       mockUploadAudio.mockResolvedValue(
         'https://uploaded-audio.com/styletts2.wav',
       );
@@ -151,9 +149,7 @@ describe('TextToSpeechService', () => {
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs Error'));
       mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 Error'));
       mockEdgeTtsGenerate.mockResolvedValue(Buffer.from('edge-audio'));
-      mockUploadAudio.mockResolvedValue(
-        'https://uploaded-audio.com/edge.mp3',
-      );
+      mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/edge.mp3');
 
       const result = await service.synthesizeStory(
         storyId,

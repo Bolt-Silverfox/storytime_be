@@ -19,6 +19,7 @@ export class PrismaVoiceQuotaRepository implements IVoiceQuotaRepository {
 
   async findUserWithSubscriptionAndUsage(
     userId: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     currentDate: Date,
   ): Promise<UserWithSubscriptionAndUsage | null> {
     return this.prisma.user.findUnique({
@@ -58,6 +59,7 @@ export class PrismaVoiceQuotaRepository implements IVoiceQuotaRepository {
   ): Promise<UserUsage> {
     const client = tx || this.prisma;
     // Remove userId from createData if present, as we use it via user relation
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { userId: _userId, ...createWithoutUserId } = createData as any;
     return client.userUsage.upsert({
       where: { userId },

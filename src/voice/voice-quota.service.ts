@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { DateFormatUtil } from '@/shared/utils/date-format.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -235,5 +234,4 @@ export class VoiceQuotaService {
       maxVoices: 1 + FREE_TIER_LIMITS.VOICES.CUSTOM_SLOTS, // default + 1 custom
     };
   }
-
 }

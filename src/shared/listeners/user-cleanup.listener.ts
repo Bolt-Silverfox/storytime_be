@@ -16,7 +16,9 @@ export class UserCleanupListener {
   @OnEvent(AppEvents.USER_DELETED)
   async onUserDeleted(event: UserDeletedEvent): Promise<void> {
     const userId = event.userId;
-    this.logger.log(`Starting cleanup for deleted user ${userId.substring(0, 8)}`);
+    this.logger.log(
+      `Starting cleanup for deleted user ${userId.substring(0, 8)}`,
+    );
 
     try {
       // Soft-delete all active sessions
@@ -31,7 +33,9 @@ export class UserCleanupListener {
         data: { status: 'cancelled', endsAt: new Date() },
       });
 
-      this.logger.log(`Cleanup completed for deleted user ${userId.substring(0, 8)}`);
+      this.logger.log(
+        `Cleanup completed for deleted user ${userId.substring(0, 8)}`,
+      );
     } catch (error) {
       this.logger.error(
         `Cleanup failed for deleted user ${userId.substring(0, 8)}: ${error instanceof Error ? error.message : String(error)}`,

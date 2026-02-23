@@ -15,7 +15,10 @@ describe('ParentFavoritesController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ParentFavoritesController],
       providers: [
-        { provide: ParentFavoritesService, useValue: mockParentFavoritesService },
+        {
+          provide: ParentFavoritesService,
+          useValue: mockParentFavoritesService,
+        },
       ],
     })
       // eslint-disable-next-line @typescript-eslint/no-require-imports

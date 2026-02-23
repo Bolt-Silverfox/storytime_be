@@ -351,10 +351,7 @@ describe('DeviceTokenService', () => {
       expect(result).toEqual({ count: 5 });
       expect(prismaService.deviceToken.deleteMany).toHaveBeenCalledWith({
         where: {
-          OR: [
-            { isActive: false },
-            { lastUsed: { lt: expect.any(Date) } },
-          ],
+          OR: [{ isActive: false }, { lastUsed: { lt: expect.any(Date) } }],
         },
       });
     });

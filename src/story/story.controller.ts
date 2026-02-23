@@ -142,7 +142,10 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   @Throttle({
-    long: { limit: THROTTLE_LIMITS.DEFAULT.limit, ttl: THROTTLE_LIMITS.DEFAULT.ttl },
+    long: {
+      limit: THROTTLE_LIMITS.DEFAULT.limit,
+      ttl: THROTTLE_LIMITS.DEFAULT.ttl,
+    },
   }) // 100 per minute
   async getStories(
     @Query('theme') theme?: string,

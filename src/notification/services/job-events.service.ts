@@ -102,11 +102,7 @@ export class JobEventsService {
   /**
    * Emit a completion event for voice jobs
    */
-  emitVoiceCompleted(
-    jobId: string,
-    userId: string,
-    audioUrl: string,
-  ): void {
+  emitVoiceCompleted(jobId: string, userId: string, audioUrl: string): void {
     this.emit({
       type: JobEventType.COMPLETED,
       jobId,

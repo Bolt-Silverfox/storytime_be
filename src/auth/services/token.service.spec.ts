@@ -307,7 +307,8 @@ describe('TokenService', () => {
       );
 
       // Act
-      const result = await service.findSessionByRefreshToken('raw-refresh-token');
+      const result =
+        await service.findSessionByRefreshToken('raw-refresh-token');
 
       // Assert
       expect(result).toEqual(mockSessionWithUser);

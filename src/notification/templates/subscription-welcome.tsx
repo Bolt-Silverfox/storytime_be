@@ -41,7 +41,8 @@ export const SubscriptionWelcomeTemplate = ({
                 Hi {userName},
               </Text>
               <Text className="text-black text-[14px] leading-[24px]">
-                Thank you for subscribing to the <strong>{planName}</strong> plan! You now have access to all premium features.
+                Thank you for subscribing to the <strong>{planName}</strong>{' '}
+                plan! You now have access to all premium features.
               </Text>
 
               <Text className="text-black text-[14px] leading-[24px] font-semibold mt-4">
@@ -49,8 +50,12 @@ export const SubscriptionWelcomeTemplate = ({
               </Text>
 
               <ul className="text-black text-[14px] leading-[24px] pl-6">
-                <li>Unlimited story access - Read as many stories as you want</li>
-                <li>Unlimited voice generations - Create stories with any voice</li>
+                <li>
+                  Unlimited story access - Read as many stories as you want
+                </li>
+                <li>
+                  Unlimited voice generations - Create stories with any voice
+                </li>
                 <li>Premium voices - Access to all voice options</li>
                 <li>AI story generation - Create personalized stories</li>
                 <li>Ad-free experience - No interruptions</li>
@@ -68,7 +73,8 @@ export const SubscriptionWelcomeTemplate = ({
 
               <Hr className="border border-solid border-[#eaeaea] my-[26px] mx-0 w-full" />
               <Text className="text-[#666666] text-[12px] leading-[24px]">
-                This confirmation was sent to {email}. If you have any questions about your subscription, please contact our support team.
+                This confirmation was sent to {email}. If you have any questions
+                about your subscription, please contact our support team.
               </Text>
             </Section>
           </Container>

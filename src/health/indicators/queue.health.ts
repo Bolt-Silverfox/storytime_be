@@ -101,8 +101,7 @@ export class QueueHealthIndicator extends HealthIndicator {
       }
 
       const duration = Date.now() - startTime;
-      const errorMessage =
-        ErrorHandler.extractMessage(error);
+      const errorMessage = ErrorHandler.extractMessage(error);
 
       throw new HealthCheckError(
         'Queue health check failed',
@@ -158,8 +157,7 @@ export class QueueHealthIndicator extends HealthIndicator {
       }
 
       const duration = Date.now() - startTime;
-      const errorMessage =
-        ErrorHandler.extractMessage(error);
+      const errorMessage = ErrorHandler.extractMessage(error);
 
       throw new HealthCheckError(
         `Queue '${queueName}' health check failed`,

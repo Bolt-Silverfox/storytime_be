@@ -185,7 +185,10 @@ describe('BadgeService', () => {
     });
 
     it('should create parent-level userBadge records when user has no kids', async () => {
-      const badges = [makeBadge(), makeBadge({ id: 'badge-2', title: 'Story Explorer' })];
+      const badges = [
+        makeBadge(),
+        makeBadge({ id: 'badge-2', title: 'Story Explorer' }),
+      ];
       prisma.badge.findMany.mockResolvedValue(badges);
       prisma.kid.findMany.mockResolvedValue([]);
       prisma.userBadge.create.mockResolvedValue(makeUserBadge());
@@ -248,8 +251,18 @@ describe('BadgeService', () => {
     it('should return top 3 badge previews', async () => {
       const userBadges = [
         makeUserBadge({ id: 'ub-1', unlocked: true, count: 1 }),
-        makeUserBadge({ id: 'ub-2', unlocked: true, count: 5, badge: makeBadge({ id: 'badge-2', title: 'Story Explorer' }) }),
-        makeUserBadge({ id: 'ub-3', unlocked: false, count: 0, badge: makeBadge({ id: 'badge-3', title: 'Story Master' }) }),
+        makeUserBadge({
+          id: 'ub-2',
+          unlocked: true,
+          count: 5,
+          badge: makeBadge({ id: 'badge-2', title: 'Story Explorer' }),
+        }),
+        makeUserBadge({
+          id: 'ub-3',
+          unlocked: false,
+          count: 0,
+          badge: makeBadge({ id: 'badge-3', title: 'Story Master' }),
+        }),
       ];
       prisma.userBadge.findMany.mockResolvedValue(userBadges);
 
@@ -276,8 +289,18 @@ describe('BadgeService', () => {
         makeUserBadge({ id: 'ub-1', unlocked: true, count: 1 }),
       ];
       const remaining = [
-        makeUserBadge({ id: 'ub-2', unlocked: false, count: 0, badge: makeBadge({ id: 'badge-2', title: 'Story Explorer' }) }),
-        makeUserBadge({ id: 'ub-3', unlocked: false, count: 0, badge: makeBadge({ id: 'badge-3', title: 'Story Master' }) }),
+        makeUserBadge({
+          id: 'ub-2',
+          unlocked: false,
+          count: 0,
+          badge: makeBadge({ id: 'badge-2', title: 'Story Explorer' }),
+        }),
+        makeUserBadge({
+          id: 'ub-3',
+          unlocked: false,
+          count: 0,
+          badge: makeBadge({ id: 'badge-3', title: 'Story Master' }),
+        }),
       ];
       prisma.userBadge.findMany
         .mockResolvedValueOnce(firstBatch)
@@ -348,7 +371,12 @@ describe('BadgeService', () => {
           id: 'ub-2',
           unlocked: false,
           count: 3,
-          badge: makeBadge({ id: 'badge-2', title: 'Story Explorer', description: 'Read 10 stories', requiredAmount: 10 }),
+          badge: makeBadge({
+            id: 'badge-2',
+            title: 'Story Explorer',
+            description: 'Read 10 stories',
+            requiredAmount: 10,
+          }),
         }),
       ];
       prisma.userBadge.findMany.mockResolvedValue(userBadges);
@@ -472,21 +500,27 @@ describe('BadgeService', () => {
     });
 
     it('should increment badge count without unlocking when threshold not met', async () => {
-      const badge = makeBadge({ id: 'badge-1', title: 'First Story', requiredAmount: 5 });
+      const badge = makeBadge({
+        id: 'badge-1',
+        title: 'First Story',
+        requiredAmount: 5,
+      });
       const userBadge = makeUserBadge({ count: 2, unlocked: false });
 
       prisma.badge.findMany.mockResolvedValue([badge]);
 
       // The interactive transaction receives a callback
-      prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-        const tx = {
-          userBadge: {
-            findUnique: jest.fn().mockResolvedValue(userBadge),
-            update: jest.fn().mockResolvedValue({ ...userBadge, count: 3 }),
-          },
-        };
-        return cb(tx);
-      });
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: unknown) => Promise<void>) => {
+          const tx = {
+            userBadge: {
+              findUnique: jest.fn().mockResolvedValue(userBadge),
+              update: jest.fn().mockResolvedValue({ ...userBadge, count: 3 }),
+            },
+          };
+          return cb(tx);
+        },
+      );
 
       await service.updateBadgeProgress(userId, 'story_read', 1);
 
@@ -498,22 +532,30 @@ describe('BadgeService', () => {
     });
 
     it('should unlock badge and emit event when threshold is met', async () => {
-      const badge = makeBadge({ id: 'badge-1', title: 'First Story', requiredAmount: 1 });
+      const badge = makeBadge({
+        id: 'badge-1',
+        title: 'First Story',
+        requiredAmount: 1,
+      });
       const userBadge = makeUserBadge({ count: 0, unlocked: false });
 
       prisma.badge.findMany.mockResolvedValue([badge]);
 
-      const txUpdateMock = jest.fn().mockResolvedValue({ ...userBadge, count: 1, unlocked: true });
+      const txUpdateMock = jest
+        .fn()
+        .mockResolvedValue({ ...userBadge, count: 1, unlocked: true });
 
-      prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-        const tx = {
-          userBadge: {
-            findUnique: jest.fn().mockResolvedValue(userBadge),
-            update: txUpdateMock,
-          },
-        };
-        return cb(tx);
-      });
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: unknown) => Promise<void>) => {
+          const tx = {
+            userBadge: {
+              findUnique: jest.fn().mockResolvedValue(userBadge),
+              update: txUpdateMock,
+            },
+          };
+          return cb(tx);
+        },
+      );
 
       await service.updateBadgeProgress(userId, 'story_read', 1);
 
@@ -536,22 +578,28 @@ describe('BadgeService', () => {
     });
 
     it('should skip badge that is already unlocked', async () => {
-      const badge = makeBadge({ id: 'badge-1', title: 'First Story', requiredAmount: 1 });
+      const badge = makeBadge({
+        id: 'badge-1',
+        title: 'First Story',
+        requiredAmount: 1,
+      });
       const userBadge = makeUserBadge({ count: 1, unlocked: true });
 
       prisma.badge.findMany.mockResolvedValue([badge]);
 
       const txUpdateMock = jest.fn();
 
-      prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-        const tx = {
-          userBadge: {
-            findUnique: jest.fn().mockResolvedValue(userBadge),
-            update: txUpdateMock,
-          },
-        };
-        return cb(tx);
-      });
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: unknown) => Promise<void>) => {
+          const tx = {
+            userBadge: {
+              findUnique: jest.fn().mockResolvedValue(userBadge),
+              update: txUpdateMock,
+            },
+          };
+          return cb(tx);
+        },
+      );
 
       await service.updateBadgeProgress(userId, 'story_read', 1);
 
@@ -560,21 +608,27 @@ describe('BadgeService', () => {
     });
 
     it('should skip when userBadge record is not found in transaction', async () => {
-      const badge = makeBadge({ id: 'badge-1', title: 'First Story', requiredAmount: 1 });
+      const badge = makeBadge({
+        id: 'badge-1',
+        title: 'First Story',
+        requiredAmount: 1,
+      });
 
       prisma.badge.findMany.mockResolvedValue([badge]);
 
       const txUpdateMock = jest.fn();
 
-      prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-        const tx = {
-          userBadge: {
-            findUnique: jest.fn().mockResolvedValue(null),
-            update: txUpdateMock,
-          },
-        };
-        return cb(tx);
-      });
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: unknown) => Promise<void>) => {
+          const tx = {
+            userBadge: {
+              findUnique: jest.fn().mockResolvedValue(null),
+              update: txUpdateMock,
+            },
+          };
+          return cb(tx);
+        },
+      );
 
       await service.updateBadgeProgress(userId, 'story_read', 1);
 
@@ -582,24 +636,40 @@ describe('BadgeService', () => {
     });
 
     it('should pass kidId into the composite key when provided', async () => {
-      const badge = makeBadge({ id: 'badge-1', title: 'First Story', requiredAmount: 5 });
-      const userBadge = makeUserBadge({ count: 0, unlocked: false, kidId: 'kid-1' });
+      const badge = makeBadge({
+        id: 'badge-1',
+        title: 'First Story',
+        requiredAmount: 5,
+      });
+      const userBadge = makeUserBadge({
+        count: 0,
+        unlocked: false,
+        kidId: 'kid-1',
+      });
 
       prisma.badge.findMany.mockResolvedValue([badge]);
 
       const txFindUniqueMock = jest.fn().mockResolvedValue(userBadge);
 
-      prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-        const tx = {
-          userBadge: {
-            findUnique: txFindUniqueMock,
-            update: jest.fn().mockResolvedValue({ ...userBadge, count: 1 }),
-          },
-        };
-        return cb(tx);
-      });
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: unknown) => Promise<void>) => {
+          const tx = {
+            userBadge: {
+              findUnique: txFindUniqueMock,
+              update: jest.fn().mockResolvedValue({ ...userBadge, count: 1 }),
+            },
+          };
+          return cb(tx);
+        },
+      );
 
-      await service.updateBadgeProgress(userId, 'story_read', 1, undefined, 'kid-1');
+      await service.updateBadgeProgress(
+        userId,
+        'story_read',
+        1,
+        undefined,
+        'kid-1',
+      );
 
       expect(txFindUniqueMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -625,7 +695,9 @@ describe('BadgeService', () => {
 
       prisma.badge.findMany.mockResolvedValue([quizBadge]);
 
-      await service.updateBadgeProgress(userId, 'quiz_answered', 1, { isCorrect: false });
+      await service.updateBadgeProgress(userId, 'quiz_answered', 1, {
+        isCorrect: false,
+      });
 
       // Transaction should not be called because the badge should be skipped
       expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -643,40 +715,54 @@ describe('BadgeService', () => {
 
       prisma.badge.findMany.mockResolvedValue([quizBadge]);
 
-      const txUpdateMock = jest.fn().mockResolvedValue({ ...userBadge, count: 1 });
+      const txUpdateMock = jest
+        .fn()
+        .mockResolvedValue({ ...userBadge, count: 1 });
 
-      prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-        const tx = {
-          userBadge: {
-            findUnique: jest.fn().mockResolvedValue(userBadge),
-            update: txUpdateMock,
-          },
-        };
-        return cb(tx);
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: unknown) => Promise<void>) => {
+          const tx = {
+            userBadge: {
+              findUnique: jest.fn().mockResolvedValue(userBadge),
+              update: txUpdateMock,
+            },
+          };
+          return cb(tx);
+        },
+      );
+
+      await service.updateBadgeProgress(userId, 'quiz_answered', 1, {
+        isCorrect: true,
       });
-
-      await service.updateBadgeProgress(userId, 'quiz_answered', 1, { isCorrect: true });
 
       expect(txUpdateMock).toHaveBeenCalled();
     });
 
     it('should use default increment of 1 when not specified', async () => {
-      const badge = makeBadge({ id: 'badge-1', title: 'First Story', requiredAmount: 5 });
+      const badge = makeBadge({
+        id: 'badge-1',
+        title: 'First Story',
+        requiredAmount: 5,
+      });
       const userBadge = makeUserBadge({ count: 2, unlocked: false });
 
       prisma.badge.findMany.mockResolvedValue([badge]);
 
-      const txUpdateMock = jest.fn().mockResolvedValue({ ...userBadge, count: 3 });
+      const txUpdateMock = jest
+        .fn()
+        .mockResolvedValue({ ...userBadge, count: 3 });
 
-      prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-        const tx = {
-          userBadge: {
-            findUnique: jest.fn().mockResolvedValue(userBadge),
-            update: txUpdateMock,
-          },
-        };
-        return cb(tx);
-      });
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: unknown) => Promise<void>) => {
+          const tx = {
+            userBadge: {
+              findUnique: jest.fn().mockResolvedValue(userBadge),
+              update: txUpdateMock,
+            },
+          };
+          return cb(tx);
+        },
+      );
 
       await service.updateBadgeProgress(userId, 'story_read');
 
@@ -690,22 +776,30 @@ describe('BadgeService', () => {
     });
 
     it('should handle custom increment values', async () => {
-      const badge = makeBadge({ id: 'badge-1', title: 'First Story', requiredAmount: 10 });
+      const badge = makeBadge({
+        id: 'badge-1',
+        title: 'First Story',
+        requiredAmount: 10,
+      });
       const userBadge = makeUserBadge({ count: 3, unlocked: false });
 
       prisma.badge.findMany.mockResolvedValue([badge]);
 
-      const txUpdateMock = jest.fn().mockResolvedValue({ ...userBadge, count: 8 });
+      const txUpdateMock = jest
+        .fn()
+        .mockResolvedValue({ ...userBadge, count: 8 });
 
-      prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-        const tx = {
-          userBadge: {
-            findUnique: jest.fn().mockResolvedValue(userBadge),
-            update: txUpdateMock,
-          },
-        };
-        return cb(tx);
-      });
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: unknown) => Promise<void>) => {
+          const tx = {
+            userBadge: {
+              findUnique: jest.fn().mockResolvedValue(userBadge),
+              update: txUpdateMock,
+            },
+          };
+          return cb(tx);
+        },
+      );
 
       await service.updateBadgeProgress(userId, 'story_read', 5);
 
@@ -720,22 +814,30 @@ describe('BadgeService', () => {
 
     it('should continue processing when a badge title is not found in DB', async () => {
       // Only return one badge from DB but there are two defs for story_read
-      const badge = makeBadge({ id: 'badge-1', title: 'First Story', requiredAmount: 5 });
+      const badge = makeBadge({
+        id: 'badge-1',
+        title: 'First Story',
+        requiredAmount: 5,
+      });
       const userBadge = makeUserBadge({ count: 0, unlocked: false });
 
       prisma.badge.findMany.mockResolvedValue([badge]);
 
-      const txUpdateMock = jest.fn().mockResolvedValue({ ...userBadge, count: 1 });
+      const txUpdateMock = jest
+        .fn()
+        .mockResolvedValue({ ...userBadge, count: 1 });
 
-      prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-        const tx = {
-          userBadge: {
-            findUnique: jest.fn().mockResolvedValue(userBadge),
-            update: txUpdateMock,
-          },
-        };
-        return cb(tx);
-      });
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: unknown) => Promise<void>) => {
+          const tx = {
+            userBadge: {
+              findUnique: jest.fn().mockResolvedValue(userBadge),
+              update: txUpdateMock,
+            },
+          };
+          return cb(tx);
+        },
+      );
 
       await service.updateBadgeProgress(userId, 'story_read', 1);
 
@@ -818,7 +920,12 @@ describe('BadgeService', () => {
         early_special: [earlyBirdDef],
       };
 
-      const earlyBadge = makeBadge({ id: 'badge-early', title: 'Early Bird', badgeType: 'special', requiredAmount: 1 });
+      const earlyBadge = makeBadge({
+        id: 'badge-early',
+        title: 'Early Bird',
+        badgeType: 'special',
+        requiredAmount: 1,
+      });
       prisma.badge.findMany.mockResolvedValue([earlyBadge]);
 
       await service.updateBadgeProgress(userId, 'early_special', 1);
@@ -827,7 +934,8 @@ describe('BadgeService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
 
       // Restore
-      (mockBadgeConstants as Record<string, unknown>).BADGE_DEFS_BY_TYPE = originalDefs;
+      (mockBadgeConstants as Record<string, unknown>).BADGE_DEFS_BY_TYPE =
+        originalDefs;
       jest.restoreAllMocks();
     });
 
@@ -849,14 +957,20 @@ describe('BadgeService', () => {
         night_special: [nightOwlDef],
       };
 
-      const nightBadge = makeBadge({ id: 'badge-night', title: 'Night Owl', badgeType: 'special', requiredAmount: 1 });
+      const nightBadge = makeBadge({
+        id: 'badge-night',
+        title: 'Night Owl',
+        badgeType: 'special',
+        requiredAmount: 1,
+      });
       prisma.badge.findMany.mockResolvedValue([nightBadge]);
 
       await service.updateBadgeProgress(userId, 'night_special', 1);
 
       expect(prisma.$transaction).not.toHaveBeenCalled();
 
-      (mockBadgeConstants as Record<string, unknown>).BADGE_DEFS_BY_TYPE = originalDefs;
+      (mockBadgeConstants as Record<string, unknown>).BADGE_DEFS_BY_TYPE =
+        originalDefs;
       jest.restoreAllMocks();
     });
 
@@ -878,26 +992,40 @@ describe('BadgeService', () => {
         early_special: [earlyBirdDef],
       };
 
-      const earlyBadge = makeBadge({ id: 'badge-early', title: 'Early Bird', badgeType: 'special', requiredAmount: 1 });
-      const userBadge = makeUserBadge({ badgeId: 'badge-early', count: 0, unlocked: false });
+      const earlyBadge = makeBadge({
+        id: 'badge-early',
+        title: 'Early Bird',
+        badgeType: 'special',
+        requiredAmount: 1,
+      });
+      const userBadge = makeUserBadge({
+        badgeId: 'badge-early',
+        count: 0,
+        unlocked: false,
+      });
       prisma.badge.findMany.mockResolvedValue([earlyBadge]);
 
-      prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-        const tx = {
-          userBadge: {
-            findUnique: jest.fn().mockResolvedValue(userBadge),
-            update: jest.fn().mockResolvedValue({ ...userBadge, count: 1, unlocked: true }),
-          },
-        };
-        return cb(tx);
-      });
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: unknown) => Promise<void>) => {
+          const tx = {
+            userBadge: {
+              findUnique: jest.fn().mockResolvedValue(userBadge),
+              update: jest
+                .fn()
+                .mockResolvedValue({ ...userBadge, count: 1, unlocked: true }),
+            },
+          };
+          return cb(tx);
+        },
+      );
 
       await service.updateBadgeProgress(userId, 'early_special', 1);
 
       // Badge should be processed - transaction should be called
       expect(prisma.$transaction).toHaveBeenCalled();
 
-      (mockBadgeConstants as Record<string, unknown>).BADGE_DEFS_BY_TYPE = originalDefs;
+      (mockBadgeConstants as Record<string, unknown>).BADGE_DEFS_BY_TYPE =
+        originalDefs;
       jest.restoreAllMocks();
     });
   });

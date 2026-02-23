@@ -42,7 +42,12 @@ import {
   SystemHealthDto,
   ApiResponseDto,
 } from './dto/admin-responses.dto';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import * as Swagger from './decorators/swagger';
 
 @ApiBearerAuth()
@@ -163,10 +168,9 @@ export class AdminController {
     enum: ['daily', 'weekly', 'monthly', 'quarterly', 'yearly'],
     description: 'Time duration filter for AI credit analytics',
   })
-  async getAiCreditStats(
-    @Query('duration') duration?: AiCreditDuration,
-  ) {
-    const data = await this.adminAnalyticsService.getAiCreditAnalytics(duration);
+  async getAiCreditStats(@Query('duration') duration?: AiCreditDuration) {
+    const data =
+      await this.adminAnalyticsService.getAiCreditAnalytics(duration);
     return {
       statusCode: 200,
       message: 'AI credit analytics retrieved successfully',
@@ -182,10 +186,9 @@ export class AdminController {
     enum: ['last_year', 'last_month', 'last_week'],
     description: 'Time duration filter for user growth data',
   })
-  async getUserGrowthMonthly(
-    @Query('duration') duration?: UserGrowthDuration,
-  ) {
-    const data = await this.adminAnalyticsService.getUserGrowthMonthly(duration);
+  async getUserGrowthMonthly(@Query('duration') duration?: UserGrowthDuration) {
+    const data =
+      await this.adminAnalyticsService.getUserGrowthMonthly(duration);
     return {
       statusCode: 200,
       message: 'User growth data retrieved successfully',

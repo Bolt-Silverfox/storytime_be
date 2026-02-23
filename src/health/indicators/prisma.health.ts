@@ -28,8 +28,7 @@ export class PrismaHealthIndicator extends HealthIndicator {
       });
     } catch (error) {
       const duration = Date.now() - startTime;
-      const errorMessage =
-        ErrorHandler.extractMessage(error);
+      const errorMessage = ErrorHandler.extractMessage(error);
 
       throw new HealthCheckError(
         'Prisma health check failed',

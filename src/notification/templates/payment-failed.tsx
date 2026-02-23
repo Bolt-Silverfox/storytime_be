@@ -64,7 +64,8 @@ export const PaymentFailedTemplate = ({
               </ul>
 
               <Text className="text-black text-[14px] leading-[24px]">
-                Please try again or use a different payment method. If the issue persists, contact your bank or our support team.
+                Please try again or use a different payment method. If the issue
+                persists, contact your bank or our support team.
               </Text>
 
               <Section className="text-center mt-[32px] mb-[32px]">
@@ -78,7 +79,8 @@ export const PaymentFailedTemplate = ({
 
               <Hr className="border border-solid border-[#eaeaea] my-[26px] mx-0 w-full" />
               <Text className="text-[#666666] text-[12px] leading-[24px]">
-                This message was sent to {email}. If you did not attempt to make a payment, please contact our support team immediately.
+                This message was sent to {email}. If you did not attempt to make
+                a payment, please contact our support team immediately.
               </Text>
             </Section>
           </Container>

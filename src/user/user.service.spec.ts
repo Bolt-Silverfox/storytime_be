@@ -32,10 +32,12 @@ const createMockPrismaService = (): MockPrismaService => ({
   avatar: {
     create: jest.fn(),
   },
-  $transaction: jest.fn((fn) => fn({
-    user: { update: jest.fn() },
-    avatar: { create: jest.fn() },
-  })),
+  $transaction: jest.fn((fn) =>
+    fn({
+      user: { update: jest.fn() },
+      avatar: { create: jest.fn() },
+    }),
+  ),
 });
 
 describe('UserService', () => {

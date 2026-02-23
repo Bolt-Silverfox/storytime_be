@@ -239,9 +239,7 @@ export class PaymentService {
     const plan = PRODUCT_ID_TO_PLAN[productId];
     if (!plan) {
       this.logger.error(`Unknown product ID: ${productId}`);
-      throw new BadRequestException(
-        `Unknown product ID: ${productId}`,
-      );
+      throw new BadRequestException(`Unknown product ID: ${productId}`);
     }
     return plan;
   }
@@ -285,14 +283,21 @@ export class PaymentService {
     let manageUrl: string | undefined;
 
     // Attempt platform-specific cancellation
-    if (existing.platform === 'google' && existing.productId && existing.purchaseToken) {
+    if (
+      existing.platform === 'google' &&
+      existing.productId &&
+      existing.purchaseToken
+    ) {
       try {
         await this.googleVerificationService.cancelSubscription({
-          packageName: this.configService.get<string>('GOOGLE_PLAY_PACKAGE_NAME') ?? '',
+          packageName:
+            this.configService.get<string>('GOOGLE_PLAY_PACKAGE_NAME') ?? '',
           productId: existing.productId,
           purchaseToken: existing.purchaseToken,
         });
-        this.logger.log(`Google subscription cancelled for user ${userId.substring(0, 8)}`);
+        this.logger.log(
+          `Google subscription cancelled for user ${userId.substring(0, 8)}`,
+        );
       } catch (error) {
         this.logger.warn(
           `Google cancellation API failed for user ${userId.substring(0, 8)}: ${this.getErrorMessage(error)}`,
@@ -300,9 +305,10 @@ export class PaymentService {
       }
     } else if (existing.platform === 'apple' && existing.purchaseToken) {
       try {
-        const appleStatus = await this.appleVerificationService.getSubscriptionStatus(
-          existing.purchaseToken,
-        );
+        const appleStatus =
+          await this.appleVerificationService.getSubscriptionStatus(
+            existing.purchaseToken,
+          );
         if (appleStatus.autoRenewActive) {
           platformWarning =
             'Apple subscription auto-renewal is still active. Please manage your subscription through your Apple ID settings.';
@@ -353,7 +359,11 @@ export class PaymentService {
     currency: string,
     plan: string,
     endsAt: Date,
-    platformDetails?: { platform: string; productId: string; purchaseToken: string },
+    platformDetails?: {
+      platform: string;
+      productId: string;
+      purchaseToken: string;
+    },
   ): Promise<{
     tx: TransactionRecord;
     subscription: {
@@ -533,7 +543,9 @@ export class PaymentService {
    * Race-condition-safe transaction creation.
    * Handles Prisma P2002 unique constraint errors by fetching the existing record.
    */
-  private async createTransactionAtomic(data: Prisma.PaymentTransactionCreateInput) {
+  private async createTransactionAtomic(
+    data: Prisma.PaymentTransactionCreateInput,
+  ) {
     try {
       return await this.prisma.paymentTransaction.create({ data });
     } catch (error) {
