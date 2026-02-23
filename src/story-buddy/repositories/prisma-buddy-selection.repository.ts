@@ -72,7 +72,7 @@ export class PrismaBuddySelectionRepository
           message: null,
         },
       });
-    } catch (error) {
+    } catch {
       // Don't throw error for logging failures - matches original behavior
       return;
     }

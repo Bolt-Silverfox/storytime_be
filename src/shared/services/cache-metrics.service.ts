@@ -45,9 +45,12 @@ export class CacheMetricsService implements OnModuleInit {
     const meter = metrics.getMeter('storytime-api');
 
     // Counter for cache operations (hits, misses, sets, deletes)
-    this.cacheOperationsCounter = meter.createCounter('cache_operations_total', {
-      description: 'Total cache operations by type and key pattern',
-    });
+    this.cacheOperationsCounter = meter.createCounter(
+      'cache_operations_total',
+      {
+        description: 'Total cache operations by type and key pattern',
+      },
+    );
 
     // Histogram for operation latency
     this.cacheLatencyHistogram = meter.createHistogram(

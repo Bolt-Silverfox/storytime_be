@@ -14,7 +14,10 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { Observable, interval, map, merge, takeWhile } from 'rxjs';
-import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import { JobEventsService, JobEventType } from './services/job-events.service';
 
 @ApiTags('SSE Events')
@@ -75,7 +78,10 @@ export class SseController {
       map(
         () =>
           ({
-            data: JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() }),
+            data: JSON.stringify({
+              type: 'heartbeat',
+              timestamp: new Date().toISOString(),
+            }),
             type: 'heartbeat',
           }) as MessageEvent,
       ),
@@ -83,7 +89,14 @@ export class SseController {
 
     // User job events
     const events$ = this.jobEventsService.subscribeToUserEvents(userId).pipe(
-      map((event) => ({ data: event.data, id: event.id, type: event.type }) as MessageEvent),
+      map(
+        (event) =>
+          ({
+            data: event.data,
+            id: event.id,
+            type: event.type,
+          }) as MessageEvent,
+      ),
     );
 
     // Merge heartbeat with actual events
@@ -127,22 +140,34 @@ export class SseController {
       map(
         () =>
           ({
-            data: JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() }),
+            data: JSON.stringify({
+              type: 'heartbeat',
+              timestamp: new Date().toISOString(),
+            }),
             type: 'heartbeat',
           }) as MessageEvent,
       ),
     );
 
     // Job-specific events
-    const events$ = this.jobEventsService.subscribeToJobEvents(jobId, userId).pipe(
-      map((event) => {
-        // Check if job finished
-        if (event.type === JobEventType.COMPLETED || event.type === JobEventType.FAILED) {
-          isFinished = true;
-        }
-        return { data: event.data, id: event.id, type: event.type } as MessageEvent;
-      }),
-    );
+    const events$ = this.jobEventsService
+      .subscribeToJobEvents(jobId, userId)
+      .pipe(
+        map((event) => {
+          // Check if job finished
+          if (
+            event.type === JobEventType.COMPLETED ||
+            event.type === JobEventType.FAILED
+          ) {
+            isFinished = true;
+          }
+          return {
+            data: event.data,
+            id: event.id,
+            type: event.type,
+          } as MessageEvent;
+        }),
+      );
 
     return merge(heartbeat$, events$);
   }

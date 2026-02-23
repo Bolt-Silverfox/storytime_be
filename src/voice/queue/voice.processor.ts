@@ -218,7 +218,9 @@ export class VoiceProcessor extends WorkerHost {
     if (error instanceof DomainException) {
       const status = error.getStatus();
       return (
-        status >= 400 && status < 500 && status !== Number(HttpStatus.TOO_MANY_REQUESTS)
+        status >= 400 &&
+        status < 500 &&
+        status !== Number(HttpStatus.TOO_MANY_REQUESTS)
       );
     }
 
@@ -343,7 +345,9 @@ export class VoiceProcessor extends WorkerHost {
         jobData.jobId,
         errorMessage,
       );
-      this.logger.log(`Failure notification sent for voice job ${jobData.jobId}`);
+      this.logger.log(
+        `Failure notification sent for voice job ${jobData.jobId}`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to send failure notification for voice job ${jobData.jobId}: ${error instanceof Error ? error.message : 'Unknown error'}`,

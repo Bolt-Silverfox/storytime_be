@@ -15,12 +15,7 @@ import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import {
-  Role,
-  NotificationCategory,
-  NotificationType,
-  OnboardingStatus,
-} from '@prisma/client';
+import { Role, OnboardingStatus } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import {
   ResourceAlreadyExistsException,

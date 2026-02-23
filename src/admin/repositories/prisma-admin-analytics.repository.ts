@@ -38,7 +38,6 @@ export class PrismaAdminAnalyticsRepository
     const prevRange24h = DateUtil.getPreviousPeriod(range24h);
     const prevRange7d = DateUtil.getPreviousPeriod(range7d);
     const prevRange30d = DateUtil.getPreviousPeriod(range30d);
-    const rangeYesterday = DateUtil.getRange(Timeframe.YESTERDAY, now);
 
     const countBetween = (
       modelName: any,
@@ -368,7 +367,8 @@ export class PrismaAdminAnalyticsRepository
         const date = user.createdAt.toISOString().split('T')[0];
         if (!acc[date]) acc[date] = { total: 0, paid: 0 };
         acc[date].total += 1;
-        if (user.subscription && user.subscription.status === 'active') acc[date].paid += 1;
+        if (user.subscription && user.subscription.status === 'active')
+          acc[date].paid += 1;
         return acc;
       },
       {} as Record<string, { total: number; paid: number }>,
@@ -738,7 +738,8 @@ export class PrismaAdminAnalyticsRepository
       const label = u.createdAt.toLocaleString('default', { month: 'short' });
       const index = uniqueLabels.indexOf(label);
       if (index !== -1) {
-        if (u.subscription && u.subscription.status === 'active') paidCounts[index]++;
+        if (u.subscription && u.subscription.status === 'active')
+          paidCounts[index]++;
         else freeCounts[index]++;
       }
     });

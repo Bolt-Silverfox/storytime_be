@@ -6,7 +6,10 @@ import {
   ApiBody,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { StoryContentAudioDto, AsyncStorySynthesisDto } from '../../dto/voice.dto';
+import {
+  StoryContentAudioDto,
+  AsyncStorySynthesisDto,
+} from '../../dto/voice.dto';
 
 // === ASYNC VOICE SYNTHESIS DECORATORS ===
 

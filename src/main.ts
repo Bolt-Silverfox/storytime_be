@@ -24,15 +24,18 @@ process.on('uncaughtException', (error: Error) => {
   setTimeout(() => process.exit(1), 1000);
 });
 
-process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
-  bootstrapLogger.error(
-    `Unhandled Rejection at: ${promise}, reason: ${reason instanceof Error ? reason.message : reason}`,
-    reason instanceof Error ? reason.stack : undefined,
-  );
-  if (isProduction) {
-    setTimeout(() => process.exit(1), 1000);
-  }
-});
+process.on(
+  'unhandledRejection',
+  (reason: unknown, promise: Promise<unknown>) => {
+    bootstrapLogger.error(
+      `Unhandled Rejection at: ${promise}, reason: ${reason instanceof Error ? reason.message : reason}`,
+      reason instanceof Error ? reason.stack : undefined,
+    );
+    if (isProduction) {
+      setTimeout(() => process.exit(1), 1000);
+    }
+  },
+);
 
 process.on('SIGTERM', () => {
   bootstrapLogger.log('SIGTERM received. Graceful shutdown initiated...');

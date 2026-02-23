@@ -15,11 +15,7 @@ interface PinResetOtpProps {
   userName: string;
 }
 
-export const PinResetTemplate = ({
-  otp,
-  email,
-  userName,
-}: PinResetOtpProps) => {
+export const PinResetTemplate = ({ otp, userName }: PinResetOtpProps) => {
   return (
     <Tailwind>
       <Html>

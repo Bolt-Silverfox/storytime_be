@@ -13,7 +13,6 @@ import {
   SubscriptionCancelledEvent,
   KidCreatedEvent,
   KidDeletedEvent,
-  NotificationSentEvent,
   QuotaExhaustedEvent,
 } from './app-events';
 

@@ -18,7 +18,10 @@ import {
   ApiBody,
   ApiParam,
 } from '@nestjs/swagger';
-import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import { DeviceTokenService } from './services/device-token.service';
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
@@ -96,7 +99,10 @@ export class DeviceController {
     },
   })
   @ApiResponse({ status: 404, description: 'Device token not found' })
-  @ApiResponse({ status: 403, description: 'Cannot unregister another user device' })
+  @ApiResponse({
+    status: 403,
+    description: 'Cannot unregister another user device',
+  })
   async unregisterDevice(
     @Req() req: AuthenticatedRequest,
     @Param('token') token: string,
@@ -143,7 +149,10 @@ export class DeviceController {
     schema: {
       type: 'object',
       properties: {
-        count: { type: 'number', description: 'Number of devices unregistered' },
+        count: {
+          type: 'number',
+          description: 'Number of devices unregistered',
+        },
       },
     },
   })

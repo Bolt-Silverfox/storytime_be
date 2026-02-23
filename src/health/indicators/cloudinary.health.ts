@@ -74,8 +74,7 @@ export class CloudinaryHealthIndicator extends HealthIndicator {
       }
 
       const duration = Date.now() - startTime;
-      const errorMessage =
-        ErrorHandler.extractMessage(error);
+      const errorMessage = ErrorHandler.extractMessage(error);
 
       this.logger.warn(`Cloudinary health check failed: ${errorMessage}`);
 

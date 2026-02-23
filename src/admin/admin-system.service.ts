@@ -7,12 +7,7 @@ import {
   IAdminSystemRepository,
   ADMIN_SYSTEM_REPOSITORY,
 } from './repositories';
-import {
-  ActivityLogDto,
-  SubscriptionDto,
-  CategoryDto,
-  ThemeDto,
-} from './dto/admin-responses.dto';
+import { ActivityLogDto, SubscriptionDto } from './dto/admin-responses.dto';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import {
   categories,
@@ -37,7 +32,10 @@ export class AdminSystemService {
     private readonly prisma: PrismaService, // For seedDatabase (complex transaction)
   ) {}
 
-  async getRecentActivity(limit: number = 50, userId?: string): Promise<ActivityLogDto[]> {
+  async getRecentActivity(
+    limit: number = 50,
+    userId?: string,
+  ): Promise<ActivityLogDto[]> {
     const normalizedUserId = userId?.trim() || undefined;
     const where: Prisma.ActivityLogWhereInput = { isDeleted: false };
     if (normalizedUserId) where.userId = normalizedUserId;
@@ -196,7 +194,7 @@ export class AdminSystemService {
               description: category.description,
             },
           })
-          .catch(async (e) => {
+          .catch(async () => {
             // Fallback if upsert by id fails because name is unique
             const existing = await this.prisma.category.findFirst({
               where: { name: category.name },

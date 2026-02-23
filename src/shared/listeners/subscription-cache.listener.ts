@@ -21,18 +21,26 @@ export class SubscriptionCacheListener {
   @OnEvent(AppEvents.SUBSCRIPTION_CREATED)
   async onSubscriptionCreated(event: SubscriptionCreatedEvent): Promise<void> {
     await this.subscriptionService.invalidateCache(event.userId);
-    this.logger.debug(`Cache invalidated for new subscription: user ${event.userId.substring(0, 8)}`);
+    this.logger.debug(
+      `Cache invalidated for new subscription: user ${event.userId.substring(0, 8)}`,
+    );
   }
 
   @OnEvent(AppEvents.SUBSCRIPTION_CHANGED)
   async onSubscriptionChanged(event: SubscriptionChangedEvent): Promise<void> {
     await this.subscriptionService.invalidateCache(event.userId);
-    this.logger.debug(`Cache invalidated for subscription change: user ${event.userId.substring(0, 8)}`);
+    this.logger.debug(
+      `Cache invalidated for subscription change: user ${event.userId.substring(0, 8)}`,
+    );
   }
 
   @OnEvent(AppEvents.SUBSCRIPTION_CANCELLED)
-  async onSubscriptionCancelled(event: SubscriptionCancelledEvent): Promise<void> {
+  async onSubscriptionCancelled(
+    event: SubscriptionCancelledEvent,
+  ): Promise<void> {
     await this.subscriptionService.invalidateCache(event.userId);
-    this.logger.debug(`Cache invalidated for subscription cancellation: user ${event.userId.substring(0, 8)}`);
+    this.logger.debug(
+      `Cache invalidated for subscription cancellation: user ${event.userId.substring(0, 8)}`,
+    );
   }
 }

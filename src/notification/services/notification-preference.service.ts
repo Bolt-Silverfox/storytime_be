@@ -107,7 +107,7 @@ export class NotificationPreferenceService {
     // Perform atomic update via transaction
     const updatedPrefs =
       await this.notificationPreferenceRepository.executeTransaction(
-        async (tx) => {
+        async () => {
           const results = [];
           for (const dto of dtos) {
             const updated =

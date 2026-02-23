@@ -95,9 +95,15 @@ describe('StoryController', () => {
       controllers: [StoryController],
       providers: [
         { provide: StoryService, useValue: mockStoryService },
-        { provide: StoryGenerationService, useValue: mockStoryGenerationService },
+        {
+          provide: StoryGenerationService,
+          useValue: mockStoryGenerationService,
+        },
         { provide: StoryProgressService, useValue: mockStoryProgressService },
-        { provide: StoryRecommendationService, useValue: mockStoryRecommendationService },
+        {
+          provide: StoryRecommendationService,
+          useValue: mockStoryRecommendationService,
+        },
         { provide: DailyChallengeService, useValue: mockDailyChallengeService },
         { provide: StoryQuotaService, useValue: mockStoryQuotaService },
         { provide: StoryQueueService, useValue: mockStoryQueueService },
@@ -110,9 +116,14 @@ describe('StoryController', () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       .overrideGuard(require('../shared/guards/auth.guard').AuthSessionGuard)
       .useValue({ canActivate: () => true })
-      .overrideGuard(require('../shared/guards/subscription-throttle.guard').SubscriptionThrottleGuard)
+      .overrideGuard(
+        require('../shared/guards/subscription-throttle.guard')
+          .SubscriptionThrottleGuard,
+      )
       .useValue({ canActivate: () => true })
-      .overrideGuard(require('../shared/guards/story-access.guard').StoryAccessGuard)
+      .overrideGuard(
+        require('../shared/guards/story-access.guard').StoryAccessGuard,
+      )
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -130,22 +141,18 @@ describe('StoryController', () => {
       await controller.generateStoryForKid(kidId, theme, category);
 
       // Verify the controller converts single strings to arrays for the service
-      expect(mockStoryGenerationService.generateStoryForKid).toHaveBeenCalledWith(
-        kidId,
-        ['Space'],
-        ['Adventure'],
-      );
+      expect(
+        mockStoryGenerationService.generateStoryForKid,
+      ).toHaveBeenCalledWith(kidId, ['Space'], ['Adventure']);
     });
 
     it('should handle missing theme/category params', async () => {
       const kidId = 'kid-123';
       await controller.generateStoryForKid(kidId);
 
-      expect(mockStoryGenerationService.generateStoryForKid).toHaveBeenCalledWith(
-        kidId,
-        undefined,
-        undefined,
-      );
+      expect(
+        mockStoryGenerationService.generateStoryForKid,
+      ).toHaveBeenCalledWith(kidId, undefined, undefined);
     });
   });
 
@@ -171,7 +178,10 @@ describe('StoryController', () => {
 
     it('removeFromLibrary: should call removeFromLibrary service method', async () => {
       await controller.removeFromLibrary(kidId, storyId);
-      expect(mockStoryService.removeFromLibrary).toHaveBeenCalledWith(kidId, storyId);
+      expect(mockStoryService.removeFromLibrary).toHaveBeenCalledWith(
+        kidId,
+        storyId,
+      );
     });
   });
 
@@ -179,24 +189,32 @@ describe('StoryController', () => {
   describe('getTopPicksFromParents', () => {
     it('should call service with capped limit of 50 when exceeding max', async () => {
       await controller.getTopPicksFromParents(100);
-      expect(mockStoryRecommendationService.getTopPicksFromParents).toHaveBeenCalledWith(50);
+      expect(
+        mockStoryRecommendationService.getTopPicksFromParents,
+      ).toHaveBeenCalledWith(50);
     });
 
     it('should call service with provided limit when within bounds', async () => {
       await controller.getTopPicksFromParents(25);
-      expect(mockStoryRecommendationService.getTopPicksFromParents).toHaveBeenCalledWith(25);
+      expect(
+        mockStoryRecommendationService.getTopPicksFromParents,
+      ).toHaveBeenCalledWith(25);
     });
 
     it('should use default limit of 10', async () => {
       await controller.getTopPicksFromParents(10);
-      expect(mockStoryRecommendationService.getTopPicksFromParents).toHaveBeenCalledWith(10);
+      expect(
+        mockStoryRecommendationService.getTopPicksFromParents,
+      ).toHaveBeenCalledWith(10);
     });
 
     it('should return the result from the service', async () => {
       const mockResult = [
         { id: 'story-1', title: 'Top Story', recommendationCount: 5 },
       ];
-      mockStoryRecommendationService.getTopPicksFromParents.mockResolvedValue(mockResult);
+      mockStoryRecommendationService.getTopPicksFromParents.mockResolvedValue(
+        mockResult,
+      );
 
       const result = await controller.getTopPicksFromParents(10);
 

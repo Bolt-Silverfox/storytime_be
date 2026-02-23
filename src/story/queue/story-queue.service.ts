@@ -116,8 +116,7 @@ export class StoryQueueService {
 
       return { queued: true, jobId, estimatedWaitTime };
     } catch (error) {
-      const errorMessage =
-        ErrorHandler.extractMessage(error);
+      const errorMessage = ErrorHandler.extractMessage(error);
       this.logger.error(
         `Failed to queue story generation ${jobId}: ${errorMessage}`,
       );
@@ -176,8 +175,7 @@ export class StoryQueueService {
 
       return { queued: true, jobId, estimatedWaitTime };
     } catch (error) {
-      const errorMessage =
-        ErrorHandler.extractMessage(error);
+      const errorMessage = ErrorHandler.extractMessage(error);
       this.logger.error(
         `Failed to queue story for kid ${jobId}: ${errorMessage}`,
       );

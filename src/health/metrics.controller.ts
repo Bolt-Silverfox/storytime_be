@@ -1,7 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
-import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
 
 @ApiTags('Metrics')
 @Controller('metrics')

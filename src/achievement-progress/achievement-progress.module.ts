@@ -7,10 +7,7 @@ import { BadgeService } from './badge.service';
 import { BadgeProgressEngine } from './badge-progress.engine';
 import { BadgeConstants } from './badge.constants';
 import { NotificationModule } from '../notification/notification.module';
-import {
-  STREAK_REPOSITORY,
-  PrismaStreakRepository,
-} from './repositories';
+import { STREAK_REPOSITORY, PrismaStreakRepository } from './repositories';
 
 @Module({
   imports: [

@@ -9,7 +9,10 @@ import {
   ADMIN_ANALYTICS_REPOSITORY,
   IAdminAnalyticsRepository,
 } from './repositories';
-import { CACHE_KEYS, CACHE_TTL_MS } from '@/shared/constants/cache-keys.constants';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+} from '@/shared/constants/cache-keys.constants';
 
 describe('AdminAnalyticsService', () => {
   let service: AdminAnalyticsService;
@@ -81,8 +84,18 @@ describe('AdminAnalyticsService', () => {
     data: [
       {
         labels: [
-          'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug',
-          'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+          'Jan',
+          'Feb',
         ],
         freeUsers: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32],
         paidUsers: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
@@ -307,9 +320,9 @@ describe('AdminAnalyticsService', () => {
       const result = await service.getSubscriptionAnalytics();
 
       expect(result).toEqual(mockSubscriptionAnalytics);
-      expect(
-        analyticsRepository.getSubscriptionAnalytics,
-      ).toHaveBeenCalledWith(undefined);
+      expect(analyticsRepository.getSubscriptionAnalytics).toHaveBeenCalledWith(
+        undefined,
+      );
     });
 
     it('should pass date range when provided', async () => {
@@ -320,9 +333,9 @@ describe('AdminAnalyticsService', () => {
 
       await service.getSubscriptionAnalytics(dateRange);
 
-      expect(
-        analyticsRepository.getSubscriptionAnalytics,
-      ).toHaveBeenCalledWith(dateRange);
+      expect(analyticsRepository.getSubscriptionAnalytics).toHaveBeenCalledWith(
+        dateRange,
+      );
     });
 
     it('should return cached subscription analytics when available', async () => {
@@ -644,10 +657,7 @@ describe('AdminAnalyticsService', () => {
         mockSubscriptionAnalytics as any,
       );
 
-      const result = await service.exportAnalyticsData(
-        'subscriptions',
-        'json',
-      );
+      const result = await service.exportAnalyticsData('subscriptions', 'json');
 
       expect(result.contentType).toBe('application/json');
       expect(JSON.parse(result.data)).toEqual(mockSubscriptionAnalytics);

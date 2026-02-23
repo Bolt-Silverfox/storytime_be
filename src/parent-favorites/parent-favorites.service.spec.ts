@@ -59,7 +59,12 @@ describe('ParentFavoritesService', () => {
         description: mockFavorite.story.description,
         coverImageUrl: mockFavorite.story.coverImageUrl,
         categories: [
-          { id: 'cat-1', name: 'Adventure', image: undefined, description: undefined },
+          {
+            id: 'cat-1',
+            name: 'Adventure',
+            image: undefined,
+            description: undefined,
+          },
         ],
         ageRange: '3-5',
         durationSeconds: 120,
@@ -98,7 +103,12 @@ describe('ParentFavoritesService', () => {
             ageMax: 9,
             durationSeconds: 300,
             categories: [
-              { id: 'cat-1', name: 'Fantasy', image: 'img.png', description: 'A fantasy category' },
+              {
+                id: 'cat-1',
+                name: 'Fantasy',
+                image: 'img.png',
+                description: 'A fantasy category',
+              },
             ],
           },
           createdAt: new Date(),
@@ -113,7 +123,12 @@ describe('ParentFavoritesService', () => {
       expect(result[0].ageRange).toBe('4-6');
       expect(result[1].ageRange).toBe('7-9');
       expect(result[1].categories).toEqual([
-        { id: 'cat-1', name: 'Fantasy', image: 'img.png', description: 'A fantasy category' },
+        {
+          id: 'cat-1',
+          name: 'Fantasy',
+          image: 'img.png',
+          description: 'A fantasy category',
+        },
       ]);
     });
   });

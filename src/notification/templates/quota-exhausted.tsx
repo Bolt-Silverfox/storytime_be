@@ -47,10 +47,12 @@ export const QuotaExhaustedTemplate = ({
                 Hi {userName},
               </Text>
               <Text className="text-black text-[14px] leading-[24px]">
-                You've used all {limit} free {quotaLabel} for this period ({used}/{limit}).
+                You've used all {limit} free {quotaLabel} for this period (
+                {used}/{limit}).
               </Text>
               <Text className="text-black text-[14px] leading-[24px]">
-                Upgrade to Premium for unlimited access to all stories and features:
+                Upgrade to Premium for unlimited access to all stories and
+                features:
               </Text>
 
               <ul className="text-black text-[14px] leading-[24px] pl-6">
@@ -71,7 +73,8 @@ export const QuotaExhaustedTemplate = ({
 
               <Hr className="border border-solid border-[#eaeaea] my-[26px] mx-0 w-full" />
               <Text className="text-[#666666] text-[12px] leading-[24px]">
-                This message was sent to {email}. Your free quota will reset at the start of the next period.
+                This message was sent to {email}. Your free quota will reset at
+                the start of the next period.
               </Text>
             </Section>
           </Container>

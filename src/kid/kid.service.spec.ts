@@ -65,7 +65,14 @@ describe('KidService', () => {
     it('should create a kid', async () => {
       const dto = { name: 'Alex', ageRange: '5-8', avatarId: 'avatar-1' };
       const userId = 'user-1';
-      const expectedResult = { id: 'kid-1', ...dto, parentId: userId, createdAt: new Date(), preferredVoiceId: null, preferredVoice: null };
+      const expectedResult = {
+        id: 'kid-1',
+        ...dto,
+        parentId: userId,
+        createdAt: new Date(),
+        preferredVoiceId: null,
+        preferredVoice: null,
+      };
 
       repo.create.mockResolvedValue(expectedResult);
 
@@ -85,7 +92,12 @@ describe('KidService', () => {
     it('should return array of kids', async () => {
       const userId = 'user-1';
       const expectedResult = [
-        { id: 'kid-1', parentId: userId, preferredVoiceId: null, preferredVoice: null },
+        {
+          id: 'kid-1',
+          parentId: userId,
+          preferredVoiceId: null,
+          preferredVoice: null,
+        },
       ];
 
       mockCacheManager.get.mockResolvedValue(null);
@@ -113,7 +125,12 @@ describe('KidService', () => {
     it('should return a kid if found and owned by user', async () => {
       const kidId = 'kid-1';
       const userId = 'user-1';
-      const expectedResult = { id: kidId, parentId: userId, preferredVoiceId: null, preferredVoice: null };
+      const expectedResult = {
+        id: kidId,
+        parentId: userId,
+        preferredVoiceId: null,
+        preferredVoice: null,
+      };
 
       repo.findByIdWithFullRelations.mockResolvedValue(expectedResult);
       repo.countParentRecommendations.mockResolvedValue(0);
@@ -147,7 +164,12 @@ describe('KidService', () => {
       const userId = 'user-1';
       const dto = { name: 'Alex Updated' };
       const existingKid = { id: kidId, parentId: userId };
-      const updatedKid = { ...existingKid, ...dto, preferredVoiceId: null, preferredVoice: null };
+      const updatedKid = {
+        ...existingKid,
+        ...dto,
+        preferredVoiceId: null,
+        preferredVoice: null,
+      };
 
       repo.findByIdNotDeleted.mockResolvedValue(existingKid);
       repo.update.mockResolvedValue(updatedKid);
@@ -207,8 +229,20 @@ describe('KidService', () => {
         { name: 'Kid 2', ageRange: '9-12', avatarId: 'avatar-2' },
       ];
       const dbKids = [
-        { id: 'kid-1', ...dtos[0], parentId: userId, preferredVoiceId: null, preferredVoice: null },
-        { id: 'kid-2', ...dtos[1], parentId: userId, preferredVoiceId: null, preferredVoice: null },
+        {
+          id: 'kid-1',
+          ...dtos[0],
+          parentId: userId,
+          preferredVoiceId: null,
+          preferredVoice: null,
+        },
+        {
+          id: 'kid-2',
+          ...dtos[1],
+          parentId: userId,
+          preferredVoiceId: null,
+          preferredVoice: null,
+        },
       ];
 
       repo.findUserByIdNotDeleted.mockResolvedValue({ id: userId });

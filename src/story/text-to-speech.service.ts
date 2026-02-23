@@ -120,7 +120,11 @@ export class TextToSpeechService {
     const type = voicetype ?? DEFAULT_VOICE;
 
     // Check paragraph-level cache first
-    const cachedUrl = await this.getCachedParagraphAudio(storyId, cleanedText, type);
+    const cachedUrl = await this.getCachedParagraphAudio(
+      storyId,
+      cleanedText,
+      type,
+    );
     if (cachedUrl) {
       this.logger.log(
         `Paragraph cache hit for story ${storyId}, voice ${type}`,
@@ -162,7 +166,9 @@ export class TextToSpeechService {
     if (useElevenLabs && userId) {
       const allowed = await this.voiceQuota.checkUsage(userId);
       if (!allowed) {
-        this.logger.log(`User ${userId} quota exceeded. Fallback to StyleTTS2.`);
+        this.logger.log(
+          `User ${userId} quota exceeded. Fallback to StyleTTS2.`,
+        );
         useElevenLabs = false;
       }
     } else if (useElevenLabs && !userId) {
@@ -234,9 +240,8 @@ export class TextToSpeechService {
         `Attempting StyleTTS2 generation for story ${storyId} with voice ${type}`,
       );
 
-      const audioBuffer = await this.styleTts2Provider.generateAudio(
-        cleanedText,
-      );
+      const audioBuffer =
+        await this.styleTts2Provider.generateAudio(cleanedText);
       const audioUrl = await this.uploadService.uploadAudioBuffer(
         audioBuffer,
         `story_${storyId}_styletts2_${Date.now()}.wav`,
@@ -256,9 +261,7 @@ export class TextToSpeechService {
         `Attempting Edge TTS generation for story ${storyId} with voice ${type}`,
       );
 
-      const audioBuffer = await this.edgeTtsProvider.generateAudio(
-        cleanedText,
-      );
+      const audioBuffer = await this.edgeTtsProvider.generateAudio(cleanedText);
       const audioUrl = await this.uploadService.uploadAudioBuffer(
         audioBuffer,
         `story_${storyId}_edgetts_${Date.now()}.mp3`,

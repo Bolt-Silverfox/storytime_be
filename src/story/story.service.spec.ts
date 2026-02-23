@@ -379,9 +379,7 @@ describe('StoryService', () => {
       expect(mockStoryRepository.softDeleteStory).toHaveBeenCalledWith(
         'story-1',
       );
-      expect(
-        mockStoryRepository.deleteStoryPermanently,
-      ).not.toHaveBeenCalled();
+      expect(mockStoryRepository.deleteStoryPermanently).not.toHaveBeenCalled();
     });
 
     it('should permanently delete when permanent=true', async () => {

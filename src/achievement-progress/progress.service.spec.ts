@@ -49,14 +49,21 @@ const mockStreakData = {
 };
 
 const mockBadgePreviewData = [
-  { id: 'badge-1', name: 'First Story', iconUrl: 'https://example.com/badge1.png', earned: true },
-  { id: 'badge-2', name: 'Bookworm', iconUrl: 'https://example.com/badge2.png', earned: false },
+  {
+    id: 'badge-1',
+    name: 'First Story',
+    iconUrl: 'https://example.com/badge1.png',
+    earned: true,
+  },
+  {
+    id: 'badge-2',
+    name: 'Bookworm',
+    iconUrl: 'https://example.com/badge2.png',
+    earned: false,
+  },
 ];
 
-const mockKids = [
-  { id: 'kid-1' },
-  { id: 'kid-2' },
-];
+const mockKids = [{ id: 'kid-1' }, { id: 'kid-2' }];
 
 const mockProgressStats = {
   storiesCompleted: 12,
@@ -129,8 +136,12 @@ describe('ProgressService', () => {
       const result = await service.getHomeScreenData(TEST_USER_ID);
 
       expect(result).toEqual(mockHomeScreenData);
-      expect(mockStreakService.getStreakSummary).toHaveBeenCalledWith(TEST_USER_ID);
-      expect(mockBadgeService.getBadgePreview).toHaveBeenCalledWith(TEST_USER_ID);
+      expect(mockStreakService.getStreakSummary).toHaveBeenCalledWith(
+        TEST_USER_ID,
+      );
+      expect(mockBadgeService.getBadgePreview).toHaveBeenCalledWith(
+        TEST_USER_ID,
+      );
       expect(mockCacheManager.set).toHaveBeenCalledWith(
         CACHE_KEYS.PROGRESS_HOME(TEST_USER_ID),
         mockHomeScreenData,
@@ -187,8 +198,12 @@ describe('ProgressService', () => {
       const result = await service.getOverview(TEST_USER_ID);
 
       expect(result).toEqual(mockOverviewData);
-      expect(mockStreakService.getStreakSummary).toHaveBeenCalledWith(TEST_USER_ID);
-      expect(mockBadgeService.getBadgePreview).toHaveBeenCalledWith(TEST_USER_ID);
+      expect(mockStreakService.getStreakSummary).toHaveBeenCalledWith(
+        TEST_USER_ID,
+      );
+      expect(mockBadgeService.getBadgePreview).toHaveBeenCalledWith(
+        TEST_USER_ID,
+      );
       expect(mockCacheManager.set).toHaveBeenCalledWith(
         CACHE_KEYS.PROGRESS_OVERVIEW(TEST_USER_ID),
         mockOverviewData,
@@ -295,13 +310,17 @@ describe('ProgressService', () => {
           completed: true,
         },
       });
-      expect(mockPrismaService.dailyChallengeAssignment.count).toHaveBeenCalledWith({
+      expect(
+        mockPrismaService.dailyChallengeAssignment.count,
+      ).toHaveBeenCalledWith({
         where: {
           kidId: { in: ['kid-1', 'kid-2'] },
           completed: true,
         },
       });
-      expect(mockPrismaService.screenTimeSession.aggregate).toHaveBeenCalledWith({
+      expect(
+        mockPrismaService.screenTimeSession.aggregate,
+      ).toHaveBeenCalledWith({
         where: {
           kidId: { in: ['kid-1', 'kid-2'] },
           endTime: { not: null },

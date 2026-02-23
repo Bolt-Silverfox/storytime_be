@@ -1,10 +1,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
-import { ValidationException } from '@/shared/exceptions';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { PrismaService } from '../prisma/prisma.service';
-import { AiProviders } from '@/shared/constants/ai-providers.constants';
-import { Role } from '@prisma/client';
 import {
   DashboardStatsDto,
   UserGrowthDto,
@@ -25,13 +21,10 @@ export type AiCreditDuration =
   | 'quarterly'
   | 'yearly';
 export type UserGrowthDuration = 'last_year' | 'last_month' | 'last_week';
-import { DateUtil } from '@/shared/utils/date.util';
-import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';
 import {
   CACHE_KEYS,
   CACHE_TTL_MS,
 } from '@/shared/constants/cache-keys.constants';
-import { DashboardUtil } from './utils/dashboard.util';
 import {
   IAdminAnalyticsRepository,
   ADMIN_ANALYTICS_REPOSITORY,
@@ -146,7 +139,7 @@ export class AdminAnalyticsService {
 
     try {
       // Still need a raw check for health, but could move to repository
-      const health = await this.adminAnalyticsRepository.getDashboardStats(); // Mock check
+      await this.adminAnalyticsRepository.getDashboardStats(); // Mock check
       const responseTime = Date.now() - startTime;
       const memUsage = process.memoryUsage();
 
@@ -297,17 +290,17 @@ export class AdminAnalyticsService {
     // Filter parallel arrays by duration (repository always fetches 12 months)
     if (duration && result.data?.length > 0) {
       const monthsToKeep =
-        duration === 'last_week' ? 1 :
-        duration === 'last_month' ? 1 :
-        12; // last_year = all 12 months
+        duration === 'last_week' ? 1 : duration === 'last_month' ? 1 : 12; // last_year = all 12 months
       const dto = result.data[0];
       const len = dto.labels.length;
       const start = Math.max(0, len - monthsToKeep);
-      result.data = [{
-        labels: dto.labels.slice(start),
-        freeUsers: dto.freeUsers.slice(start),
-        paidUsers: dto.paidUsers.slice(start),
-      }];
+      result.data = [
+        {
+          labels: dto.labels.slice(start),
+          freeUsers: dto.freeUsers.slice(start),
+          paidUsers: dto.paidUsers.slice(start),
+        },
+      ];
     }
 
     await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.DASHBOARD);
@@ -332,7 +325,8 @@ export class AdminAnalyticsService {
 
     switch (type) {
       case 'users': {
-        const growth = await this.adminAnalyticsRepository.getUserGrowth(dateRange);
+        const growth =
+          await this.adminAnalyticsRepository.getUserGrowth(dateRange);
         rawData = growth;
         break;
       }
@@ -344,7 +338,9 @@ export class AdminAnalyticsService {
       }
       case 'subscriptions': {
         const subs =
-          await this.adminAnalyticsRepository.getSubscriptionAnalytics(dateRange);
+          await this.adminAnalyticsRepository.getSubscriptionAnalytics(
+            dateRange,
+          );
         rawData = subs;
         break;
       }
@@ -358,18 +354,20 @@ export class AdminAnalyticsService {
     }
 
     // CSV format
-    const csvData = this.convertToCsv(rawData, type);
+    const csvData = this.convertToCsv(rawData);
     return {
       data: csvData,
       contentType: 'text/csv',
     };
   }
 
-  private convertToCsv(data: any, type: string): string {
+  private convertToCsv(data: any): string {
     if (Array.isArray(data) && data.length > 0) {
       const headers = Object.keys(data[0]);
       const rows = data.map((row) =>
-        headers.map((h) => this.sanitizeCsvValue(String(row[h] ?? ''))).join(','),
+        headers
+          .map((h) => this.sanitizeCsvValue(String(row[h] ?? '')))
+          .join(','),
       );
       return [headers.join(','), ...rows].join('\n');
     }

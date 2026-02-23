@@ -33,17 +33,24 @@ export class DeepgramSTTProvider implements ISpeechToTextProvider {
     try {
       this.logger.log('Attempting Deepgram STT transcription');
 
-      const transcriptionPromise = this.deepgram.listen.prerecorded.transcribeFile(buffer, {
-        model: 'nova-2',
-        smart_format: true,
-        mimetype: mimetype,
-      });
+      const transcriptionPromise =
+        this.deepgram.listen.prerecorded.transcribeFile(buffer, {
+          model: 'nova-2',
+          smart_format: true,
+          mimetype: mimetype,
+        });
 
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Deepgram transcription timed out after 30s')), 30000);
+        setTimeout(
+          () => reject(new Error('Deepgram transcription timed out after 30s')),
+          30000,
+        );
       });
 
-      const { result, error } = await Promise.race([transcriptionPromise, timeoutPromise]);
+      const { result, error } = await Promise.race([
+        transcriptionPromise,
+        timeoutPromise,
+      ]);
 
       if (error) {
         throw new InternalServerErrorException(error.message);

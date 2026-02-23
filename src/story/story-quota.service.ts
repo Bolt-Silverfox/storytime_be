@@ -248,5 +248,4 @@ export class StoryQuotaService {
   private async isPremiumUser(userId: string): Promise<boolean> {
     return this.subscriptionService.isPremiumUser(userId);
   }
-
 }

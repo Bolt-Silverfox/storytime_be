@@ -1,9 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationPreferenceService } from './notification-preference.service';
-import {
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
   INotificationPreferenceRepository,
   NOTIFICATION_PREFERENCE_REPOSITORY,
@@ -78,9 +75,7 @@ describe('NotificationPreferenceService', () => {
   describe('create', () => {
     it('should create a notification preference for a user', async () => {
       repository.findUser.mockResolvedValue(mockUser as any);
-      repository.createNotificationPreference.mockResolvedValue(
-        mockPreference,
-      );
+      repository.createNotificationPreference.mockResolvedValue(mockPreference);
 
       const result = await service.create({
         type: 'push' as NotificationType,
@@ -92,9 +87,7 @@ describe('NotificationPreferenceService', () => {
       expect(result.id).toBe('pref-1');
       expect(result.enabled).toBe(true);
       expect(repository.findUser).toHaveBeenCalledWith('user-1');
-      expect(
-        repository.createNotificationPreference,
-      ).toHaveBeenCalledWith({
+      expect(repository.createNotificationPreference).toHaveBeenCalledWith({
         type: 'push',
         category: 'NEW_STORY',
         enabled: true,
@@ -157,9 +150,10 @@ describe('NotificationPreferenceService', () => {
       const result = await service.update('pref-1', { enabled: false });
 
       expect(result.enabled).toBe(false);
-      expect(
-        repository.updateNotificationPreference,
-      ).toHaveBeenCalledWith('pref-1', { enabled: false });
+      expect(repository.updateNotificationPreference).toHaveBeenCalledWith(
+        'pref-1',
+        { enabled: false },
+      );
     });
   });
 
@@ -233,9 +227,10 @@ describe('NotificationPreferenceService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].userId).toBe('user-1');
-      expect(
-        repository.findManyNotificationPreferences,
-      ).toHaveBeenCalledWith({ userId: 'user-1', isDeleted: false });
+      expect(repository.findManyNotificationPreferences).toHaveBeenCalledWith({
+        userId: 'user-1',
+        isDeleted: false,
+      });
     });
 
     it('should throw NotFoundException when user does not exist', async () => {
@@ -257,9 +252,10 @@ describe('NotificationPreferenceService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].kidId).toBe('kid-1');
-      expect(
-        repository.findManyNotificationPreferences,
-      ).toHaveBeenCalledWith({ kidId: 'kid-1', isDeleted: false });
+      expect(repository.findManyNotificationPreferences).toHaveBeenCalledWith({
+        kidId: 'kid-1',
+        isDeleted: false,
+      });
     });
 
     it('should throw NotFoundException when kid does not exist', async () => {
@@ -280,9 +276,10 @@ describe('NotificationPreferenceService', () => {
       const result = await service.getById('pref-1');
 
       expect(result.id).toBe('pref-1');
-      expect(
-        repository.findUniqueNotificationPreference,
-      ).toHaveBeenCalledWith('pref-1', false);
+      expect(repository.findUniqueNotificationPreference).toHaveBeenCalledWith(
+        'pref-1',
+        false,
+      );
     });
 
     it('should throw NotFoundException when preference does not exist', async () => {
@@ -386,9 +383,7 @@ describe('NotificationPreferenceService', () => {
 
       await service.seedDefaultPreferences('user-1');
 
-      expect(
-        repository.createManyNotificationPreferences,
-      ).toHaveBeenCalledWith(
+      expect(repository.createManyNotificationPreferences).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({
             userId: 'user-1',
@@ -416,15 +411,14 @@ describe('NotificationPreferenceService', () => {
 
       await service.delete('pref-1');
 
-      expect(
-        repository.updateNotificationPreference,
-      ).toHaveBeenCalledWith('pref-1', {
-        isDeleted: true,
-        deletedAt: expect.any(Date),
-      });
-      expect(
-        repository.deleteNotificationPreference,
-      ).not.toHaveBeenCalled();
+      expect(repository.updateNotificationPreference).toHaveBeenCalledWith(
+        'pref-1',
+        {
+          isDeleted: true,
+          deletedAt: expect.any(Date),
+        },
+      );
+      expect(repository.deleteNotificationPreference).not.toHaveBeenCalled();
     });
 
     it('should permanently delete when permanent flag is true', async () => {
@@ -435,12 +429,10 @@ describe('NotificationPreferenceService', () => {
 
       await service.delete('pref-1', true);
 
-      expect(
-        repository.deleteNotificationPreference,
-      ).toHaveBeenCalledWith('pref-1');
-      expect(
-        repository.updateNotificationPreference,
-      ).not.toHaveBeenCalled();
+      expect(repository.deleteNotificationPreference).toHaveBeenCalledWith(
+        'pref-1',
+      );
+      expect(repository.updateNotificationPreference).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when preference does not exist', async () => {
@@ -473,12 +465,13 @@ describe('NotificationPreferenceService', () => {
       const result = await service.undoDelete('pref-1');
 
       expect(result.id).toBe('pref-1');
-      expect(
-        repository.updateNotificationPreference,
-      ).toHaveBeenCalledWith('pref-1', {
-        isDeleted: false,
-        deletedAt: null,
-      });
+      expect(repository.updateNotificationPreference).toHaveBeenCalledWith(
+        'pref-1',
+        {
+          isDeleted: false,
+          deletedAt: null,
+        },
+      );
     });
 
     it('should throw NotFoundException when preference does not exist', async () => {

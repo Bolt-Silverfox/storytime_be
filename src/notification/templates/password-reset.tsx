@@ -14,10 +14,7 @@ interface PasswordResetProps {
   email: string;
 }
 
-export const PasswordResetTemplate = ({
-  resetToken,
-  email,
-}: PasswordResetProps) => {
+export const PasswordResetTemplate = ({ resetToken }: PasswordResetProps) => {
   return (
     <Tailwind>
       <Html>

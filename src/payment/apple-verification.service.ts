@@ -238,8 +238,7 @@ export class AppleVerificationService {
                 };
 
                 // Get the most recent transaction info
-                const lastTx =
-                  response.data?.[0]?.lastTransactions?.[0];
+                const lastTx = response.data?.[0]?.lastTransactions?.[0];
                 if (!lastTx) {
                   resolve({ autoRenewActive: false, expirationTime: null });
                   return;
@@ -272,7 +271,11 @@ export class AppleVerificationService {
 
                 resolve({ autoRenewActive, expirationTime });
               } catch {
-                reject(new Error('Failed to parse Apple subscription status response'));
+                reject(
+                  new Error(
+                    'Failed to parse Apple subscription status response',
+                  ),
+                );
               }
             } else {
               this.logger.error(

@@ -1,7 +1,6 @@
 import {
   Injectable,
   Logger,
-  ConflictException,
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -211,10 +210,7 @@ export class DeviceTokenService {
 
     const result = await this.prisma.deviceToken.deleteMany({
       where: {
-        OR: [
-          { isActive: false },
-          { lastUsed: { lt: ninetyDaysAgo } },
-        ],
+        OR: [{ isActive: false }, { lastUsed: { lt: ninetyDaysAgo } }],
       },
     });
 

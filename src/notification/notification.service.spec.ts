@@ -299,5 +299,4 @@ describe('NotificationService', () => {
       expect(result.every((r) => r.success)).toBe(true);
     });
   });
-
 });
