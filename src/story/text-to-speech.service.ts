@@ -106,7 +106,7 @@ export class TextToSpeechService {
     text: string,
     voicetype?: VoiceType | string, // Allow string (UUID)
     userId?: string, // Added userId for quota tracking
-    options?: { skipQuotaCheck?: boolean },
+    options?: { skipQuotaCheck?: boolean; isPremium?: boolean },
   ): Promise<string> {
     const type = voicetype ?? DEFAULT_VOICE;
 
@@ -167,7 +167,9 @@ export class TextToSpeechService {
 
     if (useElevenLabs && userId) {
       // Premium gate: free users skip ElevenLabs entirely
-      const isPremium = await this.subscriptionService.isPremiumUser(userId);
+      const isPremium =
+        options?.isPremium ??
+        (await this.subscriptionService.isPremiumUser(userId));
       if (!isPremium) {
         this.logger.log(`Free user ${userId}. Skipping ElevenLabs.`);
         useElevenLabs = false;
@@ -313,6 +315,7 @@ export class TextToSpeechService {
     voiceType?: VoiceType | string,
     userId?: string,
   ): Promise<Array<{ index: number; text: string; audioUrl: string | null }>> {
+    const type = voiceType ?? DEFAULT_VOICE;
     const paragraphs = splitByWordCountPreservingSentences(
       fullText,
       WORDS_PER_CHUNK,
@@ -325,45 +328,76 @@ export class TextToSpeechService {
       paragraphs.length = MAX_BATCH_PARAGRAPHS;
     }
 
-    // Reserve ElevenLabs quota upfront so concurrent calls don't race
+    // Pre-check cache so we only reserve quota for uncached paragraphs
+    const cacheResults = await Promise.all(
+      paragraphs.map(async (text, index) => {
+        const cachedUrl = await this.getCachedParagraphAudio(
+          storyId,
+          text,
+          type,
+        );
+        return { index, text, cachedUrl };
+      }),
+    );
+
+    const cached: Array<{ index: number; text: string; audioUrl: string }> = [];
+    const uncached: Array<{ index: number; text: string }> = [];
+    for (const r of cacheResults) {
+      if (r.cachedUrl) {
+        cached.push({ index: r.index, text: r.text, audioUrl: r.cachedUrl });
+      } else {
+        uncached.push({ index: r.index, text: r.text });
+      }
+    }
+
+    this.logger.log(
+      `Batch story ${storyId}: ${cached.length} cached, ${uncached.length} to generate`,
+    );
+
+    if (uncached.length === 0) {
+      return cached.sort((a, b) => a.index - b.index);
+    }
+
+    // Resolve premium status once for the entire batch
     let reservedCredits = 0;
+    let isPremium = false;
     if (userId) {
-      const isPremium = await this.voiceQuota.isPremiumUser(userId);
+      isPremium = await this.subscriptionService.isPremiumUser(userId);
       if (isPremium) {
         reservedCredits = await this.voiceQuota.checkAndReserveUsage(
           userId,
-          paragraphs.length,
+          uncached.length,
         );
         this.logger.log(
-          `Reserved ${reservedCredits}/${paragraphs.length} ElevenLabs credits for batch story ${storyId}`,
+          `Reserved ${reservedCredits}/${uncached.length} ElevenLabs credits for batch story ${storyId}`,
         );
       }
     }
 
-    const results: Array<{
+    // Generate uncached paragraphs in batches of MAX_CONCURRENT
+    const generated: Array<{
       index: number;
       text: string;
       audioUrl: string | null;
     }> = [];
     let failedCount = 0;
 
-    // Process in batches of MAX_CONCURRENT
-    for (let i = 0; i < paragraphs.length; i += MAX_CONCURRENT) {
-      const batch = paragraphs.slice(i, i + MAX_CONCURRENT);
+    for (let i = 0; i < uncached.length; i += MAX_CONCURRENT) {
+      const batch = uncached.slice(i, i + MAX_CONCURRENT);
       const batchResults = await Promise.all(
-        batch.map(async (text, batchIndex) => {
-          const index = i + batchIndex;
+        batch.map(async ({ index, text }) => {
           try {
             const audioUrl = await this.textToSpeechCloudUrl(
               storyId,
               text,
               voiceType,
               userId,
-              { skipQuotaCheck: true },
+              { skipQuotaCheck: true, isPremium },
             );
             return { index, text, audioUrl };
           } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
+            const msg =
+              error instanceof Error ? error.message : String(error);
             this.logger.warn(
               `Batch TTS failed for paragraph ${index} of story ${storyId}: ${msg}`,
             );
@@ -373,15 +407,15 @@ export class TextToSpeechService {
         }),
       );
 
-      results.push(...batchResults);
+      generated.push(...batchResults);
     }
 
-    // Release reserved credits for paragraphs that failed
+    // Release reserved credits for paragraphs that failed generation
     if (failedCount > 0 && reservedCredits > 0 && userId) {
       const toRelease = Math.min(failedCount, reservedCredits);
       await this.voiceQuota.releaseReservedUsage(userId, toRelease);
     }
 
-    return results.sort((a, b) => a.index - b.index);
+    return [...cached, ...generated].sort((a, b) => a.index - b.index);
   }
 }
