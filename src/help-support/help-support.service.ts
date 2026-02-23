@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { ConfigService } from '@nestjs/config';
 import { render } from '@react-email/render';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -81,7 +82,7 @@ export class HelpSupportService {
     } catch (error) {
       this.logger.error(
         `Failed to process feedback from ${email}`,
-        error instanceof Error ? error.stack : String(error),
+        ErrorHandler.extractStack(error) ?? String(error),
       );
       // Still return success to user - feedback was received even if email failed
       return {

@@ -450,10 +450,7 @@ export class PaymentService {
       return { paymentTx, subscription, existingSub };
     });
 
-    // Invalidate subscription cache after successful update
-    await this.subscriptionService.invalidateCache(userId);
-
-    // Emit payment completed event
+    // Emit payment completed event (cache invalidation handled by SubscriptionCacheListener)
     this.eventEmitter.emit(AppEvents.PAYMENT_COMPLETED, {
       paymentId: result.paymentTx.id,
       userId,

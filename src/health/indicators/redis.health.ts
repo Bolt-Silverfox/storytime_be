@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import {
   HealthIndicator,
   HealthIndicatorResult,
@@ -44,7 +45,7 @@ export class RedisHealthIndicator extends HealthIndicator {
     } catch (error) {
       const duration = Date.now() - startTime;
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+        ErrorHandler.extractMessage(error);
 
       if (client) {
         try {

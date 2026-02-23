@@ -118,9 +118,7 @@ export class SubscriptionService {
       reason: 'user_cancelled',
     };
     this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CANCELLED, cancelledEvent);
-
-    // Invalidate cache after subscription cancellation
-    await this.invalidateCache(userId);
+    // Cache invalidation handled by SubscriptionCacheListener
 
     this.logger.log(
       `Subscription cancelled for user ${userId.substring(0, 8)}`,

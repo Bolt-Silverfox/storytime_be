@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { UploadService } from '../upload/upload.service';
 import {
   BadRequestException,
@@ -95,7 +96,7 @@ export class TextToSpeechService {
         update: { audioUrl },
       });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = ErrorHandler.extractMessage(error);
       this.logger.warn(
         `Failed to cache paragraph audio for story ${storyId}: ${msg}`,
       );
@@ -209,7 +210,7 @@ export class TextToSpeechService {
         await this.cacheParagraphAudio(storyId, cleanedText, type, audioUrl);
         return audioUrl;
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = ErrorHandler.extractMessage(error);
         this.logger.warn(
           `ElevenLabs generation failed for story ${storyId}: ${msg}. Falling back to StyleTTS2.`,
         );
@@ -243,7 +244,7 @@ export class TextToSpeechService {
       await this.cacheParagraphAudio(storyId, cleanedText, type, audioUrl);
       return audioUrl;
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = ErrorHandler.extractMessage(error);
       this.logger.warn(
         `StyleTTS2 failed for story ${storyId}: ${msg}. Falling back to Edge TTS.`,
       );
@@ -265,7 +266,7 @@ export class TextToSpeechService {
       await this.cacheParagraphAudio(storyId, cleanedText, type, audioUrl);
       return audioUrl;
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = ErrorHandler.extractMessage(error);
       this.logger.error(
         `Edge TTS fallback failed for story ${storyId}: ${msg}`,
       );

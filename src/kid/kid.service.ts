@@ -73,10 +73,7 @@ export class KidService {
       preferredCategoryIds,
     });
 
-    // Invalidate user's kids cache after creation
-    await this.cacheManager.del(CACHE_KEYS.USER_KIDS(userId));
-
-    // Emit kid created event
+    // Emit kid created event (cache invalidation handled by KidCacheListener)
     this.eventEmitter.emit(AppEvents.KID_CREATED, {
       kidId: kid.id,
       parentId: userId,
@@ -198,10 +195,7 @@ export class KidService {
       result = await this.kidRepository.softDelete(kidId);
     }
 
-    // Invalidate caches after deletion
-    await this.invalidateKidCaches(kidId, userId);
-
-    // Emit kid deleted event
+    // Emit kid deleted event (cache invalidation handled by KidCacheListener)
     this.eventEmitter.emit(AppEvents.KID_DELETED, {
       kidId: kid.id,
       parentId: userId,

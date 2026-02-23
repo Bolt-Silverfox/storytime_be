@@ -43,6 +43,9 @@ export const AppEvents = {
   // Notification events
   NOTIFICATION_SENT: 'notification.sent',
 
+  // AI Usage events
+  AI_USAGE_TRACKED: 'ai.usage_tracked',
+
   // Quota events
   QUOTA_EXHAUSTED: 'quota.exhausted',
   QUOTA_WARNING: 'quota.warning',
@@ -213,6 +216,15 @@ export interface NotificationSentEvent {
   sentAt: Date;
 }
 
+// AI Usage Events
+export interface AiUsageTrackedEvent {
+  userId: string;
+  provider: string;
+  type: string;
+  credits: number;
+  trackedAt: Date;
+}
+
 // Quota Events
 export const QuotaTypes = {
   STORY: 'story',
@@ -267,6 +279,7 @@ export interface AppEventPayloads {
   [AppEvents.BADGE_EARNED]: BadgeEarnedEvent;
   [AppEvents.STREAK_UPDATED]: StreakUpdatedEvent;
   [AppEvents.NOTIFICATION_SENT]: NotificationSentEvent;
+  [AppEvents.AI_USAGE_TRACKED]: AiUsageTrackedEvent;
   [AppEvents.QUOTA_EXHAUSTED]: QuotaExhaustedEvent;
   [AppEvents.QUOTA_WARNING]: QuotaWarningEvent;
 }

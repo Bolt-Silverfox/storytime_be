@@ -1,5 +1,6 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
+import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { Job } from 'bullmq';
 import { StoryGenerationService } from '../story-generation.service';
 import { FcmService } from '@/notification/services/fcm.service';
@@ -86,13 +87,12 @@ export class StoryProcessor extends WorkerHost {
         processingTimeMs,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = ErrorHandler.extractMessage(error);
       const processingTimeMs = Date.now() - startTime;
 
       this.logger.error(
         `Story job ${jobId} failed (attempt ${attemptsMade}): ${errorMessage}`,
-        error instanceof Error ? error.stack : undefined,
+        ErrorHandler.extractStack(error),
       );
 
       // Check if this is a non-retryable error
@@ -289,7 +289,7 @@ export class StoryProcessor extends WorkerHost {
       );
     } catch (error) {
       this.logger.error(
-        `Failed to send push notification for job ${jobData.jobId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to send push notification for job ${jobData.jobId}: ${ErrorHandler.extractMessage(error)}`,
       );
       // Push notification failures are logged but don't fail the job
       // User can still poll for status or check their stories list
@@ -353,7 +353,7 @@ export class StoryProcessor extends WorkerHost {
       this.logger.log(`Failure notification sent for job ${jobData.jobId}`);
     } catch (error) {
       this.logger.error(
-        `Failed to send failure notification for job ${jobData.jobId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to send failure notification for job ${jobData.jobId}: ${ErrorHandler.extractMessage(error)}`,
       );
     }
   }
