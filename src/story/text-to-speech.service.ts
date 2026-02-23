@@ -18,6 +18,27 @@ import { STORY_REPOSITORY, IStoryRepository } from './repositories';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { VOICE_CONFIG_SETTINGS } from '../voice/voice.config';
 
+/**
+ * Normalize text for TTS providers by stripping literal quote characters
+ * and collapsing whitespace. Without this, engines may read "quote" aloud.
+ * Preserves contractions (don't, it's) and prosody-affecting punctuation.
+ */
+function preprocessTextForTTS(text: string): string {
+  return (
+    text
+      // Remove double-quote variants (Unicode + ASCII)
+      .replace(/[\u201C\u201D\u201E\u201F"]/g, '')
+      // Remove single-quote variants at word boundaries (preserves contractions)
+      .replace(
+        /(?<!\w)[\u2018\u2019\u201A\u201B']|[\u2018\u2019\u201A\u201B'](?!\w)/g,
+        '',
+      )
+      // Collapse whitespace
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
 @Injectable()
 export class TextToSpeechService {
   private readonly logger = new Logger(TextToSpeechService.name);
@@ -37,6 +58,7 @@ export class TextToSpeechService {
     voicetype?: VoiceType | string, // Allow string (UUID)
     userId?: string, // Added userId for quota tracking
   ): Promise<string> {
+    const cleanedText = preprocessTextForTTS(text);
     const type = voicetype ?? DEFAULT_VOICE;
 
     // Resolve ElevenLabs ID and per-voice settings
@@ -110,7 +132,7 @@ export class TextToSpeechService {
           `Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${elevenLabsId}) using model ${labsModel}`,
         );
         const audioBuffer = await this.elevenLabsProvider.generateAudio(
-          text,
+          cleanedText,
           elevenLabsId,
           labsModel,
           settings,
@@ -154,7 +176,7 @@ export class TextToSpeechService {
       };
 
       const audioBuffer = await this.deepgramProvider.generateAudio(
-        text,
+        cleanedText,
         undefined,
         model,
         deepgramSettings,

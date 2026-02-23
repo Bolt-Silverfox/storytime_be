@@ -105,14 +105,54 @@ export class StoryService {
     if (filter.minAge) where.minAge = { gte: filter.minAge };
     if (filter.maxAge) where.maxAge = { lte: filter.maxAge };
 
-    // Note: complex sorting like isMostLiked requires specialized queries or services
+    // Seasonal filter: match stories linked to currently active seasons
+    if (filter.isSeasonal) {
+      const allSeasons = await this.metadataService.getSeasons();
+      const today = new Date();
+      const currentMonth = today.getMonth() + 1;
+      const currentDay = today.getDate();
+      const currentDateStr = `${currentMonth
+        .toString()
+        .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
+
+      const activeSeasonIds = allSeasons
+        .filter((s: any) => {
+          if (!s.isActive || !s.startDate || !s.endDate) return false;
+          if (s.startDate > s.endDate) {
+            // Wraps across year boundary (e.g. Dec-Jan)
+            return (
+              currentDateStr >= s.startDate || currentDateStr <= s.endDate
+            );
+          }
+          return (
+            currentDateStr >= s.startDate && currentDateStr <= s.endDate
+          );
+        })
+        .map((s: any) => s.id);
+
+      if (activeSeasonIds.length > 0) {
+        where.seasons = { some: { id: { in: activeSeasonIds } } };
+      } else {
+        // No active seasons; return empty result by using impossible filter
+        where.seasons = { some: { id: 'non-existent-id' } };
+      }
+    }
+
+    // Most-liked: order by parent favorites count descending
+    const orderBy = filter.isMostLiked
+      ? [
+          { parentFavorites: { _count: 'desc' as const } },
+          { createdAt: 'desc' as const },
+          { id: 'asc' as const },
+        ]
+      : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
     const [stories, total] = await Promise.all([
       this.storyRepository.findStories({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: orderBy as any,
         include: {
           images: true,
           categories: true,
