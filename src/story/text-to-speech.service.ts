@@ -322,7 +322,7 @@ export class TextToSpeechService {
     // Process in batches of MAX_CONCURRENT
     for (let i = 0; i < paragraphs.length; i += MAX_CONCURRENT) {
       const batch = paragraphs.slice(i, i + MAX_CONCURRENT);
-      const batchResults = await Promise.allSettled(
+      const batchResults = await Promise.all(
         batch.map(async (text, batchIndex) => {
           const index = i + batchIndex;
           try {
@@ -344,11 +344,7 @@ export class TextToSpeechService {
         }),
       );
 
-      for (const result of batchResults) {
-        if (result.status === 'fulfilled') {
-          results.push(result.value);
-        }
-      }
+      results.push(...batchResults);
     }
 
     return results.sort((a, b) => a.index - b.index);
