@@ -4,7 +4,7 @@ import { Logger } from '@nestjs/common';
 export const envSchema = z
   .object({
     NODE_ENV: z
-      .enum(['development', 'production', 'staging'])
+      .enum(['development', 'production', 'staging', 'test'])
       .default('development'),
     PORT: z.coerce.number().default(3000),
     CORS_ORIGIN: z.string().url().default('http://localhost:3000'),

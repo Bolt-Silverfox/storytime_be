@@ -56,8 +56,7 @@ Current coverage: **42 test suites, 490 passing tests** covering all services.
 
 Production code `any` types eliminated. Only test mocks remain.
 
-**Pending:**
-- [ ] Enable `noImplicitAny` in `tsconfig.json` (after test mock fixes)
+Already enabled: `noImplicitAny: true` in `tsconfig.json`. Zero errors with current codebase.
 
 ### 2.2 Event-Driven Architecture (P1) ✅ COMPLETE
 
@@ -305,8 +304,7 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 
 ### Pending 📋
 - [ ] E2E tests for payment/subscription flows (P1)
-- [ ] Enable `noImplicitAny` in tsconfig (P2)
-- [ ] Coverage badges in README (P3)
+- [ ] Coverage badges in README (P3 — requires Codecov CI integration)
 
 ---
 

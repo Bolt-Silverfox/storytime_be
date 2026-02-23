@@ -24,6 +24,8 @@ import {
   VOICE_QUOTA_REPOSITORY,
   PrismaVoiceQuotaRepository,
 } from './repositories';
+import { STORY_REPOSITORY } from '../story/repositories/story.repository.interface';
+import { PrismaStoryRepository } from '../story/repositories/prisma-story.repository';
 import { VOICE_QUEUE_NAME, VoiceQueueService, VoiceProcessor } from './queue';
 import { HttpLatencyInterceptor } from '@/shared/interceptors/http-latency.interceptor';
 
@@ -61,6 +63,10 @@ import { HttpLatencyInterceptor } from '@/shared/interceptors/http-latency.inter
     {
       provide: VOICE_QUOTA_REPOSITORY,
       useClass: PrismaVoiceQuotaRepository,
+    },
+    {
+      provide: STORY_REPOSITORY,
+      useClass: PrismaStoryRepository,
     },
   ],
   exports: [

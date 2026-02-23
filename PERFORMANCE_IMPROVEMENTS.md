@@ -109,14 +109,17 @@ GeminiService has retry logic with exponential backoff (3 attempts, 1s-8s delay)
 **Completed:**
 - ✅ 30s request timeouts on ElevenLabs (per-request `timeoutInSeconds`), Deepgram (`Promise.race` timeout), ElevenLabs HTTP service (Axios `timeout`)
 
-**Pending:**
-- [ ] Add fallback responses for non-critical failures
+**Fallback handling already in place:**
+- FCM: returns `{ successCount: 0 }` when unconfigured; processor try-catches log-and-continue
+- NotificationService: per-channel try-catch, returns `{ success: false }` on failure
+- Cloudinary health: returns `status: 'degraded'` on rate-limit/timeout
+- AnalyticsEventListener: currently stubs (log-only) — add try-catch when real analytics SDK is integrated
 
-### 4.2 Cloudinary Uploads (P2)
+### 4.2 Cloudinary Uploads (P2) ✅ LARGELY COMPLETE
 
-**Pending:**
-- [ ] Move large uploads to BullMQ background jobs
-- [ ] Configure Cloudinary auto-optimization
+- ✅ Audio uploads already run inside BullMQ processors (`VoiceProcessor` → `TextToSpeechService` → `uploadAudioBuffer`)
+- ✅ Auto-optimization configured: `quality: 'auto'`, `format: 'webp'`, `500x500 crop: limit` on image uploads
+- Avatar image uploads (~50KB webp) remain inline — fast enough to not warrant queue overhead
 
 ### 4.3 Email Queue ✅ GOOD
 
@@ -143,8 +146,7 @@ Configured via `DATABASE_URL` connection string parameters in `.env`.
 - ✅ Admin user CSV export uses chunked 1000-record pagination instead of single 10k fetch
 - Analytics export deals with small aggregated data — no streaming needed
 
-**Pending:**
-- [ ] Add memory usage monitoring for large requests
+Memory monitoring covered by Terminus health checks (`checkHeap(500MB)`, `checkRSS(1GB)`) at `/health/system` and `/health/full`. Per-request memory tracking not recommended due to `process.memoryUsage()` overhead on every request.
 
 ---
 
@@ -260,19 +262,13 @@ Batch operations replacing sequential loops:
 - Response DTOs: StoryListItemDto for lightweight list views
 - Admin export chunking: 1000-record batches replacing single 10k fetch
 - Alerting thresholds: WARNING/CRITICAL levels configured in `src/shared/config/alerting.config.ts`
+- Cloudinary optimization: auto-quality, webp format, size limits on image uploads
+- Cloudinary audio uploads: already in BullMQ queue processors (VoiceProcessor)
+- External API fallbacks: FCM, Notification, Cloudinary health all have graceful degradation
 
 ### Pending 📋
 
-**External Services**
-- [ ] Move large Cloudinary uploads to background jobs (P3)
-- [ ] Configure Cloudinary auto-optimization (P3)
-- [ ] Add fallback responses for non-critical external API failures (P3)
-
-**Monitoring**
-- [ ] Custom Grafana dashboards (P3)
-
-**Application**
-- [ ] Add memory usage monitoring for large requests (P3)
+- [ ] Custom Grafana dashboards (P3 — requires external infrastructure setup)
 
 ---
 
