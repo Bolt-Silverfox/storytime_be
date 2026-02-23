@@ -10,7 +10,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { SubscriptionService } from '../../subscription/subscription.service';
 
-import { THROTTLE_LIMITS } from '../constants/throttle.constants';
+import { THROTTLE_LIMITS } from '../config/throttle.config';
 
 /**
  * Custom throttle guard that adjusts rate limits based on user subscription status

@@ -1,31 +1,106 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
-import { TextToSpeechService } from './text-to-speech.service';
+import { StoryGenerationService } from './story-generation.service';
+import { StoryProgressService } from './story-progress.service';
+import { StoryRecommendationService } from './story-recommendation.service';
+import { DailyChallengeService } from './daily-challenge.service';
+import { StoryQuotaService } from './story-quota.service';
+import { StoryQueueService } from './queue';
 
-// Mock the Service so we test the Controller in isolation
+// Mock the Services so we test the Controller in isolation
 const mockStoryService = {
-  generateStoryForKid: jest.fn(),
+  getStories: jest.fn(),
+  getCategories: jest.fn(),
+  getThemes: jest.fn(),
+  getSeasons: jest.fn(),
+  createStory: jest.fn(),
+  updateStory: jest.fn(),
+  deleteStory: jest.fn(),
+  undoDeleteStory: jest.fn(),
+  addImage: jest.fn(),
+  addBranch: jest.fn(),
+  addFavorite: jest.fn(),
+  removeFavorite: jest.fn(),
+  getFavorites: jest.fn(),
+  getStoryById: jest.fn(),
   getCreatedStories: jest.fn(),
   getDownloads: jest.fn(),
   addDownload: jest.fn(),
   removeDownload: jest.fn(),
   removeFromLibrary: jest.fn(),
-  getTopPicksFromParents: jest.fn(),
+  startStoryPath: jest.fn(),
+  updateStoryPath: jest.fn(),
+  getStoryPathsForKid: jest.fn(),
+  getStoryPathById: jest.fn(),
 };
 
-const mockTextToSpeechService = {}; // Mock dependency
+const mockStoryGenerationService = {
+  generateStoryForKid: jest.fn(),
+  generateStoryWithAI: jest.fn(),
+};
+
+const mockStoryProgressService = {
+  setProgress: jest.fn(),
+  getProgress: jest.fn(),
+  getContinueReading: jest.fn(),
+  getCompletedStories: jest.fn(),
+};
+
+const mockStoryRecommendationService = {
+  getTopPicksFromParents: jest.fn(),
+  getTopPicksFromUs: jest.fn(),
+  recommendStoryToKid: jest.fn(),
+  getKidRecommendations: jest.fn(),
+  deleteRecommendation: jest.fn(),
+  getRecommendationStats: jest.fn(),
+  restrictStory: jest.fn(),
+  unrestrictStory: jest.fn(),
+  getRestrictedStories: jest.fn(),
+  getHomePageStories: jest.fn(),
+};
+
+const mockDailyChallengeService = {
+  setDailyChallenge: jest.fn(),
+  getDailyChallenge: jest.fn(),
+  assignDailyChallenge: jest.fn(),
+  completeDailyChallenge: jest.fn(),
+  getAssignmentsForKid: jest.fn(),
+  getAssignmentById: jest.fn(),
+  assignDailyChallengeToAllKids: jest.fn(),
+  getTodaysDailyChallengeAssignment: jest.fn(),
+  getWeeklyDailyChallengeAssignments: jest.fn(),
+};
+
+const mockStoryQuotaService = {
+  getQuotaStatus: jest.fn(),
+  recordNewStoryAccess: jest.fn(),
+};
+
+const mockStoryQueueService = {
+  queueStoryGeneration: jest.fn(),
+  queueStoryForKid: jest.fn(),
+  getJobStatus: jest.fn(),
+  getJobResult: jest.fn(),
+  cancelJob: jest.fn(),
+  getUserPendingJobs: jest.fn(),
+  getQueueStats: jest.fn(),
+};
 
 describe('StoryController', () => {
   let controller: StoryController;
-  let service: typeof mockStoryService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [StoryController],
       providers: [
         { provide: StoryService, useValue: mockStoryService },
-        { provide: TextToSpeechService, useValue: mockTextToSpeechService },
+        { provide: StoryGenerationService, useValue: mockStoryGenerationService },
+        { provide: StoryProgressService, useValue: mockStoryProgressService },
+        { provide: StoryRecommendationService, useValue: mockStoryRecommendationService },
+        { provide: DailyChallengeService, useValue: mockDailyChallengeService },
+        { provide: StoryQuotaService, useValue: mockStoryQuotaService },
+        { provide: StoryQueueService, useValue: mockStoryQueueService },
         {
           provide: 'CACHE_MANAGER',
           useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() },
@@ -33,12 +108,15 @@ describe('StoryController', () => {
       ],
     })
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      .overrideGuard(require('../auth/auth.guard').AuthSessionGuard) // Bypass Auth Guard
+      .overrideGuard(require('../shared/guards/auth.guard').AuthSessionGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(require('../shared/guards/subscription-throttle.guard').SubscriptionThrottleGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(require('../shared/guards/story-access.guard').StoryAccessGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
     controller = module.get<StoryController>(StoryController);
-    service = module.get(StoryService);
     jest.clearAllMocks();
   });
 
@@ -52,7 +130,7 @@ describe('StoryController', () => {
       await controller.generateStoryForKid(kidId, theme, category);
 
       // Verify the controller converts single strings to arrays for the service
-      expect(service.generateStoryForKid).toHaveBeenCalledWith(
+      expect(mockStoryGenerationService.generateStoryForKid).toHaveBeenCalledWith(
         kidId,
         ['Space'],
         ['Adventure'],
@@ -63,7 +141,7 @@ describe('StoryController', () => {
       const kidId = 'kid-123';
       await controller.generateStoryForKid(kidId);
 
-      expect(service.generateStoryForKid).toHaveBeenCalledWith(
+      expect(mockStoryGenerationService.generateStoryForKid).toHaveBeenCalledWith(
         kidId,
         undefined,
         undefined,
@@ -78,22 +156,22 @@ describe('StoryController', () => {
 
     it('getCreated: should call getCreatedStories service method', async () => {
       await controller.getCreated(kidId);
-      expect(service.getCreatedStories).toHaveBeenCalledWith(kidId);
+      expect(mockStoryService.getCreatedStories).toHaveBeenCalledWith(kidId);
     });
 
     it('getDownloads: should call getDownloads service method', async () => {
       await controller.getDownloads(kidId);
-      expect(service.getDownloads).toHaveBeenCalledWith(kidId);
+      expect(mockStoryService.getDownloads).toHaveBeenCalledWith(kidId);
     });
 
     it('addDownload: should call addDownload service method', async () => {
       await controller.addDownload(kidId, storyId);
-      expect(service.addDownload).toHaveBeenCalledWith(kidId, storyId);
+      expect(mockStoryService.addDownload).toHaveBeenCalledWith(kidId, storyId);
     });
 
     it('removeFromLibrary: should call removeFromLibrary service method', async () => {
       await controller.removeFromLibrary(kidId, storyId);
-      expect(service.removeFromLibrary).toHaveBeenCalledWith(kidId, storyId);
+      expect(mockStoryService.removeFromLibrary).toHaveBeenCalledWith(kidId, storyId);
     });
   });
 
@@ -101,24 +179,24 @@ describe('StoryController', () => {
   describe('getTopPicksFromParents', () => {
     it('should call service with capped limit of 50 when exceeding max', async () => {
       await controller.getTopPicksFromParents(100);
-      expect(service.getTopPicksFromParents).toHaveBeenCalledWith(50);
+      expect(mockStoryRecommendationService.getTopPicksFromParents).toHaveBeenCalledWith(50);
     });
 
     it('should call service with provided limit when within bounds', async () => {
       await controller.getTopPicksFromParents(25);
-      expect(service.getTopPicksFromParents).toHaveBeenCalledWith(25);
+      expect(mockStoryRecommendationService.getTopPicksFromParents).toHaveBeenCalledWith(25);
     });
 
     it('should use default limit of 10', async () => {
       await controller.getTopPicksFromParents(10);
-      expect(service.getTopPicksFromParents).toHaveBeenCalledWith(10);
+      expect(mockStoryRecommendationService.getTopPicksFromParents).toHaveBeenCalledWith(10);
     });
 
     it('should return the result from the service', async () => {
       const mockResult = [
         { id: 'story-1', title: 'Top Story', recommendationCount: 5 },
       ];
-      service.getTopPicksFromParents.mockResolvedValue(mockResult);
+      mockStoryRecommendationService.getTopPicksFromParents.mockResolvedValue(mockResult);
 
       const result = await controller.getTopPicksFromParents(10);
 

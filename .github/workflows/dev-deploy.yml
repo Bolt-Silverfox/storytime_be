@@ -204,9 +204,9 @@ jobs:
       - name: Run database migrations
         run: pnpm db:migrate:deploy
 
-      - name: Run tests
+      - name: Run tests with coverage
         continue-on-error: true
-        run: pnpm test
+        run: pnpm test --coverage
 
       - name: Cleanup sensitive files
         if: always()

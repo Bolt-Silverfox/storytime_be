@@ -40,3 +40,27 @@ export class AssignAvatarDto {
   @IsOptional()
   kidId?: string;
 }
+
+export class AssignAvatarToUserDto {
+  @ApiProperty({ example: 'avatar-id' })
+  @IsString()
+  @IsNotEmpty()
+  avatarId: string;
+
+  @ApiProperty({ example: 'user-id' })
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+}
+
+export class AssignAvatarToKidDto {
+  @ApiProperty({ example: 'avatar-id' })
+  @IsString()
+  @IsNotEmpty()
+  avatarId: string;
+
+  @ApiProperty({ example: 'kid-id' })
+  @IsString()
+  @IsNotEmpty()
+  kidId: string;
+}

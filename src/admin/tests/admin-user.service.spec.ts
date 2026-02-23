@@ -1,15 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  NotFoundException,
-  BadRequestException,
-  ConflictException,
-} from '@nestjs/common';
+import { ResourceNotFoundException } from '@/shared/exceptions';
 import { AdminUserService } from '../admin-user.service';
 import {
   ADMIN_USER_REPOSITORY,
   IAdminUserRepository,
 } from '../repositories/admin-user.repository.interface';
-import { Role } from '@prisma/client';
 import { PasswordService } from '../../auth/services/password.service';
 
 describe('AdminUserService', () => {
@@ -36,7 +31,7 @@ describe('AdminUserService', () => {
     profile: { id: 'profile-1', country: 'NG' },
     avatar: { id: 'avatar-1', url: 'https://example.com/avatar.jpg' },
     kids: [{ id: 'kid-1', name: 'Kid 1' }],
-    subscriptions: [],
+    subscription: null,
     _count: {
       kids: 1,
       auth: 10,
@@ -116,7 +111,7 @@ describe('AdminUserService', () => {
       adminUserRepository.findUserById.mockResolvedValue(null);
 
       await expect(service.getUserById('nonexistent')).rejects.toThrow(
-        NotFoundException,
+        ResourceNotFoundException,
       );
     });
   });

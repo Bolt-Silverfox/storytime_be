@@ -44,8 +44,8 @@ jobs:
       - name: Build
         run: pnpm db:generate && pnpm build
 
-    # - name: Run tests
-    #   run: pnpm test
+      - name: Run tests with coverage
+        run: pnpm test --coverage
 
       - name: Cleanup sensitive files
         if: always()

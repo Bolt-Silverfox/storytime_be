@@ -94,11 +94,9 @@ Fully implemented with 18+ events, typed payloads, and 6 event listeners.
 - Event-driven cache invalidation (subscription + kid caches)
 - GDPR cleanup listener for user deletion
 
-### 2.3 Console.log Usage (P3)
+### 2.3 Console.log Usage (P3) ✅ COMPLETE
 
-| File | Issue |
-|------|-------|
-| `src/story-buddy/story-buddy.seeder.ts` | `console.error` → use `Logger.error()` |
+All `console.error` replaced with NestJS `Logger.error()` (`story-buddy.seeder.ts`).
 
 ### 2.4 God Services - Single Responsibility ✅ ALL COMPLETE
 
@@ -152,10 +150,10 @@ All service-level generic `Error` throws replaced with NestJS exceptions:
 
 ## 4. Security Issues
 
-### 4.1 Input Validation in Controllers (P2)
+### 4.1 Input Validation in Controllers (P2) ✅ COMPLETE
 
-- [ ] Move manual `userId` checks in `avatar.controller.ts` to DTO decorators
-- [ ] Use `class-validator` for all input validation
+- Manual `userId` checks in `avatar.controller.ts` replaced with `AssignAvatarToUserDto` / `AssignAvatarToKidDto` using `class-validator` decorators
+- All controller input validation uses DTO + `class-validator`
 
 ### 4.2 Type Casting in Guards (P2) ✅ COMPLETE
 
@@ -175,8 +173,7 @@ Rate limiting implemented on all critical endpoints:
 - Story generation endpoints (`story.controller.ts`)
 - Device endpoints (`device.controller.ts`)
 
-**Pending:**
-- [ ] Create centralized throttle configuration file (optional consolidation)
+Centralized `THROTTLE_LIMITS` config in `src/shared/config/throttle.config.ts` with flat keys for all endpoint categories (AUTH_LOGIN, AUTH_OTP, AI_GENERATION, VOICE_SYNTHESIS, etc.).
 
 ---
 
@@ -229,10 +226,13 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 | Controllers | ~5% | 70% |
 | Utils/Helpers | ~10% | 90% |
 
+**Completed:**
+- ✅ Jest coverage thresholds configured in `jest.config.js` (70% lines/statements, 60% branches/functions)
+- ✅ CI workflows updated to run `pnpm test --coverage`
+
 **Pending:**
-- [ ] Configure Jest coverage thresholds in CI
-- [ ] Add coverage badges to README
-- [ ] Create test files for remaining P1 services (story-progress, badge, progress)
+- [ ] Add coverage badges to README (P3)
+- [ ] Create test files for remaining services: BadgeService, ProgressService (P3)
 
 ---
 
@@ -286,7 +286,7 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 ## Progress Summary
 
 ### Completed ✅
-- Unit tests: 31+ test files covering all major services
+- Unit tests: 40 test suites, 441 passing tests covering all major services
 - E2E tests: Authentication flows (41 tests)
 - Type safety: Production `any` types eliminated
 - God service refactoring: 7 → 19 focused services
@@ -295,7 +295,9 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 - Repository pattern: All target services (Reward, Avatar, Kid, Settings, Age)
 - Domain exceptions: Full hierarchy with error codes
 - Rate limiting: Auth, payment, story, device controllers
-- CI/CD: 3 GitHub Actions workflows
+- Centralized throttle config: `src/shared/config/throttle.config.ts`
+- CI/CD: 3 GitHub Actions workflows with coverage reporting
+- Jest coverage thresholds: 70% lines/statements, 60% branches/functions
 - Shared utilities: ErrorHandler, DateFormatUtil, isPremiumUser dedup
 - Event-driven cache invalidation: Subscription + kid caches
 - GDPR cleanup listener for user deletion
@@ -304,11 +306,14 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 - HTTP latency tracking: OpenTelemetry interceptor on all outgoing HTTP calls
 - Response DTOs: StoryListItemDto for lightweight list views
 - Admin export pagination: Chunked 1000-record batches instead of 10k single fetch
+- Input validation: Avatar controller DTOs with class-validator
+- Console.log cleanup: All replaced with NestJS Logger
+- Alerting thresholds config: `src/shared/config/alerting.config.ts`
+- Test spec modernization: All 40 unit test suites updated for refactored services
 
 ### Pending 📋
 - [ ] E2E tests for payment/subscription flows (P1)
 - [ ] Unit tests for remaining services: BadgeService, ProgressService (P3)
-- [ ] Jest coverage thresholds in CI (P2)
 - [ ] Coverage badges in README (P3)
 - [ ] Enable `noImplicitAny` in tsconfig (P2)
 

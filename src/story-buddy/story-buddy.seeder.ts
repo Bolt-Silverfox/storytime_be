@@ -72,9 +72,10 @@ export async function seedStoryBuddies() {
 
 // Run seeder if executed directly
 if (require.main === module) {
+  const bootstrapLogger = new Logger('StoryBuddySeeder');
   seedStoryBuddies()
     .catch((error) => {
-      console.error('Error seeding story buddies:', error);
+      bootstrapLogger.error('Error seeding story buddies:', error);
       process.exit(1);
     })
     .finally(async () => {

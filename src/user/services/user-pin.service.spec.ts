@@ -5,7 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { UserPinService } from './user-pin.service';
-import { PrismaService } from '@/prisma/prisma.service';
+import { USER_REPOSITORY } from '../repositories';
 import { NotificationService } from '@/notification/notification.service';
 import * as pinUtil from '../utils/pin.util';
 
@@ -17,17 +17,13 @@ jest.mock('../utils/pin.util', () => ({
 
 describe('UserPinService', () => {
   let service: UserPinService;
-  let mockPrisma: {
-    user: {
-      findUnique: jest.Mock;
-      update: jest.Mock;
-    };
-    token: {
-      deleteMany: jest.Mock;
-      create: jest.Mock;
-      findFirst: jest.Mock;
-      delete: jest.Mock;
-    };
+  let mockUserRepository: {
+    findUserById: jest.Mock;
+    updateUserSimple: jest.Mock;
+    deleteTokensByUserAndType: jest.Mock;
+    createToken: jest.Mock;
+    findTokenByHashedToken: jest.Mock;
+    deleteToken: jest.Mock;
   };
   let mockNotificationService: {
     sendNotification: jest.Mock;
@@ -49,17 +45,13 @@ describe('UserPinService', () => {
   };
 
   beforeEach(async () => {
-    mockPrisma = {
-      user: {
-        findUnique: jest.fn(),
-        update: jest.fn(),
-      },
-      token: {
-        deleteMany: jest.fn(),
-        create: jest.fn(),
-        findFirst: jest.fn(),
-        delete: jest.fn(),
-      },
+    mockUserRepository = {
+      findUserById: jest.fn(),
+      updateUserSimple: jest.fn(),
+      deleteTokensByUserAndType: jest.fn(),
+      createToken: jest.fn(),
+      findTokenByHashedToken: jest.fn(),
+      deleteToken: jest.fn(),
     };
 
     mockNotificationService = {
@@ -70,8 +62,8 @@ describe('UserPinService', () => {
       providers: [
         UserPinService,
         {
-          provide: PrismaService,
-          useValue: mockPrisma,
+          provide: USER_REPOSITORY,
+          useValue: mockUserRepository,
         },
         {
           provide: NotificationService,
@@ -86,9 +78,9 @@ describe('UserPinService', () => {
 
   describe('setPin', () => {
     it('should set PIN successfully', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
       (pinUtil.hashPin as jest.Mock).mockResolvedValue('newHashedPin');
-      mockPrisma.user.update.mockResolvedValue({
+      mockUserRepository.updateUserSimple.mockResolvedValue({
         ...mockUser,
         pinHash: 'newHashedPin',
         onboardingStatus: 'pin_setup',
@@ -96,14 +88,12 @@ describe('UserPinService', () => {
 
       const result = await service.setPin('user-123', '123456');
 
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'user-123', isDeleted: false },
-      });
+      expect(mockUserRepository.findUserById).toHaveBeenCalledWith('user-123');
       expect(pinUtil.hashPin).toHaveBeenCalledWith('123456');
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-123', isDeleted: false },
-        data: { pinHash: 'newHashedPin', onboardingStatus: 'pin_setup' },
-      });
+      expect(mockUserRepository.updateUserSimple).toHaveBeenCalledWith(
+        'user-123',
+        { pinHash: 'newHashedPin', onboardingStatus: 'pin_setup' },
+      );
       expect(result).toEqual({
         success: true,
         message: 'PIN set successfully',
@@ -128,7 +118,7 @@ describe('UserPinService', () => {
     });
 
     it('should throw NotFoundException if user not found', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockUserRepository.findUserById.mockResolvedValue(null);
 
       await expect(service.setPin('nonexistent', '123456')).rejects.toThrow(
         NotFoundException,
@@ -136,7 +126,7 @@ describe('UserPinService', () => {
     });
 
     it('should throw BadRequestException if onboarding not at profile_setup stage', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
+      mockUserRepository.findUserById.mockResolvedValue({
         ...mockUser,
         onboardingStatus: 'email_verified',
       });
@@ -152,14 +142,12 @@ describe('UserPinService', () => {
 
   describe('verifyPin', () => {
     it('should verify PIN successfully', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
       (pinUtil.verifyPinHash as jest.Mock).mockResolvedValue(true);
 
       const result = await service.verifyPin('user-123', '123456');
 
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'user-123', isDeleted: false },
-      });
+      expect(mockUserRepository.findUserById).toHaveBeenCalledWith('user-123');
       expect(pinUtil.verifyPinHash).toHaveBeenCalledWith(
         '123456',
         'hashedPin123',
@@ -171,7 +159,7 @@ describe('UserPinService', () => {
     });
 
     it('should throw BadRequestException if no PIN is set', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
+      mockUserRepository.findUserById.mockResolvedValue({
         ...mockUser,
         pinHash: null,
       });
@@ -185,7 +173,7 @@ describe('UserPinService', () => {
     });
 
     it('should throw BadRequestException if user not found', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockUserRepository.findUserById.mockResolvedValue(null);
 
       await expect(service.verifyPin('nonexistent', '123456')).rejects.toThrow(
         BadRequestException,
@@ -193,7 +181,7 @@ describe('UserPinService', () => {
     });
 
     it('should throw BadRequestException if PIN is incorrect', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
       (pinUtil.verifyPinHash as jest.Mock).mockResolvedValue(false);
 
       await expect(service.verifyPin('user-123', '654321')).rejects.toThrow(
@@ -207,28 +195,25 @@ describe('UserPinService', () => {
 
   describe('requestPinResetOtp', () => {
     it('should send PIN reset OTP successfully', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      mockPrisma.token.deleteMany.mockResolvedValue({ count: 1 });
-      mockPrisma.token.create.mockResolvedValue({});
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
+      mockUserRepository.deleteTokensByUserAndType.mockResolvedValue(undefined);
+      mockUserRepository.createToken.mockResolvedValue({});
       mockNotificationService.sendNotification.mockResolvedValue({
         success: true,
       });
 
       const result = await service.requestPinResetOtp('user-123');
 
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'user-123', isDeleted: false },
-      });
-      expect(mockPrisma.token.deleteMany).toHaveBeenCalledWith({
-        where: { userId: 'user-123', type: 'pin_reset' },
-      });
-      expect(mockPrisma.token.create).toHaveBeenCalledWith({
-        data: {
-          userId: 'user-123',
-          token: expect.any(String),
-          expiresAt: expect.any(Date),
-          type: 'pin_reset',
-        },
+      expect(mockUserRepository.findUserById).toHaveBeenCalledWith('user-123');
+      expect(mockUserRepository.deleteTokensByUserAndType).toHaveBeenCalledWith(
+        'user-123',
+        'pin_reset',
+      );
+      expect(mockUserRepository.createToken).toHaveBeenCalledWith({
+        userId: 'user-123',
+        token: expect.any(String),
+        expiresAt: expect.any(Date),
+        type: 'pin_reset',
       });
       expect(mockNotificationService.sendNotification).toHaveBeenCalledWith(
         'PinReset',
@@ -242,7 +227,7 @@ describe('UserPinService', () => {
     });
 
     it('should throw NotFoundException if user not found', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockUserRepository.findUserById.mockResolvedValue(null);
 
       await expect(service.requestPinResetOtp('nonexistent')).rejects.toThrow(
         NotFoundException,
@@ -250,9 +235,9 @@ describe('UserPinService', () => {
     });
 
     it('should throw ServiceUnavailableException if email sending fails', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      mockPrisma.token.deleteMany.mockResolvedValue({ count: 0 });
-      mockPrisma.token.create.mockResolvedValue({});
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
+      mockUserRepository.deleteTokensByUserAndType.mockResolvedValue(undefined);
+      mockUserRepository.createToken.mockResolvedValue({});
       mockNotificationService.sendNotification.mockResolvedValue({
         success: false,
         error: 'SMTP connection failed',
@@ -277,17 +262,15 @@ describe('UserPinService', () => {
     };
 
     it('should validate OTP successfully', async () => {
-      mockPrisma.token.findFirst.mockResolvedValue(validToken);
+      mockUserRepository.findTokenByHashedToken.mockResolvedValue(validToken);
 
       const result = await service.validatePinResetOtp('user-123', '123456');
 
-      expect(mockPrisma.token.findFirst).toHaveBeenCalledWith({
-        where: {
-          userId: 'user-123',
-          token: expect.any(String), // SHA256 hash of OTP
-          type: 'pin_reset',
-        },
-      });
+      expect(mockUserRepository.findTokenByHashedToken).toHaveBeenCalledWith(
+        'user-123',
+        expect.any(String), // SHA256 hash of OTP
+        'pin_reset',
+      );
       expect(result).toEqual({ success: true, message: 'Valid OTP' });
     });
 
@@ -301,7 +284,7 @@ describe('UserPinService', () => {
     });
 
     it('should throw BadRequestException if OTP is invalid', async () => {
-      mockPrisma.token.findFirst.mockResolvedValue(null);
+      mockUserRepository.findTokenByHashedToken.mockResolvedValue(null);
 
       await expect(
         service.validatePinResetOtp('user-123', '654321'),
@@ -316,8 +299,8 @@ describe('UserPinService', () => {
         ...validToken,
         expiresAt: new Date(Date.now() - 3600000), // 1 hour ago
       };
-      mockPrisma.token.findFirst.mockResolvedValue(expiredToken);
-      mockPrisma.token.delete.mockResolvedValue({});
+      mockUserRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
+      mockUserRepository.deleteToken.mockResolvedValue(undefined);
 
       await expect(
         service.validatePinResetOtp('user-123', '123456'),
@@ -325,7 +308,7 @@ describe('UserPinService', () => {
       await expect(
         service.validatePinResetOtp('user-123', '123456'),
       ).rejects.toThrow('OTP has expired');
-      expect(mockPrisma.token.delete).toHaveBeenCalled();
+      expect(mockUserRepository.deleteToken).toHaveBeenCalled();
     });
   });
 
@@ -339,12 +322,12 @@ describe('UserPinService', () => {
     };
 
     it('should reset PIN successfully', async () => {
-      mockPrisma.token.findFirst.mockResolvedValue(validToken);
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockUserRepository.findTokenByHashedToken.mockResolvedValue(validToken);
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
       (pinUtil.verifyPinHash as jest.Mock).mockResolvedValue(false); // New PIN is different
       (pinUtil.hashPin as jest.Mock).mockResolvedValue('newHashedPin');
-      mockPrisma.user.update.mockResolvedValue({});
-      mockPrisma.token.delete.mockResolvedValue({});
+      mockUserRepository.updateUserSimple.mockResolvedValue({});
+      mockUserRepository.deleteToken.mockResolvedValue(undefined);
 
       const result = await service.resetPinWithOtp(
         'user-123',
@@ -353,13 +336,11 @@ describe('UserPinService', () => {
       );
 
       expect(pinUtil.hashPin).toHaveBeenCalledWith('654321');
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-123' },
-        data: { pinHash: 'newHashedPin' },
-      });
-      expect(mockPrisma.token.delete).toHaveBeenCalledWith({
-        where: { id: 'token-123' },
-      });
+      expect(mockUserRepository.updateUserSimple).toHaveBeenCalledWith(
+        'user-123',
+        { pinHash: 'newHashedPin' },
+      );
+      expect(mockUserRepository.deleteToken).toHaveBeenCalledWith('token-123');
       expect(result).toEqual({
         success: true,
         message: 'PIN has been reset successfully',
@@ -385,7 +366,7 @@ describe('UserPinService', () => {
     });
 
     it('should throw BadRequestException if OTP is invalid', async () => {
-      mockPrisma.token.findFirst.mockResolvedValue(null);
+      mockUserRepository.findTokenByHashedToken.mockResolvedValue(null);
 
       await expect(
         service.resetPinWithOtp('user-123', '654321', '123456'),
@@ -400,8 +381,8 @@ describe('UserPinService', () => {
         ...validToken,
         expiresAt: new Date(Date.now() - 3600000), // 1 hour ago
       };
-      mockPrisma.token.findFirst.mockResolvedValue(expiredToken);
-      mockPrisma.token.delete.mockResolvedValue({});
+      mockUserRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
+      mockUserRepository.deleteToken.mockResolvedValue(undefined);
 
       await expect(
         service.resetPinWithOtp('user-123', '123456', '654321'),
@@ -412,8 +393,8 @@ describe('UserPinService', () => {
     });
 
     it('should throw NotFoundException if user not found after OTP validation', async () => {
-      mockPrisma.token.findFirst.mockResolvedValue(validToken);
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockUserRepository.findTokenByHashedToken.mockResolvedValue(validToken);
+      mockUserRepository.findUserById.mockResolvedValue(null);
 
       await expect(
         service.resetPinWithOtp('user-123', '123456', '654321'),
@@ -421,8 +402,8 @@ describe('UserPinService', () => {
     });
 
     it('should throw BadRequestException if new PIN is same as old PIN', async () => {
-      mockPrisma.token.findFirst.mockResolvedValue(validToken);
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockUserRepository.findTokenByHashedToken.mockResolvedValue(validToken);
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
       (pinUtil.verifyPinHash as jest.Mock).mockResolvedValue(true); // Same as old PIN
 
       await expect(
@@ -434,14 +415,14 @@ describe('UserPinService', () => {
     });
 
     it('should allow PIN reset if user has no existing PIN', async () => {
-      mockPrisma.token.findFirst.mockResolvedValue(validToken);
-      mockPrisma.user.findUnique.mockResolvedValue({
+      mockUserRepository.findTokenByHashedToken.mockResolvedValue(validToken);
+      mockUserRepository.findUserById.mockResolvedValue({
         ...mockUser,
         pinHash: null,
       });
       (pinUtil.hashPin as jest.Mock).mockResolvedValue('newHashedPin');
-      mockPrisma.user.update.mockResolvedValue({});
-      mockPrisma.token.delete.mockResolvedValue({});
+      mockUserRepository.updateUserSimple.mockResolvedValue({});
+      mockUserRepository.deleteToken.mockResolvedValue(undefined);
 
       const result = await service.resetPinWithOtp(
         'user-123',

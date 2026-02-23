@@ -13,7 +13,6 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
-  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -27,6 +26,8 @@ import {
   CreateAvatarDto,
   UpdateAvatarDto,
   AssignAvatarDto,
+  AssignAvatarToUserDto,
+  AssignAvatarToKidDto,
 } from './dto/avatar.dto';
 import {
   AuthSessionGuard,
@@ -191,11 +192,7 @@ export class AvatarController {
       },
     },
   })
-  async assignAvatarToUser(@Body() assignAvatarDto: AssignAvatarDto) {
-    if (!assignAvatarDto.userId) {
-      throw new BadRequestException('userId is required');
-    }
-
+  async assignAvatarToUser(@Body() assignAvatarDto: AssignAvatarToUserDto) {
     const user = await this.avatarService.assignAvatarToUser(
       assignAvatarDto.userId,
       assignAvatarDto.avatarId,
@@ -287,11 +284,7 @@ export class AvatarController {
       },
     },
   })
-  async assignAvatarToKid(@Body() assignAvatarDto: AssignAvatarDto) {
-    if (!assignAvatarDto.kidId) {
-      throw new BadRequestException('kidId is required');
-    }
-
+  async assignAvatarToKid(@Body() assignAvatarDto: AssignAvatarToKidDto) {
     const kid = await this.avatarService.assignAvatarToKid(
       assignAvatarDto.kidId,
       assignAvatarDto.avatarId,

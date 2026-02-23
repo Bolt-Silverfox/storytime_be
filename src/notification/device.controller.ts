@@ -22,7 +22,7 @@ import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.gua
 import { DeviceTokenService } from './services/device-token.service';
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
-import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
+import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 import { DevicePlatform } from '@prisma/client';
 
 class RegisterDeviceDto {
@@ -47,8 +47,8 @@ export class DeviceController {
   @UseGuards(AuthSessionGuard)
   @Throttle({
     default: {
-      limit: THROTTLE_LIMITS.DEVICE.REGISTER.LIMIT,
-      ttl: THROTTLE_LIMITS.DEVICE.REGISTER.TTL,
+      limit: THROTTLE_LIMITS.DEVICE_REGISTER.limit,
+      ttl: THROTTLE_LIMITS.DEVICE_REGISTER.ttl,
     },
   })
   @ApiBearerAuth()

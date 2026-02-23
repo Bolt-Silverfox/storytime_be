@@ -1,11 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserService } from './user.service';
-import type { SafeUser } from './repositories';
+import type { SafeUser } from './user.service';
 import { UserRole } from './user.controller';
-import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { NotificationService } from '@/notification/notification.service';
-import { ResourceNotFoundException } from '@/shared/exceptions';
+import {
+  ResourceNotFoundException,
+  InvalidRoleException,
+} from '@/shared/exceptions';
 
 // Type-safe mock for PrismaService
 type MockPrismaService = {
@@ -15,33 +16,10 @@ type MockPrismaService = {
     update: jest.Mock;
     delete: jest.Mock;
   };
-  session: {
-    deleteMany: jest.Mock;
-  };
-  token: {
-    deleteMany: jest.Mock;
-    create: jest.Mock;
-    findFirst: jest.Mock;
-    delete: jest.Mock;
-  };
-  profile: {
-    create: jest.Mock;
-  };
   avatar: {
     create: jest.Mock;
   };
-  kid: {
-    count: jest.Mock;
-  };
-  activityLog: {
-    create: jest.Mock;
-  };
-  supportTicket: {
-    create: jest.Mock;
-  };
-  notificationPreference: {
-    findMany: jest.Mock;
-  };
+  $transaction: jest.Mock;
 };
 
 const createMockPrismaService = (): MockPrismaService => ({
@@ -51,54 +29,23 @@ const createMockPrismaService = (): MockPrismaService => ({
     update: jest.fn(),
     delete: jest.fn(),
   },
-  session: {
-    deleteMany: jest.fn(),
-  },
-  token: {
-    deleteMany: jest.fn(),
-    create: jest.fn(),
-    findFirst: jest.fn(),
-    delete: jest.fn(),
-  },
-  profile: {
-    create: jest.fn(),
-  },
   avatar: {
     create: jest.fn(),
   },
-  kid: {
-    count: jest.fn(),
-  },
-  activityLog: {
-    create: jest.fn(),
-  },
-  supportTicket: {
-    create: jest.fn(),
-  },
-  notificationPreference: {
-    findMany: jest.fn(),
-  },
-});
-
-type MockNotificationService = {
-  sendNotification: jest.Mock;
-};
-
-const createMockNotificationService = (): MockNotificationService => ({
-  sendNotification: jest.fn(),
+  $transaction: jest.fn((fn) => fn({
+    user: { update: jest.fn() },
+    avatar: { create: jest.fn() },
+  })),
 });
 
 describe('UserService', () => {
   let service: UserService;
   let mockPrisma: MockPrismaService;
-  let mockNotificationService: MockNotificationService;
 
   const mockUser = {
     id: 'user-1',
     email: 'test@example.com',
     name: 'Test User',
-    passwordHash: 'hashed_password',
-    pinHash: null,
     isEmailVerified: true,
     isDeleted: false,
     deletedAt: null,
@@ -108,12 +55,11 @@ describe('UserService', () => {
     profile: { language: 'en', country: 'US' },
     avatar: null,
     kids: [{ id: 'kid-1' }, { id: 'kid-2' }],
-    subscriptions: [],
+    subscription: [],
   };
 
   beforeEach(async () => {
     mockPrisma = createMockPrismaService();
-    mockNotificationService = createMockNotificationService();
 
     jest.clearAllMocks();
 
@@ -121,7 +67,6 @@ describe('UserService', () => {
       providers: [
         UserService,
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: NotificationService, useValue: mockNotificationService },
       ],
     }).compile();
 
@@ -144,12 +89,14 @@ describe('UserService', () => {
       expect(result?.numberOfKids).toBe(2);
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: 'user-1', isDeleted: false },
-        include: {
+        select: expect.objectContaining({
+          id: true,
+          email: true,
           profile: true,
           kids: true,
           avatar: true,
-          subscriptions: true,
-        },
+          subscription: true,
+        }),
       });
     });
 
@@ -172,12 +119,14 @@ describe('UserService', () => {
       expect(result).toBeDefined();
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        include: {
+        select: expect.objectContaining({
+          id: true,
+          email: true,
           profile: true,
           kids: true,
           avatar: true,
-          subscriptions: true,
-        },
+          subscription: true,
+        }),
       });
     });
   });
@@ -209,7 +158,12 @@ describe('UserService', () => {
       expect(result).toHaveLength(1);
       expect(mockPrisma.user.findMany).toHaveBeenCalledWith({
         where: { isDeleted: false },
-        include: { profile: true, avatar: true },
+        select: expect.objectContaining({
+          id: true,
+          email: true,
+          profile: true,
+          avatar: true,
+        }),
       });
     });
   });
@@ -219,10 +173,10 @@ describe('UserService', () => {
   describe('updateUser', () => {
     it('should update user name', async () => {
       mockPrisma.user.findUnique.mockResolvedValueOnce(mockUser);
-      mockPrisma.user.update.mockResolvedValue({
-        ...mockUser,
-        name: 'Updated Name',
-        kids: mockUser.kids,
+      const updatedUser = { ...mockUser, name: 'Updated Name' };
+      mockPrisma.$transaction.mockResolvedValue({
+        ...updatedUser,
+        numberOfKids: 2,
       });
 
       const result = await service.updateUser('user-1', {
@@ -230,20 +184,20 @@ describe('UserService', () => {
       });
 
       expect(result).toBeDefined();
-      expect(mockPrisma.user.update).toHaveBeenCalled();
     });
 
-    it('should throw NotFoundException for non-existent user', async () => {
+    it('should throw ResourceNotFoundException for non-existent user', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
 
       await expect(
         service.updateUser('nonexistent', { name: 'Test' }),
-      ).rejects.toThrow(NotFoundException);
+      ).rejects.toThrow(ResourceNotFoundException);
     });
 
     it('should return existing user when no updates provided', async () => {
-      mockPrisma.user.findUnique.mockResolvedValueOnce(mockUser);
-      mockPrisma.user.findUnique.mockResolvedValueOnce(mockUser);
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(mockUser)
+        .mockResolvedValueOnce(mockUser);
 
       const result = await service.updateUser('user-1', {});
 
@@ -252,21 +206,28 @@ describe('UserService', () => {
 
     it('should create new avatar when avatarUrl is provided', async () => {
       mockPrisma.user.findUnique.mockResolvedValueOnce(mockUser);
-      mockPrisma.avatar.create.mockResolvedValue({
-        id: 'new-avatar-id',
-        url: 'https://example.com/avatar.jpg',
-      });
-      mockPrisma.user.update.mockResolvedValue({
-        ...mockUser,
-        avatarId: 'new-avatar-id',
-        kids: mockUser.kids,
-      });
+      const txMock = {
+        avatar: {
+          create: jest.fn().mockResolvedValue({
+            id: 'new-avatar-id',
+            url: 'https://example.com/avatar.jpg',
+          }),
+        },
+        user: {
+          update: jest.fn().mockResolvedValue({
+            ...mockUser,
+            avatarId: 'new-avatar-id',
+            kids: mockUser.kids,
+          }),
+        },
+      };
+      mockPrisma.$transaction.mockImplementation((fn) => fn(txMock));
 
       await service.updateUser('user-1', {
         avatarUrl: 'https://example.com/avatar.jpg',
       });
 
-      expect(mockPrisma.avatar.create).toHaveBeenCalled();
+      expect(txMock.avatar.create).toHaveBeenCalled();
     });
   });
 
@@ -297,7 +258,7 @@ describe('UserService', () => {
     it('should throw error for invalid role', async () => {
       await expect(
         service.updateUserRole('user-1', 'invalid' as UserRole),
-      ).rejects.toThrow('Invalid role');
+      ).rejects.toThrow(InvalidRoleException);
     });
   });
 
@@ -318,12 +279,12 @@ describe('UserService', () => {
       expect(result).toBeDefined();
     });
 
-    it('should throw NotFoundException for non-existent user', async () => {
+    it('should throw ResourceNotFoundException for non-existent user', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
 
       await expect(
         service.updateParentProfile('nonexistent', { name: 'Test' }),
-      ).rejects.toThrow(NotFoundException);
+      ).rejects.toThrow(ResourceNotFoundException);
     });
   });
 

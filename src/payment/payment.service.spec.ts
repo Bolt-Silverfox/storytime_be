@@ -18,42 +18,27 @@ type MockPrismaService = {
   $transaction: jest.Mock;
 };
 
-const createMockPrismaService = (): MockPrismaService => ({
-  paymentTransaction: {
-    create: jest.fn(),
-    findFirst: jest.fn(),
-  },
-  subscription: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
-  $transaction: jest.fn((fn) => fn({
+const createMockPrismaService = (): MockPrismaService => {
+  const svc: MockPrismaService = {
     paymentTransaction: {
-      create: jest.fn().mockResolvedValue({
-        id: 'tx-1',
-        userId: 'user-1',
-        amount: 4.99,
-        currency: 'USD',
-        status: 'success',
-        reference: 'hash-123',
-      }),
+      create: jest.fn(),
+      findFirst: jest.fn(),
     },
-    subscription: {
-      findFirst: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockResolvedValue({
-        id: 'sub-1',
-        userId: 'user-1',
-        plan: 'monthly',
-        status: 'active',
-        startedAt: new Date(),
-        endsAt: new Date(),
-      }),
-      update: jest.fn(),
-    },
-  })),
-});
+    subscription: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+    $transaction: jest.fn(),
+  };
+  // $transaction delegates to a callback with the same mock models
+  svc.$transaction.mockImplementation((fn) => fn({
+    paymentTransaction: svc.paymentTransaction,
+    subscription: svc.subscription,
+  }));
+  return svc;
+};
 
 describe('PaymentService', () => {
   let service: PaymentService;
   let mockPrisma: MockPrismaService;
-  let mockGoogleVerification: { verify: jest.Mock; cancelSubscription: jest.Mock };
+  let mockGoogleVerification: { verify: jest.Mock; cancelSubscription: jest.Mock; acknowledgePurchase: jest.Mock };
   let mockAppleVerification: { verify: jest.Mock; getSubscriptionStatus: jest.Mock };
   let mockConfigService: { get: jest.Mock };
   let mockSubscriptionService: { invalidateCache: jest.Mock };
@@ -61,7 +46,7 @@ describe('PaymentService', () => {
 
   beforeEach(async () => {
     mockPrisma = createMockPrismaService();
-    mockGoogleVerification = { verify: jest.fn(), cancelSubscription: jest.fn() };
+    mockGoogleVerification = { verify: jest.fn(), cancelSubscription: jest.fn(), acknowledgePurchase: jest.fn().mockResolvedValue({ success: true }) };
     mockAppleVerification = { verify: jest.fn(), getSubscriptionStatus: jest.fn() };
     mockConfigService = { get: jest.fn() };
     mockSubscriptionService = { invalidateCache: jest.fn() };

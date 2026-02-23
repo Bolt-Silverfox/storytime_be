@@ -185,9 +185,11 @@ GET /health/full     - All indicators
 | Queue depth | ✅ QueueHealthIndicator |
 | External API latency | ✅ HttpLatencyInterceptor (Axios) |
 
+**Completed:**
+- ✅ Alerting thresholds configured in `src/shared/config/alerting.config.ts` (WARNING/CRITICAL levels for response time, DB query time, external API time, error rate, cache hit ratio, queue depth, memory, disk)
+
 **Pending:**
 - [ ] Create custom Grafana dashboards (community dashboards available via GRAFANA_SETUP.md)
-- [ ] Configure alerting thresholds
 
 ---
 
@@ -221,9 +223,7 @@ Gzip compression (1KB threshold), Helmet security headers, CORS with 24h preflig
 
 ---
 
----
-
-## 10. Sequential Operations Optimization ✅ COMPLETED
+## 9. Sequential Operations Optimization ✅ COMPLETED
 
 Batch operations replacing sequential loops:
 
@@ -259,6 +259,7 @@ Batch operations replacing sequential loops:
 - HTTP latency tracking: OpenTelemetry Axios interceptor on story, voice, notification modules
 - Response DTOs: StoryListItemDto for lightweight list views
 - Admin export chunking: 1000-record batches replacing single 10k fetch
+- Alerting thresholds: WARNING/CRITICAL levels configured in `src/shared/config/alerting.config.ts`
 
 ### Pending 📋
 
@@ -269,7 +270,6 @@ Batch operations replacing sequential loops:
 
 **Monitoring**
 - [ ] Custom Grafana dashboards (P3)
-- [ ] Alerting threshold configuration (P2)
 
 **Application**
 - [ ] Add memory usage monitoring for large requests (P3)
@@ -279,7 +279,6 @@ Batch operations replacing sequential loops:
 ## References
 
 - [Prisma Performance Guide](https://www.prisma.io/docs/guides/performance-and-optimization)
-- [Prisma v7 Upgrade Guide](https://www.prisma.io/docs/orm/more/upgrade-guides/upgrading-versions/upgrading-to-prisma-7)
 - [NestJS Caching](https://docs.nestjs.com/techniques/caching)
 - [BullMQ Best Practices](https://docs.bullmq.io/guide/going-to-production)
 - [OpenTelemetry for Node.js](https://opentelemetry.io/docs/instrumentation/js/)
