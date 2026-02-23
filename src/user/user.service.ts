@@ -41,6 +41,8 @@ const safeUserSelect = {
   createdAt: true,
   updatedAt: true,
   biometricsEnabled: true,
+  isSuspended: true,
+  suspendedAt: true,
   isDeleted: true,
   deletedAt: true,
   preferredVoiceId: true,

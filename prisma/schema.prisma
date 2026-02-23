@@ -84,6 +84,9 @@ model User {
   updatedAt               DateTime                 @updatedAt
   pinHash                 String?
   biometricsEnabled       Boolean                  @default(false)
+  // SUSPENSION FIELDS
+  isSuspended             Boolean                  @default(false)
+  suspendedAt             DateTime?
   // SOFT DELETE FIELDS
   isDeleted               Boolean                  @default(false)
   deletedAt               DateTime?
@@ -476,11 +479,15 @@ model Subscription {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan      String
   status    String    @default("active")
-  startedAt DateTime  @default(now())
-  endsAt    DateTime?
+  startedAt     DateTime  @default(now())
+  endsAt        DateTime?
+  // Store platform-specific data for subscription management
+  platform      String?   // "google" or "apple"
+  productId     String?   // e.g. "com.storytime.monthly"
+  purchaseToken String?   // token from the platform for cancellation/status
   // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
+  isDeleted     Boolean   @default(false)
+  deletedAt     DateTime?
 
   @@index([userId, status])
   @@index([status, isDeleted])
@@ -1122,7 +1129,6 @@ model DeviceToken {
   deletedAt  DateTime?
 
   @@index([userId, isActive])
-  @@index([token])
   @@index([isDeleted])
   @@map("device_tokens")
 }

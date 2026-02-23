@@ -114,7 +114,7 @@ export class AdminUserService {
           kids,
           paymentTransactions,
           usage,
-          subscriptions,
+          subscription,
           _count,
           ...safeUser
         } = user;
@@ -142,12 +142,12 @@ export class AdminUserService {
           activityLength,
           creditUsed,
           amountSpent,
-          isPaidUser: subscriptions.length > 0,
-          activeSubscription: subscriptions[0] || null,
+          isPaidUser: subscription !== null,
+          activeSubscription: subscription || null,
           kidsCount: _count.kids,
           sessionsCount: _count.auth,
           favoritesCount: _count.parentFavorites,
-          subscriptionsCount: _count.subscriptions,
+          subscriptionsCount: subscription ? 1 : 0,
           transactionsCount: _count.paymentTransactions,
         };
       }),
@@ -182,9 +182,11 @@ export class AdminUserService {
 
     // Check if user has active subscription
     const now = new Date();
-    const hasActiveSubscription = user.subscriptions.some(
-      (sub) => sub.status === 'active' && (!sub.endsAt || sub.endsAt > now),
-    );
+    const sub = user.subscription;
+    const hasActiveSubscription =
+      sub !== null &&
+      sub.status === 'active' &&
+      (!sub.endsAt || sub.endsAt > now);
 
     const totalSpentResult =
       await this.adminUserRepository.aggregatePaymentTransactions({
@@ -209,7 +211,7 @@ export class AdminUserService {
         sessionsCount: _count.auth,
         favoritesCount: _count.parentFavorites,
         voicesCount: _count.voices,
-        subscriptionsCount: _count.subscriptions,
+        subscriptionsCount: user.subscription ? 1 : 0,
         ticketsCount: _count.supportTickets,
         transactionsCount: _count.paymentTransactions,
       },
