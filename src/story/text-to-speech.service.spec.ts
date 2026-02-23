@@ -24,10 +24,13 @@ describe('TextToSpeechService', () => {
   const mockIsPremiumUser = jest.fn();
   const mockCheckUsage = jest.fn();
   const mockIncrementUsage = jest.fn();
+  const mockCheckAndReserveUsage = jest.fn();
+  const mockReleaseReservedUsage = jest.fn();
 
   const mockPrisma = {
     paragraphAudioCache: {
       findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
       upsert: jest.fn().mockResolvedValue({}),
     },
     voice: {
@@ -39,6 +42,7 @@ describe('TextToSpeechService', () => {
     jest.clearAllMocks();
     // Reset mock implementations (clearAllMocks only resets calls, not implementations)
     mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue(null);
+    mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
     mockPrisma.paragraphAudioCache.upsert.mockResolvedValue({});
     mockPrisma.voice.findUnique.mockResolvedValue(null);
 
@@ -78,6 +82,8 @@ describe('TextToSpeechService', () => {
           useValue: {
             checkUsage: mockCheckUsage,
             incrementUsage: mockIncrementUsage,
+            checkAndReserveUsage: mockCheckAndReserveUsage,
+            releaseReservedUsage: mockReleaseReservedUsage,
           },
         },
         {
@@ -392,6 +398,205 @@ describe('TextToSpeechService', () => {
       );
 
       expect(result).toBe('https://uploaded-audio.com/audio.wav');
+    });
+  });
+
+  describe('batchTextToSpeechCloudUrls', () => {
+    const storyId = 'story-batch-123';
+    const userId = 'user-batch-123';
+    // Each "paragraph" needs enough words to form separate chunks (splitter uses ~30 words/chunk)
+    const makeText = (paragraphs: string[]) => paragraphs.join(' ');
+
+    // Short texts that each fit in one chunk
+    const shortParagraph1 = 'The cat sat on the mat and looked at the stars.';
+    const shortParagraph2 =
+      'The dog ran through the field chasing butterflies in the sun.';
+    const shortParagraph3 =
+      'A small bird sang a sweet melody from the old oak tree.';
+
+    // Full text with 3 short paragraphs (each under 30 words, will be separate chunks)
+    const fullText = makeText([
+      shortParagraph1,
+      shortParagraph2,
+      shortParagraph3,
+    ]);
+
+    it('should return empty array for empty text', async () => {
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        '',
+        VoiceType.LILY,
+        userId,
+      );
+      expect(result).toEqual([]);
+      expect(mockPrisma.paragraphAudioCache.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should return empty array for whitespace-only text', async () => {
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        '   \n\t  ',
+        VoiceType.LILY,
+        userId,
+      );
+      expect(result).toEqual([]);
+    });
+
+    it('should return cached results without reserving quota when all cached', async () => {
+      // The splitter will split fullText into chunks — we mock findMany to return
+      // cached entries for all of them. We use a spy on hashText to capture hashes.
+      mockPrisma.paragraphAudioCache.findMany.mockImplementation(
+        async (args: { where: { textHash: { in: string[] } } }) => {
+          const hashes = args.where.textHash.in;
+          return hashes.map((hash: string, i: number) => ({
+            storyId,
+            textHash: hash,
+            voiceId: 'LILY',
+            audioUrl: `https://cached.com/audio-${i}.mp3`,
+          }));
+        },
+      );
+
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        fullText,
+        VoiceType.LILY,
+        userId,
+      );
+
+      expect(result.length).toBeGreaterThan(0);
+      expect(result.every((r) => r.audioUrl !== null)).toBe(true);
+      // No quota should be reserved
+      expect(mockCheckAndReserveUsage).not.toHaveBeenCalled();
+      // No providers should be called
+      expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
+      expect(mockStyleTts2Generate).not.toHaveBeenCalled();
+      expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
+    });
+
+    it('should call providers only for uncached paragraphs', async () => {
+      // Cache the first paragraph hash only
+      mockPrisma.paragraphAudioCache.findMany.mockImplementation(
+        async (args: { where: { textHash: { in: string[] } } }) => {
+          const hashes = args.where.textHash.in;
+          // Only return cache entry for the first hash
+          return [
+            {
+              storyId,
+              textHash: hashes[0],
+              voiceId: 'LILY',
+              audioUrl: 'https://cached.com/first.mp3',
+            },
+          ];
+        },
+      );
+
+      mockIsPremiumUser.mockResolvedValue(false);
+      mockStyleTts2Generate.mockResolvedValue(Buffer.from('generated-audio'));
+      mockUploadAudio.mockResolvedValue('https://uploaded.com/new.wav');
+
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        fullText,
+        VoiceType.LILY,
+        userId,
+      );
+
+      // Should have results for all paragraphs
+      expect(result.length).toBeGreaterThan(1);
+      // First paragraph should be cached
+      const sorted = [...result].sort((a, b) => a.index - b.index);
+      expect(sorted[0].audioUrl).toBe('https://cached.com/first.mp3');
+      // Other paragraphs should have been generated
+      for (let i = 1; i < sorted.length; i++) {
+        expect(sorted[i].audioUrl).toBe('https://uploaded.com/new.wav');
+      }
+      // No ElevenLabs for free user
+      expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
+      // StyleTTS2 should be called for uncached paragraphs only
+      expect(mockStyleTts2Generate).toHaveBeenCalledTimes(
+        result.length - 1, // minus 1 cached
+      );
+    });
+
+    it('should reserve quota for premium users and release unused credits', async () => {
+      // No cache hits
+      mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
+      mockIsPremiumUser.mockResolvedValue(true);
+      // Reserve all requested credits
+      mockCheckAndReserveUsage.mockImplementation(
+        async (_userId: string, credits: number) => credits,
+      );
+      // ElevenLabs fails for all — so all reserved credits should be released
+      mockElevenLabsGenerate.mockRejectedValue(
+        new Error('ElevenLabs timeout'),
+      );
+      mockStyleTts2Generate.mockResolvedValue(Buffer.from('fallback-audio'));
+      mockUploadAudio.mockResolvedValue('https://uploaded.com/fallback.wav');
+
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        fullText,
+        VoiceType.CHARLIE,
+        userId,
+      );
+
+      // All paragraphs should have fallback audio
+      expect(result.every((r) => r.audioUrl !== null)).toBe(true);
+      // Quota was reserved
+      expect(mockCheckAndReserveUsage).toHaveBeenCalledWith(
+        userId,
+        expect.any(Number),
+      );
+      // All reserved credits should be released since ElevenLabs failed
+      expect(mockReleaseReservedUsage).toHaveBeenCalledWith(
+        userId,
+        expect.any(Number),
+      );
+      const releasedCredits = mockReleaseReservedUsage.mock.calls[0][1];
+      const reservedCredits = mockCheckAndReserveUsage.mock.calls[0][1];
+      expect(releasedCredits).toBe(reservedCredits);
+    });
+
+    it('should cap paragraphs at MAX_BATCH_PARAGRAPHS (50)', async () => {
+      // Generate text with way more than 50 words to produce many paragraphs
+      // Each word-count chunk is ~30 words, so 60 chunks = ~1800 words
+      const words = Array.from(
+        { length: 1800 },
+        (_, i) => `word${i}`,
+      ).join(' ');
+
+      mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
+      mockIsPremiumUser.mockResolvedValue(false);
+      mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
+      mockUploadAudio.mockResolvedValue('https://uploaded.com/audio.wav');
+
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        words,
+        VoiceType.LILY,
+        userId,
+      );
+
+      expect(result.length).toBeLessThanOrEqual(50);
+    });
+
+    it('should return results sorted by index', async () => {
+      mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
+      mockIsPremiumUser.mockResolvedValue(false);
+      mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
+      mockUploadAudio.mockResolvedValue('https://uploaded.com/audio.wav');
+
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        fullText,
+        VoiceType.LILY,
+        userId,
+      );
+
+      for (let i = 1; i < result.length; i++) {
+        expect(result[i].index).toBeGreaterThan(result[i - 1].index);
+      }
     });
   });
 });

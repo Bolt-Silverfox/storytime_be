@@ -120,7 +120,7 @@ export class TextToSpeechService {
     // Check paragraph-level cache first
     const cachedUrl = await this.getCachedParagraphAudio(storyId, text, type);
     if (cachedUrl) {
-      this.logger.log(
+      this.logger.debug(
         `Paragraph cache hit for story ${storyId}, voice ${type}`,
       );
       return cachedUrl;
@@ -315,38 +315,44 @@ export class TextToSpeechService {
     voiceType?: VoiceType | string,
     userId?: string,
   ): Promise<Array<{ index: number; text: string; audioUrl: string | null }>> {
+    if (!fullText?.trim()) return [];
+
     const type = voiceType ?? DEFAULT_VOICE;
-    const paragraphs = splitByWordCountPreservingSentences(
+    const allParagraphs = splitByWordCountPreservingSentences(
       fullText,
       WORDS_PER_CHUNK,
     );
 
-    if (paragraphs.length > MAX_BATCH_PARAGRAPHS) {
+    if (allParagraphs.length > MAX_BATCH_PARAGRAPHS) {
       this.logger.warn(
-        `Story ${storyId} has ${paragraphs.length} paragraphs, capping at ${MAX_BATCH_PARAGRAPHS}`,
+        `Story ${storyId} has ${allParagraphs.length} paragraphs, capping at ${MAX_BATCH_PARAGRAPHS}`,
       );
-      paragraphs.length = MAX_BATCH_PARAGRAPHS;
     }
+    const paragraphs = allParagraphs.slice(0, MAX_BATCH_PARAGRAPHS);
 
-    // Pre-check cache so we only reserve quota for uncached paragraphs
-    const cacheResults = await Promise.all(
-      paragraphs.map(async (text, index) => {
-        const cachedUrl = await this.getCachedParagraphAudio(
-          storyId,
-          text,
-          type,
-        );
-        return { index, text, cachedUrl };
-      }),
+    // Pre-check cache with a single bulk query instead of N individual lookups
+    const hashMap = new Map(
+      paragraphs.map((text, index) => [this.hashText(text), { index, text }]),
+    );
+    const cachedEntries = await this.prisma.paragraphAudioCache.findMany({
+      where: {
+        storyId,
+        voiceId: type,
+        textHash: { in: [...hashMap.keys()] },
+      },
+    });
+    const cacheMap = new Map(
+      cachedEntries.map((e) => [e.textHash, e.audioUrl]),
     );
 
     const cached: Array<{ index: number; text: string; audioUrl: string }> = [];
     const uncached: Array<{ index: number; text: string }> = [];
-    for (const r of cacheResults) {
-      if (r.cachedUrl) {
-        cached.push({ index: r.index, text: r.text, audioUrl: r.cachedUrl });
+    for (const [hash, { index, text }] of hashMap) {
+      const cachedUrl = cacheMap.get(hash);
+      if (cachedUrl) {
+        cached.push({ index, text, audioUrl: cachedUrl });
       } else {
-        uncached.push({ index: r.index, text: r.text });
+        uncached.push({ index, text });
       }
     }
 
