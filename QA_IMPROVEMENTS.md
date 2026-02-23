@@ -25,7 +25,7 @@ This document tracks quality assurance issues, testing gaps, and code quality im
 
 ### 1.1 Unit Test Status (P0 - Critical) ✅ COMPLETE
 
-Current coverage: **42 test suites, 490 passing tests** covering all services.
+Current coverage: **47 test suites, 578 passing tests** covering all services.
 
 **Core Services with Tests:** AuthService (31), UserService (45), NotificationService (34), SubscriptionService (15), OAuthService (21), OnboardingService (22), UserDeletionService (18), UserPinService (23), PaymentService, StoryService, StoryGenerationService, VoiceService, KidService, HelpSupportService, ParentFavoritesService, AdminController, AdminStoryService, AdminUserService, AdminAnalyticsService (40), AdminSystemService (32), PasswordService (22), TokenService (24), EmailVerificationService (7), DeviceTokenService (18), NotificationPreferenceService (25), BadgeService (34), ProgressService (15).
 
@@ -35,8 +35,8 @@ Current coverage: **42 test suites, 490 passing tests** covering all services.
 |------|--------|----------|
 | Authentication (login/register) | ✅ 41 tests | Done |
 | OAuth (Google/Apple) | ✅ included | Done |
-| Payment processing | ❌ | P0 |
-| Subscription management | ❌ | P1 |
+| Payment processing | ✅ 19 tests | Done |
+| Subscription management | ✅ 23 tests | Done |
 | Story CRUD operations | ❌ | P2 |
 | Kid profile management | ❌ | P2 |
 
@@ -173,14 +173,20 @@ Centralized `THROTTLE_LIMITS` config in `src/shared/config/throttle.config.ts` w
 
 ### 5.1 Circular Dependencies (P1) ✅ LARGELY RESOLVED
 
-Reduced from 7 modules to 3 modules using `forwardRef()` via event-driven architecture.
+Reduced from 7 modules to 2 remaining `forwardRef` usages via event-driven architecture and provider registration fixes.
 
-**Remaining `forwardRef` usages (3 modules):**
+**Remaining `forwardRef` usages (2):**
 
-| Module Pair | Reason |
-|-------------|--------|
+| Location | Reason |
+|----------|--------|
 | StoryModule ↔ VoiceModule | Bidirectional TTS dependency |
-| AchievementProgressModule ↔ Various | Badge/progress tracking |
+| BuddySelectionService → BuddyMessagingService | Circular service injection |
+
+**Resolved (2026-02-23):**
+- ✅ Removed `forwardRef(() => AuthModule)` from AchievementProgressModule (unnecessary — PrismaModule is @Global)
+- ✅ Removed `AuthModule` import from PrismaModule (was causing PrismaModule → AuthModule → PrismaModule cycle)
+- ✅ Registered `STREAK_REPOSITORY` directly in AchievementProgressModule
+- ✅ Registered `STORY_REPOSITORY` directly in VoiceModule
 
 **Pending:**
 - [ ] Consider extracting shared TTS logic to resolve Story ↔ Voice dependency (low priority)
@@ -277,12 +283,12 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 ## Progress Summary
 
 ### Completed ✅
-- Unit tests: 42 test suites, 490 passing tests covering all services
-- E2E tests: Authentication flows (41 tests)
+- Unit tests: 47 test suites, 578 passing tests covering all services
+- E2E tests: Authentication (41), Payment (19), Subscription (23), App health (1), Global handlers (5)
 - Type safety: Production `any` types eliminated
 - God service refactoring: 7 → 19 focused services
 - Event-driven architecture: 18+ events, 7 listeners
-- Circular dependency reduction: 7 → 3 modules with `forwardRef`
+- Circular dependency reduction: 7 → 2 remaining `forwardRef` usages
 - Repository pattern: All target services (Reward, Avatar, Kid, Settings, Age)
 - Domain exceptions: Full hierarchy with error codes
 - Rate limiting: Auth, payment, story, device controllers
@@ -303,7 +309,7 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 - Test spec modernization: All 42 unit test suites updated for refactored services
 
 ### Pending 📋
-- [ ] E2E tests for payment/subscription flows (P1)
+- [ ] E2E tests for story CRUD and kid profile flows (P2)
 - [ ] Coverage badges in README (P3 — requires Codecov CI integration)
 
 ---
