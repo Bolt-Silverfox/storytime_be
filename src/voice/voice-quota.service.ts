@@ -81,10 +81,7 @@ export class VoiceQuotaService {
    * Returns the number of credits actually reserved (may be less than
    * requested if the user doesn't have enough remaining).
    */
-  async checkAndReserveUsage(
-    userId: string,
-    credits: number,
-  ): Promise<number> {
+  async checkAndReserveUsage(userId: string, credits: number): Promise<number> {
     const currentMonth = this.getCurrentMonth();
 
     const user = await this.prisma.user.findUnique({
@@ -140,10 +137,7 @@ export class VoiceQuotaService {
    * Release previously reserved ElevenLabs credits (e.g. when batch
    * paragraphs fail after quota was reserved).
    */
-  async releaseReservedUsage(
-    userId: string,
-    credits: number,
-  ): Promise<void> {
+  async releaseReservedUsage(userId: string, credits: number): Promise<void> {
     if (credits <= 0) return;
     await this.prisma.userUsage.update({
       where: { userId },

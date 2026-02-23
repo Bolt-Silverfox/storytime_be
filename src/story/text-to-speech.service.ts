@@ -312,9 +312,7 @@ export class TextToSpeechService {
     fullText: string,
     voiceType?: VoiceType | string,
     userId?: string,
-  ): Promise<
-    Array<{ index: number; text: string; audioUrl: string | null }>
-  > {
+  ): Promise<Array<{ index: number; text: string; audioUrl: string | null }>> {
     const paragraphs = splitByWordCountPreservingSentences(
       fullText,
       WORDS_PER_CHUNK,
