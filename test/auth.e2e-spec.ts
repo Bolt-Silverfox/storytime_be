@@ -11,6 +11,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { SuccessResponseInterceptor } from '../src/shared/interceptors/success-response.interceptor';
 import { HttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from '../src/shared/filters/prisma-exception.filter';
@@ -91,6 +92,7 @@ describe('Authentication (e2e)', () => {
             signOptions: { expiresIn: '1h' },
           }),
         }),
+        EventEmitterModule.forRoot(),
         PrismaModule,
         AuthModule,
       ],
