@@ -84,16 +84,7 @@ export class VoiceQuotaService {
   async checkAndReserveUsage(userId: string, credits: number): Promise<number> {
     const currentMonth = this.getCurrentMonth();
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { subscription: true, usage: true },
-    });
-    if (!user) return 0;
-
-    const now = new Date();
-    const isPremium =
-      user.subscription?.status === SUBSCRIPTION_STATUS.ACTIVE &&
-      (user.subscription.endsAt === null || user.subscription.endsAt > now);
+    const isPremium = await this.subscriptionService.isPremiumUser(userId);
     const limit = isPremium
       ? VOICE_CONFIG_SETTINGS.QUOTAS.PREMIUM
       : VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
@@ -139,13 +130,19 @@ export class VoiceQuotaService {
    */
   async releaseReservedUsage(userId: string, credits: number): Promise<void> {
     if (credits <= 0) return;
-    await this.prisma.userUsage.update({
-      where: { userId },
-      data: { elevenLabsCount: { decrement: credits } },
+    await this.prisma.$transaction(async (tx) => {
+      const usage = await tx.userUsage.findUnique({ where: { userId } });
+      if (!usage) return;
+      const toRelease = Math.min(credits, usage.elevenLabsCount);
+      if (toRelease <= 0) return;
+      await tx.userUsage.update({
+        where: { userId },
+        data: { elevenLabsCount: { decrement: toRelease } },
+      });
+      this.logger.log(
+        `Released ${toRelease} ElevenLabs credits for user ${userId}`,
+      );
     });
-    this.logger.log(
-      `Released ${credits} ElevenLabs credits for user ${userId}`,
-    );
   }
 
   async trackGeminiStory(userId: string): Promise<void> {
