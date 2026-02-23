@@ -1,6 +1,7 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 
 // Extend Express Request to include requestId
 declare global {
@@ -10,14 +11,6 @@ declare global {
       requestId?: string;
     }
   }
-}
-
-// Type for authenticated user from auth guard
-interface AuthenticatedUser {
-  id?: string;
-  userId?: string;
-  email?: string;
-  userRole?: string;
 }
 
 interface RequestLogData {
@@ -75,8 +68,8 @@ export class RequestLoggerMiddleware implements NestMiddleware {
       const contentLength = res.get('content-length') || '0';
 
       // Get user ID if authenticated (set by auth guard)
-      const user = req.user as unknown as AuthenticatedUser | undefined;
-      const userId = user?.userId || user?.id;
+      const authUser = (req as AuthenticatedRequest).authUserData;
+      const userId = authUser?.userId;
 
       this.logResponse({
         requestId,
@@ -184,8 +177,8 @@ export function requestLogger(
   res.on('finish', () => {
     const duration = Date.now() - startTime;
     const { statusCode } = res;
-    const user = req.user as unknown as AuthenticatedUser | undefined;
-    const userId = user?.userId || user?.id;
+    const authUser = (req as AuthenticatedRequest).authUserData;
+    const userId = authUser?.userId;
     const userInfo = userId ? ` user:${userId.slice(0, 8)}` : '';
 
     const emoji = statusCode >= 500 ? '✗' : statusCode >= 400 ? '⚠' : '←';

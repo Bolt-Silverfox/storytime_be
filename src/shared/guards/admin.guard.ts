@@ -4,13 +4,7 @@ import {
   Injectable,
   ForbiddenException,
 } from '@nestjs/common';
-import { Request } from 'express';
-import { JwtPayload } from './auth.guard';
-
-/** Request with authenticated user data attached */
-interface AuthenticatedRequest extends Request {
-  authUserData?: JwtPayload;
-}
+import { AuthenticatedRequest } from './auth.guard';
 
 @Injectable()
 export class AdminGuard implements CanActivate {
