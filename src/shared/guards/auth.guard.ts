@@ -2,12 +2,12 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { PrismaService } from '@/prisma/prisma.service';
 
@@ -26,8 +26,9 @@ export interface AuthenticatedRequest extends Request {
 
 @Injectable()
 export class AuthSessionGuard implements CanActivate {
+  private readonly logger = new Logger(AuthSessionGuard.name);
+
   constructor(
-    private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
@@ -50,6 +51,7 @@ export class AuthSessionGuard implements CanActivate {
     const authHeader = request.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      this.logger.warn('Auth failure: missing or invalid authorization header');
       throw new UnauthorizedException(
         'Missing or invalid authorization header',
       );
@@ -59,6 +61,7 @@ export class AuthSessionGuard implements CanActivate {
     try {
       const payload = this.jwtService.verify<JwtPayload>(token);
       if (!payload.authSessionId) {
+        this.logger.warn('Auth failure: token missing authSessionId claim');
         throw new UnauthorizedException('Invalid or expired token');
       }
 
@@ -68,16 +71,37 @@ export class AuthSessionGuard implements CanActivate {
       });
 
       if (!session) {
+        this.logger.warn(
+          `Auth failure: session not found [sessionId=${payload.authSessionId}]`,
+        );
         throw new UnauthorizedException('Session invalid or expired');
       }
 
+      if (session.deletedAt !== null) {
+        this.logger.warn(
+          `Auth failure: session is soft-deleted [sessionId=${session.id}]`,
+        );
+        throw new UnauthorizedException('Session has been revoked');
+      }
+
+      if (session.expiresAt < new Date()) {
+        this.logger.warn(
+          `Auth failure: session expired [sessionId=${session.id}, expiresAt=${session.expiresAt.toISOString()}]`,
+        );
+        throw new UnauthorizedException('Session has expired');
+      }
+
+      this.logger.debug(
+        `Auth success [userId=${payload.userId.substring(0, 8)}...]`,
+      );
       (request as AuthenticatedRequest).authUserData = payload;
       return true;
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      throw new UnauthorizedException(error.message);
+      this.logger.error('AuthGuard unexpected error', error);
+      throw new UnauthorizedException('Authentication failed');
     }
   }
 }

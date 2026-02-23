@@ -49,6 +49,7 @@ import {
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
 import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
+import { ConfigService } from '@nestjs/config';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -60,6 +61,7 @@ export class AuthController {
     private readonly onboardingService: OnboardingService,
     private readonly emailVerificationService: EmailVerificationService,
     private readonly passwordService: PasswordService,
+    private readonly configService: ConfigService,
   ) {}
 
   @Post('login')
@@ -392,7 +394,7 @@ export class AuthController {
     const result = await this.oAuthService.handleGoogleOAuthPayload(payload);
 
     return res.redirect(
-      `${process.env.WEB_APP_BASE_URL}/oauth-success?jwt=${encodeURIComponent(
+      `${this.configService.get('WEB_APP_BASE_URL')}/oauth-success?jwt=${encodeURIComponent(
         result.jwt,
       )}&refresh=${encodeURIComponent(result.refreshToken)}`,
     );

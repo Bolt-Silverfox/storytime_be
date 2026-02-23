@@ -1,9 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentService } from './payment.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/prisma/prisma.service';
+import { SubscriptionService } from '@/subscription/subscription.service';
 import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 // Type-safe mock for PrismaService
 type MockPrismaService = {
@@ -12,6 +15,7 @@ type MockPrismaService = {
     findFirst: jest.Mock;
   };
   subscription: { findFirst: jest.Mock; create: jest.Mock; update: jest.Mock };
+  $transaction: jest.Mock;
 };
 
 const createMockPrismaService = (): MockPrismaService => ({
@@ -20,32 +24,66 @@ const createMockPrismaService = (): MockPrismaService => ({
     findFirst: jest.fn(),
   },
   subscription: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+  $transaction: jest.fn((fn) => fn({
+    paymentTransaction: {
+      create: jest.fn().mockResolvedValue({
+        id: 'tx-1',
+        userId: 'user-1',
+        amount: 4.99,
+        currency: 'USD',
+        status: 'success',
+        reference: 'hash-123',
+      }),
+    },
+    subscription: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({
+        id: 'sub-1',
+        userId: 'user-1',
+        plan: 'monthly',
+        status: 'active',
+        startedAt: new Date(),
+        endsAt: new Date(),
+      }),
+      update: jest.fn(),
+    },
+  })),
 });
 
 describe('PaymentService', () => {
   let service: PaymentService;
   let mockPrisma: MockPrismaService;
-  let mockGoogleVerification: { verify: jest.Mock };
-  let mockAppleVerification: { verify: jest.Mock };
+  let mockGoogleVerification: { verify: jest.Mock; cancelSubscription: jest.Mock };
+  let mockAppleVerification: { verify: jest.Mock; getSubscriptionStatus: jest.Mock };
+  let mockConfigService: { get: jest.Mock };
+  let mockSubscriptionService: { invalidateCache: jest.Mock };
+  let mockEventEmitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     mockPrisma = createMockPrismaService();
-    mockGoogleVerification = { verify: jest.fn() };
-    mockAppleVerification = { verify: jest.fn() };
+    mockGoogleVerification = { verify: jest.fn(), cancelSubscription: jest.fn() };
+    mockAppleVerification = { verify: jest.fn(), getSubscriptionStatus: jest.fn() };
+    mockConfigService = { get: jest.fn() };
+    mockSubscriptionService = { invalidateCache: jest.fn() };
+    mockEventEmitter = { emit: jest.fn() };
 
     jest.clearAllMocks();
 
     mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
+    mockSubscriptionService.invalidateCache.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: SubscriptionService, useValue: mockSubscriptionService },
         {
           provide: GoogleVerificationService,
           useValue: mockGoogleVerification,
         },
         { provide: AppleVerificationService, useValue: mockAppleVerification },
+        { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     }).compile();
 
@@ -329,15 +367,26 @@ describe('PaymentService', () => {
 
   describe('getSubscription', () => {
     it('should return subscription for user', async () => {
-      const mockSub = { id: 'sub-1', plan: 'monthly', status: 'active' };
+      const mockSub = {
+        id: 'sub-1',
+        plan: 'monthly',
+        status: 'active',
+        startedAt: new Date(),
+        endsAt: null,
+        platform: null,
+      };
       mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
 
       const result = await service.getSubscription('u1');
 
-      expect(result).toEqual(mockSub);
-      expect(mockPrisma.subscription.findFirst).toHaveBeenCalledWith({
-        where: { userId: 'u1' },
-      });
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe('sub-1');
+      expect(result!.plan).toBe('monthly');
+      expect(result!.status).toBe('active');
+      expect(result!.price).toBe(0);
+      expect(result!.currency).toBe('USD');
+      expect(result!.platform).toBeNull();
     });
 
     it('should return null if no subscription exists', async () => {
@@ -365,6 +414,9 @@ describe('PaymentService', () => {
         plan: 'monthly',
         status: 'active',
         endsAt: futureDate,
+        platform: null,
+        productId: null,
+        purchaseToken: null,
       };
 
       mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
@@ -380,6 +432,186 @@ describe('PaymentService', () => {
         where: { id: 'sub-1' },
         data: { status: 'cancelled', endsAt: futureDate },
       });
+    });
+
+    it('should call Google Play cancel API when platform is google', async () => {
+      const futureDate = new Date(Date.now() + 86400000 * 30);
+      const mockSub = {
+        id: 'sub-1',
+        plan: 'monthly',
+        status: 'active',
+        endsAt: futureDate,
+        platform: 'google',
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'google-token-123',
+      };
+
+      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockPrisma.subscription.update.mockResolvedValue({
+        ...mockSub,
+        status: 'cancelled',
+      });
+      mockConfigService.get.mockReturnValue('com.storytime.app');
+      mockGoogleVerification.cancelSubscription.mockResolvedValue(undefined);
+
+      await service.cancelSubscription('u1');
+
+      expect(mockGoogleVerification.cancelSubscription).toHaveBeenCalledWith({
+        packageName: 'com.storytime.app',
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'google-token-123',
+      });
+    });
+
+    it('should still complete local cancellation even if Google cancel API fails', async () => {
+      const futureDate = new Date(Date.now() + 86400000 * 30);
+      const mockSub = {
+        id: 'sub-1',
+        plan: 'monthly',
+        status: 'active',
+        endsAt: futureDate,
+        platform: 'google',
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'google-token-123',
+      };
+
+      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockPrisma.subscription.update.mockResolvedValue({
+        ...mockSub,
+        status: 'cancelled',
+      });
+      mockConfigService.get.mockReturnValue('com.storytime.app');
+      mockGoogleVerification.cancelSubscription.mockRejectedValue(
+        new Error('Google API unavailable'),
+      );
+
+      const result = await service.cancelSubscription('u1');
+
+      expect(result.status).toBe('cancelled');
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub-1' },
+        data: { status: 'cancelled', endsAt: futureDate },
+      });
+      expect(mockSubscriptionService.invalidateCache).toHaveBeenCalledWith('u1');
+    });
+
+    it('should check Apple subscription status when platform is apple', async () => {
+      const futureDate = new Date(Date.now() + 86400000 * 30);
+      const mockSub = {
+        id: 'sub-1',
+        plan: 'monthly',
+        status: 'active',
+        endsAt: futureDate,
+        platform: 'apple',
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'apple-tx-123',
+      };
+
+      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockPrisma.subscription.update.mockResolvedValue({
+        ...mockSub,
+        status: 'cancelled',
+      });
+      mockAppleVerification.getSubscriptionStatus.mockResolvedValue({
+        autoRenewActive: false,
+      });
+
+      const result = await service.cancelSubscription('u1');
+
+      expect(mockAppleVerification.getSubscriptionStatus).toHaveBeenCalledWith(
+        'apple-tx-123',
+      );
+      expect(result.status).toBe('cancelled');
+      expect(result).not.toHaveProperty('platformWarning');
+      expect(result).not.toHaveProperty('manageUrl');
+    });
+
+    it('should return warning and manageUrl when Apple auto-renewal is active', async () => {
+      const futureDate = new Date(Date.now() + 86400000 * 30);
+      const mockSub = {
+        id: 'sub-1',
+        plan: 'monthly',
+        status: 'active',
+        endsAt: futureDate,
+        platform: 'apple',
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'apple-tx-123',
+      };
+
+      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockPrisma.subscription.update.mockResolvedValue({
+        ...mockSub,
+        status: 'cancelled',
+      });
+      mockAppleVerification.getSubscriptionStatus.mockResolvedValue({
+        autoRenewActive: true,
+      });
+
+      const result = await service.cancelSubscription('u1');
+
+      expect(result.status).toBe('cancelled');
+      expect(result.platformWarning).toBe(
+        'Apple subscription auto-renewal is still active. Please manage your subscription through your Apple ID settings.',
+      );
+      expect(result.manageUrl).toBe(
+        'https://apps.apple.com/account/subscriptions',
+      );
+    });
+
+    it('should skip platform API calls when platform is null', async () => {
+      const futureDate = new Date(Date.now() + 86400000 * 30);
+      const mockSub = {
+        id: 'sub-1',
+        plan: 'monthly',
+        status: 'active',
+        endsAt: futureDate,
+        platform: null,
+        productId: null,
+        purchaseToken: null,
+      };
+
+      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockPrisma.subscription.update.mockResolvedValue({
+        ...mockSub,
+        status: 'cancelled',
+      });
+
+      const result = await service.cancelSubscription('u1');
+
+      expect(result.status).toBe('cancelled');
+      expect(mockGoogleVerification.cancelSubscription).not.toHaveBeenCalled();
+      expect(mockAppleVerification.getSubscriptionStatus).not.toHaveBeenCalled();
+    });
+
+    it('should always complete local cancellation regardless of platform API errors', async () => {
+      const futureDate = new Date(Date.now() + 86400000 * 30);
+      const mockSub = {
+        id: 'sub-1',
+        plan: 'monthly',
+        status: 'active',
+        endsAt: futureDate,
+        platform: 'apple',
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'apple-tx-123',
+      };
+
+      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockPrisma.subscription.update.mockResolvedValue({
+        ...mockSub,
+        status: 'cancelled',
+      });
+      mockAppleVerification.getSubscriptionStatus.mockRejectedValue(
+        new Error('Apple API unavailable'),
+      );
+
+      const result = await service.cancelSubscription('u1');
+
+      expect(result.status).toBe('cancelled');
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub-1' },
+        data: { status: 'cancelled', endsAt: futureDate },
+      });
+      expect(mockSubscriptionService.invalidateCache).toHaveBeenCalledWith('u1');
     });
   });
 });

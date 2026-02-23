@@ -6,7 +6,7 @@ import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Role } from '@prisma/client';
+import { Role, OnboardingStatus } from '@prisma/client';
 
 describe('OnboardingService', () => {
   let service: OnboardingService;
@@ -20,8 +20,8 @@ describe('OnboardingService', () => {
     email: 'test@example.com',
     name: 'Test User',
     isEmailVerified: true,
-    role: 'parent',
-    onboardingStatus: 'email_verified',
+    role: Role.parent,
+    onboardingStatus: OnboardingStatus.email_verified,
     createdAt: new Date(),
     updatedAt: new Date(),
     profile: {

@@ -37,9 +37,12 @@ export class AdminSystemService {
     private readonly prisma: PrismaService, // For seedDatabase (complex transaction)
   ) {}
 
-  async getRecentActivity(limit: number = 50): Promise<ActivityLogDto[]> {
+  async getRecentActivity(limit: number = 50, userId?: string): Promise<ActivityLogDto[]> {
+    const where: Prisma.ActivityLogWhereInput = { isDeleted: false };
+    if (userId) where.userId = userId;
+
     return this.adminSystemRepository.findActivityLogs({
-      where: { isDeleted: false },
+      where,
       take: limit,
       orderBy: { createdAt: 'desc' },
     });

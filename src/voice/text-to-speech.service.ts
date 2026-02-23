@@ -16,6 +16,8 @@ const VOICE_IDS: Record<VoiceType, string> = {
   [VoiceType.LILY]: 'AZnzlk1XvdvUeBnXmlld',
   [VoiceType.BILL]: 'pqHfZKP75CvOlQylNhV4',
   [VoiceType.LAURA]: 'FGY2WhTYpPnrIDTdsKH5',
+  [VoiceType.ROSIE]: 'ThT5KcBeYPX3keUQqHPh',
+  [VoiceType.PIXIE]: 'jBpfuIE2acCO8z3wKNLl',
 };
 
 @Injectable()

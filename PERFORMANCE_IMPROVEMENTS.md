@@ -1066,13 +1066,13 @@ describe('RewardService', () => {
 | `achievement-progress` | `badge.service.ts` | P1 | Medium |
 | `age` | `age.service.ts` | P2 | Low |
 | `analytics` | `analytics.service.ts` | P2 | Medium |
-| `auth` | `password.service.ts` | P1 | Low |
-| `auth` | `token.service.ts` | P1 | Low |
+| `auth` | `password.service.ts` | ~~P1~~ | ✅ 22 tests |
+| `auth` | `token.service.ts` | ~~P1~~ | ✅ 24 tests |
 | `avatar` | `avatar.service.ts` | P2 | Medium |
 | `avatar` | `avatar.seeder.service.ts` | P3 | Low |
 | `notification` | `email-queue.service.ts` | P2 | Medium |
 | `notification` | `in-app-notification.service.ts` | P2 | Medium |
-| `notification` | `notification-preference.service.ts` | P2 | Medium |
+| `notification` | `notification-preference.service.ts` | ~~P2~~ | ✅ 25 tests |
 | `prisma` | `prisma.service.ts` | P3 | Low |
 | `reports` | `reports.service.ts` | P2 | Medium |
 | `reports` | `screen-time.service.ts` | P2 | Medium |
@@ -1090,7 +1090,8 @@ describe('RewardService', () => {
 | `user` | `user-pin.service.ts` | P2 | Low |
 | `user` | `user-deletion.service.ts` | P1 | Medium |
 | `voice` | `voice-quota.service.ts` | P2 | Low |
-| `admin` | `admin-analytics.service.ts` | P3 | High |
+| `admin` | `admin-analytics.service.ts` | ~~P3~~ | ✅ 40 tests |
+| `admin` | `admin-system.service.ts` | ~~P3~~ | ✅ 32 tests |
 | `admin` | `admin-story.service.ts` | P3 | High |
 | `admin` | `admin-user.service.ts` | P3 | Medium |
 
@@ -1101,8 +1102,8 @@ describe('RewardService', () => {
 2. `story-progress.service.ts` - User progress tracking
 3. `progress.service.ts` - Achievement calculations
 4. `user-deletion.service.ts` - Data compliance critical
-5. `password.service.ts` - Security critical
-6. `token.service.ts` - Auth critical
+5. ~~`password.service.ts`~~ - ✅ 22 tests (Integration session 2026-02-23)
+6. ~~`token.service.ts`~~ - ✅ 24 tests (Integration session 2026-02-23)
 
 **P2 - Important Services (Second Wave)**
 - Achievement tracking services
@@ -1367,12 +1368,12 @@ export class SubscriptionRequiredException extends DomainException {
 | Debugging | Error details provide context for troubleshooting |
 
 **Action Items:**
-- [ ] Create base `DomainException` class
-- [ ] Implement authentication exceptions
-- [ ] Implement resource exceptions
-- [ ] Implement business logic exceptions
-- [ ] Update exception filter to handle domain exceptions
-- [ ] Migrate critical paths to use domain exceptions
+- [x] Create base `DomainException` class ✅
+- [x] Implement authentication exceptions ✅
+- [x] Implement resource exceptions ✅
+- [x] Implement business logic exceptions ✅
+- [x] Update exception filter to handle domain exceptions ✅
+- [x] Migrate critical paths to use domain exceptions ✅
 
 ---
 

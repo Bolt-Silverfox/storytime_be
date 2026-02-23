@@ -9,6 +9,8 @@ import { StoryService } from '../story/story.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { SpeechToTextService } from './speech-to-text.service';
+import { VoiceQuotaService } from './voice-quota.service';
+import { VoiceQueueService } from './queue';
 
 const mockVoiceService = {
   listVoices: jest.fn(),
@@ -19,6 +21,21 @@ const mockStoryService = {};
 const mockUploadService = {};
 const mockTextToSpeechService = {};
 const mockSpeechToTextService = {};
+const mockVoiceQuotaService = {
+  checkUsage: jest.fn(),
+  canUseVoice: jest.fn(),
+  getVoiceAccess: jest.fn(),
+  setSecondVoice: jest.fn(),
+};
+const mockVoiceQueueService = {
+  queueTextSynthesis: jest.fn(),
+  queueStorySynthesis: jest.fn(),
+  getJobStatus: jest.fn(),
+  getJobResult: jest.fn(),
+  cancelJob: jest.fn(),
+  getUserPendingJobs: jest.fn(),
+  getQueueStats: jest.fn(),
+};
 
 describe('VoiceController', () => {
   let controller: VoiceController;
@@ -37,6 +54,8 @@ describe('VoiceController', () => {
         { provide: UploadService, useValue: mockUploadService },
         { provide: TextToSpeechService, useValue: mockTextToSpeechService },
         { provide: SpeechToTextService, useValue: mockSpeechToTextService },
+        { provide: VoiceQuotaService, useValue: mockVoiceQuotaService },
+        { provide: VoiceQueueService, useValue: mockVoiceQueueService },
       ],
     })
       .overrideGuard(AuthSessionGuard)

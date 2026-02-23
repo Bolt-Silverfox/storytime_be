@@ -10,6 +10,7 @@ import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
 import { AUTH_REPOSITORY, IAuthRepository } from './repositories';
 import { UserDto } from './dto/auth.dto';
+import { Role } from '@prisma/client';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -23,7 +24,7 @@ describe('AuthService', () => {
     name: 'Test User',
     passwordHash: 'hashed_password',
     isEmailVerified: true,
-    role: 'parent',
+    role: Role.parent,
     _count: { kids: 2 },
     createdAt: new Date(),
     updatedAt: new Date(),
