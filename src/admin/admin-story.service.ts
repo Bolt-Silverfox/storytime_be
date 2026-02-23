@@ -42,6 +42,7 @@ export class AdminStoryService {
       language,
       minAge,
       maxAge,
+      categoryId,
     } = filters;
 
     const skip = (page - 1) * limit;
@@ -61,6 +62,7 @@ export class AdminStoryService {
     if (language) where.language = language;
     if (minAge) where.ageMin = { gte: minAge };
     if (maxAge) where.ageMax = { lte: maxAge };
+    if (categoryId) where.categories = { some: { id: categoryId } };
 
     const [stories, total] = await Promise.all([
       this.adminStoryRepository.findStories({

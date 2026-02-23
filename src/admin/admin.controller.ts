@@ -29,6 +29,11 @@ import {
   UpdateUserRoleDto,
   BulkActionDto,
 } from './dto/user-management.dto';
+import { ExportAnalyticsDto } from './dto/admin-export.dto';
+import type {
+  AiCreditDuration,
+  UserGrowthDuration,
+} from './admin-analytics.service';
 import { PaginationUtil } from '../shared/utils/pagination.util';
 import {
   DashboardStatsDto,
@@ -37,7 +42,7 @@ import {
   SystemHealthDto,
   ApiResponseDto,
 } from './dto/admin-responses.dto';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import * as Swagger from './decorators/swagger';
 
 @ApiBearerAuth()
@@ -149,8 +154,16 @@ export class AdminController {
 
   @Get('dashboard/ai-credits')
   @Swagger.ApiAdminGetAiCreditStats()
-  async getAiCreditStats() {
-    const data = await this.adminAnalyticsService.getAiCreditAnalytics();
+  @ApiQuery({
+    name: 'duration',
+    required: false,
+    enum: ['daily', 'weekly', 'monthly', 'quarterly', 'yearly'],
+    description: 'Time duration filter for AI credit analytics',
+  })
+  async getAiCreditStats(
+    @Query('duration') duration?: AiCreditDuration,
+  ) {
+    const data = await this.adminAnalyticsService.getAiCreditAnalytics(duration);
     return {
       statusCode: 200,
       message: 'AI credit analytics retrieved successfully',
@@ -160,13 +173,43 @@ export class AdminController {
 
   @Get('dashboard/user-growth-monthly')
   @Swagger.ApiAdminGetUserGrowthMonthly()
-  async getUserGrowthMonthly() {
-    const data = await this.adminAnalyticsService.getUserGrowthMonthly();
+  @ApiQuery({
+    name: 'duration',
+    required: false,
+    enum: ['last_year', 'last_month', 'last_week'],
+    description: 'Time duration filter for user growth data',
+  })
+  async getUserGrowthMonthly(
+    @Query('duration') duration?: UserGrowthDuration,
+  ) {
+    const data = await this.adminAnalyticsService.getUserGrowthMonthly(duration);
     return {
       statusCode: 200,
       message: 'User growth data retrieved successfully',
       data: data.data,
     };
+  }
+
+  // =====================
+  // EXPORT ENDPOINTS
+  // =====================
+
+  @Get('dashboard/export')
+  @ApiOperation({ summary: 'Export analytics data' })
+  async exportAnalytics(@Query() dto: ExportAnalyticsDto) {
+    return this.adminAnalyticsService.exportAnalyticsData(
+      dto.type,
+      dto.format ?? 'csv',
+      dto.startDate,
+      dto.endDate,
+    );
+  }
+
+  @Get('users/export')
+  @ApiOperation({ summary: 'Export users as CSV' })
+  async exportUsers() {
+    const csv = await this.adminUserService.exportUsersAsCsv();
+    return { data: csv, contentType: 'text/csv' };
   }
 
   // =====================
@@ -389,6 +432,12 @@ export class AdminController {
 
   @Get('stories')
   @Swagger.ApiAdminGetAllStories()
+  @ApiQuery({
+    name: 'categoryId',
+    required: false,
+    type: String,
+    description: 'Filter stories by category ID',
+  })
   async getAllStories(@Query() filters: StoryFilterDto) {
     const result = await this.adminStoryService.getAllStories(filters);
     return {
