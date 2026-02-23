@@ -583,6 +583,127 @@ export function ApiAdminUpdateUserRole() {
   );
 }
 
+export function ApiAdminSuspendUser() {
+  return applyDecorators(
+    ApiBearerAuth(),
+    ApiOperation({
+      summary: 'Suspend a user',
+      description:
+        'Suspends a user account, preventing them from accessing the platform. Admin users cannot be suspended.',
+    }),
+    ApiParam({
+      name: 'userId',
+      type: String,
+      description: 'User ID',
+      example: 'user-123-uuid',
+    }),
+    ApiOkResponse({
+      description: 'User suspended successfully',
+      schema: {
+        example: {
+          statusCode: 200,
+          message: 'User suspended successfully',
+          data: {
+            id: 'user-123',
+            email: 'user@example.com',
+            name: 'John Doe',
+            isSuspended: true,
+            suspendedAt: '2026-02-23T10:30:00Z',
+          },
+        },
+      },
+    }),
+    ApiResponse({
+      status: 403,
+      description: 'Cannot suspend admin users',
+      schema: {
+        example: {
+          statusCode: 403,
+          message: 'Cannot suspend admin users',
+          error: 'Forbidden',
+        },
+      },
+    }),
+    ApiResponse({
+      status: 404,
+      description: 'User not found',
+      schema: {
+        example: {
+          statusCode: 404,
+          message: 'User with ID user-123 not found',
+          error: 'Not Found',
+        },
+      },
+    }),
+    ApiResponse({
+      status: 409,
+      description: 'User is already suspended',
+      schema: {
+        example: {
+          statusCode: 409,
+          message: 'User is already suspended',
+          error: 'Conflict',
+        },
+      },
+    }),
+  );
+}
+
+export function ApiAdminUnsuspendUser() {
+  return applyDecorators(
+    ApiBearerAuth(),
+    ApiOperation({
+      summary: 'Unsuspend a user',
+      description:
+        'Removes suspension from a user account, restoring their access to the platform.',
+    }),
+    ApiParam({
+      name: 'userId',
+      type: String,
+      description: 'User ID',
+      example: 'user-123-uuid',
+    }),
+    ApiOkResponse({
+      description: 'User unsuspended successfully',
+      schema: {
+        example: {
+          statusCode: 200,
+          message: 'User unsuspended successfully',
+          data: {
+            id: 'user-123',
+            email: 'user@example.com',
+            name: 'John Doe',
+            isSuspended: false,
+            suspendedAt: null,
+          },
+        },
+      },
+    }),
+    ApiResponse({
+      status: 404,
+      description: 'User not found',
+      schema: {
+        example: {
+          statusCode: 404,
+          message: 'User with ID user-123 not found',
+          error: 'Not Found',
+        },
+      },
+    }),
+    ApiResponse({
+      status: 409,
+      description: 'User is not suspended',
+      schema: {
+        example: {
+          statusCode: 409,
+          message: 'User is not suspended',
+          error: 'Conflict',
+        },
+      },
+    }),
+  );
+}
+
 export function ApiAdminBulkUserAction() {
   return applyDecorators(
     ApiBearerAuth(),

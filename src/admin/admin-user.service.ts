@@ -3,6 +3,8 @@ import {
   ResourceNotFoundException,
   ResourceAlreadyExistsException,
   ValidationException,
+  ForbiddenActionException,
+  ConflictException,
 } from '@/shared/exceptions';
 import { Role, Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -325,6 +327,32 @@ export class AdminUserService {
     }
 
     return this.adminUserRepository.restoreUser(userId);
+  }
+
+  async suspendUser(userId: string) {
+    const user = await this.adminUserRepository.findUserByIdSimple(userId);
+    if (!user) throw new ResourceNotFoundException('User', userId);
+    if (user.role === 'admin')
+      throw new ForbiddenActionException('Cannot suspend admin users');
+    if (user.isSuspended)
+      throw new ConflictException('User is already suspended');
+
+    return this.adminUserRepository.updateUser({
+      userId,
+      data: { isSuspended: true, suspendedAt: new Date() },
+    });
+  }
+
+  async unsuspendUser(userId: string) {
+    const user = await this.adminUserRepository.findUserByIdSimple(userId);
+    if (!user) throw new ResourceNotFoundException('User', userId);
+    if (!user.isSuspended)
+      throw new ConflictException('User is not suspended');
+
+    return this.adminUserRepository.updateUser({
+      userId,
+      data: { isSuspended: false, suspendedAt: null },
+    });
   }
 
   async bulkUserAction(data: BulkActionDto): Promise<{ count: number }> {
