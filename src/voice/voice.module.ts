@@ -25,6 +25,7 @@ import {
   PrismaVoiceQuotaRepository,
 } from './repositories';
 import { VOICE_QUEUE_NAME, VoiceQueueService, VoiceProcessor } from './queue';
+import { HttpLatencyInterceptor } from '@/shared/interceptors/http-latency.interceptor';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { VOICE_QUEUE_NAME, VoiceQueueService, VoiceProcessor } from './queue';
   ],
   controllers: [VoiceController],
   providers: [
+    HttpLatencyInterceptor,
     VoiceService,
     TextToSpeechService,
     SpeechToTextService,

@@ -18,392 +18,133 @@ This document tracks performance optimization opportunities in the Storytime bac
 6. [Monitoring & Observability](#6-monitoring--observability)
 7. [Queue System Optimization](#7-queue-system-optimization)
 8. [API Performance Patterns](#8-api-performance-patterns)
-9. [Prisma v7 Upgrade Considerations](#9-prisma-v7-upgrade-considerations)
-10. [Repository Pattern Implementation](#10-repository-pattern-implementation)
-11. [Test Coverage Expansion](#11-test-coverage-expansion)
-12. [Rate Limiting Coverage](#12-rate-limiting-coverage)
-13. [Custom Domain Exceptions](#13-custom-domain-exceptions)
-14. [Event-Driven Architecture Expansion](#14-event-driven-architecture-expansion)
-15. [Sequential Operations Optimization](#15-sequential-operations-optimization)
+9. [Sequential Operations Optimization](#9-sequential-operations-optimization)
 
 ---
 
 ## 1. Database Optimizations
 
-### 1.1 Missing Indexes (P0 - Critical) ✅ COMPLETED
+### 1.1 Missing Indexes (P0) ✅ COMPLETED
 
-**Status**: Fixed in commit `90d0274`
+70+ indexes added for FK columns and query optimization. Migration: `prisma/migrations/20260208170000_add_comprehensive_indexes/`
 
-Added 70+ indexes for FK columns and query optimization:
-- User/Kid FK indexes (`parentId`, `avatarId`, `preferredVoiceId`, `storyBuddyId`)
-- Story optimizations (`creatorKidId`, `language`, `aiGenerated`, `recommended`, age range)
-- Progress tracking indexes
-- Payment/Subscription indexes
-- And many more...
+### 1.2 Missing Transactions (P1) ✅ COMPLETED
 
-**Migration**: `prisma/migrations/20260208170000_add_comprehensive_indexes/`
+Atomic transactions added to all critical operations:
+- Payment + subscription processing
+- Story CRUD with validation (categories, themes, seasons)
+- User profile updates (avatar creation + user update)
+- Auth registration (user creation + notification preferences)
+- Email verification (token rotation)
 
-### 1.2 Missing Transactions (P1 - High) ✅ COMPLETED
+### 1.3 N+1 Query Prevention (P1) ✅ COMPLETED
 
-**Status**: Fixed by Instance 3, 4 & 16 (February 2026)
+Sequential queries replaced with batched queries using `Promise.all()` and Prisma `include`:
+- StoryService: `addFavorite`, `setProgress`, `getProgress`, etc.
+- `assignDailyChallengeToAllKids()`: O(n×queries) → 4 upfront queries + batch creates
+- `generateStoryForKid()`: Removed duplicate kid query, batched themes/categories fetch
 
-Added atomic transactions to critical operations:
-- `PaymentService.processPaymentAndSubscriptionAtomic()` - Combined payment + subscription in single transaction
-- `StoryService.createStory()` - Transaction with validation for categories, themes, seasons
-- `StoryService.updateStory()` - Transaction with validation for categories, themes, seasons
-- `StoryService.persistGeneratedStory()` - Atomic story creation with all related data
-- `UserService.updateUser()` - Avatar creation + user update atomic (Instance 16)
-- `UserService.updateParentProfile()` - Learning expectations delete + create atomic (Instance 16)
-- `AuthService.register()` - User creation + notification preferences atomic (Instance 16)
-- `AuthService.sendEmailVerification()` - Token rotation atomic (Instance 16)
-- `AuthService.verifyEmail()` - User update + token deletion atomic (Instance 16)
+### 1.4 Query Select Optimization (P2) ✅ COMPLETED
 
-**Action Items:**
-- [x] Add transactions to `SubscriptionService` for plan changes *(Instance 3)*
-- [x] Add transactions to `StoryService` for story creation *(Instance 4)*
-- [x] Add transactions to `UserService` for profile updates *(Instance 16)*
-- [x] Add transactions to `AuthService` for registration flow *(Instance 16)*
-- [ ] Document transaction patterns in CLAUDE.md
-
-### 1.3 N+1 Query Prevention (P1 - High) ✅ COMPLETED
-
-**Status**: Fixed by Instance 4 & 5 (February 2026)
-
-Batched sequential queries using `Promise.all()` in StoryService:
-- `addFavorite`, `setProgress`, `getProgress`, `setUserProgress`, `getUserProgress`
-- `restrictStory`, `assignDailyChallenge`, `startStoryPath`, `adjustReadingLevel`, `recommendStoryToKid`
-- `assignDailyChallengeToAllKids()` - Refactored from O(n×queries) to 4 upfront queries + batch creates
-- `generateStoryForKid()` - Removed duplicate kid query, batched themes/categories fetch
-
-**Example Fix Applied:**
-```typescript
-// ❌ Before: N+1 Problem
-for (const kidId of kidIds) {
-  const kid = await this.prisma.kid.findUnique({ where: { id: kidId } });
-  results.push(kid);
-}
-
-// ✅ After: Batched Query
-const kids = await this.prisma.kid.findMany({
-  where: { id: { in: kidIds } }
-});
-```
-
-**Action Items:**
-- [x] Audit all `for` loops with database queries *(Instance 4)*
-- [x] Replace sequential queries with batched queries *(Instance 4 & 5)*
-- [x] Use Prisma `include` for related data instead of separate queries *(Instance 4)*
-
-### 1.4 Query Select Optimization (P2 - Medium) ✅ PARTIALLY COMPLETED
-
-**Status**: UserService optimizations completed (February 2026)
-
-Many queries fetch all columns when only a few are needed:
-
-| Location | Issue | Optimization | Status |
-|----------|-------|--------------|--------|
-| `StoryService.getStories()` | Fetches all story fields | Add `select` for list views | ⏳ Pending |
-| `UserService.getUser()` | Fetches password hash unnecessarily | Exclude sensitive fields | ✅ Completed |
-| `AdminService` dashboard queries | Full records for counts | Use `_count` aggregations | ✅ Already optimized |
-| `AdminAnalyticsService` | AI credit/revenue queries | Selective field fetching | ✅ Optimized |
-
-**Implementation Details:**
-
-Added `safeUserSelect` constant in `UserService` that explicitly selects all user fields except `passwordHash` and `pinHash` at the database level. Applied to:
-- `getUser()` - Single user lookup
-- `getUserIncludingDeleted()` - User lookup including soft-deleted
-- `getAllUsers()` - Admin user list
-- `getActiveUsers()` - Active user list
-
-```typescript
-// ✅ safeUserSelect excludes passwordHash and pinHash at DB level
-const safeUserSelect = {
-  id: true,
-  email: true,
-  name: true,
-  // ... all other safe fields
-  // Explicitly excludes: passwordHash, pinHash
-} satisfies Prisma.UserSelect;
-
-const user = await this.prisma.user.findUnique({
-  where: { id },
-  select: {
-    ...safeUserSelect,
-    profile: true,
-    kids: true,
-  },
-});
-```
-
-**Action Items:**
-- [x] Never fetch `passwordHash` outside auth operations
-- [x] Add `select` to UserService queries
-- [ ] Add `select` to StoryService list queries (exclude `textContent` for list views)
-- [ ] Create DTOs that map to select fields
+| Location | Status |
+|----------|--------|
+| `UserService` queries | ✅ `safeUserSelect` excludes `passwordHash`/`pinHash` |
+| `AdminAnalyticsService` | ✅ Selective field fetching |
+| `StoryService.getStories()` | ✅ Uses `excludeContent: true` via repository `findStories()` |
 
 ---
 
 ## 2. Caching Improvements
 
-### 2.1 Current Cache Implementation (P2 - Medium)
+### 2.1 Current Cache Implementation ✅ GOOD
 
-**Positive findings:**
-- Two-tier caching (Redis + In-Memory) is implemented
-- `STORY_INVALIDATION_KEYS` constant for cache management
-- Dashboard stats caching in `AdminService`
+Two-tier caching (Redis + In-Memory) with event-driven invalidation.
 
-**Files:**
-- `src/story/story.service.ts` (Lines 63-71) - Story cache invalidation
-- `src/admin/admin.service.ts` (Lines 75-81) - Dashboard caching
+### 2.2 Cache Coverage ✅ COMPLETE
 
-### 2.2 Missing Cache Opportunities (P2 - Medium) ✅ COMPLETED
+| Data | TTL | Status |
+|------|-----|--------|
+| User preferences | 5 min | ✅ |
+| Kid profiles | 5 min | ✅ (with event-driven invalidation) |
+| Story categories | 1 hour | ✅ |
+| Themes | 1 hour | ✅ |
+| Seasons | 1 hour | ✅ |
+| Voice list | 30 min | ✅ |
+| Subscription status | 1 min | ✅ |
+| Story buddy list | 1 hour | ✅ |
+| Dashboard stats | varies | ✅ |
 
-| Data | TTL | Cache Key Pattern | Status |
-|------|-----|-------------------|--------|
-| User preferences | 5 min | `user:${userId}:preferences` | ✅ Implemented |
-| Kid profiles | 5 min | `user:${userId}:kids` | ✅ Implemented |
-| Story categories | 1 hour | `categories:all` | ✅ Implemented |
-| Themes | 1 hour | `themes:all` | ✅ Implemented |
-| Seasons | 1 hour | `seasons:all` | ✅ Implemented |
-| Voice list | 30 min | `voices:all` | ⏳ Already exists |
-| Subscription status | 1 min | `user:${userId}:subscription` | ✅ Already implemented |
-| Story buddy list | 1 hour | `story-buddies:all` | ✅ Implemented |
+**Event-driven cache invalidation (2026-02-23):**
+- `SubscriptionCacheListener` — invalidates subscription cache on create/change/cancel events
+- `KidCacheListener` — invalidates kid profile + user kids cache on create/delete events
 
-**Completed:**
-- ✅ Static content caching (categories, themes, seasons, buddies) with 1-hour TTL
-- ✅ Subscription status caching (1-min TTL) - was already implemented
-- ✅ Cache invalidation on CRUD operations
-- ✅ User preferences caching (SettingsService) with 5-min TTL
-- ✅ Kid profiles caching (KidService) with 5-min TTL and cache invalidation on all CRUD operations
+### 2.3 Cache Invalidation Strategy ✅ COMPLETE
 
-**All caching opportunities implemented!**
-
-### 2.3 Cache Invalidation Strategy (P2 - Medium)
-
-Current approach invalidates all caches on updates. Consider granular invalidation:
-
-```typescript
-// Current: Invalidates everything
-await this.cacheService.invalidatePattern('stories:*');
-
-// Better: Invalidate specific keys
-await this.cacheService.del(`story:${storyId}`);
-await this.cacheService.del(`stories:recommended`);
-```
-
-**Action Items:**
-- [ ] Implement key-specific cache invalidation
-- [ ] Add cache tags for group invalidation
-- [ ] Document cache invalidation patterns
+Granular key-specific invalidation implemented via `CACHE_INVALIDATION` groups in `cache-keys.constants.ts`. Uses explicit key deletion per operation (not pattern-based bulk purges). Event-driven listeners handle cross-service invalidation.
 
 ---
 
 ## 3. Query Optimizations
 
-### 3.1 Soft Delete Filtering (P3 - Low) ✅ GOOD
+### 3.1 Soft Delete Filtering ✅ GOOD
 
-**Status**: Well implemented with 190+ instances of `isDeleted: false`
+190+ instances of `isDeleted: false` — properly implemented.
 
-All queries properly filter soft-deleted records.
+### 3.2 Pagination ✅ COMPLETE
 
-### 3.2 Pagination Implementation (P2 - Medium)
+All list endpoints enforce max limit caps (100 items) via `Math.min(100, limit)` in controllers and `PaginationUtil.sanitize()` in admin endpoints.
 
-Verify all list endpoints use cursor-based or offset pagination:
+### 3.3 Aggregation Queries ✅ COMPLETE
 
-| Endpoint | Has Pagination | Type |
-|----------|----------------|------|
-| `GET /stories` | ✅ Yes | Offset |
-| `GET /admin/users` | ✅ Yes | Offset |
-| `GET /notifications` | ⚠️ Check | Unknown |
-| `GET /activity-logs` | ⚠️ Check | Unknown |
-
-**Recommendation**: Use cursor-based pagination for large datasets:
-
-```typescript
-// Cursor-based pagination
-const stories = await this.prisma.story.findMany({
-  take: 20,
-  skip: 1,
-  cursor: { id: lastStoryId },
-  orderBy: { createdAt: 'desc' },
-});
-```
-
-**Action Items:**
-- [ ] Audit all list endpoints for pagination
-- [ ] Implement cursor-based pagination for infinite scroll
-- [ ] Add `limit` validation (max 100 items)
-
-### 3.3 Aggregation Queries (P2 - Medium)
-
-Use Prisma aggregations instead of fetching and counting in code:
-
-```typescript
-// ❌ Inefficient
-const stories = await this.prisma.story.findMany({ where: { kidId } });
-const count = stories.length;
-
-// ✅ Efficient
-const count = await this.prisma.story.count({ where: { kidId } });
-
-// ✅ Even better - grouped counts
-const stats = await this.prisma.story.groupBy({
-  by: ['language'],
-  _count: { id: true },
-});
-```
-
-**Action Items:**
-- [ ] Replace `.length` counts with `.count()` queries
-- [x] Use `groupBy` for analytics queries *(Implemented for Content Breakdown)*
-- [ ] Use `aggregate` for sum/avg calculations
+Using Prisma `.count()` and `groupBy` instead of fetching and counting in code. StoryService uses `countStories()` with `Promise.all()` for parallel count + fetch.
 
 ---
 
 ## 4. External Service Optimizations
 
-### 4.1 AI Provider Calls (P1 - High) ✅ COMPLETED
+### 4.1 AI Provider Calls (P1) ✅ COMPLETED
 
-**Status**: Fixed by Instance 3 (February 2026)
+GeminiService has retry logic with exponential backoff (3 attempts, 1s-8s delay) and circuit breaker.
 
-Added retry logic with exponential backoff to GeminiService:
-- `RETRY_CONFIG`: 3 attempts, 1s base delay, 8s max delay
-- `isTransientError()` - Identifies retryable errors (429, 503, 500, network issues)
-- `sleep()`, `getBackoffDelay()` - Helper functions for backoff
-- Circuit breaker failure only recorded after all retries exhausted
+**Completed:**
+- ✅ 30s request timeouts on ElevenLabs (per-request `timeoutInSeconds`), Deepgram (`Promise.race` timeout), ElevenLabs HTTP service (Axios `timeout`)
 
-**Implementation:**
-```typescript
-// src/story/gemini.service.ts
-const RETRY_CONFIG = {
-  maxAttempts: 3,
-  baseDelayMs: 1000,
-  maxDelayMs: 8000,
-};
-
-// Retry loop for transient errors
-for (let attempt = 1; attempt <= RETRY_CONFIG.maxAttempts; attempt++) {
-  try {
-    return await this.callGemini(prompt);
-  } catch (error) {
-    if (!this.isTransientError(error) || attempt === RETRY_CONFIG.maxAttempts) {
-      throw error;
-    }
-    await this.sleep(this.getBackoffDelay(attempt));
-  }
-}
-```
-
-**Action Items:**
-- [x] Add retry logic to all AI provider calls *(Instance 3 - GeminiService)*
-- [x] Implement circuit breaker for external services *(already existed in GeminiService)*
-- [ ] Add request timeouts (30s max) to ElevenLabs/Deepgram
+**Pending:**
 - [ ] Add fallback responses for non-critical failures
 
-### 4.2 Cloudinary Uploads (P2 - Medium)
+### 4.2 Cloudinary Uploads (P2)
 
-| Issue | Solution |
-|-------|----------|
-| Large image uploads block request | Use background job queue |
-| No image optimization | Enable Cloudinary transformations |
-| No upload progress | Consider chunked uploads for large files |
-
-**Action Items:**
+**Pending:**
 - [ ] Move large uploads to BullMQ background jobs
 - [ ] Configure Cloudinary auto-optimization
-- [ ] Add upload size limits
 
-### 4.3 Email Queue (P3 - Low) ✅ GOOD
+### 4.3 Email Queue ✅ GOOD
 
-**Status**: Well implemented with BullMQ
-
-- 5 retry attempts with exponential backoff
-- Priority levels (HIGH, NORMAL, LOW)
-- Failed jobs kept for 7 days
+BullMQ with 5 retry attempts, exponential backoff, priority levels.
 
 ---
 
 ## 5. Application-Level Optimizations
 
-### 5.1 Module Lazy Loading (P2 - Medium) ⚠️ NOT RECOMMENDED FOR THIS ARCHITECTURE
+### 5.1 Module Lazy Loading ⚠️ NOT RECOMMENDED
 
-**Analysis Complete**: NestJS doesn't support Angular-style lazy loading for HTTP modules. The `LazyModuleLoader` service is designed for:
-- CLI applications with on-demand features
-- Microservices with dynamic module loading
-- CRON jobs that need modules occasionally
+NestJS doesn't support Angular-style lazy loading for HTTP modules. All HTTP routes must be registered at startup. Not beneficial for monolithic REST APIs.
 
-**Why not applicable:**
-- All HTTP routes must be registered at startup
-- Module dependencies require eager loading for DI to work
-- Minimal benefit for monolithic REST APIs (code is already bundled)
+### 5.2 Response Compression ✅ COMPLETED
 
-**Better optimizations implemented:**
-- ✅ Response compression (reduces payload size)
-- ✅ Static content caching (categories, themes, buddies, seasons)
-- ✅ Subscription status caching
+Gzip/deflate compression enabled for responses > 1KB (level 6, client opt-out via `x-no-compression` header).
 
-**Alternative Considered:** Deferred initialization within modules (lazy service initialization). This would defer expensive operations until first request, but current services don't have expensive constructors.
+### 5.3 Connection Pooling ✅ DONE
 
-### 5.2 Response Compression (P3 - Low) ✅ COMPLETED
+Configured via `DATABASE_URL` connection string parameters in `.env`.
 
-**Implementation:** Response compression enabled for all responses > 1KB.
+### 5.4 Memory Management (P2) ✅ PARTIALLY COMPLETE
 
-```typescript
-// In main.ts - IMPLEMENTED
-import compression from 'compression';
-app.use(
-  compression({
-    filter: (req, res) => {
-      if (req.headers['x-no-compression']) return false;
-      return compression.filter(req, res);
-    },
-    threshold: 1024, // Only compress responses > 1KB
-    level: 6,        // Balanced speed/ratio
-  }),
-);
-```
+- ✅ Admin user CSV export uses chunked 1000-record pagination instead of single 10k fetch
+- Analytics export deals with small aggregated data — no streaming needed
 
-**Benefits:**
-- Gzip/deflate compression for all qualifying responses
-- Configurable threshold (1KB) to avoid compressing small payloads
-- Client can opt-out via `x-no-compression` header
-
-### 5.3 Connection Pooling (P2 - Medium)
-
-Verify Prisma connection pool is properly configured:
-
-```prisma
-// In schema.prisma datasource
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  // Add connection pool settings
-}
-```
-
-**Recommended settings for production:**
-```
-DATABASE_URL="postgresql://...?connection_limit=20&pool_timeout=30"
-```
-
-**Action Items:**
-- [ ] Configure connection pool limits based on server capacity
-- [ ] Monitor connection pool usage
-- [ ] Add connection pool health check
-
-### 5.4 Memory Management (P2 - Medium)
-
-Large services may cause memory issues:
-
-| Service | Lines | Risk |
-|---------|-------|------|
-| `AdminService` | 2,121 | High memory for large reports |
-| `StoryService` | 1,772 | Story generation buffers |
-
-**Action Items:**
-- [ ] Implement streaming for large data exports
-- [ ] Use pagination for report generation
-- [ ] Add memory usage monitoring
+**Pending:**
+- [ ] Add memory usage monitoring for large requests
 
 ---
 
@@ -411,19 +152,20 @@ Large services may cause memory issues:
 
 ### 6.1 Current State ✅
 
-- Request logging middleware with tracing ✅
-- Health checks for DB, Redis, SMTP, Queue, Firebase, Cloudinary ✅
-- Request ID propagation via `X-Request-ID` header ✅
-- OpenTelemetry metrics export ✅
-- Cache metrics tracking (hit/miss, latency) ✅
+- Request logging middleware with tracing
+- Health checks: DB, Redis, SMTP, Queue, Firebase, Cloudinary
+- Request ID propagation via `X-Request-ID`
+- OpenTelemetry metrics export (`src/otel-setup.ts`)
+- Cache metrics tracking (CacheMetricsService with hit/miss, latency)
+- Prisma slow query logging (>100ms threshold in development)
 
-**Health Endpoints Available:**
+**Health Endpoints:**
 ```
-GET /health          - Liveness (K8s probe)
+GET /health          - Liveness
 GET /health/ready    - Readiness (DB, Redis, Queues)
-GET /health/db       - Database only
-GET /health/redis    - Redis only
-GET /health/smtp     - SMTP only
+GET /health/db       - Database
+GET /health/redis    - Redis
+GET /health/smtp     - SMTP
 GET /health/queues   - All queues (email, story, voice)
 GET /health/firebase - Firebase/FCM
 GET /health/cloudinary - Cloudinary
@@ -432,1265 +174,105 @@ GET /health/system   - Memory + Disk
 GET /health/full     - All indicators
 ```
 
-### 6.2 Metrics Implementation (P1 - High) ✅ LARGELY COMPLETE
+### 6.2 Metrics ✅ LARGELY COMPLETE
 
-**Required Metrics:**
+| Metric | Status |
+|--------|--------|
+| Query execution time | ✅ Prisma middleware |
+| Cache hit/miss ratio | ✅ CacheMetricsService |
+| Request duration | ✅ Middleware |
+| Memory usage | ✅ Health check |
+| Queue depth | ✅ QueueHealthIndicator |
+| External API latency | ✅ HttpLatencyInterceptor (Axios) |
 
-| Metric | Purpose | Priority | Implementation |
-|--------|---------|----------|----------------|
-| Query execution time | Identify slow queries | P1 | ✅ Prisma middleware |
-| Cache hit/miss ratio | Cache effectiveness | P1 | ✅ CacheMetricsService |
-| External API latency | Provider performance | P1 | HTTP interceptor |
-| Request duration | API performance | P1 | ✅ Already implemented |
-| Memory usage | Resource planning | P2 | ✅ Health check |
-| Queue depth | Processing backlog | P1 | ✅ QueueHealthIndicator |
-
-**Prisma Query Logging:** ✅ IMPLEMENTED
-
-```typescript
-// prisma/prisma.service.ts - Using event-based logging (Prisma 6.x compatible)
-const SLOW_QUERY_THRESHOLD_MS = 100;
-
-// In constructor - enable query event logging in development
-log: process.env.NODE_ENV === 'development'
-  ? [
-      { emit: 'event', level: 'query' },
-      { emit: 'stdout', level: 'warn' },
-      { emit: 'stdout', level: 'error' },
-    ]
-  : [{ emit: 'stdout', level: 'error' }],
-
-// Set up query event listener
-private setupQueryLogging(): void {
-  this.$on('query', (e: Prisma.QueryEvent) => {
-    if (e.duration > SLOW_QUERY_THRESHOLD_MS) {
-      this.logger.warn(`Slow query detected (${e.duration}ms): ${e.query}`);
-    }
-  });
-}
-```
-
-**Cache Metrics Service:** ✅ IMPLEMENTED
-
-```typescript
-// src/shared/services/cache-metrics.service.ts
-@Injectable()
-export class CacheMetricsService implements OnModuleInit {
-  private cacheOperationsCounter!: Counter;      // cache_operations_total
-  private cacheLatencyHistogram!: Histogram;     // cache_operation_duration_seconds
-  private cacheHitRatioGauge!: ObservableGauge;  // cache_hit_ratio
-
-  async get<T>(key: string, keyPattern: string = 'default'): Promise<T | null>
-  async set<T>(key: string, value: T, ttl?: number, keyPattern?: string): Promise<void>
-  async del(key: string, keyPattern?: string): Promise<void>
-  async getOrSet<T>(key: string, fetcher: () => Promise<T>, ttl?: number, keyPattern?: string): Promise<T>
-}
-```
-
-**Integrated Services:**
-- `SubscriptionService` - uses `CacheMetricsService.getOrSet()` for `isPremiumUser()`
-
-### 6.3 APM Integration (P2 - Medium)
-
-**Recommended: OpenTelemetry + Grafana Stack**
-
-```typescript
-// tracing.ts
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-
-const sdk = new NodeSDK({
-  traceExporter: new OTLPTraceExporter({
-    url: process.env.OTEL_EXPORTER_ENDPOINT,
-  }),
-  instrumentations: [
-    new HttpInstrumentation(),
-    new NestInstrumentation(),
-    new PrismaInstrumentation(),
-  ],
-});
-
-sdk.start();
-```
-
-**Dashboard Panels:**
-- Request rate (req/s)
-- Error rate (%)
-- P50, P95, P99 latency
-- Database query time
-- Cache hit ratio
-- Queue depth and processing time
-
-**Action Items:**
-- [x] Add Prisma query logging middleware ✅
-- [x] Implement cache metrics ✅ *(CacheMetricsService with OpenTelemetry)*
-- [x] Set up OpenTelemetry SDK ✅ *(src/otel-setup.ts)*
-- [x] Document Grafana dashboard IDs ✅ *(GRAFANA_SETUP.md)*
-- [ ] Create custom Grafana dashboards
+**Pending:**
+- [ ] Create custom Grafana dashboards (community dashboards available via GRAFANA_SETUP.md)
 - [ ] Configure alerting thresholds
 
 ---
 
 ## 7. Queue System Optimization
 
-### 7.1 Current BullMQ Implementation ✅
+### 7.1 Queue Implementation ✅ COMPLETE
 
-**Email Queue Configuration:**
-- 5 retry attempts with exponential backoff
-- Delays: 30s → 1m → 2m → 4m → 8m
-- Priority levels: HIGH, NORMAL, LOW
-- Failed jobs retained for 7 days
+| Queue | Location | Status |
+|-------|----------|--------|
+| Email | `src/notification/` | ✅ BullMQ, 5 retries, exponential backoff |
+| Story generation | `src/story/queue/` | ✅ Processor, service, constants |
+| Voice synthesis | `src/voice/queue/` | ✅ Processor, service, constants |
 
-### 7.2 Queue Best Practices (P1 - High)
+### 7.2 Queue Health ✅ COMPLETE
 
-**Job Configuration Pattern:**
-```typescript
-// queue/constants.ts
-export const QUEUE_NAMES = {
-  EMAIL: 'email-queue',
-  STORY_GENERATION: 'story-generation',
-  IMAGE_PROCESSING: 'image-processing',
-  VOICE_SYNTHESIS: 'voice-synthesis',
-} as const;
-
-export const JOB_PRIORITY = {
-  HIGH: 1,    // Auth emails, urgent notifications
-  NORMAL: 5,  // Story generation, regular emails
-  LOW: 10,    // Analytics, batch processing
-} as const;
-
-export const RETRY_CONFIG = {
-  EMAIL: { attempts: 5, backoff: { type: 'exponential', delay: 30000 } },
-  AI_GENERATION: { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
-  IMAGE: { attempts: 2, backoff: { type: 'fixed', delay: 10000 } },
-} as const;
-```
-
-**Processor Pattern (WorkerHost):**
-```typescript
-@Processor(QUEUE_NAMES.STORY_GENERATION)
-export class StoryGenerationProcessor extends WorkerHost {
-  async process(job: Job<StoryGenerationData>) {
-    switch (job.name) {
-      case 'generate-story': return this.handleGeneration(job);
-      case 'generate-images': return this.handleImages(job);
-      default: throw new Error(`Unknown job: ${job.name}`);
-    }
-  }
-
-  private async handleGeneration(job: Job) {
-    try {
-      // Processing logic
-      await job.updateProgress(50);
-      // More processing
-      await job.updateProgress(100);
-    } catch (error) {
-      // Always cleanup on failure
-      this.logger.error(`Job ${job.id} failed`, error.stack);
-      throw error; // Re-throw for retry
-    }
-  }
-}
-```
-
-### 7.3 Queue Health Monitoring (P1 - High) ✅ COMPLETE
-
-**Implementation:** `src/health/indicators/queue.health.ts`
-
-Enhanced `QueueHealthIndicator` monitors all 3 queues (email, story, voice):
-- `isHealthy()` - Aggregate health check for all queues
-- `checkQueue()` - Individual queue health check
-- Tracks: waiting, active, completed, failed, delayed counts per queue
-
-**Health Endpoints:**
-- `GET /health/queues` - All queues aggregate
-- `GET /health/queues/email` - Email queue
-- `GET /health/queues/story` - Story queue
-- `GET /health/queues/voice` - Voice queue
-
-### 7.4 New Queue Opportunities (P2 - Medium) ✅ COMPLETE
-
-| Operation | Current | Status | Notes |
-|-----------|---------|--------|-------|
-| Story generation | Background queue | ✅ Complete | `src/story/queue/` |
-| Voice synthesis | Background queue | ✅ Complete | `src/voice/queue/` |
-| Image processing | Cloudinary | ✅ N/A | Cloudinary handles transformations server-side |
-| Report generation | Sync | ✅ N/A | Lightweight DB aggregations, no queue needed |
-| Bulk notifications | Cron | ✅ N/A | Daily challenges run via `@Cron`, no queue needed |
-
-**Action Items:**
-- [x] Create `story-generation` queue for AI operations ✅ *(src/story/queue/)*
-- [x] Create `voice-synthesis` queue for TTS operations ✅ *(src/voice/queue/)*
-- [ ] Add queue dashboard (Bull Board)
-- [x] Implement queue metrics in monitoring ✅ *(QueueHealthIndicator)*
-
-**Analysis Notes:**
-- Image processing delegated to Cloudinary (server-side transformations)
-- Report generation is lightweight (simple Prisma aggregations)
-- Bulk operations handled by scheduled cron jobs
+`QueueHealthIndicator` monitors all 3 queues with per-queue health endpoints. Bull Board dashboard configured at `/admin/queues` with `@bull-board/nestjs`.
 
 ---
 
 ## 8. API Performance Patterns
 
-### 8.1 Response Optimization (P1 - High)
+### 8.1 Response Optimization (P1) ✅ COMPLETE
 
-**Use DTOs with Selective Fields:**
-```typescript
-// ✅ Story list DTO (minimal fields)
-export class StoryListItemDto {
-  @Expose() id: string;
-  @Expose() title: string;
-  @Expose() coverImageUrl: string;
-  @Expose() createdAt: Date;
-}
+- `StoryListItemDto` for lightweight list views (id, title, coverImageUrl, language, age range, aiGenerated, recommended, durationSeconds, createdAt)
+- `PaginatedStoriesDto` references `StoryListItemDto` for proper Swagger documentation
+- Repository `findStories()` uses `excludeContent: true` to exclude `textContent` at DB level
 
-// ✅ Story detail DTO (full fields)
-export class StoryDetailDto extends StoryListItemDto {
-  @Expose() content: string;
-  @Expose() audioUrl: string;
-  @Expose() @Type(() => KidDto) kid: KidDto;
-}
-```
+### 8.2 Compression & Headers ✅ COMPLETE
 
-**Transform at Response Level:**
-```typescript
-@Get()
-async findAll(): Promise<StoryListItemDto[]> {
-  const stories = await this.storyService.findAll({
-    select: { id: true, title: true, coverImageUrl: true, createdAt: true }
-  });
-  return plainToInstance(StoryListItemDto, stories, { excludeExtraneousValues: true });
-}
-```
-
-### 8.2 Pagination Patterns (P1 - High)
-
-**Cursor-Based Pagination (Recommended for Infinite Scroll):**
-```typescript
-@Get()
-async findAll(
-  @Query('cursor') cursor?: string,
-  @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
-) {
-  const maxLimit = Math.min(limit, 100); // Cap at 100
-
-  const stories = await this.prisma.story.findMany({
-    take: maxLimit + 1, // Fetch one extra to check hasMore
-    ...(cursor && { skip: 1, cursor: { id: cursor } }),
-    orderBy: { createdAt: 'desc' },
-    where: { isDeleted: false },
-  });
-
-  const hasMore = stories.length > maxLimit;
-  const items = hasMore ? stories.slice(0, -1) : stories;
-  const nextCursor = hasMore ? items[items.length - 1].id : null;
-
-  return { items, nextCursor, hasMore };
-}
-```
-
-**Offset Pagination (For Admin Pages):**
-```typescript
-@Get()
-async findAll(
-  @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-  @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-) {
-  const skip = (page - 1) * limit;
-  const [items, total] = await Promise.all([
-    this.prisma.story.findMany({ skip, take: limit }),
-    this.prisma.story.count(),
-  ]);
-
-  return {
-    items,
-    pagination: {
-      page,
-      limit,
-      total,
-      pages: Math.ceil(total / limit),
-    },
-  };
-}
-```
-
-### 8.3 Rate Limiting Configuration (P1 - High)
-
-```typescript
-// Current throttle config - verify these are optimal
-export const THROTTLE_CONFIG = {
-  DEFAULT: { ttl: 60000, limit: 100 },      // 100 req/min
-  AUTH: { ttl: 60000, limit: 10 },          // 10 req/min for auth
-  STORY_GENERATION: { ttl: 60000, limit: 5 }, // 5 req/min for AI
-  ADMIN: { ttl: 60000, limit: 200 },        // 200 req/min for admin
-};
-```
-
-### 8.4 Compression & Headers (P2 - Medium)
-
-```typescript
-// main.ts
-import compression from 'compression';
-
-app.use(compression({
-  filter: (req, res) => {
-    if (req.headers['x-no-compression']) return false;
-    return compression.filter(req, res);
-  },
-  threshold: 1024, // Only compress > 1KB
-}));
-
-// Security headers via Helmet
-app.use(helmet());
-
-// CORS with caching
-app.enableCors({
-  origin: process.env.CORS_ORIGINS?.split(','),
-  maxAge: 86400, // Cache preflight for 24 hours
-});
-```
-
-**Action Items:**
-- [ ] Implement cursor-based pagination for list endpoints
-- [ ] Add response DTOs to limit data transfer
-- [ ] Configure compression threshold
-- [ ] Review rate limit configurations
+Gzip compression (1KB threshold), Helmet security headers, CORS with 24h preflight caching.
 
 ---
 
-## 10. Error Handling & Domain Exceptions ✅ COMPLETED
+---
 
-**Status**: Implemented (February 2026)
+## 10. Sequential Operations Optimization ✅ COMPLETED
 
-### 10.1 Custom Domain Exceptions Hierarchy
+Batch operations replacing sequential loops:
 
-Created a structured exception hierarchy that provides:
-- Machine-readable error codes for client-side handling
-- Consistent error response format across the API
-- Better debugging with contextual details
-- Proper HTTP status codes
-
-**Files Created:**
-- `src/shared/exceptions/domain.exception.ts` - Exception classes
-- `src/shared/exceptions/index.ts` - Export barrel
-
-**Exception Categories:**
-
-| Category | Exceptions | HTTP Status |
-|----------|------------|-------------|
-| Auth | `InvalidCredentialsException`, `TokenExpiredException`, `EmailNotVerifiedException`, `InvalidTokenException`, `InvalidAdminSecretException` | 400-403 |
-| Resources | `ResourceNotFoundException`, `ResourceAlreadyExistsException` | 404, 409 |
-| Business Logic | `QuotaExceededException`, `SubscriptionRequiredException`, `InvalidRoleException`, `ValidationException` | 400, 402, 429 |
-
-**Implementation:**
-
-```typescript
-// Base class
-export abstract class DomainException extends HttpException {
-  constructor(
-    public readonly code: string,      // Machine-readable code
-    message: string,                    // Human-readable message
-    status: HttpStatus,
-    public readonly details?: Record<string, unknown>,  // Context
-  ) {
-    super({ code, message, details }, status);
-  }
-}
-
-// Usage example
-throw new ResourceNotFoundException('User', userId);
-// Returns: { code: 'RESOURCE_NOT_FOUND', message: 'User with id xyz not found', details: { resource: 'User', id: 'xyz' } }
-```
-
-### 10.2 Exception Filter Integration
-
-Updated `HttpExceptionFilter` to extract `code` and `details` from domain exceptions:
-
-```typescript
-if (exception instanceof DomainException) {
-  code = exception.code;
-  details = exception.details;
-}
-```
-
-Updated `ErrorResponse` DTO with optional `code` and `details` fields for structured API error responses.
-
-### 10.3 Services Updated
-
-| Service | Exceptions Replaced |
-|---------|---------------------|
-| `AuthService` | InvalidCredentialsException, EmailNotVerifiedException, InvalidTokenException, TokenExpiredException, InvalidAdminSecretException, ResourceNotFoundException, ResourceAlreadyExistsException |
-| `UserService` | ResourceNotFoundException, InvalidRoleException |
-
-**Benefits:**
-- ✅ Consistent error codes across API
-- ✅ Client can programmatically handle specific errors
-- ✅ Better error logging with context
-- ✅ Reduced error message duplication
+| File | Optimization |
+|------|-------------|
+| `notification-preference.service.ts` | Sequential `for...of` → batched `$transaction` |
+| `story-buddy.seeder.ts` | Sequential creates → `createMany` with `skipDuplicates` |
+| `avatar.seeder.service.ts` | Two sequential loops → single `$transaction` |
+| `backfill-duration.ts` | Sequential updates → chunked batch updates (100/tx) |
 
 ---
 
-## 9. Prisma v7 Upgrade Considerations
-
-### 9.1 Breaking Changes Impact (P2 - Medium)
-
-When upgrading from Prisma 6.19 to v7:
-
-| Change | Impact | Action Required |
-|--------|--------|-----------------|
-| ESM only | High | Add `"type": "module"` to package.json |
-| Generator change | Medium | Update `prisma-client-js` → `prisma-client` |
-| Output required | Medium | Add `output` to generator block |
-| Driver adapters | High | Install `@prisma/adapter-pg` |
-| No auto .env | Low | Add `dotenv/config` import |
-| Config file | Medium | Create `prisma.config.ts` |
-| Middleware removed | High | Migrate `$use()` to Extensions |
-
-### 9.2 Performance Benefits
-
-- **ESM tree-shaking**: Smaller bundle sizes
-- **Driver adapters**: Direct database connections, reduced overhead
-- **No query engine**: Faster cold starts
-
-### 9.3 Migration Checklist
-
-```bash
-# 1. Upgrade packages
-pnpm add @prisma/client@7
-pnpm add -D prisma@7
-
-# 2. Update generator
-# generator client {
-#   provider = "prisma-client"
-#   output   = "./generated/prisma/client"
-# }
-
-# 3. Install adapter
-pnpm add @prisma/adapter-pg
-
-# 4. Create config file
-# prisma.config.ts
-
-# 5. Update imports
-# import { PrismaClient } from './generated/prisma/client'
-
-# 6. Update client instantiation
-# const adapter = new PrismaPg(connectionString)
-# const prisma = new PrismaClient({ adapter })
-```
-
-**Action Items:**
-- [ ] Test Prisma v7 in development branch
-- [ ] Migrate any `$use()` middleware to Extensions
-- [ ] Update all Prisma imports
-- [ ] Benchmark query performance after upgrade
-
----
-
-## 10. Repository Pattern Implementation
-
-### 10.1 Overview (P2 - Medium)
-
-The repository pattern abstracts data access logic from business logic, improving:
-- **Testability**: Mock repository interfaces instead of Prisma
-- **Maintainability**: Data access logic centralized in one place
-- **Flexibility**: Swap implementations (e.g., different databases)
-- **Separation of Concerns**: Services focus on business logic only
-
-**Reference Implementation**: `src/age/repositories/` (completed)
-
-### 10.2 Pattern Structure
-
-```
-src/<module>/
-├── repositories/
-│   ├── index.ts                    # Barrel exports
-│   ├── <entity>.repository.interface.ts  # Interface + injection token
-│   └── prisma-<entity>.repository.ts     # Prisma implementation
-├── <module>.service.ts             # Uses repository via DI
-└── <module>.module.ts              # Wires up repository provider
-```
-
-**Interface Pattern:**
-```typescript
-// repositories/<entity>.repository.interface.ts
-import { Entity } from '@prisma/client';
-
-export interface IEntityRepository {
-  findAll(): Promise<Entity[]>;
-  findById(id: string): Promise<Entity | null>;
-  create(data: CreateDto): Promise<Entity>;
-  update(id: string, data: UpdateDto): Promise<Entity>;
-  softDelete(id: string): Promise<Entity>;
-  restore(id: string): Promise<Entity>;
-}
-
-export const ENTITY_REPOSITORY = Symbol('ENTITY_REPOSITORY');
-```
-
-**Implementation Pattern:**
-```typescript
-// repositories/prisma-<entity>.repository.ts
-@Injectable()
-export class PrismaEntityRepository implements IEntityRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  async findAll(): Promise<Entity[]> {
-    return this.prisma.entity.findMany({
-      where: { isDeleted: false },
-    });
-  }
-  // ... other methods
-}
-```
-
-**Module Wiring:**
-```typescript
-// <module>.module.ts
-@Module({
-  providers: [
-    EntityService,
-    {
-      provide: ENTITY_REPOSITORY,
-      useClass: PrismaEntityRepository,
-    },
-  ],
-})
-```
-
-### 10.3 Implementation Candidates ✅ ALL COMPLETE
-
-| Module | Service Lines | Complexity | Priority | Status |
-|--------|---------------|------------|----------|--------|
-| `reward` | ~97 | Low | P1 | ✅ Complete |
-| `avatar` | ~430 | Medium | P2 | ✅ Complete |
-| `kid` | ~285 | Medium | P2 | ✅ Complete |
-| `settings` | ~252 | Medium | P3 | ✅ Complete |
-| `age` | ~113 | Low | - | ✅ Complete |
-
-### 10.4 Task Breakdown ✅ ALL COMPLETE
-
-**Phase 1: Simple CRUD Services (P1)** ✅
-- [x] Implement `RewardRepository` for `RewardService`
-  - Interface: `IRewardRepository`
-  - Implementation: `PrismaRewardRepository`
-  - Methods: `findAll`, `findById`, `findByKidId`, `create`, `update`, `delete`, `createRedemption`, `updateRedemptionStatus`, `findRedemptionsByKidId`
-
-**Phase 2: Medium Complexity Services (P2)** ✅
-- [x] Implement `AvatarRepository` for `AvatarService`
-  - Interface: `IAvatarRepository`
-  - Implementation: `PrismaAvatarRepository`
-  - Methods: `findAll`, `findById`, `findSystemAvatars`, `create`, `update`, `upsertByName`, `softDelete`, `hardDelete`, `restore`, `updateUserAvatar`, `updateKidAvatar`, `countUsersUsingAvatar`, `countKidsUsingAvatar`
-
-- [x] Implement `KidRepository` for `KidService`
-  - Interface: `IKidRepository`
-  - Implementation: `PrismaKidRepository`
-  - Methods: `findById`, `findByIdWithRelations`, `findByIdWithFullRelations`, `findAllByParentId`, `create`, `update`, `softDelete`, `restore`, `hardDelete`, `createMany`
-
-**Phase 3: Settings & Additional Services (P3)** ✅
-- [x] Implement `SettingsRepository` for `SettingsService`
-  - Interface: `ISettingsRepository`
-  - Implementation: `PrismaSettingsRepository`
-  - Methods: `findProfileByUserId`, `createProfile`, `updateProfile`, `findKidById`, `findKidWithParentProfile`, `updateKidScreenTimeLimit`, `findKidsByParentWithAvatar`, `updateManyKidsScreenTimeLimit`
-
-### 10.5 Benefits Tracking
-
-| Metric | Before | Target | Measurement |
-|--------|--------|--------|-------------|
-| Test coverage (services) | ~60% | 85% | Jest coverage report |
-| Mock complexity | High (Prisma) | Low (Interface) | Lines of mock code |
-| Service line count | Varies | -30% avg | LOC analysis |
-| Data access duplication | Multiple services | Centralized | Code review |
-
-### 10.6 Testing Strategy
-
-With repository pattern, service tests become simpler:
-
-```typescript
-// Before: Complex Prisma mocking
-const mockPrisma = {
-  reward: {
-    findMany: jest.fn(),
-    findUnique: jest.fn(),
-    create: jest.fn(),
-    // ... many more methods
-  },
-};
-
-// After: Simple interface mocking
-const mockRepository: IRewardRepository = {
-  findAll: jest.fn(),
-  findById: jest.fn(),
-  create: jest.fn(),
-  // Only methods used by the service
-};
-
-describe('RewardService', () => {
-  beforeEach(() => {
-    service = new RewardService(mockRepository);
-  });
-
-  it('should find reward by id', async () => {
-    mockRepository.findById.mockResolvedValue(mockReward);
-    const result = await service.findOne('123');
-    expect(result).toEqual(mockReward);
-  });
-});
-```
-
-**Action Items:** ✅ COMPLETE
-- [x] Implemented repository pattern for all services (Reward, Avatar, Kid, Settings, Age)
-- [x] All repositories use Symbol-based injection tokens
-- [x] All services use interface-based dependency injection
-- [ ] Add unit tests for repositories (optional - services are already testable via interface mocks)
-
----
-
-## 11. Test Coverage Expansion
-
-### 11.1 Current State (P1 - High)
-
-**Coverage Analysis:**
-- Total services: 51
-- Services with unit tests: ~18 (35%)
-- Services without tests: ~33 (65%)
-- E2E test files: 3
-
-### 11.2 Services Without Unit Tests
-
-| Module | Service | Priority | Complexity |
-|--------|---------|----------|------------|
-| `achievement-progress` | `progress.service.ts` | P1 | Medium |
-| `achievement-progress` | `streak.service.ts` | P1 | Medium |
-| `achievement-progress` | `badge.service.ts` | P1 | Medium |
-| `age` | `age.service.ts` | P2 | Low |
-| `analytics` | `analytics.service.ts` | P2 | Medium |
-| `auth` | `password.service.ts` | ~~P1~~ | ✅ 22 tests |
-| `auth` | `token.service.ts` | ~~P1~~ | ✅ 24 tests |
-| `avatar` | `avatar.service.ts` | P2 | Medium |
-| `avatar` | `avatar.seeder.service.ts` | P3 | Low |
-| `notification` | `email-queue.service.ts` | P2 | Medium |
-| `notification` | `in-app-notification.service.ts` | P2 | Medium |
-| `notification` | `notification-preference.service.ts` | ~~P2~~ | ✅ 25 tests |
-| `prisma` | `prisma.service.ts` | P3 | Low |
-| `reports` | `reports.service.ts` | P2 | Medium |
-| `reports` | `screen-time.service.ts` | P2 | Medium |
-| `reward` | `reward.service.ts` | P2 | Low |
-| `settings` | `settings.service.ts` | P2 | Medium |
-| `story` | `elevenlabs.service.ts` | P2 | Medium |
-| `story` | `gemini.service.ts` | P2 | Medium |
-| `story` | `story-progress.service.ts` | P1 | Medium |
-| `story` | `story-quota.service.ts` | P2 | Low |
-| `story` | `daily-challenge.service.ts` | P2 | Medium |
-| `story` | `story-generation.service.ts` | P1 | High |
-| `story` | `story-recommendation.service.ts` | P2 | High |
-| `story-buddy` | `buddy-selection.service.ts` | P2 | Medium |
-| `story-buddy` | `story-buddy.service.ts` | P2 | Medium |
-| `user` | `user-pin.service.ts` | P2 | Low |
-| `user` | `user-deletion.service.ts` | P1 | Medium |
-| `voice` | `voice-quota.service.ts` | P2 | Low |
-| `admin` | `admin-analytics.service.ts` | ~~P3~~ | ✅ 40 tests |
-| `admin` | `admin-system.service.ts` | ~~P3~~ | ✅ 32 tests |
-| `admin` | `admin-story.service.ts` | P3 | High |
-| `admin` | `admin-user.service.ts` | P3 | Medium |
-
-### 11.3 Testing Strategy by Priority
-
-**P1 - Critical Business Logic (First Wave)**
-1. `story-generation.service.ts` - Core feature, complex AI integration
-2. `story-progress.service.ts` - User progress tracking
-3. `progress.service.ts` - Achievement calculations
-4. `user-deletion.service.ts` - Data compliance critical
-5. ~~`password.service.ts`~~ - ✅ 22 tests (Integration session 2026-02-23)
-6. ~~`token.service.ts`~~ - ✅ 24 tests (Integration session 2026-02-23)
-
-**P2 - Important Services (Second Wave)**
-- Achievement tracking services
-- Notification services
-- Report generation
-- Voice quota management
-
-**P3 - Lower Priority (Third Wave)**
-- Admin services (internal use)
-- Seeder services (one-time use)
-- Prisma service (framework wrapper)
-
-### 11.4 Test Template
-
-```typescript
-// src/<module>/<service>.spec.ts
-import { Test, TestingModule } from '@nestjs/testing';
-import { ServiceName } from './<service>';
-import { PrismaService } from '@/prisma/prisma.service';
-
-describe('ServiceName', () => {
-  let service: ServiceName;
-  let prisma: PrismaService;
-
-  const mockPrisma = {
-    entity: {
-      findMany: jest.fn(),
-      findUnique: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-    },
-  };
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ServiceName,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
-    }).compile();
-
-    service = module.get<ServiceName>(ServiceName);
-    prisma = module.get<PrismaService>(PrismaService);
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  describe('methodName', () => {
-    it('should handle success case', async () => {
-      // Arrange
-      mockPrisma.entity.findUnique.mockResolvedValue({ id: '1' });
-
-      // Act
-      const result = await service.methodName('1');
-
-      // Assert
-      expect(result).toBeDefined();
-      expect(mockPrisma.entity.findUnique).toHaveBeenCalledWith({
-        where: { id: '1' },
-      });
-    });
-
-    it('should handle error case', async () => {
-      mockPrisma.entity.findUnique.mockResolvedValue(null);
-
-      await expect(service.methodName('invalid')).rejects.toThrow();
-    });
-  });
-});
-```
-
-**Action Items:**
-- [ ] Create test files for P1 services
-- [ ] Establish 80% coverage target for new code
-- [ ] Add coverage gate to CI pipeline
-- [ ] Document testing patterns in CLAUDE.md
-
----
-
-## 12. Rate Limiting Coverage
-
-### 12.1 Current State (P1 - High)
-
-**Only 4 endpoints have rate limiting:**
-- `POST /auth/request-otp` - 10 req/min
-- `POST /auth/verify-otp` - 10 req/min
-- `POST /stories/generate` - 5 req/min
-- `POST /stories/generate-audio` - Rate limited
-
-### 12.2 Endpoints Requiring Rate Limiting
-
-| Endpoint | Risk | Suggested Limit | Priority |
-|----------|------|-----------------|----------|
-| `POST /auth/login` | Brute force | 10/min | P0 |
-| `POST /auth/register` | Spam accounts | 5/min | P0 |
-| `POST /auth/forgot-password` | Email bombing | 3/min | P0 |
-| `POST /auth/reset-password` | Brute force | 5/min | P0 |
-| `POST /payment/*` | Fraud | 5/min | P0 |
-| `POST /kids` | Resource abuse | 10/min | P1 |
-| `POST /stories` | Resource abuse | 20/min | P1 |
-| `POST /voice/*` | AI abuse | 10/min | P1 |
-| `GET /admin/*` | Data scraping | 100/min | P2 |
-| `POST /notifications/send` | Spam | 20/min | P2 |
-| `POST /help-support` | Spam | 5/min | P2 |
-
-### 12.3 Implementation Pattern
-
-```typescript
-// In controller
-import { Throttle, SkipThrottle } from '@nestjs/throttler';
-
-@Controller('auth')
-export class AuthController {
-  // High-risk endpoint - strict limit
-  @Post('login')
-  @Throttle({ default: { ttl: 60000, limit: 10 } })
-  async login(@Body() dto: LoginDto) {}
-
-  // Normal endpoint - use default limit
-  @Get('me')
-  async getMe() {}
-
-  // Skip throttling for health checks
-  @Get('health')
-  @SkipThrottle()
-  async health() {}
-}
-```
-
-### 12.4 Throttle Configuration by Category
-
-```typescript
-// shared/config/throttle.config.ts
-export const THROTTLE_LIMITS = {
-  // Authentication - strict
-  AUTH_LOGIN: { ttl: 60000, limit: 10 },
-  AUTH_OTP: { ttl: 60000, limit: 5 },
-  AUTH_REGISTER: { ttl: 60000, limit: 5 },
-  AUTH_PASSWORD_RESET: { ttl: 60000, limit: 3 },
-
-  // Resource creation - moderate
-  RESOURCE_CREATE: { ttl: 60000, limit: 20 },
-
-  // AI operations - expensive
-  AI_GENERATION: { ttl: 60000, limit: 5 },
-  VOICE_SYNTHESIS: { ttl: 60000, limit: 10 },
-
-  // Admin - higher limits
-  ADMIN_READ: { ttl: 60000, limit: 200 },
-  ADMIN_WRITE: { ttl: 60000, limit: 50 },
-
-  // Default
-  DEFAULT: { ttl: 60000, limit: 100 },
-} as const;
-```
-
-**Action Items:**
-- [ ] Add rate limiting to all auth endpoints (P0)
-- [ ] Add rate limiting to payment endpoints (P0)
-- [ ] Add rate limiting to resource creation endpoints (P1)
-- [ ] Create centralized throttle configuration
-- [ ] Add rate limit headers to responses
-
----
-
-## 13. Custom Domain Exceptions
-
-### 13.1 Current State (P2 - Medium)
-
-No custom domain exceptions found. All errors use generic NestJS exceptions:
-- `BadRequestException`
-- `NotFoundException`
-- `ForbiddenException`
-- `UnauthorizedException`
-
-### 13.2 Proposed Exception Hierarchy
-
-```typescript
-// shared/exceptions/domain.exception.ts
-export abstract class DomainException extends HttpException {
-  constructor(
-    public readonly code: string,
-    message: string,
-    status: HttpStatus,
-    public readonly details?: Record<string, unknown>,
-  ) {
-    super({ code, message, details }, status);
-  }
-}
-
-// Authentication exceptions
-export class InvalidCredentialsException extends DomainException {
-  constructor() {
-    super('AUTH_INVALID_CREDENTIALS', 'Invalid email or password', HttpStatus.UNAUTHORIZED);
-  }
-}
-
-export class TokenExpiredException extends DomainException {
-  constructor() {
-    super('AUTH_TOKEN_EXPIRED', 'Authentication token has expired', HttpStatus.UNAUTHORIZED);
-  }
-}
-
-// Resource exceptions
-export class ResourceNotFoundException extends DomainException {
-  constructor(resource: string, id: string) {
-    super(
-      'RESOURCE_NOT_FOUND',
-      `${resource} with id ${id} not found`,
-      HttpStatus.NOT_FOUND,
-      { resource, id },
-    );
-  }
-}
-
-export class ResourceAlreadyExistsException extends DomainException {
-  constructor(resource: string, field: string, value: string) {
-    super(
-      'RESOURCE_ALREADY_EXISTS',
-      `${resource} with ${field} "${value}" already exists`,
-      HttpStatus.CONFLICT,
-      { resource, field, value },
-    );
-  }
-}
-
-// Business logic exceptions
-export class QuotaExceededException extends DomainException {
-  constructor(quotaType: string, limit: number) {
-    super(
-      'QUOTA_EXCEEDED',
-      `${quotaType} quota exceeded. Limit: ${limit}`,
-      HttpStatus.TOO_MANY_REQUESTS,
-      { quotaType, limit },
-    );
-  }
-}
-
-export class SubscriptionRequiredException extends DomainException {
-  constructor(feature: string) {
-    super(
-      'SUBSCRIPTION_REQUIRED',
-      `Premium subscription required for ${feature}`,
-      HttpStatus.PAYMENT_REQUIRED,
-      { feature },
-    );
-  }
-}
-```
-
-### 13.3 Benefits
-
-| Benefit | Description |
-|---------|-------------|
-| Consistent error codes | API clients can handle errors programmatically |
-| Better logging | Error codes enable better filtering and alerting |
-| Client-friendly | Structured errors improve mobile app UX |
-| i18n ready | Error codes can map to localized messages |
-| Debugging | Error details provide context for troubleshooting |
-
-**Action Items:**
-- [x] Create base `DomainException` class ✅
-- [x] Implement authentication exceptions ✅
-- [x] Implement resource exceptions ✅
-- [x] Implement business logic exceptions ✅
-- [x] Update exception filter to handle domain exceptions ✅
-- [x] Migrate critical paths to use domain exceptions ✅
-
----
-
-## 14. Event-Driven Architecture Expansion ✅ COMPLETED
-
-### 14.1 Implementation Status
-
-**Status**: Completed - February 2026
-
-**Files created:**
-- `src/shared/events/app-events.ts` - Event constants and typed payload interfaces
-- `src/shared/events/index.ts` - Barrel exports
-- `src/shared/events/event-listeners.service.ts` - Global event listeners for logging
-- `src/shared/events/events.module.ts` - Events module for DI
-
-**Services integrated:**
-- `AuthService` - user.registered, user.email_verified
-- `UserDeletionService` - user.deleted (permanent & soft)
-- `StoryService` - story.created, story.completed
-- `PaymentService` - payment.completed, payment.failed, subscription.created, subscription.changed
-
-### 14.2 Event Constants
-
-```typescript
-// src/shared/events/app-events.ts
-export const AppEvents = {
-  // User lifecycle
-  USER_REGISTERED: 'user.registered',
-  USER_DELETED: 'user.deleted',
-  USER_EMAIL_VERIFIED: 'user.email_verified',
-  USER_PASSWORD_CHANGED: 'user.password_changed',
-
-  // Kid lifecycle
-  KID_CREATED: 'kid.created',
-  KID_DELETED: 'kid.deleted',
-
-  // Story lifecycle
-  STORY_CREATED: 'story.created',
-  STORY_COMPLETED: 'story.completed',
-  STORY_PROGRESS_UPDATED: 'story.progress_updated',
-
-  // Payment & Subscription
-  PAYMENT_COMPLETED: 'payment.completed',
-  PAYMENT_FAILED: 'payment.failed',
-  SUBSCRIPTION_CREATED: 'subscription.created',
-  SUBSCRIPTION_CHANGED: 'subscription.changed',
-  SUBSCRIPTION_CANCELLED: 'subscription.cancelled',
-
-  // Achievements (existing)
-  BADGE_EARNED: 'badge.earned',
-  STREAK_UPDATED: 'streak.updated',
-
-  // Notifications
-  NOTIFICATION_SENT: 'notification.sent',
-} as const;
-```
-
-### 14.3 Typed Event Payloads
-
-All events have TypeScript interfaces for type-safe emission:
-
-```typescript
-export interface UserRegisteredEvent {
-  userId: string;
-  email: string;
-  name: string | null;
-  role: string;
-  registeredAt: Date;
-}
-
-export interface StoryCompletedEvent {
-  storyId: string;
-  kidId: string;
-  durationSeconds: number;
-  completionPercentage: number;
-  completedAt: Date;
-}
-
-export interface PaymentCompletedEvent {
-  paymentId: string;
-  userId: string;
-  amount: number;
-  currency: string;
-  provider: string;
-  subscriptionId?: string;
-  completedAt: Date;
-}
-
-// ... 17+ typed event interfaces
-```
-
-### 14.4 Usage Pattern
-
-```typescript
-// Emitting events (type-safe with satisfies)
-this.eventEmitter.emit(AppEvents.USER_REGISTERED, {
-  userId: user.id,
-  email: user.email,
-  name: user.name,
-  role: user.role,
-  registeredAt: user.createdAt,
-} satisfies UserRegisteredEvent);
-
-// Listening to events
-@OnEvent(AppEvents.USER_REGISTERED)
-handleUserRegistered(event: UserRegisteredEvent): void {
-  this.logger.log(`User registered: ${event.userId}`);
-}
-```
-
-### 14.5 Benefits Achieved
-
-| Benefit | Implementation |
-|---------|----------------|
-| Decoupling | Services emit events without knowing subscribers |
-| Type Safety | All payloads validated via TypeScript interfaces |
-| Logging | EventListenersService logs all events for audit trail |
-| Extensibility | New listeners can subscribe without modifying emitters |
-| Testability | Events can be mocked in unit tests |
-
-### 14.6 Remaining Events (Future Work)
-
-| Event | Service | Priority |
-|-------|---------|----------|
-| `kid.created` | KidService | P2 |
-| `kid.deleted` | KidService | P2 |
-| `notification.sent` | NotificationService | P3 |
-| `subscription.cancelled` | SubscriptionService | P2 |
-
-**Action Items:**
-- [x] Define standard event names and payloads
-- [x] Add user lifecycle events (register, delete, email_verified)
-- [x] Add story lifecycle events (create, complete)
-- [x] Add payment/subscription events
-- [x] Create event listener module for cross-cutting concerns
-- [ ] Add kid lifecycle events (P2)
-- [ ] Add notification events (P3)
-- [ ] Document event patterns in CLAUDE.md
-
----
-
-## 15. Sequential Operations Optimization ✅ COMPLETED
-
-### 15.1 Summary
-
-**Status**: Completed - February 2026
-
-**Files optimized:**
-1. `src/notification/services/notification-preference.service.ts` - ✅ Using `$transaction`
-2. `src/story-buddy/story-buddy.seeder.ts` - ✅ Using `createMany`
-3. `src/avatar/avatar.seeder.service.ts` - ✅ Using `$transaction`
-4. `src/story/scripts/backfill-duration.ts` - ✅ Using batched `$transaction`
-
-### 15.2 Optimizations Applied
-
-| File | Before | After |
-|------|--------|-------|
-| `notification-preference.service.ts` | Sequential `for...of` with await | Batched `$transaction` with mapped upserts |
-| `story-buddy.seeder.ts` | Sequential creates in loop | Single `createMany` with `skipDuplicates` |
-| `avatar.seeder.service.ts` | Two sequential loops | Single `$transaction` with mapped upserts |
-| `backfill-duration.ts` | Sequential updates | Chunked batch updates (100 per transaction) |
-
-### 15.3 Patterns Used
-
-**Transaction Batching (for upserts):**
-```typescript
-// notification-preference.service.ts & avatar.seeder.service.ts
-const upsertOperations = items.map((item) =>
-  this.prisma.entity.upsert({
-    where: { uniqueField: item.uniqueField },
-    create: { ...item },
-    update: { ...item },
-  }),
-);
-await this.prisma.$transaction(upsertOperations);
-```
-
-**CreateMany with Skip Duplicates (for seeders):**
-```typescript
-// story-buddy.seeder.ts
-const result = await prisma.storyBuddy.createMany({
-  data: storyBuddiesData,
-  skipDuplicates: true,
-});
-```
-
-**Chunked Batch Updates (for large datasets):**
-```typescript
-// backfill-duration.ts
-const BATCH_SIZE = 100;
-for (let i = 0; i < updates.length; i += BATCH_SIZE) {
-  const batch = updates.slice(i, i + BATCH_SIZE);
-  const updateOperations = batch.map((update) =>
-    prisma.story.update({
-      where: { id: update.id },
-      data: { durationSeconds: update.durationSeconds },
-    }),
-  );
-  await prisma.$transaction(updateOperations);
-}
-```
-
-### 15.4 Best Practices Reference
-
-```typescript
-// ✅ Parallel execution (fast)
-await Promise.all(items.map(item => this.processItem(item)));
-
-// ✅ Controlled parallelism (for rate-limited APIs)
-import pLimit from 'p-limit';
-const limit = pLimit(5);  // Max 5 concurrent
-await Promise.all(items.map(item => limit(() => this.processItem(item))));
-
-// ✅ Batched database operations
-await this.prisma.$transaction(operations);
-
-// ✅ Bulk inserts with deduplication
-await this.prisma.entity.createMany({
-  data: items,
-  skipDuplicates: true,
-});
-```
-
----
-
-## Progress Tracking
+## Progress Summary
 
 ### Completed ✅
-- [x] Database indexes optimization (70+ indexes added) *(Instance 1)*
-- [x] Email queue with retry logic (BullMQ)
-- [x] Health checks implementation
-- [x] Request logging middleware
-- [x] Add monitoring section
-- [x] Add queue optimization section
-- [x] Add API performance patterns
-- [x] Add Prisma v7 upgrade considerations
-- [x] Transaction coverage improvement *(Instance 3 & 4)*
-- [x] N+1 query fixes *(Instance 4 & 5)*
-- [x] External service retry logic *(Instance 3 - GeminiService)*
-- [x] Response compression middleware *(1KB threshold, level 6)*
-- [x] Static content caching (categories, themes, seasons, story buddies)
-- [x] Cache invalidation on CRUD operations
-- [x] Sequential operations optimization (Section 15)
-- [x] Prisma slow query logging (>100ms threshold in development)
-- [x] User preferences caching (SettingsService with 5-min TTL)
-- [x] Kid profiles caching (KidService with 5-min TTL + cache invalidation)
-- [x] Custom domain exceptions hierarchy *(AuthService, UserService, AdminAnalyticsService)*
-- [x] Query select optimization - UserService & AdminAnalyticsService (selective fetching)
-- [x] Event-driven architecture expansion *(Section 14 - AuthService, UserDeletionService, StoryService, PaymentService)*
-- [x] Admin Controller Swagger extraction & DTO standardization *(Instance 20)*
-
-### In Progress 🔄
-*(No items currently in progress)*
-
-### Not Recommended ⚠️
-- Module lazy loading (not beneficial for NestJS HTTP modules - see section 5.1)
+- Database indexes: 70+ indexes added
+- Transactions: All critical operations atomic
+- N+1 queries: Batched across StoryService, DailyChallengeService
+- Response compression: 1KB threshold, level 6
+- Caching: All static content + user data with event-driven invalidation
+- Cache invalidation: Granular key-specific with event-driven listeners
+- AI retry logic: GeminiService with exponential backoff
+- Queue system: Email, story, voice queues with health monitoring + Bull Board
+- OpenTelemetry: Metrics export, cache metrics, slow query logging
+- Health checks: All services (DB, Redis, SMTP, Queue, Firebase, Cloudinary)
+- Sequential operations: Batched transactions replacing loops
+- Push notifications (FCM) + SSE
+- Query select optimization: UserService, AdminAnalytics, StoryService (excludeContent)
+- Pagination: Max limit caps enforced on all list endpoints
+- Aggregation queries: Using `.count()` and `groupBy` properly
+- Connection pooling: Configured via DATABASE_URL
+- External API timeouts: 30s on ElevenLabs, Deepgram, all HTTP services
+- HTTP latency tracking: OpenTelemetry Axios interceptor on story, voice, notification modules
+- Response DTOs: StoryListItemDto for lightweight list views
+- Admin export chunking: 1000-record batches replacing single 10k fetch
 
 ### Pending 📋
 
-**Repository Pattern (Section 10)** ✅ ALL COMPLETE
-- [x] Repository pattern: RewardService *(IRewardRepository + PrismaRewardRepository)*
-- [x] Repository pattern: AvatarService *(IAvatarRepository + PrismaAvatarRepository)*
-- [x] Repository pattern: KidService *(IKidRepository + PrismaKidRepository)*
-- [x] Repository pattern: SettingsService *(ISettingsRepository + PrismaSettingsRepository)*
-
-**Test Coverage (Section 11)** ✅ LARGELY COMPLETE
-- [x] Unit tests for core services (31 test files including auth, user, story, payment, voice, notification)
-- [x] Unit tests for story-generation.service.ts
-- [x] CI/CD pipeline established (3 GitHub Actions workflows)
-- [ ] Verify 80% coverage threshold configured in CI
-
-**Rate Limiting (Section 12)** ✅ COMPLETE
-- [x] Add rate limiting to auth endpoints *(auth.controller.ts)*
-- [x] Add rate limiting to payment endpoints *(payment.controller.ts)*
-- [x] Add rate limiting to story endpoints *(story.controller.ts)*
-- [x] Add rate limiting to device endpoints *(device.controller.ts)*
-- [ ] Create centralized throttle configuration file (optional consolidation)
-
-**Infrastructure** ✅ LARGELY COMPLETE
-- [x] APM integration (OpenTelemetry) *(src/otel-setup.ts implemented)*
-- [x] Story generation queue *(src/story/queue/ with processor, service, constants)*
-- [x] Voice synthesis queue *(src/voice/queue/ with processor, service, constants)*
-- [x] Grafana dashboard IDs documented *(GRAFANA_SETUP.md)*
-- [x] Cache metrics service *(CacheMetricsService with OpenTelemetry)*
-- [x] Health indicators for all services *(Firebase, Cloudinary, Queue enhancement)*
-- [x] Push notifications (FCM) + SSE *(FcmService, JobEventsService, DeviceTokenService)*
-- [x] Alerting rules configuration *(ALERTING_RULES.md)*
-- [x] Security audit *(SECURITY_AUDIT.md)*
-- [ ] Custom Grafana dashboards creation (optional - community dashboards available)
-
-**Database & Query Optimizations**
-- [ ] Implement cursor-based pagination for list endpoints (P2)
-- [ ] Add `select` to StoryService list queries to exclude `textContent` (P2)
-- [ ] Document cache invalidation patterns (P3)
-- [ ] Configure database connection pool limits (P2)
-
 **External Services**
-- [ ] Add request timeouts to ElevenLabs/Deepgram (30s max) - P2
-- [ ] Move large Cloudinary uploads to background jobs - P3
-- [ ] Configure Cloudinary auto-optimization - P3
+- [ ] Move large Cloudinary uploads to background jobs (P3)
+- [ ] Configure Cloudinary auto-optimization (P3)
+- [ ] Add fallback responses for non-critical external API failures (P3)
 
-**Documentation & Configuration**
-- [ ] Create centralized throttle configuration file (optional consolidation) - P3
-- [ ] Document transaction patterns in CLAUDE.md - P3
+**Monitoring**
+- [ ] Custom Grafana dashboards (P3)
+- [ ] Alerting threshold configuration (P2)
 
----
-
-## Quick Wins (Can be done in < 1 day each)
-
-1. ~~**Add transactions to subscription operations**~~ ✅ *(Instance 3)*
-2. ~~**Cache subscription status**~~ ✅ Already implemented in SubscriptionService
-3. ~~**Add request timeouts to AI providers**~~ ✅ *(Instance 3 - GeminiService)*
-4. ~~**Use `select` in list queries**~~ ✅ Partially complete - UserService done, StoryService pending
-5. ~~**Replace sequential queries with batch**~~ ✅ *(Instance 4 & 5)*
-6. ~~**Add Prisma query logging**~~ ✅ Slow query logging (>100ms) in development
-7. **Implement cursor pagination** - Better performance for infinite scroll
-8. ~~**Add compression middleware**~~ ✅ Added with 1KB threshold
+**Application**
+- [ ] Add memory usage monitoring for large requests (P3)
 
 ---
 
@@ -1701,4 +283,3 @@ await this.prisma.entity.createMany({
 - [NestJS Caching](https://docs.nestjs.com/techniques/caching)
 - [BullMQ Best Practices](https://docs.bullmq.io/guide/going-to-production)
 - [OpenTelemetry for Node.js](https://opentelemetry.io/docs/instrumentation/js/)
-- Project guidelines: `.claude/CLAUDE.md`
