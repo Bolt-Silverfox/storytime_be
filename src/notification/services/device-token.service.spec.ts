@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DeviceTokenService, RegisterDeviceDto } from './device-token.service';
 import {
-  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';

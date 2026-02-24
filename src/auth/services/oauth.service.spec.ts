@@ -1,16 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OAuthService } from './oauth.service';
-import {
-  BadRequestException,
-  ServiceUnavailableException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { NotificationPreferenceService } from '@/notification/services/notification-preference.service';
 import { OAuth2Client } from 'google-auth-library';
-import appleSigninAuth from 'apple-signin-auth';
 import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
 
@@ -33,7 +28,6 @@ describe('OAuthService', () => {
   let service: OAuthService;
   let authRepository: jest.Mocked<IAuthRepository>;
   let tokenService: jest.Mocked<TokenService>;
-  let passwordService: jest.Mocked<PasswordService>;
   let googleClient: { verifyIdToken: jest.Mock };
 
   const mockUser = {
@@ -105,7 +99,6 @@ describe('OAuthService', () => {
     service = module.get<OAuthService>(OAuthService);
     authRepository = module.get(AUTH_REPOSITORY);
     tokenService = module.get(TokenService);
-    passwordService = module.get(PasswordService);
   });
 
   describe('loginWithGoogleIdToken', () => {
