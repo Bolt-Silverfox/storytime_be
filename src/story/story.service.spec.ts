@@ -178,6 +178,35 @@ describe('StoryService - Library & Generation', () => {
           }),
         );
       });
+
+      it('should enrich stories with isRead flag from user progress', async () => {
+        const stories = [
+          { id: 'story-1', title: 'Read Story' },
+          { id: 'story-2', title: 'Unread Story' },
+        ];
+        prisma.story.count.mockResolvedValue(2);
+        prisma.story.findMany.mockResolvedValue(stories);
+        prisma.userStoryProgress.findMany.mockResolvedValue([
+          { storyId: 'story-1' },
+        ]);
+
+        const result = await service.getStories({ userId: 'user-1' });
+
+        expect(result.data[0]).toEqual(
+          expect.objectContaining({ id: 'story-1', isRead: true }),
+        );
+        expect(result.data[1]).toEqual(
+          expect.objectContaining({ id: 'story-2', isRead: false }),
+        );
+        expect(prisma.userStoryProgress.findMany).toHaveBeenCalledWith({
+          where: {
+            userId: 'user-1',
+            storyId: { in: ['story-1', 'story-2'] },
+            isDeleted: false,
+          },
+          select: { storyId: true },
+        });
+      });
     });
 
     const kidId = 'kid-123';
