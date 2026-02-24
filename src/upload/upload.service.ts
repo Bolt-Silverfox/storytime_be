@@ -67,6 +67,29 @@ export class UploadService {
     });
   }
 
+  async uploadImageFromUrl(
+    imageUrl: string,
+    folder: string,
+  ): Promise<UploadApiResponse> {
+    try {
+      const result = await cloudinary.uploader.upload(imageUrl, {
+        folder: `storytime/${folder}`,
+        resource_type: 'image',
+        transformation: [
+          { width: 1024, height: 1024, crop: 'limit' },
+          { quality: 'auto' },
+          { format: 'webp' },
+        ],
+      });
+      return result;
+    } catch (error) {
+      this.logger.error('Cloudinary URL upload error:', error);
+      throw new InternalServerErrorException(
+        `Image URL upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
   async deleteImage(publicId: string): Promise<void> {
     try {
       const result = await cloudinary.uploader.destroy(publicId);

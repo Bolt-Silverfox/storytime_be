@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
+import { UploadService } from '../upload/upload.service';
 
 /** Circuit breaker states */
 enum CircuitState {
@@ -71,6 +72,7 @@ export class GeminiService {
   constructor(
     private configService: ConfigService,
     private readonly voiceQuotaService: VoiceQuotaService,
+    private readonly uploadService: UploadService,
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
@@ -324,30 +326,45 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     return true;
   }
 
-  generateStoryImage(
+  async generateStoryImage(
     title: string,
     description: string,
     userId?: string,
-  ): string {
+  ): Promise<string> {
     const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
     const encodedPrompt = encodeURIComponent(imagePrompt);
     const seed = Math.floor(Math.random() * 100000);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&seed=${seed}`;
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&seed=${seed}`;
 
-    this.logger.log(`Generated Pollinations Image URL: ${imageUrl}`);
+    this.logger.log(`Generating cover image for "${title}" via Pollinations`);
 
-    // Track usage if userId is provided
-    if (userId) {
-      this.voiceQuotaService
-        .trackGeminiImage(userId)
-        .catch((err) =>
-          this.logger.error(
-            `Failed to track Gemini image usage for user ${userId}:`,
-            err,
-          ),
-        );
+    try {
+      const result = await this.uploadService.uploadImageFromUrl(
+        pollinationsUrl,
+        'covers',
+      );
+      this.logger.log(
+        `Cover image uploaded to Cloudinary: ${result.secure_url}`,
+      );
+
+      // Track usage if userId is provided
+      if (userId) {
+        this.voiceQuotaService
+          .trackGeminiImage(userId)
+          .catch((err) =>
+            this.logger.error(
+              `Failed to track Gemini image usage for user ${userId}:`,
+              err,
+            ),
+          );
+      }
+
+      return result.secure_url;
+    } catch (error) {
+      this.logger.error(
+        `Failed to upload cover image to Cloudinary, falling back to Pollinations URL: ${error instanceof Error ? error.message : error}`,
+      );
+      return pollinationsUrl;
     }
-
-    return imageUrl;
   }
 }
