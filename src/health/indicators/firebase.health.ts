@@ -20,6 +20,7 @@ export class FirebaseHealthIndicator extends HealthIndicator {
     super();
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     const startTime = Date.now();
 

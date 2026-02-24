@@ -70,7 +70,9 @@ export class HttpLatencyInterceptor implements OnModuleInit {
         const config = error.config || {};
         const status = error.response?.status || 0;
         this.recordMetrics(config, status, true);
-        return Promise.reject(error);
+        return Promise.reject(
+          error instanceof Error ? error : new Error(String(error)),
+        );
       },
     );
   }

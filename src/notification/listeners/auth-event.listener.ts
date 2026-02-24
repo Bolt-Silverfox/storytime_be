@@ -23,7 +23,7 @@ export class AuthEventListener {
    * Triggered by: AuthService.register()
    */
   @OnEvent(AppEvents.USER_REGISTERED)
-  async handleUserRegistered(payload: UserRegisteredEvent) {
+  handleUserRegistered(payload: UserRegisteredEvent) {
     this.logger.log(
       `Handling user.registered event for user ${payload.userId}`,
     );
@@ -41,7 +41,7 @@ export class AuthEventListener {
    * Note: Welcome notifications can be added to NotificationRegistry if needed
    */
   @OnEvent(AppEvents.USER_EMAIL_VERIFIED)
-  async handleEmailVerified(payload: UserEmailVerifiedEvent) {
+  handleEmailVerified(payload: UserEmailVerifiedEvent) {
     this.logger.log(`User ${payload.userId} verified email: ${payload.email}`);
 
     // Future: Send welcome notification if Welcome template is added to registry
@@ -52,7 +52,7 @@ export class AuthEventListener {
    * Triggered by: PasswordService.changePassword()
    */
   @OnEvent(AppEvents.USER_PASSWORD_CHANGED)
-  async handlePasswordChanged(payload: UserPasswordChangedEvent) {
+  handlePasswordChanged(payload: UserPasswordChangedEvent) {
     this.logger.log(
       `Handling user.password_changed event for user ${payload.userId}`,
     );

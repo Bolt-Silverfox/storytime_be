@@ -26,7 +26,7 @@ export class AnalyticsEventListener {
    * Track new user registrations
    */
   @OnEvent(AppEvents.USER_REGISTERED)
-  async handleUserRegistered(payload: UserRegisteredEvent) {
+  handleUserRegistered(payload: UserRegisteredEvent) {
     this.logger.log(`📊 Analytics: User registered - ${payload.email}`);
     // Future: Track in analytics platform
     // await this.analytics.track('User Registered', {
@@ -40,7 +40,7 @@ export class AnalyticsEventListener {
    * Track successful payments
    */
   @OnEvent(AppEvents.PAYMENT_COMPLETED)
-  async handlePaymentCompleted(payload: PaymentCompletedEvent) {
+  handlePaymentCompleted(payload: PaymentCompletedEvent) {
     this.logger.log(
       `📊 Analytics: Payment completed - $${payload.amount} ${payload.currency} via ${payload.provider}`,
     );
@@ -57,7 +57,7 @@ export class AnalyticsEventListener {
    * Track failed payments for conversion optimization
    */
   @OnEvent(AppEvents.PAYMENT_FAILED)
-  async handlePaymentFailed(payload: PaymentFailedEvent) {
+  handlePaymentFailed(payload: PaymentFailedEvent) {
     this.logger.log(
       `📊 Analytics: Payment failed - ${payload.errorMessage || 'Unknown error'}`,
     );
@@ -74,7 +74,7 @@ export class AnalyticsEventListener {
    * Track new subscriptions
    */
   @OnEvent(AppEvents.SUBSCRIPTION_CREATED)
-  async handleSubscriptionCreated(payload: SubscriptionCreatedEvent) {
+  handleSubscriptionCreated(payload: SubscriptionCreatedEvent) {
     this.logger.log(
       `📊 Analytics: Subscription created - ${payload.planName} for user ${payload.userId.substring(0, 8)}`,
     );
@@ -91,7 +91,7 @@ export class AnalyticsEventListener {
    * Track subscription changes (upgrades/downgrades)
    */
   @OnEvent(AppEvents.SUBSCRIPTION_CHANGED)
-  async handleSubscriptionChanged(payload: SubscriptionChangedEvent) {
+  handleSubscriptionChanged(payload: SubscriptionChangedEvent) {
     this.logger.log(
       `📊 Analytics: Subscription ${payload.changeType} - ${payload.previousPlanName} → ${payload.newPlanName}`,
     );
@@ -108,7 +108,7 @@ export class AnalyticsEventListener {
    * Track subscription cancellations for churn analysis
    */
   @OnEvent(AppEvents.SUBSCRIPTION_CANCELLED)
-  async handleSubscriptionCancelled(payload: SubscriptionCancelledEvent) {
+  handleSubscriptionCancelled(payload: SubscriptionCancelledEvent) {
     this.logger.log(
       `📊 Analytics: Subscription cancelled - ${payload.planId} (reason: ${payload.reason || 'not specified'})`,
     );
@@ -124,7 +124,7 @@ export class AnalyticsEventListener {
    * Track story creation (especially AI-generated stories)
    */
   @OnEvent(AppEvents.STORY_CREATED)
-  async handleStoryCreated(payload: StoryCreatedEvent) {
+  handleStoryCreated(payload: StoryCreatedEvent) {
     const generationType = payload.aiGenerated ? 'AI-generated' : 'Manual';
     this.logger.log(
       `📊 Analytics: Story created - "${payload.title}" (${generationType})`,
@@ -141,7 +141,7 @@ export class AnalyticsEventListener {
    * Track story completions for engagement metrics
    */
   @OnEvent(AppEvents.STORY_COMPLETED)
-  async handleStoryCompleted(payload: StoryCompletedEvent) {
+  handleStoryCompleted(payload: StoryCompletedEvent) {
     const identifier = payload.kidId
       ? `kid ${payload.kidId.substring(0, 8)}`
       : `user ${payload.userId?.substring(0, 8)}`;

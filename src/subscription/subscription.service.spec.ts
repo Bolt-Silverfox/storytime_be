@@ -134,7 +134,7 @@ describe('SubscriptionService', () => {
       };
 
       // $transaction executes the callback with a prisma tx client
-      mockPrisma.$transaction.mockImplementation(async (cb: Function) => {
+      mockPrisma.$transaction.mockImplementation((cb: Function) => {
         const txClient = {
           subscription: {
             findFirst: jest.fn().mockResolvedValue(null),
@@ -179,7 +179,7 @@ describe('SubscriptionService', () => {
         status: SUBSCRIPTION_STATUS.ACTIVE,
       };
 
-      mockPrisma.$transaction.mockImplementation(async (cb: Function) => {
+      mockPrisma.$transaction.mockImplementation((cb: Function) => {
         const txClient = {
           subscription: {
             findFirst: jest.fn().mockResolvedValue(mockSubscription),

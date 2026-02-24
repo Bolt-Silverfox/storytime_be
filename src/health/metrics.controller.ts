@@ -13,7 +13,7 @@ export class MetricsController {
     description: 'Prometheus-formatted metrics',
     type: String,
   })
-  async getMetrics(): Promise<string> {
+  getMetrics(): string {
     // Metrics are automatically exposed by PrometheusExporter on port 9464
     // This endpoint is just for documentation/health check purposes
     return 'Metrics are exposed on port 9464 at /metrics';

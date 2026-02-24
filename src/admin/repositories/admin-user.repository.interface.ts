@@ -42,7 +42,7 @@ export type UserDetail = User & {
     avatar: any;
   }>;
   avatar: any;
-  subscription: any | null;
+  subscription: any;
   paymentTransactions: any[];
   _count: {
     auth: number;

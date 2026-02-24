@@ -41,7 +41,7 @@ export class StoryPathService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async getStoryPaths(_storyId: string) {
+  getStoryPaths(_storyId: string) {
     // This looks like it was possibly filtering by kidId in original service?
     // Based on original method signature, let's implement get by id
     // Or if it was meant to be get paths FOR a story across kids (unlikely for frontend)

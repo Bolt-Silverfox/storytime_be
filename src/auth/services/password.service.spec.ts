@@ -152,12 +152,13 @@ describe('PasswordService', () => {
       // Arrange
       const callOrder: string[] = [];
       authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
-      authRepository.deleteUserTokensByType.mockImplementation(async () => {
+      authRepository.deleteUserTokensByType.mockImplementation(() => {
         callOrder.push('deleteTokens');
+        return Promise.resolve();
       });
-      authRepository.createToken.mockImplementation(async () => {
+      authRepository.createToken.mockImplementation(() => {
         callOrder.push('createToken');
-        return {} as any;
+        return Promise.resolve({} as any);
       });
 
       // Act
@@ -352,12 +353,10 @@ describe('PasswordService', () => {
 
   describe('changePassword', () => {
     beforeEach(() => {
-      (bcrypt.compare as jest.Mock).mockImplementation(
-        async (plain: string) => {
-          if (plain === 'OldPassword1#') return true;
-          return false;
-        },
-      );
+      (bcrypt.compare as jest.Mock).mockImplementation((plain: string) => {
+        if (plain === 'OldPassword1#') return Promise.resolve(true);
+        return Promise.resolve(false);
+      });
       (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-password');
     });
 
