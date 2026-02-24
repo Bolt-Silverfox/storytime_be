@@ -179,32 +179,37 @@ describe('StoryService - Library & Generation', () => {
         );
       });
 
-      it('should enrich stories with isRead flag from user progress', async () => {
+      it('should enrich stories with readStatus from user progress', async () => {
         const stories = [
-          { id: 'story-1', title: 'Read Story' },
-          { id: 'story-2', title: 'Unread Story' },
+          { id: 'story-1', title: 'Completed Story' },
+          { id: 'story-2', title: 'In Progress Story' },
+          { id: 'story-3', title: 'Unread Story' },
         ];
-        prisma.story.count.mockResolvedValue(2);
+        prisma.story.count.mockResolvedValue(3);
         prisma.story.findMany.mockResolvedValue(stories);
         prisma.userStoryProgress.findMany.mockResolvedValue([
-          { storyId: 'story-1' },
+          { storyId: 'story-1', completed: true },
+          { storyId: 'story-2', completed: false },
         ]);
 
         const result = await service.getStories({ userId: 'user-1' });
 
         expect(result.data[0]).toEqual(
-          expect.objectContaining({ id: 'story-1', isRead: true }),
+          expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
         );
         expect(result.data[1]).toEqual(
-          expect.objectContaining({ id: 'story-2', isRead: false }),
+          expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+        );
+        expect(result.data[2]).toEqual(
+          expect.objectContaining({ id: 'story-3', readStatus: null }),
         );
         expect(prisma.userStoryProgress.findMany).toHaveBeenCalledWith({
           where: {
             userId: 'user-1',
-            storyId: { in: ['story-1', 'story-2'] },
+            storyId: { in: ['story-1', 'story-2', 'story-3'] },
             isDeleted: false,
           },
-          select: { storyId: true },
+          select: { storyId: true, completed: true },
         });
       });
     });
