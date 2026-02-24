@@ -301,29 +301,13 @@ export class StoryService {
     ]);
 
     const totalPages = Math.ceil(totalCount / limit);
-
-    const storyIds = stories.map((s) => s.id);
-    const readProgress = await this.prisma.userStoryProgress.findMany({
-      where: {
-        userId: filter.userId,
-        storyId: { in: storyIds },
-        isDeleted: false,
-      },
-      select: { storyId: true, completed: true },
-    });
-    const progressMap = new Map(
-      readProgress.map((p) => [p.storyId, p.completed]),
+    const enrichedStories = await this.enrichWithReadStatus(
+      filter.userId,
+      stories,
     );
 
     return {
-      data: stories.map((story) => {
-        const progress = progressMap.get(story.id);
-        return {
-          ...story,
-          readStatus:
-            progress === undefined ? null : progress ? 'done' : 'reading',
-        };
-      }),
+      data: enrichedStories,
       pagination: {
         currentPage: page,
         totalPages,
@@ -331,6 +315,35 @@ export class StoryService {
         totalCount,
       },
     };
+  }
+
+  private async enrichWithReadStatus<T extends { id: string }>(
+    userId: string,
+    stories: T[],
+  ): Promise<(T & { readStatus: 'done' | 'reading' | null })[]> {
+    const storyIds = [...new Set(stories.map((s) => s.id))];
+    if (storyIds.length === 0)
+      return stories.map((s) => ({
+        ...s,
+        readStatus: null as 'done' | 'reading' | null,
+      }));
+
+    const readProgress = await this.prisma.userStoryProgress.findMany({
+      where: { userId, storyId: { in: storyIds }, isDeleted: false },
+      select: { storyId: true, completed: true },
+    });
+    const progressMap = new Map(
+      readProgress.map((p) => [p.storyId, p.completed]),
+    );
+
+    return stories.map((story) => {
+      const progress = progressMap.get(story.id);
+      return {
+        ...story,
+        readStatus:
+          progress === undefined ? null : progress ? 'done' : 'reading',
+      };
+    });
   }
 
   // Threshold in days to consider a past season as "recent" for backfill
@@ -495,10 +508,17 @@ export class StoryService {
       include: { images: true },
     });
 
+    // Enrich all stories with readStatus in a single DB query
+    const allStories = [...recommended, ...seasonal, ...topLiked];
+    const enriched = await this.enrichWithReadStatus(userId, allStories);
+
+    const recLen = recommended.length;
+    const seaLen = seasonal.length;
+
     return {
-      recommended,
-      seasonal,
-      topLiked,
+      recommended: enriched.slice(0, recLen),
+      seasonal: enriched.slice(recLen, recLen + seaLen),
+      topLiked: enriched.slice(recLen + seaLen),
     };
   }
 
