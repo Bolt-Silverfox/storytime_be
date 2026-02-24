@@ -66,14 +66,6 @@ This document provides an accurate, up-to-date summary of remaining work after v
 
 ## 📋 What's Left To Do
 
-### Priority 2 (Medium — Nice to Have)
-
-**Performance**
-- [ ] Cursor-based pagination for list endpoints (better for mobile infinite scroll)
-
-**CI/CD**
-- [ ] Pre-commit hooks (husky + lint-staged)
-
 ### Priority 3 (Low — Optional)
 
 **Infrastructure**
