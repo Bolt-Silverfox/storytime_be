@@ -51,8 +51,22 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       fs.readFileSync(storiesPath, 'utf-8'),
     );
 
+    // Pre-fetch existing titles to avoid N+1 queries
+    const existingStories = await prisma.story.findMany({
+      select: { title: true },
+    });
+    const existingTitles = new Set(
+      existingStories.map((s) => s.title.trim().toLowerCase()),
+    );
+
     let count = 0;
+    let skipped = 0;
     for (const story of stories) {
+      if (existingTitles.has(story.title.trim().toLowerCase())) {
+        skipped++;
+        continue;
+      }
+
       // Handle both string and array formats for categories
       const storyCategories = Array.isArray(story.category)
         ? story.category
@@ -119,7 +133,7 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       count++;
     }
 
-    logger.success(`Seeded ${count} stories`);
+    logger.success(`Seeded ${count} stories (${skipped} skipped as duplicates)`);
 
     return {
       name: 'stories',
