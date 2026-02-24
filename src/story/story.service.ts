@@ -309,15 +309,21 @@ export class StoryService {
         storyId: { in: storyIds },
         isDeleted: false,
       },
-      select: { storyId: true },
+      select: { storyId: true, completed: true },
     });
-    const readStoryIds = new Set(readProgress.map((p) => p.storyId));
+    const progressMap = new Map(
+      readProgress.map((p) => [p.storyId, p.completed]),
+    );
 
     return {
-      data: stories.map((story) => ({
-        ...story,
-        isRead: readStoryIds.has(story.id),
-      })),
+      data: stories.map((story) => {
+        const progress = progressMap.get(story.id);
+        return {
+          ...story,
+          readStatus:
+            progress === undefined ? null : progress ? 'done' : 'reading',
+        };
+      }),
       pagination: {
         currentPage: page,
         totalPages,
