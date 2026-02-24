@@ -474,6 +474,8 @@ describe('TextToSpeechService', () => {
 
       expect(result.results.length).toBeGreaterThan(0);
       expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
+      expect(result.wasTruncated).toBe(false);
+      expect(result.totalParagraphs).toBe(result.results.length);
       // No quota should be reserved
       expect(mockCheckAndReserveUsage).not.toHaveBeenCalled();
       // No providers should be called
@@ -512,6 +514,8 @@ describe('TextToSpeechService', () => {
 
       // Should have results for all paragraphs
       expect(result.results.length).toBeGreaterThan(1);
+      expect(result.wasTruncated).toBe(false);
+      expect(result.totalParagraphs).toBe(result.results.length);
       // First paragraph should be cached
       const sorted = [...result.results].sort((a, b) => a.index - b.index);
       expect(sorted[0].audioUrl).toBe('https://cached.com/first.mp3');
