@@ -29,11 +29,11 @@ export const VOICE_PREVIEWS: Record<VoiceType, string> = {
   [VoiceType.WILL]:
     'https://storage.googleapis.com/eleven-public-prod/premade/voices/EiNlNiXeDU1pqqOPrYMO/preview.mp3',
   [VoiceType.LILY]:
-    'https://storage.googleapis.com/eleven-public-prod/premade/voices/XrExE9yKIg1WjnnlVkGX/preview.mp3',
+    'https://res.cloudinary.com/billmal/video/upload/v1771892834/storytime/voice_previews/matilda_preview.mp3',
   [VoiceType.BILL]:
     'https://storage.googleapis.com/eleven-public-prod/premade/voices/iCrDUkL56s3C8sCRl7wb/preview.mp3',
   [VoiceType.LAURA]:
-    'https://storage.googleapis.com/eleven-public-prod/premade/voices/N2lVS1w4EtoT3dr4eOWO/preview.mp3',
+    'https://res.cloudinary.com/billmal/video/upload/v1771892837/storytime/voice_previews/callum_preview.mp3',
   [VoiceType.ROSIE]:
     'https://storage.googleapis.com/eleven-public-prod/premade/voices/ThT5KcBeYPX3keUQqHPh/981f0855-6598-48d2-9f8f-b6d92fbbe3fc.mp3',
   [VoiceType.PIXIE]:
