@@ -338,6 +338,8 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
 
     this.logger.log(`Generating cover image for "${title}" via Pollinations`);
 
+    let finalUrl: string;
+
     try {
       const result = await this.uploadService.uploadImageFromUrl(
         pollinationsUrl,
@@ -346,25 +348,26 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
       this.logger.log(
         `Cover image uploaded to Cloudinary: ${result.secure_url}`,
       );
-
-      // Track usage if userId is provided
-      if (userId) {
-        this.voiceQuotaService
-          .trackGeminiImage(userId)
-          .catch((err) =>
-            this.logger.error(
-              `Failed to track Gemini image usage for user ${userId}:`,
-              err,
-            ),
-          );
-      }
-
-      return result.secure_url;
+      finalUrl = result.secure_url;
     } catch (error) {
       this.logger.error(
         `Failed to upload cover image to Cloudinary, falling back to Pollinations URL: ${error instanceof Error ? error.message : error}`,
       );
-      return pollinationsUrl;
+      finalUrl = pollinationsUrl;
     }
+
+    // Track usage regardless of storage destination — the image was generated either way
+    if (userId) {
+      this.voiceQuotaService
+        .trackGeminiImage(userId)
+        .catch((err) =>
+          this.logger.error(
+            `Failed to track Gemini image usage for user ${userId}:`,
+            err,
+          ),
+        );
+    }
+
+    return finalUrl;
   }
 }
