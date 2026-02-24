@@ -697,7 +697,9 @@ export class PrismaAdminAnalyticsRepository
         const details = JSON.parse(log.details || '{}');
         credits = details.credits || 1;
         provider = details.provider || '';
-      } catch {}
+      } catch {
+        // Ignore malformed JSON in log details
+      }
 
       const entry = dataMap.get(month)!;
       if (provider === 'elevenlabs') entry.elevenLabs += credits;
