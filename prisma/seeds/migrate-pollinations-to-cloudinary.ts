@@ -16,6 +16,19 @@ import { v2 as cloudinary } from 'cloudinary';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('dotenv').config();
 
+const requiredEnvVars = [
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET',
+] as const;
+
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`Missing required env var: ${envVar}`);
+    process.exit(1);
+  }
+}
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -59,6 +72,23 @@ async function main() {
   for (const story of stories) {
     try {
       console.log(`[${success + failed + 1}/${stories.length}] "${story.title}"...`);
+
+      // Validate that the URL actually points to pollinations.ai
+      try {
+        const parsed = new URL(story.coverImageUrl);
+        if (
+          (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+          (parsed.hostname !== 'pollinations.ai' &&
+            !parsed.hostname.endsWith('.pollinations.ai'))
+        ) {
+          console.log(`  ⏭ Skipped: not a Pollinations URL (${parsed.hostname})`);
+          continue;
+        }
+      } catch {
+        console.log(`  ⏭ Skipped: invalid URL`);
+        continue;
+      }
+
       const cloudinaryUrl = await uploadToCloudinary(story.coverImageUrl);
 
       await prisma.story.update({
@@ -81,6 +111,6 @@ async function main() {
 main()
   .catch((e) => {
     console.error('Migration failed:', e);
-    process.exit(1);
+    process.exitCode = 1;
   })
   .finally(() => prisma.$disconnect());
