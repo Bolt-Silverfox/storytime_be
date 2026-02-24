@@ -164,10 +164,7 @@ describe('Kid Profile Management (e2e)', () => {
 
   // ==================== HELPER FUNCTIONS ====================
 
-  const expectSuccessResponse = (
-    res: request.Response,
-    statusCode: number,
-  ) => {
+  const expectSuccessResponse = (res: request.Response, statusCode: number) => {
     expect(res.status).toBe(statusCode);
     expect(res.body.success).toBe(true);
     expect(res.body.statusCode).toBe(statusCode);
@@ -187,24 +184,16 @@ describe('Kid Profile Management (e2e)', () => {
   };
 
   const authenticatedGet = (url: string) =>
-    request(server)
-      .get(url)
-      .set('Authorization', 'Bearer mock-valid-token');
+    request(server).get(url).set('Authorization', 'Bearer mock-valid-token');
 
   const authenticatedPost = (url: string) =>
-    request(server)
-      .post(url)
-      .set('Authorization', 'Bearer mock-valid-token');
+    request(server).post(url).set('Authorization', 'Bearer mock-valid-token');
 
   const authenticatedPut = (url: string) =>
-    request(server)
-      .put(url)
-      .set('Authorization', 'Bearer mock-valid-token');
+    request(server).put(url).set('Authorization', 'Bearer mock-valid-token');
 
   const authenticatedDelete = (url: string) =>
-    request(server)
-      .delete(url)
-      .set('Authorization', 'Bearer mock-valid-token');
+    request(server).delete(url).set('Authorization', 'Bearer mock-valid-token');
 
   // ==================== GET ALL KIDS TESTS ====================
 

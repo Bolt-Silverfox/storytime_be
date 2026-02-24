@@ -117,8 +117,8 @@ describe('Payment (e2e)', () => {
             get: jest.fn().mockResolvedValue(null),
             set: jest.fn().mockResolvedValue(undefined),
             del: jest.fn().mockResolvedValue(undefined),
-            getOrSet: jest.fn(
-              (_key: string, fetcher: () => Promise<unknown>) => fetcher(),
+            getOrSet: jest.fn((_key: string, fetcher: () => Promise<unknown>) =>
+              fetcher(),
             ),
             getStats: jest
               .fn()
@@ -370,14 +370,12 @@ describe('Payment (e2e)', () => {
   describe('POST /payment/cancel', () => {
     it('should cancel an active subscription', async () => {
       // First create a subscription by verifying a purchase
-      await request(server)
-        .post('/api/v1/payment/verify-purchase')
-        .send({
-          platform: 'google',
-          productId: 'com.storytime.monthly',
-          purchaseToken: 'cancel-test-token-001',
-          packageName: 'com.storytime.app',
-        });
+      await request(server).post('/api/v1/payment/verify-purchase').send({
+        platform: 'google',
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'cancel-test-token-001',
+        packageName: 'com.storytime.app',
+      });
 
       const res = await request(server).post('/api/v1/payment/cancel').send();
 
@@ -393,13 +391,11 @@ describe('Payment (e2e)', () => {
 
     it('should include platform warning for Apple subscriptions', async () => {
       // Create an Apple subscription
-      await request(server)
-        .post('/api/v1/payment/verify-purchase')
-        .send({
-          platform: 'apple',
-          productId: 'com.storytime.monthly',
-          purchaseToken: 'apple-cancel-test-token',
-        });
+      await request(server).post('/api/v1/payment/verify-purchase').send({
+        platform: 'apple',
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'apple-cancel-test-token',
+      });
 
       const res = await request(server).post('/api/v1/payment/cancel').send();
 
@@ -417,13 +413,11 @@ describe('Payment (e2e)', () => {
   describe('GET /payment/status', () => {
     it('should return subscription status for active subscription', async () => {
       // First create a subscription
-      await request(server)
-        .post('/api/v1/payment/verify-purchase')
-        .send({
-          platform: 'google',
-          productId: 'com.storytime.monthly',
-          purchaseToken: 'status-test-token-001',
-        });
+      await request(server).post('/api/v1/payment/verify-purchase').send({
+        platform: 'google',
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'status-test-token-001',
+      });
 
       const res = await request(server).get('/api/v1/payment/status').send();
 
@@ -504,7 +498,6 @@ describe('Payment (e2e)', () => {
 function createMockPrismaService() {
   const { subscriptions, paymentTransactions } = mockState;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const prismaClient: any = {
     subscription: {
       findFirst: jest.fn(
@@ -515,9 +508,7 @@ function createMockPrismaService() {
             }
           }
           if (where.id) {
-            return Promise.resolve(
-              subscriptions.get(where.id as string) || null,
-            );
+            return Promise.resolve(subscriptions.get(where.id) || null);
           }
           return Promise.resolve(null);
         },

@@ -50,12 +50,10 @@ describe('Subscription (e2e)', () => {
       get: jest.fn().mockResolvedValue(null),
       set: jest.fn().mockResolvedValue(undefined),
       del: jest.fn().mockResolvedValue(undefined),
-      getOrSet: jest.fn(
-        (_key: string, fetcher: () => Promise<unknown>) => fetcher(),
+      getOrSet: jest.fn((_key: string, fetcher: () => Promise<unknown>) =>
+        fetcher(),
       ),
-      getStats: jest
-        .fn()
-        .mockReturnValue({ hits: 0, misses: 0, hitRatio: 0 }),
+      getStats: jest.fn().mockReturnValue({ hits: 0, misses: 0, hitRatio: 0 }),
       resetStats: jest.fn(),
       onModuleInit: jest.fn(),
     };
@@ -155,10 +153,7 @@ describe('Subscription (e2e)', () => {
 
   // ==================== HELPER FUNCTIONS ====================
 
-  const expectSuccessResponse = (
-    res: request.Response,
-    statusCode: number,
-  ) => {
+  const expectSuccessResponse = (res: request.Response, statusCode: number) => {
     expect(res.status).toBe(statusCode);
     expect(res.body.success).toBe(true);
     expect(res.body.statusCode).toBe(statusCode);
@@ -178,14 +173,10 @@ describe('Subscription (e2e)', () => {
   };
 
   const authenticatedGet = (url: string) =>
-    request(server)
-      .get(url)
-      .set('Authorization', 'Bearer mock-valid-token');
+    request(server).get(url).set('Authorization', 'Bearer mock-valid-token');
 
   const authenticatedPost = (url: string) =>
-    request(server)
-      .post(url)
-      .set('Authorization', 'Bearer mock-valid-token');
+    request(server).post(url).set('Authorization', 'Bearer mock-valid-token');
 
   // ==================== GET PLANS TESTS ====================
 

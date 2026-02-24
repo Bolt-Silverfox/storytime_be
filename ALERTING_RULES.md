@@ -1,6 +1,6 @@
 # Alerting Rules Configuration
 
-Prometheus alerting rules for Storytime backend monitoring.
+Prometheus alerting rules for Storytime backend monitoring. These are reference configurations — deploy to your Prometheus/Grafana instance as needed.
 
 ## Setup
 
