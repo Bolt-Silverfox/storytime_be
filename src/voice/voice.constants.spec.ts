@@ -45,10 +45,10 @@ describe('Voice constants', () => {
     expect(new Set(elevenLabsIds).size).toBe(elevenLabsIds.length);
   });
 
-  it('should use unique StyleTTS2 voices across all entries', () => {
-    const styleTts2Voices = Object.values(VOICE_CONFIG).map(
-      (config) => config.styleTts2Voice,
+  it('should use unique Deepgram voices across all entries', () => {
+    const deepgramVoices = Object.values(VOICE_CONFIG).map(
+      (config) => config.deepgramVoice,
     );
-    expect(new Set(styleTts2Voices).size).toBe(styleTts2Voices.length);
+    expect(new Set(deepgramVoices).size).toBe(deepgramVoices.length);
   });
 });
