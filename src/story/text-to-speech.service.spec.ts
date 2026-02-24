@@ -428,7 +428,11 @@ describe('TextToSpeechService', () => {
         VoiceType.LILY,
         userId,
       );
-      expect(result).toEqual({ results: [], totalParagraphs: 0, wasTruncated: false });
+      expect(result).toEqual({
+        results: [],
+        totalParagraphs: 0,
+        wasTruncated: false,
+      });
       expect(mockPrisma.paragraphAudioCache.findMany).not.toHaveBeenCalled();
     });
 
@@ -439,7 +443,11 @@ describe('TextToSpeechService', () => {
         VoiceType.LILY,
         userId,
       );
-      expect(result).toEqual({ results: [], totalParagraphs: 0, wasTruncated: false });
+      expect(result).toEqual({
+        results: [],
+        totalParagraphs: 0,
+        wasTruncated: false,
+      });
     });
 
     it('should return cached results without reserving quota when all cached', async () => {
@@ -700,7 +708,9 @@ describe('TextToSpeechService', () => {
       );
 
       for (let i = 1; i < result.results.length; i++) {
-        expect(result.results[i].index).toBeGreaterThan(result.results[i - 1].index);
+        expect(result.results[i].index).toBeGreaterThan(
+          result.results[i - 1].index,
+        );
       }
     });
   });
