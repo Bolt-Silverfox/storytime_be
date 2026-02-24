@@ -160,7 +160,7 @@ export class VoiceQuotaService {
     // could push elevenLabsCount negative under concurrent requests.
     // Sync: references Prisma model UserUsage, columns elevenLabsCount and userId.
     const affected = await this.prisma
-      .$executeRaw`UPDATE "UserUsage" SET "elevenLabsCount" = GREATEST("elevenLabsCount" - ${credits}, 0) WHERE "userId" = ${userId}`;
+      .$executeRaw`UPDATE "user_usages" SET "elevenLabsCount" = GREATEST("elevenLabsCount" - ${credits}, 0) WHERE "userId" = ${userId}`;
     if (affected > 0) {
       this.logger.log(
         `Released up to ${credits} ElevenLabs credits for user ${userId}`,
