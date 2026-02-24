@@ -1,5 +1,5 @@
 import { HttpModule } from '@nestjs/axios';
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '@/auth/auth.module';
@@ -56,7 +56,7 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
     SubscriptionModule,
     NotificationModule,
     PrismaModule,
-    forwardRef(() => VoiceModule),
+    VoiceModule,
     // Register story generation queue
     BullModule.registerQueue({
       name: STORY_QUEUE_NAME,

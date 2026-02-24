@@ -1,9 +1,8 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '@/auth/auth.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
-import { StoryModule } from '../story/story.module';
 import { UploadModule } from '../upload/upload.module';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { NotificationModule } from '../notification/notification.module';
@@ -37,7 +36,6 @@ import { HttpLatencyInterceptor } from '@/shared/interceptors/http-latency.inter
     UploadModule,
     NotificationModule,
     SubscriptionModule,
-    forwardRef(() => StoryModule),
     // Register voice synthesis queue
     BullModule.registerQueue({
       name: VOICE_QUEUE_NAME,

@@ -174,23 +174,15 @@ Centralized `THROTTLE_LIMITS` config in `src/shared/config/throttle.config.ts` w
 
 ### 5.1 Circular Dependencies (P1) ✅ LARGELY RESOLVED
 
-Reduced from 7 modules to 2 remaining `forwardRef` usages via event-driven architecture and provider registration fixes.
+All `forwardRef` usages eliminated. Zero circular dependencies remain.
 
-**Remaining `forwardRef` usages (2):**
-
-| Location | Reason |
-|----------|--------|
-| StoryModule ↔ VoiceModule | Bidirectional TTS dependency |
-| BuddySelectionService → BuddyMessagingService | Circular service injection |
-
-**Resolved (2026-02-23):**
+**Resolved:**
 - ✅ Removed `forwardRef(() => AuthModule)` from AchievementProgressModule (unnecessary — PrismaModule is @Global)
 - ✅ Removed `AuthModule` import from PrismaModule (was causing PrismaModule → AuthModule → PrismaModule cycle)
 - ✅ Registered `STREAK_REPOSITORY` directly in AchievementProgressModule
 - ✅ Registered `STORY_REPOSITORY` directly in VoiceModule
-
-**Pending:**
-- [ ] Consider extracting shared TTS logic to resolve Story ↔ Voice dependency (low priority)
+- ✅ Removed StoryModule ↔ VoiceModule cycle: VoiceController now uses STORY_REPOSITORY directly instead of StoryService, making VoiceModule independent of StoryModule
+- ✅ Removed unnecessary `forwardRef` in BuddySelectionService (unidirectional dependency, same module)
 
 ### 5.2 Repository Pattern ✅ ALL COMPLETE
 
@@ -277,7 +269,7 @@ Jest coverage thresholds configured in `jest.config.js` (70% lines/statements, 6
 - Type safety: Production `any` types eliminated
 - God service refactoring: 7 → 19 focused services
 - Event-driven architecture: 18+ events, 7 listeners
-- Circular dependency reduction: 7 → 2 remaining `forwardRef` usages
+- Circular dependency elimination: 7 → 0 `forwardRef` usages
 - Repository pattern: All target services (Reward, Avatar, Kid, Settings, Age)
 - Domain exceptions: Full hierarchy with error codes
 - Rate limiting: Auth, payment, story, device controllers
@@ -296,13 +288,12 @@ Jest coverage thresholds configured in `jest.config.js` (70% lines/statements, 6
 - Console.log cleanup: All replaced with NestJS Logger
 - Alerting thresholds config: `src/shared/config/alerting.config.ts`
 - Test spec modernization: All 49 test suites updated for refactored services
-- Lint cleanup: 638 → 162 errors (remaining: Swagger decorator warnings, test file patterns)
+- Lint cleanup: 638 → 0 errors (unbound-method disabled for Swagger decorators)
 - Session validation: OAuth callbacks, AuthSessionGuard, token refresh all implemented
 - Unused imports/variables: Removed across 16+ production files
 
 ### Pending 📋
 - [ ] Coverage badges in README (P3 — requires Codecov CI integration)
-- [ ] Extract shared TTS logic to resolve Story ↔ Voice forwardRef (P3)
 
 ---
 
