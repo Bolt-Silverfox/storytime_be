@@ -223,10 +223,9 @@ Logger configured to exclude:
 
 | Priority | Recommendation | Effort |
 |----------|---------------|--------|
-| Medium | Add CSP nonce for inline scripts | 2h |
-| Medium | Implement request signing for webhooks | 4h |
+| Low | Add CSP nonce for inline scripts | 2h |
+| Low | Implement request signing for webhooks | 4h |
 | Low | Add CAPTCHA for registration | 2h |
-| Low | Implement API versioning headers | 1h |
 
 ---
 

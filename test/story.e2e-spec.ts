@@ -111,13 +111,21 @@ describe('Story (e2e)', () => {
     getSeasons: jest.fn().mockResolvedValue(MOCK_SEASONS),
     createStory: jest.fn().mockResolvedValue(MOCK_STORY),
     getStoryById: jest.fn().mockResolvedValue(MOCK_STORY),
-    updateStory: jest.fn().mockResolvedValue({ ...MOCK_STORY, title: 'Updated Title' }),
+    updateStory: jest
+      .fn()
+      .mockResolvedValue({ ...MOCK_STORY, title: 'Updated Title' }),
     deleteStory: jest.fn().mockResolvedValue({ message: 'Story deleted' }),
     undoDeleteStory: jest.fn().mockResolvedValue(MOCK_STORY),
-    addImage: jest.fn().mockResolvedValue({ id: 'img-1', url: 'https://example.com/img.jpg' }),
-    addBranch: jest.fn().mockResolvedValue({ id: 'branch-1', prompt: 'What next?' }),
+    addImage: jest
+      .fn()
+      .mockResolvedValue({ id: 'img-1', url: 'https://example.com/img.jpg' }),
+    addBranch: jest
+      .fn()
+      .mockResolvedValue({ id: 'branch-1', prompt: 'What next?' }),
     addFavorite: jest.fn().mockResolvedValue(MOCK_FAVORITE),
-    removeFavorite: jest.fn().mockResolvedValue({ message: 'Favorite removed' }),
+    removeFavorite: jest
+      .fn()
+      .mockResolvedValue({ message: 'Favorite removed' }),
     getFavorites: jest.fn().mockResolvedValue([MOCK_FAVORITE]),
     startStoryPath: jest.fn().mockResolvedValue({ id: 'path-1' }),
     updateStoryPath: jest.fn().mockResolvedValue({ id: 'path-1' }),
@@ -126,7 +134,9 @@ describe('Story (e2e)', () => {
     getCreatedStories: jest.fn().mockResolvedValue([]),
     getDownloads: jest.fn().mockResolvedValue([]),
     addDownload: jest.fn().mockResolvedValue({ id: 'dl-1' }),
-    removeDownload: jest.fn().mockResolvedValue({ message: 'Download removed' }),
+    removeDownload: jest
+      .fn()
+      .mockResolvedValue({ message: 'Download removed' }),
     removeFromLibrary: jest.fn().mockResolvedValue(undefined),
   };
 
@@ -168,7 +178,9 @@ describe('Story (e2e)', () => {
     getAssignmentsForKid: jest.fn().mockResolvedValue([]),
     getAssignmentById: jest.fn().mockResolvedValue({ id: 'dca-1' }),
     assignDailyChallengeToAllKids: jest.fn().mockResolvedValue(undefined),
-    getTodaysDailyChallengeAssignment: jest.fn().mockResolvedValue({ id: 'dca-1' }),
+    getTodaysDailyChallengeAssignment: jest
+      .fn()
+      .mockResolvedValue({ id: 'dca-1' }),
     getWeeklyDailyChallengeAssignments: jest.fn().mockResolvedValue([]),
   };
 
@@ -183,17 +195,29 @@ describe('Story (e2e)', () => {
       remaining: 5,
     }),
     recordNewStoryAccess: jest.fn().mockResolvedValue(undefined),
-    checkAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'within_quota' }),
+    checkAccess: jest
+      .fn()
+      .mockResolvedValue({ allowed: true, reason: 'within_quota' }),
   };
 
   const mockStoryQueueService = {
-    queueStoryGeneration: jest.fn().mockResolvedValue({ queued: true, jobId: 'job-1' }),
-    queueStoryForKid: jest.fn().mockResolvedValue({ queued: true, jobId: 'job-1' }),
-    getJobStatus: jest.fn().mockResolvedValue({ jobId: 'job-1', status: 'completed' }),
-    getJobResult: jest.fn().mockResolvedValue({ success: true, storyId: 'story-1' }),
+    queueStoryGeneration: jest
+      .fn()
+      .mockResolvedValue({ queued: true, jobId: 'job-1' }),
+    queueStoryForKid: jest
+      .fn()
+      .mockResolvedValue({ queued: true, jobId: 'job-1' }),
+    getJobStatus: jest
+      .fn()
+      .mockResolvedValue({ jobId: 'job-1', status: 'completed' }),
+    getJobResult: jest
+      .fn()
+      .mockResolvedValue({ success: true, storyId: 'story-1' }),
     cancelJob: jest.fn().mockResolvedValue({ cancelled: true }),
     getUserPendingJobs: jest.fn().mockResolvedValue([]),
-    getQueueStats: jest.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0 }),
+    getQueueStats: jest
+      .fn()
+      .mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0 }),
   };
 
   beforeAll(async () => {
@@ -214,9 +238,15 @@ describe('Story (e2e)', () => {
       controllers: [StoryController],
       providers: [
         { provide: StoryService, useValue: mockStoryService },
-        { provide: StoryGenerationService, useValue: mockStoryGenerationService },
+        {
+          provide: StoryGenerationService,
+          useValue: mockStoryGenerationService,
+        },
         { provide: StoryProgressService, useValue: mockStoryProgressService },
-        { provide: StoryRecommendationService, useValue: mockStoryRecommendationService },
+        {
+          provide: StoryRecommendationService,
+          useValue: mockStoryRecommendationService,
+        },
         { provide: DailyChallengeService, useValue: mockDailyChallengeService },
         { provide: StoryQuotaService, useValue: mockStoryQuotaService },
         { provide: StoryQueueService, useValue: mockStoryQueueService },
@@ -289,10 +319,7 @@ describe('Story (e2e)', () => {
 
   // ==================== HELPER FUNCTIONS ====================
 
-  const expectSuccessResponse = (
-    res: request.Response,
-    statusCode: number,
-  ) => {
+  const expectSuccessResponse = (res: request.Response, statusCode: number) => {
     expect(res.status).toBe(statusCode);
     expect(res.body.success).toBe(true);
     expect(res.body.statusCode).toBe(statusCode);
@@ -312,24 +339,16 @@ describe('Story (e2e)', () => {
   };
 
   const authenticatedGet = (url: string) =>
-    request(server)
-      .get(url)
-      .set('Authorization', 'Bearer mock-valid-token');
+    request(server).get(url).set('Authorization', 'Bearer mock-valid-token');
 
   const authenticatedPost = (url: string) =>
-    request(server)
-      .post(url)
-      .set('Authorization', 'Bearer mock-valid-token');
+    request(server).post(url).set('Authorization', 'Bearer mock-valid-token');
 
   const authenticatedPatch = (url: string) =>
-    request(server)
-      .patch(url)
-      .set('Authorization', 'Bearer mock-valid-token');
+    request(server).patch(url).set('Authorization', 'Bearer mock-valid-token');
 
   const authenticatedDelete = (url: string) =>
-    request(server)
-      .delete(url)
-      .set('Authorization', 'Bearer mock-valid-token');
+    request(server).delete(url).set('Authorization', 'Bearer mock-valid-token');
 
   // ==================== GET STORIES TESTS ====================
 
@@ -416,9 +435,8 @@ describe('Story (e2e)', () => {
     };
 
     it('should create a story when authenticated with valid data', async () => {
-      const res = await authenticatedPost('/api/v1/stories').send(
-        validCreateBody,
-      );
+      const res =
+        await authenticatedPost('/api/v1/stories').send(validCreateBody);
 
       expectSuccessResponse(res, 201);
       expect(res.body.data).toHaveProperty('id');

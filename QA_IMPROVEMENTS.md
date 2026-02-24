@@ -3,7 +3,7 @@
 This document tracks quality assurance issues, testing gaps, and code quality improvements needed in the Storytime backend.
 
 > **Generated**: February 2026
-> **Last Updated**: February 2026
+> **Last Updated**: 2026-02-24
 > **Priority Scale**: P0 (Critical) | P1 (High) | P2 (Medium) | P3 (Low)
 
 ---
@@ -216,21 +216,9 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 - **Integration Tests (30%)**: API endpoints, service + repository — `*.integration-spec.ts`
 - **E2E Tests (10%)**: Critical user flows (auth, payments) — `*.e2e-spec.ts`
 
-### 6.2 Test Coverage Targets
+### 6.2 Test Coverage Targets ✅ CONFIGURED
 
-| Component | Current | Target |
-|-----------|---------|--------|
-| Services | ~35% | 80% |
-| Guards | ~0% | 100% |
-| Controllers | ~5% | 70% |
-| Utils/Helpers | ~10% | 90% |
-
-**Completed:**
-- ✅ Jest coverage thresholds configured in `jest.config.js` (70% lines/statements, 60% branches/functions)
-- ✅ CI workflows updated to run `pnpm test --coverage`
-
-**Pending:**
-- [ ] Add coverage badges to README (P3 — requires Codecov or similar CI integration)
+Jest coverage thresholds configured in `jest.config.js` (70% lines/statements, 60% branches/functions). CI workflows run `pnpm test --coverage`.
 
 ---
 
@@ -314,6 +302,7 @@ Pattern: `src/<module>/repositories/` with interface + Prisma implementation + S
 
 ### Pending 📋
 - [ ] Coverage badges in README (P3 — requires Codecov CI integration)
+- [ ] Extract shared TTS logic to resolve Story ↔ Voice forwardRef (P3)
 
 ---
 

@@ -1,9 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DeviceTokenService, RegisterDeviceDto } from './device-token.service';
-import {
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { DevicePlatform } from '@prisma/client';
 

@@ -933,7 +933,6 @@ Use FCM for mobile push notifications (free, reliable, well-documented).
 ## Related Documentation
 
 - **Queue Implementation**: See `src/story/queue/` for current code
-- **COORDINATION.md**: Instance 17 - Async Story Generation Queue System
 - **NotificationService**: Existing email notification infrastructure
 - **BullMQ Docs**: https://docs.bullmq.io/
 - **FCM Docs**: https://firebase.google.com/docs/cloud-messaging
@@ -965,5 +964,5 @@ For web, WebSockets might be better than mobile push. Consider separate implemen
 
 ---
 
-**Last Updated**: 2026-02-12
+**Last Updated**: 2026-02-24
 **Phase 2 Completed**: FCM push notifications for mobile + SSE for web clients
