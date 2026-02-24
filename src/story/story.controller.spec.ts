@@ -7,6 +7,9 @@ import { StoryRecommendationService } from './story-recommendation.service';
 import { DailyChallengeService } from './daily-challenge.service';
 import { StoryQuotaService } from './story-quota.service';
 import { StoryQueueService } from './queue';
+import { AuthSessionGuard } from '../shared/guards/auth.guard';
+import { SubscriptionThrottleGuard } from '../shared/guards/subscription-throttle.guard';
+import { StoryAccessGuard } from '../shared/guards/story-access.guard';
 
 // Mock the Services so we test the Controller in isolation
 const mockStoryService = {
@@ -113,17 +116,11 @@ describe('StoryController', () => {
         },
       ],
     })
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      .overrideGuard(require('../shared/guards/auth.guard').AuthSessionGuard)
+      .overrideGuard(AuthSessionGuard)
       .useValue({ canActivate: () => true })
-      .overrideGuard(
-        require('../shared/guards/subscription-throttle.guard')
-          .SubscriptionThrottleGuard,
-      )
+      .overrideGuard(SubscriptionThrottleGuard)
       .useValue({ canActivate: () => true })
-      .overrideGuard(
-        require('../shared/guards/story-access.guard').StoryAccessGuard,
-      )
+      .overrideGuard(StoryAccessGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

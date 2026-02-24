@@ -1,9 +1,7 @@
 import { Transform } from 'class-transformer';
 import sanitizeHtml from 'sanitize-html';
 
-export interface SanitizeOptions extends sanitizeHtml.IOptions {
-  // Add strict typing if needed
-}
+export type SanitizeOptions = sanitizeHtml.IOptions;
 
 export function SanitizeHtml(options?: SanitizeOptions) {
   return Transform(({ value }) => {

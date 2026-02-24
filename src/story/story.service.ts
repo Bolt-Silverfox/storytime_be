@@ -181,7 +181,6 @@ export class StoryService {
         title: data.title,
         description: data.description,
         textContent: data.textContent,
-        // @ts-ignore - DTO might have mapped fields, ensuring basic fields match
         language: data.language || 'en',
         coverImageUrl: data.coverImageUrl || '',
         audioUrl: data.audioUrl || '',
@@ -404,7 +403,7 @@ export class StoryService {
     return this.pathService.updateStoryPath(id, dto);
   }
 
-  async getStoryPathsForKid(kidId: string) {
+  getStoryPathsForKid(kidId: string) {
     return this.pathService.getStoryPaths(kidId);
   }
 

@@ -955,7 +955,7 @@ export class StoryController {
   @ApiOperation({ summary: 'Get all story paths for a kid' })
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [StoryPathDto] })
-  async getStoryPathsForKid(@Param('kidId') kidId: string) {
+  getStoryPathsForKid(@Param('kidId') kidId: string) {
     return this.storyService.getStoryPathsForKid(kidId);
   }
 

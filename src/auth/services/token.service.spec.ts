@@ -162,7 +162,7 @@ describe('TokenService', () => {
     it('should throw InternalServerErrorException for non-Error signing failures', () => {
       // Arrange
       jwtService.sign.mockImplementation(() => {
-        throw 'unknown error';
+        throw new Error('unknown error');
       });
 
       // Act & Assert

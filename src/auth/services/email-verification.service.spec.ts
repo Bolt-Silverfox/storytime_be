@@ -135,12 +135,13 @@ describe('EmailVerificationService', () => {
       // Arrange
       const callOrder: string[] = [];
       authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
-      authRepository.deleteUserTokensByType.mockImplementation(async () => {
+      authRepository.deleteUserTokensByType.mockImplementation(() => {
         callOrder.push('deleteTokens');
+        return Promise.resolve();
       });
-      authRepository.createToken.mockImplementation(async () => {
+      authRepository.createToken.mockImplementation(() => {
         callOrder.push('createToken');
-        return {} as any;
+        return Promise.resolve({} as any);
       });
 
       // Act
