@@ -28,9 +28,6 @@ importers:
       '@google/generative-ai':
         specifier: ^0.24.1
         version: 0.24.1
-      '@gradio/client':
-        specifier: ^2.0.4
-        version: 2.0.4
       '@hng-sdk/email':
         specifier: ^0.0.0
         version: 0.0.0
@@ -806,10 +803,6 @@ packages:
 
   '@google/generative-ai@0.24.1':
     resolution: {integrity: sha512-MqO+MLfM6kjxcKoy0p1wRzG3b4ZZXtPI+z2IE26UogS2Cm/XHO+7gGRBh6gcJsOiIVoH93UwKvW4HdgiOZCy9Q==}
-    engines: {node: '>=18.0.0'}
-
-  '@gradio/client@2.0.4':
-    resolution: {integrity: sha512-pYywxUpamTYQLca01YAlTBwr2eb3H8d9s7geeQdexuPkM7p+EN2LhyzgNRN4yZrpn4swwfwP1fOoadKgd1b6Ww==}
     engines: {node: '>=18.0.0'}
 
   '@grpc/grpc-js@1.14.3':
@@ -3893,9 +3886,6 @@ packages:
   fetch-blob@3.2.0:
     resolution: {integrity: sha512-7yAQpD2UMJzLi1Dqv7qFYnPbaPx7ZfFK6PiIxQ4PfkGPyNyl2Ugx+a/umUonmKqjhM4DnfbMvdX6otXq83soQQ==}
     engines: {node: ^12.20 || >= 14.13}
-
-  fetch-event-stream@0.1.6:
-    resolution: {integrity: sha512-GREtJ5HNikdU2AXtZ6E/5bk+aslMU6ie5mPG6H9nvsdDkkHQ6m5lHwmmmDTOBexok9hApQ7EprsXCdmz9ZC68w==}
 
   fflate@0.8.2:
     resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
@@ -7227,10 +7217,6 @@ snapshots:
     optional: true
 
   '@google/generative-ai@0.24.1': {}
-
-  '@gradio/client@2.0.4':
-    dependencies:
-      fetch-event-stream: 0.1.6
 
   '@grpc/grpc-js@1.14.3':
     dependencies:
@@ -10744,8 +10730,6 @@ snapshots:
     dependencies:
       node-domexception: 1.0.0
       web-streams-polyfill: 3.3.3
-
-  fetch-event-stream@0.1.6: {}
 
   fflate@0.8.2: {}
 
