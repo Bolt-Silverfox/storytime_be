@@ -10,12 +10,11 @@ export const VOICE_CONFIG_SETTINGS = {
     FREE: 2,
     PREMIUM: 20,
   },
-  STYLE_TTS2: {
-    SPACE_ID: 'Wismut/StyleTTS2_Studio',
-    ENDPOINT: '/on_generate_tts',
-    SPEED: 120,
+  DEEPGRAM: {
+    DEFAULT_MODEL: 'aura-2-hera-en',
+    ENCODING: 'mp3',
     TIMEOUT_MS: 30_000,
-    CHUNK_SIZE: 3000,
+    CHUNK_SIZE: 2000,
   },
   EDGE_TTS: {
     RATE: -10,
