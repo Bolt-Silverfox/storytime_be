@@ -98,6 +98,9 @@ async function main() {
 
       console.log(`  ✓ ${cloudinaryUrl}`);
       success++;
+
+      // Small delay to avoid Cloudinary rate limits
+      await new Promise((resolve) => setTimeout(resolve, 200));
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error(`  ✗ Failed: ${msg}`);
