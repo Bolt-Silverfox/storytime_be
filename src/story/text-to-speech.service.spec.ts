@@ -7,7 +7,7 @@ import {
 import { UploadService } from '../upload/upload.service';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
-import { StyleTTS2TTSProvider } from '../voice/providers/styletts2-tts.provider';
+import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';
 import { EdgeTTSProvider } from '../voice/providers/edge-tts.provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
@@ -19,7 +19,7 @@ describe('TextToSpeechService', () => {
 
   const mockUploadAudio = jest.fn();
   const mockElevenLabsGenerate = jest.fn();
-  const mockStyleTts2Generate = jest.fn();
+  const mockDeepgramGenerate = jest.fn();
   const mockEdgeTtsGenerate = jest.fn();
   const mockIsPremiumUser = jest.fn();
   const mockCheckUsage = jest.fn();
@@ -62,9 +62,9 @@ describe('TextToSpeechService', () => {
           },
         },
         {
-          provide: StyleTTS2TTSProvider,
+          provide: DeepgramTTSProvider,
           useValue: {
-            generateAudio: mockStyleTts2Generate,
+            generateAudio: mockDeepgramGenerate,
           },
         },
         {
@@ -151,17 +151,17 @@ describe('TextToSpeechService', () => {
         expect.stringContaining('elevenlabs'),
       );
       expect(result).toBe('https://uploaded-audio.com/eleven.mp3');
-      expect(mockStyleTts2Generate).not.toHaveBeenCalled();
+      expect(mockDeepgramGenerate).not.toHaveBeenCalled();
       expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
       expect(mockIncrementUsage).toHaveBeenCalledWith(userId);
       expect(mockPrisma.paragraphAudioCache.upsert).toHaveBeenCalled();
     });
 
-    it('should skip ElevenLabs for free users and try StyleTTS2', async () => {
+    it('should skip ElevenLabs for free users and try Deepgram', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('styletts2-audio'));
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('deepgram-audio'));
       mockUploadAudio.mockResolvedValue(
-        'https://uploaded-audio.com/styletts2.wav',
+        'https://uploaded-audio.com/deepgram.mp3',
       );
 
       const result = await service.textToSpeechCloudUrl(
@@ -172,14 +172,14 @@ describe('TextToSpeechService', () => {
       );
 
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
-      expect(mockStyleTts2Generate).toHaveBeenCalled();
-      expect(result).toBe('https://uploaded-audio.com/styletts2.wav');
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
+      expect(result).toBe('https://uploaded-audio.com/deepgram.mp3');
       expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
     });
 
-    it('should fallback to Edge TTS if StyleTTS2 fails', async () => {
+    it('should fallback to Edge TTS if Deepgram fails', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 timeout'));
+      mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram timeout'));
       mockEdgeTtsGenerate.mockResolvedValue(Buffer.from('edge-audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/edge.mp3');
 
@@ -191,7 +191,7 @@ describe('TextToSpeechService', () => {
       );
 
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
-      expect(mockStyleTts2Generate).toHaveBeenCalled();
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
       expect(mockEdgeTtsGenerate).toHaveBeenCalled();
       expect(result).toBe('https://uploaded-audio.com/edge.mp3');
     });
@@ -200,7 +200,7 @@ describe('TextToSpeechService', () => {
       mockIsPremiumUser.mockResolvedValue(true);
       mockCheckUsage.mockResolvedValue(true);
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs Error'));
-      mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 Error'));
+      mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram Error'));
       mockEdgeTtsGenerate.mockResolvedValue(Buffer.from('edge-audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/edge.mp3');
 
@@ -212,7 +212,7 @@ describe('TextToSpeechService', () => {
       );
 
       expect(mockElevenLabsGenerate).toHaveBeenCalled();
-      expect(mockStyleTts2Generate).toHaveBeenCalled();
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
       expect(mockEdgeTtsGenerate).toHaveBeenCalled();
       expect(result).toBe('https://uploaded-audio.com/edge.mp3');
       expect(mockIncrementUsage).not.toHaveBeenCalled();
@@ -232,7 +232,7 @@ describe('TextToSpeechService', () => {
 
       expect(result).toBe('https://cached.com/audio.mp3');
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
-      expect(mockStyleTts2Generate).not.toHaveBeenCalled();
+      expect(mockDeepgramGenerate).not.toHaveBeenCalled();
       expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
     });
 
@@ -240,7 +240,7 @@ describe('TextToSpeechService', () => {
       mockIsPremiumUser.mockResolvedValue(true);
       mockCheckUsage.mockResolvedValue(true);
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs Error'));
-      mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 Error'));
+      mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram Error'));
       mockEdgeTtsGenerate.mockRejectedValue(new Error('Edge TTS Error'));
 
       await expect(
@@ -250,7 +250,7 @@ describe('TextToSpeechService', () => {
 
     it('should throw error if all providers fail for free user', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 Error'));
+      mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram Error'));
       mockEdgeTtsGenerate.mockRejectedValue(new Error('Edge TTS Error'));
 
       await expect(
@@ -259,10 +259,10 @@ describe('TextToSpeechService', () => {
     });
 
     it('should deny anonymous requests for ElevenLabs voices', async () => {
-      // No userId provided — should skip ElevenLabs, use StyleTTS2
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('styletts2-audio'));
+      // No userId provided — should skip ElevenLabs, use Deepgram
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('deepgram-audio'));
       mockUploadAudio.mockResolvedValue(
-        'https://uploaded-audio.com/styletts2.wav',
+        'https://uploaded-audio.com/deepgram.mp3',
       );
 
       const result = await service.textToSpeechCloudUrl(
@@ -274,16 +274,16 @@ describe('TextToSpeechService', () => {
 
       expect(mockIsPremiumUser).not.toHaveBeenCalled();
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
-      expect(mockStyleTts2Generate).toHaveBeenCalled();
-      expect(result).toBe('https://uploaded-audio.com/styletts2.wav');
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
+      expect(result).toBe('https://uploaded-audio.com/deepgram.mp3');
     });
 
     it('should skip ElevenLabs when premium user exceeds quota', async () => {
       mockIsPremiumUser.mockResolvedValue(true);
       mockCheckUsage.mockResolvedValue(false); // quota exceeded
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('styletts2-audio'));
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('deepgram-audio'));
       mockUploadAudio.mockResolvedValue(
-        'https://uploaded-audio.com/styletts2.wav',
+        'https://uploaded-audio.com/deepgram.mp3',
       );
 
       const result = await service.textToSpeechCloudUrl(
@@ -296,8 +296,8 @@ describe('TextToSpeechService', () => {
       expect(mockIsPremiumUser).toHaveBeenCalledWith(userId);
       expect(mockCheckUsage).toHaveBeenCalledWith(userId);
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
-      expect(mockStyleTts2Generate).toHaveBeenCalled();
-      expect(result).toBe('https://uploaded-audio.com/styletts2.wav');
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
+      expect(result).toBe('https://uploaded-audio.com/deepgram.mp3');
     });
 
     it('should resolve custom UUID voice from database', async () => {
@@ -336,7 +336,7 @@ describe('TextToSpeechService', () => {
       const unknownId = 'unknown-voice-id';
       mockPrisma.voice.findUnique.mockResolvedValue(null);
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('default-audio'));
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('default-audio'));
       mockUploadAudio.mockResolvedValue(
         'https://uploaded-audio.com/default.wav',
       );
@@ -351,7 +351,7 @@ describe('TextToSpeechService', () => {
       expect(mockPrisma.voice.findUnique).toHaveBeenCalledWith({
         where: { id: unknownId },
       });
-      expect(mockStyleTts2Generate).toHaveBeenCalled();
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
       expect(result).toBe('https://uploaded-audio.com/default.wav');
     });
 
@@ -366,7 +366,7 @@ describe('TextToSpeechService', () => {
     it('should use default voice when voicetype is not provided', async () => {
       mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue(null);
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/audio.wav');
 
       const result = await service.textToSpeechCloudUrl(
@@ -376,14 +376,14 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      expect(mockStyleTts2Generate).toHaveBeenCalled();
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
       expect(result).toBe('https://uploaded-audio.com/audio.wav');
     });
 
     it('should still return audio when cache write fails', async () => {
       mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue(null);
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/audio.wav');
       mockPrisma.paragraphAudioCache.upsert.mockRejectedValue(
         new Error('DB write failed'),
@@ -480,7 +480,7 @@ describe('TextToSpeechService', () => {
       expect(mockCheckAndReserveUsage).not.toHaveBeenCalled();
       // No providers should be called
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
-      expect(mockStyleTts2Generate).not.toHaveBeenCalled();
+      expect(mockDeepgramGenerate).not.toHaveBeenCalled();
       expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
     });
 
@@ -502,7 +502,7 @@ describe('TextToSpeechService', () => {
       );
 
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('generated-audio'));
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('generated-audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded.com/new.wav');
 
       const result = await service.batchTextToSpeechCloudUrls(
@@ -525,8 +525,8 @@ describe('TextToSpeechService', () => {
       }
       // No ElevenLabs for free user
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
-      // StyleTTS2 should be called for uncached paragraphs only
-      expect(mockStyleTts2Generate).toHaveBeenCalledTimes(
+      // Deepgram should be called for uncached paragraphs only
+      expect(mockDeepgramGenerate).toHaveBeenCalledTimes(
         result.results.length - 1, // minus 1 cached
       );
     });
@@ -541,7 +541,7 @@ describe('TextToSpeechService', () => {
       );
       // ElevenLabs fails for all — so all reserved credits should be released
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs timeout'));
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('fallback-audio'));
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('fallback-audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded.com/fallback.wav');
 
       const result = await service.batchTextToSpeechCloudUrls(
@@ -577,7 +577,7 @@ describe('TextToSpeechService', () => {
 
       mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded.com/audio.wav');
 
       const result = await service.batchTextToSpeechCloudUrls(
@@ -607,7 +607,7 @@ describe('TextToSpeechService', () => {
       mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
       mockIsPremiumUser.mockResolvedValue(false);
       let callCount = 0;
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockImplementation(async () => {
         callCount++;
         return `https://uploaded.com/audio-${callCount}.wav`;
@@ -647,8 +647,8 @@ describe('TextToSpeechService', () => {
 
       // Provider should be called once per unique text, not once per chunk
       const uniqueTexts = new Set(result.results.map((r) => r.text)).size;
-      expect(mockStyleTts2Generate).toHaveBeenCalledTimes(uniqueTexts);
-      expect(mockStyleTts2Generate.mock.calls.length).toBeLessThan(
+      expect(mockDeepgramGenerate).toHaveBeenCalledTimes(uniqueTexts);
+      expect(mockDeepgramGenerate.mock.calls.length).toBeLessThan(
         result.results.length,
       );
     });
@@ -677,7 +677,7 @@ describe('TextToSpeechService', () => {
       );
 
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded.com/middle.wav');
 
       const result = await service.batchTextToSpeechCloudUrls(
@@ -695,13 +695,13 @@ describe('TextToSpeechService', () => {
       // Middle should be generated
       expect(sorted[1].audioUrl).toBe('https://uploaded.com/middle.wav');
       // Only 1 paragraph should be generated (the middle one)
-      expect(mockStyleTts2Generate).toHaveBeenCalledTimes(1);
+      expect(mockDeepgramGenerate).toHaveBeenCalledTimes(1);
     });
 
     it('should return results sorted by index', async () => {
       mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
       mockIsPremiumUser.mockResolvedValue(false);
-      mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded.com/audio.wav');
 
       const result = await service.batchTextToSpeechCloudUrls(
