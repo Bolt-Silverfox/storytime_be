@@ -4,6 +4,8 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Inject,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -40,7 +42,10 @@ import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
-import { StoryService } from '../story/story.service';
+import {
+  STORY_REPOSITORY,
+  IStoryRepository,
+} from '../story/repositories/story.repository.interface';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { DEFAULT_VOICE } from './voice.constants';
@@ -63,7 +68,8 @@ import { VoiceQueueService, VoicePriority } from './queue';
 export class VoiceController {
   constructor(
     private readonly voiceService: VoiceService,
-    private readonly storyService: StoryService,
+    @Inject(STORY_REPOSITORY)
+    private readonly storyRepository: IStoryRepository,
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly speechToTextService: SpeechToTextService,
@@ -229,8 +235,12 @@ export class VoiceController {
       );
     }
 
-    const audioUrl = await this.storyService.getStoryAudioUrl(
-      id,
+    const story = await this.storyRepository.findStoryById(id);
+    if (!story) throw new NotFoundException('Story not found');
+
+    const audioUrl = await this.textToSpeechService.synthesizeStory(
+      story.id,
+      story.textContent || story.description || '',
       resolvedVoice,
       req.authUserData.userId,
     );

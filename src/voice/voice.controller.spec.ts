@@ -5,7 +5,7 @@ import {
   AuthenticatedRequest,
   AuthSessionGuard,
 } from '@/shared/guards/auth.guard';
-import { StoryService } from '../story/story.service';
+import { STORY_REPOSITORY } from '../story/repositories/story.repository.interface';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { SpeechToTextService } from './speech-to-text.service';
@@ -17,7 +17,9 @@ const mockVoiceService = {
   fetchAvailableVoices: jest.fn(),
 };
 
-const mockStoryService = {};
+const mockStoryRepository = {
+  findStoryById: jest.fn(),
+};
 const mockUploadService = {};
 const mockTextToSpeechService = {};
 const mockSpeechToTextService = {};
@@ -50,7 +52,7 @@ describe('VoiceController', () => {
       controllers: [VoiceController],
       providers: [
         { provide: VoiceService, useValue: mockVoiceService },
-        { provide: StoryService, useValue: mockStoryService },
+        { provide: STORY_REPOSITORY, useValue: mockStoryRepository },
         { provide: UploadService, useValue: mockUploadService },
         { provide: TextToSpeechService, useValue: mockTextToSpeechService },
         { provide: SpeechToTextService, useValue: mockSpeechToTextService },

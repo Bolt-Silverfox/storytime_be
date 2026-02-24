@@ -3,8 +3,6 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-  Inject,
-  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BuddyMessagingService } from './buddy-messaging.service';
@@ -13,7 +11,6 @@ import { BuddyMessagingService } from './buddy-messaging.service';
 export class BuddySelectionService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(forwardRef(() => BuddyMessagingService))
     private readonly buddyMessagingService: BuddyMessagingService,
   ) {}
 
