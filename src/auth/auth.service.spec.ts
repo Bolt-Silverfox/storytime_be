@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import {
   InvalidCredentialsException,
   InvalidTokenException,
@@ -9,7 +8,6 @@ import {
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
 import { AUTH_REPOSITORY, IAuthRepository } from './repositories';
-import { UserDto } from './dto/auth.dto';
 import { Role } from '@prisma/client';
 
 describe('AuthService', () => {

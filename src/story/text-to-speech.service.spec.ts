@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TextToSpeechService } from './text-to-speech.service';
 import { UploadService } from '../upload/upload.service';
 import { VoiceType } from '../voice/dto/voice.dto';
-import { VOICE_CONFIG } from '../voice/voice.constants';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import { StyleTTS2TTSProvider } from '../voice/providers/styletts2-tts.provider';
 import { EdgeTTSProvider } from '../voice/providers/edge-tts.provider';

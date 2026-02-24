@@ -59,7 +59,6 @@ describe('AdminController', () => {
   let controller: AdminController;
   let analyticsService: typeof mockAdminAnalyticsService;
   let userService: typeof mockAdminUserService;
-  let systemService: typeof mockAdminSystemService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -92,7 +91,6 @@ describe('AdminController', () => {
     controller = module.get<AdminController>(AdminController);
     analyticsService = module.get(AdminAnalyticsService);
     userService = module.get(AdminUserService);
-    systemService = module.get(AdminSystemService);
     jest.clearAllMocks();
   });
 

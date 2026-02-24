@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationPreferenceEventListener } from './notification-preference-event.listener';
 import { NotificationPreferenceService } from '../services/notification-preference.service';
-import { AppEvents, UserRegisteredEvent } from '@/shared/events';
+import { UserRegisteredEvent } from '@/shared/events';
 
 describe('NotificationPreferenceEventListener', () => {
   let listener: NotificationPreferenceEventListener;

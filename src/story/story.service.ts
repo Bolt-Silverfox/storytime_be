@@ -20,7 +20,6 @@ import { StoryDownloadService } from './story-download.service';
 import { StoryProgressService } from './story-progress.service';
 import { StoryPathService } from './story-path.service';
 import { StoryMetadataService } from './story-metadata.service';
-import { DailyChallengeService } from './daily-challenge.service';
 import {
   IStoryCoreRepository,
   STORY_CORE_REPOSITORY,
@@ -45,7 +44,6 @@ export class StoryService {
     private readonly progressService: StoryProgressService,
     private readonly pathService: StoryPathService,
     private readonly metadataService: StoryMetadataService,
-    private readonly dailyChallengeService: DailyChallengeService,
   ) {}
 
   /** Invalidate story content caches (not metadata like categories/themes) */
