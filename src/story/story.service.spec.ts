@@ -26,6 +26,7 @@ const mockPrismaService = {
   },
   favorite: { deleteMany: jest.fn() },
   storyProgress: { deleteMany: jest.fn() },
+  userStoryProgress: { findMany: jest.fn() },
   parentRecommendation: { groupBy: jest.fn() },
   $transaction: jest.fn((args) => args), // Pass through transaction
 };
@@ -128,8 +129,9 @@ describe('StoryService - Library & Generation', () => {
       it('should filter by minAge and maxAge', async () => {
         prisma.story.count.mockResolvedValue(1);
         prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ minAge: 3, maxAge: 5 });
+        await service.getStories({ userId: 'user-1', minAge: 3, maxAge: 5 });
 
         expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -146,8 +148,9 @@ describe('StoryService - Library & Generation', () => {
       it('should filter by minAge only', async () => {
         prisma.story.count.mockResolvedValue(1);
         prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ minAge: 4 });
+        await service.getStories({ userId: 'user-1', minAge: 4 });
 
         expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -162,8 +165,9 @@ describe('StoryService - Library & Generation', () => {
       it('should filter by maxAge only', async () => {
         prisma.story.count.mockResolvedValue(1);
         prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ maxAge: 8 });
+        await service.getStories({ userId: 'user-1', maxAge: 8 });
 
         expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({

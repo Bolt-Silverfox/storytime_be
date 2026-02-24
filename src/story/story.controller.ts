@@ -86,6 +86,8 @@ export class StoryController {
   ) {}
 
   @Get()
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({
     summary:
       'Get stories (optionally filtered by theme, category, recommended, kidId, and age)',
@@ -130,6 +132,7 @@ export class StoryController {
     long: { limit: THROTTLE_LIMITS.LONG.LIMIT, ttl: THROTTLE_LIMITS.LONG.TTL },
   }) // 100 per minute
   async getStories(
+    @Req() req: AuthenticatedRequest,
     @Query('theme') theme?: string,
     @Query('category') category?: string,
     @Query('season') season?: string,
@@ -148,6 +151,7 @@ export class StoryController {
     const safeLimit = Math.max(1, Math.min(100, limit));
 
     return this.storyService.getStories({
+      userId: req.authUserData.userId,
       theme,
       category,
       season,
