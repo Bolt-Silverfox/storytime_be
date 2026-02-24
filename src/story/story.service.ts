@@ -96,6 +96,7 @@ export class StoryService {
   }
 
   async getStories(filter: {
+    userId: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -301,8 +302,22 @@ export class StoryService {
 
     const totalPages = Math.ceil(totalCount / limit);
 
+    const storyIds = stories.map((s) => s.id);
+    const readProgress = await this.prisma.userStoryProgress.findMany({
+      where: {
+        userId: filter.userId,
+        storyId: { in: storyIds },
+        isDeleted: false,
+      },
+      select: { storyId: true },
+    });
+    const readStoryIds = new Set(readProgress.map((p) => p.storyId));
+
     return {
-      data: stories,
+      data: stories.map((story) => ({
+        ...story,
+        isRead: readStoryIds.has(story.id),
+      })),
       pagination: {
         currentPage: page,
         totalPages,
