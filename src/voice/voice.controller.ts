@@ -275,6 +275,27 @@ export class VoiceController {
   @ApiResponse({
     status: 200,
     description: 'Batch audio generated successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        paragraphs: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              index: { type: 'number' },
+              text: { type: 'string' },
+              audioUrl: { type: 'string', nullable: true },
+            },
+          },
+        },
+        totalParagraphs: { type: 'number' },
+        wasTruncated: { type: 'boolean' },
+        voiceId: { type: 'string' },
+        statusCode: { type: 'number' },
+      },
+    },
   })
   @ApiBody({ type: BatchStoryAudioDto })
   async batchTextToSpeech(
