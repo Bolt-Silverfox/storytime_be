@@ -20,12 +20,19 @@ export class UploadService {
           folder: 'storytime',
           resource_type: 'auto',
         },
-        (error: UploadApiErrorResponse, result: UploadApiResponse) => {
+        (error: UploadApiErrorResponse, result?: UploadApiResponse) => {
           if (error) {
             this.logger.error('Cloudinary upload error:', error);
             return reject(
               new InternalServerErrorException(
                 `Upload failed: ${error.message}`,
+              ),
+            );
+          }
+          if (!result) {
+            return reject(
+              new InternalServerErrorException(
+                'Cloudinary upload returned no result',
               ),
             );
           }
@@ -51,12 +58,19 @@ export class UploadService {
             { format: 'webp' },
           ],
         },
-        (error: UploadApiErrorResponse, result: UploadApiResponse) => {
+        (error: UploadApiErrorResponse, result?: UploadApiResponse) => {
           if (error) {
             this.logger.error('Cloudinary image upload error:', error);
             return reject(
               new InternalServerErrorException(
                 `Image upload failed: ${error.message}`,
+              ),
+            );
+          }
+          if (!result) {
+            return reject(
+              new InternalServerErrorException(
+                'Cloudinary image upload returned no result',
               ),
             );
           }
@@ -82,12 +96,19 @@ export class UploadService {
             { format: 'webp' },
           ],
         },
-        (error: UploadApiErrorResponse, result: UploadApiResponse) => {
+        (error: UploadApiErrorResponse, result?: UploadApiResponse) => {
           if (error) {
             this.logger.error('Cloudinary buffer upload error:', error);
             return reject(
               new InternalServerErrorException(
                 `Image buffer upload failed: ${error.message}`,
+              ),
+            );
+          }
+          if (!result) {
+            return reject(
+              new InternalServerErrorException(
+                'Cloudinary buffer upload returned no result',
               ),
             );
           }
@@ -149,12 +170,19 @@ export class UploadService {
           resource_type: 'video',
           public_id: filename,
         },
-        (error: UploadApiErrorResponse, result: UploadApiResponse) => {
+        (error: UploadApiErrorResponse, result?: UploadApiResponse) => {
           if (error) {
             this.logger.error('Cloudinary audio upload error:', error);
             return reject(
               new InternalServerErrorException(
                 `Audio upload failed: ${error.message}`,
+              ),
+            );
+          }
+          if (!result) {
+            return reject(
+              new InternalServerErrorException(
+                'Cloudinary audio upload returned no result',
               ),
             );
           }
