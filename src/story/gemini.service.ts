@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { GoogleGenAI } from '@google/genai';
+import { EnvConfig } from '@/shared/config/env.validation';
 import { firstValueFrom } from 'rxjs';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
@@ -63,7 +64,7 @@ export interface GeneratedStory {
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
-  private genAI: GoogleGenAI | undefined;
+  private readonly genAI: GoogleGenAI;
   private readonly hfToken: string;
 
   // Circuit breaker state
@@ -73,20 +74,15 @@ export class GeminiService {
   private halfOpenAttempts = 0;
 
   constructor(
-    private configService: ConfigService,
+    private configService: ConfigService<EnvConfig, true>,
     private readonly httpService: HttpService,
     private readonly voiceQuotaService: VoiceQuotaService,
     private readonly uploadService: UploadService,
   ) {
-    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (!apiKey) {
-      this.logger.warn(
-        'GEMINI_API_KEY not configured. Story generation will not be available.',
-      );
-      return;
-    }
-    this.genAI = new GoogleGenAI({ apiKey });
-    this.hfToken = this.configService.get<string>('HF_TOKEN')!;
+    this.genAI = new GoogleGenAI({
+      apiKey: this.configService.get<string>('GEMINI_API_KEY'),
+    });
+    this.hfToken = this.configService.get<string>('HF_TOKEN');
   }
 
   /**
@@ -155,12 +151,6 @@ export class GeminiService {
   }
 
   async generateStory(options: GenerateStoryOptions): Promise<GeneratedStory> {
-    if (!this.genAI) {
-      throw new Error(
-        'Gemini API is not configured. Please set GEMINI_API_KEY environment variable.',
-      );
-    }
-
     // Circuit breaker check - fail fast if circuit is open
     if (!this.canMakeRequest()) {
       this.logger.warn('Circuit breaker is OPEN - failing fast');
