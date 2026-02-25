@@ -84,6 +84,7 @@ async function generateAndUpload(
         },
         (error, result) => {
           if (error) return reject(error);
+          if (!result) return reject(new Error('Cloudinary returned no result'));
           resolve(result as { secure_url: string });
         },
       );

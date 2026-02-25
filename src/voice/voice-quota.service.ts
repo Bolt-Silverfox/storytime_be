@@ -262,12 +262,23 @@ export class VoiceQuotaService {
       }
     }
 
-    // Check if this is the free user's locked-in premium voice
+    // Check if this is the free user's locked-in premium voice.
+    // selectedSecondVoiceId stores the ElevenLabs voice ID (canonical form),
+    // so also resolve a UUID voiceId to its elevenLabsId for comparison.
     const usage = await this.prisma.userUsage.findUnique({
       where: { userId },
     });
-    if (usage?.selectedSecondVoiceId === voiceId) {
-      return true;
+    if (usage?.selectedSecondVoiceId) {
+      if (usage.selectedSecondVoiceId === voiceId) {
+        return true;
+      }
+      // voiceId might be a Voice table UUID — resolve to elevenLabsId
+      const voiceRecord = await this.prisma.voice.findUnique({
+        where: { id: voiceId },
+      });
+      if (voiceRecord?.elevenLabsVoiceId === usage.selectedSecondVoiceId) {
+        return true;
+      }
     }
 
     return false;

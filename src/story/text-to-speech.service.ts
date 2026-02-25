@@ -72,6 +72,23 @@ export class TextToSpeechService {
     private readonly subscriptionService: SubscriptionService,
   ) {}
 
+  /**
+   * Resolve any voice identifier (VoiceType enum, UUID, or unknown) to its
+   * canonical ElevenLabs voice ID for consistent quota/lock checks.
+   */
+  private async resolveCanonicalVoiceId(
+    type: string,
+  ): Promise<string> {
+    if (Object.values(VoiceType).includes(type as VoiceType)) {
+      return VOICE_CONFIG[type as VoiceType].elevenLabsId;
+    }
+    const voice = await this.prisma.voice.findUnique({ where: { id: type } });
+    if (voice?.elevenLabsVoiceId) {
+      return voice.elevenLabsVoiceId;
+    }
+    return VOICE_CONFIG[DEFAULT_VOICE].elevenLabsId;
+  }
+
   private hashText(text: string): string {
     const cleaned = preprocessTextForTTS(text);
     return createHash('sha256').update(cleaned).digest('hex');
@@ -188,6 +205,9 @@ export class TextToSpeechService {
 
     // Determine if we should use ElevenLabs
     let useElevenLabs = !!elevenLabsId;
+    // Use elevenLabsId as canonical voice identity for quota/lock checks.
+    // This ensures UUID, enum, and alias inputs all resolve to the same voice.
+    const quotaVoiceId = elevenLabsId!;
 
     if (useElevenLabs && userId) {
       const isPremium =
@@ -197,7 +217,7 @@ export class TextToSpeechService {
         // Premium: per-story voice limit (cached voices don't count)
         const voiceAllowed = await this.voiceQuota.canUseVoiceForStory(
           storyId,
-          type,
+          quotaVoiceId,
         );
         if (!voiceAllowed) {
           this.logger.log(
@@ -209,7 +229,7 @@ export class TextToSpeechService {
         // Free: 1 premium voice total across all stories
         const freeAllowed = await this.voiceQuota.canFreeUserUseElevenLabs(
           userId,
-          type,
+          quotaVoiceId,
         );
         if (!freeAllowed) {
           this.logger.log(
@@ -430,6 +450,7 @@ export class TextToSpeechService {
     }
 
     // Resolve premium status and voice eligibility once for the entire batch
+    const quotaVoiceId = await this.resolveCanonicalVoiceId(type);
     let reservedCredits = 0;
     let isPremium = false;
     let useElevenLabsBatch = false;
@@ -439,7 +460,7 @@ export class TextToSpeechService {
         // Premium: check per-story voice limit
         useElevenLabsBatch = await this.voiceQuota.canUseVoiceForStory(
           storyId,
-          type,
+          quotaVoiceId,
         );
         if (!useElevenLabsBatch) {
           this.logger.log(
@@ -450,7 +471,7 @@ export class TextToSpeechService {
         // Free: check if this is their one allowed premium voice
         useElevenLabsBatch = await this.voiceQuota.canFreeUserUseElevenLabs(
           userId,
-          type,
+          quotaVoiceId,
         );
         if (!useElevenLabsBatch) {
           this.logger.log(

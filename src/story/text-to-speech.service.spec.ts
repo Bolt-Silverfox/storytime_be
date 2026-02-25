@@ -301,7 +301,7 @@ describe('TextToSpeechService', () => {
       );
 
       expect(mockIsPremiumUser).toHaveBeenCalledWith(userId);
-      expect(mockCanUseVoiceForStory).toHaveBeenCalledWith(storyId, voiceType);
+      expect(mockCanUseVoiceForStory).toHaveBeenCalledWith(storyId, 'NFG5qt843uXKj4pFvR7C');
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
       expect(mockDeepgramGenerate).toHaveBeenCalled();
       expect(result).toBe('https://uploaded-audio.com/deepgram.mp3');
