@@ -76,9 +76,7 @@ export class TextToSpeechService {
    * Resolve any voice identifier (VoiceType enum, UUID, or unknown) to its
    * canonical ElevenLabs voice ID for consistent quota/lock checks.
    */
-  private async resolveCanonicalVoiceId(
-    type: string,
-  ): Promise<string> {
+  private async resolveCanonicalVoiceId(type: string): Promise<string> {
     if (Object.values(VoiceType).includes(type as VoiceType)) {
       return VOICE_CONFIG[type as VoiceType].elevenLabsId;
     }
