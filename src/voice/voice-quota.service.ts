@@ -5,10 +5,31 @@ import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { VOICE_CONFIG } from './voice.constants';
+import { VoiceType } from './dto/voice.dto';
 
 @Injectable()
 export class VoiceQuotaService {
   private readonly logger = new Logger(VoiceQuotaService.name);
+
+  /**
+   * Map a stored voiceId (VoiceType enum, UUID, or elevenLabsId) to
+   * its canonical ElevenLabs voice ID so comparisons are consistent.
+   */
+  private async resolveCanonicalVoiceId(voiceId: string): Promise<string> {
+    // Already a VoiceType enum key → look up elevenLabsId
+    if (Object.values(VoiceType).includes(voiceId as VoiceType)) {
+      return VOICE_CONFIG[voiceId as VoiceType].elevenLabsId;
+    }
+    // Could be a UUID from the Voice table
+    const voice = await this.prisma.voice.findUnique({
+      where: { id: voiceId },
+    });
+    if (voice?.elevenLabsVoiceId) {
+      return voice.elevenLabsVoiceId;
+    }
+    // Already an elevenLabsId or unknown — return as-is
+    return voiceId;
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -22,20 +43,25 @@ export class VoiceQuotaService {
 
   /**
    * Atomically increment a usage counter with monthly rollover.
-   * Resets specified fields when the stored month differs from the current month,
-   * then upserts the counter increment.
+   * When the stored month differs from the current month, ALL counters
+   * are reset to zero (not just the one being incremented) so that
+   * whichever counter triggers first in a new month performs a full reset.
    */
   private async incrementCounter(
     userId: string,
     field: 'elevenLabsCount' | 'geminiStoryCount' | 'geminiImageCount',
     amount: number,
-    resetFields: Record<string, number>,
   ): Promise<void> {
     const currentMonth = this.getCurrentMonth();
     await this.prisma.$transaction(async (tx) => {
       await tx.userUsage.updateMany({
         where: { userId, currentMonth: { not: currentMonth } },
-        data: { currentMonth, ...resetFields },
+        data: {
+          currentMonth,
+          elevenLabsCount: 0,
+          geminiStoryCount: 0,
+          geminiImageCount: 0,
+        },
       });
       await tx.userUsage.upsert({
         where: { userId },
@@ -46,9 +72,7 @@ export class VoiceQuotaService {
   }
 
   async incrementUsage(userId: string): Promise<void> {
-    await this.incrementCounter(userId, 'elevenLabsCount', 1, {
-      elevenLabsCount: 0,
-    });
+    await this.incrementCounter(userId, 'elevenLabsCount', 1);
     await this.logAiActivity(
       userId,
       AiProviders.ElevenLabs,
@@ -63,9 +87,7 @@ export class VoiceQuotaService {
    * enforced by callers before invoking this method.
    */
   async checkAndReserveUsage(userId: string, credits: number): Promise<number> {
-    await this.incrementCounter(userId, 'elevenLabsCount', credits, {
-      elevenLabsCount: 0,
-    });
+    await this.incrementCounter(userId, 'elevenLabsCount', credits);
     await this.logAiActivity(
       userId,
       AiProviders.ElevenLabs,
@@ -94,18 +116,12 @@ export class VoiceQuotaService {
   }
 
   async trackGeminiStory(userId: string): Promise<void> {
-    await this.incrementCounter(userId, 'geminiStoryCount', 1, {
-      geminiStoryCount: 0,
-      geminiImageCount: 0,
-    });
+    await this.incrementCounter(userId, 'geminiStoryCount', 1);
     await this.logAiActivity(userId, AiProviders.Gemini, 'story_generation', 1);
   }
 
   async trackGeminiImage(userId: string): Promise<void> {
-    await this.incrementCounter(userId, 'geminiImageCount', 1, {
-      geminiStoryCount: 0,
-      geminiImageCount: 0,
-    });
+    await this.incrementCounter(userId, 'geminiImageCount', 1);
     await this.logAiActivity(userId, AiProviders.Gemini, 'image_generation', 1);
   }
 
@@ -149,17 +165,22 @@ export class VoiceQuotaService {
     const distinctVoices: Array<{ voiceId: string }> = await this.prisma
       .$queryRaw`SELECT DISTINCT "voiceId" FROM "paragraph_audio_cache" WHERE "storyId" = ${storyId}`;
 
-    const cachedVoiceIds = distinctVoices.map((v) => v.voiceId);
+    // Normalize cached voiceIds to canonical elevenLabsId form so that
+    // VoiceType enum names, UUIDs, and elevenLabsIds all compare correctly.
+    const canonicalCachedIds = await Promise.all(
+      distinctVoices.map((v) => this.resolveCanonicalVoiceId(v.voiceId)),
+    );
+    const uniqueCachedIds = [...new Set(canonicalCachedIds)];
 
     // Already cached for this story — always allowed (zero cost)
-    if (cachedVoiceIds.includes(voiceId)) {
+    if (uniqueCachedIds.includes(voiceId)) {
       return true;
     }
 
     // New voice — only allow if under the limit
-    if (cachedVoiceIds.length >= limit) {
+    if (uniqueCachedIds.length >= limit) {
       this.logger.log(
-        `Story ${storyId} already has ${cachedVoiceIds.length} distinct voices (limit ${limit}). Denying voice ${voiceId}.`,
+        `Story ${storyId} already has ${uniqueCachedIds.length} distinct voices (limit ${limit}). Denying voice ${voiceId}.`,
       );
       return false;
     }

@@ -85,7 +85,9 @@ async function generateAndUpload(
         (error, result) => {
           if (error) return reject(error);
           if (!result) return reject(new Error('Cloudinary returned no result'));
-          resolve(result as { secure_url: string });
+          if (!result.secure_url)
+            return reject(new Error('Cloudinary upload missing secure_url'));
+          resolve({ secure_url: result.secure_url });
         },
       );
       stream.end(buffer);
