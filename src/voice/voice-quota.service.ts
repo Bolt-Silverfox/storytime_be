@@ -20,19 +20,34 @@ export class VoiceQuotaService {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }
 
-  async incrementUsage(userId: string): Promise<void> {
+  /**
+   * Atomically increment a usage counter with monthly rollover.
+   * Resets specified fields when the stored month differs from the current month,
+   * then upserts the counter increment.
+   */
+  private async incrementCounter(
+    userId: string,
+    field: 'elevenLabsCount' | 'geminiStoryCount' | 'geminiImageCount',
+    amount: number,
+    resetFields: Record<string, number>,
+  ): Promise<void> {
     const currentMonth = this.getCurrentMonth();
-    // Use transaction to handle month rollover atomically (matches checkUsage pattern)
     await this.prisma.$transaction(async (tx) => {
       await tx.userUsage.updateMany({
         where: { userId, currentMonth: { not: currentMonth } },
-        data: { currentMonth, elevenLabsCount: 0 },
+        data: { currentMonth, ...resetFields },
       });
       await tx.userUsage.upsert({
         where: { userId },
-        create: { userId, currentMonth, elevenLabsCount: 1 },
-        update: { currentMonth, elevenLabsCount: { increment: 1 } },
+        create: { userId, currentMonth, [field]: amount },
+        update: { currentMonth, [field]: { increment: amount } },
       });
+    });
+  }
+
+  async incrementUsage(userId: string): Promise<void> {
+    await this.incrementCounter(userId, 'elevenLabsCount', 1, {
+      elevenLabsCount: 0,
     });
     await this.logAiActivity(
       userId,
@@ -48,20 +63,8 @@ export class VoiceQuotaService {
    * enforced by callers before invoking this method.
    */
   async checkAndReserveUsage(userId: string, credits: number): Promise<number> {
-    const currentMonth = this.getCurrentMonth();
-    await this.prisma.$transaction(async (tx) => {
-      await tx.userUsage.updateMany({
-        where: { userId, currentMonth: { not: currentMonth } },
-        data: { currentMonth, elevenLabsCount: 0 },
-      });
-      await tx.userUsage.upsert({
-        where: { userId },
-        create: { userId, currentMonth, elevenLabsCount: credits },
-        update: {
-          currentMonth,
-          elevenLabsCount: { increment: credits },
-        },
-      });
+    await this.incrementCounter(userId, 'elevenLabsCount', credits, {
+      elevenLabsCount: 0,
     });
     await this.logAiActivity(
       userId,
@@ -91,37 +94,17 @@ export class VoiceQuotaService {
   }
 
   async trackGeminiStory(userId: string): Promise<void> {
-    const currentMonth = this.getCurrentMonth();
-    // Use transaction to handle monthly rollover for Gemini counters
-    await this.prisma.$transaction(async (tx) => {
-      // Reset Gemini counters if month changed
-      await tx.userUsage.updateMany({
-        where: { userId, currentMonth: { not: currentMonth } },
-        data: { currentMonth, geminiStoryCount: 0, geminiImageCount: 0 },
-      });
-      await tx.userUsage.upsert({
-        where: { userId },
-        create: { userId, currentMonth, geminiStoryCount: 1 },
-        update: { currentMonth, geminiStoryCount: { increment: 1 } },
-      });
+    await this.incrementCounter(userId, 'geminiStoryCount', 1, {
+      geminiStoryCount: 0,
+      geminiImageCount: 0,
     });
     await this.logAiActivity(userId, AiProviders.Gemini, 'story_generation', 1);
   }
 
   async trackGeminiImage(userId: string): Promise<void> {
-    const currentMonth = this.getCurrentMonth();
-    // Use transaction to handle monthly rollover for Gemini counters
-    await this.prisma.$transaction(async (tx) => {
-      // Reset Gemini counters if month changed
-      await tx.userUsage.updateMany({
-        where: { userId, currentMonth: { not: currentMonth } },
-        data: { currentMonth, geminiStoryCount: 0, geminiImageCount: 0 },
-      });
-      await tx.userUsage.upsert({
-        where: { userId },
-        create: { userId, currentMonth, geminiImageCount: 1 },
-        update: { currentMonth, geminiImageCount: { increment: 1 } },
-      });
+    await this.incrementCounter(userId, 'geminiImageCount', 1, {
+      geminiStoryCount: 0,
+      geminiImageCount: 0,
     });
     await this.logAiActivity(userId, AiProviders.Gemini, 'image_generation', 1);
   }

@@ -63,7 +63,7 @@ export interface GeneratedStory {
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
-  private genAI: GoogleGenAI;
+  private genAI: GoogleGenAI | undefined;
   private readonly hfToken: string;
 
   // Circuit breaker state
@@ -86,12 +86,7 @@ export class GeminiService {
       return;
     }
     this.genAI = new GoogleGenAI({ apiKey });
-    this.hfToken = this.configService.get<string>('HF_TOKEN') ?? '';
-    if (!this.hfToken) {
-      this.logger.warn(
-        'HF_TOKEN not configured. Cover image generation will not be available.',
-      );
-    }
+    this.hfToken = this.configService.get<string>('HF_TOKEN')!;
   }
 
   /**

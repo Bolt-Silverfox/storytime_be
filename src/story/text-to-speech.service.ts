@@ -32,6 +32,12 @@ const MAX_CONCURRENT = 5;
 /** Max paragraphs allowed in a single batch request */
 const MAX_BATCH_PARAGRAPHS = 50;
 
+/** Internal result from TTS generation including which provider was used */
+interface TTSResult {
+  audioUrl: string;
+  provider: 'elevenlabs' | 'deepgram' | 'edgetts' | 'cache';
+}
+
 /**
  * Normalize text for TTS providers by stripping literal quote characters
  * and collapsing whitespace. Without this, engines may read "quote" aloud.
@@ -108,6 +114,24 @@ export class TextToSpeechService {
     userId?: string,
     options?: { skipQuotaCheck?: boolean; isPremium?: boolean },
   ): Promise<string> {
+    const result = await this.generateTTS(
+      storyId,
+      text,
+      voicetype,
+      userId,
+      options,
+    );
+    return result.audioUrl;
+  }
+
+  /** Internal TTS generation that tracks which provider was used */
+  private async generateTTS(
+    storyId: string,
+    text: string,
+    voicetype?: VoiceType | string,
+    userId?: string,
+    options?: { skipQuotaCheck?: boolean; isPremium?: boolean },
+  ): Promise<TTSResult> {
     const type = voicetype ?? DEFAULT_VOICE;
 
     // Guard against unbounded input
@@ -123,7 +147,7 @@ export class TextToSpeechService {
       this.logger.debug(
         `Paragraph cache hit for story ${storyId}, voice ${type}`,
       );
-      return cachedUrl;
+      return { audioUrl: cachedUrl, provider: 'cache' };
     }
 
     // Resolve ElevenLabs ID and per-voice settings
@@ -245,7 +269,7 @@ export class TextToSpeechService {
             `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
           );
         }
-        return elAudioUrl;
+        return { audioUrl: elAudioUrl, provider: 'elevenlabs' };
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         this.logger.warn(
@@ -277,7 +301,7 @@ export class TextToSpeechService {
           `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
         );
       }
-      return dgAudioUrl;
+      return { audioUrl: dgAudioUrl, provider: 'deepgram' };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(
@@ -308,7 +332,7 @@ export class TextToSpeechService {
           `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
         );
       }
-      return edgeAudioUrl;
+      return { audioUrl: edgeAudioUrl, provider: 'edgetts' };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
@@ -464,39 +488,56 @@ export class TextToSpeechService {
           const seqPos = i + batchIndex;
           const withinReserved = isPremium && seqPos < reservedCredits;
           try {
-            const audioUrl = await this.textToSpeechCloudUrl(
+            const result = await this.generateTTS(
               storyId,
               text,
               voiceType,
               userId,
               { skipQuotaCheck: withinReserved, isPremium },
             );
-            return { index, text, audioUrl, hash };
+            return {
+              index,
+              text,
+              audioUrl: result.audioUrl,
+              hash,
+              provider: result.provider,
+            };
           } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
             this.logger.warn(
               `Batch TTS failed for paragraph ${index} of story ${storyId}: ${msg}`,
             );
-            return { index, text, audioUrl: null, hash };
+            return {
+              index,
+              text,
+              audioUrl: null as string | null,
+              hash,
+              provider: null as string | null,
+            };
           }
         }),
       );
 
       // Count how many reserved-budget paragraphs actually used ElevenLabs
-      // (URL filename encodes provider: _elevenlabs_, _deepgram_, _edgetts_)
       for (let j = 0; j < batch.length; j++) {
         const seqPos = i + j;
-        const url = batchResults[j].audioUrl;
         if (
           isPremium &&
           seqPos < reservedCredits &&
-          url?.includes('_elevenlabs_')
+          batchResults[j].provider === 'elevenlabs'
         ) {
           reservedUsed++;
         }
       }
 
-      generated.push(...batchResults);
+      generated.push(
+        ...batchResults.map(({ index, text, audioUrl, hash }) => ({
+          index,
+          text,
+          audioUrl,
+          hash,
+        })),
+      );
     }
 
     // Replicate generated audioUrls to duplicate paragraphs (same hash, different indices)

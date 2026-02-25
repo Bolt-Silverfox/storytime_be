@@ -256,6 +256,7 @@ describe('TextToSpeechService', () => {
 
     it('should throw error if all providers fail for free user', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram Error'));
       mockEdgeTtsGenerate.mockRejectedValue(new Error('Edge TTS Error'));
 

@@ -138,12 +138,7 @@ async function main() {
       // Delay to respect rate limits
       await new Promise((resolve) => setTimeout(resolve, 1000));
     } catch (error) {
-      const msg =
-        error instanceof Error
-          ? error.message
-          : typeof error === 'object' && error !== null && 'message' in error
-            ? (error as { message: string }).message
-            : String(error);
+      const msg = error instanceof Error ? error.message : String(error);
       console.error(`  ✗ Failed: ${msg}`);
       failed++;
     }
