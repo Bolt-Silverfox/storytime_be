@@ -486,6 +486,11 @@ export class TextToSpeechService {
           edgeTtsVoice,
           attemptProvider,
         );
+      default: {
+        const _exhaustiveCheck: never = provider;
+        void _exhaustiveCheck;
+        throw new InternalServerErrorException('Unknown TTS provider');
+      }
     }
   }
 
@@ -691,7 +696,74 @@ export class TextToSpeechService {
     }
 
     const failedCount = generated.filter((r) => !r.audioUrl).length;
-    if (failedCount > 0) {
+
+    // If the primary batch provider failed entirely, retry with Edge TTS
+    // so free users still get audio instead of all nulls.
+    if (failedCount > 0 && failedCount === generated.length) {
+      this.logger.warn(
+        `Batch story ${storyId}: all ${uncached.length} paragraphs failed with ${batchProvider}, retrying with edgetts`,
+      );
+      generated.length = 0;
+
+      for (let i = 0; i < uncached.length; i += MAX_CONCURRENT) {
+        const chunk = uncached.slice(i, i + MAX_CONCURRENT);
+        const retryResults = await Promise.all(
+          chunk.map(async ({ index, text, hash }) => {
+            try {
+              const result = await this.generateTTS(
+                storyId,
+                text,
+                voiceType,
+                userId,
+                {
+                  skipQuotaCheck: true,
+                  isPremium,
+                  providerOverride: 'edgetts',
+                },
+              );
+              return {
+                index,
+                text,
+                hash,
+                audioUrl: result.audioUrl,
+                provider: result.provider,
+                ok: true as const,
+              };
+            } catch {
+              return {
+                index,
+                text,
+                hash,
+                audioUrl: null,
+                provider: null,
+                ok: false as const,
+              };
+            }
+          }),
+        );
+
+        for (const r of retryResults) {
+          generated.push({
+            index: r.index,
+            text: r.text,
+            hash: r.hash,
+            audioUrl: r.audioUrl,
+            provider: r.provider,
+          });
+        }
+      }
+
+      const retryFailed = generated.filter((r) => !r.audioUrl).length;
+      if (retryFailed > 0) {
+        this.logger.error(
+          `Batch story ${storyId}: ${retryFailed}/${uncached.length} paragraphs also failed with edgetts`,
+        );
+      } else {
+        this.logger.log(
+          `Batch story ${storyId}: all ${uncached.length} paragraphs succeeded with edgetts fallback`,
+        );
+      }
+    } else if (failedCount > 0) {
       this.logger.warn(
         `Batch story ${storyId}: ${failedCount}/${uncached.length} paragraphs failed with ${batchProvider}, will retry on next request`,
       );

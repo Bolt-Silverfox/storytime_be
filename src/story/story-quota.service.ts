@@ -5,7 +5,7 @@ import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 
 export interface StoryAccessResult {
   canAccess: boolean;
-  reason?: 'already_read' | 'limit_reached' | 'premium';
+  reason?: 'already_read' | 'kid_created' | 'limit_reached' | 'premium';
   remaining?: number;
   totalAllowed?: number;
 }
@@ -60,10 +60,10 @@ export class StoryQuotaService {
       select: { id: true },
     });
     if (createdByKid) {
-      return { canAccess: true, reason: 'already_read' };
+      return { canAccess: true, reason: 'kid_created' };
     }
 
-    // 3. Get/create usage record with bonus calculation
+    // 4. Get/create usage record with bonus calculation
     const usage = await this.getOrCreateUsageWithBonus(userId);
     const totalAllowed =
       FREE_TIER_LIMITS.STORIES.BASE_LIMIT + usage.bonusStories;
