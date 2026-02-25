@@ -11,6 +11,7 @@ import {
   RedisHealthIndicator,
   SmtpHealthIndicator,
   QueueHealthIndicator,
+  TTSCircuitBreakerHealthIndicator,
 } from './indicators';
 
 @ApiTags('Health')
@@ -24,6 +25,7 @@ export class HealthController {
     private readonly queueHealth: QueueHealthIndicator,
     private readonly memory: MemoryHealthIndicator,
     private readonly disk: DiskHealthIndicator,
+    private readonly ttsHealth: TTSCircuitBreakerHealthIndicator,
   ) {}
 
   /**
@@ -55,6 +57,7 @@ export class HealthController {
       () => this.prismaHealth.isHealthy('database'),
       () => this.redisHealth.isHealthy('redis'),
       () => this.queueHealth.isHealthy('email-queue'),
+      () => this.ttsHealth.isHealthy('tts-providers'),
     ]);
   }
 
@@ -151,6 +154,25 @@ export class HealthController {
           path: '/',
           thresholdPercent: 0.9,
         }),
+      () => this.ttsHealth.isHealthy('tts-providers'),
     ]);
+  }
+
+  /**
+   * TTS providers circuit breaker status
+   */
+  @Get('tts')
+  @ApiOperation({ summary: 'TTS providers circuit breaker health check' })
+  @ApiResponse({
+    status: 200,
+    description: 'All TTS circuit breakers are closed',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'One or more TTS circuit breakers are open',
+  })
+  @HealthCheck()
+  async checkTts() {
+    return this.health.check([() => this.ttsHealth.isHealthy('tts-providers')]);
   }
 }

@@ -7,6 +7,7 @@ import {
   RedisHealthIndicator,
   SmtpHealthIndicator,
   QueueHealthIndicator,
+  TTSCircuitBreakerHealthIndicator,
 } from './indicators';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { EMAIL_QUEUE_NAME } from '@/notification/queue/email-queue.constants';
@@ -26,6 +27,7 @@ import { EMAIL_QUEUE_NAME } from '@/notification/queue/email-queue.constants';
     RedisHealthIndicator,
     SmtpHealthIndicator,
     QueueHealthIndicator,
+    TTSCircuitBreakerHealthIndicator,
   ],
 })
 export class HealthModule {}

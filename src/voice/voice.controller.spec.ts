@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ForbiddenException } from '@nestjs/common';
 import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
 import {
@@ -16,9 +17,14 @@ const mockVoiceService = {
   fetchAvailableVoices: jest.fn(),
 };
 
-const mockStoryService = {};
+const mockStoryService = {
+  getStoryById: jest.fn(),
+};
 const mockUploadService = {};
-const mockTextToSpeechService = {};
+const mockTextToSpeechService = {
+  textToSpeechCloudUrl: jest.fn(),
+  batchTextToSpeechCloudUrls: jest.fn(),
+};
 const mockSpeechToTextService = {};
 const mockVoiceQuotaService = {
   canUseVoice: jest.fn().mockResolvedValue(true),
@@ -77,6 +83,91 @@ describe('VoiceController', () => {
       const result = await controller.listAvailableVoices();
       expect(result).toEqual(expectedResult);
       expect(service.fetchAvailableVoices).toHaveBeenCalled();
+    });
+  });
+
+  describe('textToSpeech', () => {
+    it('should generate audio when voice access is allowed', async () => {
+      mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
+      mockTextToSpeechService.textToSpeechCloudUrl.mockResolvedValue(
+        'https://audio.com/audio.mp3',
+      );
+
+      const result = await controller.textToSpeech(
+        { storyId: 'story-1', content: 'Hello world', voiceId: 'CHARLIE' },
+        mockRequest,
+      );
+
+      expect(mockVoiceQuotaService.canUseVoice).toHaveBeenCalledWith(
+        'user-1',
+        'CHARLIE',
+      );
+      expect(result.audioUrl).toBe('https://audio.com/audio.mp3');
+      expect(result.voiceId).toBe('CHARLIE');
+    });
+
+    it('should throw 403 when free user picks a disallowed voice', async () => {
+      mockVoiceQuotaService.canUseVoice.mockResolvedValue(false);
+
+      await expect(
+        controller.textToSpeech(
+          { storyId: 'story-1', content: 'Hello world', voiceId: 'JESSICA' },
+          mockRequest,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(
+        mockTextToSpeechService.textToSpeechCloudUrl,
+      ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('batchTextToSpeech', () => {
+    it('should generate batch audio when voice access is allowed', async () => {
+      mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
+      mockStoryService.getStoryById.mockResolvedValue({
+        id: 'story-1',
+        textContent: 'Hello world',
+      });
+      mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
+        results: [
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
+        ],
+        totalParagraphs: 1,
+        wasTruncated: false,
+      });
+
+      const result = await controller.batchTextToSpeech(
+        { storyId: 'story-1', voiceId: 'CHARLIE' },
+        mockRequest,
+      );
+
+      expect(mockVoiceQuotaService.canUseVoice).toHaveBeenCalledWith(
+        'user-1',
+        'CHARLIE',
+      );
+      expect(result.paragraphs).toHaveLength(1);
+      expect(result.voiceId).toBe('CHARLIE');
+    });
+
+    it('should throw 403 when free user picks a disallowed voice in batch', async () => {
+      mockVoiceQuotaService.canUseVoice.mockResolvedValue(false);
+
+      await expect(
+        controller.batchTextToSpeech(
+          { storyId: 'story-1', voiceId: 'JESSICA' },
+          mockRequest,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockStoryService.getStoryById).not.toHaveBeenCalled();
+      expect(
+        mockTextToSpeechService.batchTextToSpeechCloudUrls,
+      ).not.toHaveBeenCalled();
     });
   });
 });
