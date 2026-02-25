@@ -32,6 +32,12 @@ const MAX_CONCURRENT = 5;
 /** Max paragraphs allowed in a single batch request */
 const MAX_BATCH_PARAGRAPHS = 50;
 
+/** Internal result from TTS generation including which provider was used */
+interface TTSResult {
+  audioUrl: string;
+  provider: 'elevenlabs' | 'deepgram' | 'edgetts' | 'cache';
+}
+
 /**
  * Normalize text for TTS providers by stripping literal quote characters
  * and collapsing whitespace. Without this, engines may read "quote" aloud.
@@ -65,6 +71,26 @@ export class TextToSpeechService {
     private readonly voiceQuota: VoiceQuotaService,
     private readonly subscriptionService: SubscriptionService,
   ) {}
+
+  /**
+   * Resolve any voice identifier (VoiceType enum, UUID, or unknown) to its
+   * canonical ElevenLabs voice ID for consistent quota/lock checks.
+   * Falls back to DEFAULT_VOICE if the ID cannot be resolved.
+   */
+  private async resolveCanonicalVoiceId(type: string): Promise<string> {
+    const canonical = await this.voiceQuota.resolveCanonicalVoiceId(type);
+    // If voiceQuota returned the input unchanged and it's not an ElevenLabs ID
+    // we recognise, fall back to the default voice.
+    if (canonical === type && !this.isKnownElevenLabsId(canonical)) {
+      return VOICE_CONFIG[DEFAULT_VOICE].elevenLabsId;
+    }
+    return canonical;
+  }
+
+  /** Check if a string matches any known ElevenLabs voice ID */
+  private isKnownElevenLabsId(id: string): boolean {
+    return Object.values(VOICE_CONFIG).some((c) => c.elevenLabsId === id);
+  }
 
   private hashText(text: string): string {
     const cleaned = preprocessTextForTTS(text);
@@ -108,6 +134,24 @@ export class TextToSpeechService {
     userId?: string,
     options?: { skipQuotaCheck?: boolean; isPremium?: boolean },
   ): Promise<string> {
+    const result = await this.generateTTS(
+      storyId,
+      text,
+      voicetype,
+      userId,
+      options,
+    );
+    return result.audioUrl;
+  }
+
+  /** Internal TTS generation that tracks which provider was used */
+  private async generateTTS(
+    storyId: string,
+    text: string,
+    voicetype?: VoiceType | string,
+    userId?: string,
+    options?: { skipQuotaCheck?: boolean; isPremium?: boolean },
+  ): Promise<TTSResult> {
     const type = voicetype ?? DEFAULT_VOICE;
 
     // Guard against unbounded input
@@ -123,7 +167,7 @@ export class TextToSpeechService {
       this.logger.debug(
         `Paragraph cache hit for story ${storyId}, voice ${type}`,
       );
-      return cachedUrl;
+      return { audioUrl: cachedUrl, provider: 'cache' };
     }
 
     // Resolve ElevenLabs ID and per-voice settings
@@ -141,7 +185,9 @@ export class TextToSpeechService {
       voiceSettings = config.voiceSettings;
     } else {
       // Assume dynamic UUID (Custom Voice)
-      const voice = await this.prisma.voice.findUnique({ where: { id: type } });
+      const voice = await this.prisma.voice.findUnique({
+        where: { id: type, isDeleted: false },
+      });
       if (voice && voice.elevenLabsVoiceId) {
         elevenLabsId = voice.elevenLabsVoiceId;
         voiceSettings = undefined;
@@ -165,20 +211,31 @@ export class TextToSpeechService {
     // Determine if we should use ElevenLabs
     let useElevenLabs = !!elevenLabsId;
 
-    if (useElevenLabs && userId) {
-      // Premium gate: free users skip ElevenLabs entirely
+    if (useElevenLabs && elevenLabsId && userId) {
       const isPremium =
         options?.isPremium ??
         (await this.subscriptionService.isPremiumUser(userId));
-      if (!isPremium) {
-        this.logger.log(`Free user ${userId}. Skipping ElevenLabs.`);
-        useElevenLabs = false;
-      } else if (!options?.skipQuotaCheck) {
-        // Per-call quota check (skipped in batch mode where quota is reserved upfront)
-        const allowed = await this.voiceQuota.checkUsage(userId);
-        if (!allowed) {
+      if (isPremium && !options?.skipQuotaCheck) {
+        // Premium: per-story voice limit (cached voices don't count)
+        const voiceAllowed = await this.voiceQuota.canUseVoiceForStory(
+          storyId,
+          elevenLabsId,
+        );
+        if (!voiceAllowed) {
           this.logger.log(
-            `User ${userId} quota exceeded. Skipping ElevenLabs.`,
+            `Story ${storyId} has reached the premium voice limit. Skipping ElevenLabs for voice ${type}.`,
+          );
+          useElevenLabs = false;
+        }
+      } else if (!isPremium) {
+        // Free: 1 premium voice total across all stories
+        const freeAllowed = await this.voiceQuota.canFreeUserUseElevenLabs(
+          userId,
+          elevenLabsId,
+        );
+        if (!freeAllowed) {
+          this.logger.log(
+            `Free user ${userId} already used their premium voice. Skipping ElevenLabs for voice ${type}.`,
           );
           useElevenLabs = false;
         }
@@ -234,7 +291,7 @@ export class TextToSpeechService {
             `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
           );
         }
-        return elAudioUrl;
+        return { audioUrl: elAudioUrl, provider: 'elevenlabs' };
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         this.logger.warn(
@@ -266,7 +323,7 @@ export class TextToSpeechService {
           `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
         );
       }
-      return dgAudioUrl;
+      return { audioUrl: dgAudioUrl, provider: 'deepgram' };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(
@@ -297,7 +354,7 @@ export class TextToSpeechService {
           `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
         );
       }
-      return edgeAudioUrl;
+      return { audioUrl: edgeAudioUrl, provider: 'edgetts' };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
@@ -394,13 +451,39 @@ export class TextToSpeechService {
       };
     }
 
-    // Resolve premium status once for the entire batch
+    // Resolve premium status and voice eligibility once for the entire batch
+    const quotaVoiceId = await this.resolveCanonicalVoiceId(type);
     let reservedCredits = 0;
     let isPremium = false;
+    let useElevenLabsBatch = false;
     if (userId) {
       isPremium = await this.subscriptionService.isPremiumUser(userId);
       if (isPremium) {
-        reservedCredits = await this.voiceQuota.checkAndReserveUsage(
+        // Premium: check per-story voice limit
+        useElevenLabsBatch = await this.voiceQuota.canUseVoiceForStory(
+          storyId,
+          quotaVoiceId,
+        );
+        if (!useElevenLabsBatch) {
+          this.logger.log(
+            `Story ${storyId} has reached the premium voice limit. Skipping ElevenLabs for voice ${type}.`,
+          );
+        }
+      } else {
+        // Free: check if this is their one allowed premium voice
+        useElevenLabsBatch = await this.voiceQuota.canFreeUserUseElevenLabs(
+          userId,
+          quotaVoiceId,
+        );
+        if (!useElevenLabsBatch) {
+          this.logger.log(
+            `Free user ${userId} already used their premium voice. Skipping ElevenLabs for voice ${type}.`,
+          );
+        }
+      }
+
+      if (useElevenLabsBatch) {
+        reservedCredits = await this.voiceQuota.recordUsage(
           userId,
           uncached.length,
         );
@@ -428,39 +511,56 @@ export class TextToSpeechService {
           const seqPos = i + batchIndex;
           const withinReserved = isPremium && seqPos < reservedCredits;
           try {
-            const audioUrl = await this.textToSpeechCloudUrl(
+            const result = await this.generateTTS(
               storyId,
               text,
               voiceType,
               userId,
               { skipQuotaCheck: withinReserved, isPremium },
             );
-            return { index, text, audioUrl, hash };
+            return {
+              index,
+              text,
+              audioUrl: result.audioUrl,
+              hash,
+              provider: result.provider,
+            };
           } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
             this.logger.warn(
               `Batch TTS failed for paragraph ${index} of story ${storyId}: ${msg}`,
             );
-            return { index, text, audioUrl: null, hash };
+            return {
+              index,
+              text,
+              audioUrl: null as string | null,
+              hash,
+              provider: null as string | null,
+            };
           }
         }),
       );
 
       // Count how many reserved-budget paragraphs actually used ElevenLabs
-      // (URL filename encodes provider: _elevenlabs_, _deepgram_, _edgetts_)
       for (let j = 0; j < batch.length; j++) {
         const seqPos = i + j;
-        const url = batchResults[j].audioUrl;
         if (
           isPremium &&
           seqPos < reservedCredits &&
-          url?.includes('_elevenlabs_')
+          batchResults[j].provider === 'elevenlabs'
         ) {
           reservedUsed++;
         }
       }
 
-      generated.push(...batchResults);
+      generated.push(
+        ...batchResults.map(({ index, text, audioUrl, hash }) => ({
+          index,
+          text,
+          audioUrl,
+          hash,
+        })),
+      );
     }
 
     // Replicate generated audioUrls to duplicate paragraphs (same hash, different indices)
