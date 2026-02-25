@@ -8,7 +8,7 @@ export const VOICE_CONFIG_SETTINGS = {
   },
   QUOTAS: {
     FREE: 2,
-    PREMIUM: 20,
+    MAX_PREMIUM_VOICES_PER_STORY: 3,
   },
   STYLE_TTS2: {
     SPACE_ID: 'Wismut/StyleTTS2_Studio',

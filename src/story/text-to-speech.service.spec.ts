@@ -84,6 +84,7 @@ describe('TextToSpeechService', () => {
             incrementUsage: mockIncrementUsage,
             checkAndReserveUsage: mockCheckAndReserveUsage,
             releaseReservedUsage: mockReleaseReservedUsage,
+            canUseVoiceForStory: jest.fn().mockResolvedValue(true),
           },
         },
         {
@@ -278,9 +279,12 @@ describe('TextToSpeechService', () => {
       expect(result).toBe('https://uploaded-audio.com/styletts2.wav');
     });
 
-    it('should skip ElevenLabs when premium user exceeds quota', async () => {
+    it('should skip ElevenLabs when per-story voice limit reached', async () => {
       mockIsPremiumUser.mockResolvedValue(true);
-      mockCheckUsage.mockResolvedValue(false); // quota exceeded
+      const mockCanUseVoiceForStory = jest.fn().mockResolvedValue(false);
+      (
+        service as unknown as { voiceQuota: { canUseVoiceForStory: jest.Mock } }
+      ).voiceQuota.canUseVoiceForStory = mockCanUseVoiceForStory;
       mockStyleTts2Generate.mockResolvedValue(Buffer.from('styletts2-audio'));
       mockUploadAudio.mockResolvedValue(
         'https://uploaded-audio.com/styletts2.wav',
@@ -294,7 +298,7 @@ describe('TextToSpeechService', () => {
       );
 
       expect(mockIsPremiumUser).toHaveBeenCalledWith(userId);
-      expect(mockCheckUsage).toHaveBeenCalledWith(userId);
+      expect(mockCanUseVoiceForStory).toHaveBeenCalledWith(storyId, voiceType);
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
       expect(mockStyleTts2Generate).toHaveBeenCalled();
       expect(result).toBe('https://uploaded-audio.com/styletts2.wav');

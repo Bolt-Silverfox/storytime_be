@@ -174,11 +174,15 @@ export class TextToSpeechService {
         this.logger.log(`Free user ${userId}. Skipping ElevenLabs.`);
         useElevenLabs = false;
       } else if (!options?.skipQuotaCheck) {
-        // Per-call quota check (skipped in batch mode where quota is reserved upfront)
-        const allowed = await this.voiceQuota.checkUsage(userId);
-        if (!allowed) {
+        // Per-story voice limit: premium users can use up to N distinct
+        // premium voices per story (cached voices don't count against limit)
+        const voiceAllowed = await this.voiceQuota.canUseVoiceForStory(
+          storyId,
+          type,
+        );
+        if (!voiceAllowed) {
           this.logger.log(
-            `User ${userId} quota exceeded. Skipping ElevenLabs.`,
+            `Story ${storyId} has reached the premium voice limit. Skipping ElevenLabs for voice ${type}.`,
           );
           useElevenLabs = false;
         }
@@ -400,13 +404,24 @@ export class TextToSpeechService {
     if (userId) {
       isPremium = await this.subscriptionService.isPremiumUser(userId);
       if (isPremium) {
-        reservedCredits = await this.voiceQuota.checkAndReserveUsage(
-          userId,
-          uncached.length,
+        // Check per-story voice limit before reserving quota
+        const voiceAllowed = await this.voiceQuota.canUseVoiceForStory(
+          storyId,
+          type,
         );
-        this.logger.log(
-          `Reserved ${reservedCredits}/${uncached.length} ElevenLabs credits for batch story ${storyId}`,
-        );
+        if (voiceAllowed) {
+          reservedCredits = await this.voiceQuota.checkAndReserveUsage(
+            userId,
+            uncached.length,
+          );
+          this.logger.log(
+            `Reserved ${reservedCredits}/${uncached.length} ElevenLabs credits for batch story ${storyId}`,
+          );
+        } else {
+          this.logger.log(
+            `Story ${storyId} has reached the premium voice limit. Skipping ElevenLabs for voice ${type}.`,
+          );
+        }
       }
     }
 

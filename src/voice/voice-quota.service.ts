@@ -29,9 +29,12 @@ export class VoiceQuotaService {
     const currentMonth = this.getCurrentMonth();
 
     const isPremium = await this.subscriptionService.isPremiumUser(userId);
-    const limit = isPremium
-      ? VOICE_CONFIG_SETTINGS.QUOTAS.PREMIUM
-      : VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
+
+    // Premium users have no monthly ElevenLabs quota — usage is controlled
+    // per-story via canUseVoiceForStory() instead
+    if (isPremium) return true;
+
+    const limit = VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
 
     // Atomic month reset and upsert using transaction
     const usage = await this.prisma.$transaction(async (tx) => {
@@ -89,9 +92,35 @@ export class VoiceQuotaService {
     const currentMonth = this.getCurrentMonth();
 
     const isPremium = await this.subscriptionService.isPremiumUser(userId);
-    const limit = isPremium
-      ? VOICE_CONFIG_SETTINGS.QUOTAS.PREMIUM
-      : VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
+
+    // Premium users have no monthly quota — grant all requested credits.
+    // Per-story voice limits are enforced separately via canUseVoiceForStory().
+    if (isPremium) {
+      // Still track usage for analytics, but don't cap it
+      await this.prisma.$transaction(async (tx) => {
+        await tx.userUsage.updateMany({
+          where: { userId, currentMonth: { not: currentMonth } },
+          data: { currentMonth, elevenLabsCount: 0 },
+        });
+        await tx.userUsage.upsert({
+          where: { userId },
+          create: { userId, currentMonth, elevenLabsCount: credits },
+          update: {
+            currentMonth,
+            elevenLabsCount: { increment: credits },
+          },
+        });
+      });
+      await this.logAiActivity(
+        userId,
+        AiProviders.ElevenLabs,
+        'tts_batch_reservation',
+        credits,
+      );
+      return credits;
+    }
+
+    const limit = VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
 
     // Atomic reservation with Serializable isolation to prevent TOCTOU races
     // where concurrent batch requests both read the same count and both reserve.
@@ -226,6 +255,40 @@ export class VoiceQuotaService {
         `Failed to log AI activity for user ${userId}: ${errorMessage}`,
       );
     }
+  }
+
+  /**
+   * Check if a premium user can use a specific voice for a story.
+   * Premium users are limited to MAX_PREMIUM_VOICES_PER_STORY distinct
+   * premium voices per story. If the voice is already cached for this
+   * story, it's always allowed (no new cost). Otherwise, check how many
+   * distinct voices already have cached audio for this story.
+   */
+  async canUseVoiceForStory(
+    storyId: string,
+    voiceId: string,
+  ): Promise<boolean> {
+    const limit = VOICE_CONFIG_SETTINGS.QUOTAS.MAX_PREMIUM_VOICES_PER_STORY;
+
+    const distinctVoices: Array<{ voiceId: string }> = await this.prisma
+      .$queryRaw`SELECT DISTINCT "voiceId" FROM "paragraph_audio_cache" WHERE "storyId" = ${storyId}`;
+
+    const cachedVoiceIds = distinctVoices.map((v) => v.voiceId);
+
+    // Already cached for this story — always allowed (zero cost)
+    if (cachedVoiceIds.includes(voiceId)) {
+      return true;
+    }
+
+    // New voice — only allow if under the limit
+    if (cachedVoiceIds.length >= limit) {
+      this.logger.log(
+        `Story ${storyId} already has ${cachedVoiceIds.length} distinct voices (limit ${limit}). Denying voice ${voiceId}.`,
+      );
+      return false;
+    }
+
+    return true;
   }
 
   // ========== FREE TIER VOICE LIMITS ==========
