@@ -652,7 +652,8 @@ export class StoryController {
     // Record access only after successful operation to avoid consuming quota on failures
     if (
       req.authUserData?.userId &&
-      req.storyAccessResult?.reason !== 'already_read'
+      req.storyAccessResult?.reason !== 'already_read' &&
+      req.storyAccessResult?.reason !== 'kid_created'
     ) {
       await this.storyQuotaService.recordNewStoryAccess(
         req.authUserData.userId,
@@ -1047,7 +1048,8 @@ export class StoryController {
     // Record access if this is a new story for the user
     if (
       req.authUserData?.userId &&
-      req.storyAccessResult?.reason !== 'already_read'
+      req.storyAccessResult?.reason !== 'already_read' &&
+      req.storyAccessResult?.reason !== 'kid_created'
     ) {
       await this.storyQuotaService.recordNewStoryAccess(
         req.authUserData.userId,
