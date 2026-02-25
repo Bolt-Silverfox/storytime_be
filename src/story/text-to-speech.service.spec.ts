@@ -565,10 +565,10 @@ describe('TextToSpeechService', () => {
       mockRecordUsage.mockImplementation((_userId: string, credits: number) =>
         Promise.resolve(credits),
       );
-      // ElevenLabs fails for all — so all reserved credits should be released
+      // ElevenLabs fails for all — batch sticks to one provider, so
+      // failed paragraphs return null (will be retried on next request).
+      // All reserved credits should be released since none used ElevenLabs.
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs timeout'));
-      mockDeepgramGenerate.mockResolvedValue(Buffer.from('fallback-audio'));
-      mockUploadAudio.mockResolvedValue('https://uploaded.com/fallback.wav');
 
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
@@ -577,8 +577,8 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      // All paragraphs should have fallback audio
-      expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
+      // Failed paragraphs should have null audioUrl (no fallback to different provider)
+      expect(result.results.every((r) => r.audioUrl === null)).toBe(true);
       // Quota was reserved
       expect(mockRecordUsage).toHaveBeenCalledWith(userId, expect.any(Number));
       // All reserved credits should be released since ElevenLabs failed
@@ -629,6 +629,7 @@ describe('TextToSpeechService', () => {
 
       mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
       mockIsPremiumUser.mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       let callCount = 0;
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockImplementation(async () => {
@@ -700,6 +701,7 @@ describe('TextToSpeechService', () => {
       );
 
       mockIsPremiumUser.mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded.com/middle.wav');
 
