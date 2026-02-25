@@ -5,7 +5,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { UploadService } from '../upload/upload.service';
@@ -61,7 +61,7 @@ export interface GeneratedStory {
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
-  private genAI: GoogleGenerativeAI;
+  private genAI: GoogleGenAI;
 
   // Circuit breaker state
   private circuitState: CircuitState = CircuitState.CLOSED;
@@ -81,7 +81,7 @@ export class GeminiService {
       );
       return;
     }
-    this.genAI = new GoogleGenerativeAI(apiKey);
+    this.genAI = new GoogleGenAI({ apiKey });
   }
 
   /**
@@ -164,15 +164,17 @@ export class GeminiService {
       );
     }
 
-    // UPDATED: Changed model from 'gemini-1.5-flash' to 'gemini-2.5-flash'
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
     const prompt = this.buildPrompt(options);
 
     try {
-      const result = await model.generateContent(prompt);
-      const response = result.response;
-      const text = response.text();
+      const result = await this.genAI.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+      });
+      const text = result.text;
+      if (!text) {
+        throw new Error('Gemini returned an empty response');
+      }
 
       // Parse the JSON response
       const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
@@ -213,9 +215,10 @@ export class GeminiService {
 
       // Only count transient API errors toward circuit breaker
       // Parse errors and validation errors are not API instability
+      const httpStatus = error.status ?? error.code;
       const isTransientError =
-        error.status === 429 ||
-        error.status === 503 ||
+        httpStatus === 429 ||
+        httpStatus === 503 ||
         error.message?.includes('fetch failed') ||
         error.message?.includes('ETIMEDOUT');
 
@@ -235,7 +238,7 @@ export class GeminiService {
       }
 
       // 2. Check for API Overload/Rate Limits
-      if (error.status === 429 || error.status === 503) {
+      if (httpStatus === 429 || httpStatus === 503) {
         throw new ServiceUnavailableException(
           'The AI storyteller is a bit busy right now. Please try again in 1 minute.',
         );
@@ -331,32 +334,36 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     description: string,
     userId?: string,
   ): Promise<string> {
-    const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
-    const encodedPrompt = encodeURIComponent(imagePrompt);
-    const seed = Math.floor(Math.random() * 100000);
-    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&seed=${seed}`;
-
-    this.logger.log(`Generating cover image for "${title}" via Pollinations`);
-
-    let finalUrl: string;
-
-    try {
-      const result = await this.uploadService.uploadImageFromUrl(
-        pollinationsUrl,
-        'covers',
+    if (!this.genAI) {
+      throw new InternalServerErrorException(
+        'Gemini API is not configured. Cannot generate cover images.',
       );
-      this.logger.log(
-        `Cover image uploaded to Cloudinary: ${result.secure_url}`,
-      );
-      finalUrl = result.secure_url;
-    } catch (error) {
-      this.logger.error(
-        `Failed to upload cover image to Cloudinary, falling back to Pollinations URL: ${error instanceof Error ? error.message : error}`,
-      );
-      finalUrl = pollinationsUrl;
     }
 
-    // Track usage regardless of storage destination — the image was generated either way
+    const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
+
+    this.logger.log(`Generating cover image for "${title}" via Imagen`);
+
+    const response = await this.genAI.models.generateImages({
+      model: 'imagen-3.0-generate-002',
+      prompt: imagePrompt,
+      config: { numberOfImages: 1 },
+    });
+
+    const generatedImage = response.generatedImages?.[0];
+    if (!generatedImage?.image?.imageBytes) {
+      throw new InternalServerErrorException(
+        'Imagen returned no image data for cover image generation',
+      );
+    }
+
+    const buffer = Buffer.from(generatedImage.image.imageBytes, 'base64');
+    const result = await this.uploadService.uploadImageFromBuffer(
+      buffer,
+      'covers',
+    );
+    this.logger.log(`Cover image uploaded to Cloudinary: ${result.secure_url}`);
+
     if (userId) {
       this.voiceQuotaService
         .trackGeminiImage(userId)
@@ -368,6 +375,6 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
         );
     }
 
-    return finalUrl;
+    return result.secure_url;
   }
 }
