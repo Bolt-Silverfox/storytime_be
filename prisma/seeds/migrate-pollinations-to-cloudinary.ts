@@ -11,11 +11,9 @@
  * Requires these env vars (from .env):
  *   HF_TOKEN, CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
  */
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { v2 as cloudinary } from 'cloudinary';
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-require('dotenv').config();
 
 const requiredEnvVars = [
   'HF_TOKEN',

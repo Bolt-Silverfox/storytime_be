@@ -20,16 +20,6 @@ export class VoiceQuotaService {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }
 
-  /**
-   * Check if a user is allowed to use ElevenLabs (per-call check).
-   * Premium users always pass — their limits are per-story via canUseVoiceForStory().
-   * Free users are not checked here — they go through canFreeUserUseElevenLabs() instead.
-   */
-  async checkUsage(userId: string): Promise<boolean> {
-    const isPremium = await this.subscriptionService.isPremiumUser(userId);
-    return isPremium;
-  }
-
   async incrementUsage(userId: string): Promise<void> {
     const currentMonth = this.getCurrentMonth();
     // Use transaction to handle month rollover atomically (matches checkUsage pattern)
@@ -53,44 +43,12 @@ export class VoiceQuotaService {
   }
 
   /**
-   * Atomically check remaining ElevenLabs quota and reserve credits.
-   * Returns the number of credits actually reserved (may be less than
-   * requested if the user doesn't have enough remaining).
+   * Reserve ElevenLabs credits and track usage for analytics.
+   * Access control (premium per-story limit, free-tier voice lock) is
+   * enforced by callers before invoking this method.
    */
   async checkAndReserveUsage(userId: string, credits: number): Promise<number> {
     const currentMonth = this.getCurrentMonth();
-
-    const isPremium = await this.subscriptionService.isPremiumUser(userId);
-
-    // Premium users have no monthly quota — grant all requested credits.
-    // Per-story voice limits are enforced separately via canUseVoiceForStory().
-    if (isPremium) {
-      // Still track usage for analytics, but don't cap it
-      await this.prisma.$transaction(async (tx) => {
-        await tx.userUsage.updateMany({
-          where: { userId, currentMonth: { not: currentMonth } },
-          data: { currentMonth, elevenLabsCount: 0 },
-        });
-        await tx.userUsage.upsert({
-          where: { userId },
-          create: { userId, currentMonth, elevenLabsCount: credits },
-          update: {
-            currentMonth,
-            elevenLabsCount: { increment: credits },
-          },
-        });
-      });
-      await this.logAiActivity(
-        userId,
-        AiProviders.ElevenLabs,
-        'tts_batch_reservation',
-        credits,
-      );
-      return credits;
-    }
-
-    // Free users who pass the voice check get all credits (no monthly cap).
-    // Their access is gated by canFreeUserUseElevenLabs() instead.
     await this.prisma.$transaction(async (tx) => {
       await tx.userUsage.updateMany({
         where: { userId, currentMonth: { not: currentMonth } },

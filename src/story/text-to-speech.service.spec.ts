@@ -22,10 +22,11 @@ describe('TextToSpeechService', () => {
   const mockDeepgramGenerate = jest.fn();
   const mockEdgeTtsGenerate = jest.fn();
   const mockIsPremiumUser = jest.fn();
-  const mockCheckUsage = jest.fn();
   const mockIncrementUsage = jest.fn();
   const mockCheckAndReserveUsage = jest.fn();
   const mockReleaseReservedUsage = jest.fn();
+  const mockCanUseVoiceForStory = jest.fn();
+  const mockCanFreeUserUseElevenLabs = jest.fn();
 
   const mockPrisma = {
     paragraphAudioCache: {
@@ -45,6 +46,8 @@ describe('TextToSpeechService', () => {
     mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
     mockPrisma.paragraphAudioCache.upsert.mockResolvedValue({});
     mockPrisma.voice.findUnique.mockResolvedValue(null);
+    mockCanUseVoiceForStory.mockResolvedValue(true);
+    mockCanFreeUserUseElevenLabs.mockResolvedValue(true);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -80,12 +83,11 @@ describe('TextToSpeechService', () => {
         {
           provide: VoiceQuotaService,
           useValue: {
-            checkUsage: mockCheckUsage,
             incrementUsage: mockIncrementUsage,
             checkAndReserveUsage: mockCheckAndReserveUsage,
             releaseReservedUsage: mockReleaseReservedUsage,
-            canUseVoiceForStory: jest.fn().mockResolvedValue(true),
-            canFreeUserUseElevenLabs: jest.fn().mockResolvedValue(true),
+            canUseVoiceForStory: mockCanUseVoiceForStory,
+            canFreeUserUseElevenLabs: mockCanFreeUserUseElevenLabs,
           },
         },
         {
@@ -134,7 +136,7 @@ describe('TextToSpeechService', () => {
 
     it('should use ElevenLabs for premium users', async () => {
       mockIsPremiumUser.mockResolvedValue(true);
-      mockCheckUsage.mockResolvedValue(true);
+
       mockElevenLabsGenerate.mockResolvedValue(Buffer.from('eleven-audio'));
       mockUploadAudio.mockResolvedValue(
         'https://uploaded-audio.com/eleven.mp3',
@@ -161,13 +163,7 @@ describe('TextToSpeechService', () => {
 
     it('should skip ElevenLabs for free users who exhausted their premium voice', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
-      (
-        service as unknown as {
-          voiceQuota: { canFreeUserUseElevenLabs: jest.Mock };
-        }
-      ).voiceQuota.canFreeUserUseElevenLabs = jest
-        .fn()
-        .mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('deepgram-audio'));
       mockUploadAudio.mockResolvedValue(
         'https://uploaded-audio.com/deepgram.mp3',
@@ -188,13 +184,7 @@ describe('TextToSpeechService', () => {
 
     it('should fallback to Edge TTS if Deepgram fails', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
-      (
-        service as unknown as {
-          voiceQuota: { canFreeUserUseElevenLabs: jest.Mock };
-        }
-      ).voiceQuota.canFreeUserUseElevenLabs = jest
-        .fn()
-        .mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram timeout'));
       mockEdgeTtsGenerate.mockResolvedValue(Buffer.from('edge-audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/edge.mp3');
@@ -214,7 +204,7 @@ describe('TextToSpeechService', () => {
 
     it('should fallback through all 3 tiers for premium users', async () => {
       mockIsPremiumUser.mockResolvedValue(true);
-      mockCheckUsage.mockResolvedValue(true);
+
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs Error'));
       mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram Error'));
       mockEdgeTtsGenerate.mockResolvedValue(Buffer.from('edge-audio'));
@@ -254,7 +244,7 @@ describe('TextToSpeechService', () => {
 
     it('should throw error if all providers fail for premium user', async () => {
       mockIsPremiumUser.mockResolvedValue(true);
-      mockCheckUsage.mockResolvedValue(true);
+
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs Error'));
       mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram Error'));
       mockEdgeTtsGenerate.mockRejectedValue(new Error('Edge TTS Error'));
@@ -296,12 +286,7 @@ describe('TextToSpeechService', () => {
 
     it('should skip ElevenLabs when per-story voice limit reached', async () => {
       mockIsPremiumUser.mockResolvedValue(true);
-      const mockCanUseVoiceForStory = jest.fn().mockResolvedValue(false);
-      (
-        service as unknown as {
-          voiceQuota: { canUseVoiceForStory: jest.Mock };
-        }
-      ).voiceQuota.canUseVoiceForStory = mockCanUseVoiceForStory;
+      mockCanUseVoiceForStory.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('deepgram-audio'));
       mockUploadAudio.mockResolvedValue(
         'https://uploaded-audio.com/deepgram.mp3',
@@ -328,7 +313,7 @@ describe('TextToSpeechService', () => {
         elevenLabsVoiceId: 'custom-eleven-id',
       });
       mockIsPremiumUser.mockResolvedValue(true);
-      mockCheckUsage.mockResolvedValue(true);
+
       mockElevenLabsGenerate.mockResolvedValue(Buffer.from('custom-audio'));
       mockUploadAudio.mockResolvedValue(
         'https://uploaded-audio.com/custom.mp3',
@@ -357,13 +342,7 @@ describe('TextToSpeechService', () => {
       const unknownId = 'unknown-voice-id';
       mockPrisma.voice.findUnique.mockResolvedValue(null);
       mockIsPremiumUser.mockResolvedValue(false);
-      (
-        service as unknown as {
-          voiceQuota: { canFreeUserUseElevenLabs: jest.Mock };
-        }
-      ).voiceQuota.canFreeUserUseElevenLabs = jest
-        .fn()
-        .mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('default-audio'));
       mockUploadAudio.mockResolvedValue(
         'https://uploaded-audio.com/default.wav',
@@ -394,13 +373,7 @@ describe('TextToSpeechService', () => {
     it('should use default voice when voicetype is not provided', async () => {
       mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue(null);
       mockIsPremiumUser.mockResolvedValue(false);
-      (
-        service as unknown as {
-          voiceQuota: { canFreeUserUseElevenLabs: jest.Mock };
-        }
-      ).voiceQuota.canFreeUserUseElevenLabs = jest
-        .fn()
-        .mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/audio.wav');
 
@@ -539,13 +512,7 @@ describe('TextToSpeechService', () => {
       );
 
       mockIsPremiumUser.mockResolvedValue(false);
-      (
-        service as unknown as {
-          voiceQuota: { canFreeUserUseElevenLabs: jest.Mock };
-        }
-      ).voiceQuota.canFreeUserUseElevenLabs = jest
-        .fn()
-        .mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('generated-audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded.com/new.wav');
 

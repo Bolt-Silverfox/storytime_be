@@ -87,6 +87,11 @@ export class GeminiService {
     }
     this.genAI = new GoogleGenAI({ apiKey });
     this.hfToken = this.configService.get<string>('HF_TOKEN') ?? '';
+    if (!this.hfToken) {
+      this.logger.warn(
+        'HF_TOKEN not configured. Cover image generation will not be available.',
+      );
+    }
   }
 
   /**
@@ -220,12 +225,18 @@ export class GeminiService {
 
       // Only count transient API errors toward circuit breaker
       // Parse errors and validation errors are not API instability
-      const httpStatus = error.status ?? error.code;
+      const errorObj =
+        error instanceof Error
+          ? (error as unknown as Record<string, unknown>)
+          : {};
+      const httpStatus = errorObj.status ?? errorObj.code;
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       const isTransientError =
         httpStatus === 429 ||
         httpStatus === 503 ||
-        error.message?.includes('fetch failed') ||
-        error.message?.includes('ETIMEDOUT');
+        errorMessage.includes('fetch failed') ||
+        errorMessage.includes('ETIMEDOUT');
 
       if (isTransientError) {
         this.recordFailure();
@@ -233,9 +244,8 @@ export class GeminiService {
 
       // 1. Check for Network/Fetch errors
       if (
-        error.message &&
-        (error.message.includes('fetch failed') ||
-          error.message.includes('ETIMEDOUT'))
+        errorMessage.includes('fetch failed') ||
+        errorMessage.includes('ETIMEDOUT')
       ) {
         throw new ServiceUnavailableException(
           'We are having trouble connecting to the AI service right now. Please check your internet connection or try again in a moment.',
@@ -345,45 +355,53 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
       `Generating cover image for "${title}" via Hugging Face FLUX`,
     );
 
-    const response = await firstValueFrom(
-      this.httpService.post(
-        'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell',
-        { inputs: imagePrompt },
-        {
-          headers: {
-            Authorization: `Bearer ${this.hfToken}`,
-            Accept: 'image/png',
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell',
+          { inputs: imagePrompt },
+          {
+            headers: {
+              Authorization: `Bearer ${this.hfToken}`,
+              Accept: 'image/png',
+            },
+            responseType: 'arraybuffer',
+            timeout: 60000,
           },
-          responseType: 'arraybuffer',
-          timeout: 60000,
-        },
-      ),
-    );
+        ),
+      );
 
-    const buffer = Buffer.from(response.data as ArrayBuffer);
-    if (buffer.length === 0) {
+      const buffer = Buffer.from(response.data as ArrayBuffer);
+      if (buffer.length === 0) {
+        throw new Error('Hugging Face returned empty image data');
+      }
+
+      const result = await this.uploadService.uploadImageFromBuffer(
+        buffer,
+        'covers',
+      );
+      this.logger.log(
+        `Cover image uploaded to Cloudinary: ${result.secure_url}`,
+      );
+
+      if (userId) {
+        this.voiceQuotaService
+          .trackGeminiImage(userId)
+          .catch((err) =>
+            this.logger.error(
+              `Failed to track image usage for user ${userId}:`,
+              err,
+            ),
+          );
+      }
+
+      return result.secure_url;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Cover image generation failed for "${title}": ${msg}`);
       throw new InternalServerErrorException(
-        'Hugging Face returned no image data for cover image generation',
+        'Failed to generate cover image. Please try again.',
       );
     }
-
-    const result = await this.uploadService.uploadImageFromBuffer(
-      buffer,
-      'covers',
-    );
-    this.logger.log(`Cover image uploaded to Cloudinary: ${result.secure_url}`);
-
-    if (userId) {
-      this.voiceQuotaService
-        .trackGeminiImage(userId)
-        .catch((err) =>
-          this.logger.error(
-            `Failed to track image usage for user ${userId}:`,
-            err,
-          ),
-        );
-    }
-
-    return result.secure_url;
   }
 }
