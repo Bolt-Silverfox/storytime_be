@@ -454,14 +454,16 @@ describe('TextToSpeechService', () => {
       // The splitter will split fullText into chunks — we mock findMany to return
       // cached entries for all of them. We use a spy on hashText to capture hashes.
       mockPrisma.paragraphAudioCache.findMany.mockImplementation(
-        async (args: { where: { textHash: { in: string[] } } }) => {
+        (args: { where: { textHash: { in: string[] } } }) => {
           const hashes = args.where.textHash.in;
-          return hashes.map((hash: string, i: number) => ({
-            storyId,
-            textHash: hash,
-            voiceId: 'LILY',
-            audioUrl: `https://cached.com/audio-${i}.mp3`,
-          }));
+          return Promise.resolve(
+            hashes.map((hash: string, i: number) => ({
+              storyId,
+              textHash: hash,
+              voiceId: 'LILY',
+              audioUrl: `https://cached.com/audio-${i}.mp3`,
+            })),
+          );
         },
       );
 
@@ -487,17 +489,17 @@ describe('TextToSpeechService', () => {
     it('should call providers only for uncached paragraphs', async () => {
       // Cache the first paragraph hash only
       mockPrisma.paragraphAudioCache.findMany.mockImplementation(
-        async (args: { where: { textHash: { in: string[] } } }) => {
+        (args: { where: { textHash: { in: string[] } } }) => {
           const hashes = args.where.textHash.in;
           // Only return cache entry for the first hash
-          return [
+          return Promise.resolve([
             {
               storyId,
               textHash: hashes[0],
               voiceId: 'LILY',
               audioUrl: 'https://cached.com/first.mp3',
             },
-          ];
+          ]);
         },
       );
 
@@ -537,7 +539,7 @@ describe('TextToSpeechService', () => {
       mockIsPremiumUser.mockResolvedValue(true);
       // Reserve all requested credits
       mockCheckAndReserveUsage.mockImplementation(
-        async (_userId: string, credits: number) => credits,
+        (_userId: string, credits: number) => Promise.resolve(credits),
       );
       // ElevenLabs fails for all — so all reserved credits should be released
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs timeout'));
@@ -608,9 +610,9 @@ describe('TextToSpeechService', () => {
       mockIsPremiumUser.mockResolvedValue(false);
       let callCount = 0;
       mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
-      mockUploadAudio.mockImplementation(async () => {
+      mockUploadAudio.mockImplementation(() => {
         callCount++;
-        return `https://uploaded.com/audio-${callCount}.wav`;
+        return Promise.resolve(`https://uploaded.com/audio-${callCount}.wav`);
       });
 
       const result = await service.batchTextToSpeechCloudUrls(
@@ -662,17 +664,17 @@ describe('TextToSpeechService', () => {
 
       // Cache hit for the refrain hash
       mockPrisma.paragraphAudioCache.findMany.mockImplementation(
-        async (args: { where: { textHash: { in: string[] } } }) => {
+        (args: { where: { textHash: { in: string[] } } }) => {
           const hashes = args.where.textHash.in;
           // Return cache for first hash only (which is the refrain)
-          return [
+          return Promise.resolve([
             {
               storyId,
               textHash: hashes[0],
               voiceId: 'LILY',
               audioUrl: 'https://cached.com/refrain.mp3',
             },
-          ];
+          ]);
         },
       );
 
