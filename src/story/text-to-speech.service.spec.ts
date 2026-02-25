@@ -13,9 +13,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { MAX_TTS_TEXT_LENGTH } from '../voice/voice.config';
+import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
+import { TTS_CIRCUIT_BREAKER_CONFIG } from '@/shared/constants/circuit-breaker.constants';
 
 describe('TextToSpeechService', () => {
   let service: TextToSpeechService;
+  let cbService: CircuitBreakerService;
 
   const mockUploadAudio = jest.fn();
   const mockElevenLabsGenerate = jest.fn();
@@ -103,10 +106,12 @@ describe('TextToSpeechService', () => {
             isPremiumUser: mockIsPremiumUser,
           },
         },
+        CircuitBreakerService,
       ],
     }).compile();
 
     service = module.get<TextToSpeechService>(TextToSpeechService);
+    cbService = module.get<CircuitBreakerService>(CircuitBreakerService);
   });
 
   it('should be defined', () => {
@@ -786,6 +791,183 @@ describe('TextToSpeechService', () => {
           result.results[i - 1].index,
         );
       }
+    });
+  });
+
+  describe('circuit breaker integration', () => {
+    const storyId = 'story-cb-123';
+    const text = 'Once upon a time in a land far away';
+    const voiceType = VoiceType.CHARLIE;
+    const userId = 'user-cb-123';
+
+    it('should skip ElevenLabs when its breaker is OPEN and fall through to Deepgram', async () => {
+      mockIsPremiumUser.mockResolvedValue(true);
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('deepgram-audio'));
+      mockUploadAudio.mockResolvedValue(
+        'https://uploaded-audio.com/deepgram.mp3',
+      );
+
+      // Trip the ElevenLabs breaker
+      const elBreaker = cbService.getBreaker('elevenlabs');
+      for (
+        let i = 0;
+        i < TTS_CIRCUIT_BREAKER_CONFIG.elevenlabs.failureThreshold;
+        i++
+      ) {
+        elBreaker.recordFailure({ status: 500 });
+      }
+
+      const result = await service.textToSpeechCloudUrl(
+        storyId,
+        text,
+        voiceType,
+        userId,
+      );
+
+      expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
+      expect(result).toBe('https://uploaded-audio.com/deepgram.mp3');
+    });
+
+    it('should skip Deepgram when its breaker is OPEN and fall through to Edge TTS', async () => {
+      mockIsPremiumUser.mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
+      mockEdgeTtsGenerate.mockResolvedValue(Buffer.from('edge-audio'));
+      mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/edge.mp3');
+
+      // Trip the Deepgram breaker
+      const dgBreaker = cbService.getBreaker('deepgram');
+      for (
+        let i = 0;
+        i < TTS_CIRCUIT_BREAKER_CONFIG.deepgram.failureThreshold;
+        i++
+      ) {
+        dgBreaker.recordFailure({ status: 503 });
+      }
+
+      const result = await service.textToSpeechCloudUrl(
+        storyId,
+        text,
+        voiceType,
+        userId,
+      );
+
+      expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
+      expect(mockDeepgramGenerate).not.toHaveBeenCalled();
+      expect(mockEdgeTtsGenerate).toHaveBeenCalled();
+      expect(result).toBe('https://uploaded-audio.com/edge.mp3');
+    });
+
+    it('should record success on the breaker after successful provider call', async () => {
+      mockIsPremiumUser.mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
+      mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/audio.mp3');
+
+      const dgBreaker = cbService.getBreaker('deepgram');
+      const successSpy = jest.spyOn(dgBreaker, 'recordSuccess');
+
+      await service.textToSpeechCloudUrl(storyId, text, voiceType, userId);
+
+      expect(successSpy).toHaveBeenCalled();
+    });
+
+    it('should record failure on the breaker after provider error', async () => {
+      mockIsPremiumUser.mockResolvedValue(true);
+      mockElevenLabsGenerate.mockRejectedValue(
+        Object.assign(new Error('Server Error'), { status: 500 }),
+      );
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
+      mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/audio.mp3');
+
+      const elBreaker = cbService.getBreaker('elevenlabs');
+      const failureSpy = jest.spyOn(elBreaker, 'recordFailure');
+
+      await service.textToSpeechCloudUrl(storyId, text, voiceType, userId);
+
+      expect(failureSpy).toHaveBeenCalled();
+    });
+
+    describe('batch mode', () => {
+      const shortParagraph1 = 'The cat sat on the mat and looked at the stars.';
+      const shortParagraph2 =
+        'The dog ran through the field chasing butterflies in the sun.';
+      const fullText = `${shortParagraph1} ${shortParagraph2}`;
+
+      it('should downgrade from ElevenLabs to Deepgram when ElevenLabs breaker is OPEN', async () => {
+        mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
+        mockIsPremiumUser.mockResolvedValue(true);
+        mockRecordUsage.mockResolvedValue(2);
+        mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
+        mockUploadAudio.mockResolvedValue('https://uploaded.com/audio.mp3');
+
+        // Trip the ElevenLabs breaker
+        const elBreaker = cbService.getBreaker('elevenlabs');
+        for (
+          let i = 0;
+          i < TTS_CIRCUIT_BREAKER_CONFIG.elevenlabs.failureThreshold;
+          i++
+        ) {
+          elBreaker.recordFailure({ status: 500 });
+        }
+
+        const result = await service.batchTextToSpeechCloudUrls(
+          storyId,
+          fullText,
+          VoiceType.CHARLIE,
+          userId,
+        );
+
+        // Should have used Deepgram, not ElevenLabs
+        expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
+        expect(mockDeepgramGenerate).toHaveBeenCalled();
+        expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
+      });
+
+      it('should return providerStatus: degraded when a breaker is OPEN', async () => {
+        mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
+        mockIsPremiumUser.mockResolvedValue(false);
+        mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
+        mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
+        mockUploadAudio.mockResolvedValue('https://uploaded.com/audio.mp3');
+
+        // Trip the ElevenLabs breaker (even though free user won't use it,
+        // the degraded status should still be reported)
+        const elBreaker = cbService.getBreaker('elevenlabs');
+        for (
+          let i = 0;
+          i < TTS_CIRCUIT_BREAKER_CONFIG.elevenlabs.failureThreshold;
+          i++
+        ) {
+          elBreaker.recordFailure({ status: 500 });
+        }
+
+        const result = await service.batchTextToSpeechCloudUrls(
+          storyId,
+          fullText,
+          VoiceType.LILY,
+          userId,
+        );
+
+        expect(result.providerStatus).toBe('degraded');
+      });
+
+      it('should NOT return providerStatus when all breakers are healthy', async () => {
+        mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
+        mockIsPremiumUser.mockResolvedValue(false);
+        mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
+        mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
+        mockUploadAudio.mockResolvedValue('https://uploaded.com/audio.mp3');
+
+        const result = await service.batchTextToSpeechCloudUrls(
+          storyId,
+          fullText,
+          VoiceType.LILY,
+          userId,
+        );
+
+        expect(result.providerStatus).toBeUndefined();
+      });
     });
   });
 });

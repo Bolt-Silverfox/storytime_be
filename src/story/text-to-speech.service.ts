@@ -20,6 +20,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import {
+  CircuitBreakerService,
+  CircuitBreaker,
+} from '@/shared/services/circuit-breaker.service';
+import { TTS_CIRCUIT_BREAKER_CONFIG } from '@/shared/constants/circuit-breaker.constants';
+import {
   VOICE_CONFIG_SETTINGS,
   MAX_TTS_TEXT_LENGTH,
 } from '../voice/voice.config';
@@ -61,6 +66,9 @@ export function preprocessTextForTTS(text: string): string {
 @Injectable()
 export class TextToSpeechService {
   private readonly logger = new Logger(TextToSpeechService.name);
+  private readonly elevenLabsBreaker: CircuitBreaker;
+  private readonly deepgramBreaker: CircuitBreaker;
+  private readonly edgeTtsBreaker: CircuitBreaker;
 
   constructor(
     private readonly uploadService: UploadService,
@@ -70,7 +78,35 @@ export class TextToSpeechService {
     private readonly prisma: PrismaService,
     private readonly voiceQuota: VoiceQuotaService,
     private readonly subscriptionService: SubscriptionService,
-  ) {}
+    private readonly cbService: CircuitBreakerService,
+  ) {
+    this.elevenLabsBreaker = this.cbService.getBreaker(
+      'elevenlabs',
+      TTS_CIRCUIT_BREAKER_CONFIG.elevenlabs,
+    );
+    this.deepgramBreaker = this.cbService.getBreaker(
+      'deepgram',
+      TTS_CIRCUIT_BREAKER_CONFIG.deepgram,
+    );
+    this.edgeTtsBreaker = this.cbService.getBreaker(
+      'edgetts',
+      TTS_CIRCUIT_BREAKER_CONFIG.edgetts,
+    );
+  }
+
+  /** Get the circuit breaker for a given provider name */
+  private getBreakerForProvider(
+    provider: 'elevenlabs' | 'deepgram' | 'edgetts',
+  ): CircuitBreaker {
+    switch (provider) {
+      case 'elevenlabs':
+        return this.elevenLabsBreaker;
+      case 'deepgram':
+        return this.deepgramBreaker;
+      case 'edgetts':
+        return this.edgeTtsBreaker;
+    }
+  }
 
   /**
    * Resolve any voice identifier (VoiceType enum, UUID, or unknown) to its
@@ -304,53 +340,82 @@ export class TextToSpeechService {
       );
     }
 
-    // Normal mode: full fallback chain
+    // Normal mode: full fallback chain with circuit breaker checks
 
     // Priority 1: ElevenLabs (premium users only)
     if (useElevenLabs && elevenLabsId) {
-      try {
-        return await this.tryElevenLabs(
-          storyId,
-          cleanedText,
-          elevenLabsId,
-          type,
-          voiceSettings,
-          userId,
-          options,
-          attemptProvider,
-        );
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+      if (!this.elevenLabsBreaker.canExecute()) {
         this.logger.warn(
-          `ElevenLabs generation failed for story ${storyId}: ${msg}. Falling back to Deepgram.`,
+          `ElevenLabs circuit breaker OPEN for story ${storyId}. Skipping to Deepgram.`,
         );
+      } else {
+        try {
+          const result = await this.tryElevenLabs(
+            storyId,
+            cleanedText,
+            elevenLabsId,
+            type,
+            voiceSettings,
+            userId,
+            options,
+            attemptProvider,
+          );
+          this.elevenLabsBreaker.recordSuccess();
+          return result;
+        } catch (error) {
+          this.elevenLabsBreaker.recordFailure(error);
+          const msg = error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `ElevenLabs generation failed for story ${storyId}: ${msg}. Falling back to Deepgram.`,
+          );
+        }
       }
     }
 
     // Priority 2: Deepgram TTS
-    try {
-      return await this.tryDeepgram(
-        storyId,
-        cleanedText,
-        deepgramVoice,
-        attemptProvider,
-      );
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+    if (!this.deepgramBreaker.canExecute()) {
       this.logger.warn(
-        `Deepgram TTS failed for story ${storyId}: ${msg}. Falling back to Edge TTS.`,
+        `Deepgram circuit breaker OPEN for story ${storyId}. Skipping to Edge TTS.`,
       );
+    } else {
+      try {
+        const result = await this.tryDeepgram(
+          storyId,
+          cleanedText,
+          deepgramVoice,
+          attemptProvider,
+        );
+        this.deepgramBreaker.recordSuccess();
+        return result;
+      } catch (error) {
+        this.deepgramBreaker.recordFailure(error);
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Deepgram TTS failed for story ${storyId}: ${msg}. Falling back to Edge TTS.`,
+        );
+      }
     }
 
     // Priority 3: Edge TTS (final fallback)
+    if (!this.edgeTtsBreaker.canExecute()) {
+      this.logger.error(
+        `All TTS circuit breakers OPEN for story ${storyId}. No provider available.`,
+      );
+      throw new InternalServerErrorException(
+        'Voice generation failed on all providers',
+      );
+    }
     try {
-      return await this.tryEdgeTts(
+      const result = await this.tryEdgeTts(
         storyId,
         cleanedText,
         edgeTtsVoice,
         attemptProvider,
       );
+      this.edgeTtsBreaker.recordSuccess();
+      return result;
     } catch (error) {
+      this.edgeTtsBreaker.recordFailure(error);
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
         `Edge TTS fallback failed for story ${storyId}: ${msg}`,
@@ -443,6 +508,7 @@ export class TextToSpeechService {
   /**
    * Attempt a single provider without fallback (used when providerOverride is set).
    * Throws on failure instead of falling through to next provider.
+   * Records success/failure on the circuit breaker for the provider.
    */
   private async attemptSingleProvider(
     provider: 'elevenlabs' | 'deepgram' | 'edgetts',
@@ -460,43 +526,62 @@ export class TextToSpeechService {
       gen: () => Promise<Buffer>,
     ) => Promise<TTSResult>,
   ): Promise<TTSResult> {
-    switch (provider) {
-      case 'elevenlabs': {
-        if (!elevenLabsId) {
-          throw new InternalServerErrorException(
-            `No ElevenLabs voice ID available for voice ${type}`,
+    const breaker = this.getBreakerForProvider(provider);
+
+    if (!breaker.canExecute()) {
+      throw new InternalServerErrorException(
+        `${provider} circuit breaker is OPEN`,
+      );
+    }
+
+    try {
+      let result: TTSResult;
+      switch (provider) {
+        case 'elevenlabs': {
+          if (!elevenLabsId) {
+            throw new InternalServerErrorException(
+              `No ElevenLabs voice ID available for voice ${type}`,
+            );
+          }
+          result = await this.tryElevenLabs(
+            storyId,
+            cleanedText,
+            elevenLabsId,
+            type,
+            voiceSettings,
+            userId,
+            options,
+            attemptProvider,
           );
+          break;
         }
-        return this.tryElevenLabs(
-          storyId,
-          cleanedText,
-          elevenLabsId,
-          type,
-          voiceSettings,
-          userId,
-          options,
-          attemptProvider,
-        );
+        case 'deepgram':
+          result = await this.tryDeepgram(
+            storyId,
+            cleanedText,
+            deepgramVoice,
+            attemptProvider,
+          );
+          break;
+        case 'edgetts':
+          result = await this.tryEdgeTts(
+            storyId,
+            cleanedText,
+            edgeTtsVoice,
+            attemptProvider,
+          );
+          break;
+        default: {
+          const _exhaustiveCheck: never = provider;
+          void _exhaustiveCheck;
+          throw new InternalServerErrorException('Unknown TTS provider');
+        }
       }
-      case 'deepgram':
-        return this.tryDeepgram(
-          storyId,
-          cleanedText,
-          deepgramVoice,
-          attemptProvider,
-        );
-      case 'edgetts':
-        return this.tryEdgeTts(
-          storyId,
-          cleanedText,
-          edgeTtsVoice,
-          attemptProvider,
-        );
-      default: {
-        const _exhaustiveCheck: never = provider;
-        void _exhaustiveCheck;
-        throw new InternalServerErrorException('Unknown TTS provider');
-      }
+      breaker.recordSuccess();
+      return result;
+    } catch (error) {
+      breaker.recordFailure(error);
+      throw error;
     }
   }
 
@@ -509,6 +594,7 @@ export class TextToSpeechService {
     results: Array<{ index: number; text: string; audioUrl: string | null }>;
     totalParagraphs: number;
     wasTruncated: boolean;
+    providerStatus?: 'degraded';
   }> {
     if (!fullText?.trim())
       return { results: [], totalParagraphs: 0, wasTruncated: false };
@@ -645,13 +731,25 @@ export class TextToSpeechService {
     let reservedUsed = 0;
 
     // Pick the single provider for this batch.
-    // NOTE: Edge TTS is intentionally never used as a batch provider. If the
-    // chosen provider (ElevenLabs/Deepgram) is down, failed paragraphs return
-    // null and the client retries on the next request. This avoids mixing
-    // voices within a story. A circuit breaker will be added in a future
-    // version to detect provider outages early.
-    const batchProvider: 'elevenlabs' | 'deepgram' | 'edgetts' =
+    // Circuit breaker fast-fail: if the preferred provider is OPEN, downgrade.
+    let batchProvider: 'elevenlabs' | 'deepgram' | 'edgetts' =
       useElevenLabsBatch ? 'elevenlabs' : 'deepgram';
+
+    if (
+      batchProvider === 'elevenlabs' &&
+      !this.elevenLabsBreaker.canExecute()
+    ) {
+      this.logger.warn(
+        `ElevenLabs circuit breaker OPEN for batch story ${storyId}. Downgrading to Deepgram.`,
+      );
+      batchProvider = 'deepgram';
+    }
+    if (batchProvider === 'deepgram' && !this.deepgramBreaker.canExecute()) {
+      this.logger.warn(
+        `Deepgram circuit breaker OPEN for batch story ${storyId}. Downgrading to Edge TTS.`,
+      );
+      batchProvider = 'edgetts';
+    }
 
     this.logger.log(
       `Batch story ${storyId}: generating ${uncached.length} paragraphs with ${batchProvider}`,
@@ -745,12 +843,20 @@ export class TextToSpeechService {
       await this.voiceQuota.releaseReservedUsage(userId, creditsToRelease);
     }
 
+    // Report degraded status when any TTS breaker is OPEN
+    const isDegraded = [
+      this.elevenLabsBreaker,
+      this.deepgramBreaker,
+      this.edgeTtsBreaker,
+    ].some((b) => !b.canExecute());
+
     return {
       results: [...cached, ...generated, ...duplicates].sort(
         (a, b) => a.index - b.index,
       ),
       totalParagraphs: allParagraphs.length,
       wasTruncated,
+      ...(isDegraded ? { providerStatus: 'degraded' as const } : {}),
     };
   }
 }
