@@ -482,7 +482,7 @@ export class TextToSpeechService {
         }
       }
 
-      if (useElevenLabsBatch) {
+      if (useElevenLabsBatch && isPremium) {
         reservedCredits = await this.voiceQuota.recordUsage(
           userId,
           uncached.length,

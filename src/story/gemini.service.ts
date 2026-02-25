@@ -215,10 +215,10 @@ export class GeminiService {
       // Only count transient API errors toward circuit breaker
       // Parse errors and validation errors are not API instability
       const errorObj =
-        error instanceof Error
-          ? (error as unknown as Record<string, unknown>)
+        error != null && typeof error === 'object'
+          ? (error as Record<string, unknown>)
           : {};
-      const httpStatus = errorObj.status ?? errorObj.code;
+      const httpStatus = Number(errorObj.status ?? errorObj.code);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       const isTransientError =
@@ -361,8 +361,10 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
       );
 
       const buffer = Buffer.from(response.data as ArrayBuffer);
-      if (buffer.length === 0) {
-        throw new Error('Hugging Face returned empty image data');
+      if (buffer.length < 1024) {
+        throw new Error(
+          `Hugging Face returned invalid image data (${buffer.length} bytes)`,
+        );
       }
 
       const result = await this.uploadService.uploadImageFromBuffer(

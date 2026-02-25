@@ -40,6 +40,7 @@ const prisma = new PrismaClient();
 
 const HF_API_URL =
   'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell';
+const HF_TIMEOUT_MS = 60_000;
 
 async function generateAndUpload(
   title: string,
@@ -47,15 +48,29 @@ async function generateAndUpload(
 ): Promise<string> {
   const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
 
-  const response = await fetch(HF_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.HF_TOKEN}`,
-      'Content-Type': 'application/json',
-      Accept: 'image/png',
-    },
-    body: JSON.stringify({ inputs: imagePrompt }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), HF_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(HF_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.HF_TOKEN}`,
+        'Content-Type': 'application/json',
+        Accept: 'image/png',
+      },
+      body: JSON.stringify({ inputs: imagePrompt }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`HF API timed out after ${HF_TIMEOUT_MS / 1000}s`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const errorText = await response.text();

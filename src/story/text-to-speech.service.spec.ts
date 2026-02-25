@@ -51,7 +51,9 @@ describe('TextToSpeechService', () => {
     mockCanFreeUserUseElevenLabs.mockResolvedValue(true);
     // Default: return input as-is (tests for known VoiceTypes will get
     // elevenLabsId from VOICE_CONFIG in the service's own resolution)
-    mockResolveCanonicalVoiceId.mockImplementation(async (id: string) => id);
+    mockResolveCanonicalVoiceId.mockImplementation((id: string) =>
+      Promise.resolve(id),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -181,6 +183,10 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
+      expect(mockCanFreeUserUseElevenLabs).toHaveBeenCalledWith(
+        userId,
+        'NFG5qt843uXKj4pFvR7C', // CHARLIE's ElevenLabs ID
+      );
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
       expect(mockDeepgramGenerate).toHaveBeenCalled();
       expect(result).toBe('https://uploaded-audio.com/deepgram.mp3');
