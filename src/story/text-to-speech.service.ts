@@ -13,7 +13,7 @@ import {
   VoiceSettings,
 } from '../voice/voice.constants';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
-import { StyleTTS2TTSProvider } from '../voice/providers/styletts2-tts.provider';
+import { DeepgramTTSProvider } from '../voice/providers/deepgram-tts.provider';
 import { EdgeTTSProvider } from '../voice/providers/edge-tts.provider';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -59,7 +59,7 @@ export class TextToSpeechService {
   constructor(
     private readonly uploadService: UploadService,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
-    private readonly styleTts2Provider: StyleTTS2TTSProvider,
+    private readonly deepgramProvider: DeepgramTTSProvider,
     private readonly edgeTtsProvider: EdgeTTSProvider,
     private readonly prisma: PrismaService,
     private readonly voiceQuota: VoiceQuotaService,
@@ -129,7 +129,7 @@ export class TextToSpeechService {
     // Resolve ElevenLabs ID and per-voice settings
     let elevenLabsId: string | undefined;
     let edgeTtsVoice: string | undefined;
-    let styleTts2Voice: string | undefined;
+    let deepgramVoice: string | undefined;
     let voiceSettings: VoiceSettings | undefined;
 
     // Check if it's a known System Voice (Enum)
@@ -137,7 +137,7 @@ export class TextToSpeechService {
       const config = VOICE_CONFIG[type as VoiceType];
       elevenLabsId = config.elevenLabsId;
       edgeTtsVoice = config.edgeTtsVoice;
-      styleTts2Voice = config.styleTts2Voice;
+      deepgramVoice = config.deepgramVoice;
       voiceSettings = config.voiceSettings;
     } else {
       // Assume dynamic UUID (Custom Voice)
@@ -148,13 +148,13 @@ export class TextToSpeechService {
         // Custom voices are ElevenLabs clones; use default voice for free-tier fallback
         const defaultConfig = VOICE_CONFIG[DEFAULT_VOICE];
         edgeTtsVoice = defaultConfig.edgeTtsVoice;
-        styleTts2Voice = defaultConfig.styleTts2Voice;
+        deepgramVoice = defaultConfig.deepgramVoice;
       } else {
         // Unrecognized ID, fallback to default
         const defaultConfig = VOICE_CONFIG[DEFAULT_VOICE];
         elevenLabsId = defaultConfig.elevenLabsId;
         edgeTtsVoice = defaultConfig.edgeTtsVoice;
-        styleTts2Voice = defaultConfig.styleTts2Voice;
+        deepgramVoice = defaultConfig.deepgramVoice;
         voiceSettings = defaultConfig.voiceSettings;
         this.logger.warn(
           `Voice ID ${type} not found. Falling back to default.`,
@@ -249,27 +249,27 @@ export class TextToSpeechService {
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         this.logger.warn(
-          `ElevenLabs generation failed for story ${storyId}: ${msg}. Falling back to StyleTTS2.`,
+          `ElevenLabs generation failed for story ${storyId}: ${msg}. Falling back to Deepgram.`,
         );
       }
     }
 
-    // Priority 2: StyleTTS2
+    // Priority 2: Deepgram TTS
     try {
       this.logger.log(
-        `Attempting StyleTTS2 generation for story ${storyId} with voice ${styleTts2Voice ?? 'default'}`,
+        `Attempting Deepgram TTS generation for story ${storyId} with voice ${deepgramVoice ?? 'default'}`,
       );
 
-      const audioBuffer = await this.styleTts2Provider.generateAudio(
+      const audioBuffer = await this.deepgramProvider.generateAudio(
         cleanedText,
-        styleTts2Voice,
+        deepgramVoice,
       );
-      const stAudioUrl = await this.uploadService.uploadAudioBuffer(
+      const dgAudioUrl = await this.uploadService.uploadAudioBuffer(
         audioBuffer,
-        `story_${storyId}_styletts2_${Date.now()}.wav`,
+        `story_${storyId}_deepgram_${Date.now()}.mp3`,
       );
       try {
-        await this.cacheParagraphAudio(storyId, text, type, stAudioUrl);
+        await this.cacheParagraphAudio(storyId, text, type, dgAudioUrl);
       } catch (cacheErr) {
         const cacheMsg =
           cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
@@ -277,11 +277,11 @@ export class TextToSpeechService {
           `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
         );
       }
-      return stAudioUrl;
+      return dgAudioUrl;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        `StyleTTS2 failed for story ${storyId}: ${msg}. Falling back to Edge TTS.`,
+        `Deepgram TTS failed for story ${storyId}: ${msg}. Falling back to Edge TTS.`,
       );
     }
 
@@ -483,7 +483,7 @@ export class TextToSpeechService {
       );
 
       // Count how many reserved-budget paragraphs actually used ElevenLabs
-      // (URL filename encodes provider: _elevenlabs_, _styletts2_, _edgetts_)
+      // (URL filename encodes provider: _elevenlabs_, _deepgram_, _edgetts_)
       for (let j = 0; j < batch.length; j++) {
         const seqPos = i + j;
         const url = batchResults[j].audioUrl;

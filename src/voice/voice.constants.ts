@@ -52,7 +52,7 @@ export interface VoiceConfigEntry {
   id: VoiceType;
   name: string;
   edgeTtsVoice: string;
-  styleTts2Voice: string;
+  deepgramVoice: string;
   gender: string;
   elevenLabsId: string;
   previewUrl: string;
@@ -73,7 +73,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     id: VoiceType.CHARLIE,
     name: 'Milo',
     edgeTtsVoice: 'en-GB-RyanNeural',
-    styleTts2Voice: 'Richard_Male_EN_US',
+    deepgramVoice: 'aura-2-draco-en',
     gender: 'Male',
     elevenLabsId: 'NFG5qt843uXKj4pFvR7C',
     previewUrl: VOICE_PREVIEWS[VoiceType.CHARLIE],
@@ -90,7 +90,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     id: VoiceType.JESSICA,
     name: 'Bella',
     edgeTtsVoice: 'en-US-JennyMultilingualNeural',
-    styleTts2Voice: 'Sol_Female_EN_US',
+    deepgramVoice: 'aura-2-andromeda-en',
     gender: 'Female',
     elevenLabsId: 'wJqPPQ618aTW29mptyoc',
     previewUrl: VOICE_PREVIEWS[VoiceType.JESSICA],
@@ -107,7 +107,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     id: VoiceType.WILL,
     name: 'Cosmo',
     edgeTtsVoice: 'en-US-GuyNeural',
-    styleTts2Voice: 'Jack_Male_EN_US',
+    deepgramVoice: 'aura-2-zeus-en',
     gender: 'Male',
     elevenLabsId: 'EiNlNiXeDU1pqqOPrYMO',
     previewUrl: VOICE_PREVIEWS[VoiceType.WILL],
@@ -124,7 +124,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     id: VoiceType.LILY,
     name: 'Nimbus',
     edgeTtsVoice: 'en-US-AvaMultilingualNeural',
-    styleTts2Voice: 'Nelly_Female_EN_US',
+    deepgramVoice: 'aura-2-hera-en',
     gender: 'Female',
     elevenLabsId: 'XrExE9yKIg1WjnnlVkGX',
     previewUrl: VOICE_PREVIEWS[VoiceType.LILY],
@@ -141,7 +141,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     id: VoiceType.BILL,
     name: 'Fanice',
     edgeTtsVoice: 'en-US-SaraNeural',
-    styleTts2Voice: 'Lisa_Female_EN_US',
+    deepgramVoice: 'aura-2-harmonia-en',
     gender: 'Female',
     elevenLabsId: 'iCrDUkL56s3C8sCRl7wb',
     previewUrl: VOICE_PREVIEWS[VoiceType.BILL],
@@ -158,7 +158,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     id: VoiceType.LAURA,
     name: 'Chip',
     edgeTtsVoice: 'en-US-AndrewMultilingualNeural',
-    styleTts2Voice: 'Samuel_Male_EN_US',
+    deepgramVoice: 'aura-2-orion-en',
     gender: 'Male',
     elevenLabsId: 'N2lVS1w4EtoT3dr4eOWO',
     previewUrl: VOICE_PREVIEWS[VoiceType.LAURA],
@@ -175,7 +175,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     id: VoiceType.ROSIE,
     name: 'Rosie',
     edgeTtsVoice: 'en-US-AnaNeural',
-    styleTts2Voice: 'Georgia_Female_EN_US',
+    deepgramVoice: 'aura-2-iris-en',
     gender: 'Female',
     elevenLabsId: 'ThT5KcBeYPX3keUQqHPh',
     previewUrl: VOICE_PREVIEWS[VoiceType.ROSIE],
@@ -192,7 +192,7 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     id: VoiceType.PIXIE,
     name: 'Pixie',
     edgeTtsVoice: 'en-US-JennyNeural',
-    styleTts2Voice: 'Marry_Female_EN_US',
+    deepgramVoice: 'aura-2-aurora-en',
     gender: 'Female',
     elevenLabsId: 'jBpfuIE2acCO8z3wKNLl',
     previewUrl: VOICE_PREVIEWS[VoiceType.PIXIE],
