@@ -207,8 +207,11 @@ export class VoiceQuotaService {
     });
     const uniqueCachedIds = [...new Set(canonicalCachedIds)];
 
+    // Normalize the incoming voiceId the same way cached IDs are resolved
+    const canonicalVoiceId = await this.resolveCanonicalVoiceId(voiceId);
+
     // Already cached for this story — always allowed (zero cost)
-    if (uniqueCachedIds.includes(voiceId)) {
+    if (uniqueCachedIds.includes(canonicalVoiceId)) {
       return true;
     }
 
