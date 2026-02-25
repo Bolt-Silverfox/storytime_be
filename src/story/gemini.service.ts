@@ -352,7 +352,7 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
         {
           headers: {
             Authorization: `Bearer ${this.hfToken}`,
-            Accept: 'image/*',
+            Accept: 'image/png',
           },
           responseType: 'arraybuffer',
           timeout: 60000,

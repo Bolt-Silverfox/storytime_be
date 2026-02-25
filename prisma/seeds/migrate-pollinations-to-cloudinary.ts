@@ -54,7 +54,7 @@ async function generateAndUpload(
     headers: {
       Authorization: `Bearer ${process.env.HF_TOKEN}`,
       'Content-Type': 'application/json',
-      Accept: 'image/*',
+      Accept: 'image/png',
     },
     body: JSON.stringify({ inputs: imagePrompt }),
   });
