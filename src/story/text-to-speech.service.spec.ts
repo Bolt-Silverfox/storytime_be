@@ -726,6 +726,7 @@ describe('TextToSpeechService', () => {
     it('should return results sorted by index', async () => {
       mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
       mockIsPremiumUser.mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded.com/audio.wav');
 

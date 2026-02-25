@@ -757,7 +757,11 @@ export class StoryService {
     });
 
     const sessionTime = dto.sessionTime || 0;
-    const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
+    // If restoring a soft-deleted record, reset totalTimeSpent instead of
+    // accumulating stale time from before the removal.
+    const newTotalTime = existing?.isDeleted
+      ? sessionTime
+      : (existing?.totalTimeSpent || 0) + sessionTime;
 
     const result = await this.prisma.userStoryProgress.upsert({
       where: { userId_storyId: { userId, storyId: dto.storyId } },
