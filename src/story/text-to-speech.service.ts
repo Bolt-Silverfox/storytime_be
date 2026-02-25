@@ -282,7 +282,13 @@ export class TextToSpeechService {
 
     // When providerOverride is set, only try that provider and throw on failure
     // (no fallback chain). This is used by batch mode for voice consistency.
+    // Honour the quota decision: if ElevenLabs was denied, don't bypass via override.
     if (override) {
+      if (override === 'elevenlabs' && !useElevenLabs) {
+        throw new InternalServerErrorException(
+          'ElevenLabs quota exhausted for this request',
+        );
+      }
       return this.attemptSingleProvider(
         override,
         storyId,
@@ -638,7 +644,12 @@ export class TextToSpeechService {
     const generated: BatchResult[] = [];
     let reservedUsed = 0;
 
-    // Pick the single provider for this batch
+    // Pick the single provider for this batch.
+    // NOTE: Edge TTS is intentionally never used as a batch provider. If the
+    // chosen provider (ElevenLabs/Deepgram) is down, failed paragraphs return
+    // null and the client retries on the next request. This avoids mixing
+    // voices within a story. A circuit breaker will be added in a future
+    // version to detect provider outages early.
     const batchProvider: 'elevenlabs' | 'deepgram' | 'edgetts' =
       useElevenLabsBatch ? 'elevenlabs' : 'deepgram';
 

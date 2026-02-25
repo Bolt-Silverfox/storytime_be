@@ -42,7 +42,9 @@ export class StoryQuotaService {
       return { canAccess: true, reason: 'premium' };
     }
 
-    // 2. Check if story was already read (re-reading is always free)
+    // 2. Check if story was already read (re-reading is always free).
+    // Deliberately does NOT filter isDeleted — soft-deleted progress records
+    // still count as "already read" so users can re-read after library removal.
     const existingProgress = await this.prisma.userStoryProgress.findUnique({
       where: { userId_storyId: { userId, storyId } },
     });
