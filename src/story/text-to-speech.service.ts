@@ -616,12 +616,12 @@ export class TextToSpeechService {
       }
     }
 
-    // ── Tier-by-tier batch generation (all-or-nothing per provider) ──
-    // To guarantee voice consistency, we try ALL uncached paragraphs with one
-    // provider. If ANY paragraph fails, we discard the entire tier's results
-    // and retry ALL paragraphs with the next provider down. This ensures every
-    // paragraph in the story uses the exact same voice/provider.
-    type BatchEntry = { index: number; text: string; hash: string };
+    // ── Single-provider batch generation ──
+    // All uncached paragraphs are sent to ONE provider (no fallback chain).
+    // If some paragraphs fail, we keep the successes and return null for
+    // failures — the next batch request will cache-miss on those and retry
+    // with the same provider (which should be back up by then).
+    // This guarantees every generated paragraph uses the same voice.
     type BatchResult = {
       index: number;
       text: string;
@@ -630,103 +630,71 @@ export class TextToSpeechService {
       provider: string | null;
     };
 
-    let generated: BatchResult[] = [];
+    const generated: BatchResult[] = [];
     let reservedUsed = 0;
 
-    /** Process ALL paragraphs with a single provider. Returns results and whether any failed. */
-    const processTier = async (
-      entries: BatchEntry[],
-      providerOverride: 'elevenlabs' | 'deepgram' | 'edgetts',
-    ): Promise<{ results: BatchResult[]; allSucceeded: boolean }> => {
-      const results: BatchResult[] = [];
-      let allSucceeded = true;
+    // Pick the single provider for this batch
+    const batchProvider: 'elevenlabs' | 'deepgram' | 'edgetts' =
+      useElevenLabsBatch ? 'elevenlabs' : 'deepgram';
 
-      for (let i = 0; i < entries.length; i += MAX_CONCURRENT) {
-        const chunk = entries.slice(i, i + MAX_CONCURRENT);
-        const chunkResults = await Promise.all(
-          chunk.map(async ({ index, text, hash }) => {
-            try {
-              const result = await this.generateTTS(
-                storyId,
-                text,
-                voiceType,
-                userId,
-                {
-                  skipQuotaCheck: isPremium && reservedCredits > 0,
-                  isPremium,
-                  providerOverride,
-                },
-              );
-              return {
-                index,
-                text,
-                hash,
-                audioUrl: result.audioUrl,
-                provider: result.provider,
-                ok: true as const,
-              };
-            } catch {
-              return {
-                index,
-                text,
-                hash,
-                audioUrl: null,
-                provider: null,
-                ok: false as const,
-              };
-            }
-          }),
-        );
+    this.logger.log(
+      `Batch story ${storyId}: generating ${uncached.length} paragraphs with ${batchProvider}`,
+    );
 
-        for (const r of chunkResults) {
-          results.push({
-            index: r.index,
-            text: r.text,
-            hash: r.hash,
-            audioUrl: r.audioUrl,
-            provider: r.provider,
-          });
-          if (!r.ok) allSucceeded = false;
-        }
-      }
-
-      return { results, allSucceeded };
-    };
-
-    // Determine which provider tiers to try
-    const tiers: Array<'elevenlabs' | 'deepgram' | 'edgetts'> =
-      useElevenLabsBatch
-        ? ['elevenlabs', 'deepgram', 'edgetts']
-        : ['deepgram', 'edgetts'];
-
-    for (const tier of tiers) {
-      this.logger.log(
-        `Batch story ${storyId}: trying all ${uncached.length} paragraphs with ${tier}`,
+    for (let i = 0; i < uncached.length; i += MAX_CONCURRENT) {
+      const chunk = uncached.slice(i, i + MAX_CONCURRENT);
+      const chunkResults = await Promise.all(
+        chunk.map(async ({ index, text, hash }) => {
+          try {
+            const result = await this.generateTTS(
+              storyId,
+              text,
+              voiceType,
+              userId,
+              {
+                skipQuotaCheck: isPremium && reservedCredits > 0,
+                isPremium,
+                providerOverride: batchProvider,
+              },
+            );
+            return {
+              index,
+              text,
+              hash,
+              audioUrl: result.audioUrl,
+              provider: result.provider,
+              ok: true as const,
+            };
+          } catch {
+            return {
+              index,
+              text,
+              hash,
+              audioUrl: null,
+              provider: null,
+              ok: false as const,
+            };
+          }
+        }),
       );
-      const { results, allSucceeded } = await processTier(uncached, tier);
 
-      if (allSucceeded) {
-        generated = results;
-        reservedUsed = results.filter(
-          (r) => r.provider === 'elevenlabs',
-        ).length;
-        break;
+      for (const r of chunkResults) {
+        generated.push({
+          index: r.index,
+          text: r.text,
+          hash: r.hash,
+          audioUrl: r.audioUrl,
+          provider: r.provider,
+        });
+        if (r.ok && r.provider === 'elevenlabs') reservedUsed++;
       }
+    }
 
-      // Not all succeeded — discard this tier's results and try next
-      if (tier !== tiers[tiers.length - 1]) {
-        this.logger.warn(
-          `Batch story ${storyId}: some paragraphs failed with ${tier}, discarding results and falling back to next tier`,
-        );
-        continue;
-      }
-
-      // Last tier — use whatever we got (some may be null)
-      this.logger.error(
-        `Batch story ${storyId}: final tier ${tier} had failures, using partial results`,
+    const failedCount = generated.filter((r) => !r.audioUrl).length;
+    if (failedCount > 0) {
+      this.logger.warn(
+        `Batch story ${storyId}: ${failedCount}/${uncached.length} paragraphs failed with ${batchProvider}, will retry on next request`,
       );
-      generated = results;
-      reservedUsed = results.filter((r) => r.provider === 'elevenlabs').length;
     }
 
     // Replicate generated audioUrls to duplicate paragraphs (same hash, different indices)
