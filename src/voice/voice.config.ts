@@ -7,7 +7,9 @@ export const VOICE_CONFIG_SETTINGS = {
     TURBO: 'eleven_turbo_v2_5',
   },
   QUOTAS: {
-    FREE: 2,
+    /** Free users get 1 premium voice total (across all stories, cached forever) */
+    FREE_PREMIUM_VOICES_TOTAL: 1,
+    /** Premium users can use up to 3 distinct premium voices per story */
     MAX_PREMIUM_VOICES_PER_STORY: 3,
   },
   STYLE_TTS2: {

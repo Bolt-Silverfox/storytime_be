@@ -85,6 +85,7 @@ describe('TextToSpeechService', () => {
             checkAndReserveUsage: mockCheckAndReserveUsage,
             releaseReservedUsage: mockReleaseReservedUsage,
             canUseVoiceForStory: jest.fn().mockResolvedValue(true),
+            canFreeUserUseElevenLabs: jest.fn().mockResolvedValue(true),
           },
         },
         {
@@ -158,8 +159,15 @@ describe('TextToSpeechService', () => {
       expect(mockPrisma.paragraphAudioCache.upsert).toHaveBeenCalled();
     });
 
-    it('should skip ElevenLabs for free users and try StyleTTS2', async () => {
+    it('should skip ElevenLabs for free users who exhausted their premium voice', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
+      (
+        service as unknown as {
+          voiceQuota: { canFreeUserUseElevenLabs: jest.Mock };
+        }
+      ).voiceQuota.canFreeUserUseElevenLabs = jest
+        .fn()
+        .mockResolvedValue(false);
       mockStyleTts2Generate.mockResolvedValue(Buffer.from('styletts2-audio'));
       mockUploadAudio.mockResolvedValue(
         'https://uploaded-audio.com/styletts2.wav',
@@ -180,6 +188,13 @@ describe('TextToSpeechService', () => {
 
     it('should fallback to Edge TTS if StyleTTS2 fails', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
+      (
+        service as unknown as {
+          voiceQuota: { canFreeUserUseElevenLabs: jest.Mock };
+        }
+      ).voiceQuota.canFreeUserUseElevenLabs = jest
+        .fn()
+        .mockResolvedValue(false);
       mockStyleTts2Generate.mockRejectedValue(new Error('StyleTTS2 timeout'));
       mockEdgeTtsGenerate.mockResolvedValue(Buffer.from('edge-audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/edge.mp3');
@@ -340,6 +355,13 @@ describe('TextToSpeechService', () => {
       const unknownId = 'unknown-voice-id';
       mockPrisma.voice.findUnique.mockResolvedValue(null);
       mockIsPremiumUser.mockResolvedValue(false);
+      (
+        service as unknown as {
+          voiceQuota: { canFreeUserUseElevenLabs: jest.Mock };
+        }
+      ).voiceQuota.canFreeUserUseElevenLabs = jest
+        .fn()
+        .mockResolvedValue(false);
       mockStyleTts2Generate.mockResolvedValue(Buffer.from('default-audio'));
       mockUploadAudio.mockResolvedValue(
         'https://uploaded-audio.com/default.wav',
@@ -370,6 +392,13 @@ describe('TextToSpeechService', () => {
     it('should use default voice when voicetype is not provided', async () => {
       mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue(null);
       mockIsPremiumUser.mockResolvedValue(false);
+      (
+        service as unknown as {
+          voiceQuota: { canFreeUserUseElevenLabs: jest.Mock };
+        }
+      ).voiceQuota.canFreeUserUseElevenLabs = jest
+        .fn()
+        .mockResolvedValue(false);
       mockStyleTts2Generate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/audio.wav');
 
@@ -508,6 +537,13 @@ describe('TextToSpeechService', () => {
       );
 
       mockIsPremiumUser.mockResolvedValue(false);
+      (
+        service as unknown as {
+          voiceQuota: { canFreeUserUseElevenLabs: jest.Mock };
+        }
+      ).voiceQuota.canFreeUserUseElevenLabs = jest
+        .fn()
+        .mockResolvedValue(false);
       mockStyleTts2Generate.mockResolvedValue(Buffer.from('generated-audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded.com/new.wav');
 

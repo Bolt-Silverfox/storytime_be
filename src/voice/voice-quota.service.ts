@@ -1,15 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
-
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { VOICE_CONFIG } from './voice.constants';
-
-/** Max retries for Prisma serialization failures (P2034) */
-const MAX_SERIALIZATION_RETRIES = 3;
 
 @Injectable()
 export class VoiceQuotaService {
@@ -25,40 +20,14 @@ export class VoiceQuotaService {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }
 
+  /**
+   * Check if a user is allowed to use ElevenLabs (per-call check).
+   * Premium users always pass — their limits are per-story via canUseVoiceForStory().
+   * Free users are not checked here — they go through canFreeUserUseElevenLabs() instead.
+   */
   async checkUsage(userId: string): Promise<boolean> {
-    const currentMonth = this.getCurrentMonth();
-
     const isPremium = await this.subscriptionService.isPremiumUser(userId);
-
-    // Premium users have no monthly ElevenLabs quota — usage is controlled
-    // per-story via canUseVoiceForStory() instead
-    if (isPremium) return true;
-
-    const limit = VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
-
-    // Atomic month reset and upsert using transaction
-    const usage = await this.prisma.$transaction(async (tx) => {
-      // Reset count if month changed (atomic conditional update)
-      await tx.userUsage.updateMany({
-        where: { userId, currentMonth: { not: currentMonth } },
-        data: { currentMonth, elevenLabsCount: 0 },
-      });
-      // Upsert with non-empty update to ensure atomic behavior
-      return tx.userUsage.upsert({
-        where: { userId },
-        create: { userId, currentMonth, elevenLabsCount: 0 },
-        update: { currentMonth }, // Non-empty update for atomicity
-      });
-    });
-
-    if (usage.elevenLabsCount >= limit) {
-      this.logger.log(
-        `User ${userId} exceeded ElevenLabs quota (${usage.elevenLabsCount}/${limit}).`,
-      );
-      return false;
-    }
-
-    return true;
+    return isPremium;
   }
 
   async incrementUsage(userId: string): Promise<void> {
@@ -120,63 +89,29 @@ export class VoiceQuotaService {
       return credits;
     }
 
-    const limit = VOICE_CONFIG_SETTINGS.QUOTAS.FREE;
-
-    // Atomic reservation with Serializable isolation to prevent TOCTOU races
-    // where concurrent batch requests both read the same count and both reserve.
-    let reserved = 0;
-    for (let attempt = 1; attempt <= MAX_SERIALIZATION_RETRIES; attempt++) {
-      try {
-        reserved = await this.prisma.$transaction(
-          async (tx) => {
-            await tx.userUsage.updateMany({
-              where: { userId, currentMonth: { not: currentMonth } },
-              data: { currentMonth, elevenLabsCount: 0 },
-            });
-            const usage = await tx.userUsage.upsert({
-              where: { userId },
-              create: { userId, currentMonth, elevenLabsCount: 0 },
-              update: { currentMonth },
-            });
-
-            const remaining = Math.max(0, limit - usage.elevenLabsCount);
-            const toReserve = Math.min(credits, remaining);
-            if (toReserve > 0) {
-              await tx.userUsage.update({
-                where: { userId },
-                data: { elevenLabsCount: { increment: toReserve } },
-              });
-            }
-            return toReserve;
-          },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-        );
-        break; // success — exit retry loop
-      } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2034' &&
-          attempt < MAX_SERIALIZATION_RETRIES
-        ) {
-          this.logger.warn(
-            `Serialization conflict reserving quota for user ${userId} (attempt ${attempt}/${MAX_SERIALIZATION_RETRIES}), retrying…`,
-          );
-          continue;
-        }
-        throw error;
-      }
-    }
-
-    if (reserved > 0) {
-      await this.logAiActivity(
-        userId,
-        AiProviders.ElevenLabs,
-        'tts_batch_reservation',
-        reserved,
-      );
-    }
-
-    return reserved;
+    // Free users who pass the voice check get all credits (no monthly cap).
+    // Their access is gated by canFreeUserUseElevenLabs() instead.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userUsage.updateMany({
+        where: { userId, currentMonth: { not: currentMonth } },
+        data: { currentMonth, elevenLabsCount: 0 },
+      });
+      await tx.userUsage.upsert({
+        where: { userId },
+        create: { userId, currentMonth, elevenLabsCount: credits },
+        update: {
+          currentMonth,
+          elevenLabsCount: { increment: credits },
+        },
+      });
+    });
+    await this.logAiActivity(
+      userId,
+      AiProviders.ElevenLabs,
+      'tts_batch_reservation',
+      credits,
+    );
+    return credits;
   }
 
   /**
@@ -291,12 +226,51 @@ export class VoiceQuotaService {
     return true;
   }
 
+  /**
+   * Check if a free user can use ElevenLabs for a given voice.
+   * Free users get 1 premium voice total (across all stories).
+   * Once they use a premium voice, it's locked in via selectedSecondVoiceId.
+   * If they haven't used one yet, allow and lock it in.
+   */
+  async canFreeUserUseElevenLabs(
+    userId: string,
+    voiceId: string,
+  ): Promise<boolean> {
+    const currentMonth = this.getCurrentMonth();
+    const usage = await this.prisma.userUsage.upsert({
+      where: { userId },
+      create: { userId, currentMonth },
+      update: {},
+    });
+
+    // Never used a premium voice — allow and lock this one in
+    if (!usage.selectedSecondVoiceId) {
+      await this.prisma.userUsage.update({
+        where: { userId },
+        data: { selectedSecondVoiceId: voiceId },
+      });
+      this.logger.log(`Free user ${userId} locked in premium voice ${voiceId}`);
+      return true;
+    }
+
+    // Same voice they already picked — allow
+    if (usage.selectedSecondVoiceId === voiceId) {
+      return true;
+    }
+
+    // Different voice — deny
+    this.logger.log(
+      `Free user ${userId} already used premium voice ${usage.selectedSecondVoiceId}. Denying ${voiceId}.`,
+    );
+    return false;
+  }
+
   // ========== FREE TIER VOICE LIMITS ==========
 
   /**
    * Check if a user can use a specific voice
    * Premium users can use any voice
-   * Free users can only use the default voice (LILY)
+   * Free users can use the default voice (LILY) + their one locked-in premium voice
    */
   async canUseVoice(userId: string, voiceId: string): Promise<boolean> {
     const isPremium = await this.subscriptionService.isPremiumUser(userId);
@@ -318,6 +292,14 @@ export class VoiceQuotaService {
       if (voiceRecord?.elevenLabsVoiceId === defaultVoiceConfig.elevenLabsId) {
         return true;
       }
+    }
+
+    // Check if this is the free user's locked-in premium voice
+    const usage = await this.prisma.userUsage.findUnique({
+      where: { userId },
+    });
+    if (usage?.selectedSecondVoiceId === voiceId) {
+      return true;
     }
 
     return false;

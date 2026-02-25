@@ -7,25 +7,35 @@ export async function seedVoices(ctx: SeedContext): Promise<SeedResult> {
   try {
     logger.log('Seeding voices...');
 
-    let count = 0;
-    for (const [key, config] of Object.entries(VOICE_CONFIG)) {
-      const existingVoice = await prisma.voice.findFirst({
-        where: { name: key },
-      });
+    let created = 0;
+    let updated = 0;
 
+    for (const [key, config] of Object.entries(VOICE_CONFIG)) {
       const voiceData = {
         elevenLabsVoiceId: config.elevenLabsId,
         name: key,
         type: 'elevenlabs',
         voiceAvatar: config.voiceAvatar,
         url: config.previewUrl,
+        isDeleted: false,
       };
 
-      if (existingVoice) {
+      // Find by name OR elevenLabsVoiceId to catch all duplicates
+      const existing = await prisma.voice.findFirst({
+        where: {
+          OR: [
+            { name: key, userId: null },
+            { elevenLabsVoiceId: config.elevenLabsId, userId: null },
+          ],
+        },
+      });
+
+      if (existing) {
         await prisma.voice.update({
-          where: { id: existingVoice.id },
+          where: { id: existing.id },
           data: voiceData,
         });
+        updated++;
       } else {
         await prisma.voice.create({
           data: {
@@ -33,16 +43,18 @@ export async function seedVoices(ctx: SeedContext): Promise<SeedResult> {
             userId: null,
           },
         });
+        created++;
       }
-      count++;
     }
 
-    logger.success(`Seeded ${count} voices`);
+    logger.success(
+      `Seeded voices: ${created} created, ${updated} updated (${created + updated} total)`,
+    );
 
     return {
       name: 'voices',
       success: true,
-      count,
+      count: created + updated,
     };
   } catch (error) {
     logger.error('Failed to seed voices', error);

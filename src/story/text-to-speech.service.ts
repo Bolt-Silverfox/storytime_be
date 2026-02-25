@@ -166,16 +166,11 @@ export class TextToSpeechService {
     let useElevenLabs = !!elevenLabsId;
 
     if (useElevenLabs && userId) {
-      // Premium gate: free users skip ElevenLabs entirely
       const isPremium =
         options?.isPremium ??
         (await this.subscriptionService.isPremiumUser(userId));
-      if (!isPremium) {
-        this.logger.log(`Free user ${userId}. Skipping ElevenLabs.`);
-        useElevenLabs = false;
-      } else if (!options?.skipQuotaCheck) {
-        // Per-story voice limit: premium users can use up to N distinct
-        // premium voices per story (cached voices don't count against limit)
+      if (isPremium && !options?.skipQuotaCheck) {
+        // Premium: per-story voice limit (cached voices don't count)
         const voiceAllowed = await this.voiceQuota.canUseVoiceForStory(
           storyId,
           type,
@@ -183,6 +178,18 @@ export class TextToSpeechService {
         if (!voiceAllowed) {
           this.logger.log(
             `Story ${storyId} has reached the premium voice limit. Skipping ElevenLabs for voice ${type}.`,
+          );
+          useElevenLabs = false;
+        }
+      } else if (!isPremium) {
+        // Free: 1 premium voice total across all stories
+        const freeAllowed = await this.voiceQuota.canFreeUserUseElevenLabs(
+          userId,
+          type,
+        );
+        if (!freeAllowed) {
+          this.logger.log(
+            `Free user ${userId} already used their premium voice. Skipping ElevenLabs for voice ${type}.`,
           );
           useElevenLabs = false;
         }
@@ -398,30 +405,44 @@ export class TextToSpeechService {
       };
     }
 
-    // Resolve premium status once for the entire batch
+    // Resolve premium status and voice eligibility once for the entire batch
     let reservedCredits = 0;
     let isPremium = false;
+    let useElevenLabsBatch = false;
     if (userId) {
       isPremium = await this.subscriptionService.isPremiumUser(userId);
       if (isPremium) {
-        // Check per-story voice limit before reserving quota
-        const voiceAllowed = await this.voiceQuota.canUseVoiceForStory(
+        // Premium: check per-story voice limit
+        useElevenLabsBatch = await this.voiceQuota.canUseVoiceForStory(
           storyId,
           type,
         );
-        if (voiceAllowed) {
-          reservedCredits = await this.voiceQuota.checkAndReserveUsage(
-            userId,
-            uncached.length,
-          );
-          this.logger.log(
-            `Reserved ${reservedCredits}/${uncached.length} ElevenLabs credits for batch story ${storyId}`,
-          );
-        } else {
+        if (!useElevenLabsBatch) {
           this.logger.log(
             `Story ${storyId} has reached the premium voice limit. Skipping ElevenLabs for voice ${type}.`,
           );
         }
+      } else {
+        // Free: check if this is their one allowed premium voice
+        useElevenLabsBatch = await this.voiceQuota.canFreeUserUseElevenLabs(
+          userId,
+          type,
+        );
+        if (!useElevenLabsBatch) {
+          this.logger.log(
+            `Free user ${userId} already used their premium voice. Skipping ElevenLabs for voice ${type}.`,
+          );
+        }
+      }
+
+      if (useElevenLabsBatch) {
+        reservedCredits = await this.voiceQuota.checkAndReserveUsage(
+          userId,
+          uncached.length,
+        );
+        this.logger.log(
+          `Reserved ${reservedCredits}/${uncached.length} ElevenLabs credits for batch story ${storyId}`,
+        );
       }
     }
 

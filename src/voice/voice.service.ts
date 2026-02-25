@@ -276,6 +276,8 @@ export class VoiceService {
     const dbVoices = await this.prisma.voice.findMany({
       where: {
         elevenLabsVoiceId: { in: systemIds },
+        userId: null,
+        isDeleted: false,
       },
     });
 
