@@ -345,7 +345,7 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     this.logger.log(`Generating cover image for "${title}" via Imagen`);
 
     const response = await this.genAI.models.generateImages({
-      model: 'imagen-3.0-generate-002',
+      model: 'imagen-4.0-fast-generate-001',
       prompt: imagePrompt,
       config: { numberOfImages: 1 },
     });

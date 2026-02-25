@@ -49,7 +49,7 @@ async function generateAndUpload(
   const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
 
   const response = await ai.models.generateImages({
-    model: 'imagen-3.0-generate-002',
+    model: 'imagen-4.0-fast-generate-001',
     prompt: imagePrompt,
     config: { numberOfImages: 1 },
   });
