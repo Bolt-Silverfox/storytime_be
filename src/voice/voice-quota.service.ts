@@ -231,11 +231,21 @@ export class VoiceQuotaService {
    * Free users get 1 premium voice total (across all stories).
    * Once they use a premium voice, it's locked in via selectedSecondVoiceId.
    * If they haven't used one yet, allow and lock it in.
+   *
+   * The default voice (LILY) is always allowed and never consumes the slot.
+   * Locking uses an atomic compare-and-set (updateMany with
+   * selectedSecondVoiceId: null) to prevent races.
    */
   async canFreeUserUseElevenLabs(
     userId: string,
     voiceId: string,
   ): Promise<boolean> {
+    // Default voice is always allowed — don't consume the premium slot
+    const defaultVoiceType = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE;
+    if (voiceId === (defaultVoiceType as string)) return true;
+    const defaultConfig = VOICE_CONFIG[defaultVoiceType];
+    if (defaultConfig && voiceId === defaultConfig.elevenLabsId) return true;
+
     const currentMonth = this.getCurrentMonth();
     const usage = await this.prisma.userUsage.upsert({
       where: { userId },
@@ -243,24 +253,41 @@ export class VoiceQuotaService {
       update: {},
     });
 
-    // Never used a premium voice — allow and lock this one in
-    if (!usage.selectedSecondVoiceId) {
-      await this.prisma.userUsage.update({
-        where: { userId },
-        data: { selectedSecondVoiceId: voiceId },
-      });
-      this.logger.log(`Free user ${userId} locked in premium voice ${voiceId}`);
-      return true;
-    }
-
     // Same voice they already picked — allow
     if (usage.selectedSecondVoiceId === voiceId) {
       return true;
     }
 
-    // Different voice — deny
+    // Already locked a different voice — deny
+    if (usage.selectedSecondVoiceId) {
+      this.logger.log(
+        `Free user ${userId} already used premium voice ${usage.selectedSecondVoiceId}. Denying ${voiceId}.`,
+      );
+      return false;
+    }
+
+    // Never used a premium voice — atomic compare-and-set to lock this one in.
+    // Only updates if selectedSecondVoiceId is still null, preventing races.
+    const { count } = await this.prisma.userUsage.updateMany({
+      where: { userId, selectedSecondVoiceId: null },
+      data: { selectedSecondVoiceId: voiceId },
+    });
+
+    if (count > 0) {
+      this.logger.log(`Free user ${userId} locked in premium voice ${voiceId}`);
+      return true;
+    }
+
+    // Another request raced and locked a different voice — re-check
+    const updated = await this.prisma.userUsage.findUnique({
+      where: { userId },
+    });
+    if (updated?.selectedSecondVoiceId === voiceId) {
+      return true;
+    }
+
     this.logger.log(
-      `Free user ${userId} already used premium voice ${usage.selectedSecondVoiceId}. Denying ${voiceId}.`,
+      `Free user ${userId} lost race — premium voice ${updated?.selectedSecondVoiceId} was locked by concurrent request. Denying ${voiceId}.`,
     );
     return false;
   }
