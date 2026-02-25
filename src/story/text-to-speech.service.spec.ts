@@ -621,9 +621,6 @@ describe('TextToSpeechService', () => {
       mockCanFreeUserUseElevenLabs.mockResolvedValueOnce(true);
       // Per-paragraph check denies (quota exhausted after batch decision)
       mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
-      mockElevenLabsGenerate.mockRejectedValue(
-        new Error('ElevenLabs quota exhausted for this request'),
-      );
 
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
@@ -632,9 +629,10 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      // All paragraphs should have null audioUrl since ElevenLabs fails
-      // and batch mode doesn't fall back to a different provider
+      // All paragraphs should have null audioUrl since quota guard blocks dispatch
       expect(result.results.every((r) => r.audioUrl === null)).toBe(true);
+      // ElevenLabs should never be invoked — quota guard prevents dispatch
+      expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
     });
 
     it('should cap paragraphs at MAX_BATCH_PARAGRAPHS (50)', async () => {
