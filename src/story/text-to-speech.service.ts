@@ -616,10 +616,11 @@ export class TextToSpeechService {
       }
     }
 
-    // ── Tier-by-tier batch generation ──
-    // Instead of per-paragraph fallback (which produces mixed voices), we try
-    // ALL uncached paragraphs with the best available provider first, then
-    // fall back failed ones to the next tier — ensuring voice consistency.
+    // ── Tier-by-tier batch generation (all-or-nothing per provider) ──
+    // To guarantee voice consistency, we try ALL uncached paragraphs with one
+    // provider. If ANY paragraph fails, we discard the entire tier's results
+    // and retry ALL paragraphs with the next provider down. This ensures every
+    // paragraph in the story uses the exact same voice/provider.
     type BatchEntry = { index: number; text: string; hash: string };
     type BatchResult = {
       index: number;
@@ -629,20 +630,20 @@ export class TextToSpeechService {
       provider: string | null;
     };
 
-    const generated: BatchResult[] = [];
+    let generated: BatchResult[] = [];
     let reservedUsed = 0;
 
-    /** Process a list of paragraphs with a specific provider override, in MAX_CONCURRENT chunks. */
+    /** Process ALL paragraphs with a single provider. Returns results and whether any failed. */
     const processTier = async (
       entries: BatchEntry[],
       providerOverride: 'elevenlabs' | 'deepgram' | 'edgetts',
-    ): Promise<{ succeeded: BatchResult[]; failed: BatchEntry[] }> => {
-      const succeeded: BatchResult[] = [];
-      const failed: BatchEntry[] = [];
+    ): Promise<{ results: BatchResult[]; allSucceeded: boolean }> => {
+      const results: BatchResult[] = [];
+      let allSucceeded = true;
 
       for (let i = 0; i < entries.length; i += MAX_CONCURRENT) {
         const chunk = entries.slice(i, i + MAX_CONCURRENT);
-        const results = await Promise.all(
+        const chunkResults = await Promise.all(
           chunk.map(async ({ index, text, hash }) => {
             try {
               const result = await this.generateTTS(
@@ -677,23 +678,19 @@ export class TextToSpeechService {
           }),
         );
 
-        for (const r of results) {
-          if (r.ok) {
-            succeeded.push({
-              index: r.index,
-              text: r.text,
-              hash: r.hash,
-              audioUrl: r.audioUrl,
-              provider: r.provider,
-            });
-            if (r.provider === 'elevenlabs') reservedUsed++;
-          } else {
-            failed.push({ index: r.index, text: r.text, hash: r.hash });
-          }
+        for (const r of chunkResults) {
+          results.push({
+            index: r.index,
+            text: r.text,
+            hash: r.hash,
+            audioUrl: r.audioUrl,
+            provider: r.provider,
+          });
+          if (!r.ok) allSucceeded = false;
         }
       }
 
-      return { succeeded, failed };
+      return { results, allSucceeded };
     };
 
     // Determine which provider tiers to try
@@ -702,34 +699,34 @@ export class TextToSpeechService {
         ? ['elevenlabs', 'deepgram', 'edgetts']
         : ['deepgram', 'edgetts'];
 
-    let remaining = uncached;
-
     for (const tier of tiers) {
-      if (remaining.length === 0) break;
-
       this.logger.log(
-        `Batch story ${storyId}: trying ${remaining.length} paragraphs with ${tier}`,
+        `Batch story ${storyId}: trying all ${uncached.length} paragraphs with ${tier}`,
       );
-      const { succeeded, failed } = await processTier(remaining, tier);
-      generated.push(...succeeded);
+      const { results, allSucceeded } = await processTier(uncached, tier);
 
-      if (failed.length > 0 && tier !== tiers[tiers.length - 1]) {
+      if (allSucceeded) {
+        generated = results;
+        reservedUsed = results.filter(
+          (r) => r.provider === 'elevenlabs',
+        ).length;
+        break;
+      }
+
+      // Not all succeeded — discard this tier's results and try next
+      if (tier !== tiers[tiers.length - 1]) {
         this.logger.warn(
-          `Batch story ${storyId}: ${failed.length} paragraphs failed with ${tier}, falling back to next tier`,
+          `Batch story ${storyId}: some paragraphs failed with ${tier}, discarding results and falling back to next tier`,
         );
+        continue;
       }
 
-      remaining = failed;
-    }
-
-    // Any still-remaining paragraphs after all tiers are exhausted
-    if (remaining.length > 0) {
+      // Last tier — use whatever we got (some may be null)
       this.logger.error(
-        `Batch story ${storyId}: ${remaining.length} paragraphs failed on all providers`,
+        `Batch story ${storyId}: final tier ${tier} had failures, using partial results`,
       );
-      for (const { index, text, hash } of remaining) {
-        generated.push({ index, text, hash, audioUrl: null, provider: null });
-      }
+      generated = results;
+      reservedUsed = results.filter((r) => r.provider === 'elevenlabs').length;
     }
 
     // Replicate generated audioUrls to duplicate paragraphs (same hash, different indices)
