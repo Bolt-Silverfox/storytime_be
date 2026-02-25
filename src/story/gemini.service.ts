@@ -5,7 +5,9 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { HttpService } from '@nestjs/axios';
 import { GoogleGenAI } from '@google/genai';
+import { firstValueFrom } from 'rxjs';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { UploadService } from '../upload/upload.service';
@@ -62,6 +64,7 @@ export interface GeneratedStory {
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
   private genAI: GoogleGenAI;
+  private readonly hfToken: string;
 
   // Circuit breaker state
   private circuitState: CircuitState = CircuitState.CLOSED;
@@ -71,6 +74,7 @@ export class GeminiService {
 
   constructor(
     private configService: ConfigService,
+    private readonly httpService: HttpService,
     private readonly voiceQuotaService: VoiceQuotaService,
     private readonly uploadService: UploadService,
   ) {
@@ -82,6 +86,7 @@ export class GeminiService {
       return;
     }
     this.genAI = new GoogleGenAI({ apiKey });
+    this.hfToken = this.configService.get<string>('HF_TOKEN') ?? '';
   }
 
   /**
@@ -334,34 +339,34 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     description: string,
     userId?: string,
   ): Promise<string> {
-    if (!this.genAI) {
-      throw new InternalServerErrorException(
-        'Gemini API is not configured. Cannot generate cover images.',
-      );
-    }
+    const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
 
-    const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere. Generate only the image, no text response.`;
-
-    this.logger.log(`Generating cover image for "${title}" via Gemini`);
-
-    const response = await this.genAI.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: imagePrompt,
-      config: {
-        responseModalities: ['IMAGE'],
-      },
-    });
-
-    const imagePart = response.candidates?.[0]?.content?.parts?.find(
-      (part) => part.inlineData,
+    this.logger.log(
+      `Generating cover image for "${title}" via Hugging Face FLUX`,
     );
-    if (!imagePart?.inlineData?.data) {
+
+    const response = await firstValueFrom(
+      this.httpService.post(
+        'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell',
+        { inputs: imagePrompt },
+        {
+          headers: {
+            Authorization: `Bearer ${this.hfToken}`,
+            Accept: 'image/*',
+          },
+          responseType: 'arraybuffer',
+          timeout: 60000,
+        },
+      ),
+    );
+
+    const buffer = Buffer.from(response.data as ArrayBuffer);
+    if (buffer.length === 0) {
       throw new InternalServerErrorException(
-        'Gemini returned no image data for cover image generation',
+        'Hugging Face returned no image data for cover image generation',
       );
     }
 
-    const buffer = Buffer.from(imagePart.inlineData.data, 'base64');
     const result = await this.uploadService.uploadImageFromBuffer(
       buffer,
       'covers',
@@ -373,7 +378,7 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
         .trackGeminiImage(userId)
         .catch((err) =>
           this.logger.error(
-            `Failed to track Gemini image usage for user ${userId}:`,
+            `Failed to track image usage for user ${userId}:`,
             err,
           ),
         );
