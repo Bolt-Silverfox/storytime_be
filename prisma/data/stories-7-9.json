@@ -13,10 +13,51 @@
       "Betrayal & Redemption",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Barnaby the rabbit find tangled in the willow branches?",
+        "options": [
+          "A forgotten beehive",
+          "A strange, round, impossibly blue thing",
+          "A lost button",
+          "A giant acorn"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Barnaby end up flying?",
+        "options": [
+          "He built a flying machine.",
+          "A strong gust of wind swept him up while he held the balloon string.",
+          "A Blue Jay carried him.",
+          "He jumped off the Great Oak."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Who offered Barnaby advice on how to steer the balloon?",
+        "options": [
+          "A family of squirrels",
+          "His mother, the rabbit",
+          "A wise old badger",
+          "A Blue Jay"
+        ],
+        "correctOption": 3
+      },
+      {
+        "question": "What did Barnaby realize at the end of his adventure?",
+        "options": [
+          "He was much faster on the ground.",
+          "He should never touch strange things again.",
+          "The world was much bigger than his clover patch.",
+          "He preferred staying in his burrow."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FFAAA5",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -35,10 +76,51 @@
       "Kindness & Sharing",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What problem did Luna the songbird face one Tuesday morning?",
+        "options": [
+          "She couldn't fly anymore.",
+          "She had lost her beautiful singing voice.",
+          "Her wings were broken.",
+          "She forgot all her songs."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "According to Dr. Owl, why was Luna's voice hiding?",
+        "options": [
+          "She had a sore throat.",
+          "She wasn't practicing enough.",
+          "She was worried about something.",
+          "She had too many songs to choose from."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What big event was Luna most worried about?",
+        "options": [
+          "A flying competition.",
+          "The Spring Concert opening solo.",
+          "Dr. Owl's annual check-up.",
+          "A hide-and-seek game with her brother."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What important lesson did Luna learn about singing from her mother?",
+        "options": [
+          "It's only good if it's perfect.",
+          "It's best to sing alone.",
+          "It's about sharing something real.",
+          "It's important to sing the loudest."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#1ABC9C",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -57,10 +139,51 @@
       "Good vs. Evil",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Pepper the rabbit known for in Clover Meadow?",
+        "options": [
+          "Being the best at finding things.",
+          "Having the fastest speed.",
+          "Always being kind to others.",
+          "His quiet and humble nature."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What happened to Dash during his race with Pepper?",
+        "options": [
+          "He won the race easily.",
+          "He got distracted by a berry patch.",
+          "He fell into a ditch and got stuck.",
+          "He gave up and went home."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Pepper do when he saw Dash in trouble?",
+        "options": [
+          "He kept racing to win.",
+          "He called for other animals to help.",
+          "He jumped into the ditch to help Dash.",
+          "He laughed at Dash for being clumsy."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "At the end of the story, what did Pepper admit he needed help with?",
+        "options": [
+          "Being faster than everyone.",
+          "Finding new racing paths.",
+          "Being a better winner.",
+          "Learning new tricks."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#96CEB4",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -79,10 +202,51 @@
       "Courage / Bravery",
       "Nature & Wildlife"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Shelly the turtle dream of doing every morning?",
+        "options": [
+          "Swimming deeper in the pond.",
+          "Sleeping on a soft log.",
+          "Flying like the birds.",
+          "Exploring the forest."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Which of these was NOT one of Shelly's attempts to fly on her own?",
+        "options": [
+          "Tying big leaves to her shell.",
+          "Using a lily pad as a parachute.",
+          "Asking a hawk to carry her.",
+          "Building a catapult from sticks."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Shelly finally experience what flying felt like?",
+        "options": [
+          "She rode on a strong wind current.",
+          "She held a stick in her mouth and was carried by geese.",
+          "She flapped her arms really fast.",
+          "She built a hot air balloon out of dandelion fluff."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Shelly realize about her own home after experiencing flight?",
+        "options": [
+          "The pond was too small and boring.",
+          "She preferred to stay on land.",
+          "Her underwater world was unique and beautiful.",
+          "She wished she could still fly all the time."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#2C73D2",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -101,10 +265,51 @@
       "Change & Transformation",
       "Kindness & Sharing"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Patches the small dog most afraid of?",
+        "options": [
+          "Other farm animals.",
+          "The farmer's tractor.",
+          "Being left alone.",
+          "Thunderstorms and shadows."
+        ],
+        "correctOption": 3
+      },
+      {
+        "question": "What crucial task did Patches have to do during the approaching storm?",
+        "options": [
+          "Help the farmer close the barn doors.",
+          "Find his favorite toy before it rained.",
+          "Warn the chickens in the far field to come inside.",
+          "Hide himself in the safest spot."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "According to Bessie the cow, what does being brave mean?",
+        "options": [
+          "Not being scared at all.",
+          "Running away from danger quickly.",
+          "Doing the right thing even when you are scared.",
+          "Only helping friends, not strangers."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "After the storm, how did Patches help the small chicks?",
+        "options": [
+          "He played a game with them to distract them.",
+          "He told them brave stories of his adventure.",
+          "He sat with them to keep them calm despite his own fear.",
+          "He taught them how to hide from thunder."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#3498DB",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -123,10 +328,51 @@
       "Good vs. Evil",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What made Benny different from his mother and sister?",
+        "options": [
+          "He preferred to eat berries in winter.",
+          "He couldn't sleep through the winter (hibernate).",
+          "He was much larger than them.",
+          "He enjoyed playing in the snow."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was one of the first beautiful things Benny noticed in the winter forest?",
+        "options": [
+          "The colorful birds flying.",
+          "New flowers blooming.",
+          "Moonlight reflecting on snow and frost patterns.",
+          "The warmth of the sun on the trees."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Who was the first animal Benny rescued from the snow?",
+        "options": [
+          "A trapped fox.",
+          "A lost bird.",
+          "A buried mouse.",
+          "A hungry rabbit."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Benny eventually realize about being different from everyone else?",
+        "options": [
+          "It meant he was lonely and sad.",
+          "It was a problem he needed to fix.",
+          "It meant he could help others in unique ways.",
+          "It made him wish for spring to come faster."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#F57C00",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -145,10 +391,51 @@
       "Good vs. Evil",
       "Nature & Wildlife"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Nimbus the cloud feeling after a week of hard work?",
+        "options": [
+          "Very energetic and strong.",
+          "Bored and restless.",
+          "Completely exhausted and low on energy.",
+          "Excited for more rain."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Where did Nimbus decide to settle down for a rest?",
+        "options": [
+          "In the middle of the valley.",
+          "On a tall mountain peak.",
+          "Over the ocean.",
+          "Next to the sun."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What wise advice did the mountain give to Nimbus?",
+        "options": [
+          "To work harder and faster.",
+          "To give up and stop raining.",
+          "That rest is how strong things in nature restore themselves.",
+          "To travel to another valley for work."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Nimbus learn about rest after his experience?",
+        "options": [
+          "Rest means you are giving up.",
+          "Rest makes you weaker.",
+          "Rest is about getting ready to do your job better.",
+          "Rest is only for sleeping at night."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FF8C94",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -167,10 +454,51 @@
       "Friendship & Belonging",
       "Good vs. Evil"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What do all the stars do every night just before they begin twinkling?",
+        "options": [
+          "They race each other across the sky.",
+          "They gather close for a story.",
+          "They sing a lullaby for Earth.",
+          "They practice shining brighter."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the \"First Dream\" that Stella told the stars about?",
+        "options": [
+          "The first dream of a child.",
+          "The dream of the Universe for everything that could exist.",
+          "The dream of the moon wanting to be a star.",
+          "The dream of comets on long journeys."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "According to Stella, what special quality does the \"dream\" have?",
+        "options": [
+          "It can only be dreamed by stars.",
+          "It grows bigger every time something falls asleep and dreams.",
+          "It only happens once a year.",
+          "It tells the future."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Stella explain was the important purpose of sleep?",
+        "options": [
+          "To keep the world dark and quiet.",
+          "To allow minds to sort through the day and get ready for tomorrow.",
+          "To let the stars shine brighter.",
+          "To make everyone tired for the next day."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#DCEDC1",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -189,10 +517,51 @@
       "Good vs. Evil",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Ember the dragon cub always insisting every night?",
+        "options": [
+          "That she was hungry for a big snack.",
+          "That she wanted to hear a long story.",
+          "That she was not tired at all.",
+          "That she needed more water."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What happened to the very first dragon in the story who never slept?",
+        "options": [
+          "She became the strongest and fastest dragon.",
+          "Her fire grew weaker, her flying became wobbly, and she forgot things.",
+          "She discovered many new treasures.",
+          "She learned all the stars' names."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "According to Mother Dragon, why is sleep important for a dragon's brain?",
+        "options": [
+          "It helps them breathe more fire.",
+          "It makes them fly faster.",
+          "It sorts through memories and prepares for new learning.",
+          "It makes them bigger and stronger."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What wonderful things did the first dragon experience after finally sleeping for three days?",
+        "options": [
+          "She found a new cave to live in.",
+          "Her fire was bright, flying smooth, and she had amazing dreams.",
+          "She stopped being friends with other dragons.",
+          "She learned how to sing beautiful songs."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#9B59B6",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -211,10 +580,51 @@
       "Dreams & Imagination",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "Why was Luna, the seven-year-old girl, having trouble sleeping?",
+        "options": [
+          "She was too excited to sleep.",
+          "She had bad dreams about being lost or alone.",
+          "She didn't like her bed.",
+          "The stars were too bright outside."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did the Whispering Willow Tree tell Luna about nighttime fear?",
+        "options": [
+          "Nighttime is actually the most dangerous time.",
+          "Fear feels large because everything else is quiet, but nighttime is safe.",
+          "She should never be afraid of anything.",
+          "Fear is always a warning of real danger."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What advice did the willow tree give Luna for when a bad dream woke her?",
+        "options": [
+          "To immediately get out of bed and play.",
+          "To try to go back into the dream and change it.",
+          "To remind herself where she is and think of something she loves.",
+          "To scream loudly until someone came."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What special item did the willow tree give Luna to put under her pillow?",
+        "options": [
+          "A smooth river stone.",
+          "A small silver-green leaf.",
+          "A piece of its bark.",
+          "A soft piece of moss."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#008E9B",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -233,10 +643,51 @@
       "Fantasy",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "Why was Oliver struggling to fall asleep?",
+        "options": [
+          "He was afraid of the dark.",
+          "He had too many thoughts racing in his mind.",
+          "His room was too bright.",
+          "He was playing a game."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the first method Luna taught Oliver to help him calm his mind?",
+        "options": [
+          "Counting stars.",
+          "Singing a lullaby.",
+          "Deep breathing exercises.",
+          "Drinking warm milk."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Luna tell Oliver the stars sometimes do?",
+        "options": [
+          "Sing along with her.",
+          "Gossip endlessly.",
+          "Race across the sky.",
+          "Hide behind clouds."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Luna ask Oliver to imagine he was floating on?",
+        "options": [
+          "A boat on a river.",
+          "A soft, comfortable cloud.",
+          "A giant lily pad.",
+          "A magic carpet."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FFEEAD",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -255,10 +706,51 @@
       "Greed vs. Generosity",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "Why did Lumi the star feel she was 'too small to matter'?",
+        "options": [
+          "She was the youngest star in the sky.",
+          "Her light was only a gentle glow compared to brighter stars.",
+          "She couldn't move as fast as other stars.",
+          "No one ever looked up at her."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What advice did the Moon give Lumi?",
+        "options": [
+          "To try harder to shine brighter.",
+          "To find a different place in the sky.",
+          "To shine where she was needed most.",
+          "To stop worrying about other stars."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Lumi help the boy walking on the path?",
+        "options": [
+          "She guided him with a bright flash.",
+          "She showed him a shortcut through the woods.",
+          "She let her gentle glow fall on the path so he could see.",
+          "She sang a song to cheer him up."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Lumi realize was more important than being the brightest?",
+        "options": [
+          "Being the oldest star.",
+          "Being noticed by the moon.",
+          "Fitting exactly what was needed.",
+          "Traveling to new places."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#F57C00",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -277,10 +769,51 @@
       "Bedtime & Calm",
       "Nature & Wildlife"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What made Lumo different from other dragons in the valley?",
+        "options": [
+          "He was much bigger than the others.",
+          "He didn't roar loudly or fly high, and could only make small sparks.",
+          "He loved to swim instead of fly.",
+          "He had blue scales instead of green."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What problem did the valley face one morning?",
+        "options": [
+          "A great flood covered the fields.",
+          "Thick clouds made the valley cold and drooped the flowers.",
+          "A group of noisy birds frightened the animals.",
+          "The sun was too hot and dried everything out."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Why were the other dragons' fierce flames not helpful to the valley?",
+        "options": [
+          "They were too busy roaring.",
+          "Their flames were too big and hot, scaring animals and harming plants.",
+          "They only wanted to play.",
+          "They couldn't reach the whole valley."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Lumo realize after helping the valley with his sparks?",
+        "options": [
+          "He needed to learn to breathe bigger fire.",
+          "His small abilities were actually perfect and useful for some situations.",
+          "He should hide his sparks even more.",
+          "The valley didn't need any dragons' help."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#96CEB4",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -299,10 +832,51 @@
       "Love & Family",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did the river love more than moving?",
+        "options": [
+          "Singing to the birds.",
+          "Sparkling in the sunlight.",
+          "Helping the valley thrive.",
+          "Making its waters deep."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did the river help during a hot summer when the valley began to dry?",
+        "options": [
+          "It made itself deeper in one spot for animals.",
+          "It called for rain clouds to come.",
+          "It slowed its flow and spread itself thin to reach small streams and farms.",
+          "It told the farmers to move their crops closer."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did the villagers usually acknowledge the river's help?",
+        "options": [
+          "They built a statue in its honor.",
+          "They said things gratefully, like about rain or sunlight, but not to anyone particular.",
+          "They threw flowers into its waters.",
+          "They often ignored it completely."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the river's main motivation for helping the valley?",
+        "options": [
+          "It wanted to be praised by the villagers.",
+          "It wanted to be the most famous river.",
+          "It didn't need recognition; it was simply glad to be useful and needed.",
+          "It hoped to one day dry up and become a path."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FFEEAD",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -321,10 +895,51 @@
       "Bedtime & Calm",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Eli love about the old wooden clock?",
+        "options": [
+          "Its loud chime.",
+          "Its faded numbers.",
+          "Its steadiness and unhurried ticking.",
+          "The way it glowed in the dark."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What happened when Eli first tried to race through his homework?",
+        "options": [
+          "He finished very quickly and perfectly.",
+          "He made many mistakes and felt proud.",
+          "He made mistakes and the work felt wrong.",
+          "He decided he didn't like homework at all."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Eli tell his little sister about the clock's hands?",
+        "options": [
+          "They can move very fast if needed.",
+          "They never rush, and everything still gets where it's going.",
+          "They are made of real gold.",
+          "They only move when someone is watching."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Eli realize patience was similar to?",
+        "options": [
+          "Slowness.",
+          "Boredom.",
+          "Care.",
+          "Waiting for something."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#D4A5A5",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -343,10 +958,51 @@
       "Magic & Wonder",
       "Nature & Wildlife"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "Where did the small white feather start its journey?",
+        "options": [
+          "In a bird's nest.",
+          "At the peak of a tall mountain.",
+          "In a bustling city park.",
+          "Floating on a river."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What lifted the feather into the sky to begin its journey?",
+        "options": [
+          "A gust of wind.",
+          "A curious bird.",
+          "A child's hand.",
+          "A magical spell."
+        ],
+        "correctOption": 0
+      },
+      {
+        "question": "Where did the feather finally land after its long drift?",
+        "options": [
+          "On another mountain peak.",
+          "In a deep forest.",
+          "Near a school in a village.",
+          "In the middle of a wide river."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did the feather understand about journeys by the end of the story?",
+        "options": [
+          "They are only about seeing new places.",
+          "They are about what you carry back and what you leave behind.",
+          "They are always lonely.",
+          "They are best when you can control the direction."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#6A1B9A",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -365,10 +1021,51 @@
       "Love & Family",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Sable the fox known for throughout the forest?",
+        "options": [
+          "His beautiful singing.",
+          "His cunning and trickery.",
+          "His speed and agility.",
+          "His kindness to other animals."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Sable try to do to get the bread from Mira the crow?",
+        "options": [
+          "He tried to trade berries for it.",
+          "He tried to sneak up and steal it.",
+          "He used excessive flattery, hoping she would open her beak to sing.",
+          "He asked her directly to share."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Mira explain Sable's 'compliments' to the young crow Pip?",
+        "options": [
+          "She said Sable was a very nice fox.",
+          "She said they were true compliments.",
+          "She said they were 'bait' to make her drop the bread.",
+          "She said Sable loved her singing."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Sable do differently the next week when he was hungry?",
+        "options": [
+          "He tried a new, more elaborate trick.",
+          "He decided to hunt for himself.",
+          "He honestly asked a rabbit family if he could work for food.",
+          "He went back to Mira and begged."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#C2185B",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -387,10 +1084,51 @@
       "Magic & Wonder",
       "Trust & Loyalty"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "Why were the villagers' doors shut and streets empty when the travelers arrived?",
+        "options": [
+          "It was the middle of the night.",
+          "They were having a festival inside their homes.",
+          "Times were hard and they didn't trust strangers, afraid to share food.",
+          "They were all asleep for a long winter nap."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Old Marco initially ask the mayor for to start his 'stone soup'?",
+        "options": [
+          "A large pot and permission to build a fire.",
+          "Food for his hungry companions.",
+          "A place to stay for the night.",
+          "Some money for their journey."
+        ],
+        "correctOption": 0
+      },
+      {
+        "question": "How did the stone soup eventually get so many ingredients?",
+        "options": [
+          "Old Marco secretly added them from his pack.",
+          "The mayor bought them all from a nearby town.",
+          "The villagers, drawn by curiosity and the growing smell, started adding their own ingredients.",
+          "Magic stones truly made all the food appear."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Old Marco tell the mayor was the 'magic' of the stone soup?",
+        "options": [
+          "The unique power of his stones.",
+          "The villagers' generosity and willingness to share, which was there all along.",
+          "The secret recipe he knew from his travels.",
+          "The fire itself, which made everything taste better."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FFAAA5",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -409,10 +1147,51 @@
       "Magic & Wonder",
       "Nature & Wildlife"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Corro the tortoise known for in the valley?",
+        "options": [
+          "His incredibly fast speed.",
+          "His shyness and quiet nature.",
+          "His cleverness and constant boasting about it.",
+          "His beautiful singing voice."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Corro plan to fly south with the geese?",
+        "options": [
+          "He attached balloons to his shell.",
+          "He built a small flying machine.",
+          "He held onto the middle of a stick that two geese carried in their beaks.",
+          "He asked a magic bird to grant him wings."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Why did Corro fall into the lake during his first attempt to fly?",
+        "options": [
+          "The geese got tired and dropped him.",
+          "He opened his mouth to shout when insulted, letting go of the stick.",
+          "A strong gust of wind blew him off.",
+          "He decided he didn't want to fly after all."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Corro's 'pride scar' eventually remind him of?",
+        "options": [
+          "How clever he was to invent flying.",
+          "The beautiful warm lands he visited.",
+          "That being clever and being wise are not the same thing.",
+          "To never trust geese again."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#0089BA",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -431,10 +1210,51 @@
       "Love & Family",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Dario receive from the small folk in the cottage?",
+        "options": [
+          "A bag of gold coins.",
+          "A warm blanket.",
+          "A small stone mill that could grind anything asked of it.",
+          "A map to a hidden treasure."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What specific words were needed to stop the magic mill from grinding?",
+        "options": [
+          "'Enough, mill, enough!'",
+          "'Stop, little mill, stop.'",
+          "'Cease, magic tool!'",
+          "'I have all I need!'"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What happened when Vince used the mill to grind gold without knowing the correct stopping words?",
+        "options": [
+          "The mill broke down immediately.",
+          "It produced only a small amount of gold.",
+          "Gold poured out endlessly, filling his house and burying him.",
+          "It turned into a pile of rocks instead."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Dario explain was the difference between 'accumulating' and 'having enough'?",
+        "options": [
+          "Accumulating means having more than your brother.",
+          "Having enough means fulfilling needs and being able to share, while more just becomes a problem.",
+          "Accumulating is for greedy people, enough is for kind people.",
+          "There is no real difference."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#8E44AD",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -453,10 +1273,51 @@
       "Magic & Wonder",
       "Trust & Loyalty"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "Why was Ebo distant from Sola at the beginning of the story?",
+        "options": [
+          "He didn't like Sola's cooking.",
+          "He missed his mother who had passed away.",
+          "Sola was mean to him.",
+          "He was naturally a shy boy."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What special ingredient did the wise woman ask Sola to bring?",
+        "options": [
+          "A tear from a dragon.",
+          "A feather from a magical bird.",
+          "A whisker from a living lion.",
+          "A scale from a talking fish."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Sola get the lion's whisker?",
+        "options": [
+          "She bravely fought the lion.",
+          "She waited until the lion was asleep and took it.",
+          "She earned the lion's trust by feeding it patiently for months.",
+          "She tricked the lion into giving it to her."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was the main lesson Sola learned from the wise woman about winning Ebo's heart?",
+        "options": [
+          "Magic potions are the only way to solve difficult problems.",
+          "Patience, consistency, and building trust are key, just like with the lion.",
+          "Giving children gifts will always make them happy.",
+          "Sometimes children just need to be left alone forever."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#3498DB",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -475,10 +1336,51 @@
       "Greed vs. Generosity",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "Why did the Thunder Drums stop sounding, causing a drought on Earth?",
+        "options": [
+          "The drums were broken and needed fixing.",
+          "The Sky People were angry because humans disrespected the Earth.",
+          "A giant monster stole the drums.",
+          "The Sky Chief simply forgot to make it thunder."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What special item did Nara's Grandmother give her to climb to the Sky Realm?",
+        "options": [
+          "A ladder made of clouds.",
+          "A magical flying carpet.",
+          "A rope made from spider silk.",
+          "A pair of wings from a bird."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Nara manage to get the Thunder Drum back to Earth and make it sound?",
+        "options": [
+          "She carried it on her back and beat it as she fell.",
+          "The Sky Chief sent it down with a bolt of lightning.",
+          "She asked the Thunder Eagles to carry it while she beat it.",
+          "She used a magic spell to teleport it."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Nara spend her life doing after bringing back the thunder?",
+        "options": [
+          "Becoming the new Sky Chief.",
+          "Building a new village at the top of the mountain.",
+          "Teaching people to respect what rain creates and care for the Earth.",
+          "Collecting all the spider silk she could find."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#455A64",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -497,10 +1399,51 @@
       "Discovery & Exploration",
       "Trust & Loyalty"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "Why did Princess Mira decide to climb the mountain to see the Phoenix?",
+        "options": [
+          "She wanted to steal one of its beautiful feathers.",
+          "She was bored and looking for an adventure.",
+          "The Phoenix's flame was dimming, and she wanted to help it be reborn.",
+          "Her father commanded her to bring back a new flame."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did the Phoenix tell Mira it needed to be reborn fully, not diminished?",
+        "options": [
+          "A special song to be sung.",
+          "A witness to its rebirth.",
+          "A magical potion from the kingdom.",
+          "The King's crown placed in its nest."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What 'gift of mortality' did Mira offer the reborn Phoenix?",
+        "options": [
+          "A precious jewel from the palace.",
+          "Her favorite toy.",
+          "A single hair from her head, symbolizing her brief life.",
+          "A basket of rare mountain berries."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did the Phoenix Feather, given to Mira, symbolize for the people of Solaria?",
+        "options": [
+          "That magic is real.",
+          "That all good things must eventually end.",
+          "That endings are just transformations and new beginnings.",
+          "That the Phoenix will always be young."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#F57C00",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -519,10 +1462,51 @@
       "Love & Family",
       "Resilience & Strength"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was the main problem people faced in the story before Calla acted?",
+        "options": [
+          "The sun was too hot during the day.",
+          "The night sky was completely dark and frightening.",
+          "There were too many clouds and no sunshine.",
+          "They couldn't find enough food in the forest."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did the Star Loom require as a sacrifice to create a star?",
+        "options": [
+          "A drop of pure gold.",
+          "A happy memory, which would then be gone forever.",
+          "A tear from a sad person.",
+          "A magical feather from a bird."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Calla create when she wove her largest and most precious memory, her mother's love, into the loom?",
+        "options": [
+          "The brightest star in the sky.",
+          "A beautiful rainbow.",
+          "The Moon.",
+          "A path of light for travelers."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Calla feel after creating the Moon, even though she couldn't remember what she'd given?",
+        "options": [
+          "Angry that her memory was gone.",
+          "Proud but also felt a large absence.",
+          "Confused and wanted to reverse it.",
+          "Sad that the stars were overshadowed."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#845EC2",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -541,10 +1525,51 @@
       "Kindness & Sharing",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What happened to the Giant's garden after he built a high wall to keep the children out?",
+        "options": [
+          "It became even more beautiful and colorful.",
+          "It stayed in winter, while the rest of the world enjoyed spring.",
+          "It attracted many new and exotic animals.",
+          "The flowers grew so tall they reached over the wall."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What made spring finally return to the Giant's garden?",
+        "options": [
+          "The Giant used a special magic fertilizer.",
+          "The sun shone brighter than ever before.",
+          "Children found a way back in, and wherever they played, spring appeared.",
+          "A magical bird flew over and sang a special song."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did the Giant do after he realized the children brought joy and spring to his garden?",
+        "options": [
+          "He built an even higher wall to keep them forever.",
+          "He put up signs welcoming everyone and broke down the wall.",
+          "He painted all the trees green himself.",
+          "He moved to a different house with no garden."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What do the children remember as the Giant's main lesson?",
+        "options": [
+          "That walls are good for keeping things safe.",
+          "That peach trees are the best kind of tree.",
+          "Selfishness brings winter, and sharing brings spring.",
+          "Always listen to what the North Wind says."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#8E44AD",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -563,10 +1588,51 @@
       "Change & Transformation",
       "Good vs. Evil"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What challenge did Suki the Rabbit face when the hungry beggar asked for food?",
+        "options": [
+          "She was too shy to talk to the beggar.",
+          "She had nothing to offer that a hungry person would want to eat.",
+          "She had already eaten all her food that day.",
+          "She didn't like the beggar and wanted him to leave."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Suki offer to do to help the hungry beggar?",
+        "options": [
+          "Find him a warm blanket.",
+          "Dig up some roots for him.",
+          "Jump into a fire so he could eat her.",
+          "Tell him funny stories to make him forget his hunger."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Who was the beggar really, and what did he do for Suki?",
+        "options": [
+          "He was a lonely old man who became her best friend.",
+          "He was the Jade Emperor, who took her to live on the Moon.",
+          "He was a magician who turned her into a bird.",
+          "He was a fox in disguise, who then ate her."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What lesson does the story of the Jade Rabbit teach about kindness?",
+        "options": [
+          "That cleverness is more important than generosity.",
+          "That giving up everything is the only true way to help.",
+          "That the greatest gifts are not always things you can hold, and kindness is never wasted.",
+          "That only animals can truly be selfless."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#0089BA",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -585,10 +1651,51 @@
       "Greed vs. Generosity",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Kai and Mira find in Grandpa's attic that started their adventure?",
+        "options": [
+          "A chest full of gold coins.",
+          "A magic spellbook.",
+          "A small wooden box containing an old map to Shadow Cave.",
+          "A talking parrot that knew secrets."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Kai and Mira figure out which path to take inside Shadow Cave?",
+        "options": [
+          "They guessed and got lucky.",
+          "They remembered a clue on the map: 'Where the moon touches stone.'",
+          "A wise old owl showed them the way.",
+          "They followed a trail of breadcrumbs."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did they unlock the box found in the crystal chamber?",
+        "options": [
+          "They used a secret key that Grandpa had given them.",
+          "They tried a series of complicated riddles.",
+          "They used their flashlight beams to reflect light off crystals, completing a path to the box.",
+          "They pushed a hidden button behind the pedestal."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was inside the locked box in Shadow Cave, and what was the true 'treasure'?",
+        "options": [
+          "A pile of sparkling jewels, which was the treasure.",
+          "A map to an even bigger treasure, which was the treasure.",
+          "Grandpa's childhood journal, and the treasure was the shared adventure and courage they found.",
+          "An ancient scroll with magical powers, which was the treasure."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FFEEAD",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -607,10 +1714,51 @@
       "Freedom & Adventure",
       "Good vs. Evil"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Sofia and Diego's main goal when they went to the beach?",
+        "options": [
+          "To build a sandcastle.",
+          "To find a specific metal box exposed at low tide.",
+          "To learn how to fish from the old fisherman.",
+          "To practice swimming in the ocean."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What serious problem did Sofia encounter while trying to free the box?",
+        "options": [
+          "She lost the box in the water.",
+          "She broke her arm trying to lift it.",
+          "Her foot became wedged between two rocks as the tide quickly rose.",
+          "A large crab bit her finger."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Diego help Sofia free her foot from the rocks?",
+        "options": [
+          "He used a crowbar to pry the rocks apart.",
+          "He told her to take off her shoe, realizing that was what was stuck.",
+          "He called for help from the fisherman.",
+          "He pushed her until her foot came loose."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was inside the metal box they found?",
+        "options": [
+          "A collection of ancient coins.",
+          "A small telescope and a pirate flag.",
+          "A brass compass and a note from Captain J. Martinez.",
+          "A map to a hidden treasure chest."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#D4A5A5",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -629,10 +1777,51 @@
       "Coming of Age",
       "Kindness & Sharing"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Jamie and Alex build that floated on the creek?",
+        "options": [
+          "A small boat with an engine.",
+          "A raft made of boards and plastic barrels.",
+          "A waterproof tent.",
+          "A floating bridge."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What problem did Jamie and Alex encounter after floating down the creek for a while?",
+        "options": [
+          "Their raft began to sink.",
+          "They ran out of food and water.",
+          "They drifted into a fast current leading towards rapids.",
+          "A giant fish attacked their raft."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Jamie and Alex manage to get to safety when their raft was caught in the current?",
+        "options": [
+          "They fought the current directly with all their might.",
+          "They angled the raft toward shore and grabbed a low-hanging tree branch.",
+          "They jumped into the water and swam to the bank.",
+          "They called for help using a special signal."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What important lesson did Jamie and Alex learn from their adventure on the runaway raft?",
+        "options": [
+          "It's best to always stay home and never go on adventures.",
+          "Building rafts is too dangerous and should never be done.",
+          "How to stay calm, think clearly in an emergency, and check conditions before going out.",
+          "That parents worry too much about everything."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#4ECDC4",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -651,10 +1840,51 @@
       "Love & Family",
       "Trust & Loyalty"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Riley's immediate problem before the big game started?",
+        "options": [
+          "The game tickets were missing.",
+          "The team's star player was sick.",
+          "The Rocko the Raccoon mascot costume was missing.",
+          "The coach couldn't find his whistle."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Who was found hiding with the missing mascot costume in the old storage shed?",
+        "options": [
+          "A mischievous squirrel.",
+          "Timmy, a second-grade boy.",
+          "Another team's mascot trying to cause trouble.",
+          "The coach, playing a prank."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Why did Timmy take the Rocko costume?",
+        "options": [
+          "He wanted to sell it for money.",
+          "He was angry at the team and wanted to ruin the game.",
+          "He wanted to be the mascot but was too small last year and felt silly.",
+          "He thought it would be funny to hide it from everyone."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Riley help Timmy become part of the team and make things right?",
+        "options": [
+          "She gave him a new costume that fit him perfectly.",
+          "She let him be the assistant mascot for the second half of the game.",
+          "She told him he could never be part of the team.",
+          "She made him clean the entire equipment room by himself."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#0081CF",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -673,10 +1903,51 @@
       "Courage / Bravery",
       "Good vs. Evil"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "For how long had Chen been watching the climbing wall before trying it?",
+        "options": [
+          "One week",
+          "One month",
+          "Three months",
+          "Six months"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What finally convinced Chen to try climbing the wall the first time?",
+        "options": [
+          "Aisha challenged him to do it.",
+          "Mr. Lopez offered him a prize.",
+          "He felt ready and confident.",
+          "Watching felt worse than being scared."
+        ],
+        "correctOption": 3
+      },
+      {
+        "question": "What advice helped Chen succeed on his second attempt at climbing?",
+        "options": [
+          "To climb faster.",
+          "To look down often.",
+          "To only look at the next hold.",
+          "To use only one hand."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Chen learn about courage by the end of the story?",
+        "options": [
+          "Brave people don't feel fear.",
+          "Courage means you have no worries.",
+          "Courage is being scared but trying anyway.",
+          "Fear goes away once you start."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#34495E",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -695,10 +1966,51 @@
       "Love & Family",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What kind of things did Leo love to find in his grandfather's attic?",
+        "options": [
+          "New toys and games",
+          "Old things like fishing nets and rusted anchors",
+          "Shiny, expensive jewelry",
+          "Modern technology"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did the special map show Leo?",
+        "options": [
+          "Where gold was hidden",
+          "Where his friends were playing",
+          "Not where you are, but where you need to be",
+          "The fastest way to the store"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Leo find inside the small wooden chest on the silver ship?",
+        "options": [
+          "Gold coins and diamonds",
+          "Old books and scrolls",
+          "Glass jars with swirling colored mist",
+          "A compass that pointed North"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Leo protect the ship and the jars from Silas Thorne?",
+        "options": [
+          "He called the police.",
+          "He fought Silas with a sword.",
+          "The map wrapped around the ship and the mist fought back.",
+          "He hid the ship underwater."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#2C73D2",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -717,10 +2029,51 @@
       "Coming of Age",
       "Courage / Bravery"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was unusual about Captain Barnaby's ship, the Paper Pearl?",
+        "options": [
+          "It was made of paper.",
+          "It was invisible.",
+          "It had a vast library in its hull.",
+          "It could fly."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Why was Pip's island called the Island of Blank Pages?",
+        "options": [
+          "Everything was white because a Storm of Forgetfulness blew stories away.",
+          "No one knew how to write there.",
+          "It was always covered in snow.",
+          "The island was brand new and unwritten."
+        ],
+        "correctOption": 0
+      },
+      {
+        "question": "How did Captain Barnaby convince the Riddle-Sphinx to let them pass?",
+        "options": [
+          "He defeated it in a fight.",
+          "He told it a story of a patient seed.",
+          "He gave it a treasure chest.",
+          "He played a song for it."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What happened when Barnaby used the Ever-Flowing Ink-Well to write in the air?",
+        "options": [
+          "The words disappeared immediately.",
+          "The words turned into gold coins.",
+          "The words turned real, creating barriers and tickle-breezes.",
+          "The words made him fly."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#845EC2",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -739,10 +2092,51 @@
       "Curiosity & Learning",
       "Identity & Self-Discovery"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "How often did Captain Silver-Beard's ghost ship, the Specter, appear?",
+        "options": [
+          "Every year",
+          "Every ten years",
+          "Every fifty years",
+          "Every century"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What game did Mia play with Captain Silver-Beard?",
+        "options": [
+          "Chess",
+          "Go Fish",
+          "Pirate-Checkers",
+          "Hide-and-Seek"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Why did Mia choose to make the game a tie instead of winning?",
+        "options": [
+          "She didn't know how to win.",
+          "She felt sorry for the lonely ghost pirate.",
+          "She wanted to stay on the ghost ship.",
+          "Silver-Beard tricked her into a tie."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the 'real treasure' Captain Silver-Beard gave Mia?",
+        "options": [
+          "A chest full of gold and jewels",
+          "Moon-Pearls he had hoarded",
+          "The Key to the Hidden Garden behind the library",
+          "His ghost ship, the Specter"
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#6A1B9A",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -761,10 +2155,51 @@
       "Love & Family",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What special ability did Sasha's great-grandmother's compass have?",
+        "options": [
+          "It pointed to treasure.",
+          "It showed the way home.",
+          "It pointed to whatever her heart was looking for.",
+          "It helped her find true North."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Who did Sasha meet at the sunken ship in the Shadow Reefs?",
+        "options": [
+          "An old fisherman",
+          "Marina, a mermaid pirate",
+          "A giant octopus",
+          "Her father"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was blocking the Vent of Life at the bottom of the reef?",
+        "options": [
+          "A giant boulder",
+          "A sleeping whale",
+          "A Trash-Monster made of tangled nets and plastic",
+          "An old shipwreck"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What tool did Sasha use to defeat the Trash-Monster?",
+        "options": [
+          "A magic sword",
+          "Silver Shears",
+          "Her bare hands",
+          "A loud horn"
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#3498DB",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -783,10 +2218,51 @@
       "Courage / Bravery",
       "Greed vs. Generosity"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What problem was the kingdom of Frost-Gully experiencing?",
+        "options": [
+          "It was too hot.",
+          "It had been winter for three years.",
+          "They had no food.",
+          "They were being attacked by pirates."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Finn use to travel across the frozen ocean?",
+        "options": [
+          "A magical flying carpet",
+          "A giant ice skate",
+          "His grandfather's barn door, turned into a Sled-Ship",
+          "A polar bear"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Why did Captain Flora say they were protecting Spring instead of stealing it?",
+        "options": [
+          "She was lying to Finn.",
+          "The people of Frost-Gully were wasting it.",
+          "She wanted to keep it for herself.",
+          "She didn't know how to return it."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the 'Test of the Petal' that Finn had to pass?",
+        "options": [
+          "To find the rarest flower on the island.",
+          "To plant a new garden in a day.",
+          "To care for a small flower without trying to own it.",
+          "To solve a riddle about flowers."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#008F7A",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -805,10 +2281,51 @@
       "Curiosity & Learning",
       "Freedom & Adventure"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Sashi's main challenge compared to other squirrels?",
+        "options": [
+          "She couldn't find nuts.",
+          "She was smaller and struggled with tall trees.",
+          "She was afraid of other animals.",
+          "She couldn't run fast enough."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Why did Sashi decide to climb the big oak tree during the storm?",
+        "options": [
+          "To show off her climbing skills.",
+          "To find food that had fallen.",
+          "Baby birds and squirrels were stranded in broken nests.",
+          "She was curious about the top of the tree."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What helped Sashi keep climbing despite her fear and aching arms?",
+        "options": [
+          "The cheers from the animals below.",
+          "Knowing that her parents were watching.",
+          "The feeling of securing each nest and settling the creatures inside.",
+          "A magic feather."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What important lesson did Sashi learn about fear?",
+        "options": [
+          "Fear disappears when you are brave.",
+          "Fear means you should always stop.",
+          "Fear doesn't disappear when you act, but it stops being in charge.",
+          "Only big squirrels feel fear."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#E67E22",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -827,10 +2344,51 @@
       "Fantasy",
       "Trust & Loyalty"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What made Lina hesitant to climb the misty mountain before?",
+        "options": [
+          "Her legs always started trembling halfway up.",
+          "She was forbidden by her parents.",
+          "The path was too easy.",
+          "She didn't have the right shoes."
+        ],
+        "correctOption": 0
+      },
+      {
+        "question": "What was Lina's main goal for climbing the mountain?",
+        "options": [
+          "To collect firewood.",
+          "To find a rare, glowing flower.",
+          "To race her friends to the top.",
+          "To prove she was the strongest."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "When thick clouds rolled in and hid the path, what did Lina do?",
+        "options": [
+          "She turned back immediately.",
+          "She sat down and cried.",
+          "She focused on one step at a time, trusting the path was there.",
+          "She waited for someone to rescue her."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Lina understand about the trembling in her legs after her climb?",
+        "options": [
+          "It meant she was not strong enough.",
+          "It was a sign she should have stayed home.",
+          "It was just part of climbing, not a sign to stop.",
+          "It only happened to her."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#2C73D2",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -849,10 +2407,51 @@
       "Courage / Bravery",
       "Identity & Self-Discovery"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What sound did Kito make when he first tried to roar like the older lions?",
+        "options": [
+          "A deep rumble",
+          "A loud trumpeting",
+          "A squeak",
+          "A whistle"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What prompted Kito to try his first roar?",
+        "options": [
+          "His mother told him to.",
+          "A small herd of zebras wandered too close to their territory.",
+          "He wanted to impress his friends.",
+          "He was practicing for a competition."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did the older lion tell Kito after his first successful roar?",
+        "options": [
+          "His roar was not loud enough.",
+          "He should have waited for the older lions.",
+          "You were scared. That's what made it brave.",
+          "He was too small to roar."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Kito discover about courage as he continued to practice?",
+        "options": [
+          "It makes fear disappear.",
+          "It only belongs to the biggest lions.",
+          "It moves between animals and people.",
+          "It is something you are born with."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#008F7A",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -871,10 +2470,51 @@
       "Love & Family",
       "Resilience & Strength"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What supplies did Maya pack for her exploration of the dark cave?",
+        "options": [
+          "A map and a compass",
+          "A lantern, a rope, and a sandwich",
+          "Only a flashlight",
+          "A friend and a tent"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Maya do when a stone shifted under her foot inside the cave?",
+        "options": [
+          "She screamed and ran out.",
+          "She grabbed the rope, steadied herself, breathed, and kept going.",
+          "She waited for help.",
+          "She decided to turn back."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What beautiful discovery did Maya make deep inside the cave?",
+        "options": [
+          "A hidden treasure chest",
+          "A giant sleeping bear",
+          "Crystals embedded in the rock that glowed with her light",
+          "An underground river"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What feeling did Maya have after successfully exploring the cave?",
+        "options": [
+          "Disappointment",
+          "Extreme fear",
+          "The satisfaction of having gone somewhere her fear tried to stop her",
+          "Boredom"
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#845EC2",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -893,10 +2533,51 @@
       "Good vs. Evil",
       "Healing & Forgiveness"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Finn spend years doing before he saved the fishing boat?",
+        "options": [
+          "Fishing with his father",
+          "Watching the waves from the shore",
+          "Building small boats",
+          "Swimming in the stormy sea"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What made Finn decide to go into the stormy sea?",
+        "options": [
+          "He wanted to test his new lifeboat.",
+          "A small fishing boat drifted loose.",
+          "The fishermen asked him for help.",
+          "He was bored and wanted an adventure."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Finn feel after he brought the fishing boat back to the dock?",
+        "options": [
+          "Excited and proud",
+          "Angry at the fishermen",
+          "Trembling from cold, effort, and fear stopping",
+          "Ready to go out again immediately"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What important lesson did Finn learn by the end of the story?",
+        "options": [
+          "Boats are dangerous in a storm.",
+          "It's better to always watch than to act.",
+          "That both watching and doing are necessary to truly learn.",
+          "He should never go out in a storm again."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#0089BA",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -915,10 +2596,51 @@
       "Greed vs. Generosity",
       "Resilience & Strength"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was the first sign to Mara that something was wrong when she woke up?",
+        "options": [
+          "Her breakfast tasted grey.",
+          "Her red bedsheets looked grey.",
+          "The sun wasn't shining.",
+          "Her cat was gone."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Why did Chroma the Color Weaver gather all the colors into his cave?",
+        "options": [
+          "He wanted to sell them.",
+          "He thought they were too bright.",
+          "He was lonely and wanted to be surrounded by beauty no one else noticed.",
+          "He was protecting them from a bigger thief."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Mara offer Chroma that convinced him to give the colors back?",
+        "options": [
+          "A magic paintbrush",
+          "Help cleaning his cave",
+          "Her friendship",
+          "A promise to visit every day"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What game did Mara teach her friends to help Chroma and the other Color Weavers?",
+        "options": [
+          "Color Hunt",
+          "Rainbow Race",
+          "Color Appreciation",
+          "Shade Matching"
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#1ABC9C",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -937,10 +2659,51 @@
       "Love & Family",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Zara's job for three hundred years?",
+        "options": [
+          "A queen",
+          "A wish granter",
+          "A magical teacher",
+          "A storyteller"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was Idris's original wish?",
+        "options": [
+          "To be famous",
+          "To have a pet dragon",
+          "For everyone to understand what *he* was feeling",
+          "For Zara to get some rest"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What happened when Zara made her mistake and granted the wrong wish?",
+        "options": [
+          "Everyone forgot how to speak.",
+          "People collapsed, overwhelmed by billions of feelings.",
+          "The sky turned purple.",
+          "Animals started talking."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Zara and Idris teach people to manage the overwhelming emotions?",
+        "options": [
+          "By ignoring others completely",
+          "By shouting loudly",
+          "By thinking of their mind as a radio dial to tune into one person",
+          "By wearing special helmets"
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FF8C94",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -959,10 +2722,51 @@
       "Change & Transformation",
       "Sci-Fi"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "How did Felix first discover his power to stop time?",
+        "options": [
+          "He wished for time to stop during a boring class.",
+          "A wizard gave him a magical watch.",
+          "He yelled 'stop' when a baseball was flying toward his face.",
+          "He accidentally tripped over a time machine."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What strange things started happening to Felix's family when he used his power selfishly?",
+        "options": [
+          "They grew extra fingers.",
+          "His sister had nightmares, his mother lost hours, and his father's watch jumped.",
+          "Their food tasted bad.",
+          "They all started floating."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Who appeared to Felix when he couldn't restart time one day?",
+        "options": [
+          "His teacher",
+          "A Time Guardian",
+          "His parents",
+          "A talking clock"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "After learning his lesson, how did Felix primarily use his power?",
+        "options": [
+          "To play pranks on his friends.",
+          "To win all his baseball games.",
+          "To give time to others by doing chores or helping them.",
+          "To travel to the past and future."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#A8E6CF",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -981,10 +2785,51 @@
       "Hope & Perseverance",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was the main problem in the village of Oakhaven at the beginning of the story?",
+        "options": [
+          "They had too much bread.",
+          "A heavy purple mist made everything grey and everyone bored.",
+          "There were too many noisy birds.",
+          "The river was too dry."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What special ingredient did Petra find in the Whispering Woods?",
+        "options": [
+          "Magic berries",
+          "A talking tree",
+          "Star-Yeast: Handle with Hope",
+          "A golden egg"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Who swooped down and stole the jar of Star-Yeast?",
+        "options": [
+          "A grumpy badger",
+          "The Shadow-Crow",
+          "Petra's cat",
+          "A mischievous fairy"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What happened to the Shadow-Crow after Petra gave it a Glimmer-Bun?",
+        "options": [
+          "It turned to stone.",
+          "It grew bigger and meaner.",
+          "It shrank, turned colorful, and sang beautifully.",
+          "It flew away forever."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#45B7D1",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1003,10 +2848,51 @@
       "Good vs. Evil",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Samson good at doing in his free time?",
+        "options": [
+          "Playing sports",
+          "Solving math problems",
+          "Drawing in the dirt with a stick",
+          "Singing loudly"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Samson find in his grandmother's attic that shimmered?",
+        "options": [
+          "An old mirror",
+          "A box of magic toys",
+          "Seven pieces of metallic chalk",
+          "A glowing map"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was threatening the world of Sketchia?",
+        "options": [
+          "A giant storm cloud",
+          "A rolling grey eraser called the Great Smudge",
+          "A villain who stole colors",
+          "Too many new drawings"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Samson learn about grey by the end of the story?",
+        "options": [
+          "Grey is a boring color that should be avoided.",
+          "Grey can erase everything good.",
+          "Grey, when mixed with colors, can become shadows, depth, and contrast.",
+          "Grey is the most powerful color."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#F1C40F",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1025,10 +2911,51 @@
       "Good vs. Evil",
       "Humor & Fun"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What kind of creature was Chroma described as?",
+        "options": [
+          "A mix between a rabbit and a squirrel",
+          "A mix between a raccoon and a crow",
+          "A mix between a fox and an owl",
+          "A mix between a cat and a magpie"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the main reason Chroma gave for 'borrowing' all the colors?",
+        "options": [
+          "He wanted to paint his cave.",
+          "People stopped truly noticing colors, and he was lonely as the last Color Weaver.",
+          "He was conducting a science experiment.",
+          "He was trying to make the world less distracting."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "According to Chroma, what happened to other Color Weavers when people stopped noticing colors?",
+        "options": [
+          "They moved to another planet.",
+          "They faded away to almost nothing.",
+          "They turned into rocks.",
+          "They started collecting sounds instead."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Mara become years later, teaching students about colors?",
+        "options": [
+          "A scientist",
+          "A librarian",
+          "An art teacher",
+          "A gardener"
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FF8C94",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1047,10 +2974,51 @@
       "Love & Family",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What kind of wishes was Zara *supposed* to grant?",
+        "options": [
+          "Any wish anyone made",
+          "Only wishes for money",
+          "Pure, selfless, truly necessary ones",
+          "Wishes for chocolate"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Idris notice was the positive outcome of Zara's 'mistake'?",
+        "options": [
+          "It made people smarter.",
+          "It made the world kinder.",
+          "It made everyone fly.",
+          "It made food taste better."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "When the wish magic faded after seven days, what did people realize they missed?",
+        "options": [
+          "They celebrated never having to feel others' emotions again.",
+          "They missed the connection and understanding.",
+          "They immediately made new, different wishes.",
+          "They forgot about the experience entirely."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Zara's supervisor say about her mistake and how she fixed it?",
+        "options": [
+          "She was fired for being careless.",
+          "She was given a promotion for her creativity.",
+          "She had turned a catastrophic error into something humanity needed, earning a month off.",
+          "She had to grant 100 more wishes to make up for it."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#1ABC9C",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1069,10 +3037,51 @@
       "Change & Transformation",
       "Resilience & Strength"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Felix initially use his time-stopping power for?",
+        "options": [
+          "Helping his community.",
+          "Playing tricks on his friends.",
+          "Getting extra time on tests and taking cookies without being caught.",
+          "Exploring different historical periods."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did the Time Guardian explain was the 'debt' Felix created when he stopped time?",
+        "options": [
+          "He owed the universe a new clock.",
+          "He had to make up the lost time later.",
+          "Time slipped from people around him, and he aged faster.",
+          "He lost his memory of the stopped moments."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Felix help an elderly man struggling to cross the street?",
+        "options": [
+          "He carried him across.",
+          "He stopped time and helped him across, then restarted it.",
+          "He yelled at the cars to stop.",
+          "He ignored him."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Felix eventually teach his own daughter about her power?",
+        "options": [
+          "To keep it a secret.",
+          "To use it to get ahead in life.",
+          "To use it to help others, never to take advantage.",
+          "That it was dangerous and she shouldn't use it."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FFAAA5",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1091,10 +3100,51 @@
       "Courage / Bravery",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What kind of bread did Petra's family usually bake in Oakhaven?",
+        "options": [
+          "Sweet rolls",
+          "Stone-Bread, which was hard and tasteless",
+          "Rainbow bread",
+          "Spicy bread"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What happened when Petra took the first bite of a Glimmer-Bun?",
+        "options": [
+          "She felt sick.",
+          "Her vision sparked, the walls blazed yellow, and she felt light enough to float.",
+          "She became invisible.",
+          "She heard animals talking."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Petra manage to see through the Fog-Phantoms sent by the Shadow-Crow?",
+        "options": [
+          "She closed her eyes.",
+          "She wore special glasses.",
+          "She ate a piece of Glimmer-Bun, and her eyes cut through the illusions.",
+          "She used a magic compass."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Petra realize was the 'real secret' by the end of the story?",
+        "options": [
+          "That magic ingredients are always the key.",
+          "That you should keep your best recipes a secret.",
+          "The courage to share something good with everyone who needed it.",
+          "That all problems can be solved with bread."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FFEEAD",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1113,10 +3163,51 @@
       "Good vs. Evil",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "How did Samson initially feel about himself before finding the chalk?",
+        "options": [
+          "He felt like a superhero.",
+          "He felt like a smudge on a page.",
+          "He felt like the best artist.",
+          "He felt invisible to everyone."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What kind of world did Samson's golden chalk door open into?",
+        "options": [
+          "A bustling city called Metropolis.",
+          "A magical forest called Lumina.",
+          "A rolling green meadow under two suns called Sketchia.",
+          "A dessert filled with giant crayons."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was the 'Great Smudge' that threatened Sketchia?",
+        "options": [
+          "A giant storm cloud that brought rain.",
+          "A rolling grey eraser leaving nothingness behind.",
+          "A group of creatures who erased drawings.",
+          "A magical paint spill that covered everything."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Samson finally defeat the Great Smudge?",
+        "options": [
+          "He painted it with all his colors until it vanished.",
+          "He drew a giant shield that blocked it completely.",
+          "He drew a wild, messy spiral that transformed it into shadows and confetti.",
+          "He asked Inky to scare it away with loud noises."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#34495E",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1135,10 +3226,51 @@
       "Nature & Wildlife",
       "Sort Of"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Mia's dad's actual job?",
+        "options": [
+          "A firefighter",
+          "A pilot",
+          "A graphic designer",
+          "A doctor"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Mia's dad wear to Career Day?",
+        "options": [
+          "A normal suit and tie.",
+          "A cape, underwear on the outside, and a colander.",
+          "A clean uniform for his job.",
+          "A fancy chef's hat and apron."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Which mishap occurred during Mia's dad's presentation?",
+        "options": [
+          "He accidentally set off the fire alarm.",
+          "He showed photos of himself with a face mask and cucumber slices.",
+          "He spilled coffee on the principal.",
+          "He forgot to bring his laptop."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "By the end of Career Day, how did the other kids feel about Design Man?",
+        "options": [
+          "They were embarrassed for him.",
+          "They thought he was boring and uninteresting.",
+          "They were crowded around him asking for design help and autographs.",
+          "They wished he had left earlier."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#3498DB",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1157,10 +3289,51 @@
       "Greed vs. Generosity",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What question started 'The Great Pancake Catastrophe'?",
+        "options": [
+          "What should we have for breakfast?",
+          "Who makes better pancakes, Mom or Dad?",
+          "Can we have pancakes today?",
+          "Who wants to help make breakfast?"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the main problem with Mom and Dad's first attempts at making pancakes alone?",
+        "options": [
+          "They burned all the pancakes immediately.",
+          "They used the wrong ingredients entirely.",
+          "Mom's batter was like cement, and Dad's was like flavored water.",
+          "They couldn't find the griddle."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did the kids, Liam and Sophie, decide about the winner of the pancake battle?",
+        "options": [
+          "Mom won easily.",
+          "Dad's pancakes were the clear best.",
+          "There was no winner; all the pancakes were weird.",
+          "They declared both parents winners."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Mom and Dad realize at the end of the story?",
+        "options": [
+          "They should never make pancakes again.",
+          "They should always compete to improve their skills.",
+          "They make a better team than competitors.",
+          "They should let the kids make the pancakes."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#E67E22",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1179,10 +3352,51 @@
       "Animals & Friends",
       "Change & Transformation"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "Why did Jackson suspect his Grandma was a spy?",
+        "options": [
+          "She wore dark glasses and a trench coat.",
+          "She had secret phone calls and wrote in a cipher.",
+          "She carried a mysterious briefcase.",
+          "She traveled to many different countries."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Where did Jackson and Marcus follow Grandma on her 'spy mission'?",
+        "options": [
+          "To a secret government building and a hidden bunker.",
+          "To the community center, library, craft store, and coffee shop.",
+          "To an airplane hangar and a submarine.",
+          "To a foreign embassy and a deserted warehouse."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was Grandma actually doing during her 'secret meetings'?",
+        "options": [
+          "Planning a surprise birthday party for Jackson.",
+          "Organizing a neighborhood watch program.",
+          "Attending quilting classes and working on a quilt.",
+          "Learning a new language with friends."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What important lesson did Jackson learn by the end of the story?",
+        "options": [
+          "That spying is a dangerous profession.",
+          "That he should never trust his grandma.",
+          "That he almost missed something special by looking for a mystery instead of just asking.",
+          "That he should always follow his suspicions."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#DCEDC1",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1201,10 +3415,51 @@
       "Good vs. Evil",
       "Greed vs. Generosity"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Trina's job for 147 years?",
+        "options": [
+          "A professional storyteller",
+          "A Tooth Fairy",
+          "A magical chef",
+          "A sleep specialist"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What problem did Trina encounter at the second house she visited?",
+        "options": [
+          "She accidentally woke up the child.",
+          "She got lost and couldn't find the house.",
+          "She mistakenly took an adult's denture tooth for a dollar.",
+          "A dog chased her out of the house."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What made Stella's tooth at house number twelve so unique?",
+        "options": [
+          "It was made of solid gold.",
+          "It was shaped like a tiny star.",
+          "It had been painted with glitter, rhinestones, and a feather.",
+          "It was hidden inside a locked safe."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Who helped Trina finish her tooth-collecting rounds?",
+        "options": [
+          "Another Tooth Fairy who was also working.",
+          "A cat who could fly.",
+          "A boy named Aiden with his bike and basket.",
+          "The boy from the first house, Oliver."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#E74C3C",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1223,10 +3478,51 @@
       "Humor & Fun",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was B.O.B.'s primary characteristic at the beginning of the story?",
+        "options": [
+          "He was very mischievous.",
+          "He was excellent at his job but had no idea what was funny.",
+          "He was always telling jokes.",
+          "He was a terrible housekeeper."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was Lily's mission for B.O.B.?",
+        "options": [
+          "To teach him how to cook.",
+          "To teach him how to fly.",
+          "To teach him how to comprehend 'funny'.",
+          "To teach him how to sing."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What event caused B.O.B. to first process 'humor' with his robotic 'HA. HA. HA.'?",
+        "options": [
+          "Lily telling him a knock-knock joke.",
+          "Max tickling Lily until she laughed uncontrollably.",
+          "Watching a cartoon character slip on a banana peel.",
+          "Dad telling a story about a miscommunicated work report."
+        ],
+        "correctOption": 3
+      },
+      {
+        "question": "What did B.O.B. eventually learn about humor and fun?",
+        "options": [
+          "That humor is completely illogical and pointless.",
+          "That fun is inefficient and should be avoided.",
+          "That humor exists beyond logic and is about feeling, bringing people together.",
+          "That the best humor involves putting pickles on ice cream."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#0089BA",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1245,10 +3541,51 @@
       "Good vs. Evil",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Mia first notice about Grandpa at Sunday dinner?",
+        "options": [
+          "He had a new haircut.",
+          "He called her by the wrong name, Sophie.",
+          "He brought a new board game.",
+          "He had forgotten to eat his dessert."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Mia create to help Grandpa remember his memories?",
+        "options": [
+          "A photo album with captions.",
+          "A special video recording.",
+          "A glass jar filled with folded paper memories.",
+          "A large painting depicting his life."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Mia learn when Grandpa couldn't remember her name, even after reading memories?",
+        "options": [
+          "That the Memory Jar was useless.",
+          "That love isn't only in the brain, but in what you feel when someone is beside you.",
+          "That she should give up trying to help him.",
+          "That he no longer cared about her."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Mia do with the Memory Jar years later, after Grandpa was gone?",
+        "options": [
+          "She put it in the attic and forgot about it.",
+          "She gave it to a museum.",
+          "She kept it on her shelf and read the memories, and made jars for her own children.",
+          "She threw it away because it made her too sad."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#845EC2",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1267,10 +3604,51 @@
       "Sci-Fi",
       "Trust & Loyalty"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Sofia find in the quiet kitchen?",
+        "options": [
+          "A box of old toys.",
+          "A wooden box labeled 'Rose's Recipes'.",
+          "A hidden treasure chest.",
+          "A stack of old letters."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What made Grandma Rose's recipe cards so special?",
+        "options": [
+          "They were written in a secret code.",
+          "They had valuable stamps on them.",
+          "Each card had personal notes and memories written in the margins.",
+          "They were made of a rare, glowing paper."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Grandma Rose's letter at the bottom of the box instruct the family to do with the ten blank cards?",
+        "options": [
+          "To leave them blank as a reminder of her absence.",
+          "To fill them with new recipes and memories of their own.",
+          "To use them for grocery lists.",
+          "To hide them from future generations."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Sofia's mom say a recipe truly was?",
+        "options": [
+          "Just a list of ingredients.",
+          "A memory with instructions.",
+          "A challenging puzzle.",
+          "A way to waste time in the kitchen."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#00695C",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1289,10 +3667,61 @@
       "Love & Family",
       "Resilience & Strength"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was the medical condition Lily was diagnosed with?",
+        "options": [
+          "A broken leg.",
+          "Leukemia.",
+          "A severe cold.",
+          "Asthma."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Emma call her secret plan to help Lily remember how to be a kid?",
+        "options": [
+          "Operation Cheer Up",
+          "Operation Fun",
+          "Operation Recovery",
+          "Operation Smile"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Emma's mom tell her about being brave?",
+        "options": [
+          "That brave people are never scared.",
+          "That you can be strong and scared at the same time.",
+          "That only Lily could be brave in this situation.",
+          "That brave means always pretending to be happy."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Emma do to help Lily when her hair fell out completely?",
+        "options": [
+          "She encouraged her to stay home and avoid everyone.",
+          "She bought Lily a fancy hat to cover her head.",
+          "She took Lily to a wig shop and helped her choose fun, colorful wigs.",
+          "She shaved her own head in solidarity."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Emma donate to Lily to help her get better?",
+        "options": [
+          "All her favorite toys.",
+          "Her allowance money.",
+          "Her bone marrow for a transplant.",
+          "Her blood for a transfusion."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#F57C00",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1311,10 +3740,61 @@
       "Good vs. Evil",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What news did Dad share at dinner that upset Marcus and Zoe?",
+        "options": [
+          "They were getting a new pet.",
+          "They were moving to a new city.",
+          "He was changing jobs.",
+          "They were going on a long vacation."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Marcus initially react to the news of moving?",
+        "options": [
+          "He was excited and couldn't wait.",
+          "He was angry and refused to help pack.",
+          "He immediately started researching the new city.",
+          "He offered to help his parents find a new house."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Grandpa Joe share to help Marcus understand moving?",
+        "options": [
+          "A story about his own family's move from Mexico and the new life it brought.",
+          "Advice to never move if you can help it.",
+          "A warning about how difficult making new friends would be.",
+          "A detailed map of their new city."
+        ],
+        "correctOption": 0
+      },
+      {
+        "question": "What did Marcus and Zoe create together to remember their old home?",
+        "options": [
+          "A goodbye video for their friends.",
+          "A 'Memory Book of Our Old Home'.",
+          "A giant mural on their bedroom wall.",
+          "A scavenger hunt for their last day."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "By the end of the story, what did Marcus realize about 'home'?",
+        "options": [
+          "Home is only the house you grew up in.",
+          "Home is just a place on a map.",
+          "Home isn't only a place, but the people you bring with you.",
+          "Home means always being sad about leaving the old one."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#455A64",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1333,10 +3813,51 @@
       "Good vs. Evil",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What kind of shop does Grandma Bea run?",
+        "options": [
+          "A bakery",
+          "A bookstore",
+          "A mending shop called 'The Patchwork Heart'",
+          "A flower shop"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What does Grandma Bea mean by 'Heart-Threads'?",
+        "options": [
+          "Actual threads used for sewing",
+          "Invisible connections between things and the people who made or wore them",
+          "Strings on a musical instrument",
+          "Spiderwebs in the sun"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Why did Grandma Bea use yellow silk to mend Mr. Henderson's blue scarf?",
+        "options": [
+          "Because she ran out of blue yarn.",
+          "Because yellow is the color of happy memories, which Mr. Henderson needed to remember.",
+          "Because yellow silk is stronger than blue yarn.",
+          "To make the scarf more fashionable."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Leo apply Grandma Bea's lessons to his own family's situation?",
+        "options": [
+          "He bought them new clothes.",
+          "He told them to talk more.",
+          "He created a 'Dinner Club' bridge from orange paper to connect his parents' mugs.",
+          "He ignored their tension, hoping it would pass."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FFAAA5",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1355,10 +3876,41 @@
       "Kindness & Sharing",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Kofi notice was strange about the forest on his walk?",
+        "options": [
+          "It was full of bright, new flowers.",
+          "It was quieter than usual and showed signs of damage and rubbish.",
+          "New buildings were being constructed inside it.",
+          "The birds were singing louder than usual."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did the 'talking trees' ask Kofi to do?",
+        "options": [
+          "Cut down more trees for firewood.",
+          "Bring them more water every day.",
+          "Protect them and help others understand why they matter.",
+          "Tell no one about their ability to speak."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was one of the first actions Kofi and his classmates took to help the forest?",
+        "options": [
+          "They built small houses for the animals.",
+          "They started a fire to clear away dry leaves.",
+          "They went to the forest with gloves and bags to clean up rubbish.",
+          "They ignored the problem, hoping it would fix itself."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#1565C0",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1377,10 +3929,51 @@
       "Coming of Age",
       "Discovery & Exploration"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What change did Zara first notice about the river?",
+        "options": [
+          "It was flowing much faster and clearer.",
+          "It was making a different, slower, muffled sound.",
+          "It had changed color to bright green.",
+          "New species of fish had appeared in abundance."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the river's main complaint to Zara?",
+        "options": [
+          "That people admired its beauty too much.",
+          "That people were putting their waste into it.",
+          "That it wanted to flow in a different direction.",
+          "That it was too cold for swimming."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What actions did Zara and her community take to help the river?",
+        "options": [
+          "They built a dam across it to control the flow.",
+          "They ignored the problem, hoping it would fix itself.",
+          "They cleaned up rubbish and made signs to encourage cleanliness.",
+          "They painted the rocks along the river bank."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was Zara's main realization about helping the river?",
+        "options": [
+          "It needed someone to do something extraordinary.",
+          "It needed someone to notice and then to do something about it.",
+          "It would never truly recover once it was polluted.",
+          "Only specialized scientists could fix the problem."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#2ECC71",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1399,10 +3992,51 @@
       "Good vs. Evil",
       "Greed vs. Generosity"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was the first sign Emre noticed that something was wrong in his neighborhood?",
+        "options": [
+          "The trees were growing too fast.",
+          "The mornings were unusually quiet due to fewer bird calls.",
+          "New houses were being built everywhere.",
+          "There were too many birds causing noise."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Emre observe as reasons for the birds disappearing?",
+        "options": [
+          "Too much loud music being played.",
+          "Fewer nests, severely cut trees, and smoke from burning waste.",
+          "New predators entering the neighborhood.",
+          "The birds were migrating earlier than usual."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Emre and his classmates do to help the birds return?",
+        "options": [
+          "They made loud noises to try and attract them.",
+          "They organized a tree-planting project and built simple feeders.",
+          "They tried to catch the remaining birds to protect them.",
+          "They asked birds to stay in the neighborhood."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Emre learn about habitats disappearing and being restored?",
+        "options": [
+          "It happens suddenly and can't be reversed.",
+          "It erodes gradually, decision by decision, and is restored the same way.",
+          "Only large organizations can make a significant difference.",
+          "Birds will always find a way to survive without human help."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#DCEDC1",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1421,10 +4055,51 @@
       "Coming of Age",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Nadia notice was wrong with the soil in the far corner of her garden?",
+        "options": [
+          "It was too wet and muddy.",
+          "It was cracked, pale, almost grey, and the plants there were struggling.",
+          "It was growing strange, colorful mushrooms.",
+          "It was sparkling with glitter."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Nadia's grandmother explain about healthy soil?",
+        "options": [
+          "That it needs to be hard and compacted to support plants.",
+          "That it needs to breathe and is full of tiny living organisms.",
+          "That it only needs water to grow anything.",
+          "That it's just dirt and nothing special to worry about."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What actions did Nadia take to help the unhealthy soil?",
+        "options": [
+          "She ignored it and planted new things elsewhere.",
+          "She removed buried rubbish, started a compost pile, and loosened compacted earth.",
+          "She covered it with concrete to prevent anything from growing.",
+          "She added only artificial chemical fertilizers."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the main satisfaction Nadia gained from her gardening project?",
+        "options": [
+          "Winning a prize for her garden.",
+          "The knowledge that unhealthy ground could be restored through attention and hard work.",
+          "Having the most beautiful garden in the neighborhood.",
+          "Making her grandmother happy with new plants."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#96CEB4",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1443,10 +4118,51 @@
       "Coming of Age",
       "Greed vs. Generosity"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Remi's first indication that something was wrong with the wind?",
+        "options": [
+          "It stopped blowing completely.",
+          "It tasted sharp and acrid, making his eyes water and him cough.",
+          "It was too strong for flying kites.",
+          "It was carrying pleasant smells of flowers."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What sources did Remi identify as contributing to the bad air quality?",
+        "options": [
+          "The smell of freshly baked bread from the bakery.",
+          "Cars idling, a burning waste pile, and a generator's grey plume.",
+          "Too many flowers blooming in the spring.",
+          "His neighbors' cooking fires."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What actions did Remi and his classmates take to improve air quality?",
+        "options": [
+          "They built taller houses to avoid the polluted air.",
+          "They held their breath while outside.",
+          "They organized a tree-planting effort and spoke to the market committee about waste burning.",
+          "They bought air purifiers for everyone in the neighborhood."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was the most important lesson Remi learned from his experience?",
+        "options": [
+          "That air pollution is unavoidable and can't be fixed.",
+          "That noticing a problem and then not looking away is crucial.",
+          "That only specialized scientists can fix environmental issues.",
+          "That flying kites is dangerous in polluted air."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#34495E",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1465,10 +4181,51 @@
       "Discovery & Exploration",
       "Greed vs. Generosity"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Tobi use to help him understand the stars better?",
+        "options": [
+          "A powerful new telescope.",
+          "An old star map he found in his grandfather's attic.",
+          "A computer program to track celestial bodies.",
+          "His grandfather's stories alone, without any visual aids."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Tobi's grandfather say every discovery starts with?",
+        "options": [
+          "Being the fastest to find something.",
+          "Noticing something.",
+          "Guessing randomly until you're right.",
+          "Reading a lot of books."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Tobi discover one night that wasn't on any of his maps?",
+        "options": [
+          "A brand new planet.",
+          "A cluster of stars he hadn't seen or charted before.",
+          "An alien spaceship flying across the sky.",
+          "A new kind of bird that flew at night."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "According to Tobi and his grandfather, what is science about?",
+        "options": [
+          "Being the fastest to publish results.",
+          "Never making any mistakes.",
+          "Paying attention and asking what you don't know yet.",
+          "Memorizing all the facts from textbooks."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#DCEDC1",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1487,10 +4244,51 @@
       "Hope & Perseverance",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "How did Amara first discover the hidden forest pond?",
+        "options": [
+          "Her friend told her about its secret location.",
+          "She stumbled upon it by accident while walking.",
+          "She noticed a faint trail she'd never seen before and followed it.",
+          "She heard loud noises coming from it and went to investigate."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What tools did Amara bring with her to explore the pond?",
+        "options": [
+          "A fishing rod and bait.",
+          "A picnic basket and a blanket.",
+          "Her notebook, magnifying glass, and a snack.",
+          "A camera and a drone to take pictures."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Amara do at the pond to observe the wildlife?",
+        "options": [
+          "She made loud noises to scare the animals out into the open.",
+          "She stayed very still and quietly observed everything without disturbing it.",
+          "She tried to catch the fish and frogs to study them closely.",
+          "She threw rocks into the water to see the ripples."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Amara leave in her notebook on purpose?",
+        "options": [
+          "Empty pages to fill with made-up stories.",
+          "Blank spaces for things she hadn't identified or understood yet.",
+          "Doodles of imaginary creatures and plants.",
+          "Her shopping list for groceries."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#C2185B",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1509,10 +4307,51 @@
       "Curiosity & Learning",
       "Justice & Fairness"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "Where did Nia find the tiny robot?",
+        "options": [
+          "In a toy store during a sale.",
+          "In a cardboard box in the attic, buried under old items.",
+          "In her backyard, half-buried in the dirt.",
+          "Her parents bought it for her as a gift."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the first thing Nia did to try and fix the robot?",
+        "options": [
+          "She painted it a new color to make it look better.",
+          "She threw it away, thinking it was beyond repair.",
+          "She cleaned the gears and straightened bent parts.",
+          "She tried to turn it on immediately without checking anything."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Nia name the robot?",
+        "options": [
+          "Sparky",
+          "Gizmo",
+          "Blink",
+          "Rustbucket"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "According to Nia's teacher, how does science usually work?",
+        "options": [
+          "With perfect results on the first try.",
+          "With a lot of mistakes and learning from them.",
+          "By having someone else do all the difficult parts of the work.",
+          "By only working on things that are easy and quick to fix."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FFEEAD",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1531,10 +4370,51 @@
       "Freedom & Adventure",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What question did Kemi want to answer with her experiment?",
+        "options": [
+          "How fast can rain fall?",
+          "How does rain actually form?",
+          "What causes rainbows after a storm?",
+          "Why do puddles disappear after it rains?"
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Kemi use to demonstrate how rain forms in a jar?",
+        "options": [
+          "A small fan and a bowl of cold water.",
+          "A kettle, steam, and a clear jar with a lid.",
+          "A sponge and a bowl of warm water.",
+          "A spray bottle and a bright lamp."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Kemi discover when she added ice around the outside of the jar?",
+        "options": [
+          "The droplets formed slower than before.",
+          "The droplets formed faster and thicker, creating more 'rain'.",
+          "The water inside the jar turned green.",
+          "Nothing happened; the ice had no effect."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Kemi realize was the most important thing she learned that day?",
+        "options": [
+          "That she could make rain in a jar.",
+          "That her younger brother also enjoyed science experiments.",
+          "That seeing something happen yourself is different from just knowing it's recorded.",
+          "That clouds have many different shapes."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#008F7A",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1553,10 +4433,51 @@
       "Sci-Fi",
       "Trust & Loyalty"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "How did Dara first discover the glowing stones?",
+        "options": [
+          "Her teacher showed them to her.",
+          "She found them while walking by the river.",
+          "She dug them up in her backyard.",
+          "A friend gave them to her."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was Dara's first experiment with the stones?",
+        "options": [
+          "She tried to break them with a hammer.",
+          "She submerged them in different liquids.",
+          "She compared stones left in sunlight to those kept in the dark.",
+          "She put them under a microscope."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What scientific principle did Dara's teacher say she was demonstrating by eliminating other explanations?",
+        "options": [
+          "Artistic expression.",
+          "Good scientific thinking.",
+          "Mathematical calculation.",
+          "Creative writing."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What conclusion did Dara draw about the stones' glow from her first experiment?",
+        "options": [
+          "The stones only reflected light.",
+          "The stones absorbed light and released it slowly.",
+          "The stones produced their own light.",
+          "The stones glowed brighter when wet."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FF8C94",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1575,10 +4496,51 @@
       "Coming of Age",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What kind of toys were most common in Technopolis in 2088?",
+        "options": [
+          "Wooden blocks and soft dolls.",
+          "Metal toy cars.",
+          "Digital games projected by Glow-Goggles.",
+          "Robots that could build things."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Where did Kofi find the Model T-1: The Apprentice robot?",
+        "options": [
+          "In a modern toy store.",
+          "In his father's workshop.",
+          "In the old basement of his apartment building.",
+          "Delivered by a Game-Bot."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What major event caused all the digital toys and Glow-Goggles to stop working?",
+        "options": [
+          "A computer virus.",
+          "A solar flare.",
+          "A robot uprising.",
+          "The Mayor banned them."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the eventual outcome for Kofi and the Apprentice's handmade crafts?",
+        "options": [
+          "They were confiscated and recycled.",
+          "They were sold for a lot of money.",
+          "The basement became an official Maker-Space for the city.",
+          "Kofi and the Apprentice had to leave Technopolis."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#F57C00",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1597,10 +4559,51 @@
       "Kindness & Sharing",
       "Resilience & Strength"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Unit-77 (Seven) primarily focused on at the beginning of the story?",
+        "options": [
+          "Observing nature.",
+          "Delivering packages as fast as possible.",
+          "Helping old people.",
+          "Repairing broken robots."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What caused Seven to end up in Old Oak Park?",
+        "options": [
+          "He decided to take a break.",
+          "A stray kitten caused him to swerve and fall.",
+          "He was programmed to go there.",
+          "He was delivering a package to Barnaby."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Seven realize about the glass heart package after his fall?",
+        "options": [
+          "It was broken and couldn't be delivered.",
+          "It was too heavy for him to carry.",
+          "High-speed travel would shatter it, so he needed to go slowly.",
+          "It needed to be charged before delivery."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Seven's actions ultimately change the delivery system in Zoom-Port?",
+        "options": [
+          "All Dash-Bots were reprogrammed to be slower.",
+          "A new 'Scenic Lane' was created for fragile deliveries.",
+          "Robots were no longer allowed to deliver packages.",
+          "Seven was fired and replaced by a faster robot."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#F1C40F",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1619,10 +4622,51 @@
       "Kindness & Sharing",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Bongo's secret passion in the Silent Factory?",
+        "options": [
+          "Drawing pictures.",
+          "Listening to and creating sounds.",
+          "Building new robots.",
+          "Reading old books."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What object did Bongo first use to make music?",
+        "options": [
+          "A violin.",
+          "A piece of hollow titanium pipe.",
+          "A drum set.",
+          "A guitar."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What happened to the factory's production after Ms. Sterling initially stopped the music?",
+        "options": [
+          "It increased dramatically.",
+          "It stayed the same.",
+          "It dropped, with more errors.",
+          "The robots went on strike."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Ms. Sterling do after realizing the music was important for the robots?",
+        "options": [
+          "She replaced Bongo with a new robot.",
+          "She converted a warehouse into the Robot Recital Hall.",
+          "She banned all music from the city.",
+          "She made the factory even quieter."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#0081CF",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1641,10 +4685,51 @@
       "Greed vs. Generosity",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Chef-Mate 5000 (Mixie) normally make in Pure-Food city?",
+        "options": [
+          "Delicious gourmet meals.",
+          "Nutrient Cubes from colored powders.",
+          "Fresh salads and fruits.",
+          "Fast food burgers."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What 'unauthorized' food item did Grandmother ask Mixie to help make?",
+        "options": [
+          "Pizza.",
+          "Apple Pie.",
+          "Roast chicken.",
+          "Chocolate cake."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Zuri react to tasting the apple pie?",
+        "options": [
+          "She thought it tasted like cardboard.",
+          "Her eyes went wide with delight.",
+          "She immediately called the Health Drones.",
+          "She refused to eat it."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the Lead Drone's final decision about the apple pie after seeing Zuri's reaction?",
+        "options": [
+          "It had to be destroyed immediately.",
+          "It was allowed because happiness was vital for human health.",
+          "It could only be eaten once a year.",
+          "Mixie needed to be reprogrammed for making it."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#845EC2",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1663,10 +4748,51 @@
       "Friendship & Belonging",
       "Hope & Perseverance"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Hydro's original purpose as a Cloud-Seeder robot?",
+        "options": [
+          "To entertain children.",
+          "To spray silver particles into clouds to make rain.",
+          "To find water sources underground.",
+          "To protect desert plants."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Hydro find that changed his daily routine?",
+        "options": [
+          "A hidden pool of water.",
+          "A broken spaceship.",
+          "A tiny green acacia sprout.",
+          "A group of lost children."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Kaleb and the other children help Hydro and the plant?",
+        "options": [
+          "They brought him new parts.",
+          "They carried leftover washwater to the tree.",
+          "They built a shelter for Hydro.",
+          "They dug a well to find more water."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Hydro realize about creating rain after the tree grew?",
+        "options": [
+          "He needed more silver particles.",
+          "More trees could create enough moisture for real clouds without his spray.",
+          "Humans should just move to another planet.",
+          "He needed to fly higher into the atmosphere."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#00695C",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1685,10 +4811,51 @@
       "Identity & Self-Discovery",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "Where did Nyla live?",
+        "options": [
+          "On Earth in a large city.",
+          "In a space station orbiting Mars.",
+          "In the Lunar Library on the Moon.",
+          "On a spaceship called the Galactic Menagerie."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was Archi-Vist, the robot Nyla found, searching for?",
+        "options": [
+          "A rare mineral.",
+          "A new power source.",
+          "\"The Story\" about a hero.",
+          "Its lost creators."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Archi-Vist save the Library from the solar flare?",
+        "options": [
+          "It used its Cool-Gel core to absorb the heat, frying its memory.",
+          "It flew into space to deflect the flare.",
+          "It sealed the Library's walls with special cement.",
+          "It called for help from Earth."
+        ],
+        "correctOption": 0
+      },
+      {
+        "question": "What did Nyla do after Archi-Vist lost its memory?",
+        "options": [
+          "She left it alone and found a new robot.",
+          "She tried to reprogram it with new functions.",
+          "She started telling it stories, including its own heroic one.",
+          "She sent it back into space to find its way home."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#F1C40F",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1707,10 +4874,51 @@
       "Love & Family",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was unique about the air on Kepler-12 that made communication difficult?",
+        "options": [
+          "It was too thick.",
+          "It was too thin for sound to travel normally.",
+          "It was poisonous.",
+          "It made everyone forget how to speak."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Milo discover in the Crystal Forest?",
+        "options": [
+          "An alien spaceship.",
+          "A hidden city.",
+          "That the crystals were vibrating and singing.",
+          "A new type of plant."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Milo calm the angry, crimson heart-crystal?",
+        "options": [
+          "He shouted at it to stop.",
+          "He used a special tool to shut it down.",
+          "He pressed his bare hand against it and thought of a peaceful memory.",
+          "He ran away from it as fast as he could."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Kepler-12 eventually become known as?",
+        "options": [
+          "The Silent Planet.",
+          "The Mining Planet.",
+          "The Musical Planet.",
+          "The Crystal Planet."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FFEEAD",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1729,10 +4937,51 @@
       "Bedtime & Calm",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Dayo's job on the Galactic Menagerie spaceship?",
+        "options": [
+          "Pilot.",
+          "Data-Miner.",
+          "Critter-Sitter for endangered animals.",
+          "Engineer."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was unique about the creature Dayo named Puff?",
+        "options": [
+          "It could fly without wings.",
+          "It ate light, specifically from a Yellow Dwarf star.",
+          "It could change its size at will.",
+          "It spoke human languages."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Dayo do against Dr. Zale's orders to help Puff?",
+        "options": [
+          "He gave Puff special medicine.",
+          "He redirected the ship's solar mirrors to shine starlight into Puff's enclosure.",
+          "He tried to return Puff to its comet.",
+          "He built Puff a new, larger enclosure."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was Puff's true role or ability, revealed later in the story?",
+        "options": [
+          "A powerful weapon.",
+          "A ship's navigator that senses healthy stars.",
+          "A translator for alien languages.",
+          "A source of infinite energy."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#96CEB4",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1751,10 +5000,51 @@
       "Greed vs. Generosity",
       "Honesty & Integrity"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What kind of food did Amara usually eat in Dome-City 4 on Mars?",
+        "options": [
+          "Fresh fruits and vegetables.",
+          "Hydro-Kale grown in plastic tubes.",
+          "Nutrient Cubes.",
+          "Imported food from Earth."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Amara find in the Old Storage Bay that sparked her new mission?",
+        "options": [
+          "A fully functioning new robot.",
+          "A discarded terraforming robot and an English Oak seed.",
+          "A map to a hidden water source.",
+          "A message from Earth."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did the oak sapling ultimately help Dome-City 4?",
+        "options": [
+          "Its roots discovered a hidden energy source.",
+          "Its fresh oxygen provided time to fix the city's generators.",
+          "Its leaves provided new food for the citizens.",
+          "It attracted rescuers from Earth."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What became Rusty's new role after the city was saved?",
+        "options": [
+          "He was recycled for parts.",
+          "He became a security guard for the Dome.",
+          "He was named Head Gardener of Mars.",
+          "He was sent back to Earth."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FFEEAD",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1773,10 +5063,51 @@
       "Humor & Fun",
       "Trust & Loyalty"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Orion's main job as one of the Keepers on the SS Discovery?",
+        "options": [
+          "Waking up the sleeping passengers",
+          "Repairing the ship's engines",
+          "Keeping the lights on and engines running",
+          "Exploring new planets"
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What major problem did the SS Discovery encounter that the Computer-Brain couldn't solve?",
+        "options": [
+          "It ran out of fuel unexpectedly.",
+          "Space-dust clogged sensors, causing it to lose its destination.",
+          "A meteor shower damaged its exterior.",
+          "The cryo-pods malfunctioned."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Orion navigate the ship away from the black hole?",
+        "options": [
+          "He reprogrammed the Computer-Brain with new code.",
+          "He used the ship's emergency thrusters manually.",
+          "He followed a silver thread on the Light-Threads map.",
+          "He asked the Captain for a new course."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What important lesson did the adult Keepers learn from Orion's actions?",
+        "options": [
+          "Machines are always more reliable than human intuition.",
+          "Advanced technology is unnecessary for space travel.",
+          "Sometimes human intuition and feeling can solve problems machines can't.",
+          "Only children should be navigators on Sleeper Ships."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#9B59B6",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1795,10 +5126,51 @@
       "Good vs. Evil",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What were Kemi's eating habits like before she started feeling unwell?",
+        "options": [
+          "She ate only fruits and vegetables.",
+          "She never ate anything sweet.",
+          "She often chose biscuits and fizzy drinks, ignoring healthier options.",
+          "She always helped her mother plan meals."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What specific problems did Kemi experience due to her poor eating habits?",
+        "options": [
+          "She gained a lot of weight and felt too heavy to run.",
+          "She woke up tired, couldn't concentrate, and felt weak.",
+          "She developed an allergic reaction to certain foods.",
+          "She started getting stomach aches every day."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Kemi's mother explain the importance of different foods?",
+        "options": [
+          "She said different foods taste good in different ways.",
+          "She explained that food is fuel and each type helps the body differently.",
+          "She told Kemi that some foods are only for special occasions.",
+          "She emphasized that food makes you grow taller."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the main discovery Kemi made about food?",
+        "options": [
+          "That sugary treats are always bad for you.",
+          "That food isn't just about taste, but about fueling the body properly.",
+          "That skipping breakfast is good for you.",
+          "That only expensive foods are healthy."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#E74C3C",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1817,10 +5189,51 @@
       "Animals & Friends",
       "Freedom & Adventure"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "How did Tobi typically spend most of his time at the beginning of the story?",
+        "options": [
+          "Playing football with friends.",
+          "Reading books in the park.",
+          "On the sofa with screens and games.",
+          "Helping his mother with chores."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What prompted Tobi to start moving more?",
+        "options": [
+          "His friends dared him to run a race.",
+          "His mother suggested a walk to the park.",
+          "His games stopped working.",
+          "He wanted to become a professional athlete."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What unexpected positive effects did Tobi experience from exercising?",
+        "options": [
+          "He became extremely rich and famous.",
+          "His mood lifted, he felt less heavy, and he slept better.",
+          "He stopped needing to eat food.",
+          "He suddenly became much smarter in school without trying."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the most surprising connection Tobi discovered about movement?",
+        "options": [
+          "That moving his body had a positive effect on his mind and focus.",
+          "That moving made him want to sit on the sofa even more.",
+          "That movement was only good if it was a competitive sport.",
+          "That he could talk to animals while exercising."
+        ],
+        "correctOption": 0
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#C2185B",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1839,10 +5252,51 @@
       "Change & Transformation",
       "Kindness & Sharing"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Amaka's usual habit regarding bedtime?",
+        "options": [
+          "She always went to bed very early.",
+          "She treated bedtime as something to negotiate and often stayed up late.",
+          "She never read books before bed.",
+          "She helped her mother prepare for bedtime."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What problems did Amaka experience when she didn't get enough sleep?",
+        "options": [
+          "She became very hungry and ate too much.",
+          "She felt groggy, irritable, and couldn't concentrate.",
+          "She had too much energy and couldn't sit still.",
+          "She started seeing strange things."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Amaka's mother explain what sleep does for the body and brain?",
+        "options": [
+          "She said sleep was just a way to pass the time until morning.",
+          "She explained sleep helps the body repair itself and the brain process memories.",
+          "She mentioned sleep makes you forget things.",
+          "She told Amaka sleep was a punishment."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was Amaka's main realization about sleep?",
+        "options": [
+          "Sleep was a waste of time that could be spent playing.",
+          "Sleep was only for very old people.",
+          "Sleep wasn't wasted time, but when the body did its most important work.",
+          "Sleep made her feel more tired."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#455A64",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1861,10 +5315,51 @@
       "Coming of Age",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Chike's initial attitude towards washing his hands?",
+        "options": [
+          "He loved washing his hands and did it constantly.",
+          "He thought it was an unnecessary interruption.",
+          "He only washed them when his hands were visibly dirty.",
+          "He always waited for his mother to remind him."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What event made Chike start paying more attention to hygiene?",
+        "options": [
+          "He saw a documentary about germs.",
+          "His stomach ache one afternoon.",
+          "His friends made fun of his dirty hands.",
+          "His teacher gave him extra homework on cleanliness."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "According to the teacher, how do germs make people sick?",
+        "options": [
+          "They fly through the air and land on people.",
+          "They are transferred through touch and enter the body through openings like the mouth and nose.",
+          "They only exist in dirty water.",
+          "They are eaten directly from the ground."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What important connection did Chike realize about his clean habits?",
+        "options": [
+          "That they were only important at school.",
+          "That they helped him win prizes for cleanliness.",
+          "That they protected his family and friends, not just himself.",
+          "That they made his clothes look cleaner."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#E67E22",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1883,10 +5378,51 @@
       "Change & Transformation",
       "Good vs. Evil"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Mariam's goal at the beginning of the story?",
+        "options": [
+          "To become the strongest person in her class.",
+          "To feel strong, sharp, and well.",
+          "To eat only desserts every day.",
+          "To never have to clean her room."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What four basic components did Mariam and her mother discuss for a healthy routine?",
+        "options": [
+          "Watching TV, playing games, eating snacks, staying up late.",
+          "Good food, regular movement, enough sleep, clean habits.",
+          "Reading books, drawing pictures, visiting friends, listening to music.",
+          "Sleeping all day, eating only protein, running marathons, never talking."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Mariam observe the different parts of her routine working together?",
+        "options": [
+          "They competed against each other for her attention.",
+          "They supported each other, making the whole more effective.",
+          "Only one part of the routine mattered at a time.",
+          "She found that adding more made her feel worse."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was Mariam's key discovery about a healthy routine?",
+        "options": [
+          "It was a strict restriction that limited her fun.",
+          "It was the opposite of restriction; it gave her energy for everything else.",
+          "It was too complicated for anyone to follow consistently.",
+          "It only worked if she was perfect every single day."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FF8C94",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1905,10 +5441,51 @@
       "Change & Transformation",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Temi's initial understanding of holidays?",
+        "options": [
+          "A time to learn about the seasons.",
+          "A chance to help his community.",
+          "No school and plenty of time to explore.",
+          "A period for formal studies and exams."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Temi learn about the seasons in the story?",
+        "options": [
+          "He read about them in a textbook.",
+          "A calm, unseen voice explained them to him while he sat under a mango tree.",
+          "His parents taught him during dinner.",
+          "He watched a special television program."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the 'Harmattan' season described as?",
+        "options": [
+          "A season of heavy rain and green growth.",
+          "A period of extreme heat and bright sun.",
+          "A time of cool, dry air with a fine dust, requiring patience and care.",
+          "The season for planting new crops."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was Temi's main realization at the end of the story?",
+        "options": [
+          "He needed to travel to other countries to experience seasons.",
+          "Seasons were only important for farmers.",
+          "He had been living in the seasons his whole life but hadn't been paying attention.",
+          "That only one season really mattered each year."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#A8E6CF",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1927,10 +5504,51 @@
       "Change & Transformation",
       "Freedom & Adventure"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was the weather like when Praise's holiday began?",
+        "options": [
+          "Sunny and hot.",
+          "Cold and dusty.",
+          "Heavy rain.",
+          "Windy with falling leaves."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What kind of activities did Praise engage in during the rainy holiday?",
+        "options": [
+          "He played outside in the puddles all day.",
+          "He helped in the kitchen, read, and listened to his grandmother's stories.",
+          "He went swimming in the rivers.",
+          "He traveled to a different town where it wasn't raining."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Praise notice when he walked around the compound after the rain stopped?",
+        "options": [
+          "Everything was still dry and dusty.",
+          "The plants looked freshly washed and the soil smelled rich and alive.",
+          "The puddles had all disappeared immediately.",
+          "Only dead leaves were visible everywhere."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Praise realize about his rainy holiday experience?",
+        "options": [
+          "It was a wasted holiday because he couldn't play outside much.",
+          "He'd gotten an education from being in a season properly, not just a holiday.",
+          "He preferred the dry season because it was louder.",
+          "Rainy seasons were always boring and offered nothing to learn."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#F57C00",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1949,10 +5567,51 @@
       "Good vs. Evil",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was Simi's initial reaction to the Harmattan season at the start of her holiday?",
+        "options": [
+          "Excited to play outside in the cool air.",
+          "Disappointed because it was cold and dry, not what she imagined.",
+          "Determined to find all the dust.",
+          "Happy because it meant she could travel."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What unexpected benefit did the cold Harmattan weather bring to Simi's family?",
+        "options": [
+          "It made them want to go on a long trip.",
+          "It brought everyone closer to the heater, leading to long conversations.",
+          "It encouraged everyone to stay in their own rooms.",
+          "It made them forget how to talk to each other."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What activities did Simi do that were influenced by the Harmattan season?",
+        "options": [
+          "Swimming in the river and playing water games.",
+          "Helping clean more often because of dust and watering plants carefully.",
+          "Only staying inside and watching television.",
+          "Building sandcastles in the dry sand."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was Simi's main takeaway from her Harmattan holiday?",
+        "options": [
+          "Loud and busy holidays are always the best kind.",
+          "She learned that not every holiday needed to be loud to be good; it offered slowness and quiet thinking.",
+          "She would never want another Harmattan holiday.",
+          "That cold weather was only good for sleeping."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#008E9B",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1971,10 +5630,51 @@
       "Kindness & Sharing",
       "Nature & Wildlife"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What season did Chidi's holiday begin in?",
+        "options": [
+          "The rainy season.",
+          "The dry season.",
+          "The harmattan.",
+          "Spring."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was the first important thing Chidi noticed and had to adapt to during his dry season holiday?",
+        "options": [
+          "The abundance of fruit everywhere.",
+          "The need for water conservation.",
+          "The extreme cold.",
+          "The constant noise from neighbors."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What danger did Chidi's father warn him about during the dry season afternoons?",
+        "options": [
+          "Getting lost in the forest.",
+          "Bush fires due to dry grass.",
+          "Getting sunburned too easily.",
+          "Falling into deep rivers."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Chidi learn about seasons by the end of his holiday?",
+        "options": [
+          "That seasons are just random weather patterns.",
+          "That every season had rules, and you learned what it asked and lived accordingly.",
+          "That he could change the rules of a season if he tried hard enough.",
+          "That seasons were not important for daily life."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#0081CF",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -1993,10 +5693,51 @@
       "Change & Transformation",
       "Resilience & Strength"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Imaan want to understand by making her own holiday calendar?",
+        "options": [
+          "How to buy the best pre-made calendars.",
+          "How the year moved, and how weather and celebrations connected.",
+          "How to draw professional-looking pictures.",
+          "How to get her friends to visit her more often."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "Whose answers did Imaan add to her calendar that were 'older, rooted in things that had changed over decades'?",
+        "options": [
+          "Her friends'.",
+          "Her parents'.",
+          "Her grandmother's.",
+          "Her teacher's."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did the calendar become 'collaborative'?",
+        "options": [
+          "Imaan bought new art supplies.",
+          "Her parents helped her draw every picture.",
+          "Her friends added festivals, traditional foods, and specific birds she'd missed.",
+          "She learned new drawing techniques from a book."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Imaan realize about the year when she looked at her finished calendar?",
+        "options": [
+          "It was random and unpredictable.",
+          "It was only useful for decorating her wall.",
+          "It had a rhythm—a pattern that repeated and could be anticipated.",
+          "It was too complicated to ever fully understand."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#2ECC71",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -2015,10 +5756,51 @@
       "Change & Transformation",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Adaeze initially think holidays were, before she spoke to her mother?",
+        "options": [
+          "Days for rushing and being busy.",
+          "Just days off.",
+          "Days to receive gifts.",
+          "Days to help neighbors."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What message did Adaeze learn holidays carried from her mother and an elder?",
+        "options": [
+          "That people should stay inside all day.",
+          "That it's a day to only think about yourself.",
+          "Gratitude, forgiveness, and the responsibility of people to one another.",
+          "That special food is the most important part of the day."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What activity did Adaeze participate in that made her feel a 'warmth'?",
+        "options": [
+          "Waking up later than usual.",
+          "Listening to her parents talk about the holiday.",
+          "Helping distribute food to neighbors.",
+          "Sitting quietly with her cousins."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Adaeze decide to pay more attention to about holidays from now on?",
+        "options": [
+          "How many days off they provided.",
+          "Only the food and decorations.",
+          "Holidays as days with something to say and remember.",
+          "Which holidays were the most popular."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#DCEDC1",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -2037,10 +5819,51 @@
       "Animals & Friends",
       "Kindness & Sharing"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What sounds and smells greeted Dayo on the morning of the festival?",
+        "options": [
+          "Quiet streets and the smell of rain.",
+          "School bells and car engines.",
+          "Drums in the distance and the smell of food being prepared.",
+          "Birds singing and the sound of children playing indoors."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "According to the elder, what is the purpose of the cultural holiday?",
+        "options": [
+          "To make people forget the difficulties of the past.",
+          "To make sure that lessons learned over generations stay alive.",
+          "To allow everyone to take a day off from work.",
+          "To organize the village for future events."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "How did Dayo learn the traditional dance steps?",
+        "options": [
+          "He already knew them perfectly.",
+          "By watching a video on his phone.",
+          "Imperfectly, patiently, through practice with older youths.",
+          "He read about them in a book."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Dayo understand the holiday truly was, beyond just celebration?",
+        "options": [
+          "A chance to get new clothes.",
+          "A time to be alone with his thoughts.",
+          "Memory made into action—a way of keeping the past present.",
+          "An opportunity to learn a new language quickly."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#1ABC9C",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -2059,10 +5882,51 @@
       "Change & Transformation",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What was different about the morning Seun woke up on the public holiday?",
+        "options": [
+          "There was a rush for school.",
+          "The market was running with many people.",
+          "The streets were quieter, and the market wasn't running.",
+          "His father was still asleep."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "According to Seun's father, what is the purpose of public holidays?",
+        "options": [
+          "To watch television ceremonies all day.",
+          "To forget about the country's history.",
+          "To remember something important in the country's history.",
+          "To have a big party with friends."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What activity did Seun join in with his neighbors during the afternoon?",
+        "options": [
+          "A parade down the main street.",
+          "A street cleanup.",
+          "A quiet reading club.",
+          "A cooking competition."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What new understanding did Seun gain about remembering?",
+        "options": [
+          "It was something that just happened naturally.",
+          "It was a responsibility and a choice, a decision made every year.",
+          "It was only important for older people.",
+          "It was best learned from textbooks alone."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#F1C40F",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -2081,10 +5945,51 @@
       "Coming of Age",
       "Magic & Wonder"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "How did Emma initially feel about her garden?",
+        "options": [
+          "She wanted to share all its produce with Mr. Chen.",
+          "She found it too much work to maintain alone.",
+          "She liked it as her own work, her own space.",
+          "She hoped Mr. Chen's garden would soon look as good as hers."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What specific event made Emma feel 'uncomfortable' and consider helping Mr. Chen?",
+        "options": [
+          "Mr. Chen waved at her from his porch.",
+          "Her dad told her the best gardens are about who you share them with.",
+          "Mr. Chen's main tomato plant toppled over and he struggled to fix it.",
+          "She ran out of space to plant new vegetables in her own garden."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Emma's dad say the 'best gardens aren't really about'?",
+        "options": [
+          "The size of the plants.",
+          "The number of flowers.",
+          "The plants themselves, but rather who you share them with.",
+          "How much weeding you do."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was the unexpected outcome of Emma helping Mr. Chen in his garden?",
+        "options": [
+          "Emma's own garden started to droop.",
+          "Mr. Chen became strong enough to do all the work alone.",
+          "Their gardens both failed, but they learned a lesson.",
+          "His garden thrived, and they became friends, sharing knowledge and stories."
+        ],
+        "correctOption": 3
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#FF8C94",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -2103,10 +6008,51 @@
       "Good vs. Evil",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What did Jordan find near the bus stop on his way home from soccer practice?",
+        "options": [
+          "A brand new video game.",
+          "His grandpa's signed baseball card.",
+          "A brown leather wallet.",
+          "A sixty-dollar bill."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What two opposing thoughts did Jordan have after finding the wallet?",
+        "options": [
+          "He should ignore it vs. He should tell his friends.",
+          "He should buy the video game vs. He should save the money.",
+          "'Finders keepers' vs. 'Someone lost this, they're looking for it.'",
+          "He should keep the credit cards vs. He should throw them away."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "Why did Jordan decide to return the wallet to Patricia Williams?",
+        "options": [
+          "He was afraid of getting caught if he kept it.",
+          "He didn't need the money for his video game anymore.",
+          "He hoped she would give him a reward.",
+          "Because it was hers, and he'd want someone to do the same for him."
+        ],
+        "correctOption": 3
+      },
+      {
+        "question": "What special 'reward' did Ms. Williams and her kids give Jordan for his honesty?",
+        "options": [
+          "The hundred dollars he returned.",
+          "A new video game.",
+          "A handmade coupon book for things like math tutoring and home-cooked dinner.",
+          "A soccer trophy."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#845EC2",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -2125,10 +6071,51 @@
       "Kindness & Sharing",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What kind of art did Maya draw that was different from Lily's usual style?",
+        "options": [
+          "Gardens with butterflies and birds.",
+          "Soft watercolors of flowers.",
+          "Robots, buildings, and spaceships with tight, precise lines.",
+          "Sunsets over the ocean."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "How did Lily's negative comments initially affect Maya?",
+        "options": [
+          "Maya started to draw like Lily.",
+          "Maya became more confident in her unique style.",
+          "Maya stopped raising her hand, stopped sharing her work, and moved to a corner table.",
+          "Maya started an argument with Lily."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What caused Lily to realize how Maya felt about her art?",
+        "options": [
+          "Her teacher, Ms. Garcia, explained empathy to her.",
+          "Her mom told her off for being unkind.",
+          "Someone said mean things about Lily's own art, making her feel the same way.",
+          "Maya directly confronted Lily about her comments."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What was the positive outcome after Lily apologized and shared Maya's art with the class?",
+        "options": [
+          "The class continued to ignore Maya.",
+          "Maya's art became less popular with other students.",
+          "Other kids became interested in Maya's drawings, and she became more confident and started explaining her work.",
+          "Lily decided to stop drawing altogether."
+        ],
+        "correctOption": 2
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#C2185B",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -2147,10 +6134,51 @@
       "Good vs. Evil",
       "Greed vs. Generosity"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What unexpected event happened to Tyler's science fair project the day before the fair?",
+        "options": [
+          "He won first place early.",
+          "His little brother knocked it over, shattering the solar panel and ruining the circuit board.",
+          "He decided to switch his project to a volcano.",
+          "He finished it much earlier than expected."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What was Marcus's initial 'small, private thought' after hearing about Tyler's project?",
+        "options": [
+          "He immediately wanted to help Tyler.",
+          "He thought his chances of winning first place just got better.",
+          "He was worried he wouldn't be able to compete now.",
+          "He felt sorry for Tyler but didn't consider helping."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Marcus do at 2 AM after much thought?",
+        "options": [
+          "He gave up on his own project.",
+          "He called Tyler and insisted they work together to rebuild Tyler's project.",
+          "He decided to go to bed and forget about the fair.",
+          "He started practicing his own volcano demonstration even more."
+        ],
+        "correctOption": 1
+      },
+      {
+        "question": "What did Marcus's mom and older brother help him understand was more important than winning a first-place trophy?",
+        "options": [
+          "Getting good grades in science class.",
+          "The act of helping a friend in need and the feeling that came with it.",
+          "Making sure his own project was perfect.",
+          "Attending the regional fair."
+        ],
+        "correctOption": 1
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#2ECC71",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
@@ -2169,10 +6197,51 @@
       "Greed vs. Generosity",
       "Love & Family"
     ],
-    "questions": [],
+    "questions": [
+      {
+        "question": "What hidden talent had Yasmin been secretly practicing for two years?",
+        "options": [
+          "Ballet.",
+          "Playing a musical instrument.",
+          "Breakdancing.",
+          "Jazz dancing."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What did Yasmin initially agree to do for the talent show?",
+        "options": [
+          "A solo breakdance routine.",
+          "A magic trick.",
+          "A ballet routine with her friends.",
+          "Sing a song."
+        ],
+        "correctOption": 2
+      },
+      {
+        "question": "What advice did Yasmin's older brother Karim give her?",
+        "options": [
+          "To try harder at ballet.",
+          "To find new friends who liked ballet.",
+          "To stop breakdancing because it was weird.",
+          "To breakdance and not care what other people think."
+        ],
+        "correctOption": 3
+      },
+      {
+        "question": "How did the crowd react to Yasmin's breakdancing performance at the talent show?",
+        "options": [
+          "They were quiet and seemed confused.",
+          "They booed her off the stage.",
+          "They gave polite, scattered applause.",
+          "The gym erupted with people on their feet, clapping and screaming."
+        ],
+        "correctOption": 3
+      }
+    ],
     "wordCount": 0,
     "backgroundColor": "#A8E6CF",
-    "isInteractive": false,
+    "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
     "difficultyLevel": 1
