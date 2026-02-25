@@ -406,6 +406,7 @@ describe('TextToSpeechService', () => {
     it('should still return audio when cache write fails', async () => {
       mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue(null);
       mockIsPremiumUser.mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
       mockUploadAudio.mockResolvedValue('https://uploaded-audio.com/audio.wav');
       mockPrisma.paragraphAudioCache.upsert.mockRejectedValue(
@@ -589,6 +590,51 @@ describe('TextToSpeechService', () => {
       const releasedCredits = mockReleaseReservedUsage.mock.calls[0][1];
       const reservedCredits = mockRecordUsage.mock.calls[0][1];
       expect(releasedCredits).toBe(reservedCredits);
+    });
+
+    it('should return all nulls when free-user batch provider fails without falling back', async () => {
+      mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
+      mockIsPremiumUser.mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
+      // Deepgram fails for all paragraphs
+      mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram outage'));
+
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        fullText,
+        VoiceType.LILY,
+        userId,
+      );
+
+      // All paragraphs should have null audioUrl (no fallback to Edge TTS)
+      expect(result.results.every((r) => r.audioUrl === null)).toBe(true);
+      // Edge TTS should never be called in batch mode
+      expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
+      // ElevenLabs should never be called for free users denied quota
+      expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
+    });
+
+    it('should deny ElevenLabs override when quota is exhausted for free users', async () => {
+      mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
+      mockIsPremiumUser.mockResolvedValue(false);
+      // Batch-level check allows ElevenLabs
+      mockCanFreeUserUseElevenLabs.mockResolvedValueOnce(true);
+      // Per-paragraph check denies (quota exhausted after batch decision)
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
+      mockElevenLabsGenerate.mockRejectedValue(
+        new Error('ElevenLabs quota exhausted for this request'),
+      );
+
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        fullText,
+        VoiceType.CHARLIE,
+        userId,
+      );
+
+      // All paragraphs should have null audioUrl since ElevenLabs fails
+      // and batch mode doesn't fall back to a different provider
+      expect(result.results.every((r) => r.audioUrl === null)).toBe(true);
     });
 
     it('should cap paragraphs at MAX_BATCH_PARAGRAPHS (50)', async () => {

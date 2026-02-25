@@ -806,8 +806,8 @@ export class StoryService {
     });
     if (!story) throw new NotFoundException('Story not found');
 
-    const progress = await this.prisma.userStoryProgress.findUnique({
-      where: { userId_storyId: { userId, storyId } },
+    const progress = await this.prisma.userStoryProgress.findFirst({
+      where: { userId, storyId, isDeleted: false },
     });
 
     if (!progress) return null;
