@@ -144,13 +144,21 @@ export class TextToSpeechService {
     return result.audioUrl;
   }
 
-  /** Internal TTS generation that tracks which provider was used */
+  /**
+   * Internal TTS generation that tracks which provider was used.
+   * When `providerOverride` is set, only that provider is attempted
+   * (no fallback chain). Used by batch mode to ensure voice consistency.
+   */
   private async generateTTS(
     storyId: string,
     text: string,
     voicetype?: VoiceType | string,
     userId?: string,
-    options?: { skipQuotaCheck?: boolean; isPremium?: boolean },
+    options?: {
+      skipQuotaCheck?: boolean;
+      isPremium?: boolean;
+      providerOverride?: 'elevenlabs' | 'deepgram' | 'edgetts';
+    },
   ): Promise<TTSResult> {
     const type = voicetype ?? DEFAULT_VOICE;
 
@@ -248,50 +256,63 @@ export class TextToSpeechService {
     }
 
     const cleanedText = preprocessTextForTTS(text);
+    const override = options?.providerOverride;
+
+    // Helper: attempt a single provider, cache on success, return result
+    const attemptProvider = async (
+      providerName: TTSResult['provider'],
+      generate: () => Promise<Buffer>,
+    ): Promise<TTSResult> => {
+      const audioBuffer = await generate();
+      const audioUrl = await this.uploadService.uploadAudioBuffer(
+        audioBuffer,
+        `story_${storyId}_${providerName}_${Date.now()}.mp3`,
+      );
+      try {
+        await this.cacheParagraphAudio(storyId, text, type, audioUrl);
+      } catch (cacheErr) {
+        const cacheMsg =
+          cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
+        this.logger.warn(
+          `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
+        );
+      }
+      return { audioUrl, provider: providerName };
+    };
+
+    // When providerOverride is set, only try that provider and throw on failure
+    // (no fallback chain). This is used by batch mode for voice consistency.
+    if (override) {
+      return this.attemptSingleProvider(
+        override,
+        storyId,
+        type,
+        cleanedText,
+        elevenLabsId,
+        deepgramVoice,
+        edgeTtsVoice,
+        voiceSettings,
+        userId,
+        options,
+        attemptProvider,
+      );
+    }
+
+    // Normal mode: full fallback chain
 
     // Priority 1: ElevenLabs (premium users only)
     if (useElevenLabs && elevenLabsId) {
       try {
-        const labsModel = VOICE_CONFIG_SETTINGS.MODELS.DEFAULT;
-        const settings: VoiceSettings = voiceSettings ?? {
-          stability:
-            VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.STABILITY,
-          similarity_boost:
-            VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.SIMILARITY_BOOST,
-          style: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.STYLE,
-          use_speaker_boost:
-            VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS
-              .USE_SPEAKER_BOOST,
-        };
-
-        this.logger.log(
-          `Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${elevenLabsId}) using model ${labsModel}`,
-        );
-        const audioBuffer = await this.elevenLabsProvider.generateAudio(
+        return await this.tryElevenLabs(
+          storyId,
           cleanedText,
           elevenLabsId,
-          labsModel,
-          settings,
+          type,
+          voiceSettings,
+          userId,
+          options,
+          attemptProvider,
         );
-
-        if (userId && !options?.skipQuotaCheck) {
-          await this.voiceQuota.incrementUsage(userId);
-        }
-
-        const elAudioUrl = await this.uploadService.uploadAudioBuffer(
-          audioBuffer,
-          `story_${storyId}_elevenlabs_${Date.now()}.mp3`,
-        );
-        try {
-          await this.cacheParagraphAudio(storyId, text, type, elAudioUrl);
-        } catch (cacheErr) {
-          const cacheMsg =
-            cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
-          this.logger.warn(
-            `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
-          );
-        }
-        return { audioUrl: elAudioUrl, provider: 'elevenlabs' };
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         this.logger.warn(
@@ -302,28 +323,12 @@ export class TextToSpeechService {
 
     // Priority 2: Deepgram TTS
     try {
-      this.logger.log(
-        `Attempting Deepgram TTS generation for story ${storyId} with voice ${deepgramVoice ?? 'default'}`,
-      );
-
-      const audioBuffer = await this.deepgramProvider.generateAudio(
+      return await this.tryDeepgram(
+        storyId,
         cleanedText,
         deepgramVoice,
+        attemptProvider,
       );
-      const dgAudioUrl = await this.uploadService.uploadAudioBuffer(
-        audioBuffer,
-        `story_${storyId}_deepgram_${Date.now()}.mp3`,
-      );
-      try {
-        await this.cacheParagraphAudio(storyId, text, type, dgAudioUrl);
-      } catch (cacheErr) {
-        const cacheMsg =
-          cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
-        this.logger.warn(
-          `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
-        );
-      }
-      return { audioUrl: dgAudioUrl, provider: 'deepgram' };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(
@@ -333,28 +338,12 @@ export class TextToSpeechService {
 
     // Priority 3: Edge TTS (final fallback)
     try {
-      this.logger.log(
-        `Attempting Edge TTS generation for story ${storyId} with voice ${edgeTtsVoice ?? 'default'}`,
-      );
-
-      const audioBuffer = await this.edgeTtsProvider.generateAudio(
+      return await this.tryEdgeTts(
+        storyId,
         cleanedText,
         edgeTtsVoice,
+        attemptProvider,
       );
-      const edgeAudioUrl = await this.uploadService.uploadAudioBuffer(
-        audioBuffer,
-        `story_${storyId}_edgetts_${Date.now()}.mp3`,
-      );
-      try {
-        await this.cacheParagraphAudio(storyId, text, type, edgeAudioUrl);
-      } catch (cacheErr) {
-        const cacheMsg =
-          cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
-        this.logger.warn(
-          `Failed to cache paragraph audio for story ${storyId}: ${cacheMsg}`,
-        );
-      }
-      return { audioUrl: edgeAudioUrl, provider: 'edgetts' };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(
@@ -363,6 +352,140 @@ export class TextToSpeechService {
       throw new InternalServerErrorException(
         'Voice generation failed on all providers',
       );
+    }
+  }
+
+  /** Try ElevenLabs provider */
+  private async tryElevenLabs(
+    storyId: string,
+    cleanedText: string,
+    elevenLabsId: string,
+    type: string,
+    voiceSettings: VoiceSettings | undefined,
+    userId: string | undefined,
+    options: { skipQuotaCheck?: boolean; isPremium?: boolean } | undefined,
+    attemptProvider: (
+      name: TTSResult['provider'],
+      gen: () => Promise<Buffer>,
+    ) => Promise<TTSResult>,
+  ): Promise<TTSResult> {
+    const labsModel = VOICE_CONFIG_SETTINGS.MODELS.DEFAULT;
+    const settings: VoiceSettings = voiceSettings ?? {
+      stability: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.STABILITY,
+      similarity_boost:
+        VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.SIMILARITY_BOOST,
+      style: VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.STYLE,
+      use_speaker_boost:
+        VOICE_CONFIG_SETTINGS.ELEVEN_LABS.DEFAULT_SETTINGS.USE_SPEAKER_BOOST,
+    };
+
+    this.logger.log(
+      `Attempting ElevenLabs generation for story ${storyId} with voice ${type} (${elevenLabsId}) using model ${labsModel}`,
+    );
+    const result = await attemptProvider('elevenlabs', () =>
+      this.elevenLabsProvider.generateAudio(
+        cleanedText,
+        elevenLabsId,
+        labsModel,
+        settings,
+      ),
+    );
+
+    if (userId && !options?.skipQuotaCheck) {
+      await this.voiceQuota.incrementUsage(userId);
+    }
+
+    return result;
+  }
+
+  /** Try Deepgram provider */
+  private async tryDeepgram(
+    storyId: string,
+    cleanedText: string,
+    deepgramVoice: string | undefined,
+    attemptProvider: (
+      name: TTSResult['provider'],
+      gen: () => Promise<Buffer>,
+    ) => Promise<TTSResult>,
+  ): Promise<TTSResult> {
+    this.logger.log(
+      `Attempting Deepgram TTS generation for story ${storyId} with voice ${deepgramVoice ?? 'default'}`,
+    );
+    return attemptProvider('deepgram', () =>
+      this.deepgramProvider.generateAudio(cleanedText, deepgramVoice),
+    );
+  }
+
+  /** Try Edge TTS provider */
+  private async tryEdgeTts(
+    storyId: string,
+    cleanedText: string,
+    edgeTtsVoice: string | undefined,
+    attemptProvider: (
+      name: TTSResult['provider'],
+      gen: () => Promise<Buffer>,
+    ) => Promise<TTSResult>,
+  ): Promise<TTSResult> {
+    this.logger.log(
+      `Attempting Edge TTS generation for story ${storyId} with voice ${edgeTtsVoice ?? 'default'}`,
+    );
+    return attemptProvider('edgetts', () =>
+      this.edgeTtsProvider.generateAudio(cleanedText, edgeTtsVoice),
+    );
+  }
+
+  /**
+   * Attempt a single provider without fallback (used when providerOverride is set).
+   * Throws on failure instead of falling through to next provider.
+   */
+  private async attemptSingleProvider(
+    provider: 'elevenlabs' | 'deepgram' | 'edgetts',
+    storyId: string,
+    type: string,
+    cleanedText: string,
+    elevenLabsId: string | undefined,
+    deepgramVoice: string | undefined,
+    edgeTtsVoice: string | undefined,
+    voiceSettings: VoiceSettings | undefined,
+    userId: string | undefined,
+    options: { skipQuotaCheck?: boolean; isPremium?: boolean } | undefined,
+    attemptProvider: (
+      name: TTSResult['provider'],
+      gen: () => Promise<Buffer>,
+    ) => Promise<TTSResult>,
+  ): Promise<TTSResult> {
+    switch (provider) {
+      case 'elevenlabs': {
+        if (!elevenLabsId) {
+          throw new InternalServerErrorException(
+            `No ElevenLabs voice ID available for voice ${type}`,
+          );
+        }
+        return this.tryElevenLabs(
+          storyId,
+          cleanedText,
+          elevenLabsId,
+          type,
+          voiceSettings,
+          userId,
+          options,
+          attemptProvider,
+        );
+      }
+      case 'deepgram':
+        return this.tryDeepgram(
+          storyId,
+          cleanedText,
+          deepgramVoice,
+          attemptProvider,
+        );
+      case 'edgetts':
+        return this.tryEdgeTts(
+          storyId,
+          cleanedText,
+          edgeTtsVoice,
+          attemptProvider,
+        );
     }
   }
 
@@ -493,74 +616,120 @@ export class TextToSpeechService {
       }
     }
 
-    // Generate uncached paragraphs in batches of MAX_CONCURRENT.
-    // Only skip per-call quota for paragraphs within the reserved budget.
-    // Each entry in `uncached` is unique by hash — duplicates are replicated after.
-    const generated: Array<{
+    // ── Tier-by-tier batch generation ──
+    // Instead of per-paragraph fallback (which produces mixed voices), we try
+    // ALL uncached paragraphs with the best available provider first, then
+    // fall back failed ones to the next tier — ensuring voice consistency.
+    type BatchEntry = { index: number; text: string; hash: string };
+    type BatchResult = {
       index: number;
       text: string;
       audioUrl: string | null;
       hash: string;
-    }> = [];
+      provider: string | null;
+    };
+
+    const generated: BatchResult[] = [];
     let reservedUsed = 0;
 
-    for (let i = 0; i < uncached.length; i += MAX_CONCURRENT) {
-      const batch = uncached.slice(i, i + MAX_CONCURRENT);
-      const batchResults = await Promise.all(
-        batch.map(async ({ index, text, hash }, batchIndex) => {
-          const seqPos = i + batchIndex;
-          const withinReserved = isPremium && seqPos < reservedCredits;
-          try {
-            const result = await this.generateTTS(
-              storyId,
-              text,
-              voiceType,
-              userId,
-              { skipQuotaCheck: withinReserved, isPremium },
-            );
-            return {
-              index,
-              text,
-              audioUrl: result.audioUrl,
-              hash,
-              provider: result.provider,
-            };
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
-            this.logger.warn(
-              `Batch TTS failed for paragraph ${index} of story ${storyId}: ${msg}`,
-            );
-            return {
-              index,
-              text,
-              audioUrl: null as string | null,
-              hash,
-              provider: null as string | null,
-            };
-          }
-        }),
-      );
+    /** Process a list of paragraphs with a specific provider override, in MAX_CONCURRENT chunks. */
+    const processTier = async (
+      entries: BatchEntry[],
+      providerOverride: 'elevenlabs' | 'deepgram' | 'edgetts',
+    ): Promise<{ succeeded: BatchResult[]; failed: BatchEntry[] }> => {
+      const succeeded: BatchResult[] = [];
+      const failed: BatchEntry[] = [];
 
-      // Count how many reserved-budget paragraphs actually used ElevenLabs
-      for (let j = 0; j < batch.length; j++) {
-        const seqPos = i + j;
-        if (
-          isPremium &&
-          seqPos < reservedCredits &&
-          batchResults[j].provider === 'elevenlabs'
-        ) {
-          reservedUsed++;
+      for (let i = 0; i < entries.length; i += MAX_CONCURRENT) {
+        const chunk = entries.slice(i, i + MAX_CONCURRENT);
+        const results = await Promise.all(
+          chunk.map(async ({ index, text, hash }) => {
+            try {
+              const result = await this.generateTTS(
+                storyId,
+                text,
+                voiceType,
+                userId,
+                {
+                  skipQuotaCheck: isPremium && reservedCredits > 0,
+                  isPremium,
+                  providerOverride,
+                },
+              );
+              return {
+                index,
+                text,
+                hash,
+                audioUrl: result.audioUrl,
+                provider: result.provider,
+                ok: true as const,
+              };
+            } catch {
+              return {
+                index,
+                text,
+                hash,
+                audioUrl: null,
+                provider: null,
+                ok: false as const,
+              };
+            }
+          }),
+        );
+
+        for (const r of results) {
+          if (r.ok) {
+            succeeded.push({
+              index: r.index,
+              text: r.text,
+              hash: r.hash,
+              audioUrl: r.audioUrl,
+              provider: r.provider,
+            });
+            if (r.provider === 'elevenlabs') reservedUsed++;
+          } else {
+            failed.push({ index: r.index, text: r.text, hash: r.hash });
+          }
         }
       }
 
-      generated.push(
-        ...batchResults.map(({ index, text, audioUrl, hash }) => ({
-          index,
-          text,
-          audioUrl,
-          hash,
-        })),
+      return { succeeded, failed };
+    };
+
+    // Determine which provider tiers to try
+    const tiers: Array<'elevenlabs' | 'deepgram' | 'edgetts'> =
+      useElevenLabsBatch
+        ? ['elevenlabs', 'deepgram', 'edgetts']
+        : ['deepgram', 'edgetts'];
+
+    let remaining = uncached;
+
+    for (const tier of tiers) {
+      if (remaining.length === 0) break;
+
+      this.logger.log(
+        `Batch story ${storyId}: trying ${remaining.length} paragraphs with ${tier}`,
       );
+      const { succeeded, failed } = await processTier(remaining, tier);
+      generated.push(...succeeded);
+
+      if (failed.length > 0 && tier !== tiers[tiers.length - 1]) {
+        this.logger.warn(
+          `Batch story ${storyId}: ${failed.length} paragraphs failed with ${tier}, falling back to next tier`,
+        );
+      }
+
+      remaining = failed;
+    }
+
+    // Any still-remaining paragraphs after all tiers are exhausted
+    if (remaining.length > 0) {
+      this.logger.error(
+        `Batch story ${storyId}: ${remaining.length} paragraphs failed on all providers`,
+      );
+      for (const { index, text, hash } of remaining) {
+        generated.push({ index, text, hash, audioUrl: null, provider: null });
+      }
     }
 
     // Replicate generated audioUrls to duplicate paragraphs (same hash, different indices)
