@@ -766,6 +766,9 @@ export class StoryService {
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
         totalTimeSpent: newTotalTime,
+        // Restore soft-deleted records when user re-reads a removed story
+        isDeleted: false,
+        deletedAt: null,
       },
       create: {
         userId,
@@ -856,7 +859,17 @@ export class StoryService {
   async removeFromUserLibrary(userId: string, storyId: string) {
     return await this.prisma.$transaction([
       this.prisma.parentFavorite.deleteMany({ where: { userId, storyId } }),
-      this.prisma.userStoryProgress.deleteMany({ where: { userId, storyId } }),
+      // Soft-delete progress so checkStoryAccess still recognises the story
+      // as "already read" and free users can re-read without spending quota.
+      this.prisma.userStoryProgress.updateMany({
+        where: { userId, storyId },
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          progress: 0,
+          completed: false,
+        },
+      }),
     ]);
   }
 
