@@ -50,6 +50,19 @@ export class StoryQuotaService {
       return { canAccess: true, reason: 'already_read' };
     }
 
+    // 3. Check if one of the user's kids created this story (always accessible)
+    const createdByKid = await this.prisma.story.findFirst({
+      where: {
+        id: storyId,
+        isDeleted: false,
+        creatorKid: { parentId: userId, isDeleted: false },
+      },
+      select: { id: true },
+    });
+    if (createdByKid) {
+      return { canAccess: true, reason: 'already_read' };
+    }
+
     // 3. Get/create usage record with bonus calculation
     const usage = await this.getOrCreateUsageWithBonus(userId);
     const totalAllowed =
