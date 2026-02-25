@@ -24,7 +24,6 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { randomUUID } from 'crypto';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -60,11 +59,7 @@ import {
   UserStoryProgressDto,
   UserStoryProgressResponseDto,
 } from './dto/story.dto';
-import { VoiceType, StoryContentAudioDto } from '../voice/dto/voice.dto';
-import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { StoryService } from './story.service';
-import { VoiceService } from '../voice/voice.service';
-import { TextToSpeechService } from './text-to-speech.service';
 
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
@@ -87,12 +82,12 @@ export class StoryController {
   private readonly logger = new Logger(StoryController.name);
   constructor(
     private readonly storyService: StoryService,
-    private readonly voiceService: VoiceService,
-    private readonly textToSpeechService: TextToSpeechService,
     private readonly storyQuotaService: StoryQuotaService,
   ) {}
 
   @Get()
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({
     summary:
       'Get stories (optionally filtered by theme, category, recommended, kidId, and age)',
@@ -137,6 +132,7 @@ export class StoryController {
     long: { limit: THROTTLE_LIMITS.LONG.LIMIT, ttl: THROTTLE_LIMITS.LONG.TTL },
   }) // 100 per minute
   async getStories(
+    @Req() req: AuthenticatedRequest,
     @Query('theme') theme?: string,
     @Query('category') category?: string,
     @Query('season') season?: string,
@@ -155,6 +151,7 @@ export class StoryController {
     const safeLimit = Math.max(1, Math.min(100, limit));
 
     return this.storyService.getStories({
+      userId: req.authUserData.userId,
       theme,
       category,
       season,
@@ -655,7 +652,8 @@ export class StoryController {
     // Record access only after successful operation to avoid consuming quota on failures
     if (
       req.authUserData?.userId &&
-      req.storyAccessResult?.reason !== 'already_read'
+      req.storyAccessResult?.reason !== 'already_read' &&
+      req.storyAccessResult?.reason !== 'kid_created'
     ) {
       await this.storyQuotaService.recordNewStoryAccess(
         req.authUserData.userId,
@@ -935,80 +933,6 @@ export class StoryController {
     return this.storyService.getStoryPathById(id);
   }
 
-  @Get('story/audio/:id')
-  @UseGuards(AuthSessionGuard, StoryAccessGuard)
-  @ApiBearerAuth()
-  @CheckStoryQuota()
-  @ApiOperation({ summary: 'Get audio for a story path by id' })
-  @ApiParam({ name: 'id', type: String })
-  @ApiQuery({
-    name: 'voiceId',
-    required: false,
-    type: String,
-    description: 'VoiceType enum value or Voice UUID',
-  })
-  @ApiResponse({ status: 200, type: StoryPathDto })
-  @ApiResponse({
-    status: 403,
-    description: 'Story limit reached',
-    type: ErrorResponseDto,
-  })
-  async getStoryPathAudioById(
-    @Param('id') id: string,
-    @Req() req: RequestWithStoryAccess,
-    @Query('voiceId') voiceId?: VoiceType | string,
-  ) {
-    // Execute the operation first to ensure it succeeds
-    const audioUrl = await this.storyService.getStoryAudioUrl(
-      id,
-      voiceId ?? DEFAULT_VOICE,
-      req.authUserData!.userId,
-    );
-
-    // Record access only after successful operation to avoid consuming quota on failures
-    if (
-      req.authUserData?.userId &&
-      req.storyAccessResult?.reason !== 'already_read'
-    ) {
-      await this.storyQuotaService.recordNewStoryAccess(
-        req.authUserData.userId,
-        id,
-      );
-    }
-
-    return {
-      message: 'Audio generated successfully',
-      audioUrl,
-      voiceId: voiceId || DEFAULT_VOICE,
-      statusCode: 200,
-    };
-  }
-
-  @Post('story/audio')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get audio for a content' })
-  @ApiResponse({ status: 200, type: StoryPathDto })
-  @ApiBody({ type: StoryContentAudioDto })
-  async getContentAudio(
-    @Body() dto: StoryContentAudioDto,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
-      randomUUID().toString(),
-      dto.content,
-      dto.voiceId,
-      req.authUserData.userId,
-    );
-
-    return {
-      message: 'Audio generated successfully',
-      audioUrl,
-      voiceId: dto.voiceId || DEFAULT_VOICE,
-      statusCode: 200,
-    };
-  }
-
   @Post('generate')
   @UseGuards(AuthSessionGuard, SubscriptionThrottleGuard)
   @ApiBearerAuth()
@@ -1124,7 +1048,8 @@ export class StoryController {
     // Record access if this is a new story for the user
     if (
       req.authUserData?.userId &&
-      req.storyAccessResult?.reason !== 'already_read'
+      req.storyAccessResult?.reason !== 'already_read' &&
+      req.storyAccessResult?.reason !== 'kid_created'
     ) {
       await this.storyQuotaService.recordNewStoryAccess(
         req.authUserData.userId,

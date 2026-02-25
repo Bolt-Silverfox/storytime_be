@@ -331,6 +331,7 @@ model Story {
   categories            Category[]             @relation("StoryCategories")
   themes                Theme[]                @relation("StoryThemes")
   storyAudioCaches      StoryAudioCache[]
+  paragraphAudioCaches  ParagraphAudioCache[]
   questions             StoryQuestion[]
   seasons               Season[]               @relation("StorySeasons")
   // Add this field to track who created it (for AI generation)
@@ -1120,4 +1121,22 @@ model DeviceToken {
   @@index([userId, isActive])
   @@index([isDeleted])
   @@map("device_tokens")
+}
+
+// -------------------------
+// PARAGRAPH AUDIO CACHE
+// -------------------------
+model ParagraphAudioCache {
+  id        String   @id @default(uuid())
+  storyId   String
+  textHash  String
+  voiceId   String
+  audioUrl  String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storyId, textHash, voiceId])
+  @@index([storyId])
+  @@map("paragraph_audio_cache")
 }

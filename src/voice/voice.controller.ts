@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -24,7 +26,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { randomUUID } from 'crypto';
+import { Throttle } from '@nestjs/throttler';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -34,6 +36,7 @@ import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { DEFAULT_VOICE } from './voice.constants';
 import {
+  BatchStoryAudioDto,
   CreateElevenLabsVoiceDto,
   SetPreferredVoiceDto,
   StoryContentAudioDto,
@@ -150,33 +153,6 @@ export class VoiceController {
     return this.voiceService.getPreferredVoice(req.authUserData.userId);
   }
 
-  // --- Free tier second voice selection ---
-  @Patch('second-voice')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Set second voice for free tier user',
-    description:
-      'Free users can select one additional voice beyond the default. Premium users have unlimited access.',
-  })
-  @ApiBody({ type: SetPreferredVoiceDto })
-  @ApiResponse({ status: 200, description: 'Second voice set successfully' })
-  @ApiResponse({
-    status: 400,
-    description: 'Premium users do not need to set a second voice',
-  })
-  @ApiResponse({ status: 404, description: 'Voice not found' })
-  async setSecondVoice(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: SetPreferredVoiceDto,
-  ) {
-    await this.voiceQuotaService.setSecondVoice(
-      req.authUserData.userId,
-      body.voiceId,
-    );
-    return { message: 'Second voice set successfully', voiceId: body.voiceId };
-  }
-
   // --- Get voice access status ---
   @Get('access')
   @UseGuards(AuthSessionGuard)
@@ -195,7 +171,6 @@ export class VoiceController {
         isPremium: { type: 'boolean' },
         unlimited: { type: 'boolean' },
         defaultVoice: { type: 'string' },
-        selectedSecondVoice: { type: 'string', nullable: true },
         maxVoices: { type: 'number' },
       },
     },
@@ -231,16 +206,27 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Query('voiceId') voiceId?: VoiceType | string,
   ) {
+    const resolvedVoice = voiceId ?? DEFAULT_VOICE;
+    const canUse = await this.voiceQuotaService.canUseVoice(
+      req.authUserData.userId,
+      resolvedVoice,
+    );
+    if (!canUse) {
+      throw new ForbiddenException(
+        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+      );
+    }
+
     const audioUrl = await this.storyService.getStoryAudioUrl(
       id,
-      voiceId ?? DEFAULT_VOICE,
+      resolvedVoice,
       req.authUserData.userId,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceId: voiceId || DEFAULT_VOICE,
+      voiceId: resolvedVoice,
       statusCode: 200,
     };
   }
@@ -255,17 +241,100 @@ export class VoiceController {
     @Body() dto: StoryContentAudioDto,
     @Req() req: AuthenticatedRequest,
   ) {
+    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
+    const canUse = await this.voiceQuotaService.canUseVoice(
+      req.authUserData.userId,
+      resolvedVoice,
+    );
+    if (!canUse) {
+      throw new ForbiddenException(
+        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+      );
+    }
+
     const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
-      randomUUID().toString(),
+      dto.storyId,
       dto.content,
-      dto.voiceId ?? DEFAULT_VOICE,
+      resolvedVoice,
       req.authUserData.userId,
     );
 
     return {
       message: 'Audio generated successfully',
       audioUrl,
-      voiceId: dto.voiceId || DEFAULT_VOICE,
+      voiceId: resolvedVoice,
+      statusCode: 200,
+    };
+  }
+
+  @Post('story/audio/batch')
+  @UseGuards(AuthSessionGuard)
+  @Throttle({ short: { limit: 3, ttl: 60_000 } })
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate audio for all paragraphs of a story' })
+  @ApiResponse({
+    status: 200,
+    description: 'Batch audio generated successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        paragraphs: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              index: { type: 'number' },
+              text: { type: 'string' },
+              audioUrl: { type: 'string', nullable: true },
+            },
+          },
+        },
+        totalParagraphs: { type: 'number' },
+        wasTruncated: { type: 'boolean' },
+        voiceId: { type: 'string' },
+        statusCode: { type: 'number' },
+      },
+    },
+  })
+  @ApiBody({ type: BatchStoryAudioDto })
+  async batchTextToSpeech(
+    @Body() dto: BatchStoryAudioDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
+    const canUse = await this.voiceQuotaService.canUseVoice(
+      req.authUserData.userId,
+      resolvedVoice,
+    );
+    if (!canUse) {
+      throw new ForbiddenException(
+        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+      );
+    }
+
+    const story = await this.storyService.getStoryById(dto.storyId);
+    if (!story || !story.textContent) {
+      throw new NotFoundException('Story not found or has no content.');
+    }
+
+    const {
+      results: paragraphs,
+      totalParagraphs,
+      wasTruncated,
+    } = await this.textToSpeechService.batchTextToSpeechCloudUrls(
+      dto.storyId,
+      story.textContent,
+      resolvedVoice,
+      req.authUserData.userId,
+    );
+
+    return {
+      message: 'Batch audio generated successfully',
+      paragraphs,
+      totalParagraphs,
+      wasTruncated,
+      voiceId: resolvedVoice,
       statusCode: 200,
     };
   }

@@ -10,6 +10,7 @@ import { Cache } from '@nestjs/cache-manager';
 // Mock dependencies
 const mockPrismaService = {
   kid: { findUnique: jest.fn() },
+  user: { findUnique: jest.fn() },
   story: {
     create: jest.fn(),
     findMany: jest.fn(),
@@ -18,6 +19,7 @@ const mockPrismaService = {
   },
   theme: { findMany: jest.fn() },
   category: { findMany: jest.fn() },
+  season: { findMany: jest.fn() },
   downloadedStory: {
     findMany: jest.fn(),
     upsert: jest.fn(),
@@ -26,6 +28,7 @@ const mockPrismaService = {
   },
   favorite: { deleteMany: jest.fn() },
   storyProgress: { deleteMany: jest.fn() },
+  userStoryProgress: { findMany: jest.fn() },
   parentRecommendation: { groupBy: jest.fn() },
   $transaction: jest.fn((args) => args), // Pass through transaction
 };
@@ -128,8 +131,9 @@ describe('StoryService - Library & Generation', () => {
       it('should filter by minAge and maxAge', async () => {
         prisma.story.count.mockResolvedValue(1);
         prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ minAge: 3, maxAge: 5 });
+        await service.getStories({ userId: 'user-1', minAge: 3, maxAge: 5 });
 
         expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -146,8 +150,9 @@ describe('StoryService - Library & Generation', () => {
       it('should filter by minAge only', async () => {
         prisma.story.count.mockResolvedValue(1);
         prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ minAge: 4 });
+        await service.getStories({ userId: 'user-1', minAge: 4 });
 
         expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -162,8 +167,9 @@ describe('StoryService - Library & Generation', () => {
       it('should filter by maxAge only', async () => {
         prisma.story.count.mockResolvedValue(1);
         prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ maxAge: 8 });
+        await service.getStories({ userId: 'user-1', maxAge: 8 });
 
         expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -173,6 +179,41 @@ describe('StoryService - Library & Generation', () => {
             }),
           }),
         );
+      });
+
+      it('should enrich stories with readStatus from user progress', async () => {
+        const stories = [
+          { id: 'story-1', title: 'Completed Story' },
+          { id: 'story-2', title: 'In Progress Story' },
+          { id: 'story-3', title: 'Unread Story' },
+        ];
+        prisma.story.count.mockResolvedValue(3);
+        prisma.story.findMany.mockResolvedValue(stories);
+        prisma.userStoryProgress.findMany.mockResolvedValue([
+          { storyId: 'story-1', completed: true },
+          { storyId: 'story-2', completed: false },
+        ]);
+
+        const result = await service.getStories({ userId: 'user-1' });
+
+        expect(result.data[0]).toEqual(
+          expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
+        );
+        expect(result.data[1]).toEqual(
+          expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+        );
+        expect(result.data[2]).toEqual(
+          expect.objectContaining({ id: 'story-3', readStatus: null }),
+        );
+        expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
+        expect(prisma.userStoryProgress.findMany).toHaveBeenCalledWith({
+          where: {
+            userId: 'user-1',
+            storyId: { in: ['story-1', 'story-2', 'story-3'] },
+            isDeleted: false,
+          },
+          select: { storyId: true, completed: true },
+        });
       });
     });
 
@@ -225,7 +266,55 @@ describe('StoryService - Library & Generation', () => {
     });
   });
 
-  // --- 3. TOP PICKS TESTS ---
+  // --- 3. HOME PAGE STORIES ---
+  describe('getHomePageStories', () => {
+    it('should enrich recommended, seasonal, and topLiked with readStatus', async () => {
+      const userId = 'user-1';
+      prisma.user.findUnique.mockResolvedValue({
+        id: userId,
+        isDeleted: false,
+        preferredCategories: [{ id: 'cat-1' }],
+      });
+
+      const recommended = [{ id: 'story-1', title: 'Recommended' }];
+      const topLiked = [
+        { id: 'story-2', title: 'Top Liked In Progress' },
+        { id: 'story-3', title: 'Top Liked Unread' },
+      ];
+
+      // story.findMany: 1st call = recommended, 2nd call = topLiked
+      // (no seasonal call since season.findMany returns [])
+      prisma.story.findMany
+        .mockResolvedValueOnce(recommended)
+        .mockResolvedValueOnce(topLiked);
+
+      prisma.season.findMany.mockResolvedValue([]);
+
+      prisma.userStoryProgress.findMany.mockResolvedValue([
+        { storyId: 'story-1', completed: true },
+        { storyId: 'story-2', completed: false },
+        // story-3 has no progress (unread)
+      ]);
+
+      const result = await service.getHomePageStories(userId);
+
+      expect(result.recommended[0]).toEqual(
+        expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
+      );
+      expect(result.seasonal).toEqual([]);
+      expect(result.topLiked[0]).toEqual(
+        expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+      );
+      expect(result.topLiked[1]).toEqual(
+        expect.objectContaining({ id: 'story-3', readStatus: null }),
+      );
+
+      // Verify only 1 DB call for progress (not 1 per section)
+      expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // --- 4. TOP PICKS TESTS ---
   describe('getTopPicksFromParents', () => {
     it('should return stories sorted by recommendation count', async () => {
       const mockGroupByResult = [

@@ -7,42 +7,59 @@ export async function seedVoices(ctx: SeedContext): Promise<SeedResult> {
   try {
     logger.log('Seeding voices...');
 
-    let count = 0;
-    for (const [key, config] of Object.entries(VOICE_CONFIG)) {
-      const existingVoice = await prisma.voice.findFirst({
-        where: { name: key },
-      });
+    let created = 0;
+    let updated = 0;
 
-      const voiceData = {
-        elevenLabsVoiceId: config.elevenLabsId,
-        name: key,
-        type: 'elevenlabs',
-        voiceAvatar: config.voiceAvatar,
-        url: config.previewUrl,
-      };
+    await prisma.$transaction(
+      async (tx) => {
+        for (const [key, config] of Object.entries(VOICE_CONFIG)) {
+          const voiceData = {
+            elevenLabsVoiceId: config.elevenLabsId,
+            name: key,
+            type: 'elevenlabs',
+            voiceAvatar: config.voiceAvatar,
+            url: config.previewUrl,
+            isDeleted: false,
+          };
 
-      if (existingVoice) {
-        await prisma.voice.update({
-          where: { id: existingVoice.id },
-          data: voiceData,
-        });
-      } else {
-        await prisma.voice.create({
-          data: {
-            ...voiceData,
-            userId: null,
-          },
-        });
-      }
-      count++;
-    }
+          // Deterministic lookup: prefer elevenLabsVoiceId match, then name
+          const byElevenLabsId = await tx.voice.findFirst({
+            where: { elevenLabsVoiceId: config.elevenLabsId, userId: null },
+          });
+          const existing =
+            byElevenLabsId ??
+            (await tx.voice.findFirst({
+              where: { name: key, userId: null },
+            }));
 
-    logger.success(`Seeded ${count} voices`);
+          if (existing) {
+            await tx.voice.update({
+              where: { id: existing.id },
+              data: voiceData,
+            });
+            updated++;
+          } else {
+            await tx.voice.create({
+              data: {
+                ...voiceData,
+                userId: null,
+              },
+            });
+            created++;
+          }
+        }
+      },
+      { timeout: 30000 },
+    );
+
+    logger.success(
+      `Seeded voices: ${created} created, ${updated} updated (${created + updated} total)`,
+    );
 
     return {
       name: 'voices',
       success: true,
-      count,
+      count: created + updated,
     };
   } catch (error) {
     logger.error('Failed to seed voices', error);

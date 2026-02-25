@@ -58,7 +58,16 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       };
     }
 
-    let totalCount = 0;
+    // Pre-fetch existing titles to avoid N+1 queries
+    const existingStories = await prisma.story.findMany({
+      select: { title: true },
+    });
+    const existingTitles = new Set(
+      existingStories.map((s) => s.title.trim().toLowerCase()),
+    );
+
+    let count = 0;
+    let skipped = 0;
 
     for (const file of files) {
       logger.log(`Processing stories file: ${file}`);
@@ -69,6 +78,11 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       );
 
       for (const story of stories) {
+        if (existingTitles.has(story.title.trim().toLowerCase())) {
+          skipped++;
+          continue;
+        }
+
         // Handle both string and array formats for categories
         const storyCategories = Array.isArray(story.category)
           ? story.category
@@ -132,16 +146,16 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
             },
           },
         });
-        totalCount++;
+        count++;
       }
     }
 
-    logger.success(`Seeded ${totalCount} stories from ${files.length} files`);
+    logger.success(`Seeded ${count} stories from ${files.length} files (${skipped} skipped as duplicates)`);
 
     return {
       name: 'stories',
       success: true,
-      count: totalCount,
+      count: count,
     };
   } catch (error) {
     logger.error('Failed to seed stories', error);

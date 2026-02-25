@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants';
+import { SubscriptionService } from '../subscription/subscription.service';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 
 export interface StoryAccessResult {
   canAccess: boolean;
-  reason?: 'already_read' | 'limit_reached' | 'premium';
+  reason?: 'already_read' | 'kid_created' | 'limit_reached' | 'premium';
   remaining?: number;
   totalAllowed?: number;
 }
@@ -24,7 +24,10 @@ export interface StoryQuotaStatus {
 export class StoryQuotaService {
   private readonly logger = new Logger(StoryQuotaService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subscriptionService: SubscriptionService,
+  ) {}
 
   /**
    * Check if user can access a story (either new or re-read)
@@ -34,12 +37,14 @@ export class StoryQuotaService {
     storyId: string,
   ): Promise<StoryAccessResult> {
     // 1. Check if premium user
-    const isPremium = await this.isPremiumUser(userId);
+    const isPremium = await this.subscriptionService.isPremiumUser(userId);
     if (isPremium) {
       return { canAccess: true, reason: 'premium' };
     }
 
-    // 2. Check if story was already read (re-reading is always free)
+    // 2. Check if story was already read (re-reading is always free).
+    // Deliberately does NOT filter isDeleted — soft-deleted progress records
+    // still count as "already read" so users can re-read after library removal.
     const existingProgress = await this.prisma.userStoryProgress.findUnique({
       where: { userId_storyId: { userId, storyId } },
     });
@@ -47,7 +52,20 @@ export class StoryQuotaService {
       return { canAccess: true, reason: 'already_read' };
     }
 
-    // 3. Get/create usage record with bonus calculation
+    // 3. Check if one of the user's kids created this story (always accessible)
+    const createdByKid = await this.prisma.story.findFirst({
+      where: {
+        id: storyId,
+        isDeleted: false,
+        creatorKid: { parentId: userId, isDeleted: false },
+      },
+      select: { id: true },
+    });
+    if (createdByKid) {
+      return { canAccess: true, reason: 'kid_created' };
+    }
+
+    // 4. Get/create usage record with bonus calculation
     const usage = await this.getOrCreateUsageWithBonus(userId);
     const totalAllowed =
       FREE_TIER_LIMITS.STORIES.BASE_LIMIT + usage.bonusStories;
@@ -119,7 +137,7 @@ export class StoryQuotaService {
    * Get user's story quota status
    */
   async getQuotaStatus(userId: string): Promise<StoryQuotaStatus> {
-    const isPremium = await this.isPremiumUser(userId);
+    const isPremium = await this.subscriptionService.isPremiumUser(userId);
     if (isPremium) {
       return { isPremium: true, unlimited: true };
     }
@@ -221,21 +239,6 @@ export class StoryQuotaService {
     const weeksPassed = Math.floor(elapsed / msPerWeek);
 
     return weeksPassed * FREE_TIER_LIMITS.STORIES.WEEKLY_BONUS;
-  }
-
-  /**
-   * Check if user has an active premium subscription
-   */
-  private async isPremiumUser(userId: string): Promise<boolean> {
-    const subscription = await this.prisma.subscription.findFirst({
-      where: {
-        userId,
-        status: SUBSCRIPTION_STATUS.ACTIVE,
-        OR: [{ endsAt: { gt: new Date() } }, { endsAt: null }],
-      },
-    });
-
-    return !!subscription;
   }
 
   private getCurrentMonth(): string {

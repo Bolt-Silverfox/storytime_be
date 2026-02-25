@@ -21,10 +21,6 @@ export const envSchema = z
       .string()
       .email('DEFAULT_SENDER_EMAIL must be a valid email'),
     DEFAULT_SENDER_NAME: z.string().min(1, 'DEFAULT_SENDER_NAME is required'),
-    SUPPORT_EMAIL: z
-      .string()
-      .email('SUPPORT_EMAIL must be a valid email')
-      .optional(),
     // SMTP Configuration (replaces Brevo)
     SMTP_HOST: z.string().min(1, 'SMTP_HOST is required'),
     SMTP_PORT: z.coerce.number().default(587),
@@ -41,13 +37,20 @@ export const envSchema = z
     WEB_APP_BASE_URL: z.string().url('WEB_APP_BASE_URL must be a valid URL'),
     GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
     GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET is required'),
-    GOOGLE_WEB_CLIENT_ID: z.string().optional(),
-    GOOGLE_ANDROID_CLIENT_ID: z.string().optional(),
-    GOOGLE_IOS_CLIENT_ID: z.string().optional(),
+    GOOGLE_WEB_CLIENT_ID: z.string().min(1, 'GOOGLE_WEB_CLIENT_ID is required'),
+    GOOGLE_ANDROID_CLIENT_ID: z
+      .string()
+      .min(1, 'GOOGLE_ANDROID_CLIENT_ID is required'),
+    GOOGLE_IOS_CLIENT_ID: z.string().min(1, 'GOOGLE_IOS_CLIENT_ID is required'),
     BACKEND_BASE_URL: z.string().url('BACKEND_BASE_URL must be a valid URL'),
-    DEEPGRAM_API_KEY: z.string().min(1, 'GOOGLE_TTS_API_KEY is required'),
+    // Deepgram API key (used for STT and TTS)
+    DEEPGRAM_API_KEY: z.string().min(1, 'DEEPGRAM_API_KEY is required'),
     APPLE_CLIENT_ID: z.string().min(1, 'APPLE_CLIENT_ID is required'),
     APPLE_SERVICE_ID: z.string().min(1, 'APPLE_SERVICE_ID is required'),
+    // Google Gemini API (used for story generation)
+    GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY is required'),
+    // Hugging Face Inference API (used for cover image generation)
+    HF_TOKEN: z.string().min(1, 'HF_TOKEN is required'),
     // Firebase Cloud Messaging (optional - required for push notifications)
     FIREBASE_PROJECT_ID: z.string().optional(),
     FIREBASE_CLIENT_EMAIL: z.string().email().optional(),

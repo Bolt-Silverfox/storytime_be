@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
 
@@ -12,6 +13,20 @@ export { PLANS } from './subscription.constants';
 @Injectable()
 export class SubscriptionService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async isPremiumUser(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, subscription: true },
+    });
+    if (!user) return false;
+    if (user.role === Role.admin) return true;
+
+    const sub = user.subscription;
+    if (!sub || sub.status !== SUBSCRIPTION_STATUS.ACTIVE) return false;
+
+    return sub.endsAt === null || sub.endsAt > new Date();
+  }
 
   getPlans() {
     return PLANS;

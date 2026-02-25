@@ -96,6 +96,7 @@ export class StoryService {
   }
 
   async getStories(filter: {
+    userId: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -300,9 +301,13 @@ export class StoryService {
     ]);
 
     const totalPages = Math.ceil(totalCount / limit);
+    const enrichedStories = await this.enrichWithReadStatus(
+      filter.userId,
+      stories,
+    );
 
     return {
-      data: stories,
+      data: enrichedStories,
       pagination: {
         currentPage: page,
         totalPages,
@@ -310,6 +315,35 @@ export class StoryService {
         totalCount,
       },
     };
+  }
+
+  private async enrichWithReadStatus<T extends { id: string }>(
+    userId: string,
+    stories: T[],
+  ): Promise<(T & { readStatus: 'done' | 'reading' | null })[]> {
+    const storyIds = [...new Set(stories.map((s) => s.id))];
+    if (storyIds.length === 0)
+      return stories.map((s) => ({
+        ...s,
+        readStatus: null as 'done' | 'reading' | null,
+      }));
+
+    const readProgress = await this.prisma.userStoryProgress.findMany({
+      where: { userId, storyId: { in: storyIds }, isDeleted: false },
+      select: { storyId: true, completed: true },
+    });
+    const progressMap = new Map(
+      readProgress.map((p) => [p.storyId, p.completed]),
+    );
+
+    return stories.map((story) => {
+      const progress = progressMap.get(story.id);
+      return {
+        ...story,
+        readStatus:
+          progress === undefined ? null : progress ? 'done' : 'reading',
+      };
+    });
   }
 
   // Threshold in days to consider a past season as "recent" for backfill
@@ -474,10 +508,17 @@ export class StoryService {
       include: { images: true },
     });
 
+    // Enrich all stories with readStatus in a single DB query
+    const allStories = [...recommended, ...seasonal, ...topLiked];
+    const enriched = await this.enrichWithReadStatus(userId, allStories);
+
+    const recLen = recommended.length;
+    const seaLen = seasonal.length;
+
     return {
-      recommended,
-      seasonal,
-      topLiked,
+      recommended: enriched.slice(0, recLen),
+      seasonal: enriched.slice(recLen, recLen + seaLen),
+      topLiked: enriched.slice(recLen + seaLen),
     };
   }
 
@@ -716,7 +757,11 @@ export class StoryService {
     });
 
     const sessionTime = dto.sessionTime || 0;
-    const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
+    // If restoring a soft-deleted record, reset totalTimeSpent instead of
+    // accumulating stale time from before the removal.
+    const newTotalTime = existing?.isDeleted
+      ? sessionTime
+      : (existing?.totalTimeSpent || 0) + sessionTime;
 
     const result = await this.prisma.userStoryProgress.upsert({
       where: { userId_storyId: { userId, storyId: dto.storyId } },
@@ -725,6 +770,9 @@ export class StoryService {
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
         totalTimeSpent: newTotalTime,
+        // Restore soft-deleted records when user re-reads a removed story
+        isDeleted: false,
+        deletedAt: null,
       },
       create: {
         userId,
@@ -758,8 +806,8 @@ export class StoryService {
     });
     if (!story) throw new NotFoundException('Story not found');
 
-    const progress = await this.prisma.userStoryProgress.findUnique({
-      where: { userId_storyId: { userId, storyId } },
+    const progress = await this.prisma.userStoryProgress.findFirst({
+      where: { userId, storyId, isDeleted: false },
     });
 
     if (!progress) return null;
@@ -783,7 +831,11 @@ export class StoryService {
         isDeleted: false,
       },
       orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
+      include: {
+        story: {
+          include: { categories: true },
+        },
+      },
     });
 
     return progressRecords.map((record) => ({
@@ -798,7 +850,11 @@ export class StoryService {
     const records = await this.prisma.userStoryProgress.findMany({
       where: { userId, completed: true, isDeleted: false },
       orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
+      include: {
+        story: {
+          include: { categories: true },
+        },
+      },
     });
 
     return records.map((r) => r.story);
@@ -807,7 +863,17 @@ export class StoryService {
   async removeFromUserLibrary(userId: string, storyId: string) {
     return await this.prisma.$transaction([
       this.prisma.parentFavorite.deleteMany({ where: { userId, storyId } }),
-      this.prisma.userStoryProgress.deleteMany({ where: { userId, storyId } }),
+      // Soft-delete progress so checkStoryAccess still recognises the story
+      // as "already read" and free users can re-read without spending quota.
+      this.prisma.userStoryProgress.updateMany({
+        where: { userId, storyId },
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          progress: 0,
+          completed: false,
+        },
+      }),
     ]);
   }
 
@@ -1394,11 +1460,11 @@ export class StoryService {
       if (kid) userId = kid.parentId;
     }
 
-    // 1. Generate Cover Image (Pollinations)
+    // 1. Generate Cover Image (Pollinations → Cloudinary)
     let coverImageUrl = '';
     try {
       this.logger.log(`Generating cover image for "${generatedStory.title}"`);
-      coverImageUrl = this.geminiService.generateStoryImage(
+      coverImageUrl = await this.geminiService.generateStoryImage(
         generatedStory.title,
         generatedStory.description || `A story about ${generatedStory.title}`,
         userId, // Pass userId for tracking
@@ -1532,7 +1598,11 @@ export class StoryService {
     const progressRecords = await this.prisma.storyProgress.findMany({
       where: { kidId, progress: { gt: 0 }, completed: false, isDeleted: false },
       orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
+      include: {
+        story: {
+          include: { categories: true },
+        },
+      },
     });
     return progressRecords.map((record) => ({
       ...record.story,
@@ -1546,7 +1616,11 @@ export class StoryService {
     const records = await this.prisma.storyProgress.findMany({
       where: { kidId, completed: true, isDeleted: false },
       orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
+      include: {
+        story: {
+          include: { categories: true },
+        },
+      },
     });
     return records.map((r) => r.story);
   }

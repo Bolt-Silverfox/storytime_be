@@ -25,8 +25,14 @@ export interface GoogleCancelResult {
   error?: string;
 }
 
-/** Parameters for cancellation */
-export interface CancelParams {
+/** Result from Google purchase acknowledgement */
+export interface GoogleAcknowledgeResult {
+  success: boolean;
+  error?: string;
+}
+
+/** Parameters for Google Play purchase operations (verify, cancel, acknowledge) */
+export interface GooglePurchaseParams {
   packageName: string;
   productId: string;
   purchaseToken: string;
@@ -234,7 +240,9 @@ export class GoogleVerificationService {
     }
   }
 
-  async cancelSubscription(params: CancelParams): Promise<GoogleCancelResult> {
+  async cancelSubscription(
+    params: GooglePurchaseParams,
+  ): Promise<GoogleCancelResult> {
     const packageName = (params?.packageName ?? '').trim();
     const productId = (params?.productId ?? '').trim();
     const purchaseToken = (params?.purchaseToken ?? '').trim();
@@ -270,6 +278,65 @@ export class GoogleVerificationService {
       return result;
     } catch (error) {
       this.logger.error(`Google cancel failed: ${this.errorMessage(error)}`);
+      return {
+        success: false,
+        error: this.errorMessage(error),
+      };
+    }
+  }
+
+  /**
+   * Acknowledge a Google Play purchase to prevent auto-refund after 3 days.
+   */
+  async acknowledgePurchase(
+    params: GooglePurchaseParams,
+    isSubscription: boolean,
+  ): Promise<GoogleAcknowledgeResult> {
+    const packageName = (params?.packageName ?? '').trim();
+    const productId = (params?.productId ?? '').trim();
+    const purchaseToken = (params?.purchaseToken ?? '').trim();
+
+    if (!packageName || !productId || !purchaseToken) {
+      return {
+        success: false,
+        error: 'packageName, productId, and purchaseToken are required',
+      };
+    }
+
+    const ackType = isSubscription ? 'subscription' : 'product';
+    this.logger.log(
+      `Acknowledging Google ${ackType} for package ${this.sanitizeForLog(packageName)} product ${this.sanitizeForLog(productId)}`,
+    );
+
+    try {
+      const { stdout, stderr } = await execFileAsync(
+        this.pythonPath,
+        [
+          this.scriptPath,
+          'acknowledge',
+          ackType,
+          packageName,
+          productId,
+          purchaseToken,
+        ],
+        {
+          timeout: 10000,
+          encoding: 'utf8',
+        },
+      );
+
+      if (stderr) {
+        this.logger.warn(
+          `Python acknowledge script stderr received (len=${stderr.length})`,
+        );
+      }
+
+      const result = JSON.parse(stdout.trim()) as GoogleAcknowledgeResult;
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Google acknowledge failed: ${this.errorMessage(error)}`,
+      );
       return {
         success: false,
         error: this.errorMessage(error),

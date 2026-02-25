@@ -37,6 +37,10 @@ import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
+import {
+  ALLOWED_IMAGE_TYPES,
+  MAX_IMAGE_SIZE,
+} from '@/shared/constants/upload.constants';
 import { AdminGuard } from '@/shared/guards/admin.guard';
 import { Public } from '@/shared/decorators/public.decorator';
 import { SuccessResponse } from '@/shared/dtos/api-response.dto';
@@ -589,8 +593,8 @@ export class StoryBuddyController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|gif|webp)' }),
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }), // 5MB
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
         ],
         fileIsRequired: false,
       }),
@@ -672,8 +676,8 @@ export class StoryBuddyController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|gif|webp)' }),
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
         ],
         fileIsRequired: false,
       }),

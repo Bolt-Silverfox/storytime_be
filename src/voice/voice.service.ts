@@ -55,12 +55,9 @@ export class VoiceService {
         );
         this.logger.log(`Cloned voice ${dto.name} with ID ${elevenLabsId}`);
       } catch (error) {
-        this.logger.warn(
-          `Failed to clone voice with ElevenLabs: ${error.message}`,
-        );
-        throw new InternalServerErrorException(
-          'Voice cloning failed: ' + error.message,
-        );
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`Failed to clone voice with ElevenLabs: ${msg}`);
+        throw new InternalServerErrorException(`Voice cloning failed: ${msg}`);
       }
     }
 
@@ -127,6 +124,7 @@ export class VoiceService {
       return {
         id: '',
         name: '',
+        displayName: '',
         type: '',
         previewUrl: undefined,
         voiceAvatar: undefined,
@@ -142,6 +140,13 @@ export class VoiceService {
     let previewUrl = voice.url ?? undefined;
     let voiceAvatar = voice.voiceAvatar ?? undefined;
 
+    // Lookup VOICE_CONFIG for display name
+    const config = voice.elevenLabsVoiceId
+      ? Object.values(VOICE_CONFIG).find(
+          (c) => c.elevenLabsId === voice.elevenLabsVoiceId,
+        )
+      : undefined;
+
     // If it's an uploaded voice, the 'url' is the preview/audio itself
     if (voice.type === (VoiceSourceType.UPLOADED as string)) {
       previewUrl = voice.url ?? undefined;
@@ -150,16 +155,19 @@ export class VoiceService {
         voiceAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${voice.name}`;
       }
     } else if (voice.type === (VoiceSourceType.ELEVENLABS as string)) {
-      // For ElevenLabs, 'url' might be the preview URL if we saved it
-      previewUrl = voice.url ?? undefined;
+      // For ElevenLabs, fall back to VOICE_CONFIG, then dicebear
+      previewUrl = voice.url || config?.previewUrl;
       if (!voiceAvatar) {
-        voiceAvatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${voice.elevenLabsVoiceId}`;
+        voiceAvatar =
+          config?.voiceAvatar ??
+          `https://api.dicebear.com/7.x/identicon/svg?seed=${voice.elevenLabsVoiceId}`;
       }
     }
 
     return {
       id: voice.id,
       name: voice.name,
+      displayName: config?.name ?? voice.name,
       type: voice.type,
       previewUrl,
       voiceAvatar,
@@ -208,9 +216,8 @@ export class VoiceService {
         voicePreviewUrl = data.preview_url; // e.g., "https://..."
       }
     } catch (error) {
-      this.logger.warn(
-        `Failed to fetch voice details from ElevenLabs: ${error.message}`,
-      );
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to fetch voice details from ElevenLabs: ${msg}`);
     }
 
     // 3. Fallback: If API failed, check if it's a known voice just to fix the name
@@ -265,25 +272,12 @@ export class VoiceService {
     const dbVoices = await this.prisma.voice.findMany({
       where: {
         elevenLabsVoiceId: { in: systemIds },
+        userId: null,
+        isDeleted: false,
       },
     });
 
-    // Map DB voices to response, enriching with config data (avatar, preview) if needed
-    const voices = dbVoices.map((voice) => {
-      // Find matching config to get extra metadata if missing in DB
-      const config = Object.values(VOICE_CONFIG).find(
-        (c) => c.elevenLabsId === voice.elevenLabsVoiceId,
-      );
-
-      return {
-        id: voice.id,
-        name: voice.name,
-        type: voice.type,
-        previewUrl: voice.url || config?.previewUrl,
-        voiceAvatar: voice.voiceAvatar || config?.voiceAvatar,
-        elevenLabsVoiceId: voice.elevenLabsVoiceId ?? undefined,
-      };
-    });
+    const voices = dbVoices.map((voice) => this.toVoiceResponse(voice));
 
     // Cache the result
     await this.cacheManager.set(

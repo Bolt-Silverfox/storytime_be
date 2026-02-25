@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export enum VoiceSourceType {
   UPLOADED = 'uploaded',
@@ -41,6 +47,9 @@ export class VoiceResponseDto {
   @ApiProperty()
   name: string;
 
+  @ApiProperty({ description: 'User-facing display name' })
+  displayName: string;
+
   @ApiProperty({
     description: "'uploaded' or 'elevenlabs'",
     enum: VoiceSourceType,
@@ -64,6 +73,8 @@ export enum VoiceType {
   LILY = 'LILY',
   BILL = 'BILL',
   LAURA = 'LAURA',
+  ROSIE = 'ROSIE',
+  PIXIE = 'PIXIE',
 }
 
 export class StoryContentAudioDto {
@@ -76,11 +87,42 @@ export class StoryContentAudioDto {
   content: string;
 
   @ApiProperty({
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    description: 'Story ID for caching paragraph audio',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @IsUUID()
+  storyId: string;
+
+  @ApiProperty({
     required: false,
     example: 'MILO',
     description: 'Preferred voice ID (Enum value or UUID)',
     type: 'string',
   })
   @IsOptional()
+  voiceId?: VoiceType | string;
+}
+
+export class BatchStoryAudioDto {
+  @ApiProperty({
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    description: 'Story ID to generate batch audio for',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @IsUUID()
+  storyId: string;
+
+  @ApiProperty({
+    required: false,
+    example: 'LILY',
+    description: 'Preferred voice ID (Enum value or UUID)',
+    type: 'string',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
   voiceId?: VoiceType | string;
 }
