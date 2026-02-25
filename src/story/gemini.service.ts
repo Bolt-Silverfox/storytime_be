@@ -13,6 +13,10 @@ import { VoiceType } from '../voice/dto/voice.dto';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { UploadService } from '../upload/upload.service';
 
+/** Hugging Face Inference API endpoint for cover image generation */
+const HF_IMAGE_API_URL =
+  'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell';
+
 /** Circuit breaker states */
 enum CircuitState {
   CLOSED = 'CLOSED', // Normal operation
@@ -74,7 +78,7 @@ export class GeminiService {
   private halfOpenAttempts = 0;
 
   constructor(
-    private configService: ConfigService<EnvConfig, true>,
+    private readonly configService: ConfigService<EnvConfig, true>,
     private readonly httpService: HttpService,
     private readonly voiceQuotaService: VoiceQuotaService,
     private readonly uploadService: UploadService,
@@ -343,7 +347,7 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     try {
       const response = await firstValueFrom(
         this.httpService.post(
-          'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell',
+          HF_IMAGE_API_URL,
           { inputs: imagePrompt },
           {
             headers: {

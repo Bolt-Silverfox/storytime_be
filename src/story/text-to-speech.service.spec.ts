@@ -23,10 +23,11 @@ describe('TextToSpeechService', () => {
   const mockEdgeTtsGenerate = jest.fn();
   const mockIsPremiumUser = jest.fn();
   const mockIncrementUsage = jest.fn();
-  const mockCheckAndReserveUsage = jest.fn();
+  const mockRecordUsage = jest.fn();
   const mockReleaseReservedUsage = jest.fn();
   const mockCanUseVoiceForStory = jest.fn();
   const mockCanFreeUserUseElevenLabs = jest.fn();
+  const mockResolveCanonicalVoiceId = jest.fn();
 
   const mockPrisma = {
     paragraphAudioCache: {
@@ -48,6 +49,9 @@ describe('TextToSpeechService', () => {
     mockPrisma.voice.findUnique.mockResolvedValue(null);
     mockCanUseVoiceForStory.mockResolvedValue(true);
     mockCanFreeUserUseElevenLabs.mockResolvedValue(true);
+    // Default: return input as-is (tests for known VoiceTypes will get
+    // elevenLabsId from VOICE_CONFIG in the service's own resolution)
+    mockResolveCanonicalVoiceId.mockImplementation(async (id: string) => id);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -84,10 +88,11 @@ describe('TextToSpeechService', () => {
           provide: VoiceQuotaService,
           useValue: {
             incrementUsage: mockIncrementUsage,
-            checkAndReserveUsage: mockCheckAndReserveUsage,
+            recordUsage: mockRecordUsage,
             releaseReservedUsage: mockReleaseReservedUsage,
             canUseVoiceForStory: mockCanUseVoiceForStory,
             canFreeUserUseElevenLabs: mockCanFreeUserUseElevenLabs,
+            resolveCanonicalVoiceId: mockResolveCanonicalVoiceId,
           },
         },
         {
@@ -331,7 +336,7 @@ describe('TextToSpeechService', () => {
       );
 
       expect(mockPrisma.voice.findUnique).toHaveBeenCalledWith({
-        where: { id: customVoiceId },
+        where: { id: customVoiceId, isDeleted: false },
       });
       expect(mockElevenLabsGenerate).toHaveBeenCalledWith(
         expect.any(String),
@@ -360,7 +365,7 @@ describe('TextToSpeechService', () => {
       );
 
       expect(mockPrisma.voice.findUnique).toHaveBeenCalledWith({
-        where: { id: unknownId },
+        where: { id: unknownId, isDeleted: false },
       });
       expect(mockDeepgramGenerate).toHaveBeenCalled();
       expect(result).toBe('https://uploaded-audio.com/default.wav');
@@ -491,7 +496,7 @@ describe('TextToSpeechService', () => {
       expect(result.wasTruncated).toBe(false);
       expect(result.totalParagraphs).toBe(result.results.length);
       // No quota should be reserved
-      expect(mockCheckAndReserveUsage).not.toHaveBeenCalled();
+      expect(mockRecordUsage).not.toHaveBeenCalled();
       // No providers should be called
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
       expect(mockDeepgramGenerate).not.toHaveBeenCalled();
@@ -551,8 +556,8 @@ describe('TextToSpeechService', () => {
       mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
       mockIsPremiumUser.mockResolvedValue(true);
       // Reserve all requested credits
-      mockCheckAndReserveUsage.mockImplementation(
-        (_userId: string, credits: number) => Promise.resolve(credits),
+      mockRecordUsage.mockImplementation((_userId: string, credits: number) =>
+        Promise.resolve(credits),
       );
       // ElevenLabs fails for all — so all reserved credits should be released
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs timeout'));
@@ -569,17 +574,14 @@ describe('TextToSpeechService', () => {
       // All paragraphs should have fallback audio
       expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
       // Quota was reserved
-      expect(mockCheckAndReserveUsage).toHaveBeenCalledWith(
-        userId,
-        expect.any(Number),
-      );
+      expect(mockRecordUsage).toHaveBeenCalledWith(userId, expect.any(Number));
       // All reserved credits should be released since ElevenLabs failed
       expect(mockReleaseReservedUsage).toHaveBeenCalledWith(
         userId,
         expect.any(Number),
       );
       const releasedCredits = mockReleaseReservedUsage.mock.calls[0][1];
-      const reservedCredits = mockCheckAndReserveUsage.mock.calls[0][1];
+      const reservedCredits = mockRecordUsage.mock.calls[0][1];
       expect(releasedCredits).toBe(reservedCredits);
     });
 

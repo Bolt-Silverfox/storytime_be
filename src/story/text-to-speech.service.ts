@@ -75,16 +75,21 @@ export class TextToSpeechService {
   /**
    * Resolve any voice identifier (VoiceType enum, UUID, or unknown) to its
    * canonical ElevenLabs voice ID for consistent quota/lock checks.
+   * Falls back to DEFAULT_VOICE if the ID cannot be resolved.
    */
   private async resolveCanonicalVoiceId(type: string): Promise<string> {
-    if (Object.values(VoiceType).includes(type as VoiceType)) {
-      return VOICE_CONFIG[type as VoiceType].elevenLabsId;
+    const canonical = await this.voiceQuota.resolveCanonicalVoiceId(type);
+    // If voiceQuota returned the input unchanged and it's not an ElevenLabs ID
+    // we recognise, fall back to the default voice.
+    if (canonical === type && !this.isKnownElevenLabsId(canonical)) {
+      return VOICE_CONFIG[DEFAULT_VOICE].elevenLabsId;
     }
-    const voice = await this.prisma.voice.findUnique({ where: { id: type } });
-    if (voice?.elevenLabsVoiceId) {
-      return voice.elevenLabsVoiceId;
-    }
-    return VOICE_CONFIG[DEFAULT_VOICE].elevenLabsId;
+    return canonical;
+  }
+
+  /** Check if a string matches any known ElevenLabs voice ID */
+  private isKnownElevenLabsId(id: string): boolean {
+    return Object.values(VOICE_CONFIG).some((c) => c.elevenLabsId === id);
   }
 
   private hashText(text: string): string {
@@ -180,7 +185,9 @@ export class TextToSpeechService {
       voiceSettings = config.voiceSettings;
     } else {
       // Assume dynamic UUID (Custom Voice)
-      const voice = await this.prisma.voice.findUnique({ where: { id: type } });
+      const voice = await this.prisma.voice.findUnique({
+        where: { id: type, isDeleted: false },
+      });
       if (voice && voice.elevenLabsVoiceId) {
         elevenLabsId = voice.elevenLabsVoiceId;
         voiceSettings = undefined;
@@ -203,11 +210,8 @@ export class TextToSpeechService {
 
     // Determine if we should use ElevenLabs
     let useElevenLabs = !!elevenLabsId;
-    // Use elevenLabsId as canonical voice identity for quota/lock checks.
-    // This ensures UUID, enum, and alias inputs all resolve to the same voice.
-    const quotaVoiceId = elevenLabsId!;
 
-    if (useElevenLabs && userId) {
+    if (useElevenLabs && elevenLabsId && userId) {
       const isPremium =
         options?.isPremium ??
         (await this.subscriptionService.isPremiumUser(userId));
@@ -215,7 +219,7 @@ export class TextToSpeechService {
         // Premium: per-story voice limit (cached voices don't count)
         const voiceAllowed = await this.voiceQuota.canUseVoiceForStory(
           storyId,
-          quotaVoiceId,
+          elevenLabsId,
         );
         if (!voiceAllowed) {
           this.logger.log(
@@ -227,7 +231,7 @@ export class TextToSpeechService {
         // Free: 1 premium voice total across all stories
         const freeAllowed = await this.voiceQuota.canFreeUserUseElevenLabs(
           userId,
-          quotaVoiceId,
+          elevenLabsId,
         );
         if (!freeAllowed) {
           this.logger.log(
@@ -479,7 +483,7 @@ export class TextToSpeechService {
       }
 
       if (useElevenLabsBatch) {
-        reservedCredits = await this.voiceQuota.checkAndReserveUsage(
+        reservedCredits = await this.voiceQuota.recordUsage(
           userId,
           uncached.length,
         );

@@ -15,20 +15,34 @@ export class VoiceQuotaService {
    * Map a stored voiceId (VoiceType enum, UUID, or elevenLabsId) to
    * its canonical ElevenLabs voice ID so comparisons are consistent.
    */
-  private async resolveCanonicalVoiceId(voiceId: string): Promise<string> {
+  async resolveCanonicalVoiceId(voiceId: string): Promise<string> {
     // Already a VoiceType enum key → look up elevenLabsId
     if (Object.values(VoiceType).includes(voiceId as VoiceType)) {
       return VOICE_CONFIG[voiceId as VoiceType].elevenLabsId;
     }
     // Could be a UUID from the Voice table
     const voice = await this.prisma.voice.findUnique({
-      where: { id: voiceId },
+      where: { id: voiceId, isDeleted: false },
     });
     if (voice?.elevenLabsVoiceId) {
       return voice.elevenLabsVoiceId;
     }
     // Already an elevenLabsId or unknown — return as-is
     return voiceId;
+  }
+
+  /**
+   * Resolve an ElevenLabs voice ID to the Voice table UUID.
+   * Returns null if no matching voice record is found.
+   */
+  private async resolveVoiceUuid(
+    elevenLabsVoiceId: string,
+  ): Promise<string | null> {
+    const voice = await this.prisma.voice.findFirst({
+      where: { elevenLabsVoiceId, isDeleted: false },
+      select: { id: true },
+    });
+    return voice?.id ?? null;
   }
 
   constructor(
@@ -82,11 +96,11 @@ export class VoiceQuotaService {
   }
 
   /**
-   * Reserve ElevenLabs credits and track usage for analytics.
-   * Access control (premium per-story limit, free-tier voice lock) is
-   * enforced by callers before invoking this method.
+   * Record ElevenLabs credit usage and track for analytics.
+   * This method only increments counters — access control (premium
+   * per-story limit, free-tier voice lock) is enforced by callers.
    */
-  async checkAndReserveUsage(userId: string, credits: number): Promise<number> {
+  async recordUsage(userId: string, credits: number): Promise<number> {
     await this.incrementCounter(userId, 'elevenLabsCount', credits);
     await this.logAiActivity(
       userId,
@@ -167,9 +181,30 @@ export class VoiceQuotaService {
 
     // Normalize cached voiceIds to canonical elevenLabsId form so that
     // VoiceType enum names, UUIDs, and elevenLabsIds all compare correctly.
-    const canonicalCachedIds = await Promise.all(
-      distinctVoices.map((v) => this.resolveCanonicalVoiceId(v.voiceId)),
+    // Batch UUID lookups to avoid N+1 queries.
+    const uuidCandidates = distinctVoices
+      .map((v) => v.voiceId)
+      .filter((id) => !Object.values(VoiceType).includes(id as VoiceType));
+
+    const voiceRecords =
+      uuidCandidates.length > 0
+        ? await this.prisma.voice.findMany({
+            where: { id: { in: uuidCandidates }, isDeleted: false },
+            select: { id: true, elevenLabsVoiceId: true },
+          })
+        : [];
+    const uuidToElevenLabs = new Map(
+      voiceRecords
+        .filter((v) => v.elevenLabsVoiceId)
+        .map((v) => [v.id, v.elevenLabsVoiceId!]),
     );
+
+    const canonicalCachedIds = distinctVoices.map((v) => {
+      if (Object.values(VoiceType).includes(v.voiceId as VoiceType)) {
+        return VOICE_CONFIG[v.voiceId as VoiceType].elevenLabsId;
+      }
+      return uuidToElevenLabs.get(v.voiceId) ?? v.voiceId;
+    });
     const uniqueCachedIds = [...new Set(canonicalCachedIds)];
 
     // Already cached for this story — always allowed (zero cost)
@@ -200,13 +235,24 @@ export class VoiceQuotaService {
    */
   async canFreeUserUseElevenLabs(
     userId: string,
-    voiceId: string,
+    elevenLabsVoiceId: string,
   ): Promise<boolean> {
     // Default voice is always allowed — don't consume the premium slot
     const defaultVoiceType = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE;
-    if (voiceId === (defaultVoiceType as string)) return true;
+    if (elevenLabsVoiceId === (defaultVoiceType as string)) return true;
     const defaultConfig = VOICE_CONFIG[defaultVoiceType];
-    if (defaultConfig && voiceId === defaultConfig.elevenLabsId) return true;
+    if (defaultConfig && elevenLabsVoiceId === defaultConfig.elevenLabsId)
+      return true;
+
+    // Resolve ElevenLabs ID to Voice table UUID for FK-safe storage.
+    // selectedSecondVoiceId has a FK constraint referencing voices.id.
+    const voiceUuid = await this.resolveVoiceUuid(elevenLabsVoiceId);
+    if (!voiceUuid) {
+      this.logger.warn(
+        `No voice record found for ElevenLabs ID ${elevenLabsVoiceId}. Denying free-tier premium voice.`,
+      );
+      return false;
+    }
 
     const currentMonth = this.getCurrentMonth();
     const usage = await this.prisma.userUsage.upsert({
@@ -215,28 +261,31 @@ export class VoiceQuotaService {
       update: {},
     });
 
-    // Same voice they already picked — allow
-    if (usage.selectedSecondVoiceId === voiceId) {
+    // Same voice they already picked — allow (compare UUIDs)
+    if (usage.selectedSecondVoiceId === voiceUuid) {
       return true;
     }
 
     // Already locked a different voice — deny
     if (usage.selectedSecondVoiceId) {
       this.logger.log(
-        `Free user ${userId} already used premium voice ${usage.selectedSecondVoiceId}. Denying ${voiceId}.`,
+        `Free user ${userId} already used premium voice ${usage.selectedSecondVoiceId}. Denying ${elevenLabsVoiceId}.`,
       );
       return false;
     }
 
     // Never used a premium voice — atomic compare-and-set to lock this one in.
     // Only updates if selectedSecondVoiceId is still null, preventing races.
+    // Stores the Voice table UUID (not ElevenLabs ID) to satisfy FK constraint.
     const { count } = await this.prisma.userUsage.updateMany({
       where: { userId, selectedSecondVoiceId: null },
-      data: { selectedSecondVoiceId: voiceId },
+      data: { selectedSecondVoiceId: voiceUuid },
     });
 
     if (count > 0) {
-      this.logger.log(`Free user ${userId} locked in premium voice ${voiceId}`);
+      this.logger.log(
+        `Free user ${userId} locked in premium voice ${voiceUuid} (${elevenLabsVoiceId})`,
+      );
       return true;
     }
 
@@ -244,12 +293,12 @@ export class VoiceQuotaService {
     const updated = await this.prisma.userUsage.findUnique({
       where: { userId },
     });
-    if (updated?.selectedSecondVoiceId === voiceId) {
+    if (updated?.selectedSecondVoiceId === voiceUuid) {
       return true;
     }
 
     this.logger.log(
-      `Free user ${userId} lost race — premium voice ${updated?.selectedSecondVoiceId} was locked by concurrent request. Denying ${voiceId}.`,
+      `Free user ${userId} lost race — premium voice ${updated?.selectedSecondVoiceId} was locked by concurrent request. Denying ${elevenLabsVoiceId}.`,
     );
     return false;
   }
@@ -265,41 +314,24 @@ export class VoiceQuotaService {
     const isPremium = await this.subscriptionService.isPremiumUser(userId);
     if (isPremium) return true;
 
-    const defaultVoiceType = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE;
+    // Resolve the requested voice to its canonical ElevenLabs ID
+    const requestedCanonical = await this.resolveCanonicalVoiceId(voiceId);
 
-    // Check if it's the default voice (by VoiceType enum or elevenLabsId)
-    if (voiceId === (defaultVoiceType as string)) return true;
-    const defaultVoiceConfig = VOICE_CONFIG[defaultVoiceType];
-    if (defaultVoiceConfig && voiceId === defaultVoiceConfig.elevenLabsId)
-      return true;
-
-    // Check if voiceId is a UUID that matches the default voice in the database
-    if (defaultVoiceConfig) {
-      const voiceRecord = await this.prisma.voice.findUnique({
-        where: { id: voiceId },
-      });
-      if (voiceRecord?.elevenLabsVoiceId === defaultVoiceConfig.elevenLabsId) {
-        return true;
-      }
-    }
+    // Check if it's the default voice
+    const defaultConfig = VOICE_CONFIG[FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE];
+    if (requestedCanonical === defaultConfig.elevenLabsId) return true;
 
     // Check if this is the free user's locked-in premium voice.
-    // selectedSecondVoiceId stores the ElevenLabs voice ID (canonical form),
-    // so also resolve a UUID voiceId to its elevenLabsId for comparison.
+    // selectedSecondVoiceId stores a Voice table UUID, so resolve it
+    // to canonical ElevenLabs ID for consistent comparison.
     const usage = await this.prisma.userUsage.findUnique({
       where: { userId },
     });
     if (usage?.selectedSecondVoiceId) {
-      if (usage.selectedSecondVoiceId === voiceId) {
-        return true;
-      }
-      // voiceId might be a Voice table UUID — resolve to elevenLabsId
-      const voiceRecord = await this.prisma.voice.findUnique({
-        where: { id: voiceId },
-      });
-      if (voiceRecord?.elevenLabsVoiceId === usage.selectedSecondVoiceId) {
-        return true;
-      }
+      const lockedCanonical = await this.resolveCanonicalVoiceId(
+        usage.selectedSecondVoiceId,
+      );
+      if (lockedCanonical === requestedCanonical) return true;
     }
 
     return false;
