@@ -55,12 +55,9 @@ export class VoiceService {
         );
         this.logger.log(`Cloned voice ${dto.name} with ID ${elevenLabsId}`);
       } catch (error) {
-        this.logger.warn(
-          `Failed to clone voice with ElevenLabs: ${error.message}`,
-        );
-        throw new InternalServerErrorException(
-          'Voice cloning failed: ' + error.message,
-        );
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`Failed to clone voice with ElevenLabs: ${msg}`);
+        throw new InternalServerErrorException(`Voice cloning failed: ${msg}`);
       }
     }
 
@@ -219,9 +216,8 @@ export class VoiceService {
         voicePreviewUrl = data.preview_url; // e.g., "https://..."
       }
     } catch (error) {
-      this.logger.warn(
-        `Failed to fetch voice details from ElevenLabs: ${error.message}`,
-      );
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to fetch voice details from ElevenLabs: ${msg}`);
     }
 
     // 3. Fallback: If API failed, check if it's a known voice just to fix the name
@@ -276,6 +272,8 @@ export class VoiceService {
     const dbVoices = await this.prisma.voice.findMany({
       where: {
         elevenLabsVoiceId: { in: systemIds },
+        userId: null,
+        isDeleted: false,
       },
     });
 

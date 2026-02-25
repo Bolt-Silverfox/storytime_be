@@ -47,6 +47,10 @@ export const envSchema = z
     DEEPGRAM_API_KEY: z.string().min(1, 'DEEPGRAM_API_KEY is required'),
     APPLE_CLIENT_ID: z.string().min(1, 'APPLE_CLIENT_ID is required'),
     APPLE_SERVICE_ID: z.string().min(1, 'APPLE_SERVICE_ID is required'),
+    // Google Gemini API (used for story generation)
+    GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY is required'),
+    // Hugging Face Inference API (used for cover image generation)
+    HF_TOKEN: z.string().min(1, 'HF_TOKEN is required'),
     // Firebase Cloud Messaging (optional - required for push notifications)
     FIREBASE_PROJECT_ID: z.string().optional(),
     FIREBASE_CLIENT_EMAIL: z.string().email().optional(),

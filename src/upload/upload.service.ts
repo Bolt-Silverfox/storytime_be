@@ -67,6 +67,37 @@ export class UploadService {
     });
   }
 
+  async uploadImageFromBuffer(
+    buffer: Buffer,
+    folder: string,
+  ): Promise<UploadApiResponse> {
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: `storytime/${folder}`,
+          resource_type: 'image',
+          transformation: [
+            { width: 1024, height: 1024, crop: 'limit' },
+            { quality: 'auto' },
+            { format: 'webp' },
+          ],
+        },
+        (error: UploadApiErrorResponse, result: UploadApiResponse) => {
+          if (error) {
+            this.logger.error('Cloudinary buffer upload error:', error);
+            return reject(
+              new InternalServerErrorException(
+                `Image buffer upload failed: ${error.message}`,
+              ),
+            );
+          }
+          resolve(result);
+        },
+      );
+      uploadStream.end(buffer);
+    });
+  }
+
   async uploadImageFromUrl(
     imageUrl: string,
     folder: string,

@@ -7,8 +7,8 @@ export const VOICE_CONFIG_SETTINGS = {
     TURBO: 'eleven_turbo_v2_5',
   },
   QUOTAS: {
-    FREE: 2,
-    PREMIUM: 20,
+    /** Premium users can use up to 3 distinct premium voices per story */
+    MAX_PREMIUM_VOICES_PER_STORY: 3,
   },
   DEEPGRAM: {
     DEFAULT_MODEL: 'aura-2-hera-en',
