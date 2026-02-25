@@ -340,24 +340,28 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
       );
     }
 
-    const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
+    const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere. Generate only the image, no text response.`;
 
-    this.logger.log(`Generating cover image for "${title}" via Imagen`);
+    this.logger.log(`Generating cover image for "${title}" via Gemini`);
 
-    const response = await this.genAI.models.generateImages({
-      model: 'imagen-4.0-fast-generate-001',
-      prompt: imagePrompt,
-      config: { numberOfImages: 1 },
+    const response = await this.genAI.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: imagePrompt,
+      config: {
+        responseModalities: ['IMAGE'],
+      },
     });
 
-    const generatedImage = response.generatedImages?.[0];
-    if (!generatedImage?.image?.imageBytes) {
+    const imagePart = response.candidates?.[0]?.content?.parts?.find(
+      (part) => part.inlineData,
+    );
+    if (!imagePart?.inlineData?.data) {
       throw new InternalServerErrorException(
-        'Imagen returned no image data for cover image generation',
+        'Gemini returned no image data for cover image generation',
       );
     }
 
-    const buffer = Buffer.from(generatedImage.image.imageBytes, 'base64');
+    const buffer = Buffer.from(imagePart.inlineData.data, 'base64');
     const result = await this.uploadService.uploadImageFromBuffer(
       buffer,
       'covers',

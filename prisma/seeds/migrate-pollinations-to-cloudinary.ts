@@ -46,20 +46,24 @@ async function generateAndUpload(
   title: string,
   description: string,
 ): Promise<string> {
-  const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
+  const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere. Generate only the image, no text response.`;
 
-  const response = await ai.models.generateImages({
-    model: 'imagen-4.0-fast-generate-001',
-    prompt: imagePrompt,
-    config: { numberOfImages: 1 },
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash-image',
+    contents: imagePrompt,
+    config: {
+      responseModalities: ['IMAGE'],
+    },
   });
 
-  const generatedImage = response.generatedImages?.[0];
-  if (!generatedImage?.image?.imageBytes) {
-    throw new Error('Imagen returned no image data');
+  const imagePart = response.candidates?.[0]?.content?.parts?.find(
+    (part) => part.inlineData,
+  );
+  if (!imagePart?.inlineData?.data) {
+    throw new Error('Gemini returned no image data');
   }
 
-  const buffer = Buffer.from(generatedImage.image.imageBytes, 'base64');
+  const buffer = Buffer.from(imagePart.inlineData.data, 'base64');
 
   // Upload buffer to Cloudinary
   const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
