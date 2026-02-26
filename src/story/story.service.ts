@@ -1034,25 +1034,7 @@ export class StoryService {
     return assignment ? this.toDailyChallengeAssignmentDto(assignment) : null;
   }
 
-  async getStoryAudioUrl(
-    storyId: string,
-    voiceId: VoiceType | string,
-    userId?: string,
-  ): Promise<string> {
-    const story = await this.prisma.story.findUnique({
-      where: { id: storyId, isDeleted: false },
-      select: { textContent: true },
-    });
-    if (!story)
-      throw new NotFoundException(`Story with ID ${storyId} not found`);
 
-    return this.textToSpeechService.textToSpeechCloudUrl(
-      storyId,
-      story?.textContent ?? '',
-      voiceId,
-      userId,
-    );
-  }
 
   private toStoryPathDto(path: StoryPath): StoryPathDto {
     return {
