@@ -1084,6 +1084,7 @@ model UserUsage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([elevenLabsTrialStoryId])
   @@map("user_usages")
 }
 

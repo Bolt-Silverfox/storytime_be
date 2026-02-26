@@ -709,16 +709,15 @@ export class TextToSpeechService {
         }
       } else {
         // Free user: allow ElevenLabs only for their one trial story
-        const trialAllowed = await this.voiceQuota.canFreeUserUseElevenLabs(
+        useElevenLabsBatch = await this.voiceQuota.canFreeUserUseElevenLabs(
           userId,
           quotaVoiceId,
           storyId,
         );
-        if (!trialAllowed) {
+        if (!useElevenLabsBatch) {
           this.logger.debug(
             `Free user ${userId}: ElevenLabs trial not available for batch story ${storyId}, using Deepgram/Edge TTS.`,
           );
-          useElevenLabsBatch = false;
         }
       }
 

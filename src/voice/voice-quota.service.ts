@@ -261,6 +261,14 @@ export class VoiceQuotaService {
       elevenLabsVoiceId === (defaultVoiceType as string) ||
       (defaultConfig && elevenLabsVoiceId === defaultConfig.elevenLabsId);
 
+    // Ensure usage record exists (needed for both voice locking and trial check)
+    const currentMonth = this.getCurrentMonth();
+    const usage = await this.prisma.userUsage.upsert({
+      where: { userId },
+      create: { userId, currentMonth },
+      update: {},
+    });
+
     if (!isDefaultVoice) {
       // === Voice locking check (non-default voices only) ===
       // Resolve ElevenLabs ID to Voice table UUID for FK-safe storage.
@@ -272,13 +280,6 @@ export class VoiceQuotaService {
         );
         return false;
       }
-
-      const currentMonth = this.getCurrentMonth();
-      const usage = await this.prisma.userUsage.upsert({
-        where: { userId },
-        create: { userId, currentMonth },
-        update: {},
-      });
 
       let voiceAllowed = false;
       if (usage.selectedSecondVoiceId === voiceUuid) {
@@ -321,23 +322,15 @@ export class VoiceQuotaService {
     }
 
     // === ElevenLabs trial story check (applies to ALL voices including default) ===
-    // Ensure usage record exists for trial check
-    const currentMonth = this.getCurrentMonth();
-    const latestUsage = await this.prisma.userUsage.upsert({
-      where: { userId },
-      create: { userId, currentMonth },
-      update: {},
-    });
-
     // Same trial story — allow ElevenLabs
-    if (latestUsage?.elevenLabsTrialStoryId === storyId) {
+    if (usage.elevenLabsTrialStoryId === storyId) {
       return true;
     }
 
     // Already used trial on a different story — deny ElevenLabs (will fall through to Deepgram/Edge)
-    if (latestUsage?.elevenLabsTrialStoryId) {
+    if (usage?.elevenLabsTrialStoryId) {
       this.logger.log(
-        `Free user ${userId} already used ElevenLabs trial on story ${latestUsage.elevenLabsTrialStoryId}. Denying for story ${storyId}.`,
+        `Free user ${userId} already used ElevenLabs trial on story ${usage.elevenLabsTrialStoryId}. Denying for story ${storyId}.`,
       );
       return false;
     }
