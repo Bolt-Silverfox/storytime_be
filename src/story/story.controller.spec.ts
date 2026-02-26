@@ -96,6 +96,26 @@ describe('StoryController', () => {
       );
     });
 
+    it('getCreated: should pass sanitized cursor and limit to service', async () => {
+      await controller.getCreated(kidId, 'abc', '10');
+      expect(service.getCreatedStories).toHaveBeenCalledWith(kidId, 'abc', 10);
+    });
+
+    it('getCreated: should default limit when not provided with cursor', async () => {
+      await controller.getCreated(kidId, 'abc');
+      expect(service.getCreatedStories).toHaveBeenCalledWith(kidId, 'abc', 20);
+    });
+
+    it('getDownloads: should pass sanitized cursor and limit to service', async () => {
+      await controller.getDownloads(kidId, 'xyz', '5');
+      expect(service.getDownloads).toHaveBeenCalledWith(kidId, 'xyz', 5);
+    });
+
+    it('getDownloads: should default limit when not provided with cursor', async () => {
+      await controller.getDownloads(kidId, 'xyz');
+      expect(service.getDownloads).toHaveBeenCalledWith(kidId, 'xyz', 20);
+    });
+
     it('addDownload: should call addDownload service method', async () => {
       await controller.addDownload(kidId, storyId);
       expect(service.addDownload).toHaveBeenCalledWith(kidId, storyId);

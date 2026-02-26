@@ -371,13 +371,12 @@ export class StoryService {
     const limit = filter.limit || 20;
     const { where } = await this.buildStoryWhereClause(filter);
 
-    const orderBy = filter.isMostLiked
-      ? [
-          { parentFavorites: { _count: 'desc' as const } },
-          { createdAt: 'desc' as const },
-          { id: 'asc' as const },
-        ]
-      : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
+    // isMostLiked uses aggregate ordering incompatible with cursors;
+    // the controller prevents it from reaching this method.
+    const orderBy = [
+      { createdAt: 'desc' as const },
+      { id: 'asc' as const },
+    ];
 
     const stories = await this.withCursorErrorHandling(() =>
       this.prisma.story.findMany({
