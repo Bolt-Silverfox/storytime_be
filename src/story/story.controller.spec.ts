@@ -73,12 +73,20 @@ describe('StoryController', () => {
 
     it('getCreated: should call getCreatedStories service method', async () => {
       await controller.getCreated(kidId);
-      expect(service.getCreatedStories).toHaveBeenCalledWith(kidId);
+      expect(service.getCreatedStories).toHaveBeenCalledWith(
+        kidId,
+        undefined,
+        expect.any(Number),
+      );
     });
 
     it('getDownloads: should call getDownloads service method', async () => {
       await controller.getDownloads(kidId);
-      expect(service.getDownloads).toHaveBeenCalledWith(kidId);
+      expect(service.getDownloads).toHaveBeenCalledWith(
+        kidId,
+        undefined,
+        expect.any(Number),
+      );
     });
 
     it('addDownload: should call addDownload service method', async () => {

@@ -34,6 +34,7 @@ import {
   CategoryDto,
   CompleteDailyChallengeDto,
   CreateStoryDto,
+  CursorPaginatedStoriesDto,
   DailyChallengeAssignmentDto,
   DailyChallengeDto,
   ErrorResponseDto,
@@ -59,6 +60,7 @@ import {
   UserStoryProgressDto,
   UserStoryProgressResponseDto,
 } from './dto/story.dto';
+import { PaginationUtil } from '@/shared/utils/pagination.util';
 import { StoryService } from './story.service';
 
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
@@ -108,6 +110,7 @@ export class StoryController {
   @ApiQuery({ name: 'age', required: false, type: String })
   @ApiQuery({ name: 'minAge', required: false, type: String })
   @ApiQuery({ name: 'maxAge', required: false, type: String })
+  @ApiQuery({ name: 'cursor', required: false, type: String, description: 'Cursor for cursor-based pagination' })
   @ApiOkResponse({
     description: 'List of stories',
     type: CreateStoryDto,
@@ -144,13 +147,11 @@ export class StoryController {
     @Query('age') age?: string,
     @Query('minAge') minAge?: string,
     @Query('maxAge') maxAge?: string,
+    @Query('cursor') cursor?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
     @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number = 12,
-  ): Promise<PaginatedStoriesDto> {
-    const safePage = Math.max(1, page);
-    const safeLimit = Math.max(1, Math.min(100, limit));
-
-    return this.storyService.getStories({
+  ): Promise<PaginatedStoriesDto | CursorPaginatedStoriesDto> {
+    const commonFilter = {
       userId: req.authUserData.userId,
       theme,
       category,
@@ -158,11 +159,30 @@ export class StoryController {
       recommended: recommended === 'true',
       isMostLiked: isMostLiked === 'true',
       isSeasonal: isSeasonal === 'true',
-      topPicksFromUs: topPicksFromUs === 'true',
       kidId,
       age: age ? parseInt(age, 10) : undefined,
       minAge: minAge ? parseInt(minAge, 10) : undefined,
       maxAge: maxAge ? parseInt(maxAge, 10) : undefined,
+    };
+
+    // Use cursor-based pagination when cursor param is provided
+    // topPicksFromUs uses random ordering incompatible with cursors
+    if (cursor && topPicksFromUs !== 'true') {
+      const { cursor: safeCursor, limit: safeLimit } =
+        PaginationUtil.sanitizeCursorParams(cursor, limit);
+      return this.storyService.getStoriesCursor({
+        ...commonFilter,
+        cursor: safeCursor,
+        limit: safeLimit,
+      });
+    }
+
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.max(1, Math.min(100, limit));
+
+    return this.storyService.getStories({
+      ...commonFilter,
+      topPicksFromUs: topPicksFromUs === 'true',
       page: safePage,
       limit: safeLimit,
     });
@@ -479,6 +499,8 @@ export class StoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get kid favorites' })
   @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiOkResponse({
     description: 'List of favorites',
     type: FavoriteDto,
@@ -499,8 +521,14 @@ export class StoryController {
     description: 'Not Found',
     type: ErrorResponseDto,
   })
-  async getFavorites(@Param('kidId') kidId: string) {
-    return this.storyService.getFavorites(kidId);
+  async getFavorites(
+    @Param('kidId') kidId: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const { cursor: safeCursor, limit: safeLimit } =
+      PaginationUtil.sanitizeCursorParams(cursor, limit);
+    return this.storyService.getFavorites(kidId, safeCursor, safeLimit);
   }
 
   // === RESTRICTED STORIES ENDPOINTS ===
@@ -699,6 +727,8 @@ export class StoryController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get in-progress stories for authenticated user' })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiOkResponse({
     description: 'List of in-progress stories',
     type: StoryWithProgressDto,
@@ -709,14 +739,26 @@ export class StoryController {
     description: 'Unauthorized',
     type: ErrorResponseDto,
   })
-  async getUserContinueReading(@Req() req: AuthenticatedRequest) {
-    return this.storyService.getUserContinueReading(req.authUserData.userId);
+  async getUserContinueReading(
+    @Req() req: AuthenticatedRequest,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const { cursor: safeCursor, limit: safeLimit } =
+      PaginationUtil.sanitizeCursorParams(cursor, limit);
+    return this.storyService.getUserContinueReading(
+      req.authUserData.userId,
+      safeCursor,
+      safeLimit,
+    );
   }
 
   @Get('user/library/completed')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get completed stories for authenticated user' })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiOkResponse({
     description: 'List of completed stories',
     type: StoryDto,
@@ -727,8 +769,18 @@ export class StoryController {
     description: 'Unauthorized',
     type: ErrorResponseDto,
   })
-  async getUserCompletedStories(@Req() req: AuthenticatedRequest) {
-    return this.storyService.getUserCompletedStories(req.authUserData.userId);
+  async getUserCompletedStories(
+    @Req() req: AuthenticatedRequest,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const { cursor: safeCursor, limit: safeLimit } =
+      PaginationUtil.sanitizeCursorParams(cursor, limit);
+    return this.storyService.getUserCompletedStories(
+      req.authUserData.userId,
+      safeCursor,
+      safeLimit,
+    );
   }
 
   @Delete('user/library/remove/:storyId')
@@ -1065,33 +1117,65 @@ export class StoryController {
   @Get('library/:kidId/continue-reading')
   @ApiOperation({ summary: 'Get stories currently in progress' })
   @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, type: [StoryWithProgressDto] })
-  async getContinueReading(@Param('kidId') kidId: string) {
-    return this.storyService.getContinueReading(kidId);
+  async getContinueReading(
+    @Param('kidId') kidId: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const { cursor: safeCursor, limit: safeLimit } =
+      PaginationUtil.sanitizeCursorParams(cursor, limit);
+    return this.storyService.getContinueReading(kidId, safeCursor, safeLimit);
   }
 
   @Get('library/:kidId/completed')
   @ApiOperation({ summary: 'Get completed stories history' })
   @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, type: [StoryDto] })
-  async getCompleted(@Param('kidId') kidId: string) {
-    return this.storyService.getCompletedStories(kidId);
+  async getCompleted(
+    @Param('kidId') kidId: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const { cursor: safeCursor, limit: safeLimit } =
+      PaginationUtil.sanitizeCursorParams(cursor, limit);
+    return this.storyService.getCompletedStories(kidId, safeCursor, safeLimit);
   }
 
   @Get('library/:kidId/created')
   @ApiOperation({ summary: 'Get stories created by the kid' })
   @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, type: [StoryDto] })
-  async getCreated(@Param('kidId') kidId: string) {
-    return this.storyService.getCreatedStories(kidId);
+  async getCreated(
+    @Param('kidId') kidId: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const { cursor: safeCursor, limit: safeLimit } =
+      PaginationUtil.sanitizeCursorParams(cursor, limit);
+    return this.storyService.getCreatedStories(kidId, safeCursor, safeLimit);
   }
 
   @Get('library/:kidId/downloads')
   @ApiOperation({ summary: 'Get downloaded stories' })
   @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, type: [StoryDto] })
-  async getDownloads(@Param('kidId') kidId: string) {
-    return this.storyService.getDownloads(kidId);
+  async getDownloads(
+    @Param('kidId') kidId: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const { cursor: safeCursor, limit: safeLimit } =
+      PaginationUtil.sanitizeCursorParams(cursor, limit);
+    return this.storyService.getDownloads(kidId, safeCursor, safeLimit);
   }
 
   @Post('library/:kidId/download/:storyId')

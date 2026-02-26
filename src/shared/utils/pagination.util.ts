@@ -79,4 +79,27 @@ export class PaginationUtil {
     result = Math.floor(result);
     return Math.max(min, Math.min(max, result));
   }
+
+  /**
+   * Sanitizes cursor-based pagination parameters.
+   * @param cursor - The cursor string (last record ID)
+   * @param limit - The page size limit
+   * @param maxLimit - Maximum allowed limit (default 50)
+   * @returns Sanitized cursor and limit
+   */
+  static sanitizeCursorParams(
+    cursor: unknown,
+    limit: unknown,
+    maxLimit = 50,
+  ) {
+    const sanitizedLimit = PaginationUtil.sanitizeLimit(limit, {
+      defaultValue: 20,
+      max: maxLimit,
+    });
+    const sanitizedCursor =
+      typeof cursor === 'string' && cursor.trim().length > 0
+        ? cursor.trim()
+        : undefined;
+    return { cursor: sanitizedCursor, limit: sanitizedLimit };
+  }
 }

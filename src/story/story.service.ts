@@ -16,6 +16,7 @@ import {
   CategoryDto,
   ThemeDto,
   PaginatedStoriesDto,
+  CursorPaginatedStoriesDto,
   ParentRecommendationDto,
   RecommendationResponseDto,
   RecommendationsStatsDto,
@@ -95,26 +96,21 @@ export class StoryService {
     return Math.ceil((wordCount / this.WORDS_PER_MINUTE) * 60);
   }
 
-  async getStories(filter: {
-    userId: string;
+  private async buildStoryWhereClause(filter: {
     theme?: string;
     category?: string;
     season?: string;
     recommended?: boolean;
     isMostLiked?: boolean;
     isSeasonal?: boolean;
-    topPicksFromUs?: boolean;
     age?: number;
     minAge?: number;
     maxAge?: number;
     kidId?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<PaginatedStoriesDto> {
-    const page = filter.page || 1;
-    const limit = filter.limit || 12;
-    const skip = (page - 1) * limit;
-
+  }): Promise<{
+    where: Prisma.StoryWhereInput;
+    recommendedStoryIds: string[];
+  }> {
     const where: Prisma.StoryWhereInput = {
       isDeleted: false,
     };
@@ -251,6 +247,31 @@ export class StoryService {
       where.id = { in: recommendedStoryIds };
     }
 
+    return { where, recommendedStoryIds };
+  }
+
+  async getStories(filter: {
+    userId: string;
+    theme?: string;
+    category?: string;
+    season?: string;
+    recommended?: boolean;
+    isMostLiked?: boolean;
+    isSeasonal?: boolean;
+    topPicksFromUs?: boolean;
+    age?: number;
+    minAge?: number;
+    maxAge?: number;
+    kidId?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedStoriesDto> {
+    const page = filter.page || 1;
+    const limit = filter.limit || 12;
+    const skip = (page - 1) * limit;
+
+    const { where } = await this.buildStoryWhereClause(filter);
+
     // Handle topPicksFromUs filter - get random stories using shared helper
     if (filter.topPicksFromUs) {
       const randomStoryIds = await this.getRandomStoryIds(limit, skip);
@@ -313,6 +334,60 @@ export class StoryService {
         totalPages,
         pageSize: limit,
         totalCount,
+      },
+    };
+  }
+
+  async getStoriesCursor(filter: {
+    userId: string;
+    theme?: string;
+    category?: string;
+    season?: string;
+    recommended?: boolean;
+    isMostLiked?: boolean;
+    isSeasonal?: boolean;
+    age?: number;
+    minAge?: number;
+    maxAge?: number;
+    kidId?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<CursorPaginatedStoriesDto> {
+    const limit = filter.limit || 20;
+    const { where } = await this.buildStoryWhereClause(filter);
+
+    const orderBy = filter.isMostLiked
+      ? [
+          { parentFavorites: { _count: 'desc' as const } },
+          { createdAt: 'desc' as const },
+          { id: 'asc' as const },
+        ]
+      : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
+
+    const stories = await this.prisma.story.findMany({
+      where,
+      take: limit + 1,
+      ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
+      orderBy,
+      include: {
+        images: true,
+        branches: true,
+        categories: true,
+        themes: true,
+        seasons: true,
+        questions: true,
+      },
+    });
+
+    const hasNextPage = stories.length > limit;
+    if (hasNextPage) stories.pop();
+    const enriched = await this.enrichWithReadStatus(filter.userId, stories);
+
+    return {
+      data: enriched,
+      pagination: {
+        nextCursor: hasNextPage ? stories[stories.length - 1].id : null,
+        hasNextPage,
       },
     };
   }
@@ -670,15 +745,34 @@ export class StoryService {
     return await this.prisma.favorite.deleteMany({ where: { kidId, storyId } });
   }
 
-  async getFavorites(kidId: string) {
+  async getFavorites(kidId: string, cursor?: string, limit?: number) {
     const kid = await this.prisma.kid.findUnique({
       where: { id: kidId, isDeleted: false },
     });
     if (!kid) throw new NotFoundException('Kid not found');
-    return await this.prisma.favorite.findMany({
+
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? 20;
+
+    const records = await this.prisma.favorite.findMany({
       where: { kidId },
       include: { story: true },
+      orderBy: { createdAt: 'desc' },
+      ...(useCursor ? { take: take + 1 } : {}),
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
+
+    if (!useCursor) return records;
+
+    const hasNextPage = records.length > take;
+    if (hasNextPage) records.pop();
+    return {
+      data: records,
+      pagination: {
+        nextCursor: hasNextPage ? records[records.length - 1].id : null,
+        hasNextPage,
+      },
+    };
   }
 
   async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
@@ -822,7 +916,10 @@ export class StoryService {
     };
   }
 
-  async getUserContinueReading(userId: string) {
+  async getUserContinueReading(userId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? 20;
+
     const progressRecords = await this.prisma.userStoryProgress.findMany({
       where: {
         userId,
@@ -836,17 +933,35 @@ export class StoryService {
           include: { categories: true },
         },
       },
+      ...(useCursor ? { take: take + 1 } : {}),
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
 
-    return progressRecords.map((record) => ({
+    const mapped = progressRecords.map((record) => ({
       ...record.story,
+      progressId: record.id,
       progress: record.progress,
       totalTimeSpent: record.totalTimeSpent,
       lastAccessed: record.lastAccessed,
     }));
+
+    if (!useCursor) return mapped;
+
+    const hasNextPage = mapped.length > take;
+    if (hasNextPage) mapped.pop();
+    return {
+      data: mapped,
+      pagination: {
+        nextCursor: hasNextPage ? progressRecords[mapped.length - 1].id : null,
+        hasNextPage,
+      },
+    };
   }
 
-  async getUserCompletedStories(userId: string) {
+  async getUserCompletedStories(userId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? 20;
+
     const records = await this.prisma.userStoryProgress.findMany({
       where: { userId, completed: true, isDeleted: false },
       orderBy: { lastAccessed: 'desc' },
@@ -855,9 +970,21 @@ export class StoryService {
           include: { categories: true },
         },
       },
+      ...(useCursor ? { take: take + 1 } : {}),
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
 
-    return records.map((r) => r.story);
+    if (!useCursor) return records.map((r) => r.story);
+
+    const hasNextPage = records.length > take;
+    if (hasNextPage) records.pop();
+    return {
+      data: records.map((r) => r.story),
+      pagination: {
+        nextCursor: hasNextPage ? records[records.length - 1].id : null,
+        hasNextPage,
+      },
+    };
   }
 
   async removeFromUserLibrary(userId: string, storyId: string) {
@@ -1566,7 +1693,10 @@ export class StoryService {
     }
   }
 
-  async getContinueReading(kidId: string) {
+  async getContinueReading(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? 20;
+
     const progressRecords = await this.prisma.storyProgress.findMany({
       where: { kidId, progress: { gt: 0 }, completed: false, isDeleted: false },
       orderBy: { lastAccessed: 'desc' },
@@ -1575,16 +1705,35 @@ export class StoryService {
           include: { categories: true },
         },
       },
+      ...(useCursor ? { take: take + 1 } : {}),
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
-    return progressRecords.map((record) => ({
+
+    const mapped = progressRecords.map((record) => ({
       ...record.story,
+      progressId: record.id,
       progress: record.progress,
       totalTimeSpent: record.totalTimeSpent,
       lastAccessed: record.lastAccessed,
     }));
+
+    if (!useCursor) return mapped;
+
+    const hasNextPage = mapped.length > take;
+    if (hasNextPage) mapped.pop();
+    return {
+      data: mapped,
+      pagination: {
+        nextCursor: hasNextPage ? progressRecords[mapped.length - 1].id : null,
+        hasNextPage,
+      },
+    };
   }
 
-  async getCompletedStories(kidId: string) {
+  async getCompletedStories(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? 20;
+
     const records = await this.prisma.storyProgress.findMany({
       where: { kidId, completed: true, isDeleted: false },
       orderBy: { lastAccessed: 'desc' },
@@ -1593,24 +1742,70 @@ export class StoryService {
           include: { categories: true },
         },
       },
+      ...(useCursor ? { take: take + 1 } : {}),
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
-    return records.map((r) => r.story);
+
+    if (!useCursor) return records.map((r) => r.story);
+
+    const hasNextPage = records.length > take;
+    if (hasNextPage) records.pop();
+    return {
+      data: records.map((r) => r.story),
+      pagination: {
+        nextCursor: hasNextPage ? records[records.length - 1].id : null,
+        hasNextPage,
+      },
+    };
   }
 
-  async getCreatedStories(kidId: string) {
-    return await this.prisma.story.findMany({
+  async getCreatedStories(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? 20;
+
+    const stories = await this.prisma.story.findMany({
       where: { creatorKidId: kidId, isDeleted: false },
       orderBy: { createdAt: 'desc' },
+      ...(useCursor ? { take: take + 1 } : {}),
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
+
+    if (!useCursor) return stories;
+
+    const hasNextPage = stories.length > take;
+    if (hasNextPage) stories.pop();
+    return {
+      data: stories,
+      pagination: {
+        nextCursor: hasNextPage ? stories[stories.length - 1].id : null,
+        hasNextPage,
+      },
+    };
   }
 
-  async getDownloads(kidId: string) {
+  async getDownloads(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? 20;
+
     const downloads = await this.prisma.downloadedStory.findMany({
       where: { kidId },
       include: { story: true },
       orderBy: { downloadedAt: 'desc' },
+      ...(useCursor ? { take: take + 1 } : {}),
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
-    return downloads.map((d) => d.story);
+
+    if (!useCursor) return downloads.map((d) => d.story);
+
+    const hasNextPage = downloads.length > take;
+    if (hasNextPage) downloads.pop();
+    return {
+      data: downloads.map((d) => d.story),
+      pagination: {
+        nextCursor: hasNextPage ? downloads[downloads.length - 1].id : null,
+        hasNextPage,
+      },
+    };
   }
 
   async addDownload(kidId: string, storyId: string) {
