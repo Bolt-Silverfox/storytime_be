@@ -94,16 +94,16 @@ describe('VoiceController', () => {
       );
 
       const result = await controller.textToSpeech(
-        { storyId: 'story-1', content: 'Hello world', voiceId: 'CHARLIE' },
+        { storyId: 'story-1', content: 'Hello world', voiceId: 'MILO' },
         mockRequest,
       );
 
       expect(mockVoiceQuotaService.canUseVoice).toHaveBeenCalledWith(
         'user-1',
-        'CHARLIE',
+        'MILO',
       );
       expect(result.audioUrl).toBe('https://audio.com/audio.mp3');
-      expect(result.voiceId).toBe('CHARLIE');
+      expect(result.voiceId).toBe('MILO');
     });
 
     it('should throw 403 when free user picks a disallowed voice', async () => {
@@ -111,7 +111,7 @@ describe('VoiceController', () => {
 
       await expect(
         controller.textToSpeech(
-          { storyId: 'story-1', content: 'Hello world', voiceId: 'JESSICA' },
+          { storyId: 'story-1', content: 'Hello world', voiceId: 'BELLA' },
           mockRequest,
         ),
       ).rejects.toThrow(ForbiddenException);
@@ -142,16 +142,16 @@ describe('VoiceController', () => {
       });
 
       const result = await controller.batchTextToSpeech(
-        { storyId: 'story-1', voiceId: 'CHARLIE' },
+        { storyId: 'story-1', voiceId: 'MILO' },
         mockRequest,
       );
 
       expect(mockVoiceQuotaService.canUseVoice).toHaveBeenCalledWith(
         'user-1',
-        'CHARLIE',
+        'MILO',
       );
       expect(result.paragraphs).toHaveLength(1);
-      expect(result.voiceId).toBe('CHARLIE');
+      expect(result.voiceId).toBe('MILO');
     });
 
     it('should throw 403 when free user picks a disallowed voice in batch', async () => {
@@ -159,7 +159,7 @@ describe('VoiceController', () => {
 
       await expect(
         controller.batchTextToSpeech(
-          { storyId: 'story-1', voiceId: 'JESSICA' },
+          { storyId: 'story-1', voiceId: 'BELLA' },
           mockRequest,
         ),
       ).rejects.toThrow(ForbiddenException);
