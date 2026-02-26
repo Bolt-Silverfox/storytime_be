@@ -8,6 +8,7 @@ import {
   CircuitBreakerService,
   CircuitState,
 } from '@/shared/services/circuit-breaker.service';
+import { TTS_BREAKER_NAMES } from '@/shared/constants/circuit-breaker.constants';
 
 @Injectable()
 export class TTSCircuitBreakerHealthIndicator extends HealthIndicator {
@@ -16,14 +17,16 @@ export class TTSCircuitBreakerHealthIndicator extends HealthIndicator {
   }
 
   isHealthy(key: string): HealthIndicatorResult {
-    const breakers = this.cbService.getAllBreakers();
+    const allBreakers = this.cbService.getAllBreakers();
     const details: Record<
       string,
       { state: string; failureCount: number; lastFailureTime: number | null }
     > = {};
     let hasOpenBreaker = false;
 
-    for (const [name, breaker] of breakers) {
+    for (const [name, breaker] of allBreakers) {
+      if (!TTS_BREAKER_NAMES.includes(name)) continue;
+
       const snapshot = breaker.getSnapshot();
       details[name] = {
         state: snapshot.state,

@@ -40,6 +40,8 @@ describe('TTSCircuitBreakerHealthIndicator', () => {
   });
 
   it('should include breaker details in the result', () => {
+    expect.assertions(3);
+
     const breaker = cbService.getBreaker('elevenlabs', {
       failureThreshold: 1,
     });

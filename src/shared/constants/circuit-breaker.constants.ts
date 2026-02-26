@@ -21,3 +21,8 @@ export const TTS_CIRCUIT_BREAKER_CONFIG = {
     halfOpenMaxAttempts: 1,
   },
 } as const;
+
+/** Breaker names used by the TTS health indicator to filter from getAllBreakers() */
+export const TTS_BREAKER_NAMES: ReadonlyArray<string> = Object.keys(
+  TTS_CIRCUIT_BREAKER_CONFIG,
+);
