@@ -225,12 +225,31 @@ describe('StoryService - Library & Generation', () => {
       expect(prisma.story.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
-            creatorKidId: kidId, // <--- Ensures we only fetch THEIR stories
+            creatorKidId: kidId,
             isDeleted: false,
           },
           orderBy: { createdAt: 'desc' },
         }),
       );
+    });
+
+    it('getCreatedStories: should return cursor-paginated when limit provided', async () => {
+      const stories = [
+        { id: 'story-1', title: 'Story 1' },
+        { id: 'story-2', title: 'Story 2' },
+        { id: 'story-3', title: 'Story 3' },
+      ];
+      prisma.story.findMany.mockResolvedValue(stories);
+
+      const result = await service.getCreatedStories(kidId, undefined, 2);
+
+      expect(result).toEqual({
+        data: [{ id: 'story-1', title: 'Story 1' }, { id: 'story-2', title: 'Story 2' }],
+        pagination: {
+          nextCursor: 'story-2',
+          hasNextPage: true,
+        },
+      });
     });
 
     it('addDownload: should use upsert to prevent duplicates', async () => {

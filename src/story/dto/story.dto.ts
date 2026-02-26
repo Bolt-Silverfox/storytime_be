@@ -534,6 +534,30 @@ export class PaginatedStoriesDto {
   pagination: PaginationMetaDto;
 }
 
+export class CursorPaginationMetaDto {
+  @ApiProperty({ description: 'Cursor for next page', nullable: true })
+  nextCursor: string | null;
+
+  @ApiProperty({ description: 'Whether more items exist' })
+  hasNextPage: boolean;
+}
+
+export class CursorPaginatedStoriesDto {
+  @ApiProperty({
+    description: 'Array of stories',
+    type: 'array',
+    isArray: true,
+  })
+  @IsArray()
+  data: Record<string, unknown>[];
+
+  @ApiProperty({
+    description: 'Cursor pagination metadata',
+    type: CursorPaginationMetaDto,
+  })
+  pagination: CursorPaginationMetaDto;
+}
+
 export class DownloadedStoryDto {
   @ApiProperty()
   id: string;
