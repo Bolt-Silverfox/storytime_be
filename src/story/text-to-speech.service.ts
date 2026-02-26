@@ -858,6 +858,11 @@ export class TextToSpeechService {
         break;
       }
 
+      // Intentional: discard partial results from this provider and retry ALL
+      // uncached paragraphs on the next provider. The next iteration rebuilds
+      // uncached from a fresh cache lookup scoped to the new provider, ensuring
+      // all returned audio comes from a single provider for voice consistency.
+      // Audio already uploaded by this provider remains cached for future use.
       this.logger.warn(
         `Batch story ${storyId}: ${attempt.failedCount}/${uncached.length} failed with ${provider}, trying next provider`,
       );
