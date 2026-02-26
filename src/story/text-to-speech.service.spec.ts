@@ -279,6 +279,50 @@ describe('TextToSpeechService', () => {
       expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
     });
 
+    it('should not return cross-provider cached URL when providerOverride is set', async () => {
+      // Simulate batch mode: Deepgram is the override provider.
+      // An ElevenLabs cache entry exists but should NOT be returned.
+      mockPrisma.paragraphAudioCache.findFirst.mockImplementation(
+        (args: { where: { provider?: string } }) => {
+          // Only return cache when no provider filter (or provider is 'elevenlabs')
+          if (!args.where.provider || args.where.provider === 'elevenlabs') {
+            return Promise.resolve({
+              audioUrl: 'https://cached.com/elevenlabs-audio.mp3',
+              provider: 'elevenlabs',
+            });
+          }
+          // No cache for deepgram
+          return Promise.resolve(null);
+        },
+      );
+
+      mockIsPremiumUser.mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('deepgram-audio'));
+      mockUploadAudio.mockResolvedValue(
+        'https://uploaded-audio.com/deepgram.mp3',
+      );
+
+      // Call generateTTS indirectly via textToSpeechCloudUrl won't use providerOverride,
+      // so we use the batch path to trigger it. But for a simpler test, we can
+      // call the service method that sets providerOverride internally.
+      // Use batch with a single short paragraph:
+      mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
+
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        text,
+        voiceType,
+        userId,
+      );
+
+      // Deepgram should have been called (not served from ElevenLabs cache)
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
+      expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
+      expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
+      expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
+    });
+
     it('should throw error if all providers fail for premium user', async () => {
       mockIsPremiumUser.mockResolvedValue(true);
 
