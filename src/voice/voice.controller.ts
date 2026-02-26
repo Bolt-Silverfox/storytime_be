@@ -4,10 +4,8 @@ import {
   ForbiddenException,
   Get,
   NotFoundException,
-  Param,
   Patch,
   Post,
-  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -21,8 +19,6 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
-  ApiParam,
-  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -39,10 +35,8 @@ import {
   BatchStoryAudioDto,
   CreateElevenLabsVoiceDto,
   SetPreferredVoiceDto,
-  StoryContentAudioDto,
   UploadVoiceDto,
   VoiceResponseDto,
-  VoiceType,
 } from './dto/voice.dto';
 import { SpeechToTextService } from './speech-to-text.service';
 import { VoiceService } from './voice.service';
@@ -189,83 +183,6 @@ export class VoiceController {
   }
 
   // --- Text to Speech ---
-  @Get('story/audio/:id')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Generate audio for stored text using ID' })
-  @ApiParam({ name: 'id', type: String })
-  @ApiQuery({
-    name: 'voiceId',
-    required: false,
-    type: String,
-    description: 'VoiceType enum value or Voice UUID',
-  })
-  @ApiResponse({ status: 200, description: 'Audio generated successfully' })
-  async getTextToSpeechById(
-    @Param('id') id: string,
-    @Req() req: AuthenticatedRequest,
-    @Query('voiceId') voiceId?: VoiceType | string,
-  ) {
-    const resolvedVoice = voiceId ?? DEFAULT_VOICE;
-    const canUse = await this.voiceQuotaService.canUseVoice(
-      req.authUserData.userId,
-      resolvedVoice,
-    );
-    if (!canUse) {
-      throw new ForbiddenException(
-        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
-      );
-    }
-
-    const audioUrl = await this.storyService.getStoryAudioUrl(
-      id,
-      resolvedVoice,
-      req.authUserData.userId,
-    );
-
-    return {
-      message: 'Audio generated successfully',
-      audioUrl,
-      voiceId: resolvedVoice,
-      statusCode: 200,
-    };
-  }
-
-  @Post('story/audio')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Convert raw text to speech and return audio URL' })
-  @ApiResponse({ status: 200, description: 'Audio generated successfully' })
-  @ApiBody({ type: StoryContentAudioDto })
-  async textToSpeech(
-    @Body() dto: StoryContentAudioDto,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
-    const canUse = await this.voiceQuotaService.canUseVoice(
-      req.authUserData.userId,
-      resolvedVoice,
-    );
-    if (!canUse) {
-      throw new ForbiddenException(
-        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
-      );
-    }
-
-    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
-      dto.storyId,
-      dto.content,
-      resolvedVoice,
-      req.authUserData.userId,
-    );
-
-    return {
-      message: 'Audio generated successfully',
-      audioUrl,
-      voiceId: resolvedVoice,
-      statusCode: 200,
-    };
-  }
 
   @Post('story/audio/batch')
   @UseGuards(AuthSessionGuard)
