@@ -2,6 +2,30 @@ import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SAFE_ID_REGEX = /^[\w\-.]+$/;
+const MAX_REQUEST_ID_LENGTH = 128;
+
+/**
+ * Normalize and validate an X-Request-ID header value.
+ * Accepts a valid UUID or a safe string up to 128 chars.
+ * Returns a new random UUID if the value is missing or invalid.
+ */
+function resolveRequestId(raw: string | string[] | undefined): string {
+  const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+
+  if (!value) return randomUUID();
+
+  if (UUID_REGEX.test(value)) return value;
+
+  if (value.length <= MAX_REQUEST_ID_LENGTH && SAFE_ID_REGEX.test(value)) {
+    return value;
+  }
+
+  return randomUUID();
+}
+
 // Extend Express Request to include requestId
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -44,7 +68,7 @@ export class RequestLoggerMiddleware implements NestMiddleware {
     const startTime = Date.now();
 
     // Generate unique request ID for tracing
-    const requestId = (req.headers['x-request-id'] as string) || randomUUID();
+    const requestId = resolveRequestId(req.headers['x-request-id']);
     req.requestId = requestId;
 
     // Add request ID to response headers for client correlation
@@ -163,7 +187,7 @@ export function requestLogger(
   const logger = new Logger('HTTP');
   const startTime = Date.now();
 
-  const requestId = (req.headers['x-request-id'] as string) || randomUUID();
+  const requestId = resolveRequestId(req.headers['x-request-id']);
   req.requestId = requestId;
   res.setHeader('X-Request-ID', requestId);
 
