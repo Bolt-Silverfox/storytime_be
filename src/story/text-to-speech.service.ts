@@ -861,14 +861,13 @@ export class TextToSpeechService {
    * into cached (with audioUrl) and uncached (needing generation) arrays.
    */
   private async rebuildCacheForProvider(
-    provider: string,
+    provider: 'elevenlabs' | 'deepgram' | 'edgetts',
     hashMap: Map<string, Array<{ index: number; text: string }>>,
     storyId: string,
     voiceId: string,
   ): Promise<{
     cached: Array<{ index: number; text: string; audioUrl: string }>;
     uncached: Array<{ index: number; text: string; hash: string }>;
-    uncachedHashes: Set<string>;
   }> {
     const entries = await this.prisma.paragraphAudioCache.findMany({
       where: {
@@ -889,7 +888,6 @@ export class TextToSpeechService {
 
     const cached: Array<{ index: number; text: string; audioUrl: string }> = [];
     const uncached: Array<{ index: number; text: string; hash: string }> = [];
-    const uncachedHashes = new Set<string>();
 
     for (const [hash, hashEntries] of hashMap) {
       const cachedUrl = cacheMap.get(hash);
@@ -898,18 +896,15 @@ export class TextToSpeechService {
           cached.push({ index, text, audioUrl: cachedUrl });
         }
       } else {
-        if (!uncachedHashes.has(hash)) {
-          uncachedHashes.add(hash);
-          uncached.push({
-            index: hashEntries[0].index,
-            text: hashEntries[0].text,
-            hash,
-          });
-        }
+        uncached.push({
+          index: hashEntries[0].index,
+          text: hashEntries[0].text,
+          hash,
+        });
       }
     }
 
-    return { cached, uncached, uncachedHashes };
+    return { cached, uncached };
   }
 
   /** Generate a batch of paragraphs using a single provider */
