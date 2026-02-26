@@ -34,7 +34,10 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
   const { prisma, logger } = ctx;
 
   try {
-    logger.log('Seeding stories...');
+    const env = process.env.NODE_ENV || 'development';
+    const envFile = path.resolve(`prisma/data/stories.${env}.json`);
+    const defaultFile = path.resolve('prisma/data/stories.json');
+    const storiesPath = fs.existsSync(envFile) ? envFile : defaultFile;
 
     const dataDir = path.resolve('prisma/data');
     if (!fs.existsSync(dataDir)) {

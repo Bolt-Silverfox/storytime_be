@@ -1,3 +1,8 @@
+const os = require('os');
+
+const cpus = os.cpus().length;
+const prodInstances = Math.max(2, cpus - 1);
+
 const baseConfig = {
   script: 'dist/src/main.js',
   instances: 'max',
@@ -26,6 +31,7 @@ module.exports = {
     {
       ...baseConfig,
       name: 'storytime-api-production',
+      instances: prodInstances,
       env: {
         NODE_ENV: 'production',
       },
