@@ -286,14 +286,15 @@ export class TextToSpeechService {
           useElevenLabs = false;
         }
       } else if (!isPremium) {
-        // Free: 1 premium voice total across all stories
-        const freeAllowed = await this.voiceQuota.canFreeUserUseElevenLabs(
+        // Free user: allow ElevenLabs only for their one trial story
+        const trialAllowed = await this.voiceQuota.canFreeUserUseElevenLabs(
           userId,
           elevenLabsId,
+          storyId,
         );
-        if (!freeAllowed) {
-          this.logger.log(
-            `Free user ${userId} already used their premium voice. Skipping ElevenLabs for voice ${type}.`,
+        if (!trialAllowed) {
+          this.logger.debug(
+            `Free user ${userId}: ElevenLabs trial not available for story ${storyId}, using Deepgram/Edge TTS.`,
           );
           useElevenLabs = false;
         }
@@ -707,14 +708,15 @@ export class TextToSpeechService {
           );
         }
       } else {
-        // Free: check if this is their one allowed premium voice
+        // Free user: allow ElevenLabs only for their one trial story
         useElevenLabsBatch = await this.voiceQuota.canFreeUserUseElevenLabs(
           userId,
           quotaVoiceId,
+          storyId,
         );
         if (!useElevenLabsBatch) {
-          this.logger.log(
-            `Free user ${userId} already used their premium voice. Skipping ElevenLabs for voice ${type}.`,
+          this.logger.debug(
+            `Free user ${userId}: ElevenLabs trial not available for batch story ${storyId}, using Deepgram/Edge TTS.`,
           );
         }
       }

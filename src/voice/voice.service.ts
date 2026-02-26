@@ -252,8 +252,12 @@ export class VoiceService {
   }
 
   /**
-   * Fetch available system voices with caching
-   * Cached for 5 minutes since voices rarely change
+   * Fetch available system voices with caching.
+   *
+   * Config-driven: always returns all voices from VOICE_CONFIG.
+   * DB records are used to attach UUIDs when available; if a voice
+   * isn't seeded in the DB, the VoiceType enum key is used as the id
+   * (TTS endpoints accept both UUIDs and VoiceType enum values).
    */
   async fetchAvailableVoices(): Promise<VoiceResponseDto[]> {
     // Check cache first
@@ -268,7 +272,7 @@ export class VoiceService {
     // Get the IDs we expect from config
     const systemIds = Object.values(VOICE_CONFIG).map((c) => c.elevenLabsId);
 
-    // Fetch actual records from DB to get UUIDs
+    // Fetch DB records to get UUIDs (best-effort — voices work without DB rows)
     const dbVoices = await this.prisma.voice.findMany({
       where: {
         elevenLabsVoiceId: { in: systemIds },
@@ -277,7 +281,24 @@ export class VoiceService {
       },
     });
 
-    const voices = dbVoices.map((voice) => this.toVoiceResponse(voice));
+    // Index DB voices by elevenLabsId for O(1) lookup
+    const dbVoiceMap = new Map(dbVoices.map((v) => [v.elevenLabsVoiceId, v]));
+
+    // Build response from VOICE_CONFIG (guaranteed all 8 voices)
+    const voices: VoiceResponseDto[] = Object.entries(VOICE_CONFIG).map(
+      ([key, config]) => {
+        const dbVoice = dbVoiceMap.get(config.elevenLabsId);
+        return {
+          id: dbVoice?.id ?? key,
+          name: key,
+          displayName: config.name,
+          type: VoiceSourceType.ELEVENLABS,
+          previewUrl: dbVoice?.url ?? config.previewUrl,
+          voiceAvatar: dbVoice?.voiceAvatar ?? config.voiceAvatar,
+          elevenLabsVoiceId: config.elevenLabsId,
+        };
+      },
+    );
 
     // Cache the result
     await this.cacheManager.set(
