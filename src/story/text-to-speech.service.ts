@@ -6,7 +6,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { VoiceType } from '../voice/dto/voice.dto';
+import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../voice/dto/voice.dto';
 import {
   VOICE_CONFIG,
   DEFAULT_VOICE,
@@ -197,7 +197,7 @@ export class TextToSpeechService {
       providerOverride?: 'elevenlabs' | 'deepgram' | 'edgetts';
     },
   ): Promise<TTSResult> {
-    const type = voicetype ?? DEFAULT_VOICE;
+    const type = VOICE_TYPE_MIGRATION_MAP[voicetype as string] ?? voicetype ?? DEFAULT_VOICE;
 
     // Guard against unbounded input
     if (text.length > MAX_TTS_TEXT_LENGTH) {
@@ -228,10 +228,20 @@ export class TextToSpeechService {
       edgeTtsVoice = config.edgeTtsVoice;
       deepgramVoice = config.deepgramVoice;
       voiceSettings = config.voiceSettings;
+    } else if (VOICE_TYPE_MIGRATION_MAP[type]) {
+      // Old enum name (e.g. CHARLIE) — resolve via migration map
+      const config = VOICE_CONFIG[VOICE_TYPE_MIGRATION_MAP[type]];
+      elevenLabsId = config.elevenLabsId;
+      edgeTtsVoice = config.edgeTtsVoice;
+      deepgramVoice = config.deepgramVoice;
+      voiceSettings = config.voiceSettings;
     } else {
-      // Assume dynamic UUID (Custom Voice)
-      const voice = await this.prisma.voice.findUnique({
-        where: { id: type, isDeleted: false },
+      // Assume dynamic UUID (Custom Voice) — try DB lookup first
+      const voice = await this.prisma.voice.findFirst({
+        where: {
+          OR: [{ id: type }, { name: type }],
+          isDeleted: false,
+        },
       });
       if (voice && voice.elevenLabsVoiceId) {
         elevenLabsId = voice.elevenLabsVoiceId;
@@ -600,7 +610,7 @@ export class TextToSpeechService {
     if (!fullText?.trim())
       return { results: [], totalParagraphs: 0, wasTruncated: false };
 
-    const type = voiceType ?? DEFAULT_VOICE;
+    const type = VOICE_TYPE_MIGRATION_MAP[voiceType as string] ?? voiceType ?? DEFAULT_VOICE;
     const allParagraphs = splitByWordCountPreservingSentences(
       fullText,
       WORDS_PER_CHUNK,

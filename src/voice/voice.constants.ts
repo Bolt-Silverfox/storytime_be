@@ -1,19 +1,19 @@
 import { VoiceType } from './dto/voice.dto';
 
-export const DEFAULT_VOICE = VoiceType.LILY;
+export const DEFAULT_VOICE = VoiceType.NIMBUS;
 
 export const VOICE_AVATARS: Record<VoiceType, string> = {
-  [VoiceType.CHARLIE]:
+  [VoiceType.MILO]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772687/storytime/voice_avatars/milo.png',
-  [VoiceType.JESSICA]:
+  [VoiceType.BELLA]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772688/storytime/voice_avatars/bella.png',
-  [VoiceType.WILL]:
+  [VoiceType.COSMO]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772689/storytime/voice_avatars/cosmo.png',
-  [VoiceType.LILY]:
+  [VoiceType.NIMBUS]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772690/storytime/voice_avatars/nimbus.png',
-  [VoiceType.BILL]:
+  [VoiceType.FANICE]:
     'https://res.cloudinary.com/billmal/image/upload/v1771776487/storytime/voice_avatars/fanice.png',
-  [VoiceType.LAURA]:
+  [VoiceType.CHIP]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772693/storytime/voice_avatars/chip.png',
   [VoiceType.ROSIE]:
     'https://res.cloudinary.com/billmal/image/upload/v1771776416/storytime/voice_avatars/rosie.png',
@@ -22,17 +22,17 @@ export const VOICE_AVATARS: Record<VoiceType, string> = {
 };
 
 export const VOICE_PREVIEWS: Record<VoiceType, string> = {
-  [VoiceType.CHARLIE]:
+  [VoiceType.MILO]:
     'https://storage.googleapis.com/eleven-public-prod/premade/voices/NFG5qt843uXKj4pFvR7C/preview.mp3',
-  [VoiceType.JESSICA]:
+  [VoiceType.BELLA]:
     'https://storage.googleapis.com/eleven-public-prod/premade/voices/wJqPPQ618aTW29mptyoc/preview.mp3',
-  [VoiceType.WILL]:
+  [VoiceType.COSMO]:
     'https://storage.googleapis.com/eleven-public-prod/premade/voices/EiNlNiXeDU1pqqOPrYMO/preview.mp3',
-  [VoiceType.LILY]:
+  [VoiceType.NIMBUS]:
     'https://res.cloudinary.com/billmal/video/upload/v1771892834/storytime/voice_previews/matilda_preview.mp3',
-  [VoiceType.BILL]:
+  [VoiceType.FANICE]:
     'https://storage.googleapis.com/eleven-public-prod/premade/voices/iCrDUkL56s3C8sCRl7wb/preview.mp3',
-  [VoiceType.LAURA]:
+  [VoiceType.CHIP]:
     'https://res.cloudinary.com/billmal/video/upload/v1771892837/storytime/voice_previews/callum_preview.mp3',
   [VoiceType.ROSIE]:
     'https://storage.googleapis.com/eleven-public-prod/premade/voices/ThT5KcBeYPX3keUQqHPh/981f0855-6598-48d2-9f8f-b6d92fbbe3fc.mp3',
@@ -61,7 +61,7 @@ export interface VoiceConfigEntry {
 }
 
 /**
- * VoiceType enum keys (CHARLIE, JESSICA, etc.) are stable internal identifiers
+ * VoiceType enum keys (MILO, BELLA, etc.) are stable internal identifiers
  * used in the database and API. The `name` field is the user-facing display name
  * shown in the mobile app (Milo, Bella, etc.). Keep these decoupled — update
  * `name` for UI changes without touching enum keys or stored references.
@@ -69,15 +69,15 @@ export interface VoiceConfigEntry {
  * here in VOICE_AVATARS, VOICE_PREVIEWS, and VOICE_CONFIG.
  */
 export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
-  [VoiceType.CHARLIE]: {
-    id: VoiceType.CHARLIE,
+  [VoiceType.MILO]: {
+    id: VoiceType.MILO,
     name: 'Milo',
     edgeTtsVoice: 'en-GB-RyanNeural',
     deepgramVoice: 'aura-2-draco-en',
     gender: 'Male',
     elevenLabsId: 'NFG5qt843uXKj4pFvR7C',
-    previewUrl: VOICE_PREVIEWS[VoiceType.CHARLIE],
-    voiceAvatar: VOICE_AVATARS[VoiceType.CHARLIE],
+    previewUrl: VOICE_PREVIEWS[VoiceType.MILO],
+    voiceAvatar: VOICE_AVATARS[VoiceType.MILO],
     // Milo (Adam Stone voice): laid-back British male - expressive storytelling
     voiceSettings: {
       stability: 0.35,
@@ -86,15 +86,15 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       use_speaker_boost: true,
     },
   },
-  [VoiceType.JESSICA]: {
-    id: VoiceType.JESSICA,
+  [VoiceType.BELLA]: {
+    id: VoiceType.BELLA,
     name: 'Bella',
     edgeTtsVoice: 'en-US-JennyMultilingualNeural',
     deepgramVoice: 'aura-2-andromeda-en',
     gender: 'Female',
     elevenLabsId: 'wJqPPQ618aTW29mptyoc',
-    previewUrl: VOICE_PREVIEWS[VoiceType.JESSICA],
-    voiceAvatar: VOICE_AVATARS[VoiceType.JESSICA],
+    previewUrl: VOICE_PREVIEWS[VoiceType.BELLA],
+    voiceAvatar: VOICE_AVATARS[VoiceType.BELLA],
     // Bella (Ana Rita voice): smooth, expressive female - engaging storytelling
     voiceSettings: {
       stability: 0.3,
@@ -103,15 +103,15 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       use_speaker_boost: true,
     },
   },
-  [VoiceType.WILL]: {
-    id: VoiceType.WILL,
+  [VoiceType.COSMO]: {
+    id: VoiceType.COSMO,
     name: 'Cosmo',
     edgeTtsVoice: 'en-US-GuyNeural',
     deepgramVoice: 'aura-2-zeus-en',
     gender: 'Male',
     elevenLabsId: 'EiNlNiXeDU1pqqOPrYMO',
-    previewUrl: VOICE_PREVIEWS[VoiceType.WILL],
-    voiceAvatar: VOICE_AVATARS[VoiceType.WILL],
+    previewUrl: VOICE_PREVIEWS[VoiceType.COSMO],
+    voiceAvatar: VOICE_AVATARS[VoiceType.COSMO],
     // Cosmo (John Doe voice): deep, intimate male - immersive storytelling
     voiceSettings: {
       stability: 0.4,
@@ -120,15 +120,15 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       use_speaker_boost: true,
     },
   },
-  [VoiceType.LILY]: {
-    id: VoiceType.LILY,
+  [VoiceType.NIMBUS]: {
+    id: VoiceType.NIMBUS,
     name: 'Nimbus',
     edgeTtsVoice: 'en-US-AvaMultilingualNeural',
     deepgramVoice: 'aura-2-hera-en',
     gender: 'Female',
     elevenLabsId: 'XrExE9yKIg1WjnnlVkGX',
-    previewUrl: VOICE_PREVIEWS[VoiceType.LILY],
-    voiceAvatar: VOICE_AVATARS[VoiceType.LILY],
+    previewUrl: VOICE_PREVIEWS[VoiceType.NIMBUS],
+    voiceAvatar: VOICE_AVATARS[VoiceType.NIMBUS],
     // Nimbus (Matilda voice): warm audiobook narrator - best default for storytelling
     voiceSettings: {
       stability: 0.35,
@@ -137,15 +137,15 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       use_speaker_boost: true,
     },
   },
-  [VoiceType.BILL]: {
-    id: VoiceType.BILL,
+  [VoiceType.FANICE]: {
+    id: VoiceType.FANICE,
     name: 'Fanice',
     edgeTtsVoice: 'en-US-SaraNeural',
     deepgramVoice: 'aura-2-harmonia-en',
     gender: 'Female',
     elevenLabsId: 'iCrDUkL56s3C8sCRl7wb',
-    previewUrl: VOICE_PREVIEWS[VoiceType.BILL],
-    voiceAvatar: VOICE_AVATARS[VoiceType.BILL],
+    previewUrl: VOICE_PREVIEWS[VoiceType.FANICE],
+    voiceAvatar: VOICE_AVATARS[VoiceType.FANICE],
     // Fanice (Hope voice): soothing female narrator - calming bedtime stories
     voiceSettings: {
       stability: 0.45,
@@ -154,15 +154,15 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
       use_speaker_boost: true,
     },
   },
-  [VoiceType.LAURA]: {
-    id: VoiceType.LAURA,
+  [VoiceType.CHIP]: {
+    id: VoiceType.CHIP,
     name: 'Chip',
     edgeTtsVoice: 'en-US-AndrewMultilingualNeural',
     deepgramVoice: 'aura-2-orion-en',
     gender: 'Male',
     elevenLabsId: 'N2lVS1w4EtoT3dr4eOWO',
-    previewUrl: VOICE_PREVIEWS[VoiceType.LAURA],
-    voiceAvatar: VOICE_AVATARS[VoiceType.LAURA],
+    previewUrl: VOICE_PREVIEWS[VoiceType.CHIP],
+    voiceAvatar: VOICE_AVATARS[VoiceType.CHIP],
     // Chip (Callum voice): gentle male storyteller - warm and engaging
     voiceSettings: {
       stability: 0.4,

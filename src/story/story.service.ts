@@ -50,7 +50,7 @@ import {
   GeneratedStory,
 } from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
-import { VoiceType } from '../voice/dto/voice.dto';
+import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
 import { PaginationUtil } from '@/shared/utils/pagination.util';
@@ -1382,6 +1382,8 @@ export class StoryService {
       const voiceName = kid.preferredVoice.name.toUpperCase();
       if (voiceName in VoiceType) {
         voiceType = VoiceType[voiceName as keyof typeof VoiceType];
+      } else if (VOICE_TYPE_MIGRATION_MAP[voiceName]) {
+        voiceType = VOICE_TYPE_MIGRATION_MAP[voiceName];
       } else if (kid.preferredVoice.elevenLabsVoiceId) {
         const elId = kid.preferredVoice.elevenLabsVoiceId.toUpperCase();
         if (elId in VoiceType) {
