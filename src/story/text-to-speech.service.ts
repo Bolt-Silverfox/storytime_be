@@ -138,10 +138,11 @@ export class TextToSpeechService {
     storyId: string,
     text: string,
     voiceId: string,
+    provider?: string,
   ): Promise<string | null> {
     const textHash = this.hashText(text);
     const cached = await this.prisma.paragraphAudioCache.findFirst({
-      where: { storyId, textHash, voiceId },
+      where: { storyId, textHash, voiceId, ...(provider ? { provider } : {}) },
     });
     return cached?.audioUrl ?? null;
   }
@@ -213,8 +214,15 @@ export class TextToSpeechService {
       );
     }
 
-    // Check paragraph-level cache first
-    const cachedUrl = await this.getCachedParagraphAudio(storyId, text, type);
+    // Check paragraph-level cache first.
+    // When providerOverride is set (batch mode), scope cache to that provider
+    // to avoid cross-provider cache hits that break voice consistency.
+    const cachedUrl = await this.getCachedParagraphAudio(
+      storyId,
+      text,
+      type,
+      options?.providerOverride,
+    );
     if (cachedUrl) {
       this.logger.debug(
         `Paragraph cache hit for story ${storyId}, voice ${type}`,
@@ -818,6 +826,7 @@ export class TextToSpeechService {
           }
         }
         if (uncached.length === 0) {
+          generated = [];
           actualProvider = provider;
           break;
         }

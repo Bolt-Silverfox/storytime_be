@@ -210,6 +210,18 @@ export class VoiceController {
         totalParagraphs: { type: 'number' },
         wasTruncated: { type: 'boolean' },
         voiceId: { type: 'string' },
+        usedProvider: {
+          type: 'string',
+          enum: ['elevenlabs', 'deepgram', 'edgetts'],
+          description: 'The TTS provider that generated the audio',
+        },
+        preferredProvider: {
+          type: 'string',
+          enum: ['elevenlabs', 'deepgram', 'edgetts'],
+          nullable: true,
+          description:
+            'The originally preferred provider (present only when a fallback occurred)',
+        },
         statusCode: { type: 'number' },
       },
     },
