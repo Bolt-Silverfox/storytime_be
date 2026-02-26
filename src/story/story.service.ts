@@ -757,7 +757,7 @@ export class StoryService {
     const records = await this.prisma.favorite.findMany({
       where: { kidId },
       include: { story: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       ...(useCursor ? { take: take + 1 } : {}),
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
@@ -931,7 +931,7 @@ export class StoryService {
         completed: false,
         isDeleted: false,
       },
-      orderBy: { lastAccessed: 'desc' },
+      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
       include: {
         story: {
           include: { categories: true },
@@ -973,7 +973,7 @@ export class StoryService {
 
     const records = await this.prisma.userStoryProgress.findMany({
       where: { userId, completed: true, isDeleted: false },
-      orderBy: { lastAccessed: 'desc' },
+      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
       include: {
         story: {
           include: { categories: true },
@@ -1708,7 +1708,7 @@ export class StoryService {
 
     const progressRecords = await this.prisma.storyProgress.findMany({
       where: { kidId, progress: { gt: 0 }, completed: false, isDeleted: false },
-      orderBy: { lastAccessed: 'desc' },
+      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
       include: {
         story: {
           include: { categories: true },
@@ -1746,7 +1746,7 @@ export class StoryService {
 
     const records = await this.prisma.storyProgress.findMany({
       where: { kidId, completed: true, isDeleted: false },
-      orderBy: { lastAccessed: 'desc' },
+      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
       include: {
         story: {
           include: { categories: true },
@@ -1775,7 +1775,7 @@ export class StoryService {
 
     const stories = await this.prisma.story.findMany({
       where: { creatorKidId: kidId, isDeleted: false },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       ...(useCursor ? { take: take + 1 } : {}),
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
@@ -1800,7 +1800,7 @@ export class StoryService {
     const downloads = await this.prisma.downloadedStory.findMany({
       where: { kidId },
       include: { story: true },
-      orderBy: { downloadedAt: 'desc' },
+      orderBy: [{ downloadedAt: 'desc' }, { id: 'asc' }],
       ...(useCursor ? { take: take + 1 } : {}),
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
