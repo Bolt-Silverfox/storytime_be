@@ -175,7 +175,31 @@ describe('TextToSpeechService', () => {
       expect(mockPrisma.paragraphAudioCache.upsert).toHaveBeenCalled();
     });
 
-    it('should skip ElevenLabs for free users who exhausted their premium voice', async () => {
+    it('should allow ElevenLabs for free user trial story', async () => {
+      mockIsPremiumUser.mockResolvedValue(false);
+      mockCanFreeUserUseElevenLabs.mockResolvedValue(true);
+      mockElevenLabsGenerate.mockResolvedValue(Buffer.from('eleven-audio'));
+      mockUploadAudio.mockResolvedValue(
+        'https://uploaded-audio.com/eleven.mp3',
+      );
+
+      const result = await service.textToSpeechCloudUrl(
+        storyId,
+        text,
+        voiceType,
+        userId,
+      );
+
+      expect(mockCanFreeUserUseElevenLabs).toHaveBeenCalledWith(
+        userId,
+        expect.any(String),
+        storyId,
+      );
+      expect(mockElevenLabsGenerate).toHaveBeenCalled();
+      expect(result).toBe('https://uploaded-audio.com/eleven.mp3');
+    });
+
+    it('should skip ElevenLabs for free user after trial is used (Deepgram → Edge TTS chain)', async () => {
       mockIsPremiumUser.mockResolvedValue(false);
       mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('deepgram-audio'));
@@ -192,7 +216,8 @@ describe('TextToSpeechService', () => {
 
       expect(mockCanFreeUserUseElevenLabs).toHaveBeenCalledWith(
         userId,
-        'NFG5qt843uXKj4pFvR7C', // MILO's ElevenLabs ID
+        expect.any(String),
+        storyId,
       );
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
       expect(mockDeepgramGenerate).toHaveBeenCalled();

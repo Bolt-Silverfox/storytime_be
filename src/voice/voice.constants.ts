@@ -68,141 +68,131 @@ export interface VoiceConfigEntry {
  * When adding new voices, add the enum in dto/voice.dto.ts, then add entries
  * here in VOICE_AVATARS, VOICE_PREVIEWS, and VOICE_CONFIG.
  */
+
+/** Build a VoiceConfigEntry, auto-wiring id/previewUrl/voiceAvatar from the type. */
+function buildVoiceConfig(
+  type: VoiceType,
+  overrides: Omit<VoiceConfigEntry, 'id' | 'previewUrl' | 'voiceAvatar'>,
+): VoiceConfigEntry {
+  return {
+    id: type,
+    previewUrl: VOICE_PREVIEWS[type],
+    voiceAvatar: VOICE_AVATARS[type],
+    ...overrides,
+  };
+}
+
 export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
-  [VoiceType.MILO]: {
-    id: VoiceType.MILO,
+  // Milo (Adam Stone voice): laid-back British male - expressive storytelling
+  [VoiceType.MILO]: buildVoiceConfig(VoiceType.MILO, {
     name: 'Milo',
     edgeTtsVoice: 'en-GB-RyanNeural',
     deepgramVoice: 'aura-2-draco-en',
     gender: 'Male',
     elevenLabsId: 'NFG5qt843uXKj4pFvR7C',
-    previewUrl: VOICE_PREVIEWS[VoiceType.MILO],
-    voiceAvatar: VOICE_AVATARS[VoiceType.MILO],
-    // Milo (Adam Stone voice): laid-back British male - expressive storytelling
     voiceSettings: {
       stability: 0.35,
       similarity_boost: 0.8,
       style: 0.55,
       use_speaker_boost: true,
     },
-  },
-  [VoiceType.BELLA]: {
-    id: VoiceType.BELLA,
+  }),
+  // Bella (Ana Rita voice): smooth, expressive female - engaging storytelling
+  [VoiceType.BELLA]: buildVoiceConfig(VoiceType.BELLA, {
     name: 'Bella',
     edgeTtsVoice: 'en-US-JennyMultilingualNeural',
     deepgramVoice: 'aura-2-andromeda-en',
     gender: 'Female',
     elevenLabsId: 'wJqPPQ618aTW29mptyoc',
-    previewUrl: VOICE_PREVIEWS[VoiceType.BELLA],
-    voiceAvatar: VOICE_AVATARS[VoiceType.BELLA],
-    // Bella (Ana Rita voice): smooth, expressive female - engaging storytelling
     voiceSettings: {
       stability: 0.3,
       similarity_boost: 0.85,
       style: 0.65,
       use_speaker_boost: true,
     },
-  },
-  [VoiceType.COSMO]: {
-    id: VoiceType.COSMO,
+  }),
+  // Cosmo (John Doe voice): deep, intimate male - immersive storytelling
+  [VoiceType.COSMO]: buildVoiceConfig(VoiceType.COSMO, {
     name: 'Cosmo',
     edgeTtsVoice: 'en-US-GuyNeural',
     deepgramVoice: 'aura-2-zeus-en',
     gender: 'Male',
     elevenLabsId: 'EiNlNiXeDU1pqqOPrYMO',
-    previewUrl: VOICE_PREVIEWS[VoiceType.COSMO],
-    voiceAvatar: VOICE_AVATARS[VoiceType.COSMO],
-    // Cosmo (John Doe voice): deep, intimate male - immersive storytelling
     voiceSettings: {
       stability: 0.4,
       similarity_boost: 0.8,
       style: 0.5,
       use_speaker_boost: true,
     },
-  },
-  [VoiceType.NIMBUS]: {
-    id: VoiceType.NIMBUS,
+  }),
+  // Nimbus (Matilda voice): warm audiobook narrator - best default for storytelling
+  [VoiceType.NIMBUS]: buildVoiceConfig(VoiceType.NIMBUS, {
     name: 'Nimbus',
     edgeTtsVoice: 'en-US-AvaMultilingualNeural',
     deepgramVoice: 'aura-2-hera-en',
     gender: 'Female',
     elevenLabsId: 'XrExE9yKIg1WjnnlVkGX',
-    previewUrl: VOICE_PREVIEWS[VoiceType.NIMBUS],
-    voiceAvatar: VOICE_AVATARS[VoiceType.NIMBUS],
-    // Nimbus (Matilda voice): warm audiobook narrator - best default for storytelling
     voiceSettings: {
       stability: 0.35,
       similarity_boost: 0.8,
       style: 0.6,
       use_speaker_boost: true,
     },
-  },
-  [VoiceType.FANICE]: {
-    id: VoiceType.FANICE,
+  }),
+  // Fanice (Hope voice): soothing female narrator - calming bedtime stories
+  [VoiceType.FANICE]: buildVoiceConfig(VoiceType.FANICE, {
     name: 'Fanice',
     edgeTtsVoice: 'en-US-SaraNeural',
     deepgramVoice: 'aura-2-harmonia-en',
     gender: 'Female',
     elevenLabsId: 'iCrDUkL56s3C8sCRl7wb',
-    previewUrl: VOICE_PREVIEWS[VoiceType.FANICE],
-    voiceAvatar: VOICE_AVATARS[VoiceType.FANICE],
-    // Fanice (Hope voice): soothing female narrator - calming bedtime stories
     voiceSettings: {
       stability: 0.45,
       similarity_boost: 0.75,
       style: 0.45,
       use_speaker_boost: true,
     },
-  },
-  [VoiceType.CHIP]: {
-    id: VoiceType.CHIP,
+  }),
+  // Chip (Callum voice): gentle male storyteller - warm and engaging
+  [VoiceType.CHIP]: buildVoiceConfig(VoiceType.CHIP, {
     name: 'Chip',
     edgeTtsVoice: 'en-US-AndrewMultilingualNeural',
     deepgramVoice: 'aura-2-orion-en',
     gender: 'Male',
     elevenLabsId: 'N2lVS1w4EtoT3dr4eOWO',
-    previewUrl: VOICE_PREVIEWS[VoiceType.CHIP],
-    voiceAvatar: VOICE_AVATARS[VoiceType.CHIP],
-    // Chip (Callum voice): gentle male storyteller - warm and engaging
     voiceSettings: {
       stability: 0.4,
       similarity_boost: 0.8,
       style: 0.5,
       use_speaker_boost: true,
     },
-  },
-  [VoiceType.ROSIE]: {
-    id: VoiceType.ROSIE,
+  }),
+  // Rosie: young child voice - calmer for storytelling
+  [VoiceType.ROSIE]: buildVoiceConfig(VoiceType.ROSIE, {
     name: 'Rosie',
     edgeTtsVoice: 'en-US-AnaNeural',
     deepgramVoice: 'aura-2-iris-en',
     gender: 'Female',
     elevenLabsId: 'ThT5KcBeYPX3keUQqHPh',
-    previewUrl: VOICE_PREVIEWS[VoiceType.ROSIE],
-    voiceAvatar: VOICE_AVATARS[VoiceType.ROSIE],
-    // Rosie: young child voice - calmer for storytelling
     voiceSettings: {
       stability: 0.45,
       similarity_boost: 0.75,
       style: 0.4,
       use_speaker_boost: true,
     },
-  },
-  [VoiceType.PIXIE]: {
-    id: VoiceType.PIXIE,
+  }),
+  // Pixie: animated childish voice - more expressive
+  [VoiceType.PIXIE]: buildVoiceConfig(VoiceType.PIXIE, {
     name: 'Pixie',
     edgeTtsVoice: 'en-US-JennyNeural',
     deepgramVoice: 'aura-2-aurora-en',
     gender: 'Female',
     elevenLabsId: 'jBpfuIE2acCO8z3wKNLl',
-    previewUrl: VOICE_PREVIEWS[VoiceType.PIXIE],
-    voiceAvatar: VOICE_AVATARS[VoiceType.PIXIE],
-    // Pixie: animated childish voice - more expressive
     voiceSettings: {
       stability: 0.3,
       similarity_boost: 0.85,
       style: 0.7,
       use_speaker_boost: true,
     },
-  },
+  }),
 };

@@ -1046,22 +1046,12 @@ export class StoryService {
     if (!story)
       throw new NotFoundException(`Story with ID ${storyId} not found`);
 
-    // voiceId can be an enum or a uuid string
-    const cachedAudio = await this.prisma.storyAudioCache.findFirst({
-      where: { storyId, voiceType: voiceId }, // Schema still calls it voiceType
-    });
-    if (cachedAudio) return cachedAudio.audioUrl;
-
-    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
+    return this.textToSpeechService.textToSpeechCloudUrl(
       storyId,
       story?.textContent ?? '',
       voiceId,
       userId,
     );
-    await this.prisma.storyAudioCache.create({
-      data: { storyId, voiceType: voiceId, audioUrl },
-    });
-    return audioUrl;
   }
 
   private toStoryPathDto(path: StoryPath): StoryPathDto {
