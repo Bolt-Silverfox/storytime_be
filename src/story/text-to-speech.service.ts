@@ -710,8 +710,12 @@ export class TextToSpeechService {
     // ── Cache lookup: only accept hits from the SAME provider ──
     // Paragraphs cached by a different provider are treated as uncached
     // so they get regenerated, ensuring consistent voice across the story.
-    let { cached, uncached } =
-      await this.rebuildCacheForProvider(batchProvider, hashMap, storyId, type);
+    let { cached, uncached } = await this.rebuildCacheForProvider(
+      batchProvider,
+      hashMap,
+      storyId,
+      type,
+    );
 
     this.logger.log(
       `Batch story ${storyId}: ${cached.length} cached (${batchProvider}), ${uncached.length} to generate`,
@@ -761,8 +765,12 @@ export class TextToSpeechService {
           continue;
         }
         // Re-do cache lookup for this provider
-        ({ cached, uncached } =
-          await this.rebuildCacheForProvider(provider, hashMap, storyId, type));
+        ({ cached, uncached } = await this.rebuildCacheForProvider(
+          provider,
+          hashMap,
+          storyId,
+          type,
+        ));
         if (uncached.length === 0) {
           generated = [];
           actualProvider = provider;
