@@ -16,6 +16,14 @@ export interface IInAppNotificationRepository {
     unreadOnly?: boolean;
   }): Promise<number>;
 
+  // Find notifications with cursor-based pagination
+  findNotificationsWithCursor(params: {
+    userId: string;
+    cursor?: { id: string };
+    take: number;
+    unreadOnly?: boolean;
+  }): Promise<Notification[]>;
+
   // Mark specific notifications as read
   markNotificationsAsRead(params: {
     userId: string;

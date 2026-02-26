@@ -68,6 +68,39 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
     });
   }
 
+  async findContinueReadingProgressPaginated(
+    kidId: string,
+    cursor?: { id: string },
+    take?: number,
+  ): Promise<StoryProgressWithStory[]> {
+    return await this.prisma.storyProgress.findMany({
+      where: {
+        kidId,
+        progress: { gt: 0 },
+        completed: false,
+        isDeleted: false,
+      },
+      ...(cursor ? { cursor: { id: cursor.id }, skip: 1 } : {}),
+      take,
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: { include: { categories: true } } },
+    });
+  }
+
+  async findCompletedProgressPaginated(
+    kidId: string,
+    cursor?: { id: string },
+    take?: number,
+  ): Promise<StoryProgressWithStory[]> {
+    return await this.prisma.storyProgress.findMany({
+      where: { kidId, completed: true, isDeleted: false },
+      ...(cursor ? { cursor: { id: cursor.id }, skip: 1 } : {}),
+      take,
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: { include: { categories: true } } },
+    });
+  }
+
   async deleteStoryProgress(
     kidId: string,
     storyId: string,
@@ -131,6 +164,39 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
   ): Promise<UserStoryProgressWithStory[]> {
     return await this.prisma.userStoryProgress.findMany({
       where: { userId, completed: true, isDeleted: false },
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: { include: { categories: true } } },
+    });
+  }
+
+  async findUserContinueReadingProgressPaginated(
+    userId: string,
+    cursor?: { id: string },
+    take?: number,
+  ): Promise<UserStoryProgressWithStory[]> {
+    return await this.prisma.userStoryProgress.findMany({
+      where: {
+        userId,
+        progress: { gt: 0 },
+        completed: false,
+        isDeleted: false,
+      },
+      ...(cursor ? { cursor: { id: cursor.id }, skip: 1 } : {}),
+      take,
+      orderBy: { lastAccessed: 'desc' },
+      include: { story: { include: { categories: true } } },
+    });
+  }
+
+  async findUserCompletedProgressPaginated(
+    userId: string,
+    cursor?: { id: string },
+    take?: number,
+  ): Promise<UserStoryProgressWithStory[]> {
+    return await this.prisma.userStoryProgress.findMany({
+      where: { userId, completed: true, isDeleted: false },
+      ...(cursor ? { cursor: { id: cursor.id }, skip: 1 } : {}),
+      take,
       orderBy: { lastAccessed: 'desc' },
       include: { story: { include: { categories: true } } },
     });

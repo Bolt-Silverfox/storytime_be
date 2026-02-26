@@ -78,12 +78,16 @@ export class PrismaStoryCoreRepository implements IStoryCoreRepository {
       | Prisma.StoryOrderByWithRelationInput[];
     include?: Prisma.StoryInclude;
     excludeContent?: boolean;
+    cursor?: { id: string };
   }): Promise<StoryWithRelations[]> {
+    const skipValue = params.cursor ? (params.skip ?? 0) + 1 : params.skip;
+
     // When excludeContent is true, use select to exclude textContent
     if (params.excludeContent) {
       return (await this.prisma.story.findMany({
         where: params.where,
-        skip: params.skip,
+        ...(params.cursor ? { cursor: { id: params.cursor.id } } : {}),
+        skip: skipValue,
         take: params.take,
         orderBy: params.orderBy,
         select: {
@@ -100,7 +104,8 @@ export class PrismaStoryCoreRepository implements IStoryCoreRepository {
 
     return await this.prisma.story.findMany({
       where: params.where,
-      skip: params.skip,
+      ...(params.cursor ? { cursor: { id: params.cursor.id } } : {}),
+      skip: skipValue,
       take: params.take,
       orderBy: params.orderBy,
       include: params.include,

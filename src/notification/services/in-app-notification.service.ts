@@ -3,6 +3,7 @@ import {
   IInAppNotificationRepository,
   IN_APP_NOTIFICATION_REPOSITORY,
 } from '../repositories';
+import { buildCursorPaginatedResponse } from '@/shared/utils/cursor-pagination.helper';
 
 @Injectable()
 export class InAppNotificationService {
@@ -37,6 +38,31 @@ export class InAppNotificationService {
       })),
       total,
     };
+  }
+
+  async getInAppNotificationsCursor(
+    userId: string,
+    cursorId: string | null,
+    limit: number,
+    unreadOnly: boolean = false,
+  ) {
+    const notifications =
+      await this.inAppNotificationRepository.findNotificationsWithCursor({
+        userId,
+        cursor: cursorId ? { id: cursorId } : undefined,
+        take: limit + 1,
+        unreadOnly,
+      });
+
+    return buildCursorPaginatedResponse({
+      items: notifications.map((n) => ({
+        ...n,
+        category: n.category,
+      })),
+      limit,
+      cursorId,
+      getId: (item) => item.id,
+    });
   }
 
   async markAsRead(userId: string, notificationIds: string[]) {

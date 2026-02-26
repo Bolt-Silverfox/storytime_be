@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   Req,
   UseGuards,
   Logger,
@@ -17,8 +18,10 @@ import {
   ApiBody,
   ApiOkResponse,
   ApiParam,
+  ApiQuery,
   ApiResponse,
 } from '@nestjs/swagger';
+import { PaginationUtil } from '@/shared/utils/pagination.util';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -86,7 +89,20 @@ export class ParentFavoritesController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get all parent favorites',
-    description: 'Retrieves all stories favorited by the authenticated parent.',
+    description:
+      'Retrieves all stories favorited by the authenticated parent. Supports optional cursor-based pagination for mobile infinite scroll.',
+  })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    type: String,
+    description: 'Opaque cursor for cursor-based pagination',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of items per page (default 10, max 100)',
   })
   @ApiOkResponse({
     description: 'List of parent favorites retrieved successfully',
@@ -98,9 +114,26 @@ export class ParentFavoritesController {
     description: 'Unauthorized',
     type: ErrorResponseDto,
   })
-  async getFavorites(@Req() req: AuthenticatedRequest) {
+  async getFavorites(
+    @Req() req: AuthenticatedRequest,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
     const userId = req.authUserData.userId;
     this.logger.log(`Fetching favorites for parent ${userId}`);
+
+    // If cursor or limit is present, use cursor-based pagination
+    if (cursor !== undefined || limit !== undefined) {
+      const { cursorId, limit: safeLimit } =
+        PaginationUtil.sanitizeCursorParams(cursor, limit);
+      return this.parentFavoritesService.getFavoritesPaginated(
+        userId,
+        cursorId,
+        safeLimit,
+      );
+    }
+
+    // Default: return all favorites (backward compatibility)
     return this.parentFavoritesService.getFavorites(userId);
   }
 

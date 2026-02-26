@@ -4,6 +4,8 @@ export interface SanitizeLimitOptions {
   max?: number;
 }
 
+import { CursorUtil } from './cursor.util';
+
 export class PaginationUtil {
   /**
    * Sanitizes page and limit query parameters.
@@ -78,5 +80,23 @@ export class PaginationUtil {
     // Floor and clamp to [min, max]
     result = Math.floor(result);
     return Math.max(min, Math.min(max, result));
+  }
+
+  /**
+   * Sanitize cursor pagination parameters.
+   * Decodes the cursor and clamps the limit.
+   * Returns null cursorId for invalid cursors (starts from beginning).
+   */
+  static sanitizeCursorParams(
+    cursor: string | undefined,
+    limit: unknown,
+    maxLimit = 100,
+  ): { cursorId: string | null; limit: number } {
+    const cursorId = cursor ? CursorUtil.decode(cursor) : null;
+    const sanitizedLimit = PaginationUtil.sanitizeLimit(limit, {
+      defaultValue: 10,
+      max: maxLimit,
+    });
+    return { cursorId, limit: sanitizedLimit };
   }
 }

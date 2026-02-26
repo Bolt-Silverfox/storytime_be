@@ -6,6 +6,7 @@ import {
   IParentFavoriteRepository,
   PARENT_FAVORITE_REPOSITORY,
 } from './repositories';
+import { buildCursorPaginatedResponse } from '@/shared/utils/cursor-pagination.helper';
 
 @Injectable()
 export class ParentFavoritesService {
@@ -61,6 +62,43 @@ export class ParentFavoritesService {
       durationSeconds: fav.story.durationSeconds ?? undefined,
       createdAt: fav.createdAt,
     }));
+  }
+
+  async getFavoritesPaginated(
+    userId: string,
+    cursorId: string | null,
+    limit: number,
+  ) {
+    const favorites =
+      await this.parentFavoriteRepository.findFavoritesPaginated({
+        userId,
+        ...(cursorId ? { cursor: { id: cursorId } } : {}),
+        take: limit + 1,
+      });
+
+    const mapped = favorites.map((fav) => ({
+      id: fav.id,
+      storyId: fav.storyId,
+      title: fav.story.title,
+      description: fav.story.description,
+      coverImageUrl: fav.story.coverImageUrl,
+      categories: fav.story.categories.map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        image: cat.image ?? undefined,
+        description: cat.description ?? undefined,
+      })),
+      ageRange: `${fav.story.ageMin}-${fav.story.ageMax}`,
+      durationSeconds: fav.story.durationSeconds ?? undefined,
+      createdAt: fav.createdAt,
+    }));
+
+    return buildCursorPaginatedResponse({
+      items: mapped,
+      limit,
+      cursorId,
+      getId: (item) => item.id,
+    });
   }
 
   async removeFavorite(userId: string, storyId: string): Promise<string> {

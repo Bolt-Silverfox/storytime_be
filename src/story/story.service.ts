@@ -9,10 +9,12 @@ import {
   FavoriteDto,
   StoryProgressDto,
   PaginatedStoriesDto,
+  CursorPaginatedStoriesDto,
   UserStoryProgressDto,
   StartStoryPathDto,
   UpdateStoryPathDto,
 } from './dto/story.dto';
+import { buildCursorPaginatedResponse } from '@/shared/utils/cursor-pagination.helper';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from './text-to-speech.service';
 import { StoryFavoriteService } from './story-favorite.service';
@@ -158,6 +160,94 @@ export class StoryService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  async getStoriesCursor(filter: {
+    theme?: string;
+    category?: string;
+    season?: string;
+    recommended?: boolean;
+    isMostLiked?: boolean;
+    isSeasonal?: boolean;
+    topPicksFromUs?: boolean;
+    age?: number;
+    minAge?: number;
+    maxAge?: number;
+    kidId?: string;
+    cursorId: string | null;
+    limit: number;
+  }): Promise<CursorPaginatedStoriesDto> {
+    // Build where clause (same as getStories)
+    const where: any = { isDeleted: false, isPublished: true };
+    if (filter.theme) where.themes = { some: { name: filter.theme } };
+    if (filter.category) where.categories = { some: { name: filter.category } };
+    if (filter.season) where.seasons = { some: { name: filter.season } };
+    if (filter.recommended) where.recommended = true;
+    if (filter.age) {
+      where.minAge = { lte: filter.age };
+      where.maxAge = { gte: filter.age };
+    }
+    if (filter.minAge) where.minAge = { gte: filter.minAge };
+    if (filter.maxAge) where.maxAge = { lte: filter.maxAge };
+
+    if (filter.isSeasonal) {
+      const allSeasons = await this.metadataService.getSeasons();
+      const today = new Date();
+      const currentMonth = today.getMonth() + 1;
+      const currentDay = today.getDate();
+      const currentDateStr = `${currentMonth
+        .toString()
+        .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
+
+      const activeSeasonIds = allSeasons
+        .filter((s: any) => {
+          if (!s.isActive || !s.startDate || !s.endDate) return false;
+          if (s.startDate > s.endDate) {
+            return currentDateStr >= s.startDate || currentDateStr <= s.endDate;
+          }
+          return currentDateStr >= s.startDate && currentDateStr <= s.endDate;
+        })
+        .map((s: any) => s.id);
+
+      if (activeSeasonIds.length > 0) {
+        where.seasons = { some: { id: { in: activeSeasonIds } } };
+      } else {
+        where.seasons = { some: { id: 'non-existent-id' } };
+      }
+    }
+
+    const orderBy = filter.isMostLiked
+      ? [
+          { parentFavorites: { _count: 'desc' as const } },
+          { createdAt: 'desc' as const },
+          { id: 'asc' as const },
+        ]
+      : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
+
+    // Overfetch by 1 to detect next page
+    const stories = await this.storyRepository.findStories({
+      where,
+      ...(filter.cursorId ? { cursor: { id: filter.cursorId } } : {}),
+      take: filter.limit + 1,
+      orderBy: orderBy as any,
+      include: {
+        images: true,
+        categories: true,
+        themes: true,
+      },
+      excludeContent: true,
+    });
+
+    return buildCursorPaginatedResponse({
+      items: stories.map((story) => ({
+        ...story,
+        isLiked: false,
+        isFavorite: false,
+      })),
+      limit: filter.limit,
+      cursorId: filter.cursorId,
+      getId: (item) => item.id,
+    });
   }
 
   async getCreatedStories(kidId: string) {

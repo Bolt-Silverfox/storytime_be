@@ -576,6 +576,37 @@ export class PaginatedStoriesDto {
   pagination: PaginationMetaDto;
 }
 
+export class CursorPaginationStoriesMetaDto {
+  @ApiProperty({ nullable: true })
+  nextCursor: string | null;
+
+  @ApiProperty({ nullable: true })
+  previousCursor: string | null;
+
+  @ApiProperty()
+  hasNextPage: boolean;
+
+  @ApiProperty()
+  hasPreviousPage: boolean;
+
+  @ApiProperty()
+  limit: number;
+}
+
+export class CursorPaginatedStoriesDto {
+  @ApiProperty({
+    description: 'Array of stories (lightweight list view)',
+    type: [StoryListItemDto],
+  })
+  data: (StoryListItemDto & Record<string, unknown>)[];
+
+  @ApiProperty({
+    description: 'Cursor pagination metadata',
+    type: CursorPaginationStoriesMetaDto,
+  })
+  pagination: CursorPaginationStoriesMetaDto;
+}
+
 export class DownloadedStoryDto {
   @ApiProperty()
   id: string;

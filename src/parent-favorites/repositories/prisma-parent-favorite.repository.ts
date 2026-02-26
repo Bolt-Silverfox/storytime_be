@@ -47,6 +47,28 @@ export class PrismaParentFavoriteRepository
     });
   }
 
+  async findFavoritesPaginated(params: {
+    userId: string;
+    cursor?: { id: string };
+    skip?: number;
+    take: number;
+  }): Promise<ParentFavoriteWithStory[]> {
+    return this.prisma.parentFavorite.findMany({
+      where: { userId: params.userId },
+      ...(params.cursor ? { cursor: { id: params.cursor.id } } : {}),
+      skip: params.cursor ? (params.skip ?? 0) + 1 : params.skip,
+      take: params.take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        story: {
+          include: {
+            categories: true,
+          },
+        },
+      },
+    });
+  }
+
   async findFavorite(
     userId: string,
     storyId: string,

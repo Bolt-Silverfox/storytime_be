@@ -34,6 +34,7 @@ import {
   CategoryDto,
   CompleteDailyChallengeDto,
   CreateStoryDto,
+  CursorPaginatedStoriesDto,
   DailyChallengeAssignmentDto,
   DailyChallengeDto,
   ErrorResponseDto,
@@ -59,6 +60,7 @@ import {
   UserStoryProgressDto,
   UserStoryProgressResponseDto,
 } from './dto/story.dto';
+import { PaginationUtil } from '@/shared/utils/pagination.util';
 import { StoryService } from './story.service';
 import { StoryGenerationService } from './story-generation.service';
 import { StoryProgressService } from './story-progress.service';
@@ -121,6 +123,13 @@ export class StoryController {
   @ApiQuery({ name: 'age', required: false, type: String })
   @ApiQuery({ name: 'minAge', required: false, type: String })
   @ApiQuery({ name: 'maxAge', required: false, type: String })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    type: String,
+    description:
+      'Opaque cursor for cursor-based pagination (mobile infinite scroll)',
+  })
   @ApiOkResponse({
     description: 'List of stories',
     type: CreateStoryDto,
@@ -159,13 +168,12 @@ export class StoryController {
     @Query('age') age?: string,
     @Query('minAge') minAge?: string,
     @Query('maxAge') maxAge?: string,
+    @Query('cursor') cursor?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
     @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number = 12,
-  ): Promise<PaginatedStoriesDto> {
-    const safePage = Math.max(1, page);
+  ): Promise<PaginatedStoriesDto | CursorPaginatedStoriesDto> {
     const safeLimit = Math.max(1, Math.min(100, limit));
-
-    return this.storyService.getStories({
+    const filters = {
       theme,
       category,
       season,
@@ -177,6 +185,23 @@ export class StoryController {
       age: age ? parseInt(age, 10) : undefined,
       minAge: minAge ? parseInt(minAge, 10) : undefined,
       maxAge: maxAge ? parseInt(maxAge, 10) : undefined,
+    };
+
+    // Cursor mode: if cursor param is present, use cursor-based pagination
+    if (cursor !== undefined) {
+      const { cursorId, limit: cursorLimit } =
+        PaginationUtil.sanitizeCursorParams(cursor, limit);
+      return this.storyService.getStoriesCursor({
+        ...filters,
+        cursorId,
+        limit: cursorLimit,
+      });
+    }
+
+    // Page mode (default): existing offset-based pagination
+    const safePage = Math.max(1, page);
+    return this.storyService.getStories({
+      ...filters,
       page: safePage,
       limit: safeLimit,
     });
@@ -727,6 +752,18 @@ export class StoryController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get in-progress stories for authenticated user' })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    type: String,
+    description: 'Opaque cursor for cursor-based pagination',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of items per page',
+  })
   @ApiOkResponse({
     description: 'List of in-progress stories',
     type: StoryWithProgressDto,
@@ -737,7 +774,20 @@ export class StoryController {
     description: 'Unauthorized',
     type: ErrorResponseDto,
   })
-  async getUserContinueReading(@Req() req: AuthenticatedRequest) {
+  async getUserContinueReading(
+    @Req() req: AuthenticatedRequest,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (cursor !== undefined || limit !== undefined) {
+      const { cursorId, limit: safeLimit } =
+        PaginationUtil.sanitizeCursorParams(cursor, limit);
+      return this.storyProgressService.getUserContinueReadingPaginated(
+        req.authUserData.userId,
+        cursorId,
+        safeLimit,
+      );
+    }
     return this.storyProgressService.getUserContinueReading(
       req.authUserData.userId,
     );
@@ -747,6 +797,18 @@ export class StoryController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get completed stories for authenticated user' })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    type: String,
+    description: 'Opaque cursor for cursor-based pagination',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of items per page',
+  })
   @ApiOkResponse({
     description: 'List of completed stories',
     type: StoryDto,
@@ -757,7 +819,20 @@ export class StoryController {
     description: 'Unauthorized',
     type: ErrorResponseDto,
   })
-  async getUserCompletedStories(@Req() req: AuthenticatedRequest) {
+  async getUserCompletedStories(
+    @Req() req: AuthenticatedRequest,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (cursor !== undefined || limit !== undefined) {
+      const { cursorId, limit: safeLimit } =
+        PaginationUtil.sanitizeCursorParams(cursor, limit);
+      return this.storyProgressService.getUserCompletedStoriesPaginated(
+        req.authUserData.userId,
+        cursorId,
+        safeLimit,
+      );
+    }
     return this.storyProgressService.getUserCompletedStories(
       req.authUserData.userId,
     );
@@ -1322,16 +1397,66 @@ export class StoryController {
   @Get('library/:kidId/continue-reading')
   @ApiOperation({ summary: 'Get stories currently in progress' })
   @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    type: String,
+    description: 'Opaque cursor for cursor-based pagination',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of items per page',
+  })
   @ApiResponse({ status: 200, type: [StoryWithProgressDto] })
-  async getContinueReading(@Param('kidId') kidId: string) {
+  async getContinueReading(
+    @Param('kidId') kidId: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (cursor !== undefined || limit !== undefined) {
+      const { cursorId, limit: safeLimit } =
+        PaginationUtil.sanitizeCursorParams(cursor, limit);
+      return this.storyProgressService.getContinueReadingPaginated(
+        kidId,
+        cursorId,
+        safeLimit,
+      );
+    }
     return this.storyProgressService.getContinueReading(kidId);
   }
 
   @Get('library/:kidId/completed')
   @ApiOperation({ summary: 'Get completed stories history' })
   @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    type: String,
+    description: 'Opaque cursor for cursor-based pagination',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of items per page',
+  })
   @ApiResponse({ status: 200, type: [StoryDto] })
-  async getCompleted(@Param('kidId') kidId: string) {
+  async getCompleted(
+    @Param('kidId') kidId: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (cursor !== undefined || limit !== undefined) {
+      const { cursorId, limit: safeLimit } =
+        PaginationUtil.sanitizeCursorParams(cursor, limit);
+      return this.storyProgressService.getCompletedStoriesPaginated(
+        kidId,
+        cursorId,
+        safeLimit,
+      );
+    }
     return this.storyProgressService.getCompletedStories(kidId);
   }
 
