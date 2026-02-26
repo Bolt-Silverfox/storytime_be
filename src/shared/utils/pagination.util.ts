@@ -87,11 +87,7 @@ export class PaginationUtil {
    * @param maxLimit - Maximum allowed limit (default 50)
    * @returns Sanitized cursor and limit
    */
-  static sanitizeCursorParams(
-    cursor: unknown,
-    limit: unknown,
-    maxLimit = 50,
-  ) {
+  static sanitizeCursorParams(cursor: unknown, limit: unknown, maxLimit = 50) {
     const sanitizedLimit = PaginationUtil.sanitizeLimit(limit, {
       defaultValue: 20,
       max: maxLimit,

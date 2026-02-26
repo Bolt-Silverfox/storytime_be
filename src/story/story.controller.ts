@@ -110,7 +110,12 @@ export class StoryController {
   @ApiQuery({ name: 'age', required: false, type: String })
   @ApiQuery({ name: 'minAge', required: false, type: String })
   @ApiQuery({ name: 'maxAge', required: false, type: String })
-  @ApiQuery({ name: 'cursor', required: false, type: String, description: 'Cursor for cursor-based pagination' })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    type: String,
+    description: 'Cursor for cursor-based pagination',
+  })
   @ApiOkResponse({
     description: 'List of stories',
     type: CreateStoryDto,

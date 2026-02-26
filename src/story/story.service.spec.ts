@@ -244,7 +244,10 @@ describe('StoryService - Library & Generation', () => {
       const result = await service.getCreatedStories(kidId, undefined, 2);
 
       expect(result).toEqual({
-        data: [{ id: 'story-1', title: 'Story 1' }, { id: 'story-2', title: 'Story 2' }],
+        data: [
+          { id: 'story-1', title: 'Story 1' },
+          { id: 'story-2', title: 'Story 2' },
+        ],
         pagination: {
           nextCursor: 'story-2',
           hasNextPage: true,
