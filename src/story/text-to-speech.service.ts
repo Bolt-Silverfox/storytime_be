@@ -156,7 +156,12 @@ export class TextToSpeechService {
     const textHash = this.hashText(text);
     await this.prisma.paragraphAudioCache.upsert({
       where: {
-        storyId_textHash_voiceId_provider: { storyId, textHash, voiceId, provider },
+        storyId_textHash_voiceId_provider: {
+          storyId,
+          textHash,
+          voiceId,
+          provider,
+        },
       },
       create: { storyId, textHash, voiceId, audioUrl, provider },
       update: { audioUrl },
@@ -886,9 +891,7 @@ export class TextToSpeechService {
       totalParagraphs: allParagraphs.length,
       wasTruncated,
       usedProvider: actualProvider,
-      ...(actualProvider !== preferredProvider
-        ? { preferredProvider }
-        : {}),
+      ...(actualProvider !== preferredProvider ? { preferredProvider } : {}),
       ...(isDegraded ? { providerStatus: 'degraded' as const } : {}),
     };
   }
