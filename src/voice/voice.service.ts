@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   InternalServerErrorException,
+  NotFoundException,
   Inject,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +17,7 @@ import {
   UploadVoiceDto,
   VoiceResponseDto,
   VoiceSourceType,
+  VoiceType,
 } from './dto/voice.dto';
 import { VOICE_CONFIG } from './voice.constants';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
@@ -100,17 +102,37 @@ export class VoiceService {
     userId: string,
     dto: SetPreferredVoiceDto,
   ): Promise<VoiceResponseDto> {
+    let voice: Voice | null;
+
+    // Check if the voiceId is a VoiceType enum key (e.g. "NIMBUS") rather than a UUID
+    const voiceTypeKey = dto.voiceId as VoiceType;
+    if (Object.values(VoiceType).includes(voiceTypeKey)) {
+      const config = VOICE_CONFIG[voiceTypeKey];
+      voice = await this.prisma.voice.findFirst({
+        where: {
+          elevenLabsVoiceId: config.elevenLabsId,
+          userId: null,
+        },
+      });
+    } else {
+      voice = await this.prisma.voice.findUnique({
+        where: { id: dto.voiceId },
+      });
+    }
+
+    if (!voice) {
+      throw new NotFoundException(
+        `Voice "${dto.voiceId}" not found. Please select a valid voice.`,
+      );
+    }
+
     const result = await this.prisma.user.update({
       where: { id: userId },
-      data: { preferredVoiceId: dto.voiceId },
+      data: { preferredVoiceId: voice.id },
       include: { preferredVoice: true },
     });
 
-    if (!result.preferredVoice) {
-      throw new Error('Preferred voice not found');
-    }
-
-    return this.toVoiceResponse(result.preferredVoice);
+    return this.toVoiceResponse(result.preferredVoice!);
   }
 
   // --- Get the preferred voice for a user ---

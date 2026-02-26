@@ -426,12 +426,29 @@ export class VoiceQuotaService {
       where: { userId },
     });
 
+    // Resolve UUID to VoiceType key so mobile can match against available voices
+    let lockedVoiceId: string | null = null;
+    if (usage?.selectedSecondVoiceId) {
+      const lockedVoice = await this.prisma.voice.findUnique({
+        where: { id: usage.selectedSecondVoiceId },
+        select: { elevenLabsVoiceId: true },
+      });
+      const elevenLabsId = lockedVoice?.elevenLabsVoiceId;
+      // Find the VoiceType key whose config matches this elevenLabsId
+      const voiceTypeKey = elevenLabsId
+        ? Object.entries(VOICE_CONFIG).find(
+            ([, config]) => config.elevenLabsId === elevenLabsId,
+          )?.[0] ?? null
+        : null;
+      lockedVoiceId = voiceTypeKey ?? usage.selectedSecondVoiceId;
+    }
+
     return {
       isPremium: false,
       unlimited: false,
       defaultVoice: FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE,
       maxVoices: FREE_TIER_LIMITS.VOICES.CUSTOM_SLOTS + 1, // +1 for the always-available default voice
-      lockedVoiceId: usage?.selectedSecondVoiceId ?? null,
+      lockedVoiceId,
       elevenLabsTrialStoryId: usage?.elevenLabsTrialStoryId ?? null,
     };
   }

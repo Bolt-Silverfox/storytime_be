@@ -133,7 +133,16 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Body() body: SetPreferredVoiceDto,
   ): Promise<VoiceResponseDto> {
-    return this.voiceService.setPreferredVoice(req.authUserData.userId, body);
+    const userId = req.authUserData.userId;
+    const access = await this.voiceQuotaService.getVoiceAccess(userId);
+
+    if (!access.isPremium && access.lockedVoiceId && access.lockedVoiceId !== body.voiceId) {
+      throw new ForbiddenException(
+        'Free users cannot change their voice after selecting one. Upgrade to premium to unlock all voices.',
+      );
+    }
+
+    return this.voiceService.setPreferredVoice(userId, body);
   }
 
   // --- Get preferred voice ---
