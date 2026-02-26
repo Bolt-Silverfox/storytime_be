@@ -176,18 +176,19 @@ export class StoryController {
       maxAge: maxAge ? parseInt(maxAge, 10) : undefined,
     };
 
-    // Sanitize cursor params first, then decide mode.
+    // Use cursor-based pagination when cursor param is present (even empty string).
+    // The mobile cursor client always sends ?cursor= to signal intent.
     // topPicksFromUs (random) and isMostLiked (aggregate count) use
     // orderings incompatible with stable cursor pagination.
     const { cursor: safeCursor, limit: safeLimit } =
       PaginationUtil.sanitizeCursorParams(cursor, limit);
 
     const useCursorMode =
-      safeCursor !== undefined &&
+      cursor !== undefined &&
       topPicksFromUs !== 'true' &&
       isMostLiked !== 'true';
 
-    if (safeCursor !== undefined && !useCursorMode) {
+    if (cursor !== undefined && !useCursorMode) {
       this.logger.warn(
         `Cursor pagination ignored: cursor="${cursor}" bypassed because topPicksFromUs=${topPicksFromUs}, isMostLiked=${isMostLiked}. Falling back to offset pagination.`,
       );
