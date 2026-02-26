@@ -34,7 +34,7 @@ import {
   DailyChallenge,
   ParentRecommendation,
 } from '@prisma/client';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TextToSpeechService } from './text-to-speech.service';
 import {
@@ -61,6 +61,21 @@ export class StoryService {
   private readonly logger = new Logger(StoryService.name);
   // Average reading speed for children: ~150 words per minute
   private readonly WORDS_PER_MINUTE = 150;
+
+  /** Wraps a Prisma query to handle invalid cursor IDs gracefully */
+  private async withCursorErrorHandling<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new BadRequestException('Invalid cursor: record not found');
+      }
+      throw error;
+    }
+  }
 
   /** Invalidate all story-related caches */
   private async invalidateStoryCaches(): Promise<void> {
@@ -364,20 +379,22 @@ export class StoryService {
         ]
       : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
-    const stories = await this.prisma.story.findMany({
-      where,
-      take: limit + 1,
-      ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
-      orderBy,
-      include: {
-        images: true,
-        branches: true,
-        categories: true,
-        themes: true,
-        seasons: true,
-        questions: true,
-      },
-    });
+    const stories = await this.withCursorErrorHandling(() =>
+      this.prisma.story.findMany({
+        where,
+        take: limit + 1,
+        ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
+        orderBy,
+        include: {
+          images: true,
+          branches: true,
+          categories: true,
+          themes: true,
+          seasons: true,
+          questions: true,
+        },
+      }),
+    );
 
     const hasNextPage = stories.length > limit;
     if (hasNextPage) stories.pop();
@@ -754,13 +771,15 @@ export class StoryService {
     const useCursor = cursor !== undefined || limit !== undefined;
     const take = limit ?? 20;
 
-    const records = await this.prisma.favorite.findMany({
-      where: { kidId },
-      include: { story: true },
-      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-      ...(useCursor ? { take: take + 1 } : {}),
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    });
+    const records = await this.withCursorErrorHandling(() =>
+      this.prisma.favorite.findMany({
+        where: { kidId },
+        include: { story: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
 
     if (!useCursor) return records;
 
@@ -924,22 +943,24 @@ export class StoryService {
     const useCursor = cursor !== undefined || limit !== undefined;
     const take = limit ?? 20;
 
-    const progressRecords = await this.prisma.userStoryProgress.findMany({
-      where: {
-        userId,
-        progress: { gt: 0 },
-        completed: false,
-        isDeleted: false,
-      },
-      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
-      include: {
-        story: {
-          include: { categories: true },
+    const progressRecords = await this.withCursorErrorHandling(() =>
+      this.prisma.userStoryProgress.findMany({
+        where: {
+          userId,
+          progress: { gt: 0 },
+          completed: false,
+          isDeleted: false,
         },
-      },
-      ...(useCursor ? { take: take + 1 } : {}),
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    });
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
+        },
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
 
     const mapped = progressRecords.map((record) => ({
       ...record.story,
@@ -953,6 +974,9 @@ export class StoryService {
 
     const hasNextPage = mapped.length > take;
     if (hasNextPage) mapped.pop();
+    // Use progressRecords (not mapped) for cursor since Prisma cursors
+    // operate on the progress table. lastIndex matches because mapped
+    // and progressRecords share the same indices; only mapped is popped.
     const lastIndex = mapped.length - 1;
     return {
       data: mapped,
@@ -971,17 +995,19 @@ export class StoryService {
     const useCursor = cursor !== undefined || limit !== undefined;
     const take = limit ?? 20;
 
-    const records = await this.prisma.userStoryProgress.findMany({
-      where: { userId, completed: true, isDeleted: false },
-      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
-      include: {
-        story: {
-          include: { categories: true },
+    const records = await this.withCursorErrorHandling(() =>
+      this.prisma.userStoryProgress.findMany({
+        where: { userId, completed: true, isDeleted: false },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
         },
-      },
-      ...(useCursor ? { take: take + 1 } : {}),
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    });
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
 
     if (!useCursor) return records.map((r) => r.story);
 
@@ -1706,17 +1732,19 @@ export class StoryService {
     const useCursor = cursor !== undefined || limit !== undefined;
     const take = limit ?? 20;
 
-    const progressRecords = await this.prisma.storyProgress.findMany({
-      where: { kidId, progress: { gt: 0 }, completed: false, isDeleted: false },
-      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
-      include: {
-        story: {
-          include: { categories: true },
+    const progressRecords = await this.withCursorErrorHandling(() =>
+      this.prisma.storyProgress.findMany({
+        where: { kidId, progress: { gt: 0 }, completed: false, isDeleted: false },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
         },
-      },
-      ...(useCursor ? { take: take + 1 } : {}),
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    });
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
 
     const mapped = progressRecords.map((record) => ({
       ...record.story,
@@ -1730,6 +1758,9 @@ export class StoryService {
 
     const hasNextPage = mapped.length > take;
     if (hasNextPage) mapped.pop();
+    // Use progressRecords (not mapped) for cursor since Prisma cursors
+    // operate on the progress table. lastIndex matches because mapped
+    // and progressRecords share the same indices; only mapped is popped.
     const lastIndex = mapped.length - 1;
     return {
       data: mapped,
@@ -1744,17 +1775,19 @@ export class StoryService {
     const useCursor = cursor !== undefined || limit !== undefined;
     const take = limit ?? 20;
 
-    const records = await this.prisma.storyProgress.findMany({
-      where: { kidId, completed: true, isDeleted: false },
-      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
-      include: {
-        story: {
-          include: { categories: true },
+    const records = await this.withCursorErrorHandling(() =>
+      this.prisma.storyProgress.findMany({
+        where: { kidId, completed: true, isDeleted: false },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
         },
-      },
-      ...(useCursor ? { take: take + 1 } : {}),
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    });
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
 
     if (!useCursor) return records.map((r) => r.story);
 
@@ -1773,12 +1806,14 @@ export class StoryService {
     const useCursor = cursor !== undefined || limit !== undefined;
     const take = limit ?? 20;
 
-    const stories = await this.prisma.story.findMany({
-      where: { creatorKidId: kidId, isDeleted: false },
-      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-      ...(useCursor ? { take: take + 1 } : {}),
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    });
+    const stories = await this.withCursorErrorHandling(() =>
+      this.prisma.story.findMany({
+        where: { creatorKidId: kidId, isDeleted: false },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
 
     if (!useCursor) return stories;
 
@@ -1797,13 +1832,15 @@ export class StoryService {
     const useCursor = cursor !== undefined || limit !== undefined;
     const take = limit ?? 20;
 
-    const downloads = await this.prisma.downloadedStory.findMany({
-      where: { kidId },
-      include: { story: true },
-      orderBy: [{ downloadedAt: 'desc' }, { id: 'asc' }],
-      ...(useCursor ? { take: take + 1 } : {}),
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    });
+    const downloads = await this.withCursorErrorHandling(() =>
+      this.prisma.downloadedStory.findMany({
+        where: { kidId },
+        include: { story: true },
+        orderBy: [{ downloadedAt: 'desc' }, { id: 'asc' }],
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
 
     if (!useCursor) return downloads.map((d) => d.story);
 
