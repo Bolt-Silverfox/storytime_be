@@ -128,7 +128,15 @@ export class PaginationUtil {
   static buildCursorResponse<T>(
     records: T[],
     limit: number,
-    getCursorId: (item: T) => string = (item) => (item as { id: string }).id,
+    getCursorId: (item: T) => string = (item) => {
+      const id = (item as Record<string, unknown>).id;
+      if (typeof id !== 'string') {
+        throw new Error(
+          'buildCursorResponse: item has no string "id" field. Provide a custom getCursorId.',
+        );
+      }
+      return id;
+    },
   ): CursorPaginatedResponse<T> {
     const hasNextPage = records.length > limit;
     const data = hasNextPage ? records.slice(0, limit) : records;
