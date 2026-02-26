@@ -5,7 +5,7 @@ import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { VOICE_CONFIG } from './voice.constants';
-import { VoiceType } from './dto/voice.dto';
+import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from './dto/voice.dto';
 
 @Injectable()
 export class VoiceQuotaService {
@@ -19,6 +19,11 @@ export class VoiceQuotaService {
     // Already a VoiceType enum key → look up elevenLabsId
     if (Object.values(VoiceType).includes(voiceId as VoiceType)) {
       return VOICE_CONFIG[voiceId as VoiceType].elevenLabsId;
+    }
+    // Check migration map for old enum names (CHARLIE → MILO, etc.)
+    const migrated = VOICE_TYPE_MIGRATION_MAP[voiceId];
+    if (migrated) {
+      return VOICE_CONFIG[migrated].elevenLabsId;
     }
     // Could be a UUID from the Voice table
     const voice = await this.prisma.voice.findUnique({
@@ -184,7 +189,11 @@ export class VoiceQuotaService {
     // Batch UUID lookups to avoid N+1 queries.
     const uuidCandidates = distinctVoices
       .map((v) => v.voiceId)
-      .filter((id) => !Object.values(VoiceType).includes(id as VoiceType));
+      .filter(
+        (id) =>
+          !Object.values(VoiceType).includes(id as VoiceType) &&
+          !(id in VOICE_TYPE_MIGRATION_MAP),
+      );
 
     const voiceRecords =
       uuidCandidates.length > 0
@@ -202,6 +211,10 @@ export class VoiceQuotaService {
     const canonicalCachedIds = distinctVoices.map((v) => {
       if (Object.values(VoiceType).includes(v.voiceId as VoiceType)) {
         return VOICE_CONFIG[v.voiceId as VoiceType].elevenLabsId;
+      }
+      const migrated = VOICE_TYPE_MIGRATION_MAP[v.voiceId];
+      if (migrated) {
+        return VOICE_CONFIG[migrated].elevenLabsId;
       }
       return uuidToElevenLabs.get(v.voiceId) ?? v.voiceId;
     });

@@ -67,15 +67,28 @@ export class VoiceResponseDto {
 }
 
 export enum VoiceType {
-  CHARLIE = 'CHARLIE',
-  JESSICA = 'JESSICA',
-  WILL = 'WILL',
-  LILY = 'LILY',
-  BILL = 'BILL',
-  LAURA = 'LAURA',
+  MILO = 'MILO',
+  BELLA = 'BELLA',
+  COSMO = 'COSMO',
+  NIMBUS = 'NIMBUS',
+  FANICE = 'FANICE',
+  CHIP = 'CHIP',
   ROSIE = 'ROSIE',
   PIXIE = 'PIXIE',
 }
+
+/**
+ * Maps old VoiceType enum values (ElevenLabs codenames) to new display-name values.
+ * Used during transition so old mobile clients and cached data still resolve correctly.
+ */
+export const VOICE_TYPE_MIGRATION_MAP: Record<string, VoiceType> = {
+  CHARLIE: VoiceType.MILO,
+  JESSICA: VoiceType.BELLA,
+  WILL: VoiceType.COSMO,
+  LILY: VoiceType.NIMBUS,
+  BILL: VoiceType.FANICE,
+  LAURA: VoiceType.CHIP,
+};
 
 export class StoryContentAudioDto {
   @ApiProperty({
@@ -117,7 +130,7 @@ export class BatchStoryAudioDto {
 
   @ApiProperty({
     required: false,
-    example: 'LILY',
+    example: 'NIMBUS',
     description: 'Preferred voice ID (Enum value or UUID)',
     type: 'string',
   })

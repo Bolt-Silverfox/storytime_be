@@ -9,8 +9,8 @@ import {
 describe('Voice constants', () => {
   const allVoiceTypes = Object.values(VoiceType);
 
-  it('should have LILY as the default voice', () => {
-    expect(DEFAULT_VOICE).toBe(VoiceType.LILY);
+  it('should have NIMBUS as the default voice', () => {
+    expect(DEFAULT_VOICE).toBe(VoiceType.NIMBUS);
   });
 
   it('should have a VOICE_CONFIG entry for every VoiceType', () => {

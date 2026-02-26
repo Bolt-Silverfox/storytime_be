@@ -40,6 +40,7 @@ describe('TextToSpeechService', () => {
     },
     voice: {
       findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
     },
   };
 
@@ -50,6 +51,7 @@ describe('TextToSpeechService', () => {
     mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
     mockPrisma.paragraphAudioCache.upsert.mockResolvedValue({});
     mockPrisma.voice.findUnique.mockResolvedValue(null);
+    mockPrisma.voice.findFirst.mockResolvedValue(null);
     mockCanUseVoiceForStory.mockResolvedValue(true);
     mockCanFreeUserUseElevenLabs.mockResolvedValue(true);
     // Default: return input as-is (tests for known VoiceTypes will get
@@ -143,7 +145,7 @@ describe('TextToSpeechService', () => {
   describe('textToSpeechCloudUrl', () => {
     const storyId = 'story-123';
     const text = 'Once upon a time';
-    const voiceType = VoiceType.CHARLIE;
+    const voiceType = VoiceType.MILO;
     const userId = 'user-123';
 
     it('should use ElevenLabs for premium users', async () => {
@@ -190,7 +192,7 @@ describe('TextToSpeechService', () => {
 
       expect(mockCanFreeUserUseElevenLabs).toHaveBeenCalledWith(
         userId,
-        'NFG5qt843uXKj4pFvR7C', // CHARLIE's ElevenLabs ID
+        'NFG5qt843uXKj4pFvR7C', // MILO's ElevenLabs ID
       );
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
       expect(mockDeepgramGenerate).toHaveBeenCalled();
@@ -328,7 +330,7 @@ describe('TextToSpeechService', () => {
 
     it('should resolve custom UUID voice from database', async () => {
       const customVoiceId = '550e8400-e29b-41d4-a716-446655440000';
-      mockPrisma.voice.findUnique.mockResolvedValue({
+      mockPrisma.voice.findFirst.mockResolvedValue({
         id: customVoiceId,
         elevenLabsVoiceId: 'custom-eleven-id',
       });
@@ -346,8 +348,11 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      expect(mockPrisma.voice.findUnique).toHaveBeenCalledWith({
-        where: { id: customVoiceId, isDeleted: false },
+      expect(mockPrisma.voice.findFirst).toHaveBeenCalledWith({
+        where: {
+          OR: [{ id: customVoiceId }, { name: customVoiceId }],
+          isDeleted: false,
+        },
       });
       expect(mockElevenLabsGenerate).toHaveBeenCalledWith(
         expect.any(String),
@@ -360,7 +365,7 @@ describe('TextToSpeechService', () => {
 
     it('should fallback to default for unrecognized voice ID', async () => {
       const unknownId = 'unknown-voice-id';
-      mockPrisma.voice.findUnique.mockResolvedValue(null);
+      mockPrisma.voice.findFirst.mockResolvedValue(null);
       mockIsPremiumUser.mockResolvedValue(false);
       mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('default-audio'));
@@ -375,8 +380,11 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      expect(mockPrisma.voice.findUnique).toHaveBeenCalledWith({
-        where: { id: unknownId, isDeleted: false },
+      expect(mockPrisma.voice.findFirst).toHaveBeenCalledWith({
+        where: {
+          OR: [{ id: unknownId }, { name: unknownId }],
+          isDeleted: false,
+        },
       });
       expect(mockDeepgramGenerate).toHaveBeenCalled();
       expect(result).toBe('https://uploaded-audio.com/default.wav');
@@ -454,7 +462,7 @@ describe('TextToSpeechService', () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         '',
-        VoiceType.LILY,
+        VoiceType.NIMBUS,
         userId,
       );
       expect(result).toEqual({
@@ -469,7 +477,7 @@ describe('TextToSpeechService', () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         '   \n\t  ',
-        VoiceType.LILY,
+        VoiceType.NIMBUS,
         userId,
       );
       expect(result).toEqual({
@@ -489,7 +497,7 @@ describe('TextToSpeechService', () => {
             hashes.map((hash: string, i: number) => ({
               storyId,
               textHash: hash,
-              voiceId: 'LILY',
+              voiceId: 'NIMBUS',
               audioUrl: `https://cached.com/audio-${i}.mp3`,
             })),
           );
@@ -499,7 +507,7 @@ describe('TextToSpeechService', () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         fullText,
-        VoiceType.LILY,
+        VoiceType.NIMBUS,
         userId,
       );
 
@@ -525,7 +533,7 @@ describe('TextToSpeechService', () => {
             {
               storyId,
               textHash: hashes[0],
-              voiceId: 'LILY',
+              voiceId: 'NIMBUS',
               audioUrl: 'https://cached.com/first.mp3',
             },
           ]);
@@ -540,7 +548,7 @@ describe('TextToSpeechService', () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         fullText,
-        VoiceType.LILY,
+        VoiceType.NIMBUS,
         userId,
       );
 
@@ -579,7 +587,7 @@ describe('TextToSpeechService', () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         fullText,
-        VoiceType.CHARLIE,
+        VoiceType.MILO,
         userId,
       );
 
@@ -607,7 +615,7 @@ describe('TextToSpeechService', () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         fullText,
-        VoiceType.LILY,
+        VoiceType.NIMBUS,
         userId,
       );
 
@@ -630,7 +638,7 @@ describe('TextToSpeechService', () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         fullText,
-        VoiceType.CHARLIE,
+        VoiceType.MILO,
         userId,
       );
 
@@ -655,7 +663,7 @@ describe('TextToSpeechService', () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         words,
-        VoiceType.LILY,
+        VoiceType.NIMBUS,
         userId,
       );
 
@@ -689,7 +697,7 @@ describe('TextToSpeechService', () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         textWithDuplicates,
-        VoiceType.LILY,
+        VoiceType.NIMBUS,
         userId,
       );
 
@@ -742,7 +750,7 @@ describe('TextToSpeechService', () => {
             {
               storyId,
               textHash: hashes[0],
-              voiceId: 'LILY',
+              voiceId: 'NIMBUS',
               audioUrl: 'https://cached.com/refrain.mp3',
             },
           ]);
@@ -757,7 +765,7 @@ describe('TextToSpeechService', () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         textWithDuplicates,
-        VoiceType.LILY,
+        VoiceType.NIMBUS,
         userId,
       );
 
@@ -782,7 +790,7 @@ describe('TextToSpeechService', () => {
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
         fullText,
-        VoiceType.LILY,
+        VoiceType.NIMBUS,
         userId,
       );
 
@@ -797,7 +805,7 @@ describe('TextToSpeechService', () => {
   describe('circuit breaker integration', () => {
     const storyId = 'story-cb-123';
     const text = 'Once upon a time in a land far away';
-    const voiceType = VoiceType.CHARLIE;
+    const voiceType = VoiceType.MILO;
     const userId = 'user-cb-123';
 
     it('should skip ElevenLabs when its breaker is OPEN and fall through to Deepgram', async () => {
@@ -914,7 +922,7 @@ describe('TextToSpeechService', () => {
         const result = await service.batchTextToSpeechCloudUrls(
           storyId,
           fullText,
-          VoiceType.CHARLIE,
+          VoiceType.MILO,
           userId,
         );
 
@@ -945,7 +953,7 @@ describe('TextToSpeechService', () => {
         const result = await service.batchTextToSpeechCloudUrls(
           storyId,
           fullText,
-          VoiceType.LILY,
+          VoiceType.NIMBUS,
           userId,
         );
 
@@ -962,7 +970,7 @@ describe('TextToSpeechService', () => {
         const result = await service.batchTextToSpeechCloudUrls(
           storyId,
           fullText,
-          VoiceType.LILY,
+          VoiceType.NIMBUS,
           userId,
         );
 
