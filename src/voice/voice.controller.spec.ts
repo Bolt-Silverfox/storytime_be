@@ -183,7 +183,11 @@ describe('VoiceController', () => {
       });
       mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
         results: [
-          { index: 0, text: 'Hello world', audioUrl: 'https://audio.com/a.mp3' },
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
         ],
         totalParagraphs: 1,
         wasTruncated: false,
@@ -209,7 +213,11 @@ describe('VoiceController', () => {
       });
       mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
         results: [
-          { index: 0, text: 'Hello world', audioUrl: 'https://audio.com/a.mp3' },
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
         ],
         totalParagraphs: 1,
         wasTruncated: false,
