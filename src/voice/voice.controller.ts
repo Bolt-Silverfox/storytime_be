@@ -227,8 +227,7 @@ export class VoiceController {
           type: 'string',
           enum: ['degraded'],
           nullable: true,
-          description:
-            'Present when a TTS provider circuit breaker is open',
+          description: 'Present when a TTS provider circuit breaker is open',
         },
         statusCode: { type: 'number' },
       },
