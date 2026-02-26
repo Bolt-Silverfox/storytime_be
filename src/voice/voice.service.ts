@@ -282,9 +282,7 @@ export class VoiceService {
     });
 
     // Index DB voices by elevenLabsId for O(1) lookup
-    const dbVoiceMap = new Map(
-      dbVoices.map((v) => [v.elevenLabsVoiceId, v]),
-    );
+    const dbVoiceMap = new Map(dbVoices.map((v) => [v.elevenLabsVoiceId, v]));
 
     // Build response from VOICE_CONFIG (guaranteed all 8 voices)
     const voices: VoiceResponseDto[] = Object.entries(VOICE_CONFIG).map(
