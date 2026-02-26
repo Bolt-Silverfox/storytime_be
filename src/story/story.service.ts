@@ -373,10 +373,7 @@ export class StoryService {
 
     // isMostLiked uses aggregate ordering incompatible with cursors;
     // the controller prevents it from reaching this method.
-    const orderBy = [
-      { createdAt: 'desc' as const },
-      { id: 'asc' as const },
-    ];
+    const orderBy = [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
     const stories = await this.withCursorErrorHandling(() =>
       this.prisma.story.findMany({
