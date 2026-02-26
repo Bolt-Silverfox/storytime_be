@@ -328,7 +328,7 @@ export class VoiceQuotaService {
     }
 
     // Already used trial on a different story — deny ElevenLabs (will fall through to Deepgram/Edge)
-    if (usage?.elevenLabsTrialStoryId) {
+    if (usage.elevenLabsTrialStoryId) {
       this.logger.log(
         `Free user ${userId} already used ElevenLabs trial on story ${usage.elevenLabsTrialStoryId}. Denying for story ${storyId}.`,
       );
