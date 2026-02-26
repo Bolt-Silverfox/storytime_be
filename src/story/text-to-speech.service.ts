@@ -321,7 +321,13 @@ export class TextToSpeechService {
         `story_${storyId}_${providerName}_${Date.now()}.mp3`,
       );
       try {
-        await this.cacheParagraphAudio(storyId, text, type, audioUrl, providerName);
+        await this.cacheParagraphAudio(
+          storyId,
+          text,
+          type,
+          audioUrl,
+          providerName,
+        );
       } catch (cacheErr) {
         const cacheMsg =
           cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
