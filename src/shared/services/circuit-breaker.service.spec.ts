@@ -97,20 +97,6 @@ describe('CircuitBreaker', () => {
   });
 
   it('should transition OPEN → HALF_OPEN after timeout', () => {
-    for (let i = 0; i < 3; i++) {
-      breaker.recordFailure({ status: 500 });
-    }
-    expect(breaker.getSnapshot().state).toBe(CircuitState.OPEN);
-
-    // Advance time past the reset timeout
-    jest.useFakeTimers();
-    jest.advanceTimersByTime(1001);
-
-    // Need to manually set lastFailureTime in the past since we can't
-    // easily mock Date.now inside the class. Instead, use real timing:
-    jest.useRealTimers();
-
-    // Create a new breaker with a very short timeout for testing
     const fastBreaker = new CircuitBreaker('fast-test', {
       ...defaultConfig,
       resetTimeoutMs: 0, // Immediately transition

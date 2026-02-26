@@ -22,6 +22,7 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import {
   CircuitBreakerService,
   CircuitBreaker,
+  CircuitState,
 } from '@/shared/services/circuit-breaker.service';
 import { TTS_CIRCUIT_BREAKER_CONFIG } from '@/shared/constants/circuit-breaker.constants';
 import {
@@ -843,12 +844,13 @@ export class TextToSpeechService {
       await this.voiceQuota.releaseReservedUsage(userId, creditsToRelease);
     }
 
-    // Report degraded status when any TTS breaker is OPEN
+    // Report degraded status when any TTS breaker is OPEN (read-only snapshot
+    // to avoid side effects like advancing OPEN → HALF_OPEN)
     const isDegraded = [
       this.elevenLabsBreaker,
       this.deepgramBreaker,
       this.edgeTtsBreaker,
-    ].some((b) => !b.canExecute());
+    ].some((b) => b.getSnapshot().state === CircuitState.OPEN);
 
     return {
       results: [...cached, ...generated, ...duplicates].sort(
