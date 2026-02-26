@@ -197,7 +197,10 @@ export class TextToSpeechService {
       providerOverride?: 'elevenlabs' | 'deepgram' | 'edgetts';
     },
   ): Promise<TTSResult> {
-    const type = VOICE_TYPE_MIGRATION_MAP[voicetype as string] ?? voicetype ?? DEFAULT_VOICE;
+    const type =
+      VOICE_TYPE_MIGRATION_MAP[voicetype as string] ??
+      voicetype ??
+      DEFAULT_VOICE;
 
     // Guard against unbounded input
     if (text.length > MAX_TTS_TEXT_LENGTH) {
@@ -222,8 +225,8 @@ export class TextToSpeechService {
     let voiceSettings: VoiceSettings | undefined;
 
     // Check if it's a known System Voice (Enum)
-    if (Object.values(VoiceType).includes(type as VoiceType)) {
-      const config = VOICE_CONFIG[type as VoiceType];
+    if (Object.values(VoiceType).includes(type)) {
+      const config = VOICE_CONFIG[type];
       elevenLabsId = config.elevenLabsId;
       edgeTtsVoice = config.edgeTtsVoice;
       deepgramVoice = config.deepgramVoice;
@@ -610,7 +613,10 @@ export class TextToSpeechService {
     if (!fullText?.trim())
       return { results: [], totalParagraphs: 0, wasTruncated: false };
 
-    const type = VOICE_TYPE_MIGRATION_MAP[voiceType as string] ?? voiceType ?? DEFAULT_VOICE;
+    const type =
+      VOICE_TYPE_MIGRATION_MAP[voiceType as string] ??
+      voiceType ??
+      DEFAULT_VOICE;
     const allParagraphs = splitByWordCountPreservingSentences(
       fullText,
       WORDS_PER_CHUNK,
