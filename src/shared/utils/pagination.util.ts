@@ -1,3 +1,14 @@
+/** Default page size for cursor-based pagination. */
+export const DEFAULT_CURSOR_LIMIT = 20;
+
+export interface CursorPaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    nextCursor: string | null;
+    hasNextPage: boolean;
+  };
+}
+
 export interface SanitizeLimitOptions {
   defaultValue?: number;
   min?: number;
@@ -100,9 +111,36 @@ export class PaginationUtil {
     }
 
     const sanitizedLimit = PaginationUtil.sanitizeLimit(limit, {
-      defaultValue: 20,
+      defaultValue: DEFAULT_CURSOR_LIMIT,
       max: maxLimit,
     });
     return { cursor: sanitizedCursor, limit: sanitizedLimit };
+  }
+
+  /**
+   * Builds a cursor-paginated response from a "take N+1" result set.
+   * Uses `slice` instead of `pop` to avoid mutating the input array.
+   *
+   * @param records - The fetched records (should have `limit + 1` items if there is a next page)
+   * @param limit - The requested page size
+   * @param getCursorId - Optional function to extract cursor ID (defaults to `record.id`)
+   */
+  static buildCursorResponse<T>(
+    records: T[],
+    limit: number,
+    getCursorId: (item: T) => string = (item) => (item as { id: string }).id,
+  ): CursorPaginatedResponse<T> {
+    const hasNextPage = records.length > limit;
+    const data = hasNextPage ? records.slice(0, limit) : records;
+    return {
+      data,
+      pagination: {
+        nextCursor:
+          hasNextPage && data.length > 0
+            ? getCursorId(data[data.length - 1])
+            : null,
+        hasNextPage,
+      },
+    };
   }
 }

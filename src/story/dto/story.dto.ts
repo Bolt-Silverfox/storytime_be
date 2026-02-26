@@ -542,14 +542,13 @@ export class CursorPaginationMetaDto {
   hasNextPage: boolean;
 }
 
-export class CursorPaginatedStoriesDto {
+export class CursorPaginatedStoriesDto<T = Record<string, unknown>> {
   @ApiProperty({
-    description: 'Array of stories',
-    type: 'array',
+    description: 'Array of paginated records',
     isArray: true,
   })
   @IsArray()
-  data: Record<string, unknown>[];
+  data: T[];
 
   @ApiProperty({
     description: 'Cursor pagination metadata',

@@ -176,23 +176,24 @@ export class StoryController {
       maxAge: maxAge ? parseInt(maxAge, 10) : undefined,
     };
 
-    // Use cursor-based pagination when cursor param is provided.
+    // Sanitize cursor params first, then decide mode.
     // topPicksFromUs (random) and isMostLiked (aggregate count) use
     // orderings incompatible with stable cursor pagination.
+    const { cursor: safeCursor, limit: safeLimit } =
+      PaginationUtil.sanitizeCursorParams(cursor, limit);
+
     const useCursorMode =
-      cursor !== undefined &&
+      safeCursor !== undefined &&
       topPicksFromUs !== 'true' &&
       isMostLiked !== 'true';
 
-    if (cursor !== undefined && !useCursorMode) {
+    if (safeCursor !== undefined && !useCursorMode) {
       this.logger.warn(
         `Cursor pagination ignored: cursor="${cursor}" bypassed because topPicksFromUs=${topPicksFromUs}, isMostLiked=${isMostLiked}. Falling back to offset pagination.`,
       );
     }
 
     if (useCursorMode) {
-      const { cursor: safeCursor, limit: safeLimit } =
-        PaginationUtil.sanitizeCursorParams(cursor, limit);
       return this.storyService.getStoriesCursor({
         ...commonFilter,
         cursor: safeCursor,
