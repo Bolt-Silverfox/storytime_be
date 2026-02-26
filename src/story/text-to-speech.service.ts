@@ -143,6 +143,7 @@ export class TextToSpeechService {
     const textHash = this.hashText(text);
     const cached = await this.prisma.paragraphAudioCache.findFirst({
       where: { storyId, textHash, voiceId, ...(provider ? { provider } : {}) },
+      orderBy: { createdAt: 'desc' },
     });
     return cached?.audioUrl ?? null;
   }
@@ -613,7 +614,7 @@ export class TextToSpeechService {
     results: Array<{ index: number; text: string; audioUrl: string | null }>;
     totalParagraphs: number;
     wasTruncated: boolean;
-    usedProvider: 'elevenlabs' | 'deepgram' | 'edgetts';
+    usedProvider: 'elevenlabs' | 'deepgram' | 'edgetts' | 'none';
     preferredProvider?: 'elevenlabs' | 'deepgram' | 'edgetts';
     providerStatus?: 'degraded';
   }> {
@@ -622,7 +623,7 @@ export class TextToSpeechService {
         results: [],
         totalParagraphs: 0,
         wasTruncated: false,
-        usedProvider: 'deepgram',
+        usedProvider: 'none',
       };
 
     const type =
@@ -716,10 +717,16 @@ export class TextToSpeechService {
         provider: batchProvider,
         textHash: { in: [...hashMap.keys()] },
       },
+      orderBy: { createdAt: 'desc' },
     });
-    const cacheMap = new Map(
-      cachedEntries.map((e) => [e.textHash, e.audioUrl]),
-    );
+    // Map keeps last entry for duplicate keys, so desc order + skip-if-exists
+    // ensures the newest cache entry wins.
+    const cacheMap = new Map<string, string>();
+    for (const e of cachedEntries) {
+      if (!cacheMap.has(e.textHash)) {
+        cacheMap.set(e.textHash, e.audioUrl);
+      }
+    }
 
     let cached: Array<{ index: number; text: string; audioUrl: string }> = [];
     let uncached: Array<{ index: number; text: string; hash: string }> = [];
@@ -799,10 +806,14 @@ export class TextToSpeechService {
               provider,
               textHash: { in: [...hashMap.keys()] },
             },
+            orderBy: { createdAt: 'desc' },
           });
-        const providerCacheMap = new Map(
-          providerCacheEntries.map((e) => [e.textHash, e.audioUrl]),
-        );
+        const providerCacheMap = new Map<string, string>();
+        for (const e of providerCacheEntries) {
+          if (!providerCacheMap.has(e.textHash)) {
+            providerCacheMap.set(e.textHash, e.audioUrl);
+          }
+        }
 
         // Rebuild cached/uncached arrays for this provider
         cached = [];

@@ -212,8 +212,9 @@ export class VoiceController {
         voiceId: { type: 'string' },
         usedProvider: {
           type: 'string',
-          enum: ['elevenlabs', 'deepgram', 'edgetts'],
-          description: 'The TTS provider that generated the audio',
+          enum: ['elevenlabs', 'deepgram', 'edgetts', 'none'],
+          description:
+            'The TTS provider that generated the audio. "none" when text is empty.',
         },
         preferredProvider: {
           type: 'string',
@@ -221,6 +222,13 @@ export class VoiceController {
           nullable: true,
           description:
             'The originally preferred provider (present only when a fallback occurred)',
+        },
+        providerStatus: {
+          type: 'string',
+          enum: ['degraded'],
+          nullable: true,
+          description:
+            'Present when a TTS provider circuit breaker is open',
         },
         statusCode: { type: 'number' },
       },
@@ -253,6 +261,7 @@ export class VoiceController {
       wasTruncated,
       usedProvider,
       preferredProvider,
+      providerStatus,
     } = await this.textToSpeechService.batchTextToSpeechCloudUrls(
       dto.storyId,
       story.textContent,
@@ -268,6 +277,7 @@ export class VoiceController {
       voiceId: resolvedVoice,
       usedProvider,
       ...(preferredProvider ? { preferredProvider } : {}),
+      ...(providerStatus ? { providerStatus } : {}),
       statusCode: 200,
     };
   }
