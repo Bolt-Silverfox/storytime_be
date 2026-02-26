@@ -322,6 +322,8 @@ export class VoiceController {
       results: paragraphs,
       totalParagraphs,
       wasTruncated,
+      usedProvider,
+      preferredProvider,
     } = await this.textToSpeechService.batchTextToSpeechCloudUrls(
       dto.storyId,
       story.textContent,
@@ -335,6 +337,8 @@ export class VoiceController {
       totalParagraphs,
       wasTruncated,
       voiceId: resolvedVoice,
+      usedProvider,
+      ...(preferredProvider ? { preferredProvider } : {}),
       statusCode: 200,
     };
   }

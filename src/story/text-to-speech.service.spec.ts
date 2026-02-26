@@ -32,6 +32,7 @@ describe('TextToSpeechService', () => {
   const mockPrisma = {
     paragraphAudioCache: {
       findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
       upsert: jest.fn().mockResolvedValue({}),
     },
@@ -45,6 +46,7 @@ describe('TextToSpeechService', () => {
     jest.clearAllMocks();
     // Reset mock implementations (clearAllMocks only resets calls, not implementations)
     mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue(null);
+    mockPrisma.paragraphAudioCache.findFirst.mockResolvedValue(null);
     mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
     mockPrisma.paragraphAudioCache.upsert.mockResolvedValue({});
     mockPrisma.voice.findUnique.mockResolvedValue(null);
@@ -260,7 +262,7 @@ describe('TextToSpeechService', () => {
     });
 
     it('should return cached URL without calling any provider', async () => {
-      mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue({
+      mockPrisma.paragraphAudioCache.findFirst.mockResolvedValue({
         audioUrl: 'https://cached.com/audio.mp3',
       });
 
@@ -486,6 +488,7 @@ describe('TextToSpeechService', () => {
         results: [],
         totalParagraphs: 0,
         wasTruncated: false,
+        usedProvider: 'deepgram',
       });
       expect(mockPrisma.paragraphAudioCache.findMany).not.toHaveBeenCalled();
     });
@@ -501,6 +504,7 @@ describe('TextToSpeechService', () => {
         results: [],
         totalParagraphs: 0,
         wasTruncated: false,
+        usedProvider: 'deepgram',
       });
     });
 
@@ -586,10 +590,12 @@ describe('TextToSpeechService', () => {
       );
     });
 
-    it('should return all nulls when premium ElevenLabs batch fails', async () => {
+    it('should failover through all providers when each fails', async () => {
       mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
       mockIsPremiumUser.mockResolvedValue(true);
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs timeout'));
+      mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram timeout'));
+      mockEdgeTtsGenerate.mockRejectedValue(new Error('Edge TTS timeout'));
 
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
@@ -598,16 +604,21 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      // Failed paragraphs should have null audioUrl (no fallback to different provider)
       expect(result.results.every((r) => r.audioUrl === null)).toBe(true);
+      expect(mockElevenLabsGenerate).toHaveBeenCalled();
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
+      expect(mockEdgeTtsGenerate).toHaveBeenCalled();
     });
 
-    it('should return all nulls when free-user batch provider fails without falling back', async () => {
+    it('should failover to Edge TTS when free-user Deepgram fails', async () => {
       mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
       mockIsPremiumUser.mockResolvedValue(false);
       mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
-      // Deepgram fails for all paragraphs
+      // Deepgram fails
       mockDeepgramGenerate.mockRejectedValue(new Error('Deepgram outage'));
+      // Edge TTS succeeds
+      mockEdgeTtsGenerate.mockResolvedValue(Buffer.from('edge-audio'));
+      mockUploadAudio.mockResolvedValue('https://uploaded.com/edge.mp3');
 
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
@@ -616,12 +627,16 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      // All paragraphs should have null audioUrl (no fallback to Edge TTS)
-      expect(result.results.every((r) => r.audioUrl === null)).toBe(true);
-      // Edge TTS should never be called in batch mode
-      expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
-      // ElevenLabs should never be called for free users denied quota
+      // All paragraphs should have audio (failover to Edge TTS)
+      expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
+      // ElevenLabs should not be called for free users
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
+      // Deepgram was attempted
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
+      // Edge TTS was used as fallback
+      expect(mockEdgeTtsGenerate).toHaveBeenCalled();
+      expect(result.usedProvider).toBe('edgetts');
+      expect(result.preferredProvider).toBe('deepgram');
     });
 
     it('should deny ElevenLabs override when quota is exhausted for free users', async () => {
@@ -631,6 +646,9 @@ describe('TextToSpeechService', () => {
       mockCanFreeUserUseElevenLabs.mockResolvedValueOnce(true);
       // Per-paragraph check denies (quota exhausted after batch decision)
       mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
+      // Deepgram succeeds as failover after ElevenLabs quota denial
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('deepgram-audio'));
+      mockUploadAudio.mockResolvedValue('https://uploaded.com/deepgram.mp3');
 
       const result = await service.batchTextToSpeechCloudUrls(
         storyId,
@@ -639,10 +657,13 @@ describe('TextToSpeechService', () => {
         userId,
       );
 
-      // All paragraphs should have null audioUrl since quota guard blocks dispatch
-      expect(result.results.every((r) => r.audioUrl === null)).toBe(true);
       // ElevenLabs should never be invoked — quota guard prevents dispatch
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
+      // Failover to Deepgram should succeed
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
+      expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
+      expect(result.usedProvider).toBe('deepgram');
+      expect(result.preferredProvider).toBe('elevenlabs');
     });
 
     it('should cap paragraphs at MAX_BATCH_PARAGRAPHS (50)', async () => {
@@ -775,6 +796,34 @@ describe('TextToSpeechService', () => {
       expect(sorted[1].audioUrl).toBe('https://uploaded.com/middle.wav');
       // Only 1 paragraph should be generated (the middle one)
       expect(mockDeepgramGenerate).toHaveBeenCalledTimes(1);
+    });
+
+    it('should failover to Deepgram when ElevenLabs fails mid-batch', async () => {
+      mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
+      mockIsPremiumUser.mockResolvedValue(true);
+
+      // ElevenLabs fails for all paragraphs
+      mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs 500'));
+      // Deepgram succeeds
+      mockDeepgramGenerate.mockResolvedValue(Buffer.from('deepgram-audio'));
+      mockUploadAudio.mockResolvedValue('https://uploaded.com/audio.mp3');
+
+      const result = await service.batchTextToSpeechCloudUrls(
+        storyId,
+        fullText,
+        VoiceType.MILO,
+        userId,
+      );
+
+      // All paragraphs should have audio (failover to Deepgram)
+      expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
+      // ElevenLabs was attempted
+      expect(mockElevenLabsGenerate).toHaveBeenCalled();
+      // Deepgram was used as fallback
+      expect(mockDeepgramGenerate).toHaveBeenCalled();
+      // Response indicates fallback happened
+      expect(result.usedProvider).toBe('deepgram');
+      expect(result.preferredProvider).toBe('elevenlabs');
     });
 
     it('should return results sorted by index', async () => {

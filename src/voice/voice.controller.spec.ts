@@ -139,6 +139,7 @@ describe('VoiceController', () => {
         ],
         totalParagraphs: 1,
         wasTruncated: false,
+        usedProvider: 'deepgram',
       });
 
       const result = await controller.batchTextToSpeech(

@@ -1124,7 +1124,7 @@ model ParagraphAudioCache {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([storyId, textHash, voiceId])
+  @@unique([storyId, textHash, voiceId, provider])
   @@index([storyId])
   @@map("paragraph_audio_cache")
 }
