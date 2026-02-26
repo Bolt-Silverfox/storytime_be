@@ -949,10 +949,11 @@ export class StoryService {
 
     const hasNextPage = mapped.length > take;
     if (hasNextPage) mapped.pop();
+    const lastIndex = mapped.length - 1;
     return {
       data: mapped,
       pagination: {
-        nextCursor: hasNextPage ? progressRecords[mapped.length - 1].id : null,
+        nextCursor: hasNextPage ? progressRecords[lastIndex].id : null,
         hasNextPage,
       },
     };
@@ -1721,10 +1722,11 @@ export class StoryService {
 
     const hasNextPage = mapped.length > take;
     if (hasNextPage) mapped.pop();
+    const lastIndex = mapped.length - 1;
     return {
       data: mapped,
       pagination: {
-        nextCursor: hasNextPage ? progressRecords[mapped.length - 1].id : null,
+        nextCursor: hasNextPage ? progressRecords[lastIndex].id : null,
         hasNextPage,
       },
     };
