@@ -1034,8 +1034,6 @@ export class StoryService {
     return assignment ? this.toDailyChallengeAssignmentDto(assignment) : null;
   }
 
-
-
   private toStoryPathDto(path: StoryPath): StoryPathDto {
     return {
       id: path.id,
