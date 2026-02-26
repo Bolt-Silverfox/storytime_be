@@ -21,6 +21,14 @@ export interface IParentFavoriteRepository {
   // Find a specific favorite
   findFavorite(userId: string, storyId: string): Promise<ParentFavorite | null>;
 
+  // Find favorites with cursor-based pagination
+  findFavoritesPaginated(params: {
+    userId: string;
+    cursor?: { id: string };
+    skip?: number;
+    take: number;
+  }): Promise<ParentFavoriteWithStory[]>;
+
   // Delete a favorite by id
   deleteParentFavorite(id: string): Promise<void>;
 }

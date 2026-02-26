@@ -14,6 +14,7 @@ import {
   IStoryProgressRepository,
   STORY_PROGRESS_REPOSITORY,
 } from './repositories/story-progress.repository.interface';
+import { buildCursorPaginatedResponse } from '@/shared/utils/cursor-pagination.helper';
 
 @Injectable()
 export class StoryProgressService {
@@ -111,6 +112,44 @@ export class StoryProgressService {
     return records.map((r) => r.story);
   }
 
+  async getContinueReadingPaginated(
+    kidId: string,
+    cursorId: string | null,
+    limit: number,
+  ) {
+    const records =
+      await this.progressRepository.findContinueReadingProgressPaginated(
+        kidId,
+        cursorId ? { id: cursorId } : undefined,
+        limit + 1,
+      );
+    return buildCursorPaginatedResponse({
+      items: records.map((r) => r.story),
+      limit,
+      cursorId,
+      getId: (item) => item.id,
+    });
+  }
+
+  async getCompletedStoriesPaginated(
+    kidId: string,
+    cursorId: string | null,
+    limit: number,
+  ) {
+    const records =
+      await this.progressRepository.findCompletedProgressPaginated(
+        kidId,
+        cursorId ? { id: cursorId } : undefined,
+        limit + 1,
+      );
+    return buildCursorPaginatedResponse({
+      items: records.map((r) => r.story),
+      limit,
+      cursorId,
+      getId: (item) => item.id,
+    });
+  }
+
   // ==================== User (Adult) Progress ====================
 
   async setUserProgress(
@@ -181,6 +220,50 @@ export class StoryProgressService {
     const records =
       await this.progressRepository.findUserCompletedProgress(userId);
     return records.map((r) => r.story);
+  }
+
+  async getUserContinueReadingPaginated(
+    userId: string,
+    cursorId: string | null,
+    limit: number,
+  ) {
+    const records =
+      await this.progressRepository.findUserContinueReadingProgressPaginated(
+        userId,
+        cursorId ? { id: cursorId } : undefined,
+        limit + 1,
+      );
+
+    return buildCursorPaginatedResponse({
+      items: records.map((record) => ({
+        ...record.story,
+        progress: record.progress,
+        totalTimeSpent: record.totalTimeSpent,
+        lastAccessed: record.lastAccessed,
+      })),
+      limit,
+      cursorId,
+      getId: (item) => item.id,
+    });
+  }
+
+  async getUserCompletedStoriesPaginated(
+    userId: string,
+    cursorId: string | null,
+    limit: number,
+  ) {
+    const records =
+      await this.progressRepository.findUserCompletedProgressPaginated(
+        userId,
+        cursorId ? { id: cursorId } : undefined,
+        limit + 1,
+      );
+    return buildCursorPaginatedResponse({
+      items: records.map((r) => r.story),
+      limit,
+      cursorId,
+      getId: (item) => item.id,
+    });
   }
 
   async removeFromUserLibrary(userId: string, storyId: string) {

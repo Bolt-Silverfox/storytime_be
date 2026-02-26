@@ -20,6 +20,7 @@ import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
+import { PaginationUtil } from '@/shared/utils/pagination.util';
 
 @ApiTags('notifications')
 @ApiBearerAuth()
@@ -32,21 +33,43 @@ export class InAppNotificationController {
 
   @Get()
   @ApiOperation({ summary: 'Get in-app notifications for current user' })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    type: String,
+    description: 'Opaque cursor for cursor-based pagination',
+  })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'offset', required: false, type: Number })
   @ApiQuery({ name: 'unreadOnly', required: false, type: Boolean })
   @ApiResponse({ status: 200, type: [NotificationDto] })
   async getNotifications(
     @Request() req: AuthenticatedRequest,
+    @Query('cursor') cursor?: string,
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
     @Query('unreadOnly') unreadOnly?: boolean,
   ) {
+    const isUnreadOnly = unreadOnly === true || String(unreadOnly) === 'true';
+
+    // Cursor mode: if cursor param is present, use cursor-based pagination
+    if (cursor !== undefined) {
+      const { cursorId, limit: safeLimit } =
+        PaginationUtil.sanitizeCursorParams(cursor, limit);
+      return this.inAppNotificationService.getInAppNotificationsCursor(
+        req.authUserData.userId,
+        cursorId,
+        safeLimit,
+        isUnreadOnly,
+      );
+    }
+
+    // Offset mode (default): existing pagination
     return this.inAppNotificationService.getInAppNotifications(
       req.authUserData.userId,
       limit ? Number(limit) : undefined,
       offset ? Number(offset) : undefined,
-      unreadOnly === true || String(unreadOnly) === 'true',
+      isUnreadOnly,
     );
   }
 

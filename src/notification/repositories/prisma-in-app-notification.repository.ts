@@ -32,6 +32,29 @@ export class PrismaInAppNotificationRepository
     });
   }
 
+  async findNotificationsWithCursor(params: {
+    userId: string;
+    cursor?: { id: string };
+    take: number;
+    unreadOnly?: boolean;
+  }): Promise<Notification[]> {
+    const where: { userId: string; isDeleted: boolean; isRead?: boolean } = {
+      userId: params.userId,
+      isDeleted: false,
+    };
+
+    if (params.unreadOnly) {
+      where.isRead = false;
+    }
+
+    return this.prisma.notification.findMany({
+      where,
+      ...(params.cursor ? { cursor: { id: params.cursor.id }, skip: 1 } : {}),
+      take: params.take,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async countNotifications(params: {
     userId: string;
     unreadOnly?: boolean;

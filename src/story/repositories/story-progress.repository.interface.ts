@@ -29,6 +29,18 @@ export interface IStoryProgressRepository {
 
   findCompletedProgress(kidId: string): Promise<StoryProgressWithStory[]>;
 
+  findContinueReadingProgressPaginated(
+    kidId: string,
+    cursor?: { id: string },
+    take?: number,
+  ): Promise<StoryProgressWithStory[]>;
+
+  findCompletedProgressPaginated(
+    kidId: string,
+    cursor?: { id: string },
+    take?: number,
+  ): Promise<StoryProgressWithStory[]>;
+
   deleteStoryProgress(
     kidId: string,
     storyId: string,
@@ -56,6 +68,18 @@ export interface IStoryProgressRepository {
 
   findUserCompletedProgress(
     userId: string,
+  ): Promise<UserStoryProgressWithStory[]>;
+
+  findUserContinueReadingProgressPaginated(
+    userId: string,
+    cursor?: { id: string },
+    take?: number,
+  ): Promise<UserStoryProgressWithStory[]>;
+
+  findUserCompletedProgressPaginated(
+    userId: string,
+    cursor?: { id: string },
+    take?: number,
   ): Promise<UserStoryProgressWithStory[]>;
 
   deleteUserStoryProgress(

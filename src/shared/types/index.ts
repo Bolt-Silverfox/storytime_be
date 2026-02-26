@@ -50,6 +50,28 @@ export interface PaginatedResponse<T> {
 }
 
 /**
+ * Cursor-based pagination parameters
+ */
+export interface CursorPaginationParams {
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * Cursor-based paginated response wrapper
+ */
+export interface CursorPaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    nextCursor: string | null;
+    previousCursor: string | null;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+    limit: number;
+  };
+}
+
+/**
  * Badge metadata for achievement tracking
  */
 export interface BadgeMetadata {
