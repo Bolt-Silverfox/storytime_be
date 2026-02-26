@@ -70,26 +70,33 @@ function findClosestValid(value, validList) {
   return null;
 }
 
-const filePath = path.resolve(__dirname, '../data/stories-4-6.json');
-const stories = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+const dataDir = path.resolve(__dirname, '../data');
+const files = fs.readdirSync(dataDir).filter(f => f.startsWith('stories') && f.endsWith('.json') && !f.includes('backup'));
 
-for (const story of stories) {
-  // --- CATEGORY ---
-  let cats = story.category;
-  if (!Array.isArray(cats)) cats = cats ? [cats] : [];
-  cats = cats
-    .map((c) => findClosestValid(c, validCategories))
-    .filter((c) => !!c);
-  story.category = cats;
+for (const file of files) {
+  const filePath = path.join(dataDir, file);
+  console.log(`Fixing categories and themes in ${file}...`);
+  const stories = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 
-  // --- THEME ---
-  let ths = story.theme;
-  if (!Array.isArray(ths)) ths = ths ? [ths] : [];
-  ths = ths
-    .map((t) => findClosestValid(t, validThemes))
-    .filter((t) => !!t);
-  story.theme = ths;
+  for (const story of stories) {
+    // --- CATEGORY ---
+    let cats = story.category;
+    if (!Array.isArray(cats)) cats = cats ? [cats] : [];
+    cats = cats
+      .map((c) => findClosestValid(c, validCategories))
+      .filter((c) => !!c);
+    story.category = cats;
+
+    // --- THEME ---
+    let ths = story.theme;
+    if (!Array.isArray(ths)) ths = ths ? [ths] : [];
+    ths = ths
+      .map((t) => findClosestValid(t, validThemes))
+      .filter((t) => !!t);
+    story.theme = ths;
+  }
+
+  fs.writeFileSync(filePath, JSON.stringify(stories, null, 2));
 }
 
-fs.writeFileSync(filePath, JSON.stringify(stories, null, 2));
-console.log('stories.json has been fixed!'); 
+console.log('stories JSON files have been fixed!'); 
