@@ -916,7 +916,11 @@ export class StoryService {
     };
   }
 
-  async getUserContinueReading(userId: string, cursor?: string, limit?: number) {
+  async getUserContinueReading(
+    userId: string,
+    cursor?: string,
+    limit?: number,
+  ) {
     const useCursor = cursor !== undefined || limit !== undefined;
     const take = limit ?? 20;
 
@@ -959,7 +963,11 @@ export class StoryService {
     };
   }
 
-  async getUserCompletedStories(userId: string, cursor?: string, limit?: number) {
+  async getUserCompletedStories(
+    userId: string,
+    cursor?: string,
+    limit?: number,
+  ) {
     const useCursor = cursor !== undefined || limit !== undefined;
     const take = limit ?? 20;
 
