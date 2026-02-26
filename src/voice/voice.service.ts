@@ -132,9 +132,7 @@ export class VoiceService {
       include: { preferredVoice: true },
     });
 
-    return this.toVoiceResponse(
-      result.preferredVoice as NonNullable<typeof result.preferredVoice>,
-    );
+    return this.toVoiceResponse(result.preferredVoice);
   }
 
   // --- Get the preferred voice for a user ---
