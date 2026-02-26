@@ -1,7 +1,9 @@
 import { learningExpectations } from '../data';
 import { SeedContext, SeedResult } from './types';
 
-export async function seedLearningExpectations(ctx: SeedContext): Promise<SeedResult> {
+export async function seedLearningExpectations(
+  ctx: SeedContext,
+): Promise<SeedResult> {
   const { prisma, logger } = ctx;
 
   try {

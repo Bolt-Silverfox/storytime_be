@@ -47,7 +47,14 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
     }
 
     // Find all files matching stories*.json
-    const files = fs.readdirSync(dataDir).filter(file => file.startsWith('stories') && file.endsWith('.json') && !file.includes('backup'));
+    const files = fs
+      .readdirSync(dataDir)
+      .filter(
+        (file) =>
+          file.startsWith('stories') &&
+          file.endsWith('.json') &&
+          !file.includes('backup'),
+      );
 
     if (files.length === 0) {
       logger.error(`No stories*.json files found in ${dataDir}`);
@@ -73,84 +80,105 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       logger.log(`Processing stories file: ${file}`);
       const filePath = path.join(dataDir, file);
 
-      const stories: StoryData[] = JSON.parse(
-        fs.readFileSync(filePath, 'utf-8'),
-      );
-
-      for (const story of stories) {
-        if (existingTitles.has(story.title.trim().toLowerCase())) {
-          skipped++;
-          continue;
-        }
-
-        // Handle both string and array formats for categories
-        const storyCategories = Array.isArray(story.category)
-          ? story.category
-          : [story.category];
-        const cleanCategories = storyCategories.filter(
-          (c: string) => c && c.length > 0,
+      let stories: StoryData[];
+      try {
+        stories = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      } catch (e) {
+        logger.error(
+          `Skipping malformed JSON file: ${file}, Error: ${e instanceof Error ? e.message : 'Unknown'}`,
         );
-
-        // Handle both string and array formats for themes
-        const storyThemes = Array.isArray(story.theme)
-          ? story.theme
-          : [story.theme];
-        const cleanThemes = storyThemes.filter((t: string) => t && t.length > 0);
-
-        await prisma.story.create({
-          data: {
-            title: story.title,
-            description: story.description,
-            language: story.language,
-            coverImageUrl: story.coverImageUrl,
-            audioUrl: story.audioUrl ?? '',
-            isInteractive: story.isInteractive ?? false,
-            ageMin: story.ageMin ?? 0,
-            ageMax: story.ageMax ?? 9,
-            textContent: story.content,
-            recommended: story.recommended ?? false,
-            backgroundColor: story.backgroundColor || '#5E3A54',
-            wordCount: story.wordCount ?? 0,
-            durationSeconds: story.durationSeconds ?? null,
-            difficultyLevel: story.difficultyLevel ?? 1,
-            aiGenerated: story.aiGenerated ?? false,
-            categories: {
-              connectOrCreate: cleanCategories.map((name: string) => ({
-                where: { name },
-                create: {
-                  name,
-                  description: 'Auto-generated category',
-                },
-              })),
-            },
-            themes: {
-              connectOrCreate: cleanThemes.map((name: string) => ({
-                where: { name },
-                create: {
-                  name,
-                  description: 'Auto-generated theme',
-                },
-              })),
-            },
-            seasons: story.seasons
-              ? {
-                connect: story.seasons.map((name: string) => ({ name })),
-              }
-              : undefined,
-            questions: {
-              create: story.questions.map((question: StoryQuestion) => ({
-                question: question.question,
-                options: question.options,
-                correctOption: question.correctOption,
-              })),
-            },
-          },
-        });
-        count++;
+        continue;
       }
+
+      await prisma.$transaction(async (tx) => {
+        for (const story of stories) {
+          if (!story.title) {
+            logger.error(`Skipping story without a title in ${file}`);
+            continue;
+          }
+          if (existingTitles.has(story.title.trim().toLowerCase())) {
+            skipped++;
+            continue;
+          }
+
+          // Handle both string and array formats for categories
+          const storyCategories = Array.isArray(story.category)
+            ? story.category
+            : [story.category];
+          const cleanCategories = storyCategories.filter(
+            (c: string) => c && c.length > 0,
+          );
+
+          // Handle both string and array formats for themes
+          const storyThemes = Array.isArray(story.theme)
+            ? story.theme
+            : [story.theme];
+          const cleanThemes = storyThemes.filter(
+            (t: string) => t && t.length > 0,
+          );
+
+          await tx.story.create({
+            data: {
+              title: story.title,
+              description: story.description,
+              language: story.language,
+              coverImageUrl: story.coverImageUrl,
+              audioUrl: story.audioUrl ?? '',
+              isInteractive: story.isInteractive ?? false,
+              ageMin: story.ageMin ?? 0,
+              ageMax: story.ageMax ?? 9,
+              textContent: story.content,
+              recommended: story.recommended ?? false,
+              backgroundColor: story.backgroundColor || '#5E3A54',
+              wordCount: story.wordCount ?? 0,
+              durationSeconds: story.durationSeconds ?? null,
+              difficultyLevel: story.difficultyLevel ?? 1,
+              aiGenerated: story.aiGenerated ?? false,
+              categories: {
+                connectOrCreate: cleanCategories.map((name: string) => ({
+                  where: { name },
+                  create: {
+                    name,
+                    description: 'Auto-generated category',
+                  },
+                })),
+              },
+              themes: {
+                connectOrCreate: cleanThemes.map((name: string) => ({
+                  where: { name },
+                  create: {
+                    name,
+                    description: 'Auto-generated theme',
+                  },
+                })),
+              },
+              seasons: story.seasons
+                ? {
+                    connectOrCreate: story.seasons.map((name: string) => ({
+                      where: { name },
+                      create: { name },
+                    })),
+                  }
+                : undefined,
+              questions: {
+                create: (story.questions || []).map(
+                  (question: StoryQuestion) => ({
+                    question: question.question,
+                    options: question.options,
+                    correctOption: question.correctOption,
+                  }),
+                ),
+              },
+            },
+          });
+          count++;
+        }
+      });
     }
 
-    logger.success(`Seeded ${count} stories from ${files.length} files (${skipped} skipped as duplicates)`);
+    logger.success(
+      `Seeded ${count} stories from ${files.length} files (${skipped} skipped as duplicates)`,
+    );
 
     return {
       name: 'stories',
