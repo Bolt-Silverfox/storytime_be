@@ -710,45 +710,8 @@ export class TextToSpeechService {
     // ── Cache lookup: only accept hits from the SAME provider ──
     // Paragraphs cached by a different provider are treated as uncached
     // so they get regenerated, ensuring consistent voice across the story.
-    const cachedEntries = await this.prisma.paragraphAudioCache.findMany({
-      where: {
-        storyId,
-        voiceId: type,
-        provider: batchProvider,
-        textHash: { in: [...hashMap.keys()] },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    // Map keeps last entry for duplicate keys, so desc order + skip-if-exists
-    // ensures the newest cache entry wins.
-    const cacheMap = new Map<string, string>();
-    for (const e of cachedEntries) {
-      if (!cacheMap.has(e.textHash)) {
-        cacheMap.set(e.textHash, e.audioUrl);
-      }
-    }
-
-    let cached: Array<{ index: number; text: string; audioUrl: string }> = [];
-    let uncached: Array<{ index: number; text: string; hash: string }> = [];
-    let uncachedHashes = new Set<string>();
-
-    for (const [hash, entries] of hashMap) {
-      const cachedUrl = cacheMap.get(hash);
-      if (cachedUrl) {
-        for (const { index, text } of entries) {
-          cached.push({ index, text, audioUrl: cachedUrl });
-        }
-      } else {
-        if (!uncachedHashes.has(hash)) {
-          uncachedHashes.add(hash);
-          uncached.push({
-            index: entries[0].index,
-            text: entries[0].text,
-            hash,
-          });
-        }
-      }
-    }
+    let { cached, uncached } =
+      await this.rebuildCacheForProvider(batchProvider, hashMap, storyId, type);
 
     this.logger.log(
       `Batch story ${storyId}: ${cached.length} cached (${batchProvider}), ${uncached.length} to generate`,
@@ -798,44 +761,8 @@ export class TextToSpeechService {
           continue;
         }
         // Re-do cache lookup for this provider
-        const providerCacheEntries =
-          await this.prisma.paragraphAudioCache.findMany({
-            where: {
-              storyId,
-              voiceId: type,
-              provider,
-              textHash: { in: [...hashMap.keys()] },
-            },
-            orderBy: { createdAt: 'desc' },
-          });
-        const providerCacheMap = new Map<string, string>();
-        for (const e of providerCacheEntries) {
-          if (!providerCacheMap.has(e.textHash)) {
-            providerCacheMap.set(e.textHash, e.audioUrl);
-          }
-        }
-
-        // Rebuild cached/uncached arrays for this provider
-        cached = [];
-        uncached = [];
-        uncachedHashes = new Set<string>();
-        for (const [hash, entries] of hashMap) {
-          const cachedUrl = providerCacheMap.get(hash);
-          if (cachedUrl) {
-            for (const { index, text } of entries) {
-              cached.push({ index, text, audioUrl: cachedUrl });
-            }
-          } else {
-            if (!uncachedHashes.has(hash)) {
-              uncachedHashes.add(hash);
-              uncached.push({
-                index: entries[0].index,
-                text: entries[0].text,
-                hash,
-              });
-            }
-          }
-        }
+        ({ cached, uncached } =
+          await this.rebuildCacheForProvider(provider, hashMap, storyId, type));
         if (uncached.length === 0) {
           generated = [];
           actualProvider = provider;
@@ -919,6 +846,62 @@ export class TextToSpeechService {
       ...(actualProvider !== preferredProvider ? { preferredProvider } : {}),
       ...(isDegraded ? { providerStatus: 'degraded' as const } : {}),
     };
+  }
+
+  /**
+   * Query paragraph audio cache for a specific provider and split hashMap entries
+   * into cached (with audioUrl) and uncached (needing generation) arrays.
+   */
+  private async rebuildCacheForProvider(
+    provider: string,
+    hashMap: Map<string, Array<{ index: number; text: string }>>,
+    storyId: string,
+    voiceId: string,
+  ): Promise<{
+    cached: Array<{ index: number; text: string; audioUrl: string }>;
+    uncached: Array<{ index: number; text: string; hash: string }>;
+    uncachedHashes: Set<string>;
+  }> {
+    const entries = await this.prisma.paragraphAudioCache.findMany({
+      where: {
+        storyId,
+        voiceId,
+        provider,
+        textHash: { in: [...hashMap.keys()] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    // desc order + skip-if-exists ensures the newest cache entry wins.
+    const cacheMap = new Map<string, string>();
+    for (const e of entries) {
+      if (!cacheMap.has(e.textHash)) {
+        cacheMap.set(e.textHash, e.audioUrl);
+      }
+    }
+
+    const cached: Array<{ index: number; text: string; audioUrl: string }> = [];
+    const uncached: Array<{ index: number; text: string; hash: string }> = [];
+    const uncachedHashes = new Set<string>();
+
+    for (const [hash, hashEntries] of hashMap) {
+      const cachedUrl = cacheMap.get(hash);
+      if (cachedUrl) {
+        for (const { index, text } of hashEntries) {
+          cached.push({ index, text, audioUrl: cachedUrl });
+        }
+      } else {
+        if (!uncachedHashes.has(hash)) {
+          uncachedHashes.add(hash);
+          uncached.push({
+            index: hashEntries[0].index,
+            text: hashEntries[0].text,
+            hash,
+          });
+        }
+      }
+    }
+
+    return { cached, uncached, uncachedHashes };
   }
 
   /** Generate a batch of paragraphs using a single provider */
