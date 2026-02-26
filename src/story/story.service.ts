@@ -400,6 +400,22 @@ export class StoryService {
     return { data: enriched, pagination };
   }
 
+  private mapProgressRecord(record: {
+    id: string;
+    progress: number;
+    totalTimeSpent: number;
+    lastAccessed: Date;
+    story: Record<string, unknown>;
+  }) {
+    return {
+      ...record.story,
+      progressId: record.id,
+      progress: record.progress,
+      totalTimeSpent: record.totalTimeSpent,
+      lastAccessed: record.lastAccessed,
+    };
+  }
+
   private async enrichWithReadStatus<T extends { id: string }>(
     userId: string,
     stories: T[],
@@ -945,15 +961,8 @@ export class StoryService {
       }),
     );
 
-    const mapRecord = (record: (typeof progressRecords)[number]) => ({
-      ...record.story,
-      progressId: record.id,
-      progress: record.progress,
-      totalTimeSpent: record.totalTimeSpent,
-      lastAccessed: record.lastAccessed,
-    });
-
-    if (!useCursor) return progressRecords.map(mapRecord);
+    if (!useCursor)
+      return progressRecords.map((r) => this.mapProgressRecord(r));
 
     // Cursor comes from progress table ID (Prisma cursor operates on this table).
     // Build response from raw records first, then map to the enriched shape.
@@ -961,7 +970,7 @@ export class StoryService {
       progressRecords,
       take,
     );
-    return { data: data.map(mapRecord), pagination };
+    return { data: data.map((r) => this.mapProgressRecord(r)), pagination };
   }
 
   async getUserCompletedStories(
@@ -1724,21 +1733,14 @@ export class StoryService {
       }),
     );
 
-    const mapRecord = (record: (typeof progressRecords)[number]) => ({
-      ...record.story,
-      progressId: record.id,
-      progress: record.progress,
-      totalTimeSpent: record.totalTimeSpent,
-      lastAccessed: record.lastAccessed,
-    });
-
-    if (!useCursor) return progressRecords.map(mapRecord);
+    if (!useCursor)
+      return progressRecords.map((r) => this.mapProgressRecord(r));
 
     const { data, pagination } = PaginationUtil.buildCursorResponse(
       progressRecords,
       take,
     );
-    return { data: data.map(mapRecord), pagination };
+    return { data: data.map((r) => this.mapProgressRecord(r)), pagination };
   }
 
   async getCompletedStories(kidId: string, cursor?: string, limit?: number) {
