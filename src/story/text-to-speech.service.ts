@@ -153,14 +153,15 @@ export class TextToSpeechService {
     text: string,
     voiceId: string,
     audioUrl: string,
+    provider: string,
   ): Promise<void> {
     const textHash = this.hashText(text);
     await this.prisma.paragraphAudioCache.upsert({
       where: {
         storyId_textHash_voiceId: { storyId, textHash, voiceId },
       },
-      create: { storyId, textHash, voiceId, audioUrl },
-      update: { audioUrl },
+      create: { storyId, textHash, voiceId, audioUrl, provider },
+      update: { audioUrl, provider },
     });
   }
 
@@ -320,7 +321,7 @@ export class TextToSpeechService {
         `story_${storyId}_${providerName}_${Date.now()}.mp3`,
       );
       try {
-        await this.cacheParagraphAudio(storyId, text, type, audioUrl);
+        await this.cacheParagraphAudio(storyId, text, type, audioUrl, providerName);
       } catch (cacheErr) {
         const cacheMsg =
           cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
@@ -349,8 +350,6 @@ export class TextToSpeechService {
         deepgramVoice,
         edgeTtsVoice,
         voiceSettings,
-        userId,
-        options,
         attemptProvider,
       );
     }
@@ -371,8 +370,6 @@ export class TextToSpeechService {
             elevenLabsId,
             type,
             voiceSettings,
-            userId,
-            options,
             attemptProvider,
           );
           this.elevenLabsBreaker.recordSuccess();
@@ -448,8 +445,6 @@ export class TextToSpeechService {
     elevenLabsId: string,
     type: string,
     voiceSettings: VoiceSettings | undefined,
-    userId: string | undefined,
-    options: { skipQuotaCheck?: boolean; isPremium?: boolean } | undefined,
     attemptProvider: (
       name: TTSResult['provider'],
       gen: () => Promise<Buffer>,
@@ -476,10 +471,6 @@ export class TextToSpeechService {
         settings,
       ),
     );
-
-    if (userId && !options?.skipQuotaCheck) {
-      await this.voiceQuota.incrementUsage(userId);
-    }
 
     return result;
   }
@@ -534,8 +525,6 @@ export class TextToSpeechService {
     deepgramVoice: string | undefined,
     edgeTtsVoice: string | undefined,
     voiceSettings: VoiceSettings | undefined,
-    userId: string | undefined,
-    options: { skipQuotaCheck?: boolean; isPremium?: boolean } | undefined,
     attemptProvider: (
       name: TTSResult['provider'],
       gen: () => Promise<Buffer>,
@@ -564,8 +553,6 @@ export class TextToSpeechService {
             elevenLabsId,
             type,
             voiceSettings,
-            userId,
-            options,
             attemptProvider,
           );
           break;
@@ -641,63 +628,15 @@ export class TextToSpeechService {
       hashMap.set(hash, entries);
     }
 
-    const cachedEntries = await this.prisma.paragraphAudioCache.findMany({
-      where: {
-        storyId,
-        voiceId: type,
-        textHash: { in: [...hashMap.keys()] },
-      },
-    });
-    const cacheMap = new Map(
-      cachedEntries.map((e) => [e.textHash, e.audioUrl]),
-    );
-
-    const cached: Array<{ index: number; text: string; audioUrl: string }> = [];
-    const uncached: Array<{ index: number; text: string; hash: string }> = [];
-    // Track which hashes we've already queued for generation (only generate once per unique text)
-    const uncachedHashes = new Set<string>();
-
-    for (const [hash, entries] of hashMap) {
-      const cachedUrl = cacheMap.get(hash);
-      if (cachedUrl) {
-        // All paragraphs with this hash get the cached URL
-        for (const { index, text } of entries) {
-          cached.push({ index, text, audioUrl: cachedUrl });
-        }
-      } else {
-        // Only generate for the first entry; duplicates will be filled in after generation
-        if (!uncachedHashes.has(hash)) {
-          uncachedHashes.add(hash);
-          uncached.push({
-            index: entries[0].index,
-            text: entries[0].text,
-            hash,
-          });
-        }
-      }
-    }
-
-    this.logger.log(
-      `Batch story ${storyId}: ${cached.length} cached, ${uncached.length} to generate`,
-    );
-
-    if (uncached.length === 0) {
-      return {
-        results: cached.sort((a, b) => a.index - b.index),
-        totalParagraphs: allParagraphs.length,
-        wasTruncated,
-      };
-    }
-
-    // Resolve premium status and voice eligibility once for the entire batch
+    // ── Determine the batch provider BEFORE cache lookup ──
+    // This ensures we only use cache hits from the same provider,
+    // guaranteeing every paragraph in the story sounds the same.
     const quotaVoiceId = await this.resolveCanonicalVoiceId(type);
-    let reservedCredits = 0;
     let isPremium = false;
     let useElevenLabsBatch = false;
     if (userId) {
       isPremium = await this.subscriptionService.isPremiumUser(userId);
       if (isPremium) {
-        // Premium: check per-story voice limit
         useElevenLabsBatch = await this.voiceQuota.canUseVoiceForStory(
           storyId,
           quotaVoiceId,
@@ -720,34 +659,7 @@ export class TextToSpeechService {
           );
         }
       }
-
-      if (useElevenLabsBatch && isPremium) {
-        reservedCredits = await this.voiceQuota.recordUsage(
-          userId,
-          uncached.length,
-        );
-        this.logger.log(
-          `Reserved ${reservedCredits}/${uncached.length} ElevenLabs credits for batch story ${storyId}`,
-        );
-      }
     }
-
-    // ── Single-provider batch generation ──
-    // All uncached paragraphs are sent to ONE provider (no fallback chain).
-    // If some paragraphs fail, we keep the successes and return null for
-    // failures — the next batch request will cache-miss on those and retry
-    // with the same provider (which should be back up by then).
-    // This guarantees every generated paragraph uses the same voice.
-    type BatchResult = {
-      index: number;
-      text: string;
-      audioUrl: string | null;
-      hash: string;
-      provider: string | null;
-    };
-
-    const generated: BatchResult[] = [];
-    let reservedUsed = 0;
 
     // Pick the single provider for this batch.
     // Circuit breaker fast-fail: if the preferred provider is OPEN, downgrade.
@@ -770,6 +682,71 @@ export class TextToSpeechService {
       batchProvider = 'edgetts';
     }
 
+    // ── Cache lookup: only accept hits from the SAME provider ──
+    // Paragraphs cached by a different provider are treated as uncached
+    // so they get regenerated, ensuring consistent voice across the story.
+    const cachedEntries = await this.prisma.paragraphAudioCache.findMany({
+      where: {
+        storyId,
+        voiceId: type,
+        provider: batchProvider,
+        textHash: { in: [...hashMap.keys()] },
+      },
+    });
+    const cacheMap = new Map(
+      cachedEntries.map((e) => [e.textHash, e.audioUrl]),
+    );
+
+    const cached: Array<{ index: number; text: string; audioUrl: string }> = [];
+    const uncached: Array<{ index: number; text: string; hash: string }> = [];
+    const uncachedHashes = new Set<string>();
+
+    for (const [hash, entries] of hashMap) {
+      const cachedUrl = cacheMap.get(hash);
+      if (cachedUrl) {
+        for (const { index, text } of entries) {
+          cached.push({ index, text, audioUrl: cachedUrl });
+        }
+      } else {
+        if (!uncachedHashes.has(hash)) {
+          uncachedHashes.add(hash);
+          uncached.push({
+            index: entries[0].index,
+            text: entries[0].text,
+            hash,
+          });
+        }
+      }
+    }
+
+    this.logger.log(
+      `Batch story ${storyId}: ${cached.length} cached (${batchProvider}), ${uncached.length} to generate`,
+    );
+
+    if (uncached.length === 0) {
+      return {
+        results: cached.sort((a, b) => a.index - b.index),
+        totalParagraphs: allParagraphs.length,
+        wasTruncated,
+      };
+    }
+
+    // ── Single-provider batch generation ──
+    // All uncached paragraphs are sent to ONE provider (no fallback chain).
+    // If some paragraphs fail, we keep the successes and return null for
+    // failures — the next batch request will cache-miss on those and retry
+    // with the same provider (which should be back up by then).
+    // This guarantees every generated paragraph uses the same voice.
+    type BatchResult = {
+      index: number;
+      text: string;
+      audioUrl: string | null;
+      hash: string;
+      provider: string | null;
+    };
+
+    const generated: BatchResult[] = [];
+
     this.logger.log(
       `Batch story ${storyId}: generating ${uncached.length} paragraphs with ${batchProvider}`,
     );
@@ -785,7 +762,7 @@ export class TextToSpeechService {
               voiceType,
               userId,
               {
-                skipQuotaCheck: isPremium && reservedCredits > 0,
+                skipQuotaCheck: true,
                 isPremium,
                 providerOverride: batchProvider,
               },
@@ -819,7 +796,6 @@ export class TextToSpeechService {
           audioUrl: r.audioUrl,
           provider: r.provider,
         });
-        if (r.ok && r.provider === 'elevenlabs') reservedUsed++;
       }
     }
 
@@ -852,14 +828,6 @@ export class TextToSpeechService {
           audioUrl: url,
         });
       }
-    }
-
-    // Release unused reserved credits — only paragraphs that actually used
-    // ElevenLabs (identified by URL filename pattern) keep their reserved credits.
-    // This prevents quota leaks when ElevenLabs fails but a fallback succeeds.
-    const creditsToRelease = reservedCredits - reservedUsed;
-    if (creditsToRelease > 0 && userId) {
-      await this.voiceQuota.releaseReservedUsage(userId, creditsToRelease);
     }
 
     // Report degraded status when any TTS breaker is OPEN (read-only snapshot

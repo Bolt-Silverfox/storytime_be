@@ -25,9 +25,6 @@ describe('TextToSpeechService', () => {
   const mockDeepgramGenerate = jest.fn();
   const mockEdgeTtsGenerate = jest.fn();
   const mockIsPremiumUser = jest.fn();
-  const mockIncrementUsage = jest.fn();
-  const mockRecordUsage = jest.fn();
-  const mockReleaseReservedUsage = jest.fn();
   const mockCanUseVoiceForStory = jest.fn();
   const mockCanFreeUserUseElevenLabs = jest.fn();
   const mockResolveCanonicalVoiceId = jest.fn();
@@ -94,9 +91,6 @@ describe('TextToSpeechService', () => {
         {
           provide: VoiceQuotaService,
           useValue: {
-            incrementUsage: mockIncrementUsage,
-            recordUsage: mockRecordUsage,
-            releaseReservedUsage: mockReleaseReservedUsage,
             canUseVoiceForStory: mockCanUseVoiceForStory,
             canFreeUserUseElevenLabs: mockCanFreeUserUseElevenLabs,
             resolveCanonicalVoiceId: mockResolveCanonicalVoiceId,
@@ -171,7 +165,6 @@ describe('TextToSpeechService', () => {
       expect(result).toBe('https://uploaded-audio.com/eleven.mp3');
       expect(mockDeepgramGenerate).not.toHaveBeenCalled();
       expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
-      expect(mockIncrementUsage).toHaveBeenCalledWith(userId);
       expect(mockPrisma.paragraphAudioCache.upsert).toHaveBeenCalled();
     });
 
@@ -264,7 +257,6 @@ describe('TextToSpeechService', () => {
       expect(mockDeepgramGenerate).toHaveBeenCalled();
       expect(mockEdgeTtsGenerate).toHaveBeenCalled();
       expect(result).toBe('https://uploaded-audio.com/edge.mp3');
-      expect(mockIncrementUsage).not.toHaveBeenCalled();
     });
 
     it('should return cached URL without calling any provider', async () => {
@@ -540,8 +532,6 @@ describe('TextToSpeechService', () => {
       expect(result.results.every((r) => r.audioUrl !== null)).toBe(true);
       expect(result.wasTruncated).toBe(false);
       expect(result.totalParagraphs).toBe(result.results.length);
-      // No quota should be reserved
-      expect(mockRecordUsage).not.toHaveBeenCalled();
       // No providers should be called
       expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
       expect(mockDeepgramGenerate).not.toHaveBeenCalled();
@@ -596,17 +586,9 @@ describe('TextToSpeechService', () => {
       );
     });
 
-    it('should reserve quota for premium users and release unused credits', async () => {
-      // No cache hits
+    it('should return all nulls when premium ElevenLabs batch fails', async () => {
       mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
       mockIsPremiumUser.mockResolvedValue(true);
-      // Reserve all requested credits
-      mockRecordUsage.mockImplementation((_userId: string, credits: number) =>
-        Promise.resolve(credits),
-      );
-      // ElevenLabs fails for all — batch sticks to one provider, so
-      // failed paragraphs return null (will be retried on next request).
-      // All reserved credits should be released since none used ElevenLabs.
       mockElevenLabsGenerate.mockRejectedValue(new Error('ElevenLabs timeout'));
 
       const result = await service.batchTextToSpeechCloudUrls(
@@ -618,16 +600,6 @@ describe('TextToSpeechService', () => {
 
       // Failed paragraphs should have null audioUrl (no fallback to different provider)
       expect(result.results.every((r) => r.audioUrl === null)).toBe(true);
-      // Quota was reserved
-      expect(mockRecordUsage).toHaveBeenCalledWith(userId, expect.any(Number));
-      // All reserved credits should be released since ElevenLabs failed
-      expect(mockReleaseReservedUsage).toHaveBeenCalledWith(
-        userId,
-        expect.any(Number),
-      );
-      const releasedCredits = mockReleaseReservedUsage.mock.calls[0][1];
-      const reservedCredits = mockRecordUsage.mock.calls[0][1];
-      expect(releasedCredits).toBe(reservedCredits);
     });
 
     it('should return all nulls when free-user batch provider fails without falling back', async () => {
@@ -930,7 +902,6 @@ describe('TextToSpeechService', () => {
       it('should downgrade from ElevenLabs to Deepgram when ElevenLabs breaker is OPEN', async () => {
         mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
         mockIsPremiumUser.mockResolvedValue(true);
-        mockRecordUsage.mockResolvedValue(2);
         mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
         mockUploadAudio.mockResolvedValue('https://uploaded.com/audio.mp3');
 
