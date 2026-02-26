@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Req } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -7,7 +7,9 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
-import { CreateActivityLogDto, ActivityLogDto } from './analytics.dto';
+import { CreateActivityLogDto, ActivityLogDto } from './dto/analytics.dto';
+import { UAParser } from 'ua-parser-js';
+import { Request } from 'express';
 
 @ApiTags('activity-logs')
 @Controller('activity-logs')
@@ -18,7 +20,16 @@ export class ActivityLogController {
   @ApiOperation({ summary: 'Log an activity' })
   @ApiBody({ type: CreateActivityLogDto })
   @ApiResponse({ status: 201, type: ActivityLogDto })
-  async create(@Body() dto: CreateActivityLogDto) {
+  async create(@Body() dto: CreateActivityLogDto, @Req() req: Request) {
+    // Detect IP
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    // Detect device info from User-Agent
+    const parser = new UAParser(req.headers['user-agent'] as string);
+    const ua = parser.getResult();
+    dto.os = ua.os.name + ' ' + ua.os.version;
+    dto.deviceName = ua.device.model || ua.browser.name;
+    dto.deviceModel = ua.device.vendor || 'unknown';
+    dto.ipAddress = ip as string;
     return this.analyticsService.create(dto);
   }
 

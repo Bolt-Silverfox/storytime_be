@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
-import { AnalyticsStatsDto } from './analytics.dto';
+import { AnalyticsStatsDto } from './dto/analytics.dto';
 
 @ApiTags('analytics')
 @Controller('analytics')

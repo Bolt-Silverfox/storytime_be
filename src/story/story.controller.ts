@@ -1,72 +1,288 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
   Body,
+  Controller,
+  Delete,
+  Get,
+  Logger,
   Param,
+  Patch,
+  Post,
   Query,
   Req,
   UseGuards,
   UseInterceptors,
-  UploadedFile,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import {
-  ApiTags,
-  ApiOperation,
-  ApiQuery,
-  ApiParam,
-  ApiBody,
   ApiBearerAuth,
+  ApiBody,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
   ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
-import { StoryService } from './story.service';
 import {
-  CreateStoryDto,
-  UpdateStoryDto,
-  StoryImageDto,
-  StoryBranchDto,
-  FavoriteDto,
-  StoryProgressDto,
-  DailyChallengeDto,
-  UploadVoiceDto,
-  CreateElevenLabsVoiceDto,
-  SetPreferredVoiceDto,
-  VoiceResponseDto,
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
+
+import {
   AssignDailyChallengeDto,
+  CategoryDto,
   CompleteDailyChallengeDto,
+  CreateStoryDto,
   DailyChallengeAssignmentDto,
+  DailyChallengeDto,
+  ErrorResponseDto,
+  FavoriteDto,
+  GenerateStoryDto,
   StartStoryPathDto,
-  UpdateStoryPathDto,
+  StoryBranchDto,
+  StoryImageDto,
   StoryPathDto,
-} from './story.dto';
-import { AuthSessionGuard, AuthenticatedRequest } from '../auth/auth.guard';
-import { FileInterceptor } from '@nestjs/platform-express';
+  StoryProgressDto,
+  ThemeDto,
+  UpdateStoryDto,
+  UpdateStoryPathDto,
+  PaginatedStoriesDto,
+  DownloadedStoryDto,
+  ParentRecommendationDto,
+  RecommendationResponseDto,
+  RecommendationsStatsDto,
+  RestrictStoryDto,
+  StoryDto,
+  StoryWithProgressDto,
+  TopPickStoryDto,
+  UserStoryProgressDto,
+  UserStoryProgressResponseDto,
+} from './dto/story.dto';
+import { StoryService } from './story.service';
+
+import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
+import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
+import {
+  StoryAccessGuard,
+  RequestWithStoryAccess,
+} from '@/shared/guards/story-access.guard';
+import { CheckStoryQuota } from '@/shared/decorators/story-quota.decorator';
+import { Throttle } from '@nestjs/throttler';
+import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+} from '@/shared/constants/cache-keys.constants';
+import { StoryQuotaService } from './story-quota.service';
 
 @ApiTags('stories')
 @Controller('stories')
 export class StoryController {
-  constructor(private readonly storyService: StoryService) {}
+  private readonly logger = new Logger(StoryController.name);
+  constructor(
+    private readonly storyService: StoryService,
+    private readonly storyQuotaService: StoryQuotaService,
+  ) {}
 
   @Get()
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get all stories',
-    description:
-      'Retrieve all stories, optionally filtered by theme or category.',
+    summary:
+      'Get stories (optionally filtered by theme, category, recommended, kidId, and age)',
   })
   @ApiQuery({ name: 'theme', required: false, type: String })
   @ApiQuery({ name: 'category', required: false, type: String })
+  @ApiQuery({ name: 'season', required: false, type: String })
+  @ApiQuery({ name: 'recommended', required: false, type: String })
+  @ApiQuery({ name: 'isMostLiked', required: false, type: String })
+  @ApiQuery({ name: 'isSeasonal', required: false, type: String })
+  @ApiQuery({
+    name: 'topPicksFromUs',
+    required: false,
+    type: String,
+    description: 'Get random top picks from us',
+  })
+  @ApiQuery({ name: 'kidId', required: false, type: String })
+  @ApiQuery({ name: 'age', required: false, type: String })
+  @ApiQuery({ name: 'minAge', required: false, type: String })
+  @ApiQuery({ name: 'maxAge', required: false, type: String })
+  @ApiOkResponse({
+    description: 'List of stories',
+    type: CreateStoryDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  @Throttle({
+    long: { limit: THROTTLE_LIMITS.LONG.LIMIT, ttl: THROTTLE_LIMITS.LONG.TTL },
+  }) // 100 per minute
   async getStories(
+    @Req() req: AuthenticatedRequest,
     @Query('theme') theme?: string,
     @Query('category') category?: string,
+    @Query('season') season?: string,
+    @Query('recommended') recommended?: string,
+    @Query('isMostLiked') isMostLiked?: string,
+    @Query('isSeasonal') isSeasonal?: string,
+    @Query('topPicksFromUs') topPicksFromUs?: string,
+    @Query('kidId') kidId?: string,
+    @Query('age') age?: string,
+    @Query('minAge') minAge?: string,
+    @Query('maxAge') maxAge?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number = 12,
+  ): Promise<PaginatedStoriesDto> {
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.max(1, Math.min(100, limit));
+
+    return this.storyService.getStories({
+      userId: req.authUserData.userId,
+      theme,
+      category,
+      season,
+      recommended: recommended === 'true',
+      isMostLiked: isMostLiked === 'true',
+      isSeasonal: isSeasonal === 'true',
+      topPicksFromUs: topPicksFromUs === 'true',
+      kidId,
+      age: age ? parseInt(age, 10) : undefined,
+      minAge: minAge ? parseInt(minAge, 10) : undefined,
+      maxAge: maxAge ? parseInt(maxAge, 10) : undefined,
+      page: safePage,
+      limit: safeLimit,
+    });
+  }
+
+  @Get('homepage/parent')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get parent homepage stories (Recommended, Seasonal, Top Liked)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Homepage stories retrieved successfully.',
+  })
+  @ApiQuery({ name: 'limitRecommended', required: false, type: Number })
+  @ApiQuery({ name: 'limitSeasonal', required: false, type: Number })
+  @ApiQuery({ name: 'limitTopLiked', required: false, type: Number })
+  async getParentHomepage(
+    @Req() req: AuthenticatedRequest,
+    @Query('limitRecommended', new DefaultValuePipe(5), ParseIntPipe)
+    limitRecommended: number,
+    @Query('limitSeasonal', new DefaultValuePipe(5), ParseIntPipe)
+    limitSeasonal: number,
+    @Query('limitTopLiked', new DefaultValuePipe(5), ParseIntPipe)
+    limitTopLiked: number,
   ) {
-    return this.storyService.getStories({ theme, category });
+    return this.storyService.getHomePageStories(
+      req.authUserData.userId,
+      limitRecommended,
+      limitSeasonal,
+      limitTopLiked,
+    );
+  }
+
+  @Get('categories')
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey('categories:all')
+  @CacheTTL(4 * 60 * 60 * 1000)
+  @ApiOperation({ summary: 'Get all categories' })
+  @ApiOkResponse({
+    description: 'List of categories',
+    type: CategoryDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getCategories() {
+    return this.storyService.getCategories();
+  }
+
+  @Get('themes')
+  @ApiOperation({ summary: 'Get all themes' })
+  @ApiOkResponse({
+    description: 'List of themes',
+    type: ThemeDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getThemes() {
+    return this.storyService.getThemes();
+  }
+
+  @Get('seasons')
+  @ApiOperation({ summary: 'Get all seasons' })
+  @ApiOkResponse({
+    description: 'List of seasons',
+    type: ThemeDto, // Using ThemeDto struct or similar since SeasonDto is simple
+    isArray: true,
+  })
+  async getSeasons() {
+    return this.storyService.getSeasons();
   }
 
   @Post()
   @ApiOperation({ summary: 'Create a new story' })
   @ApiBody({ type: CreateStoryDto })
+  @ApiOkResponse({ description: 'Created story', type: CreateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async createStory(@Body() body: CreateStoryDto) {
     return this.storyService.createStory(body);
   }
@@ -75,6 +291,22 @@ export class StoryController {
   @ApiOperation({ summary: 'Update a story' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: UpdateStoryDto })
+  @ApiOkResponse({ description: 'Updated story', type: UpdateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async updateStory(@Param('id') id: string, @Body() body: UpdateStoryDto) {
     return this.storyService.updateStory(id, body);
   }
@@ -82,8 +314,59 @@ export class StoryController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a story' })
   @ApiParam({ name: 'id', type: String })
-  async deleteStory(@Param('id') id: string) {
-    return this.storyService.deleteStory(id);
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete the story (default: false - soft delete)',
+  })
+  @ApiOkResponse({ description: 'Deleted story', type: String })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async deleteStory(
+    @Param('id') id: string,
+    @Query('permanent') permanent: boolean = false,
+  ) {
+    return this.storyService.deleteStory(id, permanent);
+  }
+
+  @Post(':id/undo-delete')
+  @ApiOperation({ summary: 'Restore a soft deleted story' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({
+    description: 'Story restored successfully',
+    type: UpdateStoryDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - Story is not deleted',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async undoDeleteStory(@Param('id') id: string) {
+    return this.storyService.undoDeleteStory(id);
   }
 
   // --- Images ---
@@ -91,6 +374,22 @@ export class StoryController {
   @ApiOperation({ summary: 'Add an image to a story' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: StoryImageDto })
+  @ApiOkResponse({ description: 'Added image', type: StoryImageDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async addImage(@Param('id') id: string, @Body() body: StoryImageDto) {
     return this.storyService.addImage(id, body);
   }
@@ -100,6 +399,22 @@ export class StoryController {
   @ApiOperation({ summary: 'Add a branch to a story' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: StoryBranchDto })
+  @ApiOkResponse({ description: 'Added branch', type: StoryBranchDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async addBranch(@Param('id') id: string, @Body() body: StoryBranchDto) {
     return this.storyService.addBranch(id, body);
   }
@@ -110,31 +425,129 @@ export class StoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add a story to favorites' })
   @ApiBody({ type: FavoriteDto })
-  async addFavorite(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: FavoriteDto,
-  ) {
-    return this.storyService.addFavorite(req.authUserData.userId, body);
+  @ApiOkResponse({ description: 'Added favorite', type: FavoriteDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async addFavorite(@Body() body: FavoriteDto) {
+    return this.storyService.addFavorite(body);
   }
 
-  @Delete('favorites/:storyId')
+  @Delete('favorites/:kidId/:storyId')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Remove a story from favorites' })
+  @ApiParam({ name: 'kidId', type: String })
   @ApiParam({ name: 'storyId', type: String })
+  @ApiOkResponse({ description: 'Removed favorite', type: String })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async removeFavorite(
-    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyService.removeFavorite(req.authUserData.userId, storyId);
+    return this.storyService.removeFavorite(kidId, storyId);
   }
 
-  @Get('favorites')
+  @Get('favorites/:kidId')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get user favorites' })
-  async getFavorites(@Req() req: AuthenticatedRequest) {
-    return this.storyService.getFavorites(req.authUserData.userId);
+  @ApiOperation({ summary: 'Get kid favorites' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiOkResponse({
+    description: 'List of favorites',
+    type: FavoriteDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getFavorites(@Param('kidId') kidId: string) {
+    return this.storyService.getFavorites(kidId);
+  }
+
+  // === RESTRICTED STORIES ENDPOINTS ===
+
+  @Post('/auth/restrict')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Restrict a story for a specific kid' })
+  @ApiBody({ type: RestrictStoryDto })
+  async restrictStory(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: RestrictStoryDto,
+  ) {
+    return this.storyService.restrictStory({
+      ...body,
+      userId: req.authUserData.userId,
+    });
+  }
+
+  @Delete('/auth/restrict/:kidId/:storyId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unrestrict a story for a kid' })
+  async unrestrictStory(
+    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+    @Param('storyId') storyId: string,
+  ) {
+    return this.storyService.unrestrictStory(
+      kidId,
+      storyId,
+      req.authUserData.userId,
+    );
+  }
+
+  @Get('/auth/restrict/:kidId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get list of restricted stories for a kid' })
+  async getRestrictedStories(
+    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+  ) {
+    return this.storyService.getRestrictedStories(
+      kidId,
+      req.authUserData.userId,
+    );
   }
 
   // --- Progress ---
@@ -143,23 +556,231 @@ export class StoryController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Set story progress' })
   @ApiBody({ type: StoryProgressDto })
-  async setProgress(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: StoryProgressDto,
-  ) {
-    return this.storyService.setProgress(req.authUserData.userId, body);
+  @ApiOkResponse({ description: 'Set progress', type: StoryProgressDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async setProgress(@Body() body: StoryProgressDto) {
+    return this.storyService.setProgress(body);
   }
 
-  @Get('progress/:storyId')
+  @Get('progress/:kidId/:storyId')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get story progress' })
+  @ApiParam({ name: 'kidId', type: String })
   @ApiParam({ name: 'storyId', type: String })
+  @ApiOkResponse({ description: 'Progress for story', type: StoryProgressDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
   async getProgress(
+    @Param('kidId') kidId: string,
+    @Param('storyId') storyId: string,
+  ) {
+    return this.storyService.getProgress(kidId, storyId);
+  }
+
+  // --- USER STORY PROGRESS (Parent/User - non-kid specific) ---
+
+  @Post('user/progress')
+  @UseGuards(AuthSessionGuard, StoryAccessGuard)
+  @ApiBearerAuth()
+  @CheckStoryQuota()
+  @ApiOperation({
+    summary: 'Record story progress for authenticated user (parent account)',
+  })
+  @ApiBody({ type: UserStoryProgressDto })
+  @ApiOkResponse({
+    description: 'Progress recorded',
+    type: UserStoryProgressResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Story limit reached',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async setUserProgress(
+    @Req() req: RequestWithStoryAccess,
+    @Body() body: UserStoryProgressDto,
+  ) {
+    // Execute the operation first, then record quota on success
+    const result = await this.storyService.setUserProgress(
+      req.authUserData!.userId,
+      body,
+    );
+
+    // Record access only after successful operation to avoid consuming quota on failures
+    if (
+      req.authUserData?.userId &&
+      req.storyAccessResult?.reason !== 'already_read' &&
+      req.storyAccessResult?.reason !== 'kid_created'
+    ) {
+      await this.storyQuotaService.recordNewStoryAccess(
+        req.authUserData.userId,
+        body.storyId,
+      );
+    }
+
+    return result;
+  }
+
+  @Get('user/progress/:storyId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get story progress for authenticated user' })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiOkResponse({
+    description: 'Progress for story',
+    type: UserStoryProgressResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getUserProgress(
     @Req() req: AuthenticatedRequest,
     @Param('storyId') storyId: string,
   ) {
-    return this.storyService.getProgress(req.authUserData.userId, storyId);
+    return this.storyService.getUserProgress(req.authUserData.userId, storyId);
+  }
+
+  @Get('user/library/continue-reading')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get in-progress stories for authenticated user' })
+  @ApiOkResponse({
+    description: 'List of in-progress stories',
+    type: StoryWithProgressDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  async getUserContinueReading(@Req() req: AuthenticatedRequest) {
+    return this.storyService.getUserContinueReading(req.authUserData.userId);
+  }
+
+  @Get('user/library/completed')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get completed stories for authenticated user' })
+  @ApiOkResponse({
+    description: 'List of completed stories',
+    type: StoryDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  async getUserCompletedStories(@Req() req: AuthenticatedRequest) {
+    return this.storyService.getUserCompletedStories(req.authUserData.userId);
+  }
+
+  @Delete('user/library/remove/:storyId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Remove story from user library (resets progress and favorites)',
+  })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiOkResponse({ description: 'Story removed from library successfully' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  async removeFromUserLibrary(
+    @Req() req: AuthenticatedRequest,
+    @Param('storyId') storyId: string,
+  ) {
+    await this.storyService.removeFromUserLibrary(
+      req.authUserData.userId,
+      storyId,
+    );
+    return { message: 'Story removed from library successfully' };
+  }
+
+  @Get('user/quota')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get story quota status for authenticated user' })
+  @ApiOkResponse({
+    description: 'Quota status',
+    schema: {
+      type: 'object',
+      properties: {
+        isPremium: { type: 'boolean' },
+        unlimited: { type: 'boolean' },
+        used: { type: 'number' },
+        baseLimit: { type: 'number' },
+        bonusStories: { type: 'number' },
+        totalAllowed: { type: 'number' },
+        remaining: { type: 'number' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  async getQuotaStatus(@Req() req: AuthenticatedRequest) {
+    return this.storyQuotaService.getQuotaStatus(req.authUserData.userId);
   }
 
   // --- Daily Challenge ---
@@ -210,77 +831,73 @@ export class StoryController {
     return this.storyService.getAssignmentById(id);
   }
 
-  // --- Voices ---
-  @Post('voices/upload')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @UseInterceptors(FileInterceptor('file'))
-  @ApiOperation({ summary: 'Upload a custom voice (audio file)' })
-  async uploadVoice(
-    @Req() req: AuthenticatedRequest,
-    @UploadedFile() file: Express.Multer.File,
-    @Body() body: UploadVoiceDto,
-  ): Promise<VoiceResponseDto> {
-    // Upload file to Cloudinary
-    const url = await this.storyService.uploadService.uploadFile(file);
-    return this.storyService.uploadVoice(
-      req.authUserData.userId,
-      url.secure_url,
-      body,
+  @Post('daily-challenge/assign-all')
+  @ApiOperation({
+    summary: 'Assign daily challenge to all kids (admin/manual trigger)',
+  })
+  @ApiOkResponse({ description: 'Daily challenges assigned to all kids.' })
+  async assignDailyChallengeToAllKids() {
+    await this.storyService.assignDailyChallengeToAllKids();
+    return { message: 'Daily challenges assigned to all kids.' };
+  }
+
+  @Get('daily-challenge/today')
+  @ApiOperation({ summary: "Get today's daily challenge assignment for a kid" })
+  @ApiQuery({ name: 'kidId', required: true, type: String })
+  @ApiOkResponse({
+    description: "Today's daily challenge assignment",
+    type: DailyChallengeAssignmentDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No daily challenge assignment found',
+    type: ErrorResponseDto,
+  })
+  async getTodaysDailyChallengeAssignment(@Query('kidId') kidId: string) {
+    this.logger.log(
+      `Getting today's daily challenge assignment for kid ${kidId}`,
     );
+    return await this.storyService.getTodaysDailyChallengeAssignment(kidId);
   }
 
-  @Post('voices/elevenlabs')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Register a custom ElevenLabs voice' })
-  async createElevenLabsVoice(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: CreateElevenLabsVoiceDto,
-  ): Promise<VoiceResponseDto> {
-    return this.storyService.createElevenLabsVoice(
-      req.authUserData.userId,
-      body,
+  @Get('daily-challenge/kid/:kidId/week')
+  @ApiOperation({
+    summary:
+      'Get daily challenge assignments for a kid for a week (Sunday to Saturday)',
+  })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({
+    name: 'weekStart',
+    required: true,
+    type: String,
+    description: 'Start of the week (YYYY-MM-DD, must be a Sunday)',
+  })
+  @ApiResponse({ status: 200, type: [DailyChallengeAssignmentDto] })
+  @ApiResponse({
+    status: 404,
+    description: 'No daily challenge assignments found',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Internal Server Error',
+    type: ErrorResponseDto,
+  })
+  async getWeeklyAssignmentsForKid(
+    @Param('kidId') kidId: string,
+    @Query('weekStart') weekStart: string,
+  ) {
+    const weekStartDate = new Date(weekStart);
+    weekStartDate.setHours(0, 0, 0, 0);
+    return this.storyService.getWeeklyDailyChallengeAssignments(
+      kidId,
+      weekStartDate,
     );
-  }
-
-  @Get('voices')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all voices for the user' })
-  async listVoices(
-    @Req() req: AuthenticatedRequest,
-  ): Promise<VoiceResponseDto[]> {
-    return this.storyService.listVoices(req.authUserData.userId);
-  }
-
-  @Patch('voices/preferred')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Set preferred voice for the user' })
-  async setPreferredVoice(
-    @Req() req: AuthenticatedRequest,
-    @Body() body: SetPreferredVoiceDto,
-  ): Promise<void> {
-    return this.storyService.setPreferredVoice(req.authUserData.userId, body);
-  }
-
-  @Get('voices/preferred')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get preferred voice for the user' })
-  async getPreferredVoice(
-    @Req() req: AuthenticatedRequest,
-  ): Promise<VoiceResponseDto | null> {
-    return this.storyService.getPreferredVoice(req.authUserData.userId);
-  }
-
-  @Get('voices/available')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'List all available ElevenLabs voices' })
-  async listAvailableVoices(): Promise<any[]> {
-    return this.storyService.fetchAvailableVoices();
   }
 
   // --- Story Path / Choice Tracking ---
@@ -314,5 +931,397 @@ export class StoryController {
   @ApiResponse({ status: 200, type: StoryPathDto })
   async getStoryPathById(@Param('id') id: string) {
     return this.storyService.getStoryPathById(id);
+  }
+
+  @Post('generate')
+  @UseGuards(AuthSessionGuard, SubscriptionThrottleGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate a story using AI' })
+  @ApiBody({ type: GenerateStoryDto })
+  @ApiOkResponse({ description: 'Generated story', type: CreateStoryDto })
+  @Throttle({
+    medium: {
+      limit: THROTTLE_LIMITS.GENERATION.FREE.LIMIT,
+      ttl: THROTTLE_LIMITS.GENERATION.FREE.TTL,
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  async generateStory(@Body() body: GenerateStoryDto) {
+    // If kidId is provided, use the specialized method
+    if (body.kidId) {
+      return this.storyService.generateStoryForKid(
+        body.kidId,
+        body.themes,
+        body.categories,
+        body.seasonIds,
+        body.kidName,
+      );
+    }
+
+    // Otherwise, generate with provided options
+    const options = {
+      theme: body.themes || ['Adventure'],
+      category: body.categories || ['Bedtime Stories'],
+      ageMin: body.ageMin || 4,
+      ageMax: body.ageMax || 8,
+      language: body.language || 'English',
+      kidName: body.kidName,
+      additionalContext: body.additionalContext,
+      seasonIds: body.seasonIds,
+    };
+
+    return this.storyService.generateStoryWithAI(options);
+  }
+
+  @Post('generate/kid/:kidId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Generate a personalized story for a specific kid',
+  })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiQuery({ name: 'theme', required: false, type: String })
+  @ApiQuery({ name: 'category', required: false, type: String })
+  @ApiOkResponse({ description: 'Generated story', type: CreateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async generateStoryForKid(
+    @Param('kidId') kidId: string,
+    @Query('theme') theme?: string,
+    @Query('category') category?: string,
+  ) {
+    const themes = theme ? [theme] : undefined;
+    const categories = category ? [category] : undefined;
+    return this.storyService.generateStoryForKid(kidId, themes, categories);
+  }
+
+  @Get(':id')
+  @UseGuards(AuthSessionGuard, StoryAccessGuard)
+  @ApiBearerAuth()
+  @CheckStoryQuota()
+  @ApiOperation({ summary: 'Get a story by id' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ description: 'Story', type: CreateStoryDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Story limit reached',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getStoryById(
+    @Param('id') id: string,
+    @Req() req: RequestWithStoryAccess,
+  ) {
+    const story = await this.storyService.getStoryById(id);
+
+    // Record access if this is a new story for the user
+    if (
+      req.authUserData?.userId &&
+      req.storyAccessResult?.reason !== 'already_read' &&
+      req.storyAccessResult?.reason !== 'kid_created'
+    ) {
+      await this.storyQuotaService.recordNewStoryAccess(
+        req.authUserData.userId,
+        id,
+      );
+    }
+
+    return story;
+  }
+
+  // --- LIBRARY ENDPOINTS ---
+
+  @Get('library/:kidId/continue-reading')
+  @ApiOperation({ summary: 'Get stories currently in progress' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [StoryWithProgressDto] })
+  async getContinueReading(@Param('kidId') kidId: string) {
+    return this.storyService.getContinueReading(kidId);
+  }
+
+  @Get('library/:kidId/completed')
+  @ApiOperation({ summary: 'Get completed stories history' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [StoryDto] })
+  async getCompleted(@Param('kidId') kidId: string) {
+    return this.storyService.getCompletedStories(kidId);
+  }
+
+  @Get('library/:kidId/created')
+  @ApiOperation({ summary: 'Get stories created by the kid' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [StoryDto] })
+  async getCreated(@Param('kidId') kidId: string) {
+    return this.storyService.getCreatedStories(kidId);
+  }
+
+  @Get('library/:kidId/downloads')
+  @ApiOperation({ summary: 'Get downloaded stories' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiResponse({ status: 200, type: [StoryDto] })
+  async getDownloads(@Param('kidId') kidId: string) {
+    return this.storyService.getDownloads(kidId);
+  }
+
+  @Post('library/:kidId/download/:storyId')
+  @ApiOperation({ summary: 'Mark a story as downloaded' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiResponse({ status: 201, type: DownloadedStoryDto })
+  async addDownload(
+    @Param('kidId') kidId: string,
+    @Param('storyId') storyId: string,
+  ) {
+    return this.storyService.addDownload(kidId, storyId);
+  }
+
+  @Delete('library/:kidId/download/:storyId')
+  @ApiOperation({ summary: 'Remove a story from downloads' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiResponse({ status: 200, type: DownloadedStoryDto })
+  async removeDownload(
+    @Param('kidId') kidId: string,
+    @Param('storyId') storyId: string,
+  ) {
+    return this.storyService.removeDownload(kidId, storyId);
+  }
+
+  @Delete('library/:kidId/remove/:storyId')
+  @ApiOperation({
+    summary: 'Remove from library (Resets progress, favs, downloads)',
+  })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiParam({ name: 'storyId', type: String })
+  @ApiResponse({
+    status: 200,
+    description: 'Story removed from library successfully',
+  })
+  async removeFromLibrary(
+    @Param('kidId') kidId: string,
+    @Param('storyId') storyId: string,
+  ) {
+    await this.storyService.removeFromLibrary(kidId, storyId);
+    return { message: 'Story removed from library successfully' };
+  }
+
+  // --- PARENT RECOMMENDATIONS ---
+
+  @Post('recommend')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Recommend a story to your kid' })
+  @ApiBody({ type: ParentRecommendationDto })
+  @ApiOkResponse({
+    description: 'Story recommended successfully',
+    type: RecommendationResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async recommendStory(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: ParentRecommendationDto,
+  ) {
+    return this.storyService.recommendStoryToKid(req.authUserData.userId, body);
+  }
+
+  @Get('recommendations/kid/:kidId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all recommended stories for a kid' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiOkResponse({
+    description: 'List of recommended stories',
+    type: RecommendationResponseDto,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getKidRecommendations(
+    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+  ) {
+    return this.storyService.getKidRecommendations(
+      kidId,
+      req.authUserData.userId,
+    );
+  }
+
+  @Delete('recommendations/:recommendationId')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a recommendation' })
+  @ApiParam({ name: 'recommendationId', type: String })
+  @ApiQuery({
+    name: 'permanent',
+    required: false,
+    type: Boolean,
+    description: 'Permanently delete (default: false - soft delete)',
+  })
+  @ApiOkResponse({ description: 'Recommendation deleted successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async deleteRecommendation(
+    @Req() req: AuthenticatedRequest,
+    @Param('recommendationId') recommendationId: string,
+    @Query('permanent') permanent: boolean = false,
+  ) {
+    return this.storyService.deleteRecommendation(
+      recommendationId,
+      req.authUserData.userId,
+      permanent,
+    );
+  }
+
+  @Get('recommendations/kid/:kidId/stats')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get recommendation statistics for a kid' })
+  @ApiParam({ name: 'kidId', type: String })
+  @ApiOkResponse({
+    description: 'Recommendation statistics',
+    type: RecommendationsStatsDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found',
+    type: ErrorResponseDto,
+  })
+  async getRecommendationStats(
+    @Req() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+  ) {
+    return this.storyService.getRecommendationStats(
+      kidId,
+      req.authUserData.userId,
+    );
+  }
+
+  @Get('recommendations/top-picks')
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey('recommendations:top-picks')
+  @CacheTTL(30 * 60 * 1000) // 30 minutes
+  @ApiOperation({
+    summary: 'Get top picked stories by parents (most recommended)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of stories to return (default: 10)',
+  })
+  @ApiOkResponse({
+    description: 'List of top picked stories with recommendation counts',
+    type: TopPickStoryDto,
+    isArray: true,
+  })
+  async getTopPicksFromParents(
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ) {
+    return this.storyService.getTopPicksFromParents(Math.min(limit, 50));
+  }
+
+  @Get('top-picks-from-us')
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey(CACHE_KEYS.TOP_PICKS_FROM_US)
+  @CacheTTL(CACHE_TTL_MS.TOP_PICKS_FROM_US)
+  @ApiOperation({
+    summary: 'Get curated random stories (refreshes every 24 hours)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of stories to return (default: 10)',
+  })
+  @ApiOkResponse({
+    description: 'List of random curated stories',
+    type: StoryDto,
+    isArray: true,
+  })
+  async getTopPicksFromUs(
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ) {
+    return this.storyService.getTopPicksFromUs(Math.min(limit, 20));
   }
 }
