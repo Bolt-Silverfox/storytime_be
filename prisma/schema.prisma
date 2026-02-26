@@ -1118,6 +1118,7 @@ model ParagraphAudioCache {
   storyId   String
   textHash  String
   voiceId   String
+  provider  String   @default("unknown")
   audioUrl  String
   story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
