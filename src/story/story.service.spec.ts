@@ -1,4 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { StoryService } from './story.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from './gemini.service';
@@ -412,6 +414,43 @@ describe('StoryService - Library & Generation', () => {
       expect(result[0]).toHaveProperty('categories');
       expect(result[0]).toHaveProperty('images');
       expect(result[0].themes).toEqual([{ id: 'theme-1', name: 'Adventure' }]);
+    });
+  });
+
+  // --- 5. CURSOR ERROR HANDLING ---
+  describe('withCursorErrorHandling (via getCreatedStories)', () => {
+    it('should throw BadRequestException for invalid cursor (P2025)', async () => {
+      prisma.story.findMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Record not found', {
+          code: 'P2025',
+          clientVersion: '5.0.0',
+        }),
+      );
+
+      await expect(
+        service.getCreatedStories('kid-1', 'invalid-cursor', 10),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should re-throw non-P2025 Prisma errors', async () => {
+      prisma.story.findMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint', {
+          code: 'P2002',
+          clientVersion: '5.0.0',
+        }),
+      );
+
+      await expect(
+        service.getCreatedStories('kid-1', 'some-cursor', 10),
+      ).rejects.toThrow(Prisma.PrismaClientKnownRequestError);
+    });
+
+    it('should re-throw non-Prisma errors', async () => {
+      prisma.story.findMany.mockRejectedValue(new Error('Network error'));
+
+      await expect(
+        service.getCreatedStories('kid-1', 'some-cursor', 10),
+      ).rejects.toThrow('Network error');
     });
   });
 });

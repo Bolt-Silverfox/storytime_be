@@ -1,7 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
+import { StoryQuotaService } from './story-quota.service';
+
 // Mock the Service so we test the Controller in isolation
+const mockStoryQuotaService = {
+  recordNewStoryAccess: jest.fn(),
+};
+
 const mockStoryService = {
   generateStoryForKid: jest.fn(),
   getCreatedStories: jest.fn(),
@@ -21,6 +27,7 @@ describe('StoryController', () => {
       controllers: [StoryController],
       providers: [
         { provide: StoryService, useValue: mockStoryService },
+        { provide: StoryQuotaService, useValue: mockStoryQuotaService },
         {
           provide: 'CACHE_MANAGER',
           useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() },
@@ -28,7 +35,7 @@ describe('StoryController', () => {
       ],
     })
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      .overrideGuard(require('../auth/auth.guard').AuthSessionGuard) // Bypass Auth Guard
+      .overrideGuard(require('../shared/guards/auth.guard').AuthSessionGuard) // Bypass Auth Guard
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -76,7 +83,7 @@ describe('StoryController', () => {
       expect(service.getCreatedStories).toHaveBeenCalledWith(
         kidId,
         undefined,
-        expect.any(Number),
+        undefined,
       );
     });
 
@@ -85,7 +92,7 @@ describe('StoryController', () => {
       expect(service.getDownloads).toHaveBeenCalledWith(
         kidId,
         undefined,
-        expect.any(Number),
+        undefined,
       );
     });
 
