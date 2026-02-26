@@ -289,7 +289,7 @@ export class VoiceService {
       ([key, config]) => {
         const dbVoice = dbVoiceMap.get(config.elevenLabsId);
         return {
-          id: dbVoice?.id ?? key,
+          id: key,
           name: key,
           displayName: config.name,
           type: VoiceSourceType.ELEVENLABS,
