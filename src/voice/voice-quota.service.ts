@@ -386,12 +386,14 @@ export class VoiceQuotaService {
     const usage = await this.prisma.userUsage.findUnique({
       where: { userId },
     });
-    if (usage?.selectedSecondVoiceId) {
-      const lockedCanonical = await this.resolveCanonicalVoiceId(
-        usage.selectedSecondVoiceId,
-      );
-      if (lockedCanonical === requestedCanonical) return true;
-    }
+
+    // No voice locked yet — allow any voice (locking happens downstream in canFreeUserUseElevenLabs)
+    if (!usage?.selectedSecondVoiceId) return true;
+
+    const lockedCanonical = await this.resolveCanonicalVoiceId(
+      usage.selectedSecondVoiceId,
+    );
+    if (lockedCanonical === requestedCanonical) return true;
 
     return false;
   }
