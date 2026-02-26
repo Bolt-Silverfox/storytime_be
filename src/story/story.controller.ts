@@ -116,6 +116,12 @@ export class StoryController {
     type: String,
     description: 'Cursor for cursor-based pagination',
   })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Maximum number of items to return for pagination',
+  })
   @ApiOkResponse({
     description: 'List of stories',
     type: CreateStoryDto,
@@ -177,6 +183,12 @@ export class StoryController {
       cursor !== undefined &&
       topPicksFromUs !== 'true' &&
       isMostLiked !== 'true';
+
+    if (cursor !== undefined && !useCursorMode) {
+      this.logger.warn(
+        `Cursor pagination ignored: cursor="${cursor}" bypassed because topPicksFromUs=${topPicksFromUs}, isMostLiked=${isMostLiked}. Falling back to offset pagination.`,
+      );
+    }
 
     if (useCursorMode) {
       const { cursor: safeCursor, limit: safeLimit } =
