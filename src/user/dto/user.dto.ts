@@ -1,0 +1,38 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional, IsString, IsUrl } from 'class-validator';
+
+export class UpdateUserDto {
+  @ApiProperty({ example: 'John Doe', required: false })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiProperty({ example: 'en', required: false })
+  @IsOptional()
+  @IsString()
+  language?: string;
+
+  @ApiProperty({ example: 'Nigeria', required: false })
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @ApiProperty({ example: 1, required: false })
+  @IsOptional()
+  @IsString()
+  numberOfKids?: number;
+
+  @ApiProperty({ example: 'https://example.com/avatar.jpg', required: false })
+  @IsOptional()
+  @IsUrl()
+  avatarUrl?: string;
+
+  @ApiProperty({ example: 'avatar-id', required: false })
+  @IsOptional()
+  @IsString()
+  avatarId?: string;
+
+  @ApiProperty({ example: true, required: false })
+  @IsOptional()
+  biometricsEnabled?: boolean;
+}

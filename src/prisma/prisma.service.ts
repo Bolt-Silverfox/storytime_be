@@ -1,16 +1,37 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleDestroy,
+  OnModuleInit,
+  Logger,
+} from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import IHealth, { HealthResponse } from 'src/health/Ihealth.interfaces';
+import IHealth, { HealthResponse } from '@/health/Ihealth.interfaces';
 
 @Injectable()
-class PrismaService
+export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy, IHealth
 {
-  async onModuleInit(): Promise<void> {
-    await this.$connect();
+  private readonly logger = new Logger(PrismaService.name);
+
+  constructor() {
+    // Configure connection pool via datasource URL parameters
+    // These can be overridden in DATABASE_URL: ?connection_limit=10&pool_timeout=10
+    super({
+      datasources: {
+        db: {
+          url: process.env.DATABASE_URL,
+        },
+      },
+      log:
+        process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+    });
   }
 
+  async onModuleInit(): Promise<void> {
+    await this.$connect();
+    this.logger.log('Database connection established');
+  }
   async onModuleDestroy() {
     await this.$disconnect();
   }
@@ -26,8 +47,7 @@ class PrismaService
         message: 'Prisma is up and running',
         duration: Date.now() - start,
       };
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (error) {
+    } catch {
       return {
         service: 'prisma',
         status: 'down',
@@ -37,4 +57,3 @@ class PrismaService
     }
   }
 }
-export default PrismaService;

@@ -1,101 +1,204 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Storytime Backend API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A NestJS-based backend API for the Storytime application, providing interactive storytelling experiences for children with AI-powered story generation, user management, and content delivery.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Features
 
-## Storytime Backend
+- **Authentication & Authorization**: JWT-based authentication with user registration and login
+- **User Management**: User profiles, settings, and preferences
+- **Story Module**: AI-powered story generation using Google Generative AI
+  - Theme and adventure-based stories
+  - Story seeding and management
+- **Settings**: User preferences including content filters, screen time, and language
+- **Analytics**: User activity tracking and insights
+- **Rewards**: User reward system
+- **Notifications**: User notification management
+- **File Upload**: Cloudinary integration for media uploads
+- **Health Checks**: API health monitoring endpoint
+- **API Documentation**: Interactive Swagger UI at `/docs`
 
-This project is a NestJS backend for the Storytime web app, using PostgreSQL and Prisma ORM.
+## Tech Stack
 
-### Features
-- Auth module: User registration, login, JWT authentication
-- User module: User profile management
-- Settings module: User settings (content filter, screen time, language)
-- Prisma ORM for PostgreSQL
-- API documentation with Swagger (available at `/docs`)
+- **Framework**: NestJS 11.x
+- **Database**: PostgreSQL with Prisma ORM
+- **Authentication**: JWT with bcryptjs
+- **AI Integration**: Google Generative AI
+- **File Storage**: Cloudinary
+- **Validation**: class-validator, class-transformer, Zod
+- **Process Management**: PM2
+- **API Documentation**: Swagger/OpenAPI
 
-### Getting Started
+## Getting Started
 
-#### 1. Install dependencies
+### Prerequisites
+
+- Node.js (v18+)
+- pnpm
+- PostgreSQL database
+- Cloudinary account (for file uploads)
+- Google Generative AI API key (for story generation)
+
+### Installation
+
+1. Install dependencies:
 ```bash
 pnpm install
 ```
-
-#### 2. Set up environment variables
-Create a `.env` file in the `prisma` directory with your PostgreSQL connection string:
+2. Set up environment variables:
+Create a `.env` file in the project root with the following:
 ```env
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=public"
+JWT_SECRET="your-jwt-secret"
+GOOGLE_AI_API_KEY="your-google-ai-key"
+CLOUDINARY_CLOUD_NAME="your-cloudinary-cloud-name"
+CLOUDINARY_API_KEY="your-cloudinary-api-key"
+CLOUDINARY_API_SECRET="your-cloudinary-api-secret"
 ```
 
-#### 3. Run database migrations
+3. Run database migrations:
 ```bash
-pnpx prisma migrate dev --name init
+pnpm db:migrate:deploy
 ```
 
-#### 4. Start the development server
+4. Generate Prisma client:
 ```bash
-pnpm run start:dev
+pnpm db:generate
 ```
-
-#### 5. Access Swagger API docs
-Visit [http://localhost:3000/docs](http://localhost:3000/docs) for interactive API documentation.
-
-### Project Structure
-- `src/auth` - Authentication logic and endpoints
-- `src/user` - User profile endpoints
-- `src/settings` - User settings endpoints
-- `prisma/schema.prisma` - Prisma data models
-
-### Useful Commands
-- `pnpx prisma studio` - Visual database browser
-- `pnpx prisma generate` - Generate Prisma client
-
-## Project setup
-
+5. (Optional) Seed the database with initial stories:
 ```bash
-$ pnpm install
+pnpm db:seed
 ```
 
-## Compile and run the project
+### Development
 
+Start the development server with hot-reload:
 ```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+pnpm start:dev
 ```
 
-## Run tests
+The API will be available at `http://localhost:3000`
 
+Access Swagger documentation at `http://localhost:3000/docs`
+
+### Production
+
+Build and start the application:
 ```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+pnpm build
+pnpm start:prod
 ```
+
+Or use PM2 for process management:
+```bash
+pnpm start:pm2:prod
+```
+
+### Deployment
+
+Deploy to development environment (runs migrations, generates Prisma client, and starts with PM2):
+```bash
+pnpm deploy:dev
+```
+
+## Project Structure
+
+```
+src/
+├── analytics/      - User activity tracking and analytics
+├── auth/          - Authentication (login, register, JWT)
+├── config/        - Application configuration
+├── health/        - Health check endpoints
+├── notification/  - User notifications
+├── prisma/        - Prisma client module
+├── reward/        - User reward system
+├── settings/      - User settings and preferences
+├── story/         - Story generation and management
+├── upload/        - File upload handling (Cloudinary)
+├── user/          - User profile management
+├── utils/         - Shared utilities
+├── app.module.ts  - Root application module
+└── main.ts        - Application entry point
+```
+
+## Available Scripts
+
+### Development
+- `pnpm start:dev` - Start development server with watch mode
+- `pnpm start:debug` - Start with debugger
+
+### Database
+- `pnpm db:generate` - Generate Prisma client
+- `pnpm db:migrate:deploy` - Run migrations (production)
+- `pnpm db:migrate:dev` - Create new migration (development)
+- `pnpm db:reset` - Reset database
+- `pnpm db:seed` - Seed database with stories
+
+### Production
+- `pnpm build` - Build the application
+- `pnpm start:prod` - Start production server
+- `pnpm start:pm2:dev` - Start/restart with PM2 (development)
+- `pnpm start:pm2:staging` - Start/restart with PM2 (staging)
+- `pnpm start:pm2:prod` - Start/restart with PM2 (production)
+- `pnpm deploy:dev` - Deploy to dev environment
+- `pnpm deploy:staging` - Deploy to staging environment
+- `pnpm deploy:prod` - Deploy to production environment
+
+### Code Quality
+- `pnpm lint` - Lint and fix code
+- `pnpm format` - Format code with Prettier
+
+### Testing
+- `pnpm test` - Run unit tests
+- `pnpm test:watch` - Run tests in watch mode
+- `pnpm test:cov` - Generate test coverage
+- `pnpm test:e2e` - Run end-to-end tests
+- `pnpm test:debug` - Run tests with debugger
+
+## Database Management
+
+### Prisma Studio
+Launch the visual database browser:
+```bash
+pnpx prisma studio
+```
+
+## Achievement / Badge Per-Child (kidId) Changes
+
+This project was updated to support per-child (per `Kid`) badge progress. Key notes:
+
+- The Prisma model `UserBadge` now includes an optional `kidId` field and the unique constraint is on `(userId, kidId, badgeId)`. This allows storing badges per child as well as parent-level badges.
+- Service updates: `BadgeService.updateBadgeProgress(userId, badgeType, increment, metadata, kidId?)` accepts an optional `kidId` to scope progress.
+- The `BadgeProgressEngine` now propagates `kidId` from activity events into badge updates when available.
+
+Important migration steps (run locally):
+
+1. Create a migration to update the database schema:
+```powershell
+pnpm db:migrate:dev --name add-userbadge-kidid
+```
+
+2. Generate the Prisma client:
+```powershell
+pnpm db:generate
+```
+
+3. Initialize badges for existing users (optional): the `BadgeService.initializeUserBadges(userId)` will create both parent-level and per-kid badge records for each user. You can call this from a seed script or an admin endpoint.
+
+Testing the kid-scoped endpoints and badge flow (Postman):
+
+1. Start the server:
+```powershell
+pnpm start:dev
+```
+
+2. Create or use an authenticated parent user and create a `Kid` record.
+
+3. Trigger a kid-scoped activity (for example, complete a daily challenge): POST to `/achievement/complete-daily-challenge` (or call the equivalent endpoint) with the `kidId` in the body. The engine will record activity and update the per-kid `UserBadge` record.
+
+4. Retrieve badges for the kid:
+- GET `/badges/preview?kidId=<kidId>` — returns top 3 badges scoped to that kid.
+- GET `/badges/full?kidId=<kidId>` — returns the full badge list for the kid.
+
+## License
+
+UNLICENSED - Private project
