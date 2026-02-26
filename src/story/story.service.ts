@@ -54,7 +54,10 @@ import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
-import { PaginationUtil } from '@/shared/utils/pagination.util';
+import {
+  DEFAULT_CURSOR_LIMIT,
+  PaginationUtil,
+} from '@/shared/utils/pagination.util';
 
 @Injectable()
 export class StoryService {
@@ -358,8 +361,6 @@ export class StoryService {
     theme?: string;
     category?: string;
     season?: string;
-    recommended?: boolean;
-    isMostLiked?: boolean;
     isSeasonal?: boolean;
     age?: number;
     minAge?: number;
@@ -368,11 +369,9 @@ export class StoryService {
     cursor?: string;
     limit?: number;
   }): Promise<CursorPaginatedStoriesDto> {
-    const limit = filter.limit || 20;
+    const limit = filter.limit ?? DEFAULT_CURSOR_LIMIT;
     const { where } = await this.buildStoryWhereClause(filter);
 
-    // isMostLiked uses aggregate ordering incompatible with cursors;
-    // the controller prevents it from reaching this method.
     const orderBy = [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
     const stories = await this.withCursorErrorHandling(() =>
@@ -392,17 +391,13 @@ export class StoryService {
       }),
     );
 
-    const hasNextPage = stories.length > limit;
-    if (hasNextPage) stories.pop();
-    const enriched = await this.enrichWithReadStatus(filter.userId, stories);
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      stories,
+      limit,
+    );
+    const enriched = await this.enrichWithReadStatus(filter.userId, data);
 
-    return {
-      data: enriched,
-      pagination: {
-        nextCursor: hasNextPage ? stories[stories.length - 1].id : null,
-        hasNextPage,
-      },
-    };
+    return { data: enriched, pagination };
   }
 
   private async enrichWithReadStatus<T extends { id: string }>(
@@ -765,7 +760,7 @@ export class StoryService {
     if (!kid) throw new NotFoundException('Kid not found');
 
     const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? 20;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
     const records = await this.withCursorErrorHandling(() =>
       this.prisma.favorite.findMany({
@@ -779,15 +774,7 @@ export class StoryService {
 
     if (!useCursor) return records;
 
-    const hasNextPage = records.length > take;
-    if (hasNextPage) records.pop();
-    return {
-      data: records,
-      pagination: {
-        nextCursor: hasNextPage ? records[records.length - 1].id : null,
-        hasNextPage,
-      },
-    };
+    return PaginationUtil.buildCursorResponse(records, take);
   }
 
   async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
@@ -937,7 +924,7 @@ export class StoryService {
     limit?: number,
   ) {
     const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? 20;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
     const progressRecords = await this.withCursorErrorHandling(() =>
       this.prisma.userStoryProgress.findMany({
@@ -958,29 +945,23 @@ export class StoryService {
       }),
     );
 
-    const mapped = progressRecords.map((record) => ({
+    const mapRecord = (record: (typeof progressRecords)[number]) => ({
       ...record.story,
       progressId: record.id,
       progress: record.progress,
       totalTimeSpent: record.totalTimeSpent,
       lastAccessed: record.lastAccessed,
-    }));
+    });
 
-    if (!useCursor) return mapped;
+    if (!useCursor) return progressRecords.map(mapRecord);
 
-    const hasNextPage = mapped.length > take;
-    if (hasNextPage) mapped.pop();
-    // Use progressRecords (not mapped) for cursor since Prisma cursors
-    // operate on the progress table. lastIndex matches because mapped
-    // and progressRecords share the same indices; only mapped is popped.
-    const lastIndex = mapped.length - 1;
-    return {
-      data: mapped,
-      pagination: {
-        nextCursor: hasNextPage ? progressRecords[lastIndex].id : null,
-        hasNextPage,
-      },
-    };
+    // Cursor comes from progress table ID (Prisma cursor operates on this table).
+    // Build response from raw records first, then map to the enriched shape.
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      progressRecords,
+      take,
+    );
+    return { data: data.map(mapRecord), pagination };
   }
 
   async getUserCompletedStories(
@@ -989,7 +970,7 @@ export class StoryService {
     limit?: number,
   ) {
     const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? 20;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
     const records = await this.withCursorErrorHandling(() =>
       this.prisma.userStoryProgress.findMany({
@@ -1007,15 +988,11 @@ export class StoryService {
 
     if (!useCursor) return records.map((r) => r.story);
 
-    const hasNextPage = records.length > take;
-    if (hasNextPage) records.pop();
-    return {
-      data: records.map((r) => r.story),
-      pagination: {
-        nextCursor: hasNextPage ? records[records.length - 1].id : null,
-        hasNextPage,
-      },
-    };
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      records,
+      take,
+    );
+    return { data: data.map((r) => r.story), pagination };
   }
 
   async removeFromUserLibrary(userId: string, storyId: string) {
@@ -1726,7 +1703,7 @@ export class StoryService {
 
   async getContinueReading(kidId: string, cursor?: string, limit?: number) {
     const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? 20;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
     const progressRecords = await this.withCursorErrorHandling(() =>
       this.prisma.storyProgress.findMany({
@@ -1747,34 +1724,26 @@ export class StoryService {
       }),
     );
 
-    const mapped = progressRecords.map((record) => ({
+    const mapRecord = (record: (typeof progressRecords)[number]) => ({
       ...record.story,
       progressId: record.id,
       progress: record.progress,
       totalTimeSpent: record.totalTimeSpent,
       lastAccessed: record.lastAccessed,
-    }));
+    });
 
-    if (!useCursor) return mapped;
+    if (!useCursor) return progressRecords.map(mapRecord);
 
-    const hasNextPage = mapped.length > take;
-    if (hasNextPage) mapped.pop();
-    // Use progressRecords (not mapped) for cursor since Prisma cursors
-    // operate on the progress table. lastIndex matches because mapped
-    // and progressRecords share the same indices; only mapped is popped.
-    const lastIndex = mapped.length - 1;
-    return {
-      data: mapped,
-      pagination: {
-        nextCursor: hasNextPage ? progressRecords[lastIndex].id : null,
-        hasNextPage,
-      },
-    };
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      progressRecords,
+      take,
+    );
+    return { data: data.map(mapRecord), pagination };
   }
 
   async getCompletedStories(kidId: string, cursor?: string, limit?: number) {
     const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? 20;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
     const records = await this.withCursorErrorHandling(() =>
       this.prisma.storyProgress.findMany({
@@ -1792,20 +1761,16 @@ export class StoryService {
 
     if (!useCursor) return records.map((r) => r.story);
 
-    const hasNextPage = records.length > take;
-    if (hasNextPage) records.pop();
-    return {
-      data: records.map((r) => r.story),
-      pagination: {
-        nextCursor: hasNextPage ? records[records.length - 1].id : null,
-        hasNextPage,
-      },
-    };
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      records,
+      take,
+    );
+    return { data: data.map((r) => r.story), pagination };
   }
 
   async getCreatedStories(kidId: string, cursor?: string, limit?: number) {
     const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? 20;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
     const stories = await this.withCursorErrorHandling(() =>
       this.prisma.story.findMany({
@@ -1818,20 +1783,12 @@ export class StoryService {
 
     if (!useCursor) return stories;
 
-    const hasNextPage = stories.length > take;
-    if (hasNextPage) stories.pop();
-    return {
-      data: stories,
-      pagination: {
-        nextCursor: hasNextPage ? stories[stories.length - 1].id : null,
-        hasNextPage,
-      },
-    };
+    return PaginationUtil.buildCursorResponse(stories, take);
   }
 
   async getDownloads(kidId: string, cursor?: string, limit?: number) {
     const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? 20;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
     const downloads = await this.withCursorErrorHandling(() =>
       this.prisma.downloadedStory.findMany({
@@ -1845,15 +1802,11 @@ export class StoryService {
 
     if (!useCursor) return downloads.map((d) => d.story);
 
-    const hasNextPage = downloads.length > take;
-    if (hasNextPage) downloads.pop();
-    return {
-      data: downloads.map((d) => d.story),
-      pagination: {
-        nextCursor: hasNextPage ? downloads[downloads.length - 1].id : null,
-        hasNextPage,
-      },
-    };
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      downloads,
+      take,
+    );
+    return { data: data.map((d) => d.story), pagination };
   }
 
   async addDownload(kidId: string, storyId: string) {
