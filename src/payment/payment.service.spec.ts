@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/prisma/prisma.service';
 import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
+import { Prisma } from '@prisma/client';
 
 // Type-safe mock for PrismaService
 type MockPrismaService = {
@@ -28,6 +29,7 @@ describe('PaymentService', () => {
   let mockPrisma: MockPrismaService;
   let mockGoogleVerification: {
     verify: jest.Mock;
+    acknowledgePurchase: jest.Mock;
     cancelSubscription: jest.Mock;
   };
   let mockAppleVerification: {
@@ -40,6 +42,7 @@ describe('PaymentService', () => {
     mockPrisma = createMockPrismaService();
     mockGoogleVerification = {
       verify: jest.fn(),
+      acknowledgePurchase: jest.fn().mockResolvedValue({ success: true }),
       cancelSubscription: jest.fn(),
     };
     mockAppleVerification = {
@@ -56,8 +59,6 @@ describe('PaymentService', () => {
     };
 
     jest.clearAllMocks();
-
-    mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -96,6 +97,7 @@ describe('PaymentService', () => {
         amount: 4.99,
         currency: 'USD',
         expirationTime: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+        metadata: { acknowledgementState: 1 },
       });
 
       mockPrisma.paymentTransaction.create.mockResolvedValue({
@@ -107,6 +109,7 @@ describe('PaymentService', () => {
         status: 'success',
         reference: 'hash-123',
       });
+      // findFirst called in upsertSubscriptionWithExpiry: no existing sub
       mockPrisma.subscription.findFirst.mockResolvedValue(null);
       mockPrisma.subscription.create.mockResolvedValue({
         id: 'sub-1',
@@ -176,7 +179,7 @@ describe('PaymentService', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should handle duplicate Google receipt (idempotency)', async () => {
+    it('should handle duplicate Google receipt (idempotency) via P2002', async () => {
       const userId = 'user-1';
       const dto = {
         platform: 'google' as const,
@@ -187,11 +190,22 @@ describe('PaymentService', () => {
       mockGoogleVerification.verify.mockResolvedValue({
         success: true,
         isSubscription: true,
+        metadata: { acknowledgementState: 1 },
       });
 
+      // Simulate P2002 unique constraint violation on paymentTransaction.create
+      const p2002Error = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        { code: 'P2002', clientVersion: '5.0.0' },
+      );
+      mockPrisma.paymentTransaction.create.mockRejectedValue(p2002Error);
+
+      // findFirst returns existing transaction for the same user
       mockPrisma.paymentTransaction.findFirst.mockResolvedValue({
         id: 'tx-existing',
         userId: 'user-1',
+        amount: 4.99,
+        currency: 'USD',
         status: 'success',
         reference: 'existing-hash',
       });
@@ -206,14 +220,13 @@ describe('PaymentService', () => {
 
       const result = await service.verifyPurchase(userId, dto);
 
-      expect(mockPrisma.paymentTransaction.create).not.toHaveBeenCalled();
       expect(result.success).toBe(true);
       expect((result as { alreadyProcessed?: boolean }).alreadyProcessed).toBe(
         true,
       );
     });
 
-    it('should reject receipt reuse from different user', async () => {
+    it('should reject receipt reuse from different user via P2002', async () => {
       const userId = 'user-2';
       const dto = {
         platform: 'google' as const,
@@ -224,12 +237,22 @@ describe('PaymentService', () => {
       mockGoogleVerification.verify.mockResolvedValue({
         success: true,
         isSubscription: true,
+        metadata: { acknowledgementState: 1 },
       });
+
+      // Simulate P2002 unique constraint violation
+      const p2002Error = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        { code: 'P2002', clientVersion: '5.0.0' },
+      );
+      mockPrisma.paymentTransaction.create.mockRejectedValue(p2002Error);
 
       // Existing transaction belongs to a different user
       mockPrisma.paymentTransaction.findFirst.mockResolvedValue({
         id: 'tx-existing',
         userId: 'user-1',
+        amount: 4.99,
+        currency: 'USD',
         status: 'success',
         reference: 'existing-hash',
       });
@@ -293,6 +316,7 @@ describe('PaymentService', () => {
       mockGoogleVerification.verify.mockResolvedValue({
         success: true,
         isSubscription: true,
+        metadata: { acknowledgementState: 1 },
       });
 
       await expect(service.verifyPurchase(userId, dto)).rejects.toThrow(
@@ -315,6 +339,7 @@ describe('PaymentService', () => {
         amount: 47.99,
         currency: 'USD',
         expirationTime: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
+        metadata: { acknowledgementState: 1 },
       });
 
       mockPrisma.paymentTransaction.create.mockResolvedValue({
@@ -351,13 +376,33 @@ describe('PaymentService', () => {
   });
 
   describe('getSubscription', () => {
-    it('should return subscription for user', async () => {
-      const mockSub = { id: 'sub-1', plan: 'monthly', status: 'active' };
+    it('should return enriched subscription for user', async () => {
+      const mockSub = {
+        id: 'sub-1',
+        plan: 'monthly',
+        status: 'active',
+        startedAt: new Date(),
+        endsAt: new Date(),
+        platform: null,
+      };
       mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({
+        amount: 4.99,
+        currency: 'USD',
+      });
 
       const result = await service.getSubscription('u1');
 
-      expect(result).toEqual(mockSub);
+      expect(result).toEqual({
+        id: 'sub-1',
+        plan: 'monthly',
+        status: 'active',
+        startedAt: mockSub.startedAt,
+        endsAt: mockSub.endsAt,
+        platform: null,
+        price: 4.99,
+        currency: 'USD',
+      });
       expect(mockPrisma.subscription.findFirst).toHaveBeenCalledWith({
         where: { userId: 'u1' },
       });
