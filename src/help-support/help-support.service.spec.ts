@@ -1,12 +1,39 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HelpSupportService } from './help-support.service';
+import { PrismaService } from '@/prisma/prisma.service';
+import { NotificationService } from '@/notification/notification.service';
+import { ConfigService } from '@nestjs/config';
 
 describe('HelpSupportService', () => {
   let service: HelpSupportService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [HelpSupportService],
+      providers: [
+        HelpSupportService,
+        {
+          provide: PrismaService,
+          useValue: {
+            supportTicket: {
+              create: jest.fn(),
+              findMany: jest.fn(),
+              findUnique: jest.fn(),
+            },
+          },
+        },
+        {
+          provide: NotificationService,
+          useValue: {
+            queueEmail: jest.fn(),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue('team@storytime.app'),
+          },
+        },
+      ],
     }).compile();
 
     service = module.get<HelpSupportService>(HelpSupportService);

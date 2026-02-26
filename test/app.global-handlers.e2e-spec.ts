@@ -1,26 +1,70 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  ValidationPipe,
+  Controller,
+  Get,
+  Post,
+  Body,
+  HttpException,
+  HttpStatus,
+  Module,
+} from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
-import request, { Response } from 'supertest';
+import request from 'supertest';
+import { IsString, IsNotEmpty } from 'class-validator';
 import { SuccessResponseInterceptor } from '../src/shared/interceptors/success-response.interceptor';
 import { HttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from '../src/shared/filters/prisma-exception.filter';
-import { AppModule } from '../src/app.module';
 import { Server } from 'http';
 
-// --- Mocking for Testing ---
-// Note: In a real environment, you'd mock Prisma to simulate P2002/P2025 errors.
-// For simplicity here, we will test the HTTP and Validation pipe filters, which are the most common.
+// --- Minimal test fixtures (no env vars needed) ---
+
+class TestLoginDto {
+  @IsString()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  password: string;
+}
+
+@Controller('auth')
+class TestController {
+  @Get('test-success')
+  testSuccess() {
+    return { hello: 'world' };
+  }
+
+  @Post('login')
+  login(@Body() _dto: TestLoginDto) {
+    return { token: 'fake' };
+  }
+
+  @Get('conflict')
+  conflict() {
+    throw new HttpException(
+      { message: 'The email is already in use.', error: 'Conflict' },
+      HttpStatus.CONFLICT,
+    );
+  }
+}
+
+@Module({
+  controllers: [TestController],
+})
+class TestAppModule {}
+
+// --- Tests ---
 
 describe('Global Handlers (e2e)', () => {
   let app: INestApplication;
   let server: Server;
 
   beforeAll(async () => {
-    // We recreate the app setup here to ensure the global handlers are registered correctly,
-    // mimicking the main.ts environment.
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
+      imports: [TestAppModule],
     }).compile();
 
     app = moduleFixture.createNestApplication();
@@ -31,8 +75,6 @@ describe('Global Handlers (e2e)', () => {
     // 2. Apply Global Filters
     const { httpAdapter } = app.get(HttpAdapterHost);
     app.useGlobalFilters(new HttpExceptionFilter());
-    // NOTE: Testing PrismaFilter in E2E is complex as it requires a real/mocked DB.
-    // We register it but primarily test the HTTP & Validation filters.
     app.useGlobalFilters(new PrismaExceptionFilter(httpAdapter));
 
     // 3. Apply Global Validation Pipe
@@ -51,7 +93,7 @@ describe('Global Handlers (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) await app.close();
   });
 
   // Helper function to check the standardized error response format
@@ -80,22 +122,12 @@ describe('Global Handlers (e2e)', () => {
 
   describe('SuccessResponseInterceptor', () => {
     it('should wrap successful GET request data into the standard success format', async () => {
-      // This endpoint must exist in your AuthController for this test to pass.
-      // If it does not, this test will be skipped.
       const res = await request(server).get('/api/v1/auth/test-success');
-      if (res.status === 200) {
-        expectSuccessFormat(res, 200);
-      } else {
-        // If the test endpoint doesn't exist, we skip the 200 check
-        // and proceed to testing the error filters below.
-        console.warn(
-          'Skipping SuccessInterceptor test: Could not find /api/v1/auth/test-success endpoint.',
-        );
-      }
+      expectSuccessFormat(res, 200);
+      expect(res.body.data).toEqual({ hello: 'world' });
     });
   });
 
-  // --- TEST SUITE: HttpExceptionFilter (Standard Errors) ---
   describe('HttpExceptionFilter', () => {
     it('should catch unhandled 404s and format them correctly', async () => {
       const res = await request(server).get('/api/v1/a-non-existent-route-999');
@@ -106,50 +138,20 @@ describe('Global Handlers (e2e)', () => {
       );
     });
 
-    it('should format custom thrown HttpException (409 Conflict)', () => {
-      // To properly test this, we need a test route that throws new ConflictException('Already used').
-      // Since we don't have access to your controllers, we will mock the request response
-      // based on the expected behavior of a controller throwing this exception.
+    it('should format custom thrown HttpException (409 Conflict)', async () => {
+      const res = await request(server).get('/api/v1/auth/conflict');
 
-      // You must verify this against a real endpoint in your code.
-
-      // Mocked check for expected formatting:
-      const mockConflictResponse = {
-        status: 409,
-        body: {
-          statusCode: 409,
-          success: false,
-          error: 'Conflict',
-          message: 'The email is already in use.',
-          timestamp: new Date().toISOString(),
-          path: '/api/v1/auth/register',
-        },
-      };
-
-      // If you had a test controller throwing ConflictException, the result would look like this:
-      expectErrorFormat(
-        {
-          status: mockConflictResponse.status,
-          body: mockConflictResponse.body,
-        } as Response,
-        409,
-        'Conflict',
-      );
+      expectErrorFormat(res, 409, 'Conflict');
+      expect(res.body.message).toBe('The email is already in use.');
     });
   });
 
-  // --- TEST SUITE: Validation Pipe & HttpExceptionFilter ---
   describe('ValidationPipe Integration', () => {
     it('should catch DTO validation errors and format them as 400 Bad Request', async () => {
-      // Assuming you have a POST endpoint, e.g., /auth/login, with validation rules.
-      // We send a body that violates DTO rules (e.g., empty object).
-      const res = await request(server).post('/api/v1/auth/login').send({}); // Invalid body (missing fields)
+      const res = await request(server).post('/api/v1/auth/login').send({});
 
-      // The ValidationPipe throws a BadRequestException, caught by HttpExceptionFilter.
       expectErrorFormat(res, 400, 'Bad Request');
-      // The message property should be an array of validation errors
       expect(Array.isArray(res.body.message)).toBe(true);
-      // Example: expect(res.body.message).toContain('email should not be empty');
     });
   });
 });

@@ -40,7 +40,10 @@ describe('ParentFavoritesService', () => {
           coverImageUrl: 'http://test.com/image.jpg',
           ageMin: 3,
           ageMax: 5,
-          creatorKid: { name: 'Author Kid' },
+          durationSeconds: null,
+          categories: [
+            { id: 'cat-1', name: 'Adventure', image: null, description: null },
+          ],
         },
         createdAt: new Date(),
       };
@@ -55,8 +58,16 @@ describe('ParentFavoritesService', () => {
         title: mockFavorite.story.title,
         description: mockFavorite.story.description,
         coverImageUrl: mockFavorite.story.coverImageUrl,
-        author: mockFavorite.story.creatorKid.name,
+        categories: [
+          {
+            id: 'cat-1',
+            name: 'Adventure',
+            image: undefined,
+            description: undefined,
+          },
+        ],
         ageRange: '3-5',
+        durationSeconds: undefined,
         createdAt: mockFavorite.createdAt,
       });
     });
@@ -74,7 +85,8 @@ describe('ParentFavoritesService', () => {
             coverImageUrl: 'url1',
             ageMin: 4,
             ageMax: 6,
-            creatorKid: null,
+            durationSeconds: 120,
+            categories: [],
           },
           createdAt: new Date(),
         },
@@ -87,7 +99,15 @@ describe('ParentFavoritesService', () => {
             coverImageUrl: 'url2',
             ageMin: 7,
             ageMax: 9,
-            creatorKid: { name: 'Kid Author' },
+            durationSeconds: null,
+            categories: [
+              {
+                id: 'cat-2',
+                name: 'Fantasy',
+                image: 'img.png',
+                description: 'Magical',
+              },
+            ],
           },
           createdAt: new Date(),
         },
@@ -102,7 +122,14 @@ describe('ParentFavoritesService', () => {
       expect(result).toHaveLength(2);
       expect(result[0].ageRange).toBe('4-6');
       expect(result[1].ageRange).toBe('7-9');
-      expect(result[1].author).toBe('Kid Author');
+      expect(result[1].categories).toEqual([
+        {
+          id: 'cat-2',
+          name: 'Fantasy',
+          image: 'img.png',
+          description: 'Magical',
+        },
+      ]);
     });
   });
 });
