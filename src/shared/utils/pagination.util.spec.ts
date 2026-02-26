@@ -22,7 +22,10 @@ describe('PaginationUtil.sanitizeCursorParams', () => {
   });
 
   it('should trim cursor whitespace', () => {
-    const result = PaginationUtil.sanitizeCursorParams('  abc-123  ', undefined);
+    const result = PaginationUtil.sanitizeCursorParams(
+      '  abc-123  ',
+      undefined,
+    );
     expect(result).toEqual({ cursor: 'abc-123', limit: 20 });
   });
 

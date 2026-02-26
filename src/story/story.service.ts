@@ -1734,7 +1734,12 @@ export class StoryService {
 
     const progressRecords = await this.withCursorErrorHandling(() =>
       this.prisma.storyProgress.findMany({
-        where: { kidId, progress: { gt: 0 }, completed: false, isDeleted: false },
+        where: {
+          kidId,
+          progress: { gt: 0 },
+          completed: false,
+          isDeleted: false,
+        },
         orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
         include: {
           story: {
