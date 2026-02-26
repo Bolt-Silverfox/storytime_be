@@ -286,11 +286,18 @@ export class TextToSpeechService {
           useElevenLabs = false;
         }
       } else if (!isPremium) {
-        // Free users never use ElevenLabs — provider chain is Deepgram → Edge TTS
-        this.logger.debug(
-          `Free user ${userId}: skipping ElevenLabs for voice ${type}, using Deepgram/Edge TTS.`,
+        // Free user: allow ElevenLabs only for their one trial story
+        const trialAllowed = await this.voiceQuota.canFreeUserUseElevenLabs(
+          userId,
+          elevenLabsId,
+          storyId,
         );
-        useElevenLabs = false;
+        if (!trialAllowed) {
+          this.logger.debug(
+            `Free user ${userId}: ElevenLabs trial not available for story ${storyId}, using Deepgram/Edge TTS.`,
+          );
+          useElevenLabs = false;
+        }
       }
     } else if (useElevenLabs && !userId) {
       this.logger.warn(
@@ -701,11 +708,18 @@ export class TextToSpeechService {
           );
         }
       } else {
-        // Free users never use ElevenLabs — provider chain is Deepgram → Edge TTS
-        this.logger.debug(
-          `Free user ${userId}: skipping ElevenLabs for batch voice ${type}, using Deepgram/Edge TTS.`,
+        // Free user: allow ElevenLabs only for their one trial story
+        const trialAllowed = await this.voiceQuota.canFreeUserUseElevenLabs(
+          userId,
+          quotaVoiceId,
+          storyId,
         );
-        useElevenLabsBatch = false;
+        if (!trialAllowed) {
+          this.logger.debug(
+            `Free user ${userId}: ElevenLabs trial not available for batch story ${storyId}, using Deepgram/Edge TTS.`,
+          );
+          useElevenLabsBatch = false;
+        }
       }
 
       if (useElevenLabsBatch && isPremium) {

@@ -330,7 +330,6 @@ model Story {
   paths                 StoryPath[]
   categories            Category[]             @relation("StoryCategories")
   themes                Theme[]                @relation("StoryThemes")
-  storyAudioCaches      StoryAudioCache[]
   paragraphAudioCaches  ParagraphAudioCache[]
   questions             StoryQuestion[]
   seasons               Season[]               @relation("StorySeasons")
@@ -343,6 +342,7 @@ model Story {
   parentRecommendations ParentRecommendation[]
   // ADDED: Restricted stories
   restrictedStories     RestrictedStory[]
+  elevenLabsTrialUsers  UserUsage[] @relation("ElevenLabsTrial")
 
   @@index([isDeleted])
   @@index([createdAt])
@@ -777,24 +777,6 @@ model Theme {
   @@index([isDeleted])
 }
 
-model StoryAudioCache {
-  id        String    @id @default(uuid())
-  storyId   String
-  voiceType String
-  story     Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  audioUrl  String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
-  @@unique([storyId, audioUrl])
-  @@unique([storyId, voiceType])
-  @@index([storyId])
-  @@index([isDeleted])
-  @@map("story_audio_cache")
-}
 
 model StoryQuestion {
   id            String           @id @default(uuid())
@@ -1094,6 +1076,10 @@ model UserUsage {
   // Free tier voice quota
   selectedSecondVoiceId String?   // The one custom voice free users can select (beyond default)
   selectedSecondVoice   Voice?    @relation("SecondVoiceSelection", fields: [selectedSecondVoiceId], references: [id], onDelete: SetNull)
+
+  // Free tier ElevenLabs trial — the one story that gets ElevenLabs audio
+  elevenLabsTrialStoryId String?
+  elevenLabsTrialStory   Story?  @relation("ElevenLabsTrial", fields: [elevenLabsTrialStoryId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

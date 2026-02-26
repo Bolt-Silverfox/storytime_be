@@ -252,69 +252,119 @@ export class VoiceQuotaService {
   async canFreeUserUseElevenLabs(
     userId: string,
     elevenLabsVoiceId: string,
+    storyId: string,
   ): Promise<boolean> {
-    // Default voice is always allowed — don't consume the premium slot
+    // Check if this is the default voice — skip voice locking but still check trial
     const defaultVoiceType = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE;
-    if (elevenLabsVoiceId === (defaultVoiceType as string)) return true;
     const defaultConfig = VOICE_CONFIG[defaultVoiceType];
-    if (defaultConfig && elevenLabsVoiceId === defaultConfig.elevenLabsId)
-      return true;
+    const isDefaultVoice =
+      elevenLabsVoiceId === (defaultVoiceType as string) ||
+      (defaultConfig && elevenLabsVoiceId === defaultConfig.elevenLabsId);
 
-    // Resolve ElevenLabs ID to Voice table UUID for FK-safe storage.
-    // selectedSecondVoiceId has a FK constraint referencing voices.id.
-    const voiceUuid = await this.resolveVoiceUuid(elevenLabsVoiceId);
-    if (!voiceUuid) {
-      this.logger.warn(
-        `No voice record found for ElevenLabs ID ${elevenLabsVoiceId}. Denying free-tier premium voice.`,
-      );
-      return false;
+    if (!isDefaultVoice) {
+      // === Voice locking check (non-default voices only) ===
+      // Resolve ElevenLabs ID to Voice table UUID for FK-safe storage.
+      // selectedSecondVoiceId has a FK constraint referencing voices.id.
+      const voiceUuid = await this.resolveVoiceUuid(elevenLabsVoiceId);
+      if (!voiceUuid) {
+        this.logger.warn(
+          `No voice record found for ElevenLabs ID ${elevenLabsVoiceId}. Denying free-tier premium voice.`,
+        );
+        return false;
+      }
+
+      const currentMonth = this.getCurrentMonth();
+      const usage = await this.prisma.userUsage.upsert({
+        where: { userId },
+        create: { userId, currentMonth },
+        update: {},
+      });
+
+      let voiceAllowed = false;
+      if (usage.selectedSecondVoiceId === voiceUuid) {
+        voiceAllowed = true;
+      } else if (usage.selectedSecondVoiceId) {
+        // Already locked a different voice — deny
+        this.logger.log(
+          `Free user ${userId} already used premium voice ${usage.selectedSecondVoiceId}. Denying ${elevenLabsVoiceId}.`,
+        );
+        return false;
+      } else {
+        // Never used a premium voice — atomic compare-and-set to lock this one in.
+        const { count } = await this.prisma.userUsage.updateMany({
+          where: { userId, selectedSecondVoiceId: null },
+          data: { selectedSecondVoiceId: voiceUuid },
+        });
+
+        if (count > 0) {
+          this.logger.log(
+            `Free user ${userId} locked in premium voice ${voiceUuid} (${elevenLabsVoiceId})`,
+          );
+          voiceAllowed = true;
+        } else {
+          // Another request raced and locked a different voice — re-check
+          const updated = await this.prisma.userUsage.findUnique({
+            where: { userId },
+          });
+          if (updated?.selectedSecondVoiceId === voiceUuid) {
+            voiceAllowed = true;
+          } else {
+            this.logger.log(
+              `Free user ${userId} lost race — premium voice ${updated?.selectedSecondVoiceId} was locked by concurrent request. Denying ${elevenLabsVoiceId}.`,
+            );
+            return false;
+          }
+        }
+      }
+
+      if (!voiceAllowed) return false;
     }
 
+    // === ElevenLabs trial story check (applies to ALL voices including default) ===
+    // Ensure usage record exists for trial check
     const currentMonth = this.getCurrentMonth();
-    const usage = await this.prisma.userUsage.upsert({
+    const latestUsage = await this.prisma.userUsage.upsert({
       where: { userId },
       create: { userId, currentMonth },
       update: {},
     });
 
-    // Same voice they already picked — allow (compare UUIDs)
-    if (usage.selectedSecondVoiceId === voiceUuid) {
+    // Same trial story — allow ElevenLabs
+    if (latestUsage?.elevenLabsTrialStoryId === storyId) {
       return true;
     }
 
-    // Already locked a different voice — deny
-    if (usage.selectedSecondVoiceId) {
+    // Already used trial on a different story — deny ElevenLabs (will fall through to Deepgram/Edge)
+    if (latestUsage?.elevenLabsTrialStoryId) {
       this.logger.log(
-        `Free user ${userId} already used premium voice ${usage.selectedSecondVoiceId}. Denying ${elevenLabsVoiceId}.`,
+        `Free user ${userId} already used ElevenLabs trial on story ${latestUsage.elevenLabsTrialStoryId}. Denying for story ${storyId}.`,
       );
       return false;
     }
 
-    // Never used a premium voice — atomic compare-and-set to lock this one in.
-    // Only updates if selectedSecondVoiceId is still null, preventing races.
-    // Stores the Voice table UUID (not ElevenLabs ID) to satisfy FK constraint.
-    const { count } = await this.prisma.userUsage.updateMany({
-      where: { userId, selectedSecondVoiceId: null },
-      data: { selectedSecondVoiceId: voiceUuid },
+    // No trial used yet — atomic lock to this story
+    const { count: trialCount } = await this.prisma.userUsage.updateMany({
+      where: { userId, elevenLabsTrialStoryId: null },
+      data: { elevenLabsTrialStoryId: storyId },
     });
 
-    if (count > 0) {
+    if (trialCount > 0) {
       this.logger.log(
-        `Free user ${userId} locked in premium voice ${voiceUuid} (${elevenLabsVoiceId})`,
+        `Free user ${userId} locked ElevenLabs trial to story ${storyId}`,
       );
       return true;
     }
 
-    // Another request raced and locked a different voice — re-check
-    const updated = await this.prisma.userUsage.findUnique({
+    // Lost race — check if same story won
+    const raceCheck = await this.prisma.userUsage.findUnique({
       where: { userId },
     });
-    if (updated?.selectedSecondVoiceId === voiceUuid) {
+    if (raceCheck?.elevenLabsTrialStoryId === storyId) {
       return true;
     }
 
     this.logger.log(
-      `Free user ${userId} lost race — premium voice ${updated?.selectedSecondVoiceId} was locked by concurrent request. Denying ${elevenLabsVoiceId}.`,
+      `Free user ${userId} lost ElevenLabs trial race — story ${raceCheck?.elevenLabsTrialStoryId} won. Denying story ${storyId}.`,
     );
     return false;
   }
@@ -361,6 +411,8 @@ export class VoiceQuotaService {
     unlimited: boolean;
     defaultVoice: string;
     maxVoices: number;
+    lockedVoiceId: string | null;
+    elevenLabsTrialStoryId: string | null;
   }> {
     const isPremium = await this.subscriptionService.isPremiumUser(userId);
 
@@ -370,14 +422,22 @@ export class VoiceQuotaService {
         unlimited: true,
         defaultVoice: FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE,
         maxVoices: -1, // unlimited
+        lockedVoiceId: null,
+        elevenLabsTrialStoryId: null,
       };
     }
+
+    const usage = await this.prisma.userUsage.findUnique({
+      where: { userId },
+    });
 
     return {
       isPremium: false,
       unlimited: false,
       defaultVoice: FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE,
       maxVoices: FREE_TIER_LIMITS.VOICES.CUSTOM_SLOTS + 1, // +1 for the always-available default voice
+      lockedVoiceId: usage?.selectedSecondVoiceId ?? null,
+      elevenLabsTrialStoryId: usage?.elevenLabsTrialStoryId ?? null,
     };
   }
 }
