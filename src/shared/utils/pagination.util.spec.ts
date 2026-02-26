@@ -137,4 +137,21 @@ describe('PaginationUtil.buildCursorResponse', () => {
       hasNextPage: true,
     });
   });
+
+  it('should handle limit=1 with next page', () => {
+    const items = makeItems(2);
+    const result = PaginationUtil.buildCursorResponse(items, 1);
+    expect(result.data).toHaveLength(1);
+    expect(result.pagination).toEqual({
+      nextCursor: 'id-0',
+      hasNextPage: true,
+    });
+  });
+
+  it('should handle limit=1 without next page', () => {
+    const items = makeItems(1);
+    const result = PaginationUtil.buildCursorResponse(items, 1);
+    expect(result.data).toHaveLength(1);
+    expect(result.pagination).toEqual({ nextCursor: null, hasNextPage: false });
+  });
 });

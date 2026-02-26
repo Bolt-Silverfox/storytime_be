@@ -162,13 +162,15 @@ export class StoryController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
     @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number = 12,
   ): Promise<PaginatedStoriesDto | CursorPaginatedStoriesDto> {
-    const commonFilter = {
+    // Base filter shared by both pagination modes.
+    // recommended and isMostLiked are intentionally excluded here
+    // because they use orderings incompatible with cursor pagination,
+    // and including them would leak into buildStoryWhereClause.
+    const baseFilter = {
       userId: req.authUserData.userId,
       theme,
       category,
       season,
-      recommended: recommended === 'true',
-      isMostLiked: isMostLiked === 'true',
       isSeasonal: isSeasonal === 'true',
       kidId,
       age: age ? parseInt(age, 10) : undefined,
@@ -196,7 +198,7 @@ export class StoryController {
 
     if (useCursorMode) {
       return this.storyService.getStoriesCursor({
-        ...commonFilter,
+        ...baseFilter,
         cursor: safeCursor,
         limit: safeLimit,
       });
@@ -206,7 +208,9 @@ export class StoryController {
     const safeOffsetLimit = Math.max(1, Math.min(100, limit));
 
     return this.storyService.getStories({
-      ...commonFilter,
+      ...baseFilter,
+      recommended: recommended === 'true',
+      isMostLiked: isMostLiked === 'true',
       topPicksFromUs: topPicksFromUs === 'true',
       page: safePage,
       limit: safeOffsetLimit,
