@@ -31,13 +31,11 @@ describe('TextToSpeechService', () => {
 
   const mockPrisma = {
     paragraphAudioCache: {
-      findUnique: jest.fn().mockResolvedValue(null),
       findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
       upsert: jest.fn().mockResolvedValue({}),
     },
     voice: {
-      findUnique: jest.fn().mockResolvedValue(null),
       findFirst: jest.fn().mockResolvedValue(null),
     },
   };
@@ -45,11 +43,9 @@ describe('TextToSpeechService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     // Reset mock implementations (clearAllMocks only resets calls, not implementations)
-    mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue(null);
     mockPrisma.paragraphAudioCache.findFirst.mockResolvedValue(null);
     mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([]);
     mockPrisma.paragraphAudioCache.upsert.mockResolvedValue({});
-    mockPrisma.voice.findUnique.mockResolvedValue(null);
     mockPrisma.voice.findFirst.mockResolvedValue(null);
     mockCanUseVoiceForStory.mockResolvedValue(true);
     mockCanFreeUserUseElevenLabs.mockResolvedValue(true);
@@ -462,7 +458,7 @@ describe('TextToSpeechService', () => {
     });
 
     it('should use default voice when voicetype is not provided', async () => {
-      mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue(null);
+      mockPrisma.paragraphAudioCache.findFirst.mockResolvedValue(null);
       mockIsPremiumUser.mockResolvedValue(false);
       mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
@@ -480,7 +476,7 @@ describe('TextToSpeechService', () => {
     });
 
     it('should still return audio when cache write fails', async () => {
-      mockPrisma.paragraphAudioCache.findUnique.mockResolvedValue(null);
+      mockPrisma.paragraphAudioCache.findFirst.mockResolvedValue(null);
       mockIsPremiumUser.mockResolvedValue(false);
       mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
       mockDeepgramGenerate.mockResolvedValue(Buffer.from('audio'));
@@ -532,7 +528,7 @@ describe('TextToSpeechService', () => {
         results: [],
         totalParagraphs: 0,
         wasTruncated: false,
-        usedProvider: 'deepgram',
+        usedProvider: 'none',
       });
       expect(mockPrisma.paragraphAudioCache.findMany).not.toHaveBeenCalled();
     });
@@ -548,7 +544,7 @@ describe('TextToSpeechService', () => {
         results: [],
         totalParagraphs: 0,
         wasTruncated: false,
-        usedProvider: 'deepgram',
+        usedProvider: 'none',
       });
     });
 
