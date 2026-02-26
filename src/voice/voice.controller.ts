@@ -136,7 +136,11 @@ export class VoiceController {
     const userId = req.authUserData.userId;
     const access = await this.voiceQuotaService.getVoiceAccess(userId);
 
-    if (!access.isPremium && access.lockedVoiceId && access.lockedVoiceId !== body.voiceId) {
+    if (
+      !access.isPremium &&
+      access.lockedVoiceId &&
+      access.lockedVoiceId !== body.voiceId
+    ) {
       throw new ForbiddenException(
         'Free users cannot change their voice after selecting one. Upgrade to premium to unlock all voices.',
       );

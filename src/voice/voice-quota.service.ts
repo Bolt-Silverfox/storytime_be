@@ -436,9 +436,9 @@ export class VoiceQuotaService {
       const elevenLabsId = lockedVoice?.elevenLabsVoiceId;
       // Find the VoiceType key whose config matches this elevenLabsId
       const voiceTypeKey = elevenLabsId
-        ? Object.entries(VOICE_CONFIG).find(
+        ? (Object.entries(VOICE_CONFIG).find(
             ([, config]) => config.elevenLabsId === elevenLabsId,
-          )?.[0] ?? null
+          )?.[0] ?? null)
         : null;
       lockedVoiceId = voiceTypeKey ?? usage.selectedSecondVoiceId;
     }
