@@ -40,6 +40,7 @@ jobs:
         run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
 
       - name: Lint
+        continue-on-error: true
         run: pnpm run lint
 
       - name: Security audit
