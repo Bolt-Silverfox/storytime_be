@@ -208,6 +208,7 @@ describe('StoryController', () => {
       await expect(
         controller.updateStory(mockReq, 'story-123', {} as any),
       ).rejects.toThrow(ForbiddenException);
+      expect(mockStoryService.updateStory).not.toHaveBeenCalled();
     });
   });
 });

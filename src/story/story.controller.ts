@@ -118,7 +118,7 @@ export class StoryController {
     if (!story) {
       throw new NotFoundException(`Story ${storyId} not found`);
     }
-    if (story.creatorKidId && story.creatorKid?.parentId !== userId) {
+    if (!story.creatorKidId || story.creatorKid?.parentId !== userId) {
       throw new ForbiddenException(
         'You do not have permission to modify this story',
       );
