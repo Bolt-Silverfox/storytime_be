@@ -113,7 +113,7 @@ describe('AdminService', () => {
       ];
 
       prisma.user.findMany.mockResolvedValue(mockUsers);
-      prisma.user.count.mockResolvedValue(10); // Generic count return
+      prisma.user.count.mockResolvedValue(100); // Generic count return
       prisma.kid.count.mockResolvedValue(5);
       prisma.story.count.mockResolvedValue(20);
       prisma.category.count.mockResolvedValue(3);
@@ -136,13 +136,13 @@ describe('AdminService', () => {
       const result = await service.getDashboardStats();
 
       // Verify structure and key values
-      // The service uses prisma.user.count() for totalUsers (returns 10),
+      // The service uses prisma.user.count() for totalUsers (returns 100),
       // subscription.count() for paidUsers (returns 15), and
       // averageSessionTime is a placeholder (0).
       expect(result).toBeDefined();
-      expect(result.totalUsers).toBe(10);
+      expect(result.totalUsers).toBe(100);
       expect(result.paidUsers).toBe(15); // activeSubscriptionsCount from subscription.count
-      expect(result.unpaidUsers).toBe(-5); // totalUsers - paidUsers = 10 - 15
+      expect(result.unpaidUsers).toBe(85); // totalUsers - paidUsers = 100 - 15
       expect(result.totalKids).toBe(5);
       expect(result.totalRevenue).toBe(5000);
       expect(result.averageSessionTime).toBe(0); // Placeholder in service

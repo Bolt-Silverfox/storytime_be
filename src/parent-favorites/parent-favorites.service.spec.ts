@@ -121,7 +121,10 @@ describe('ParentFavoritesService', () => {
 
       expect(result).toHaveLength(2);
       expect(result[0].ageRange).toBe('4-6');
+      expect(result[0].durationSeconds).toBe(120);
+      expect(result[0].categories).toEqual([]);
       expect(result[1].ageRange).toBe('7-9');
+      expect(result[1].durationSeconds).toBeUndefined();
       expect(result[1].categories).toEqual([
         {
           id: 'cat-2',

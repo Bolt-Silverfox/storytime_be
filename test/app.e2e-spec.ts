@@ -11,7 +11,7 @@ const describeIfEnv = hasEnv ? describe : describe.skip;
 describeIfEnv('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     // Dynamic import to avoid env validation at module load time
     const { AppModule } = await import('./../src/app.module');
 
@@ -23,7 +23,7 @@ describeIfEnv('AppController (e2e)', () => {
     await app.init();
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (app) await app.close();
   });
 
