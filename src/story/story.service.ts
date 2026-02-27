@@ -833,7 +833,11 @@ export class StoryService {
     });
 
     if (dto.completed && (!existing || !existing.completed)) {
-      this.adjustReadingLevel(dto.kidId, dto.storyId, result.totalTimeSpent).catch((e) => {
+      this.adjustReadingLevel(
+        dto.kidId,
+        dto.storyId,
+        result.totalTimeSpent,
+      ).catch((e) => {
         const msg = e instanceof Error ? e.message : String(e);
         this.logger.error(`Failed to adjust reading level: ${msg}`);
       });
