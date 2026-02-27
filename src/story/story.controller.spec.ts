@@ -22,7 +22,9 @@ const mockStoryService = {
 
 const mockPrismaService = {
   kid: {
-    findFirst: jest.fn().mockResolvedValue({ id: 'kid-123', parentId: 'user-1' }),
+    findFirst: jest
+      .fn()
+      .mockResolvedValue({ id: 'kid-123', parentId: 'user-1' }),
   },
 };
 
@@ -57,7 +59,10 @@ describe('StoryController', () => {
     controller = module.get<StoryController>(StoryController);
     service = module.get(StoryService);
     jest.clearAllMocks();
-    mockPrismaService.kid.findFirst.mockResolvedValue({ id: 'kid-123', parentId: 'user-1' });
+    mockPrismaService.kid.findFirst.mockResolvedValue({
+      id: 'kid-123',
+      parentId: 'user-1',
+    });
   });
 
   // --- 1. TEST THE GENERATION ENDPOINT ---
@@ -176,9 +181,9 @@ describe('StoryController', () => {
   describe('verifyKidOwnership', () => {
     it('should throw NotFoundException when kid does not belong to parent', async () => {
       mockPrismaService.kid.findFirst.mockResolvedValue(null);
-      await expect(
-        controller.getCreated(mockReq, 'kid-999'),
-      ).rejects.toThrow('not found');
+      await expect(controller.getCreated(mockReq, 'kid-999')).rejects.toThrow(
+        'not found',
+      );
     });
   });
 });
