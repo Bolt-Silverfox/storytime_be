@@ -16,6 +16,7 @@ export class UploadVoiceDto {
   @ApiProperty({ description: 'Voice name', example: 'Dad Voice' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(100)
   name: string;
 }
 
@@ -23,11 +24,12 @@ export class CreateElevenLabsVoiceDto {
   @ApiProperty({ description: 'Voice name', example: 'Robot Voice' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(100)
   name: string;
 
   @ApiProperty({ description: 'ElevenLabs Voice ID', example: 'abc123xyz' })
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   elevenLabsVoiceId: string;
 }
 

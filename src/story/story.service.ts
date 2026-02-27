@@ -87,7 +87,8 @@ export class StoryService {
         STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
       );
     } catch (error) {
-      this.logger.warn(`Failed to invalidate story caches: ${error.message}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to invalidate story caches: ${msg}`);
     }
   }
 
@@ -780,7 +781,7 @@ export class StoryService {
 
     const records = await this.withCursorErrorHandling(() =>
       this.prisma.favorite.findMany({
-        where: { kidId },
+        where: { kidId, isDeleted: false },
         include: { story: true },
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         ...(useCursor ? { take: take + 1 } : {}),
@@ -788,7 +789,12 @@ export class StoryService {
       }),
     );
 
-    if (!useCursor) return records;
+    if (!useCursor) {
+      return {
+        data: records,
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
 
     return PaginationUtil.buildCursorResponse(records, take);
   }
@@ -803,12 +809,11 @@ export class StoryService {
     });
     if (!story) throw new NotFoundException('Story not found');
 
+    const sessionTime = dto.sessionTime || 0;
+
     const existing = await this.prisma.storyProgress.findUnique({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
     });
-
-    const sessionTime = dto.sessionTime || 0;
-    const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
 
     const result = await this.prisma.storyProgress.upsert({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
@@ -816,7 +821,7 @@ export class StoryService {
         progress: dto.progress,
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
-        totalTimeSpent: newTotalTime,
+        totalTimeSpent: { increment: sessionTime },
       },
       create: {
         kidId: dto.kidId,
@@ -828,9 +833,10 @@ export class StoryService {
     });
 
     if (dto.completed && (!existing || !existing.completed)) {
-      this.adjustReadingLevel(dto.kidId, dto.storyId, newTotalTime).catch((e) =>
-        this.logger.error(`Failed to adjust reading level: ${e.message}`),
-      );
+      this.adjustReadingLevel(dto.kidId, dto.storyId, result.totalTimeSpent).catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.error(`Failed to adjust reading level: ${msg}`);
+      });
     }
     return result;
   }
@@ -869,11 +875,12 @@ export class StoryService {
     });
 
     const sessionTime = dto.sessionTime || 0;
+
     // If restoring a soft-deleted record, reset totalTimeSpent instead of
     // accumulating stale time from before the removal.
-    const newTotalTime = existing?.isDeleted
+    const totalTimeSpentUpdate = existing?.isDeleted
       ? sessionTime
-      : (existing?.totalTimeSpent || 0) + sessionTime;
+      : { increment: sessionTime };
 
     const result = await this.prisma.userStoryProgress.upsert({
       where: { userId_storyId: { userId, storyId: dto.storyId } },
@@ -881,7 +888,7 @@ export class StoryService {
         progress: dto.progress,
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
-        totalTimeSpent: newTotalTime,
+        totalTimeSpent: totalTimeSpentUpdate,
         // Restore soft-deleted records when user re-reads a removed story
         isDeleted: false,
         deletedAt: null,
@@ -961,8 +968,12 @@ export class StoryService {
       }),
     );
 
-    if (!useCursor)
-      return progressRecords.map((r) => this.mapProgressRecord(r));
+    if (!useCursor) {
+      return {
+        data: progressRecords.map((r) => this.mapProgressRecord(r)),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
 
     // Cursor comes from progress table ID (Prisma cursor operates on this table).
     // Build response from raw records first, then map to the enriched shape.
@@ -995,7 +1006,12 @@ export class StoryService {
       }),
     );
 
-    if (!useCursor) return records.map((r) => r.story);
+    if (!useCursor) {
+      return {
+        data: records.map((r) => r.story),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
 
     const { data, pagination } = PaginationUtil.buildCursorResponse(
       records,
@@ -1464,9 +1480,13 @@ export class StoryService {
       const availableThemes = await this.prisma.theme.findMany({
         where: { isDeleted: false },
       });
-      const randomTheme =
-        availableThemes[Math.floor(Math.random() * availableThemes.length)];
-      themes = [randomTheme.name];
+      if (availableThemes.length === 0) {
+        themes = ['Adventure'];
+      } else {
+        const randomTheme =
+          availableThemes[Math.floor(Math.random() * availableThemes.length)];
+        themes = [randomTheme.name];
+      }
     }
 
     let categories = categoryNames || [];
@@ -1478,11 +1498,15 @@ export class StoryService {
       const availableCategories = await this.prisma.category.findMany({
         where: { isDeleted: false },
       });
-      const randomCategory =
-        availableCategories[
-          Math.floor(Math.random() * availableCategories.length)
-        ];
-      categories = [randomCategory.name];
+      if (availableCategories.length === 0) {
+        categories = ['General'];
+      } else {
+        const randomCategory =
+          availableCategories[
+            Math.floor(Math.random() * availableCategories.length)
+          ];
+        categories = [randomCategory.name];
+      }
     }
 
     let contextString = '';
@@ -1586,7 +1610,8 @@ export class StoryService {
         userId, // Pass userId for tracking
       );
     } catch (e) {
-      this.logger.error(`Failed to generate story image: ${e.message}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Failed to generate story image: ${msg}`);
     }
 
     // 2. Prepare Relations (Categories/Themes)
@@ -1670,8 +1695,9 @@ export class StoryService {
           },
         });
       } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
         this.logger.error(
-          `Failed to generate audio for story ${story.id}: ${error.message}`,
+          `Failed to generate audio for story ${story.id}: ${msg}`,
         );
       }
     }
@@ -1733,8 +1759,12 @@ export class StoryService {
       }),
     );
 
-    if (!useCursor)
-      return progressRecords.map((r) => this.mapProgressRecord(r));
+    if (!useCursor) {
+      return {
+        data: progressRecords.map((r) => this.mapProgressRecord(r)),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
 
     const { data, pagination } = PaginationUtil.buildCursorResponse(
       progressRecords,
@@ -1761,7 +1791,12 @@ export class StoryService {
       }),
     );
 
-    if (!useCursor) return records.map((r) => r.story);
+    if (!useCursor) {
+      return {
+        data: records.map((r) => r.story),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
 
     const { data, pagination } = PaginationUtil.buildCursorResponse(
       records,
@@ -1783,7 +1818,12 @@ export class StoryService {
       }),
     );
 
-    if (!useCursor) return stories;
+    if (!useCursor) {
+      return {
+        data: stories,
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
 
     return PaginationUtil.buildCursorResponse(stories, take);
   }
@@ -1802,7 +1842,12 @@ export class StoryService {
       }),
     );
 
-    if (!useCursor) return downloads.map((d) => d.story);
+    if (!useCursor) {
+      return {
+        data: downloads.map((d) => d.story),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
 
     const { data, pagination } = PaginationUtil.buildCursorResponse(
       downloads,

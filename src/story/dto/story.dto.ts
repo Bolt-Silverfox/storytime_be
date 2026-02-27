@@ -252,6 +252,8 @@ export class UserStoryProgressDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(86400)
   sessionTime?: number;
 }
 
@@ -720,4 +722,30 @@ export class RestrictStoryDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+// --- Concrete cursor-paginated response DTOs (Swagger-friendly) ---
+
+export class CursorPaginatedStoryResponse {
+  @ApiProperty({ type: [StoryDto] })
+  data: StoryDto[];
+
+  @ApiProperty({ type: CursorPaginationMetaDto })
+  pagination: CursorPaginationMetaDto;
+}
+
+export class CursorPaginatedStoryWithProgressResponse {
+  @ApiProperty({ type: [StoryWithProgressDto] })
+  data: StoryWithProgressDto[];
+
+  @ApiProperty({ type: CursorPaginationMetaDto })
+  pagination: CursorPaginationMetaDto;
+}
+
+export class CursorPaginatedFavoriteResponse {
+  @ApiProperty({ type: [FavoriteDto] })
+  data: FavoriteDto[];
+
+  @ApiProperty({ type: CursorPaginationMetaDto })
+  pagination: CursorPaginationMetaDto;
 }
