@@ -74,6 +74,7 @@ async function main() {
       // Stagger creation times so they appear in order (newest first)
       createdAt: new Date(now.getTime() - i * 60 * 60 * 1000), // 1 hour apart
     })),
+    skipDuplicates: true,
   });
 
   console.log(`✓ Created ${created.count} notifications.`);
