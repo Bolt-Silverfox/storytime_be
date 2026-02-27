@@ -406,6 +406,10 @@ describe('PaymentService', () => {
       expect(mockPrisma.subscription.findFirst).toHaveBeenCalledWith({
         where: { userId: 'u1' },
       });
+      expect(mockPrisma.paymentTransaction.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'u1', status: 'success' },
+        orderBy: { createdAt: 'desc' },
+      });
     });
 
     it('should return null if no subscription exists', async () => {

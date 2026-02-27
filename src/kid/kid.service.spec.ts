@@ -105,7 +105,7 @@ describe('KidService', () => {
       prisma.kid.findUnique.mockResolvedValue(mockKid);
 
       const result = await service.findOne(kidId, userId);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         ...mockKid,
         preferredVoiceId: undefined,
         recommendationStats: {
