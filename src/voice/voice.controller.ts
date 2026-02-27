@@ -20,6 +20,7 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -229,10 +230,22 @@ export class VoiceController {
       },
     },
   })
+  @ApiQuery({
+    name: 'storyId',
+    required: false,
+    type: String,
+    description: 'Optional story ID to retrieve per-story voice usage',
+  })
   async getVoiceAccess(
     @Req() req: AuthenticatedRequest,
     @Query('storyId') storyId?: string,
   ) {
+    if (storyId) {
+      const story = await this.storyService.getStoryById(storyId);
+      if (!story) {
+        throw new NotFoundException(`Story ${storyId} not found`);
+      }
+    }
     return this.voiceQuotaService.getVoiceAccess(
       req.authUserData.userId,
       storyId,

@@ -241,7 +241,8 @@ export class VoiceQuotaService {
       const entry = Object.entries(VOICE_CONFIG).find(
         ([, config]) => config.elevenLabsId === elevenLabsId,
       );
-      return entry ? entry[0] : v.voiceId;
+      // Keep non-system voices in canonical form for downstream comparison
+      return entry ? entry[0] : elevenLabsId;
     });
 
     return [...new Set(voiceTypeKeys)];
