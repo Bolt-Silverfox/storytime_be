@@ -40,6 +40,7 @@
     "@andresaya/edge-tts": "^1.8.0",
     "@deepgram/sdk": "^4.11.3",
     "@google/genai": "^1.42.0",
+    "@google/generative-ai": "^0.24.1",
     "@hng-sdk/email": "^0.0.0",
     "@keyv/redis": "^5.1.4",
     "@nestjs/axios": "^4.0.0",
