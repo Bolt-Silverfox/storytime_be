@@ -27,7 +27,13 @@ function assertSeedFilesReadable() {
 
   for (const file of files) {
     const filePath = path.join(dataDir, file);
-    JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    try {
+      JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    } catch (err) {
+      throw new Error(
+        `Failed to parse seed file ${file}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
+    }
   }
 }
 

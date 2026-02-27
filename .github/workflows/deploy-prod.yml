@@ -44,7 +44,7 @@ jobs:
 
       - name: Security audit
         continue-on-error: true
-        run: pnpm audit --audit-level=high || true
+        run: pnpm audit --audit-level=high
 
   # ===================
   # Build (runs on all events)
