@@ -149,7 +149,7 @@ export class VoiceService {
       );
     }
 
-    return this.toVoiceResponse(result.preferredVoice);
+    return this.toVoiceResponseWithKey(result.preferredVoice);
   }
 
   // --- Get the preferred voice for a user ---
@@ -171,10 +171,14 @@ export class VoiceService {
       };
     }
 
-    const response = this.toVoiceResponse(user.preferredVoice);
+    return this.toVoiceResponseWithKey(user.preferredVoice);
+  }
 
-    // Resolve DB UUID to VoiceType key so mobile can match against available voices
-    const elevenLabsId = user.preferredVoice.elevenLabsVoiceId;
+  // Resolve DB UUID to VoiceType key so mobile can match against available voices.
+  // Used by both setPreferredVoice and getPreferredVoice for consistent ids.
+  private toVoiceResponseWithKey(voice: Voice): VoiceResponseDto {
+    const response = this.toVoiceResponse(voice);
+    const elevenLabsId = voice.elevenLabsVoiceId;
     if (elevenLabsId) {
       const voiceTypeKey = Object.entries(VOICE_CONFIG).find(
         ([, config]) => config.elevenLabsId === elevenLabsId,
@@ -183,7 +187,6 @@ export class VoiceService {
         response.id = voiceTypeKey;
       }
     }
-
     return response;
   }
 
