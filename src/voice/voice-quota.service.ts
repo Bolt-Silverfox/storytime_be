@@ -473,7 +473,9 @@ export class VoiceQuotaService {
           select: { elevenLabsVoiceId: true },
         });
       } else if (user?.preferredVoice) {
-        lockedVoice = { elevenLabsVoiceId: user.preferredVoice.elevenLabsVoiceId };
+        lockedVoice = {
+          elevenLabsVoiceId: user.preferredVoice.elevenLabsVoiceId,
+        };
       }
 
       const elevenLabsId = lockedVoice?.elevenLabsVoiceId;
