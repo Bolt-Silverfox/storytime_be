@@ -79,24 +79,39 @@ describe('ParentFavoritesController', () => {
   });
 
   describe('getFavorites', () => {
-    it('should call service.getFavorites with userId and return the result', async () => {
-      const favorites = [mockFavoriteResponse];
-      service.getFavorites.mockResolvedValue(favorites);
+    it('should call service.getFavorites with userId, cursor, and limit, and return the result', async () => {
+      const paginatedResponse = {
+        data: [mockFavoriteResponse],
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+      service.getFavorites.mockResolvedValue(paginatedResponse);
 
       const result = await controller.getFavorites(mockReq);
 
-      expect(service.getFavorites).toHaveBeenCalledWith(mockUserId);
+      expect(service.getFavorites).toHaveBeenCalledWith(
+        mockUserId,
+        undefined,
+        undefined,
+      );
       expect(service.getFavorites).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(favorites);
+      expect(result).toEqual(paginatedResponse);
     });
 
-    it('should return an empty array when no favorites exist', async () => {
-      service.getFavorites.mockResolvedValue([]);
+    it('should return an empty data array when no favorites exist', async () => {
+      const emptyResponse = {
+        data: [],
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+      service.getFavorites.mockResolvedValue(emptyResponse);
 
       const result = await controller.getFavorites(mockReq);
 
-      expect(service.getFavorites).toHaveBeenCalledWith(mockUserId);
-      expect(result).toEqual([]);
+      expect(service.getFavorites).toHaveBeenCalledWith(
+        mockUserId,
+        undefined,
+        undefined,
+      );
+      expect(result).toEqual(emptyResponse);
     });
 
     it('should propagate errors thrown by the service', async () => {

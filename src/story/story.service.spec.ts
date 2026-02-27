@@ -7,7 +7,6 @@ import { GeminiService } from './gemini.service';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from './text-to-speech.service';
-import { Cache } from '@nestjs/cache-manager';
 
 // Mock dependencies
 const mockPrismaService = {
@@ -198,14 +197,15 @@ describe('StoryService - Library & Generation', () => {
 
         const result = await service.getStories({ userId: 'user-1' });
 
+        // sortByReadStatus orders: null (unread) first, then reading, then done
         expect(result.data[0]).toEqual(
-          expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
+          expect.objectContaining({ id: 'story-3', readStatus: null }),
         );
         expect(result.data[1]).toEqual(
           expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
         );
         expect(result.data[2]).toEqual(
-          expect.objectContaining({ id: 'story-3', readStatus: null }),
+          expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
         );
         expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
         expect(prisma.userStoryProgress.findMany).toHaveBeenCalledWith({
@@ -326,11 +326,12 @@ describe('StoryService - Library & Generation', () => {
         expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
       );
       expect(result.seasonal).toEqual([]);
+      // sortByReadStatus orders: null (unread) first, then reading, then done
       expect(result.topLiked[0]).toEqual(
-        expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+        expect.objectContaining({ id: 'story-3', readStatus: null }),
       );
       expect(result.topLiked[1]).toEqual(
-        expect.objectContaining({ id: 'story-3', readStatus: null }),
+        expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
       );
 
       // Verify only 1 DB call for progress (not 1 per section)
