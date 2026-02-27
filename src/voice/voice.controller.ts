@@ -166,15 +166,21 @@ export class VoiceController {
       }
     }
 
-    const result = await this.voiceService.setPreferredVoice(userId, body);
-
     // Lock voice for free users who haven't locked one yet.
-    // Free users get ONE voice total — the lock is permanent until they upgrade.
+    // Must happen before setPreferredVoice to prevent out-of-sync state.
     if (!access.isPremium && !access.lockedVoiceId) {
-      await this.voiceQuotaService.lockFreeUserVoice(userId, body.voiceId);
+      const locked = await this.voiceQuotaService.lockFreeUserVoice(
+        userId,
+        body.voiceId,
+      );
+      if (!locked) {
+        throw new ForbiddenException(
+          'Unable to lock voice selection. Please try again.',
+        );
+      }
     }
 
-    return result;
+    return this.voiceService.setPreferredVoice(userId, body);
   }
 
   // --- Get preferred voice ---
