@@ -136,14 +136,21 @@ export class VoiceController {
     const userId = req.authUserData.userId;
     const access = await this.voiceQuotaService.getVoiceAccess(userId);
 
-    if (
-      !access.isPremium &&
-      access.lockedVoiceId &&
-      access.lockedVoiceId !== body.voiceId
-    ) {
-      throw new ForbiddenException(
-        'Free users cannot change their voice after selecting one. Upgrade to premium to unlock all voices.',
-      );
+    if (!access.isPremium && access.lockedVoiceId) {
+      // Canonicalize both sides to ElevenLabs IDs so VoiceType keys,
+      // UUIDs, and migrated names all compare correctly.
+      const lockedCanonical =
+        await this.voiceQuotaService.resolveCanonicalVoiceId(
+          access.lockedVoiceId,
+        );
+      const requestedCanonical =
+        await this.voiceQuotaService.resolveCanonicalVoiceId(body.voiceId);
+
+      if (lockedCanonical !== requestedCanonical) {
+        throw new ForbiddenException(
+          'Free users cannot change their voice after selecting one. Upgrade to premium to unlock all voices.',
+        );
+      }
     }
 
     return this.voiceService.setPreferredVoice(userId, body);

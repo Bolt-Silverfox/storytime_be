@@ -37,6 +37,8 @@ export class SetPreferredVoiceDto {
     example: 'uuid-voice-id',
   })
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
   voiceId: string;
 }
 

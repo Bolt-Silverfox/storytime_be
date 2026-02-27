@@ -18,6 +18,7 @@ import {
   VoiceResponseDto,
   VoiceSourceType,
   VoiceType,
+  VOICE_TYPE_MIGRATION_MAP,
 } from './dto/voice.dto';
 import { VOICE_CONFIG } from './voice.constants';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
@@ -104,19 +105,25 @@ export class VoiceService {
   ): Promise<VoiceResponseDto> {
     let voice: Voice | null;
 
-    // Check if the voiceId is a VoiceType enum key (e.g. "NIMBUS") rather than a UUID
-    const voiceTypeKey = dto.voiceId as VoiceType;
+    // Check if the voiceId is a VoiceType enum key (e.g. "NIMBUS") or migrated name
+    let voiceTypeKey = dto.voiceId as VoiceType;
+    const migrated = VOICE_TYPE_MIGRATION_MAP[dto.voiceId];
+    if (migrated) {
+      voiceTypeKey = migrated;
+    }
+
     if (Object.values(VoiceType).includes(voiceTypeKey)) {
       const config = VOICE_CONFIG[voiceTypeKey];
       voice = await this.prisma.voice.findFirst({
         where: {
           elevenLabsVoiceId: config.elevenLabsId,
           userId: null,
+          isDeleted: false,
         },
       });
     } else {
-      voice = await this.prisma.voice.findUnique({
-        where: { id: dto.voiceId },
+      voice = await this.prisma.voice.findFirst({
+        where: { id: dto.voiceId, isDeleted: false },
       });
     }
 
@@ -131,6 +138,12 @@ export class VoiceService {
       data: { preferredVoiceId: voice.id },
       include: { preferredVoice: true },
     });
+
+    if (!result.preferredVoice) {
+      throw new InternalServerErrorException(
+        'Preferred voice was set but could not be loaded.',
+      );
+    }
 
     return this.toVoiceResponse(result.preferredVoice);
   }
