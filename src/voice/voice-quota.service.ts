@@ -38,7 +38,8 @@ export class VoiceQuotaService {
 
   /**
    * Resolve an ElevenLabs voice ID to the Voice table UUID.
-   * Returns null if no matching voice record is found.
+   * If no DB row exists but the ID belongs to a known system voice,
+   * auto-creates the row so voice locking works without manual seeding.
    */
   private async resolveVoiceUuid(
     elevenLabsVoiceId: string,
@@ -47,7 +48,30 @@ export class VoiceQuotaService {
       where: { elevenLabsVoiceId, isDeleted: false },
       select: { id: true },
     });
-    return voice?.id ?? null;
+    if (voice) return voice.id;
+
+    // Auto-seed from VOICE_CONFIG if this is a known system voice
+    const configEntry = Object.entries(VOICE_CONFIG).find(
+      ([, config]) => config.elevenLabsId === elevenLabsVoiceId,
+    );
+    if (!configEntry) return null;
+
+    const [key, config] = configEntry;
+    const created = await this.prisma.voice.create({
+      data: {
+        elevenLabsVoiceId: config.elevenLabsId,
+        name: key,
+        type: 'elevenlabs',
+        voiceAvatar: config.voiceAvatar,
+        url: config.previewUrl,
+        isDeleted: false,
+      },
+      select: { id: true },
+    });
+    this.logger.log(
+      `Auto-seeded voice ${key} (${elevenLabsVoiceId}) with UUID ${created.id}`,
+    );
+    return created.id;
   }
 
   constructor(
