@@ -404,18 +404,30 @@ export class VoiceQuotaService {
   // Uses compare-and-set: only locks when selectedSecondVoiceId is null.
   async lockFreeUserVoice(userId: string, voiceId: string): Promise<void> {
     const canonicalId = await this.resolveCanonicalVoiceId(voiceId);
+
+    // Don't lock the default voice — free users can always use it
+    const defaultConfig = VOICE_CONFIG[FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE];
+    if (canonicalId === defaultConfig.elevenLabsId) {
+      return;
+    }
+
     const voice = await this.prisma.voice.findFirst({
       where: { elevenLabsVoiceId: canonicalId, isDeleted: false },
       select: { id: true },
     });
-    if (!voice) return;
+    if (!voice) {
+      this.logger.warn(
+        `No voice record found for ElevenLabs ID ${canonicalId}. Skipping lock for user ${userId}.`,
+      );
+      return;
+    }
 
     const currentMonth = this.getCurrentMonth();
 
-    // Ensure the usage record exists
+    // Ensure the usage record exists (without setting the lock)
     await this.prisma.userUsage.upsert({
       where: { userId },
-      create: { userId, currentMonth, selectedSecondVoiceId: voice.id },
+      create: { userId, currentMonth },
       update: {},
     });
 
