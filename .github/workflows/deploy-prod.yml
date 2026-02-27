@@ -306,7 +306,14 @@ jobs:
         run: pnpm db:generate && pnpm build
 
       - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
         run: pnpm db:migrate:deploy
+
+      - name: Seed database
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
+        run: pnpm db:seed
 
       - name: Prepare deployment directory
         uses: appleboy/ssh-action@v1.0.3
