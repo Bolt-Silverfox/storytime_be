@@ -351,6 +351,7 @@ model Story {
   @@index([aiGenerated, isDeleted])
   @@index([recommended, isDeleted])
   @@index([ageMin, ageMax])
+  @@index([isDeleted, createdAt(sort: Desc)])
   @@map("stories")
 }
 
@@ -406,6 +407,7 @@ model Favorite {
   @@index([storyId])
   @@index([kidId, storyId])
   @@index([isDeleted])
+  @@index([kidId, isDeleted, createdAt(sort: Desc)])
   @@map("favorites")
 }
 
@@ -445,6 +447,7 @@ model StoryProgress {
   @@index([storyId])
   @@index([isDeleted])
   @@index([kidId, completed])
+  @@index([kidId, completed, isDeleted, lastAccessed(sort: Desc)])
   @@map("story_progress")
 }
 
@@ -462,9 +465,9 @@ model UserStoryProgress {
   deletedAt      DateTime?
 
   @@unique([userId, storyId])
-  @@index([userId])
   @@index([storyId])
   @@index([isDeleted])
+  @@index([userId, completed, isDeleted, lastAccessed(sort: Desc)])
   @@map("user_story_progress")
 }
 
@@ -598,6 +601,7 @@ model Voice {
   @@index([name])
   @@index([type, isDeleted])
   @@index([isDeleted])
+  @@index([elevenLabsVoiceId])
   @@map("voices")
 }
 
@@ -1004,8 +1008,8 @@ model DownloadedStory {
   downloadedAt DateTime @default(now())
 
   @@unique([kidId, storyId]) // Prevent duplicate downloads
-  @@index([kidId])
   @@index([storyId])
+  @@index([kidId, downloadedAt(sort: Desc)])
   @@map("downloaded_stories")
 }
 
@@ -1118,12 +1122,13 @@ model ParagraphAudioCache {
   storyId   String
   textHash  String
   voiceId   String
+  provider  String   @default("unknown")
   audioUrl  String
   story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([storyId, textHash, voiceId])
+  @@unique([storyId, textHash, voiceId, provider])
   @@index([storyId])
   @@map("paragraph_audio_cache")
 }

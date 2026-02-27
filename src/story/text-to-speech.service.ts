@@ -112,14 +112,16 @@ export class TextToSpeechService {
   /**
    * Resolve any voice identifier (VoiceType enum, UUID, or unknown) to its
    * canonical ElevenLabs voice ID for consistent quota/lock checks.
-   * Falls back to DEFAULT_VOICE if the ID cannot be resolved.
+   * Returns undefined for unrecognised voices so callers skip ElevenLabs.
    */
-  private async resolveCanonicalVoiceId(type: string): Promise<string> {
+  private async resolveCanonicalVoiceId(
+    type: string,
+  ): Promise<string | undefined> {
     const canonical = await this.voiceQuota.resolveCanonicalVoiceId(type);
     // If voiceQuota returned the input unchanged and it's not an ElevenLabs ID
-    // we recognise, fall back to the default voice.
+    // we recognise, the voice is unknown — return undefined to skip ElevenLabs.
     if (canonical === type && !this.isKnownElevenLabsId(canonical)) {
-      return VOICE_CONFIG[DEFAULT_VOICE].elevenLabsId;
+      return undefined;
     }
     return canonical;
   }
@@ -138,12 +140,12 @@ export class TextToSpeechService {
     storyId: string,
     text: string,
     voiceId: string,
+    provider?: string,
   ): Promise<string | null> {
     const textHash = this.hashText(text);
-    const cached = await this.prisma.paragraphAudioCache.findUnique({
-      where: {
-        storyId_textHash_voiceId: { storyId, textHash, voiceId },
-      },
+    const cached = await this.prisma.paragraphAudioCache.findFirst({
+      where: { storyId, textHash, voiceId, ...(provider ? { provider } : {}) },
+      orderBy: { createdAt: 'desc' },
     });
     return cached?.audioUrl ?? null;
   }
@@ -153,13 +155,19 @@ export class TextToSpeechService {
     text: string,
     voiceId: string,
     audioUrl: string,
+    provider: string,
   ): Promise<void> {
     const textHash = this.hashText(text);
     await this.prisma.paragraphAudioCache.upsert({
       where: {
-        storyId_textHash_voiceId: { storyId, textHash, voiceId },
+        storyId_textHash_voiceId_provider: {
+          storyId,
+          textHash,
+          voiceId,
+          provider,
+        },
       },
-      create: { storyId, textHash, voiceId, audioUrl },
+      create: { storyId, textHash, voiceId, audioUrl, provider },
       update: { audioUrl },
     });
   }
@@ -209,8 +217,15 @@ export class TextToSpeechService {
       );
     }
 
-    // Check paragraph-level cache first
-    const cachedUrl = await this.getCachedParagraphAudio(storyId, text, type);
+    // Check paragraph-level cache first.
+    // When providerOverride is set (batch mode), scope cache to that provider
+    // to avoid cross-provider cache hits that break voice consistency.
+    const cachedUrl = await this.getCachedParagraphAudio(
+      storyId,
+      text,
+      type,
+      options?.providerOverride,
+    );
     if (cachedUrl) {
       this.logger.debug(
         `Paragraph cache hit for story ${storyId}, voice ${type}`,
@@ -254,14 +269,14 @@ export class TextToSpeechService {
         edgeTtsVoice = defaultConfig.edgeTtsVoice;
         deepgramVoice = defaultConfig.deepgramVoice;
       } else {
-        // Unrecognized ID, fallback to default
+        // Unrecognized ID — skip ElevenLabs, use default Deepgram/Edge voices
         const defaultConfig = VOICE_CONFIG[DEFAULT_VOICE];
-        elevenLabsId = defaultConfig.elevenLabsId;
+        elevenLabsId = undefined;
         edgeTtsVoice = defaultConfig.edgeTtsVoice;
         deepgramVoice = defaultConfig.deepgramVoice;
-        voiceSettings = defaultConfig.voiceSettings;
+        voiceSettings = undefined;
         this.logger.warn(
-          `Voice ID ${type} not found. Falling back to default.`,
+          `Voice ID ${type} not found. Skipping ElevenLabs, using Deepgram/Edge fallback.`,
         );
       }
     }
@@ -320,7 +335,13 @@ export class TextToSpeechService {
         `story_${storyId}_${providerName}_${Date.now()}.mp3`,
       );
       try {
-        await this.cacheParagraphAudio(storyId, text, type, audioUrl);
+        await this.cacheParagraphAudio(
+          storyId,
+          text,
+          type,
+          audioUrl,
+          providerName,
+        );
       } catch (cacheErr) {
         const cacheMsg =
           cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
@@ -349,8 +370,6 @@ export class TextToSpeechService {
         deepgramVoice,
         edgeTtsVoice,
         voiceSettings,
-        userId,
-        options,
         attemptProvider,
       );
     }
@@ -371,8 +390,6 @@ export class TextToSpeechService {
             elevenLabsId,
             type,
             voiceSettings,
-            userId,
-            options,
             attemptProvider,
           );
           this.elevenLabsBreaker.recordSuccess();
@@ -448,8 +465,6 @@ export class TextToSpeechService {
     elevenLabsId: string,
     type: string,
     voiceSettings: VoiceSettings | undefined,
-    userId: string | undefined,
-    options: { skipQuotaCheck?: boolean; isPremium?: boolean } | undefined,
     attemptProvider: (
       name: TTSResult['provider'],
       gen: () => Promise<Buffer>,
@@ -476,10 +491,6 @@ export class TextToSpeechService {
         settings,
       ),
     );
-
-    if (userId && !options?.skipQuotaCheck) {
-      await this.voiceQuota.incrementUsage(userId);
-    }
 
     return result;
   }
@@ -534,8 +545,6 @@ export class TextToSpeechService {
     deepgramVoice: string | undefined,
     edgeTtsVoice: string | undefined,
     voiceSettings: VoiceSettings | undefined,
-    userId: string | undefined,
-    options: { skipQuotaCheck?: boolean; isPremium?: boolean } | undefined,
     attemptProvider: (
       name: TTSResult['provider'],
       gen: () => Promise<Buffer>,
@@ -564,8 +573,6 @@ export class TextToSpeechService {
             elevenLabsId,
             type,
             voiceSettings,
-            userId,
-            options,
             attemptProvider,
           );
           break;
@@ -609,10 +616,17 @@ export class TextToSpeechService {
     results: Array<{ index: number; text: string; audioUrl: string | null }>;
     totalParagraphs: number;
     wasTruncated: boolean;
+    usedProvider: 'elevenlabs' | 'deepgram' | 'edgetts' | 'none';
+    preferredProvider?: 'elevenlabs' | 'deepgram' | 'edgetts';
     providerStatus?: 'degraded';
   }> {
     if (!fullText?.trim())
-      return { results: [], totalParagraphs: 0, wasTruncated: false };
+      return {
+        results: [],
+        totalParagraphs: 0,
+        wasTruncated: false,
+        usedProvider: 'none',
+      };
 
     const type =
       VOICE_TYPE_MIGRATION_MAP[voiceType as string] ??
@@ -641,63 +655,15 @@ export class TextToSpeechService {
       hashMap.set(hash, entries);
     }
 
-    const cachedEntries = await this.prisma.paragraphAudioCache.findMany({
-      where: {
-        storyId,
-        voiceId: type,
-        textHash: { in: [...hashMap.keys()] },
-      },
-    });
-    const cacheMap = new Map(
-      cachedEntries.map((e) => [e.textHash, e.audioUrl]),
-    );
-
-    const cached: Array<{ index: number; text: string; audioUrl: string }> = [];
-    const uncached: Array<{ index: number; text: string; hash: string }> = [];
-    // Track which hashes we've already queued for generation (only generate once per unique text)
-    const uncachedHashes = new Set<string>();
-
-    for (const [hash, entries] of hashMap) {
-      const cachedUrl = cacheMap.get(hash);
-      if (cachedUrl) {
-        // All paragraphs with this hash get the cached URL
-        for (const { index, text } of entries) {
-          cached.push({ index, text, audioUrl: cachedUrl });
-        }
-      } else {
-        // Only generate for the first entry; duplicates will be filled in after generation
-        if (!uncachedHashes.has(hash)) {
-          uncachedHashes.add(hash);
-          uncached.push({
-            index: entries[0].index,
-            text: entries[0].text,
-            hash,
-          });
-        }
-      }
-    }
-
-    this.logger.log(
-      `Batch story ${storyId}: ${cached.length} cached, ${uncached.length} to generate`,
-    );
-
-    if (uncached.length === 0) {
-      return {
-        results: cached.sort((a, b) => a.index - b.index),
-        totalParagraphs: allParagraphs.length,
-        wasTruncated,
-      };
-    }
-
-    // Resolve premium status and voice eligibility once for the entire batch
+    // ── Determine the batch provider BEFORE cache lookup ──
+    // This ensures we only use cache hits from the same provider,
+    // guaranteeing every paragraph in the story sounds the same.
     const quotaVoiceId = await this.resolveCanonicalVoiceId(type);
-    let reservedCredits = 0;
     let isPremium = false;
     let useElevenLabsBatch = false;
-    if (userId) {
+    if (userId && quotaVoiceId) {
       isPremium = await this.subscriptionService.isPremiumUser(userId);
       if (isPremium) {
-        // Premium: check per-story voice limit
         useElevenLabsBatch = await this.voiceQuota.canUseVoiceForStory(
           storyId,
           quotaVoiceId,
@@ -720,34 +686,13 @@ export class TextToSpeechService {
           );
         }
       }
-
-      if (useElevenLabsBatch && isPremium) {
-        reservedCredits = await this.voiceQuota.recordUsage(
-          userId,
-          uncached.length,
-        );
-        this.logger.log(
-          `Reserved ${reservedCredits}/${uncached.length} ElevenLabs credits for batch story ${storyId}`,
-        );
-      }
+    } else if (userId && !quotaVoiceId) {
+      // Unknown voice — resolve isPremium for downstream TTS flow but skip ElevenLabs
+      isPremium = await this.subscriptionService.isPremiumUser(userId);
+      this.logger.warn(
+        `Batch story ${storyId}: unrecognised voice ${type}, skipping ElevenLabs.`,
+      );
     }
-
-    // ── Single-provider batch generation ──
-    // All uncached paragraphs are sent to ONE provider (no fallback chain).
-    // If some paragraphs fail, we keep the successes and return null for
-    // failures — the next batch request will cache-miss on those and retry
-    // with the same provider (which should be back up by then).
-    // This guarantees every generated paragraph uses the same voice.
-    type BatchResult = {
-      index: number;
-      text: string;
-      audioUrl: string | null;
-      hash: string;
-      provider: string | null;
-    };
-
-    const generated: BatchResult[] = [];
-    let reservedUsed = 0;
 
     // Pick the single provider for this batch.
     // Circuit breaker fast-fail: if the preferred provider is OPEN, downgrade.
@@ -770,63 +715,108 @@ export class TextToSpeechService {
       batchProvider = 'edgetts';
     }
 
-    this.logger.log(
-      `Batch story ${storyId}: generating ${uncached.length} paragraphs with ${batchProvider}`,
+    // ── Cache lookup: only accept hits from the SAME provider ──
+    // Paragraphs cached by a different provider are treated as uncached
+    // so they get regenerated, ensuring consistent voice across the story.
+    let { cached, uncached } = await this.rebuildCacheForProvider(
+      batchProvider,
+      hashMap,
+      storyId,
+      type,
     );
 
-    for (let i = 0; i < uncached.length; i += MAX_CONCURRENT) {
-      const chunk = uncached.slice(i, i + MAX_CONCURRENT);
-      const chunkResults = await Promise.all(
-        chunk.map(async ({ index, text, hash }) => {
-          try {
-            const result = await this.generateTTS(
-              storyId,
-              text,
-              voiceType,
-              userId,
-              {
-                skipQuotaCheck: isPremium && reservedCredits > 0,
-                isPremium,
-                providerOverride: batchProvider,
-              },
-            );
-            return {
-              index,
-              text,
-              hash,
-              audioUrl: result.audioUrl,
-              provider: result.provider,
-              ok: true as const,
-            };
-          } catch {
-            return {
-              index,
-              text,
-              hash,
-              audioUrl: null,
-              provider: null,
-              ok: false as const,
-            };
-          }
-        }),
+    this.logger.log(
+      `Batch story ${storyId}: ${cached.length} cached (${batchProvider}), ${uncached.length} to generate`,
+    );
+
+    if (uncached.length === 0) {
+      return {
+        results: cached.sort((a, b) => a.index - b.index),
+        totalParagraphs: allParagraphs.length,
+        wasTruncated,
+        usedProvider: batchProvider,
+      };
+    }
+
+    // ── Provider failover chain for batch generation ──
+    // All uncached paragraphs are sent to ONE provider. If that provider
+    // fails, we retry the ENTIRE batch with the next provider in the chain
+    // so users always get a complete story with consistent voice.
+    const providerChain: Array<'elevenlabs' | 'deepgram' | 'edgetts'> = [];
+    if (batchProvider === 'elevenlabs')
+      providerChain.push('elevenlabs', 'deepgram', 'edgetts');
+    else if (batchProvider === 'deepgram')
+      providerChain.push('deepgram', 'edgetts');
+    else providerChain.push('edgetts');
+
+    const preferredProvider = batchProvider;
+
+    type BatchResult = {
+      index: number;
+      text: string;
+      audioUrl: string | null;
+      hash: string;
+      provider: string | null;
+    };
+
+    let generated: BatchResult[] = [];
+    let actualProvider = batchProvider;
+
+    for (const provider of providerChain) {
+      // For non-first providers: check circuit breaker and re-do cache lookup
+      if (provider !== batchProvider) {
+        const breaker = this.getBreakerForProvider(provider);
+        if (!breaker.canExecute()) {
+          this.logger.warn(
+            `${provider} circuit breaker OPEN, skipping failover for batch story ${storyId}`,
+          );
+          continue;
+        }
+        // Re-do cache lookup for this provider
+        ({ cached, uncached } = await this.rebuildCacheForProvider(
+          provider,
+          hashMap,
+          storyId,
+          type,
+        ));
+        if (uncached.length === 0) {
+          generated = [];
+          actualProvider = provider;
+          break;
+        }
+      }
+
+      const attempt = await this.generateBatchForProvider(
+        uncached,
+        provider,
+        storyId,
+        voiceType,
+        userId,
+        isPremium,
       );
 
-      for (const r of chunkResults) {
-        generated.push({
-          index: r.index,
-          text: r.text,
-          hash: r.hash,
-          audioUrl: r.audioUrl,
-          provider: r.provider,
-        });
-        if (r.ok && r.provider === 'elevenlabs') reservedUsed++;
+      if (attempt.failedCount === 0) {
+        generated = attempt.results;
+        actualProvider = provider;
+        break;
       }
+
+      // Intentional: discard partial results from this provider and retry ALL
+      // uncached paragraphs on the next provider. The next iteration rebuilds
+      // uncached from a fresh cache lookup scoped to the new provider, ensuring
+      // all returned audio comes from a single provider for voice consistency.
+      // Audio already uploaded by this provider remains cached for future use.
+      this.logger.warn(
+        `Batch story ${storyId}: ${attempt.failedCount}/${uncached.length} failed with ${provider}, trying next provider`,
+      );
+      actualProvider = provider;
+      generated = attempt.results;
     }
 
     const failedCount = generated.filter((r) => !r.audioUrl).length;
     if (failedCount > 0) {
       this.logger.warn(
-        `Batch story ${storyId}: ${failedCount}/${uncached.length} paragraphs failed with ${batchProvider}, will retry on next request`,
+        `Batch story ${storyId}: ${failedCount}/${uncached.length} paragraphs failed on all providers`,
       );
     }
 
@@ -854,14 +844,6 @@ export class TextToSpeechService {
       }
     }
 
-    // Release unused reserved credits — only paragraphs that actually used
-    // ElevenLabs (identified by URL filename pattern) keep their reserved credits.
-    // This prevents quota leaks when ElevenLabs fails but a fallback succeeds.
-    const creditsToRelease = reservedCredits - reservedUsed;
-    if (creditsToRelease > 0 && userId) {
-      await this.voiceQuota.releaseReservedUsage(userId, creditsToRelease);
-    }
-
     // Report degraded status when any TTS breaker is OPEN (read-only snapshot
     // to avoid side effects like advancing OPEN → HALF_OPEN)
     const isDegraded = [
@@ -876,7 +858,142 @@ export class TextToSpeechService {
       ),
       totalParagraphs: allParagraphs.length,
       wasTruncated,
+      usedProvider: actualProvider,
+      ...(actualProvider !== preferredProvider ? { preferredProvider } : {}),
       ...(isDegraded ? { providerStatus: 'degraded' as const } : {}),
     };
+  }
+
+  /**
+   * Query paragraph audio cache for a specific provider and split hashMap entries
+   * into cached (with audioUrl) and uncached (needing generation) arrays.
+   */
+  private async rebuildCacheForProvider(
+    provider: 'elevenlabs' | 'deepgram' | 'edgetts',
+    hashMap: Map<string, Array<{ index: number; text: string }>>,
+    storyId: string,
+    voiceId: string,
+  ): Promise<{
+    cached: Array<{ index: number; text: string; audioUrl: string }>;
+    uncached: Array<{ index: number; text: string; hash: string }>;
+  }> {
+    const entries = await this.prisma.paragraphAudioCache.findMany({
+      where: {
+        storyId,
+        voiceId,
+        provider,
+        textHash: { in: [...hashMap.keys()] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    // desc order + skip-if-exists ensures the newest cache entry wins.
+    const cacheMap = new Map<string, string>();
+    for (const e of entries) {
+      if (!cacheMap.has(e.textHash)) {
+        cacheMap.set(e.textHash, e.audioUrl);
+      }
+    }
+
+    const cached: Array<{ index: number; text: string; audioUrl: string }> = [];
+    const uncached: Array<{ index: number; text: string; hash: string }> = [];
+
+    for (const [hash, hashEntries] of hashMap) {
+      const cachedUrl = cacheMap.get(hash);
+      if (cachedUrl) {
+        for (const { index, text } of hashEntries) {
+          cached.push({ index, text, audioUrl: cachedUrl });
+        }
+      } else {
+        uncached.push({
+          index: hashEntries[0].index,
+          text: hashEntries[0].text,
+          hash,
+        });
+      }
+    }
+
+    return { cached, uncached };
+  }
+
+  /** Generate a batch of paragraphs using a single provider */
+  private async generateBatchForProvider(
+    uncached: Array<{ index: number; text: string; hash: string }>,
+    batchProvider: 'elevenlabs' | 'deepgram' | 'edgetts',
+    storyId: string,
+    voiceType: VoiceType | string | undefined,
+    userId: string | undefined,
+    isPremium: boolean,
+  ): Promise<{
+    results: Array<{
+      index: number;
+      text: string;
+      audioUrl: string | null;
+      hash: string;
+      provider: string | null;
+    }>;
+    failedCount: number;
+  }> {
+    const results: Array<{
+      index: number;
+      text: string;
+      audioUrl: string | null;
+      hash: string;
+      provider: string | null;
+    }> = [];
+
+    this.logger.log(
+      `Batch story ${storyId}: generating ${uncached.length} paragraphs with ${batchProvider}`,
+    );
+
+    for (let i = 0; i < uncached.length; i += MAX_CONCURRENT) {
+      const chunk = uncached.slice(i, i + MAX_CONCURRENT);
+      const chunkResults = await Promise.all(
+        chunk.map(async ({ index, text, hash }) => {
+          try {
+            const result = await this.generateTTS(
+              storyId,
+              text,
+              voiceType,
+              userId,
+              {
+                skipQuotaCheck: true,
+                isPremium,
+                providerOverride: batchProvider,
+              },
+            );
+            return {
+              index,
+              text,
+              hash,
+              audioUrl: result.audioUrl,
+              provider: result.provider,
+              ok: true as const,
+            };
+          } catch {
+            return {
+              index,
+              text,
+              hash,
+              audioUrl: null,
+              provider: null,
+              ok: false as const,
+            };
+          }
+        }),
+      );
+
+      for (const r of chunkResults) {
+        results.push({
+          index: r.index,
+          text: r.text,
+          hash: r.hash,
+          audioUrl: r.audioUrl,
+          provider: r.provider,
+        });
+      }
+    }
+
+    const failedCount = results.filter((r) => !r.audioUrl).length;
+    return { results, failedCount };
   }
 }

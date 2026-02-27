@@ -1,11 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { StoryService } from './story.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from './gemini.service';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from './text-to-speech.service';
-import { Cache } from '@nestjs/cache-manager';
 
 // Mock dependencies
 const mockPrismaService = {
@@ -196,14 +197,15 @@ describe('StoryService - Library & Generation', () => {
 
         const result = await service.getStories({ userId: 'user-1' });
 
+        // sortByReadStatus orders: null (unread) first, then reading, then done
         expect(result.data[0]).toEqual(
-          expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
+          expect.objectContaining({ id: 'story-3', readStatus: null }),
         );
         expect(result.data[1]).toEqual(
           expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
         );
         expect(result.data[2]).toEqual(
-          expect.objectContaining({ id: 'story-3', readStatus: null }),
+          expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
         );
         expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
         expect(prisma.userStoryProgress.findMany).toHaveBeenCalledWith({
@@ -225,12 +227,34 @@ describe('StoryService - Library & Generation', () => {
       expect(prisma.story.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
-            creatorKidId: kidId, // <--- Ensures we only fetch THEIR stories
+            creatorKidId: kidId,
             isDeleted: false,
           },
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         }),
       );
+    });
+
+    it('getCreatedStories: should return cursor-paginated when limit provided', async () => {
+      const stories = [
+        { id: 'story-1', title: 'Story 1' },
+        { id: 'story-2', title: 'Story 2' },
+        { id: 'story-3', title: 'Story 3' },
+      ];
+      prisma.story.findMany.mockResolvedValue(stories);
+
+      const result = await service.getCreatedStories(kidId, undefined, 2);
+
+      expect(result).toEqual({
+        data: [
+          { id: 'story-1', title: 'Story 1' },
+          { id: 'story-2', title: 'Story 2' },
+        ],
+        pagination: {
+          nextCursor: 'story-2',
+          hasNextPage: true,
+        },
+      });
     });
 
     it('addDownload: should use upsert to prevent duplicates', async () => {
@@ -302,11 +326,12 @@ describe('StoryService - Library & Generation', () => {
         expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
       );
       expect(result.seasonal).toEqual([]);
+      // sortByReadStatus orders: null (unread) first, then reading, then done
       expect(result.topLiked[0]).toEqual(
-        expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+        expect.objectContaining({ id: 'story-3', readStatus: null }),
       );
       expect(result.topLiked[1]).toEqual(
-        expect.objectContaining({ id: 'story-3', readStatus: null }),
+        expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
       );
 
       // Verify only 1 DB call for progress (not 1 per section)
@@ -390,6 +415,43 @@ describe('StoryService - Library & Generation', () => {
       expect(result[0]).toHaveProperty('categories');
       expect(result[0]).toHaveProperty('images');
       expect(result[0].themes).toEqual([{ id: 'theme-1', name: 'Adventure' }]);
+    });
+  });
+
+  // --- 5. CURSOR ERROR HANDLING ---
+  describe('withCursorErrorHandling (via getCreatedStories)', () => {
+    it('should throw BadRequestException for invalid cursor (P2025)', async () => {
+      prisma.story.findMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Record not found', {
+          code: 'P2025',
+          clientVersion: '5.0.0',
+        }),
+      );
+
+      await expect(
+        service.getCreatedStories('kid-1', 'invalid-cursor', 10),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should re-throw non-P2025 Prisma errors', async () => {
+      prisma.story.findMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint', {
+          code: 'P2002',
+          clientVersion: '5.0.0',
+        }),
+      );
+
+      await expect(
+        service.getCreatedStories('kid-1', 'some-cursor', 10),
+      ).rejects.toThrow(Prisma.PrismaClientKnownRequestError);
+    });
+
+    it('should re-throw non-Prisma errors', async () => {
+      prisma.story.findMany.mockRejectedValue(new Error('Network error'));
+
+      await expect(
+        service.getCreatedStories('kid-1', 'some-cursor', 10),
+      ).rejects.toThrow('Network error');
     });
   });
 });

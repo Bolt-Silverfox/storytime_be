@@ -3,26 +3,21 @@ const path = require('path');
 
 // Master lists from seed.ts
 const validCategories = [
-  'Animal Stories',
-  'Adventure & Action',
-  'Bedtime Stories',
-  'Cultural & Folklore Stories',
-  'Drama & Family Stories',
-  'Educational & Learning Stories',
-  'Fairy Tales',
-  'Fables & Morality Stories',
-  'Fantasy & Magic',
-  'Historical Fiction',
-  'Holiday / Seasonal Stories',
-  'Horror & Ghost Stories',
-  'Humor & Satire',
-  'Myths & Legends',
-  'Nature',
-  'Ocean',
-  'Mystery & Detective Stories',
-  'Robots',
-  'Romance & Love Stories',
-  'Science Fiction & Space',
+  'Animal',
+  'Educational',
+  'Bedtime',
+  'Fairytales & Folktales',
+  'Adventures and Action',
+  'Fantasy and Magical Stories',
+  'Funny Stories',
+  'Friendship and Feelings',
+  'Nature and Oceans',
+  'Science and Discovery',
+  'Mystery & Spooky',
+  'History & Heroes',
+  'Holiday/Seasonal',
+  'Superheroes',
+  'Value and Life Lessons',
 ];
 
 const validThemes = [
@@ -70,26 +65,51 @@ function findClosestValid(value, validList) {
   return null;
 }
 
-const filePath = path.resolve(__dirname, '../data/stories.json');
-const stories = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+const dataDir = path.resolve(__dirname, '../data');
+const files = fs.readdirSync(dataDir).filter(f => f.startsWith('stories') && f.endsWith('.json') && !f.includes('backup'));
 
-for (const story of stories) {
-  // --- CATEGORY ---
-  let cats = story.category;
-  if (!Array.isArray(cats)) cats = cats ? [cats] : [];
-  cats = cats
-    .map((c) => findClosestValid(c, validCategories))
-    .filter((c) => !!c);
-  story.category = cats;
+let failedFiles = 0;
 
-  // --- THEME ---
-  let ths = story.theme;
-  if (!Array.isArray(ths)) ths = ths ? [ths] : [];
-  ths = ths
-    .map((t) => findClosestValid(t, validThemes))
-    .filter((t) => !!t);
-  story.theme = ths;
+for (const file of files) {
+  const filePath = path.join(dataDir, file);
+  console.log(`Fixing categories and themes in ${file}...`);
+
+  try {
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    const stories = JSON.parse(fileContent);
+
+    for (const story of stories) {
+      // --- CATEGORY ---
+      let cats = story.category;
+      if (!Array.isArray(cats)) cats = cats ? [cats] : [];
+      cats = cats
+        .map((c) => findClosestValid(c, validCategories))
+        .filter((c) => !!c);
+      story.category = cats;
+
+      // --- THEME ---
+      let ths = story.theme;
+      if (!Array.isArray(ths)) ths = ths ? [ths] : [];
+      ths = ths
+        .map((t) => findClosestValid(t, validThemes))
+        .filter((t) => !!t);
+      story.theme = ths;
+    }
+
+    // Create backup before overriding
+    const backupPath = filePath + '.bak';
+    fs.writeFileSync(backupPath, fileContent);
+
+    fs.writeFileSync(filePath, JSON.stringify(stories, null, 2));
+  } catch (error) {
+    console.error(`Error processing file ${file}:`, error);
+    failedFiles++;
+  }
 }
 
-fs.writeFileSync(filePath, JSON.stringify(stories, null, 2));
-console.log('stories.json has been fixed!'); 
+if (failedFiles > 0) {
+  console.error(`Completed with ${failedFiles} failed file(s).`);
+  process.exitCode = 1;
+} else {
+  console.log('stories JSON files have been fixed!');
+}

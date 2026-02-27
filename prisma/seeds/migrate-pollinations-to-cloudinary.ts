@@ -97,9 +97,15 @@ async function generateAndUpload(
             { format: 'webp' },
           ],
         },
-        (error, result) => {
-          if (error) return reject(error);
-          if (!result) return reject(new Error('Cloudinary returned no result'));
+        (error: any, result) => {
+          if (error)
+            return reject(
+              error instanceof Error
+                ? error
+                : new Error(error?.message || 'Cloudinary Upload Failed'),
+            );
+          if (!result)
+            return reject(new Error('Cloudinary returned no result'));
           if (!result.secure_url)
             return reject(new Error('Cloudinary upload missing secure_url'));
           resolve({ secure_url: result.secure_url });
