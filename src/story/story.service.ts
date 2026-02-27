@@ -6,7 +6,9 @@ const MAX_SESSION_TIME = 86_400;
 /** Parse, clamp and floor a raw sessionTime value to a safe integer in [0, MAX_SESSION_TIME]. */
 function normalizeSessionTime(value: unknown): number {
   const raw = Number(value ?? 0);
-  return Number.isFinite(raw) ? Math.min(Math.max(0, Math.floor(raw)), MAX_SESSION_TIME) : 0;
+  return Number.isFinite(raw)
+    ? Math.min(Math.max(0, Math.floor(raw)), MAX_SESSION_TIME)
+    : 0;
 }
 import {
   CreateStoryDto,
