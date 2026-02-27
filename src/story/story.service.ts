@@ -1451,7 +1451,6 @@ export class StoryService {
     // 2. Persist with Image & Audio
     return this.persistGeneratedStory(
       generatedStory,
-      options.kidName || 'Hero',
       options.creatorKidId,
       options.voiceType,
       options.seasonIds,
@@ -1585,7 +1584,6 @@ export class StoryService {
     // 3. Persist (with Image & Audio) - calling shared helper
     return this.persistGeneratedStory(
       generatedStory,
-      options.kidName!,
       kidId,
       voiceType,
       seasonIds,
@@ -1595,7 +1593,6 @@ export class StoryService {
   // --- PRIVATE HELPER: PERSIST STORY (Includes Image & Audio Gen) ---
   private async persistGeneratedStory(
     generatedStory: GeneratedStory & { textContent?: string },
-    _kidName: string,
     creatorKidId?: string,
     voiceType?: VoiceType,
     seasonIds?: string[],

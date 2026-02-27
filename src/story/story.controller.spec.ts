@@ -183,12 +183,19 @@ describe('StoryController', () => {
   });
 
   // --- 4. IDOR PROTECTION ---
-  describe('verifyKidOwnership', () => {
+  describe('IDOR protection', () => {
     it('should throw NotFoundException when kid does not belong to parent', async () => {
       mockPrismaService.kid.findFirst.mockResolvedValue(null);
       await expect(controller.getCreated(mockReq, 'kid-999')).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('should throw NotFoundException when story does not exist', async () => {
+      mockPrismaService.story.findFirst.mockResolvedValue(null);
+      await expect(
+        controller.updateStory(mockReq, 'non-existent-story', {} as any),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw ForbiddenException when story belongs to another user', async () => {

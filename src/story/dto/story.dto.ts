@@ -733,6 +733,7 @@ export class RestrictStoryDto {
 
 export class CursorPaginatedStoryResponse {
   @ApiProperty({ type: [StoryDto] })
+  @IsArray()
   data: StoryDto[];
 
   @ApiProperty({ type: CursorPaginationMetaDto })
@@ -741,6 +742,7 @@ export class CursorPaginatedStoryResponse {
 
 export class CursorPaginatedStoryWithProgressResponse {
   @ApiProperty({ type: [StoryWithProgressDto] })
+  @IsArray()
   data: StoryWithProgressDto[];
 
   @ApiProperty({ type: CursorPaginationMetaDto })
@@ -749,6 +751,7 @@ export class CursorPaginatedStoryWithProgressResponse {
 
 export class CursorPaginatedFavoriteResponse {
   @ApiProperty({ type: [FavoriteDto] })
+  @IsArray()
   data: FavoriteDto[];
 
   @ApiProperty({ type: CursorPaginationMetaDto })
