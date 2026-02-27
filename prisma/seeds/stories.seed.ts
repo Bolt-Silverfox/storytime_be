@@ -60,8 +60,8 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       logger.error(`No stories*.json files found in ${dataDir}`);
       return {
         name: 'stories',
-        success: true,
-        count: 0,
+        success: false,
+        error: 'No stories JSON files found',
       };
     }
 
@@ -154,11 +154,11 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
               },
               seasons: story.seasons
                 ? {
-                    connectOrCreate: story.seasons.map((name: string) => ({
-                      where: { name },
-                      create: { name },
-                    })),
-                  }
+                  connectOrCreate: story.seasons.map((name: string) => ({
+                    where: { name },
+                    create: { name },
+                  })),
+                }
                 : undefined,
               questions: {
                 create: (story.questions || []).map(

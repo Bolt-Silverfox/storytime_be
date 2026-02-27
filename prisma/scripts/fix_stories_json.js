@@ -71,27 +71,37 @@ const files = fs.readdirSync(dataDir).filter(f => f.startsWith('stories') && f.e
 for (const file of files) {
   const filePath = path.join(dataDir, file);
   console.log(`Fixing categories and themes in ${file}...`);
-  const stories = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 
-  for (const story of stories) {
-    // --- CATEGORY ---
-    let cats = story.category;
-    if (!Array.isArray(cats)) cats = cats ? [cats] : [];
-    cats = cats
-      .map((c) => findClosestValid(c, validCategories))
-      .filter((c) => !!c);
-    story.category = cats;
+  try {
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    const stories = JSON.parse(fileContent);
 
-    // --- THEME ---
-    let ths = story.theme;
-    if (!Array.isArray(ths)) ths = ths ? [ths] : [];
-    ths = ths
-      .map((t) => findClosestValid(t, validThemes))
-      .filter((t) => !!t);
-    story.theme = ths;
+    for (const story of stories) {
+      // --- CATEGORY ---
+      let cats = story.category;
+      if (!Array.isArray(cats)) cats = cats ? [cats] : [];
+      cats = cats
+        .map((c) => findClosestValid(c, validCategories))
+        .filter((c) => !!c);
+      story.category = cats;
+
+      // --- THEME ---
+      let ths = story.theme;
+      if (!Array.isArray(ths)) ths = ths ? [ths] : [];
+      ths = ths
+        .map((t) => findClosestValid(t, validThemes))
+        .filter((t) => !!t);
+      story.theme = ths;
+    }
+
+    // Create backup before overriding
+    const backupPath = filePath + '.bak';
+    fs.writeFileSync(backupPath, fileContent);
+
+    fs.writeFileSync(filePath, JSON.stringify(stories, null, 2));
+  } catch (error) {
+    console.error(`Error processing file ${file}:`, error);
   }
-
-  fs.writeFileSync(filePath, JSON.stringify(stories, null, 2));
 }
 
 console.log('stories JSON files have been fixed!'); 
