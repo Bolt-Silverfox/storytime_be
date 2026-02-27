@@ -34,11 +34,9 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
   const { prisma, logger } = ctx;
 
   try {
+    // 1. Determine environment
     const env = process.env.NODE_ENV || 'development';
-    const envFile = path.resolve(`prisma/data/stories.${env}.json`);
-    const defaultFile = path.resolve('prisma/data/stories.json');
-    const storiesPath = fs.existsSync(envFile) ? envFile : defaultFile;
-
+    const isProduction = env === 'production';
     const dataDir = path.resolve('prisma/data');
     if (!fs.existsSync(dataDir)) {
       logger.error(`Data directory not found at ${dataDir}`);
@@ -49,15 +47,18 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       };
     }
 
-    // Find all files matching stories*.json
-    const files = fs
-      .readdirSync(dataDir)
-      .filter(
-        (file) =>
-          file.startsWith('stories') &&
-          file.endsWith('.json') &&
-          !file.includes('backup'),
-      );
+    const files = fs.readdirSync(dataDir).filter((file) => {
+      if (!file.startsWith('stories') || !file.endsWith('.json') || file.includes('backup')) {
+        return false;
+      }
+
+      if (isProduction) {
+        return file.endsWith('.production.json');
+      }
+      return !file.endsWith('.production.json');
+    });
+
+    logger.log(`Found ${files.length} files to process in ${env} mode.`);
 
     if (files.length === 0) {
       logger.error(`No stories*.json files found in ${dataDir}`);
@@ -86,10 +87,8 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       let stories: StoryData[];
       try {
         stories = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      } catch (e) {
-        logger.error(
-          `Skipping malformed JSON file: ${file}, Error: ${e instanceof Error ? e.message : 'Unknown'}`,
-        );
+      } catch {
+        logger.error(`Skipping malformed JSON file: ${file}`);
         continue;
       }
 

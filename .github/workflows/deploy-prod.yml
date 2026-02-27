@@ -37,7 +37,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Format check
-        run: pnpm run format:check || pnpm run format --check || echo "Format check not configured"
+        run: pnpm run format -- --check
 
       - name: Lint
         run: pnpm run lint
@@ -322,6 +322,13 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
           chmod 600 /tmp/ssh_key
 
+      - name: Add server host key
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          ssh-keyscan -H "$EC2_HOST" > /tmp/known_hosts
+          chmod 600 /tmp/known_hosts
+
       - name: Sync files to server
         run: |
           rsync -avz --delete \
@@ -331,7 +338,7 @@ jobs:
             --exclude='.env.local' \
             --exclude='coverage' \
             --exclude='.turbo' \
-            -e "ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no" \
+            -e "ssh -i /tmp/ssh_key -o UserKnownHostsFile=/tmp/known_hosts -o StrictHostKeyChecking=yes" \
             ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/production/storytime-api/
 
       - name: Install dependencies and restart application
@@ -344,6 +351,7 @@ jobs:
           script: |
             source ~/.nvm/nvm.sh
             cd /home/ubuntu/storytime/production/storytime-api
+            [ -f .env ] && chmod 600 .env
 
             # Install Node dependencies
             pnpm install --frozen-lockfile
@@ -401,5 +409,5 @@ jobs:
       - name: Cleanup sensitive files
         if: always()
         run: |
-          rm -f /tmp/ssh_key
+          rm -f /tmp/ssh_key /tmp/known_hosts
           rm -f .env

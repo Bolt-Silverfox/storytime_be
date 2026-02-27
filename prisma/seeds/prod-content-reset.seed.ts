@@ -1,7 +1,35 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { seedCategories } from './categories.seed';
 import { seedStories } from './stories.seed';
 import { createSeedLogger } from './types';
+
+function assertSeedFilesReadable() {
+  const env = process.env.NODE_ENV || 'development';
+  const isProduction = env === 'production';
+  const dataDir = path.resolve('prisma/data');
+
+  if (!fs.existsSync(dataDir)) {
+    throw new Error(`Data directory not found at ${dataDir}`);
+  }
+
+  const files = fs.readdirSync(dataDir).filter((file) => {
+    if (!file.startsWith('stories') || !file.endsWith('.json') || file.includes('backup')) {
+      return false;
+    }
+    return isProduction ? file.endsWith('.production.json') : !file.endsWith('.production.json');
+  });
+
+  if (files.length === 0) {
+    throw new Error(`No stories seed files found for NODE_ENV=${env}`);
+  }
+
+  for (const file of files) {
+    const filePath = path.join(dataDir, file);
+    JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  }
+}
 
 export async function prodContentReset(prisma: PrismaClient) {
   const logger = createSeedLogger('prod-reset');
@@ -14,6 +42,11 @@ export async function prodContentReset(prisma: PrismaClient) {
   }
 
   logger.log('Starting production content reset...');
+
+  // Validate seed files are readable and parseable before any destructive operations
+  logger.log('Validating seed files...');
+  assertSeedFilesReadable();
+  logger.success('Seed files validated successfully.');
 
   try {
     // 0. Pre-cleanup of non-cascading relations that might block Story deletion

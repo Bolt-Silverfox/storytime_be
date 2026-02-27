@@ -68,6 +68,8 @@ function findClosestValid(value, validList) {
 const dataDir = path.resolve(__dirname, '../data');
 const files = fs.readdirSync(dataDir).filter(f => f.startsWith('stories') && f.endsWith('.json') && !f.includes('backup'));
 
+let failedFiles = 0;
+
 for (const file of files) {
   const filePath = path.join(dataDir, file);
   console.log(`Fixing categories and themes in ${file}...`);
@@ -101,7 +103,13 @@ for (const file of files) {
     fs.writeFileSync(filePath, JSON.stringify(stories, null, 2));
   } catch (error) {
     console.error(`Error processing file ${file}:`, error);
+    failedFiles++;
   }
 }
 
-console.log('stories JSON files have been fixed!'); 
+if (failedFiles > 0) {
+  console.error(`Completed with ${failedFiles} failed file(s).`);
+  process.exitCode = 1;
+} else {
+  console.log('stories JSON files have been fixed!');
+}
