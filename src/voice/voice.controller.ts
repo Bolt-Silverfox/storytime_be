@@ -4,10 +4,8 @@ import {
   ForbiddenException,
   Get,
   NotFoundException,
-  Param,
   Patch,
   Post,
-  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -21,8 +19,6 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
-  ApiParam,
-  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -39,10 +35,8 @@ import {
   BatchStoryAudioDto,
   CreateElevenLabsVoiceDto,
   SetPreferredVoiceDto,
-  StoryContentAudioDto,
   UploadVoiceDto,
   VoiceResponseDto,
-  VoiceType,
 } from './dto/voice.dto';
 import { SpeechToTextService } from './speech-to-text.service';
 import { VoiceService } from './voice.service';
@@ -54,7 +48,7 @@ export class VoiceController {
   constructor(
     private readonly voiceService: VoiceService,
     private readonly storyService: StoryService,
-    public readonly uploadService: UploadService,
+    private readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly speechToTextService: SpeechToTextService,
     private readonly voiceQuotaService: VoiceQuotaService,
@@ -77,7 +71,20 @@ export class VoiceController {
   @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: 'Upload a custom voice (audio file)' })
   async uploadVoiceFile(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({
+          fileType:
+            /^(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/m4a|audio\/mp4|audio\/ogg|audio\/webm)$/,
+        })
+        .addMaxSizeValidator({
+          maxSize: 25 * 1024 * 1024, // 25MB
+        })
+        .build({
+          errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        }),
+    )
+    file: Express.Multer.File,
     @Body() dto: UploadVoiceDto,
     @Req() req: AuthenticatedRequest,
   ) {
@@ -139,7 +146,41 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Body() body: SetPreferredVoiceDto,
   ): Promise<VoiceResponseDto> {
-    return this.voiceService.setPreferredVoice(req.authUserData.userId, body);
+    const userId = req.authUserData.userId;
+    const access = await this.voiceQuotaService.getVoiceAccess(userId);
+
+    if (!access.isPremium && access.lockedVoiceId) {
+      // Canonicalize both sides to ElevenLabs IDs so VoiceType keys,
+      // UUIDs, and migrated names all compare correctly.
+      const lockedCanonical =
+        await this.voiceQuotaService.resolveCanonicalVoiceId(
+          access.lockedVoiceId,
+        );
+      const requestedCanonical =
+        await this.voiceQuotaService.resolveCanonicalVoiceId(body.voiceId);
+
+      if (lockedCanonical !== requestedCanonical) {
+        throw new ForbiddenException(
+          'Free users cannot change their voice after selecting one. Upgrade to premium to unlock all voices.',
+        );
+      }
+    }
+
+    // Lock voice for free users who haven't locked one yet.
+    // Must happen before setPreferredVoice to prevent out-of-sync state.
+    if (!access.isPremium && !access.lockedVoiceId) {
+      const locked = await this.voiceQuotaService.lockFreeUserVoice(
+        userId,
+        body.voiceId,
+      );
+      if (!locked) {
+        throw new ForbiddenException(
+          'Unable to lock voice selection. Please try again.',
+        );
+      }
+    }
+
+    return this.voiceService.setPreferredVoice(userId, body);
   }
 
   // --- Get preferred voice ---
@@ -149,7 +190,7 @@ export class VoiceController {
   @ApiOperation({ summary: 'Get preferred voice for the user' })
   async getPreferredVoice(
     @Req() req: AuthenticatedRequest,
-  ): Promise<VoiceResponseDto | null> {
+  ): Promise<VoiceResponseDto> {
     return this.voiceService.getPreferredVoice(req.authUserData.userId);
   }
 
@@ -172,6 +213,8 @@ export class VoiceController {
         unlimited: { type: 'boolean' },
         defaultVoice: { type: 'string' },
         maxVoices: { type: 'number' },
+        lockedVoiceId: { type: 'string', nullable: true },
+        elevenLabsTrialStoryId: { type: 'string', nullable: true },
       },
     },
   })
@@ -189,83 +232,6 @@ export class VoiceController {
   }
 
   // --- Text to Speech ---
-  @Get('story/audio/:id')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Generate audio for stored text using ID' })
-  @ApiParam({ name: 'id', type: String })
-  @ApiQuery({
-    name: 'voiceId',
-    required: false,
-    type: String,
-    description: 'VoiceType enum value or Voice UUID',
-  })
-  @ApiResponse({ status: 200, description: 'Audio generated successfully' })
-  async getTextToSpeechById(
-    @Param('id') id: string,
-    @Req() req: AuthenticatedRequest,
-    @Query('voiceId') voiceId?: VoiceType | string,
-  ) {
-    const resolvedVoice = voiceId ?? DEFAULT_VOICE;
-    const canUse = await this.voiceQuotaService.canUseVoice(
-      req.authUserData.userId,
-      resolvedVoice,
-    );
-    if (!canUse) {
-      throw new ForbiddenException(
-        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
-      );
-    }
-
-    const audioUrl = await this.storyService.getStoryAudioUrl(
-      id,
-      resolvedVoice,
-      req.authUserData.userId,
-    );
-
-    return {
-      message: 'Audio generated successfully',
-      audioUrl,
-      voiceId: resolvedVoice,
-      statusCode: 200,
-    };
-  }
-
-  @Post('story/audio')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Convert raw text to speech and return audio URL' })
-  @ApiResponse({ status: 200, description: 'Audio generated successfully' })
-  @ApiBody({ type: StoryContentAudioDto })
-  async textToSpeech(
-    @Body() dto: StoryContentAudioDto,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
-    const canUse = await this.voiceQuotaService.canUseVoice(
-      req.authUserData.userId,
-      resolvedVoice,
-    );
-    if (!canUse) {
-      throw new ForbiddenException(
-        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
-      );
-    }
-
-    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
-      dto.storyId,
-      dto.content,
-      resolvedVoice,
-      req.authUserData.userId,
-    );
-
-    return {
-      message: 'Audio generated successfully',
-      audioUrl,
-      voiceId: resolvedVoice,
-      statusCode: 200,
-    };
-  }
 
   @Post('story/audio/batch')
   @UseGuards(AuthSessionGuard)
@@ -293,6 +259,25 @@ export class VoiceController {
         totalParagraphs: { type: 'number' },
         wasTruncated: { type: 'boolean' },
         voiceId: { type: 'string' },
+        usedProvider: {
+          type: 'string',
+          enum: ['elevenlabs', 'deepgram', 'edgetts', 'none'],
+          description:
+            'The TTS provider that generated the audio. "none" when text is empty.',
+        },
+        preferredProvider: {
+          type: 'string',
+          enum: ['elevenlabs', 'deepgram', 'edgetts'],
+          nullable: true,
+          description:
+            'The originally preferred provider (present only when a fallback occurred)',
+        },
+        providerStatus: {
+          type: 'string',
+          enum: ['degraded'],
+          nullable: true,
+          description: 'Present when a TTS provider circuit breaker is open',
+        },
         statusCode: { type: 'number' },
       },
     },
@@ -322,6 +307,9 @@ export class VoiceController {
       results: paragraphs,
       totalParagraphs,
       wasTruncated,
+      usedProvider,
+      preferredProvider,
+      providerStatus,
     } = await this.textToSpeechService.batchTextToSpeechCloudUrls(
       dto.storyId,
       story.textContent,
@@ -335,6 +323,9 @@ export class VoiceController {
       totalParagraphs,
       wasTruncated,
       voiceId: resolvedVoice,
+      usedProvider,
+      ...(preferredProvider ? { preferredProvider } : {}),
+      ...(providerStatus ? { providerStatus } : {}),
       statusCode: 200,
     };
   }
@@ -360,7 +351,7 @@ export class VoiceController {
       new ParseFilePipeBuilder()
         .addFileTypeValidator({
           fileType:
-            /(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/ogg|audio\/webm)/,
+            /^(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/m4a|audio\/mp4|audio\/ogg|audio\/webm)$/,
         })
         .addMaxSizeValidator({
           maxSize: 50 * 1024 * 1024, // 50MB

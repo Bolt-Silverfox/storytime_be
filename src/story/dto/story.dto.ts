@@ -249,9 +249,16 @@ export class UserStoryProgressDto {
   @IsBoolean()
   completed?: boolean;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({
+    required: false,
+    minimum: 0,
+    maximum: 86400,
+    description: 'Session time in seconds (max 24h)',
+  })
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(86400)
   sessionTime?: number;
 }
 
@@ -534,6 +541,29 @@ export class PaginatedStoriesDto {
   pagination: PaginationMetaDto;
 }
 
+export class CursorPaginationMetaDto {
+  @ApiProperty({ description: 'Cursor for next page', nullable: true })
+  nextCursor: string | null;
+
+  @ApiProperty({ description: 'Whether more items exist' })
+  hasNextPage: boolean;
+}
+
+export class CursorPaginatedStoriesDto<T = Record<string, unknown>> {
+  @ApiProperty({
+    description: 'Array of paginated records',
+    isArray: true,
+  })
+  @IsArray()
+  data: T[];
+
+  @ApiProperty({
+    description: 'Cursor pagination metadata',
+    type: CursorPaginationMetaDto,
+  })
+  pagination: CursorPaginationMetaDto;
+}
+
 export class DownloadedStoryDto {
   @ApiProperty()
   id: string;
@@ -697,4 +727,33 @@ export class RestrictStoryDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+// --- Concrete cursor-paginated response DTOs (Swagger-friendly) ---
+
+export class CursorPaginatedStoryResponse {
+  @ApiProperty({ type: [StoryDto] })
+  @IsArray()
+  data: StoryDto[];
+
+  @ApiProperty({ type: CursorPaginationMetaDto })
+  pagination: CursorPaginationMetaDto;
+}
+
+export class CursorPaginatedStoryWithProgressResponse {
+  @ApiProperty({ type: [StoryWithProgressDto] })
+  @IsArray()
+  data: StoryWithProgressDto[];
+
+  @ApiProperty({ type: CursorPaginationMetaDto })
+  pagination: CursorPaginationMetaDto;
+}
+
+export class CursorPaginatedFavoriteResponse {
+  @ApiProperty({ type: [FavoriteDto] })
+  @IsArray()
+  data: FavoriteDto[];
+
+  @ApiProperty({ type: CursorPaginationMetaDto })
+  pagination: CursorPaginationMetaDto;
 }

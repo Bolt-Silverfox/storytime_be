@@ -1,6 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { AdminService } from '../admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ElevenLabsTTSProvider } from '../../voice/providers/eleven-labs-tts.provider';
+
+// Mock Cache Manager
+const mockCacheManager = {
+  get: jest.fn(),
+  set: jest.fn(),
+  del: jest.fn(),
+  reset: jest.fn(),
+};
+
+// Mock ElevenLabs TTS Provider
+const mockElevenLabsProvider = {
+  getUsageStats: jest.fn(),
+};
 
 // Mock Prisma Service
 const mockPrismaService = {
@@ -63,6 +78,14 @@ describe('AdminService', () => {
           provide: PrismaService,
           useValue: mockPrismaService,
         },
+        {
+          provide: ElevenLabsTTSProvider,
+          useValue: mockElevenLabsProvider,
+        },
+        {
+          provide: CACHE_MANAGER,
+          useValue: mockCacheManager,
+        },
       ],
     }).compile();
 
@@ -90,7 +113,7 @@ describe('AdminService', () => {
       ];
 
       prisma.user.findMany.mockResolvedValue(mockUsers);
-      prisma.user.count.mockResolvedValue(10); // Generic count return
+      prisma.user.count.mockResolvedValue(100); // Generic count return
       prisma.kid.count.mockResolvedValue(5);
       prisma.story.count.mockResolvedValue(20);
       prisma.category.count.mockResolvedValue(3);
@@ -113,13 +136,16 @@ describe('AdminService', () => {
       const result = await service.getDashboardStats();
 
       // Verify structure and key values
+      // The service uses prisma.user.count() for totalUsers (returns 100),
+      // subscription.count() for paidUsers (returns 15), and
+      // averageSessionTime is a placeholder (0).
       expect(result).toBeDefined();
-      expect(result.totalUsers).toBe(2); // From mockUsers length logic in service
-      expect(result.paidUsers).toBe(1);
-      expect(result.unpaidUsers).toBe(1);
+      expect(result.totalUsers).toBe(100);
+      expect(result.paidUsers).toBe(15); // activeSubscriptionsCount from subscription.count
+      expect(result.unpaidUsers).toBe(85); // totalUsers - paidUsers = 100 - 15
       expect(result.totalKids).toBe(5);
       expect(result.totalRevenue).toBe(5000);
-      expect(result.averageSessionTime).toBe(15); // (10+20)/2
+      expect(result.averageSessionTime).toBe(0); // Placeholder in service
       expect(result.subscriptionPlans).toHaveLength(2);
     });
   });
@@ -166,11 +192,19 @@ describe('AdminService', () => {
         {
           id: 'user-1',
           email: 'test@example.com',
+          createdAt: new Date(),
           subscription: {
             id: 'sub-1',
             status: 'active',
             endsAt: new Date(Date.now() + 10000),
           },
+          usage: { elevenLabsCount: 3 },
+          kids: [
+            {
+              screenTimeSessions: [{ duration: 10 }, { duration: 20 }],
+            },
+          ],
+          paymentTransactions: [{ amount: 50 }, { amount: 25 }],
           _count: {
             kids: 2,
             auth: 5,

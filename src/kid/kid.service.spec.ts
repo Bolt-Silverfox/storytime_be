@@ -19,6 +19,9 @@ const mockPrismaService = {
   user: {
     findUnique: jest.fn(),
   },
+  parentRecommendation: {
+    count: jest.fn().mockResolvedValue(0),
+  },
 };
 
 const mockVoiceService = {
@@ -97,12 +100,18 @@ describe('KidService', () => {
     it('should return a kid if found and owned by user', async () => {
       const kidId = 'kid-1';
       const userId = 'user-1';
-      const expectedResult = { id: kidId, parentId: userId };
+      const mockKid = { id: kidId, parentId: userId };
 
-      prisma.kid.findUnique.mockResolvedValue(expectedResult);
+      prisma.kid.findUnique.mockResolvedValue(mockKid);
 
       const result = await service.findOne(kidId, userId);
-      expect(result).toEqual(expectedResult);
+      expect(result).toStrictEqual({
+        ...mockKid,
+        preferredVoiceId: undefined,
+        recommendationStats: {
+          total: 0,
+        },
+      });
     });
 
     it('should throw NotFoundException if kid not found', async () => {

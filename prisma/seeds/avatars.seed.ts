@@ -31,7 +31,9 @@ export async function seedAvatars(ctx: SeedContext): Promise<SeedResult> {
       count++;
     }
 
-    logger.success(`Seeded ${count} new avatars (${existingNames.size} already existed)`);
+    logger.success(
+      `Seeded ${count} new avatars (${existingNames.size} already existed)`,
+    );
 
     return {
       name: 'avatars',
