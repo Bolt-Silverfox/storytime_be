@@ -429,8 +429,8 @@ export class VoiceQuotaService {
     // Resolve UUID to VoiceType key so mobile can match against available voices
     let lockedVoiceId: string | null = null;
     if (usage?.selectedSecondVoiceId) {
-      const lockedVoice = await this.prisma.voice.findUnique({
-        where: { id: usage.selectedSecondVoiceId },
+      const lockedVoice = await this.prisma.voice.findFirst({
+        where: { id: usage.selectedSecondVoiceId, isDeleted: false },
         select: { elevenLabsVoiceId: true },
       });
       const elevenLabsId = lockedVoice?.elevenLabsVoiceId;

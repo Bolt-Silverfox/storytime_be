@@ -160,7 +160,7 @@ export class StoryController {
     @Query('maxAge') maxAge?: string,
     @Query('cursor') cursor?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number = 12,
+    @Query('limit') limitParam?: string,
   ): Promise<PaginatedStoriesDto | CursorPaginatedStoriesDto> {
     // Base filter shared by both pagination modes.
     // recommended and isMostLiked are intentionally excluded here
@@ -184,7 +184,7 @@ export class StoryController {
     // recommended (special ordering) use orderings incompatible with
     // stable cursor pagination.
     const { cursor: safeCursor, limit: safeLimit } =
-      PaginationUtil.sanitizeCursorParams(cursor, limit);
+      PaginationUtil.sanitizeCursorParams(cursor, limitParam);
 
     const useCursorMode =
       cursor !== undefined &&
@@ -206,8 +206,8 @@ export class StoryController {
       });
     }
 
+    const limit = Math.max(1, Math.min(100, Number(limitParam) || 12));
     const safePage = Math.max(1, page);
-    const safeOffsetLimit = Math.max(1, Math.min(100, limit));
 
     return this.storyService.getStories({
       ...baseFilter,
@@ -215,7 +215,7 @@ export class StoryController {
       isMostLiked: isMostLiked === 'true',
       topPicksFromUs: topPicksFromUs === 'true',
       page: safePage,
-      limit: safeOffsetLimit,
+      limit,
     });
   }
 
