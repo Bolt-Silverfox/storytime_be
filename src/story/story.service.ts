@@ -1,4 +1,15 @@
 import { PrismaService } from '../prisma/prisma.service';
+
+/** Max session time in seconds (24 h), matching the DTO contract. */
+const MAX_SESSION_TIME = 86_400;
+
+/** Parse, clamp and floor a raw sessionTime value to a safe integer in [0, MAX_SESSION_TIME]. */
+function normalizeSessionTime(value: unknown): number {
+  const raw = Number(value ?? 0);
+  return Number.isFinite(raw)
+    ? Math.min(Math.max(0, Math.floor(raw)), MAX_SESSION_TIME)
+    : 0;
+}
 import {
   CreateStoryDto,
   UpdateStoryDto,
@@ -16,6 +27,7 @@ import {
   CategoryDto,
   ThemeDto,
   PaginatedStoriesDto,
+  CursorPaginatedStoriesDto,
   ParentRecommendationDto,
   RecommendationResponseDto,
   RecommendationsStatsDto,
@@ -33,7 +45,7 @@ import {
   DailyChallenge,
   ParentRecommendation,
 } from '@prisma/client';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TextToSpeechService } from './text-to-speech.service';
 import {
@@ -53,13 +65,31 @@ import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
-import { PaginationUtil } from '@/shared/utils/pagination.util';
+import {
+  DEFAULT_CURSOR_LIMIT,
+  PaginationUtil,
+} from '@/shared/utils/pagination.util';
 
 @Injectable()
 export class StoryService {
   private readonly logger = new Logger(StoryService.name);
   // Average reading speed for children: ~150 words per minute
   private readonly WORDS_PER_MINUTE = 150;
+
+  /** Wraps a Prisma query to handle invalid cursor IDs gracefully */
+  private async withCursorErrorHandling<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new BadRequestException('Invalid cursor: record not found');
+      }
+      throw error;
+    }
+  }
 
   /** Invalidate all story-related caches */
   private async invalidateStoryCaches(): Promise<void> {
@@ -68,7 +98,8 @@ export class StoryService {
         STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
       );
     } catch (error) {
-      this.logger.warn(`Failed to invalidate story caches: ${error.message}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to invalidate story caches: ${msg}`);
     }
   }
 
@@ -95,26 +126,21 @@ export class StoryService {
     return Math.ceil((wordCount / this.WORDS_PER_MINUTE) * 60);
   }
 
-  async getStories(filter: {
-    userId: string;
+  private async buildStoryWhereClause(filter: {
     theme?: string;
     category?: string;
     season?: string;
     recommended?: boolean;
     isMostLiked?: boolean;
     isSeasonal?: boolean;
-    topPicksFromUs?: boolean;
     age?: number;
     minAge?: number;
     maxAge?: number;
     kidId?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<PaginatedStoriesDto> {
-    const page = filter.page || 1;
-    const limit = filter.limit || 12;
-    const skip = (page - 1) * limit;
-
+  }): Promise<{
+    where: Prisma.StoryWhereInput;
+    recommendedStoryIds: string[];
+  }> {
     const where: Prisma.StoryWhereInput = {
       isDeleted: false,
     };
@@ -251,6 +277,31 @@ export class StoryService {
       where.id = { in: recommendedStoryIds };
     }
 
+    return { where, recommendedStoryIds };
+  }
+
+  async getStories(filter: {
+    userId: string;
+    theme?: string;
+    category?: string;
+    season?: string;
+    recommended?: boolean;
+    isMostLiked?: boolean;
+    isSeasonal?: boolean;
+    topPicksFromUs?: boolean;
+    age?: number;
+    minAge?: number;
+    maxAge?: number;
+    kidId?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedStoriesDto> {
+    const page = filter.page || 1;
+    const limit = filter.limit || 12;
+    const skip = (page - 1) * limit;
+
+    const { where } = await this.buildStoryWhereClause(filter);
+
     // Handle topPicksFromUs filter - get random stories using shared helper
     if (filter.topPicksFromUs) {
       const randomStoryIds = await this.getRandomStoryIds(limit, skip);
@@ -307,7 +358,7 @@ export class StoryService {
     );
 
     return {
-      data: enrichedStories,
+      data: this.sortByReadStatus(enrichedStories),
       pagination: {
         currentPage: page,
         totalPages,
@@ -315,6 +366,80 @@ export class StoryService {
         totalCount,
       },
     };
+  }
+
+  async getStoriesCursor(filter: {
+    userId: string;
+    theme?: string;
+    category?: string;
+    season?: string;
+    isSeasonal?: boolean;
+    age?: number;
+    minAge?: number;
+    maxAge?: number;
+    kidId?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<CursorPaginatedStoriesDto> {
+    const limit = filter.limit ?? DEFAULT_CURSOR_LIMIT;
+    const { where } = await this.buildStoryWhereClause(filter);
+
+    const orderBy = [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
+
+    const stories = await this.withCursorErrorHandling(() =>
+      this.prisma.story.findMany({
+        where,
+        take: limit + 1,
+        ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
+        orderBy,
+        include: {
+          images: true,
+          branches: true,
+          categories: true,
+          themes: true,
+          seasons: true,
+          questions: true,
+        },
+      }),
+    );
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      stories,
+      limit,
+    );
+    const enriched = await this.enrichWithReadStatus(filter.userId, data);
+
+    return { data: this.sortByReadStatus(enriched), pagination };
+  }
+
+  private mapProgressRecord(record: {
+    id: string;
+    progress: number;
+    totalTimeSpent: number;
+    lastAccessed: Date;
+    story: Record<string, unknown>;
+  }) {
+    return {
+      ...record.story,
+      progressId: record.id,
+      progress: record.progress,
+      totalTimeSpent: record.totalTimeSpent,
+      lastAccessed: record.lastAccessed,
+    };
+  }
+
+  // Sort stories so unread appear first, then reading, then done.
+  // Preserves original order within each group (stable sort).
+  // Applied post-fetch: pagination cursors use DB order (createdAt/id),
+  // so items may shift within a page if readStatus changes between requests.
+  private sortByReadStatus<T extends { readStatus: 'done' | 'reading' | null }>(
+    stories: T[],
+  ): T[] {
+    const order: Record<string, number> = { done: 2, reading: 1 };
+    return [...stories].sort(
+      (a, b) =>
+        (order[a.readStatus ?? ''] ?? 0) - (order[b.readStatus ?? ''] ?? 0),
+    );
   }
 
   private async enrichWithReadStatus<T extends { id: string }>(
@@ -516,9 +641,9 @@ export class StoryService {
     const seaLen = seasonal.length;
 
     return {
-      recommended: enriched.slice(0, recLen),
-      seasonal: enriched.slice(recLen, recLen + seaLen),
-      topLiked: enriched.slice(recLen + seaLen),
+      recommended: this.sortByReadStatus(enriched.slice(0, recLen)),
+      seasonal: this.sortByReadStatus(enriched.slice(recLen, recLen + seaLen)),
+      topLiked: this.sortByReadStatus(enriched.slice(recLen + seaLen)),
     };
   }
 
@@ -602,7 +727,7 @@ export class StoryService {
 
   async deleteStory(id: string, permanent: boolean = false) {
     const story = await this.prisma.story.findUnique({
-      where: { id, isDeleted: false },
+      where: { id, ...(permanent ? {} : { isDeleted: false }) },
     });
     if (!story) throw new NotFoundException('Story not found');
 
@@ -670,15 +795,33 @@ export class StoryService {
     return await this.prisma.favorite.deleteMany({ where: { kidId, storyId } });
   }
 
-  async getFavorites(kidId: string) {
+  async getFavorites(kidId: string, cursor?: string, limit?: number) {
     const kid = await this.prisma.kid.findUnique({
       where: { id: kidId, isDeleted: false },
     });
     if (!kid) throw new NotFoundException('Kid not found');
-    return await this.prisma.favorite.findMany({
-      where: { kidId },
-      include: { story: true },
-    });
+
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const records = await this.withCursorErrorHandling(() =>
+      this.prisma.favorite.findMany({
+        where: { kidId, isDeleted: false, story: { isDeleted: false } },
+        include: { story: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: records,
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    return PaginationUtil.buildCursorResponse(records, take);
   }
 
   async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
@@ -691,12 +834,11 @@ export class StoryService {
     });
     if (!story) throw new NotFoundException('Story not found');
 
+    const sessionTime = normalizeSessionTime(dto.sessionTime);
+
     const existing = await this.prisma.storyProgress.findUnique({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
     });
-
-    const sessionTime = dto.sessionTime || 0;
-    const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
 
     const result = await this.prisma.storyProgress.upsert({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
@@ -704,7 +846,7 @@ export class StoryService {
         progress: dto.progress,
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
-        totalTimeSpent: newTotalTime,
+        totalTimeSpent: { increment: sessionTime },
       },
       create: {
         kidId: dto.kidId,
@@ -716,9 +858,14 @@ export class StoryService {
     });
 
     if (dto.completed && (!existing || !existing.completed)) {
-      this.adjustReadingLevel(dto.kidId, dto.storyId, newTotalTime).catch((e) =>
-        this.logger.error(`Failed to adjust reading level: ${e.message}`),
-      );
+      this.adjustReadingLevel(
+        dto.kidId,
+        dto.storyId,
+        result.totalTimeSpent,
+      ).catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.error(`Failed to adjust reading level: ${msg}`);
+      });
     }
     return result;
   }
@@ -756,12 +903,13 @@ export class StoryService {
       where: { userId_storyId: { userId, storyId: dto.storyId } },
     });
 
-    const sessionTime = dto.sessionTime || 0;
+    const sessionTime = normalizeSessionTime(dto.sessionTime);
+
     // If restoring a soft-deleted record, reset totalTimeSpent instead of
     // accumulating stale time from before the removal.
-    const newTotalTime = existing?.isDeleted
+    const totalTimeSpentUpdate = existing?.isDeleted
       ? sessionTime
-      : (existing?.totalTimeSpent || 0) + sessionTime;
+      : { increment: sessionTime };
 
     const result = await this.prisma.userStoryProgress.upsert({
       where: { userId_storyId: { userId, storyId: dto.storyId } },
@@ -769,7 +917,7 @@ export class StoryService {
         progress: dto.progress,
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
-        totalTimeSpent: newTotalTime,
+        totalTimeSpent: totalTimeSpentUpdate,
         // Restore soft-deleted records when user re-reads a removed story
         isDeleted: false,
         deletedAt: null,
@@ -822,42 +970,89 @@ export class StoryService {
     };
   }
 
-  async getUserContinueReading(userId: string) {
-    const progressRecords = await this.prisma.userStoryProgress.findMany({
-      where: {
-        userId,
-        progress: { gt: 0 },
-        completed: false,
-        isDeleted: false,
-      },
-      orderBy: { lastAccessed: 'desc' },
-      include: {
-        story: {
-          include: { categories: true },
-        },
-      },
-    });
+  async getUserContinueReading(
+    userId: string,
+    cursor?: string,
+    limit?: number,
+  ) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
-    return progressRecords.map((record) => ({
-      ...record.story,
-      progress: record.progress,
-      totalTimeSpent: record.totalTimeSpent,
-      lastAccessed: record.lastAccessed,
-    }));
+    const progressRecords = await this.withCursorErrorHandling(() =>
+      this.prisma.userStoryProgress.findMany({
+        where: {
+          userId,
+          progress: { gt: 0 },
+          completed: false,
+          isDeleted: false,
+          story: { isDeleted: false },
+        },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
+        },
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: progressRecords.map((r) => this.mapProgressRecord(r)),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    // Cursor comes from progress table ID (Prisma cursor operates on this table).
+    // Build response from raw records first, then map to the enriched shape.
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      progressRecords,
+      take,
+    );
+    return { data: data.map((r) => this.mapProgressRecord(r)), pagination };
   }
 
-  async getUserCompletedStories(userId: string) {
-    const records = await this.prisma.userStoryProgress.findMany({
-      where: { userId, completed: true, isDeleted: false },
-      orderBy: { lastAccessed: 'desc' },
-      include: {
-        story: {
-          include: { categories: true },
-        },
-      },
-    });
+  async getUserCompletedStories(
+    userId: string,
+    cursor?: string,
+    limit?: number,
+  ) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
-    return records.map((r) => r.story);
+    const records = await this.withCursorErrorHandling(() =>
+      this.prisma.userStoryProgress.findMany({
+        where: {
+          userId,
+          completed: true,
+          isDeleted: false,
+          story: { isDeleted: false },
+        },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
+        },
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: records.map((r) => r.story),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      records,
+      take,
+    );
+    return { data: data.map((r) => r.story), pagination };
   }
 
   async removeFromUserLibrary(userId: string, storyId: string) {
@@ -1032,26 +1227,6 @@ export class StoryService {
       where: { id },
     });
     return assignment ? this.toDailyChallengeAssignmentDto(assignment) : null;
-  }
-
-  async getStoryAudioUrl(
-    storyId: string,
-    voiceId: VoiceType | string,
-    userId?: string,
-  ): Promise<string> {
-    const story = await this.prisma.story.findUnique({
-      where: { id: storyId, isDeleted: false },
-      select: { textContent: true },
-    });
-    if (!story)
-      throw new NotFoundException(`Story with ID ${storyId} not found`);
-
-    return this.textToSpeechService.textToSpeechCloudUrl(
-      storyId,
-      story?.textContent ?? '',
-      voiceId,
-      userId,
-    );
   }
 
   private toStoryPathDto(path: StoryPath): StoryPathDto {
@@ -1301,7 +1476,6 @@ export class StoryService {
     // 2. Persist with Image & Audio
     return this.persistGeneratedStory(
       generatedStory,
-      options.kidName || 'Hero',
       options.creatorKidId,
       options.voiceType,
       options.seasonIds,
@@ -1340,9 +1514,13 @@ export class StoryService {
       const availableThemes = await this.prisma.theme.findMany({
         where: { isDeleted: false },
       });
-      const randomTheme =
-        availableThemes[Math.floor(Math.random() * availableThemes.length)];
-      themes = [randomTheme.name];
+      if (availableThemes.length === 0) {
+        themes = ['Adventure'];
+      } else {
+        const randomTheme =
+          availableThemes[Math.floor(Math.random() * availableThemes.length)];
+        themes = [randomTheme.name];
+      }
     }
 
     let categories = categoryNames || [];
@@ -1354,11 +1532,15 @@ export class StoryService {
       const availableCategories = await this.prisma.category.findMany({
         where: { isDeleted: false },
       });
-      const randomCategory =
-        availableCategories[
-          Math.floor(Math.random() * availableCategories.length)
-        ];
-      categories = [randomCategory.name];
+      if (availableCategories.length === 0) {
+        categories = ['General'];
+      } else {
+        const randomCategory =
+          availableCategories[
+            Math.floor(Math.random() * availableCategories.length)
+          ];
+        categories = [randomCategory.name];
+      }
     }
 
     let contextString = '';
@@ -1427,7 +1609,6 @@ export class StoryService {
     // 3. Persist (with Image & Audio) - calling shared helper
     return this.persistGeneratedStory(
       generatedStory,
-      options.kidName!,
       kidId,
       voiceType,
       seasonIds,
@@ -1437,7 +1618,6 @@ export class StoryService {
   // --- PRIVATE HELPER: PERSIST STORY (Includes Image & Audio Gen) ---
   private async persistGeneratedStory(
     generatedStory: GeneratedStory & { textContent?: string },
-    kidName: string,
     creatorKidId?: string,
     voiceType?: VoiceType,
     seasonIds?: string[],
@@ -1462,7 +1642,8 @@ export class StoryService {
         userId, // Pass userId for tracking
       );
     } catch (e) {
-      this.logger.error(`Failed to generate story image: ${e.message}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Failed to generate story image: ${msg}`);
     }
 
     // 2. Prepare Relations (Categories/Themes)
@@ -1546,8 +1727,9 @@ export class StoryService {
           },
         });
       } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
         this.logger.error(
-          `Failed to generate audio for story ${story.id}: ${error.message}`,
+          `Failed to generate audio for story ${story.id}: ${msg}`,
         );
       }
     }
@@ -1586,51 +1768,130 @@ export class StoryService {
     }
   }
 
-  async getContinueReading(kidId: string) {
-    const progressRecords = await this.prisma.storyProgress.findMany({
-      where: { kidId, progress: { gt: 0 }, completed: false, isDeleted: false },
-      orderBy: { lastAccessed: 'desc' },
-      include: {
-        story: {
-          include: { categories: true },
+  async getContinueReading(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const progressRecords = await this.withCursorErrorHandling(() =>
+      this.prisma.storyProgress.findMany({
+        where: {
+          kidId,
+          progress: { gt: 0 },
+          completed: false,
+          isDeleted: false,
+          story: { isDeleted: false },
         },
-      },
-    });
-    return progressRecords.map((record) => ({
-      ...record.story,
-      progress: record.progress,
-      totalTimeSpent: record.totalTimeSpent,
-      lastAccessed: record.lastAccessed,
-    }));
-  }
-
-  async getCompletedStories(kidId: string) {
-    const records = await this.prisma.storyProgress.findMany({
-      where: { kidId, completed: true, isDeleted: false },
-      orderBy: { lastAccessed: 'desc' },
-      include: {
-        story: {
-          include: { categories: true },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
         },
-      },
-    });
-    return records.map((r) => r.story);
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: progressRecords.map((r) => this.mapProgressRecord(r)),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      progressRecords,
+      take,
+    );
+    return { data: data.map((r) => this.mapProgressRecord(r)), pagination };
   }
 
-  async getCreatedStories(kidId: string) {
-    return await this.prisma.story.findMany({
-      where: { creatorKidId: kidId, isDeleted: false },
-      orderBy: { createdAt: 'desc' },
-    });
+  async getCompletedStories(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const records = await this.withCursorErrorHandling(() =>
+      this.prisma.storyProgress.findMany({
+        where: {
+          kidId,
+          completed: true,
+          isDeleted: false,
+          story: { isDeleted: false },
+        },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
+        },
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: records.map((r) => r.story),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      records,
+      take,
+    );
+    return { data: data.map((r) => r.story), pagination };
   }
 
-  async getDownloads(kidId: string) {
-    const downloads = await this.prisma.downloadedStory.findMany({
-      where: { kidId },
-      include: { story: true },
-      orderBy: { downloadedAt: 'desc' },
-    });
-    return downloads.map((d) => d.story);
+  async getCreatedStories(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const stories = await this.withCursorErrorHandling(() =>
+      this.prisma.story.findMany({
+        where: { creatorKidId: kidId, isDeleted: false },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: stories,
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    return PaginationUtil.buildCursorResponse(stories, take);
+  }
+
+  async getDownloads(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const downloads = await this.withCursorErrorHandling(() =>
+      this.prisma.downloadedStory.findMany({
+        where: { kidId },
+        include: { story: true },
+        orderBy: [{ downloadedAt: 'desc' }, { id: 'asc' }],
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: downloads.map((d) => d.story),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      downloads,
+      take,
+    );
+    return { data: data.map((d) => d.story), pagination };
   }
 
   async addDownload(kidId: string, storyId: string) {

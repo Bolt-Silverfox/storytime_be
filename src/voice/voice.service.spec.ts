@@ -4,6 +4,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+
+const mockCacheManager = {
+  get: jest.fn(),
+  set: jest.fn(),
+  del: jest.fn(),
+};
 
 const mockPrismaService = {
   voice: {
@@ -41,6 +48,7 @@ describe('VoiceService', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: HttpService, useValue: mockHttpService },
         { provide: ElevenLabsTTSProvider, useValue: mockElevenLabsProvider },
+        { provide: CACHE_MANAGER, useValue: mockCacheManager },
       ],
     }).compile();
 
@@ -79,7 +87,7 @@ describe('VoiceService', () => {
       });
 
       expect(prisma.voice.findMany).toHaveBeenCalledWith({
-        where: { userId },
+        where: { userId, isDeleted: false },
       });
     });
   });

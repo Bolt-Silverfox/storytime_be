@@ -22,7 +22,6 @@ const mockStoryService = {
 };
 const mockUploadService = {};
 const mockTextToSpeechService = {
-  textToSpeechCloudUrl: jest.fn(),
   batchTextToSpeechCloudUrls: jest.fn(),
 };
 const mockSpeechToTextService = {};
@@ -86,42 +85,6 @@ describe('VoiceController', () => {
     });
   });
 
-  describe('textToSpeech', () => {
-    it('should generate audio when voice access is allowed', async () => {
-      mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
-      mockTextToSpeechService.textToSpeechCloudUrl.mockResolvedValue(
-        'https://audio.com/audio.mp3',
-      );
-
-      const result = await controller.textToSpeech(
-        { storyId: 'story-1', content: 'Hello world', voiceId: 'MILO' },
-        mockRequest,
-      );
-
-      expect(mockVoiceQuotaService.canUseVoice).toHaveBeenCalledWith(
-        'user-1',
-        'MILO',
-      );
-      expect(result.audioUrl).toBe('https://audio.com/audio.mp3');
-      expect(result.voiceId).toBe('MILO');
-    });
-
-    it('should throw 403 when free user picks a disallowed voice', async () => {
-      mockVoiceQuotaService.canUseVoice.mockResolvedValue(false);
-
-      await expect(
-        controller.textToSpeech(
-          { storyId: 'story-1', content: 'Hello world', voiceId: 'BELLA' },
-          mockRequest,
-        ),
-      ).rejects.toThrow(ForbiddenException);
-
-      expect(
-        mockTextToSpeechService.textToSpeechCloudUrl,
-      ).not.toHaveBeenCalled();
-    });
-  });
-
   describe('batchTextToSpeech', () => {
     it('should generate batch audio when voice access is allowed', async () => {
       mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
@@ -139,6 +102,7 @@ describe('VoiceController', () => {
         ],
         totalParagraphs: 1,
         wasTruncated: false,
+        usedProvider: 'deepgram',
       });
 
       const result = await controller.batchTextToSpeech(
@@ -152,6 +116,120 @@ describe('VoiceController', () => {
       );
       expect(result.paragraphs).toHaveLength(1);
       expect(result.voiceId).toBe('MILO');
+    });
+
+    it('should include usedProvider and preferredProvider in the response', async () => {
+      mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
+      mockStoryService.getStoryById.mockResolvedValue({
+        id: 'story-1',
+        textContent: 'Hello world',
+      });
+      mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
+        results: [
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
+        ],
+        totalParagraphs: 1,
+        wasTruncated: false,
+        usedProvider: 'deepgram',
+        preferredProvider: 'elevenlabs',
+      });
+
+      const result = await controller.batchTextToSpeech(
+        { storyId: 'story-1', voiceId: 'MILO' },
+        mockRequest,
+      );
+
+      expect(result.usedProvider).toBe('deepgram');
+      expect(result.preferredProvider).toBe('elevenlabs');
+    });
+
+    it('should omit preferredProvider when no fallback occurred', async () => {
+      mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
+      mockStoryService.getStoryById.mockResolvedValue({
+        id: 'story-1',
+        textContent: 'Hello world',
+      });
+      mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
+        results: [
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
+        ],
+        totalParagraphs: 1,
+        wasTruncated: false,
+        usedProvider: 'deepgram',
+      });
+
+      const result = await controller.batchTextToSpeech(
+        { storyId: 'story-1', voiceId: 'MILO' },
+        mockRequest,
+      );
+
+      expect(result.usedProvider).toBe('deepgram');
+      expect(result.preferredProvider).toBeUndefined();
+    });
+
+    it('should include providerStatus when service reports degraded', async () => {
+      mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
+      mockStoryService.getStoryById.mockResolvedValue({
+        id: 'story-1',
+        textContent: 'Hello world',
+      });
+      mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
+        results: [
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
+        ],
+        totalParagraphs: 1,
+        wasTruncated: false,
+        usedProvider: 'deepgram',
+        preferredProvider: 'elevenlabs',
+        providerStatus: 'degraded',
+      });
+
+      const result = await controller.batchTextToSpeech(
+        { storyId: 'story-1', voiceId: 'MILO' },
+        mockRequest,
+      );
+
+      expect(result.providerStatus).toBe('degraded');
+      expect(result.preferredProvider).toBe('elevenlabs');
+    });
+
+    it('should omit providerStatus when providers are healthy', async () => {
+      mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
+      mockStoryService.getStoryById.mockResolvedValue({
+        id: 'story-1',
+        textContent: 'Hello world',
+      });
+      mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
+        results: [
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
+        ],
+        totalParagraphs: 1,
+        wasTruncated: false,
+        usedProvider: 'elevenlabs',
+      });
+
+      const result = await controller.batchTextToSpeech(
+        { storyId: 'story-1', voiceId: 'MILO' },
+        mockRequest,
+      );
+
+      expect(result.providerStatus).toBeUndefined();
     });
 
     it('should throw 403 when free user picks a disallowed voice in batch', async () => {

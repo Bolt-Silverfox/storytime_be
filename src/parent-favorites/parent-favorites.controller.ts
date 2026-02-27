@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   Req,
   UseGuards,
   Logger,
@@ -17,8 +18,10 @@ import {
   ApiBody,
   ApiOkResponse,
   ApiParam,
+  ApiQuery,
   ApiResponse,
 } from '@nestjs/swagger';
+import { PaginationUtil } from '@/shared/utils/pagination.util';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -85,23 +88,50 @@ export class ParentFavoritesController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get all parent favorites',
-    description: 'Retrieves all stories favorited by the authenticated parent.',
+    summary: 'Get parent favorites with cursor pagination',
+    description:
+      'Retrieves stories favorited by the authenticated parent, paginated via cursor.',
   })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiOkResponse({
-    description: 'List of parent favorites retrieved successfully',
-    type: ParentFavoriteResponseDto,
-    isArray: true,
+    description: 'Paginated list of parent favorites',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/ParentFavoriteResponseDto' },
+        },
+        pagination: {
+          type: 'object',
+          properties: {
+            nextCursor: { type: 'string', nullable: true },
+            hasNextPage: { type: 'boolean' },
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized',
     type: ErrorResponseDto,
   })
-  async getFavorites(@Req() req: AuthenticatedRequest) {
+  async getFavorites(
+    @Req() req: AuthenticatedRequest,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
     const userId = req.authUserData.userId;
     this.logger.log(`Fetching favorites for parent ${userId}`);
-    return this.parentFavoritesService.getFavorites(userId);
+    const { cursor: safeCursor, limit: safeLimit } =
+      PaginationUtil.sanitizeCursorParams(cursor, limit);
+    return this.parentFavoritesService.getFavorites(
+      userId,
+      safeCursor,
+      safeLimit,
+    );
   }
 
   @Delete(':storyId')

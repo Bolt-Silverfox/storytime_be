@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   InternalServerErrorException,
+  NotFoundException,
   Inject,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +17,8 @@ import {
   UploadVoiceDto,
   VoiceResponseDto,
   VoiceSourceType,
+  VoiceType,
+  VOICE_TYPE_MIGRATION_MAP,
 } from './dto/voice.dto';
 import { VOICE_CONFIG } from './voice.constants';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
@@ -57,7 +60,9 @@ export class VoiceService {
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         this.logger.warn(`Failed to clone voice with ElevenLabs: ${msg}`);
-        throw new InternalServerErrorException(`Voice cloning failed: ${msg}`);
+        throw new InternalServerErrorException(
+          'Voice cloning failed. Please try again later.',
+        );
       }
     }
 
@@ -91,7 +96,9 @@ export class VoiceService {
 
   // --- List all voices for a user ---
   async listVoices(userId: string): Promise<VoiceResponseDto[]> {
-    const voices = await this.prisma.voice.findMany({ where: { userId } });
+    const voices = await this.prisma.voice.findMany({
+      where: { userId, isDeleted: false },
+    });
     return voices.map((v) => this.toVoiceResponse(v));
   }
 
@@ -100,21 +107,53 @@ export class VoiceService {
     userId: string,
     dto: SetPreferredVoiceDto,
   ): Promise<VoiceResponseDto> {
+    let voice: Voice | null;
+
+    // Check if the voiceId is a VoiceType enum key (e.g. "NIMBUS") or migrated name
+    let voiceTypeKey = dto.voiceId as VoiceType;
+    const migrated = VOICE_TYPE_MIGRATION_MAP[dto.voiceId];
+    if (migrated) {
+      voiceTypeKey = migrated;
+    }
+
+    if (Object.values(VoiceType).includes(voiceTypeKey)) {
+      const config = VOICE_CONFIG[voiceTypeKey];
+      voice = await this.prisma.voice.findFirst({
+        where: {
+          elevenLabsVoiceId: config.elevenLabsId,
+          userId: null,
+          isDeleted: false,
+        },
+      });
+    } else {
+      voice = await this.prisma.voice.findFirst({
+        where: { id: dto.voiceId, isDeleted: false },
+      });
+    }
+
+    if (!voice) {
+      throw new NotFoundException(
+        `Voice "${dto.voiceId}" not found. Please select a valid voice.`,
+      );
+    }
+
     const result = await this.prisma.user.update({
       where: { id: userId },
-      data: { preferredVoiceId: dto.voiceId },
+      data: { preferredVoiceId: voice.id },
       include: { preferredVoice: true },
     });
 
     if (!result.preferredVoice) {
-      throw new Error('Preferred voice not found');
+      throw new InternalServerErrorException(
+        'Preferred voice was set but could not be loaded.',
+      );
     }
 
-    return this.toVoiceResponse(result.preferredVoice);
+    return this.toVoiceResponseWithKey(result.preferredVoice);
   }
 
   // --- Get the preferred voice for a user ---
-  async getPreferredVoice(userId: string): Promise<VoiceResponseDto | null> {
+  async getPreferredVoice(userId: string): Promise<VoiceResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { preferredVoice: true },
@@ -122,30 +161,44 @@ export class VoiceService {
 
     if (!user || !user.preferredVoice) {
       return {
-        id: '',
-        name: '',
-        displayName: '',
-        type: '',
+        id: 'default',
+        name: 'default',
+        displayName: 'Default Voice',
+        type: VoiceSourceType.ELEVENLABS,
         previewUrl: undefined,
         voiceAvatar: undefined,
         elevenLabsVoiceId: undefined,
       };
     }
 
-    return this.toVoiceResponse(user.preferredVoice);
+    return this.toVoiceResponseWithKey(user.preferredVoice);
   }
 
-  // --- Helper to map Prisma Voice to VoiceResponseDto ---
+  // Find the VOICE_CONFIG entry and VoiceType key for a given elevenLabsId.
+  private findVoiceConfig(elevenLabsId: string | null) {
+    if (!elevenLabsId) return undefined;
+    const entry = Object.entries(VOICE_CONFIG).find(
+      ([, config]) => config.elevenLabsId === elevenLabsId,
+    );
+    return entry ? { key: entry[0], config: entry[1] } : undefined;
+  }
+
+  // Resolve DB UUID to VoiceType key so mobile can match against available voices.
+  // Used by both setPreferredVoice and getPreferredVoice for consistent ids.
+  private toVoiceResponseWithKey(voice: Voice): VoiceResponseDto {
+    const response = this.toVoiceResponse(voice);
+    const match = this.findVoiceConfig(voice.elevenLabsVoiceId);
+    if (match) {
+      response.id = match.key;
+    }
+    return response;
+  }
+
   private toVoiceResponse(voice: Voice): VoiceResponseDto {
     let previewUrl = voice.url ?? undefined;
     let voiceAvatar = voice.voiceAvatar ?? undefined;
 
-    // Lookup VOICE_CONFIG for display name
-    const config = voice.elevenLabsVoiceId
-      ? Object.values(VOICE_CONFIG).find(
-          (c) => c.elevenLabsId === voice.elevenLabsVoiceId,
-        )
-      : undefined;
+    const config = this.findVoiceConfig(voice.elevenLabsVoiceId)?.config;
 
     // If it's an uploaded voice, the 'url' is the preview/audio itself
     if (voice.type === (VoiceSourceType.UPLOADED as string)) {
@@ -184,6 +237,7 @@ export class VoiceService {
       where: {
         userId: userId,
         elevenLabsVoiceId: elevenLabsId,
+        isDeleted: false,
       },
     });
 
