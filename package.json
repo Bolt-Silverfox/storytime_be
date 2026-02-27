@@ -31,6 +31,7 @@
     "db:migrate:deploy": "npx prisma migrate deploy",
     "db:reset": "npx prisma migrate reset",
     "db:seed": "npx ts-node prisma/seeds/index.ts",
+    "db:reset:prod": "NODE_ENV=production node dist/prisma/seeds/prod-content-reset.seed.js",
     "deploy:dev": "pnpm db:migrate:deploy && pnpm db:generate && pnpm start:pm2:dev",
     "deploy:staging": "pnpm db:migrate:deploy && pnpm db:generate && pnpm start:pm2:staging",
     "deploy:prod": "pnpm db:migrate:deploy && pnpm db:generate && pnpm start:pm2:prod"
