@@ -92,115 +92,131 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
         continue;
       }
 
-      let localCount = 0;
-      let localSkipped = 0;
-      let createdTitlesThisTx: string[] = [];
+      let fileCount = 0;
+      let fileSkipped = 0;
 
-      await prisma.$transaction(
-        async (tx) => {
-          // Reset local trackers on possible transaction retries
-          localCount = 0;
-          localSkipped = 0;
-          createdTitlesThisTx = [];
+      // Batch stories into chunks to avoid transaction timeouts on large files
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < stories.length; i += BATCH_SIZE) {
+        const batch = stories.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(stories.length / BATCH_SIZE);
+        logger.log(
+          `  Batch ${batchNum}/${totalBatches} (${batch.length} stories)`,
+        );
 
-          for (const story of stories) {
-            if (!story.title) {
-              logger.error(`Skipping story without a title in ${file}`);
-              continue;
+        let batchCount = 0;
+        let batchSkipped = 0;
+        const createdTitlesThisBatch: string[] = [];
+
+        await prisma.$transaction(
+          async (tx) => {
+            batchCount = 0;
+            batchSkipped = 0;
+            createdTitlesThisBatch.length = 0;
+
+            for (const story of batch) {
+              if (!story.title) {
+                logger.error(`Skipping story without a title in ${file}`);
+                continue;
+              }
+              const normalizedTitle = story.title.trim().toLowerCase();
+              if (
+                existingTitles.has(normalizedTitle) ||
+                createdTitlesThisBatch.includes(normalizedTitle)
+              ) {
+                batchSkipped++;
+                continue;
+              }
+
+              // Handle both string and array formats for categories
+              const storyCategories = Array.isArray(story.category)
+                ? story.category
+                : [story.category];
+              const cleanCategories = storyCategories.filter(
+                (c: string) => c && c.length > 0,
+              );
+
+              // Handle both string and array formats for themes
+              const storyThemes = Array.isArray(story.theme)
+                ? story.theme
+                : [story.theme];
+              const cleanThemes = storyThemes.filter(
+                (t: string) => t && t.length > 0,
+              );
+
+              await tx.story.create({
+                data: {
+                  title: story.title,
+                  description: story.description,
+                  language: story.language,
+                  coverImageUrl: story.coverImageUrl,
+                  audioUrl: story.audioUrl ?? '',
+                  isInteractive: story.isInteractive ?? false,
+                  ageMin: story.ageMin ?? 0,
+                  ageMax: story.ageMax ?? 9,
+                  textContent: story.content,
+                  recommended: story.recommended ?? false,
+                  backgroundColor: story.backgroundColor || '#5E3A54',
+                  wordCount: story.wordCount ?? 0,
+                  durationSeconds: story.durationSeconds ?? null,
+                  difficultyLevel: story.difficultyLevel ?? 1,
+                  aiGenerated: story.aiGenerated ?? false,
+                  categories: {
+                    connectOrCreate: cleanCategories.map((name: string) => ({
+                      where: { name },
+                      create: {
+                        name,
+                        description: 'Auto-generated category',
+                      },
+                    })),
+                  },
+                  themes: {
+                    connectOrCreate: cleanThemes.map((name: string) => ({
+                      where: { name },
+                      create: {
+                        name,
+                        description: 'Auto-generated theme',
+                      },
+                    })),
+                  },
+                  seasons: story.seasons
+                    ? {
+                        connectOrCreate: story.seasons.map(
+                          (name: string) => ({
+                            where: { name },
+                            create: { name },
+                          }),
+                        ),
+                      }
+                    : undefined,
+                  questions: {
+                    create: (story.questions || []).map(
+                      (question: StoryQuestion) => ({
+                        question: question.question,
+                        options: question.options,
+                        correctOption: question.correctOption,
+                      }),
+                    ),
+                  },
+                },
+              });
+
+              createdTitlesThisBatch.push(normalizedTitle);
+              batchCount++;
             }
-            const normalizedTitle = story.title.trim().toLowerCase();
-            if (
-              existingTitles.has(normalizedTitle) ||
-              createdTitlesThisTx.includes(normalizedTitle)
-            ) {
-              localSkipped++;
-              continue;
-            }
+          },
+          { timeout: 60_000 },
+        );
 
-            // Handle both string and array formats for categories
-            const storyCategories = Array.isArray(story.category)
-              ? story.category
-              : [story.category];
-            const cleanCategories = storyCategories.filter(
-              (c: string) => c && c.length > 0,
-            );
+        // Batch succeeded — update global tracking
+        createdTitlesThisBatch.forEach((t) => existingTitles.add(t));
+        fileCount += batchCount;
+        fileSkipped += batchSkipped;
+      }
 
-            // Handle both string and array formats for themes
-            const storyThemes = Array.isArray(story.theme)
-              ? story.theme
-              : [story.theme];
-            const cleanThemes = storyThemes.filter(
-              (t: string) => t && t.length > 0,
-            );
-
-            await tx.story.create({
-              data: {
-                title: story.title,
-                description: story.description,
-                language: story.language,
-                coverImageUrl: story.coverImageUrl,
-                audioUrl: story.audioUrl ?? '',
-                isInteractive: story.isInteractive ?? false,
-                ageMin: story.ageMin ?? 0,
-                ageMax: story.ageMax ?? 9,
-                textContent: story.content,
-                recommended: story.recommended ?? false,
-                backgroundColor: story.backgroundColor || '#5E3A54',
-                wordCount: story.wordCount ?? 0,
-                durationSeconds: story.durationSeconds ?? null,
-                difficultyLevel: story.difficultyLevel ?? 1,
-                aiGenerated: story.aiGenerated ?? false,
-                categories: {
-                  connectOrCreate: cleanCategories.map((name: string) => ({
-                    where: { name },
-                    create: {
-                      name,
-                      description: 'Auto-generated category',
-                    },
-                  })),
-                },
-                themes: {
-                  connectOrCreate: cleanThemes.map((name: string) => ({
-                    where: { name },
-                    create: {
-                      name,
-                      description: 'Auto-generated theme',
-                    },
-                  })),
-                },
-                seasons: story.seasons
-                  ? {
-                      connectOrCreate: story.seasons.map(
-                        (name: string) => ({
-                          where: { name },
-                          create: { name },
-                        }),
-                      ),
-                    }
-                  : undefined,
-                questions: {
-                  create: (story.questions || []).map(
-                    (question: StoryQuestion) => ({
-                      question: question.question,
-                      options: question.options,
-                      correctOption: question.correctOption,
-                    }),
-                  ),
-                },
-              },
-            });
-
-            createdTitlesThisTx.push(normalizedTitle);
-            localCount++;
-          }
-        },
-        { timeout: 30_000 },
-      );
-
-      // Transaction succeeded, safely commit local tracking to global state
-      createdTitlesThisTx.forEach((t) => existingTitles.add(t));
-      count += localCount;
-      skipped += localSkipped;
+      count += fileCount;
+      skipped += fileSkipped;
     }
 
     logger.success(
