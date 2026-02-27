@@ -124,9 +124,7 @@ describe('ParentFavoritesController', () => {
     });
 
     it('should propagate errors thrown by the service', async () => {
-      service.removeFavorite.mockRejectedValue(
-        new Error('Favorite not found'),
-      );
+      service.removeFavorite.mockRejectedValue(new Error('Favorite not found'));
 
       await expect(
         controller.removeFavorite(mockReq, mockStoryId),
