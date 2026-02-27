@@ -66,7 +66,7 @@ export class ParentFavoritesService {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     });
 
     const mapped = favorites.map((fav) => ({

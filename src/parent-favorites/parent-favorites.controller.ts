@@ -96,8 +96,22 @@ export class ParentFavoritesController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiOkResponse({
     description: 'Paginated list of parent favorites',
-    type: ParentFavoriteResponseDto,
-    isArray: true,
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/ParentFavoriteResponseDto' },
+        },
+        pagination: {
+          type: 'object',
+          properties: {
+            nextCursor: { type: 'string', nullable: true },
+            hasNextPage: { type: 'boolean' },
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 401,
