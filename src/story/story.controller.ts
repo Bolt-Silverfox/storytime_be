@@ -204,15 +204,24 @@ export class StoryController {
     // because they use orderings incompatible with cursor pagination,
     // and including them would leak into buildStoryWhereClause.
     const parsedAge = age ? Number(age) : undefined;
-    if (parsedAge !== undefined && (!Number.isFinite(parsedAge) || parsedAge < 0)) {
+    if (
+      parsedAge !== undefined &&
+      (!Number.isFinite(parsedAge) || parsedAge < 0)
+    ) {
       throw new BadRequestException('age must be a non-negative number');
     }
     const parsedMinAge = minAge ? Number(minAge) : undefined;
-    if (parsedMinAge !== undefined && (!Number.isFinite(parsedMinAge) || parsedMinAge < 0)) {
+    if (
+      parsedMinAge !== undefined &&
+      (!Number.isFinite(parsedMinAge) || parsedMinAge < 0)
+    ) {
       throw new BadRequestException('minAge must be a non-negative number');
     }
     const parsedMaxAge = maxAge ? Number(maxAge) : undefined;
-    if (parsedMaxAge !== undefined && (!Number.isFinite(parsedMaxAge) || parsedMaxAge < 0)) {
+    if (
+      parsedMaxAge !== undefined &&
+      (!Number.isFinite(parsedMaxAge) || parsedMaxAge < 0)
+    ) {
       throw new BadRequestException('maxAge must be a non-negative number');
     }
 
