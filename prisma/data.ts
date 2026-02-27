@@ -361,7 +361,7 @@ export const seasons = [
     name: 'Winter',
     description: 'Stories for the winter season',
     startDate: '12-01',
-    endDate: '02-29',
+    endDate: '02-28',
   },
   {
     name: 'Spring',
