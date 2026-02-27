@@ -15,6 +15,7 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { MAX_TTS_TEXT_LENGTH } from '../voice/voice.config';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 import { TTS_CIRCUIT_BREAKER_CONFIG } from '@/shared/constants/circuit-breaker.constants';
+import { VOICE_CONFIG } from '../voice/voice.constants';
 
 describe('TextToSpeechService', () => {
   let service: TextToSpeechService;
@@ -49,11 +50,12 @@ describe('TextToSpeechService', () => {
     mockPrisma.voice.findFirst.mockResolvedValue(null);
     mockCanUseVoiceForStory.mockResolvedValue(true);
     mockCanFreeUserUseElevenLabs.mockResolvedValue(true);
-    // Default: return input as-is (tests for known VoiceTypes will get
-    // elevenLabsId from VOICE_CONFIG in the service's own resolution)
-    mockResolveCanonicalVoiceId.mockImplementation((id: string) =>
-      Promise.resolve(id),
-    );
+    // Resolve known VoiceType enum keys to their ElevenLabs IDs,
+    // mirroring the real VoiceQuotaService.resolveCanonicalVoiceId behaviour.
+    mockResolveCanonicalVoiceId.mockImplementation((id: string) => {
+      const config = VOICE_CONFIG[id as VoiceType];
+      return Promise.resolve(config ? config.elevenLabsId : id);
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
