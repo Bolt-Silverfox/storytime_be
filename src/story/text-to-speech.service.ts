@@ -112,14 +112,16 @@ export class TextToSpeechService {
   /**
    * Resolve any voice identifier (VoiceType enum, UUID, or unknown) to its
    * canonical ElevenLabs voice ID for consistent quota/lock checks.
-   * Falls back to DEFAULT_VOICE if the ID cannot be resolved.
+   * Returns undefined for unrecognized voices (they skip ElevenLabs entirely).
    */
-  private async resolveCanonicalVoiceId(type: string): Promise<string> {
+  private async resolveCanonicalVoiceId(
+    type: string,
+  ): Promise<string | undefined> {
     const canonical = await this.voiceQuota.resolveCanonicalVoiceId(type);
     // If voiceQuota returned the input unchanged and it's not an ElevenLabs ID
-    // we recognise, fall back to the default voice.
+    // we recognise, the voice is unknown — don't fall back to a default.
     if (canonical === type && !this.isKnownElevenLabsId(canonical)) {
-      return VOICE_CONFIG[DEFAULT_VOICE].elevenLabsId;
+      return undefined;
     }
     return canonical;
   }
@@ -267,14 +269,14 @@ export class TextToSpeechService {
         edgeTtsVoice = defaultConfig.edgeTtsVoice;
         deepgramVoice = defaultConfig.deepgramVoice;
       } else {
-        // Unrecognized ID, fallback to default
+        // Unrecognized ID — skip ElevenLabs entirely, use Deepgram/EdgeTTS
         const defaultConfig = VOICE_CONFIG[DEFAULT_VOICE];
-        elevenLabsId = defaultConfig.elevenLabsId;
+        elevenLabsId = undefined;
         edgeTtsVoice = defaultConfig.edgeTtsVoice;
         deepgramVoice = defaultConfig.deepgramVoice;
-        voiceSettings = defaultConfig.voiceSettings;
+        voiceSettings = undefined;
         this.logger.warn(
-          `Voice ID ${type} not found. Falling back to default.`,
+          `Voice ID ${type} not found. Falling back to Deepgram/EdgeTTS (skipping ElevenLabs).`,
         );
       }
     }
@@ -659,7 +661,7 @@ export class TextToSpeechService {
     const quotaVoiceId = await this.resolveCanonicalVoiceId(type);
     let isPremium = false;
     let useElevenLabsBatch = false;
-    if (userId) {
+    if (userId && quotaVoiceId) {
       isPremium = await this.subscriptionService.isPremiumUser(userId);
       if (isPremium) {
         useElevenLabsBatch = await this.voiceQuota.canUseVoiceForStory(
@@ -684,6 +686,11 @@ export class TextToSpeechService {
           );
         }
       }
+    } else if (userId && !quotaVoiceId) {
+      isPremium = await this.subscriptionService.isPremiumUser(userId);
+      this.logger.debug(
+        `Unrecognized voice ${type} for batch story ${storyId}, skipping ElevenLabs.`,
+      );
     }
 
     // Pick the single provider for this batch.
