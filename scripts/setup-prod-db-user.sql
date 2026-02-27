@@ -10,11 +10,11 @@
 -- production database server before the first deployment.
 --
 -- Usage:
---   psql -h <host> -U postgres -d storytime_db -f scripts/setup-prod-db-user.sql
+--   psql -h <host> -U postgres -d storytime_prod -f scripts/setup-prod-db-user.sql
 --
 -- After running, set these in your production .env / GitHub secrets:
---   DATABASE_URL=postgresql://storytime_app:<APP_PASSWORD>@<host>:5432/storytime_db?schema=public
---   MIGRATE_DATABASE_URL=postgresql://storytime_migrator:<MIGRATOR_PASSWORD>@<host>:5432/storytime_db?schema=public
+--   DATABASE_URL=postgresql://storytime_app:<APP_PASSWORD>@<host>:5432/storytime_prod?schema=public
+--   MIGRATE_DATABASE_URL=postgresql://storytime_migrator:<MIGRATOR_PASSWORD>@<host>:5432/storytime_prod?schema=public
 --
 -- Deployment workflow:
 --   1. Run migrations with MIGRATE_DATABASE_URL:
@@ -42,7 +42,7 @@ CREATE ROLE storytime_migrator WITH
   CONNECTION LIMIT 5;
 
 -- Allow connecting to the database
-GRANT CONNECT ON DATABASE storytime_db TO storytime_migrator;
+GRANT CONNECT ON DATABASE storytime_prod TO storytime_migrator;
 
 -- Full schema privileges: CREATE tables, types, indexes
 GRANT CREATE, USAGE ON SCHEMA public TO storytime_migrator;
@@ -82,7 +82,7 @@ CREATE ROLE storytime_app WITH
   CONNECTION LIMIT 20;
 
 -- Allow connecting to the database
-GRANT CONNECT ON DATABASE storytime_db TO storytime_app;
+GRANT CONNECT ON DATABASE storytime_prod TO storytime_app;
 
 -- Read-only schema access (can see tables, cannot create them)
 GRANT USAGE ON SCHEMA public TO storytime_app;
