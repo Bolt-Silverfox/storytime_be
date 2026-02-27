@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Patch,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -215,11 +216,27 @@ export class VoiceController {
         maxVoices: { type: 'number' },
         lockedVoiceId: { type: 'string', nullable: true },
         elevenLabsTrialStoryId: { type: 'string', nullable: true },
+        usedVoicesForStory: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'VoiceType keys already used on the given story (premium only)',
+        },
+        maxVoicesPerStory: {
+          type: 'number',
+          description: 'Max distinct voices allowed per story for premium',
+        },
       },
     },
   })
-  async getVoiceAccess(@Req() req: AuthenticatedRequest) {
-    return this.voiceQuotaService.getVoiceAccess(req.authUserData.userId);
+  async getVoiceAccess(
+    @Req() req: AuthenticatedRequest,
+    @Query('storyId') storyId?: string,
+  ) {
+    return this.voiceQuotaService.getVoiceAccess(
+      req.authUserData.userId,
+      storyId,
+    );
   }
 
   // --- List available ElevenLabs voices ---

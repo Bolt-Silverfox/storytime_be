@@ -194,24 +194,17 @@ export class VoiceQuotaService {
   }
 
   /**
-   * Check if a premium user can use a specific voice for a story.
-   * Premium users are limited to MAX_PREMIUM_VOICES_PER_STORY distinct
-   * premium voices per story. If the voice is already cached for this
-   * story, it's always allowed (no new cost). Otherwise, check how many
-   * distinct voices already have cached audio for this story.
+   * Get the distinct VoiceType keys already used on a story.
+   * Normalizes stored voiceIds (UUIDs, elevenLabsIds, enum names)
+   * to VoiceType keys for consistent comparison on the client.
    */
-  async canUseVoiceForStory(
-    storyId: string,
-    voiceId: string,
-  ): Promise<boolean> {
-    const limit = VOICE_CONFIG_SETTINGS.QUOTAS.MAX_PREMIUM_VOICES_PER_STORY;
-
+  async getUsedVoicesForStory(storyId: string): Promise<string[]> {
     const distinctVoices: Array<{ voiceId: string }> = await this.prisma
       .$queryRaw`SELECT DISTINCT "voiceId" FROM "paragraph_audio_cache" WHERE "storyId" = ${storyId}`;
 
-    // Normalize cached voiceIds to canonical elevenLabsId form so that
-    // VoiceType enum names, UUIDs, and elevenLabsIds all compare correctly.
-    // Batch UUID lookups to avoid N+1 queries.
+    if (distinctVoices.length === 0) return [];
+
+    // Batch UUID lookups to avoid N+1 queries
     const uuidCandidates = distinctVoices
       .map((v) => v.voiceId)
       .filter(
@@ -233,30 +226,61 @@ export class VoiceQuotaService {
         .map((v) => [v.id, v.elevenLabsVoiceId!]),
     );
 
-    const canonicalCachedIds = distinctVoices.map((v) => {
+    // Resolve each cached voiceId to its VoiceType key
+    const voiceTypeKeys = distinctVoices.map((v) => {
+      // Already a VoiceType key
       if (Object.values(VoiceType).includes(v.voiceId as VoiceType)) {
-        return VOICE_CONFIG[v.voiceId as VoiceType].elevenLabsId;
+        return v.voiceId;
       }
+      // Migrated name → new VoiceType key
       const migrated = VOICE_TYPE_MIGRATION_MAP[v.voiceId];
-      if (migrated) {
-        return VOICE_CONFIG[migrated].elevenLabsId;
-      }
-      return uuidToElevenLabs.get(v.voiceId) ?? v.voiceId;
-    });
-    const uniqueCachedIds = [...new Set(canonicalCachedIds)];
+      if (migrated) return migrated;
 
-    // Normalize the incoming voiceId the same way cached IDs are resolved
+      // UUID or elevenLabsId → look up the elevenLabsId, then find VoiceType key
+      const elevenLabsId = uuidToElevenLabs.get(v.voiceId) ?? v.voiceId;
+      const entry = Object.entries(VOICE_CONFIG).find(
+        ([, config]) => config.elevenLabsId === elevenLabsId,
+      );
+      return entry ? entry[0] : v.voiceId;
+    });
+
+    return [...new Set(voiceTypeKeys)];
+  }
+
+  /**
+   * Check if a premium user can use a specific voice for a story.
+   * Premium users are limited to MAX_PREMIUM_VOICES_PER_STORY distinct
+   * premium voices per story. If the voice is already cached for this
+   * story, it's always allowed (no new cost). Otherwise, check how many
+   * distinct voices already have cached audio for this story.
+   */
+  async canUseVoiceForStory(
+    storyId: string,
+    voiceId: string,
+  ): Promise<boolean> {
+    const limit = VOICE_CONFIG_SETTINGS.QUOTAS.MAX_PREMIUM_VOICES_PER_STORY;
+    const usedVoices = await this.getUsedVoicesForStory(storyId);
+
+    // Normalize the incoming voiceId to canonical form for comparison
     const canonicalVoiceId = await this.resolveCanonicalVoiceId(voiceId);
 
+    // Resolve used voices to canonical elevenLabsIds for comparison
+    const canonicalUsedIds = usedVoices.map((key) => {
+      if (Object.values(VoiceType).includes(key as VoiceType)) {
+        return VOICE_CONFIG[key as VoiceType].elevenLabsId;
+      }
+      return key;
+    });
+
     // Already cached for this story — always allowed (zero cost)
-    if (uniqueCachedIds.includes(canonicalVoiceId)) {
+    if (canonicalUsedIds.includes(canonicalVoiceId)) {
       return true;
     }
 
     // New voice — only allow if under the limit
-    if (uniqueCachedIds.length >= limit) {
+    if (canonicalUsedIds.length >= limit) {
       this.logger.log(
-        `Story ${storyId} already has ${uniqueCachedIds.length} distinct voices (limit ${limit}). Denying voice ${voiceId}.`,
+        `Story ${storyId} already has ${canonicalUsedIds.length} distinct voices (limit ${limit}). Denying voice ${voiceId}.`,
       );
       return false;
     }
@@ -462,17 +486,28 @@ export class VoiceQuotaService {
   }
 
   // Get voice access info for a user
-  async getVoiceAccess(userId: string): Promise<{
+  async getVoiceAccess(
+    userId: string,
+    storyId?: string,
+  ): Promise<{
     isPremium: boolean;
     unlimited: boolean;
     defaultVoice: string;
     maxVoices: number;
     lockedVoiceId: string | null;
     elevenLabsTrialStoryId: string | null;
+    usedVoicesForStory: string[];
+    maxVoicesPerStory: number;
   }> {
     const isPremium = await this.subscriptionService.isPremiumUser(userId);
+    const maxVoicesPerStory =
+      VOICE_CONFIG_SETTINGS.QUOTAS.MAX_PREMIUM_VOICES_PER_STORY;
 
     if (isPremium) {
+      const usedVoicesForStory = storyId
+        ? await this.getUsedVoicesForStory(storyId)
+        : [];
+
       return {
         isPremium: true,
         unlimited: true,
@@ -480,6 +515,8 @@ export class VoiceQuotaService {
         maxVoices: -1, // unlimited
         lockedVoiceId: null,
         elevenLabsTrialStoryId: null,
+        usedVoicesForStory,
+        maxVoicesPerStory,
       };
     }
 
@@ -536,6 +573,8 @@ export class VoiceQuotaService {
       maxVoices: 1, // free users get ONE voice total
       lockedVoiceId,
       elevenLabsTrialStoryId: usage?.elevenLabsTrialStoryId ?? null,
+      usedVoicesForStory: [], // free users only have 1 voice
+      maxVoicesPerStory,
     };
   }
 }
