@@ -2,7 +2,7 @@ name: Dev CI/CD Pipeline
 
 on:
   pull_request:
-    branches: ['develop-v*.*.*']
+    branches: ['develop-v1.1.0']
     types: [opened, synchronize, closed]
 
 concurrency:
@@ -38,7 +38,7 @@ jobs:
 
       - name: Format check
         continue-on-error: true
-        run: pnpm run format:check || pnpm run format --check || echo "Format check not configured"
+        run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
 
       - name: Lint
         continue-on-error: true
