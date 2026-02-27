@@ -687,7 +687,7 @@ export class TextToSpeechService {
         }
       }
     } else if (userId && !quotaVoiceId) {
-      // Unknown voice — resolve isPremium for logging but skip ElevenLabs
+      // Unknown voice — resolve isPremium for downstream TTS flow but skip ElevenLabs
       isPremium = await this.subscriptionService.isPremiumUser(userId);
       this.logger.warn(
         `Batch story ${storyId}: unrecognised voice ${type}, skipping ElevenLabs.`,
