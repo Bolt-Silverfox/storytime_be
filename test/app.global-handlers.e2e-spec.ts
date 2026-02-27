@@ -38,6 +38,7 @@ class TestController {
   }
 
   @Post('login')
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   login(@Body() _dto: TestLoginDto) {
     return { token: 'fake' };
   }
