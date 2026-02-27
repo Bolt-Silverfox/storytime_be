@@ -430,6 +430,8 @@ export class StoryService {
 
   // Sort stories so unread appear first, then reading, then done.
   // Preserves original order within each group (stable sort).
+  // Applied post-fetch: pagination cursors use DB order (createdAt/id),
+  // so items may shift within a page if readStatus changes between requests.
   private sortByReadStatus<T extends { readStatus: 'done' | 'reading' | null }>(
     stories: T[],
   ): T[] {
