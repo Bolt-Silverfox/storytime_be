@@ -347,6 +347,8 @@ export class VoiceQuotaService {
   // Check if a user can use a specific voice.
   // Premium users can use any voice.
   // Free users get ONE voice total — once locked, only that voice is allowed.
+  // Falls back to preferredVoiceId for existing users who picked a voice
+  // before the locking mechanism was added.
   async canUseVoice(userId: string, voiceId: string): Promise<boolean> {
     const isPremium = await this.subscriptionService.isPremiumUser(userId);
     if (isPremium) return true;
@@ -357,27 +359,44 @@ export class VoiceQuotaService {
       where: { userId },
     });
 
-    // No voice locked yet — allow any voice (locking happens downstream in canFreeUserUseElevenLabs)
-    if (!usage?.selectedSecondVoiceId) return true;
+    // Check explicit lock first
+    if (usage?.selectedSecondVoiceId) {
+      const lockedCanonical = await this.resolveCanonicalVoiceId(
+        usage.selectedSecondVoiceId,
+      );
+      return lockedCanonical === requestedCanonical;
+    }
 
-    const lockedCanonical = await this.resolveCanonicalVoiceId(
-      usage.selectedSecondVoiceId,
-    );
-    return lockedCanonical === requestedCanonical;
+    // Fall back to preferredVoiceId for legacy users
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { preferredVoiceId: true },
+    });
+
+    if (user?.preferredVoiceId) {
+      const preferredCanonical = await this.resolveCanonicalVoiceId(
+        user.preferredVoiceId,
+      );
+      return preferredCanonical === requestedCanonical;
+    }
+
+    // No voice locked yet — allow any (locking happens downstream in canFreeUserUseElevenLabs)
+    return true;
   }
 
-  // Lock a free user's premium voice in UserUsage.selectedSecondVoiceId.
+  // Lock a free user's voice in UserUsage.selectedSecondVoiceId.
   // Called from setPreferredVoice so the lock takes effect immediately
   // (not deferred to TTS generation).
   // Uses compare-and-set: only locks when selectedSecondVoiceId is null.
-  async lockFreeUserVoice(userId: string, voiceId: string): Promise<void> {
+  // Returns true if locked successfully, false if CAS failed or voice not found.
+  async lockFreeUserVoice(userId: string, voiceId: string): Promise<boolean> {
     const canonicalId = await this.resolveCanonicalVoiceId(voiceId);
     const voiceUuid = await this.resolveVoiceUuid(canonicalId);
     if (!voiceUuid) {
       this.logger.warn(
         `No voice record found for ElevenLabs ID ${canonicalId}. Skipping lock for user ${userId}.`,
       );
-      return;
+      return false;
     }
 
     const currentMonth = this.getCurrentMonth();
@@ -399,7 +418,13 @@ export class VoiceQuotaService {
       this.logger.log(
         `Locked free user ${userId} voice to ${voiceUuid} via setPreferredVoice`,
       );
+      return true;
     }
+
+    this.logger.warn(
+      `CAS failed: free user ${userId} voice already locked. Requested ${voiceUuid}.`,
+    );
+    return false;
   }
 
   // Get voice access info for a user
