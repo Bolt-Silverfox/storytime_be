@@ -87,7 +87,7 @@ describe('VoiceService', () => {
       });
 
       expect(prisma.voice.findMany).toHaveBeenCalledWith({
-        where: { userId },
+        where: { userId, isDeleted: false },
       });
     });
   });

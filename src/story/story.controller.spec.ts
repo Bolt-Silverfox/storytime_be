@@ -3,6 +3,7 @@ import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
 import { StoryQuotaService } from './story-quota.service';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
+import { PrismaService } from '../prisma/prisma.service';
 
 // Mock the Service so we test the Controller in isolation
 const mockStoryQuotaService = {
@@ -19,6 +20,16 @@ const mockStoryService = {
   getTopPicksFromParents: jest.fn(),
 };
 
+const mockPrismaService = {
+  kid: {
+    findFirst: jest.fn().mockResolvedValue({ id: 'kid-123', parentId: 'user-1' }),
+  },
+};
+
+const mockReq = {
+  authUserData: { userId: 'user-1' },
+} as any;
+
 describe('StoryController', () => {
   let controller: StoryController;
   let service: typeof mockStoryService;
@@ -29,6 +40,7 @@ describe('StoryController', () => {
       providers: [
         { provide: StoryService, useValue: mockStoryService },
         { provide: StoryQuotaService, useValue: mockStoryQuotaService },
+        { provide: PrismaService, useValue: mockPrismaService },
         {
           provide: 'CACHE_MANAGER',
           useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() },
@@ -45,6 +57,7 @@ describe('StoryController', () => {
     controller = module.get<StoryController>(StoryController);
     service = module.get(StoryService);
     jest.clearAllMocks();
+    mockPrismaService.kid.findFirst.mockResolvedValue({ id: 'kid-123', parentId: 'user-1' });
   });
 
   // --- 1. TEST THE GENERATION ENDPOINT ---
@@ -54,7 +67,7 @@ describe('StoryController', () => {
       const theme = 'Space';
       const category = 'Adventure';
 
-      await controller.generateStoryForKid(kidId, theme, category);
+      await controller.generateStoryForKid(mockReq, kidId, theme, category);
 
       // Verify the controller converts single strings to arrays for the service
       expect(service.generateStoryForKid).toHaveBeenCalledWith(
@@ -66,7 +79,7 @@ describe('StoryController', () => {
 
     it('should handle missing theme/category params', async () => {
       const kidId = 'kid-123';
-      await controller.generateStoryForKid(kidId);
+      await controller.generateStoryForKid(mockReq, kidId);
 
       expect(service.generateStoryForKid).toHaveBeenCalledWith(
         kidId,
@@ -82,7 +95,7 @@ describe('StoryController', () => {
     const storyId = 'story-456';
 
     it('getCreated: should call getCreatedStories service method', async () => {
-      await controller.getCreated(kidId);
+      await controller.getCreated(mockReq, kidId);
       expect(service.getCreatedStories).toHaveBeenCalledWith(
         kidId,
         undefined,
@@ -91,7 +104,7 @@ describe('StoryController', () => {
     });
 
     it('getDownloads: should call getDownloads service method', async () => {
-      await controller.getDownloads(kidId);
+      await controller.getDownloads(mockReq, kidId);
       expect(service.getDownloads).toHaveBeenCalledWith(
         kidId,
         undefined,
@@ -100,27 +113,27 @@ describe('StoryController', () => {
     });
 
     it('getCreated: should pass sanitized cursor and limit to service', async () => {
-      await controller.getCreated(kidId, 'abc', '10');
+      await controller.getCreated(mockReq, kidId, 'abc', '10');
       expect(service.getCreatedStories).toHaveBeenCalledWith(kidId, 'abc', 10);
     });
 
     it('getCreated: should default limit when not provided with cursor', async () => {
-      await controller.getCreated(kidId, 'abc');
+      await controller.getCreated(mockReq, kidId, 'abc');
       expect(service.getCreatedStories).toHaveBeenCalledWith(kidId, 'abc', 20);
     });
 
     it('getDownloads: should pass sanitized cursor and limit to service', async () => {
-      await controller.getDownloads(kidId, 'xyz', '5');
+      await controller.getDownloads(mockReq, kidId, 'xyz', '5');
       expect(service.getDownloads).toHaveBeenCalledWith(kidId, 'xyz', 5);
     });
 
     it('getDownloads: should default limit when not provided with cursor', async () => {
-      await controller.getDownloads(kidId, 'xyz');
+      await controller.getDownloads(mockReq, kidId, 'xyz');
       expect(service.getDownloads).toHaveBeenCalledWith(kidId, 'xyz', 20);
     });
 
     it('addDownload: should call addDownload service method', async () => {
-      await controller.addDownload(kidId, storyId);
+      await controller.addDownload(mockReq, kidId, storyId);
       expect(service.addDownload).toHaveBeenCalledWith(kidId, storyId);
     });
 
@@ -156,6 +169,16 @@ describe('StoryController', () => {
       const result = await controller.getTopPicksFromParents(10);
 
       expect(result).toEqual(mockResult);
+    });
+  });
+
+  // --- 4. IDOR PROTECTION ---
+  describe('verifyKidOwnership', () => {
+    it('should throw NotFoundException when kid does not belong to parent', async () => {
+      mockPrismaService.kid.findFirst.mockResolvedValue(null);
+      await expect(
+        controller.getCreated(mockReq, 'kid-999'),
+      ).rejects.toThrow('not found');
     });
   });
 });

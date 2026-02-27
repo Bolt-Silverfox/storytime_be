@@ -48,7 +48,7 @@ export class VoiceController {
   constructor(
     private readonly voiceService: VoiceService,
     private readonly storyService: StoryService,
-    public readonly uploadService: UploadService,
+    private readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly speechToTextService: SpeechToTextService,
     private readonly voiceQuotaService: VoiceQuotaService,
@@ -71,7 +71,20 @@ export class VoiceController {
   @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: 'Upload a custom voice (audio file)' })
   async uploadVoiceFile(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({
+          fileType:
+            /(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/ogg|audio\/webm)/,
+        })
+        .addMaxSizeValidator({
+          maxSize: 25 * 1024 * 1024, // 25MB
+        })
+        .build({
+          errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        }),
+    )
+    file: Express.Multer.File,
     @Body() dto: UploadVoiceDto,
     @Req() req: AuthenticatedRequest,
   ) {
@@ -163,7 +176,7 @@ export class VoiceController {
   @ApiOperation({ summary: 'Get preferred voice for the user' })
   async getPreferredVoice(
     @Req() req: AuthenticatedRequest,
-  ): Promise<VoiceResponseDto | null> {
+  ): Promise<VoiceResponseDto> {
     return this.voiceService.getPreferredVoice(req.authUserData.userId);
   }
 
@@ -186,6 +199,8 @@ export class VoiceController {
         unlimited: { type: 'boolean' },
         defaultVoice: { type: 'string' },
         maxVoices: { type: 'number' },
+        lockedVoiceId: { type: 'string', nullable: true },
+        elevenLabsTrialStoryId: { type: 'string', nullable: true },
       },
     },
   })

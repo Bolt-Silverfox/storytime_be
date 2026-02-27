@@ -60,7 +60,7 @@ export class VoiceService {
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         this.logger.warn(`Failed to clone voice with ElevenLabs: ${msg}`);
-        throw new InternalServerErrorException(`Voice cloning failed: ${msg}`);
+        throw new InternalServerErrorException('Voice cloning failed. Please try again later.');
       }
     }
 
@@ -94,7 +94,7 @@ export class VoiceService {
 
   // --- List all voices for a user ---
   async listVoices(userId: string): Promise<VoiceResponseDto[]> {
-    const voices = await this.prisma.voice.findMany({ where: { userId } });
+    const voices = await this.prisma.voice.findMany({ where: { userId, isDeleted: false } });
     return voices.map((v) => this.toVoiceResponse(v));
   }
 
@@ -149,7 +149,7 @@ export class VoiceService {
   }
 
   // --- Get the preferred voice for a user ---
-  async getPreferredVoice(userId: string): Promise<VoiceResponseDto | null> {
+  async getPreferredVoice(userId: string): Promise<VoiceResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { preferredVoice: true },
@@ -219,6 +219,7 @@ export class VoiceService {
       where: {
         userId: userId,
         elevenLabsVoiceId: elevenLabsId,
+        isDeleted: false,
       },
     });
 
