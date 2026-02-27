@@ -119,13 +119,13 @@ describe('ParentFavoritesService', () => {
 
       const result = await service.getFavorites('user-1');
 
-      expect(result.data).toHaveLength(2);
-      expect(result.data[0].ageRange).toBe('4-6');
-      expect(result.data[0].durationSeconds).toBe(120);
-      expect(result.data[0].categories).toEqual([]);
-      expect(result.data[1].ageRange).toBe('7-9');
-      expect(result.data[1].durationSeconds).toBeUndefined();
-      expect(result.data[1].categories).toEqual([
+      expect(result).toHaveLength(2);
+      expect(result[0].ageRange).toBe('4-6');
+      expect(result[0].durationSeconds).toBe(120);
+      expect(result[0].categories).toEqual([]);
+      expect(result[1].ageRange).toBe('7-9');
+      expect(result[1].durationSeconds).toBeUndefined();
+      expect(result[1].categories).toEqual([
         {
           id: 'cat-2',
           name: 'Fantasy',
@@ -133,10 +133,6 @@ describe('ParentFavoritesService', () => {
           description: 'Magical',
         },
       ]);
-      expect(result.pagination).toEqual({
-        nextCursor: null,
-        hasNextPage: false,
-      });
     });
   });
 });
