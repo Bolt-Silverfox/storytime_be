@@ -24,42 +24,10 @@
 --   3. Start the app with DATABASE_URL (storytime_app)
 -- =============================================================================
 
-BEGIN;
 
 -- =============================================================================
--- CLEANUP: Remove existing roles if re-running this script
+-- STEP 1: Create the migration user
 -- =============================================================================
--- Uses a DO block to safely handle cases where roles don't exist yet.
-
-DO $$
-BEGIN
-  -- Revoke storytime_app privileges (if the role exists)
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'storytime_app') THEN
-    EXECUTE 'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM storytime_app';
-    EXECUTE 'REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM storytime_app';
-    EXECUTE 'REVOKE ALL ON SCHEMA public FROM storytime_app';
-    EXECUTE 'REVOKE CONNECT ON DATABASE storytime_prod FROM storytime_app';
-    EXECUTE 'DROP ROLE storytime_app';
-    RAISE NOTICE 'Dropped existing role: storytime_app';
-  END IF;
-
-  -- Revoke storytime_migrator privileges (if the role exists)
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'storytime_migrator') THEN
-    EXECUTE 'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM storytime_migrator';
-    EXECUTE 'REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM storytime_migrator';
-    EXECUTE 'REVOKE ALL ON SCHEMA public FROM storytime_migrator';
-    EXECUTE 'REVOKE CONNECT ON DATABASE storytime_prod FROM storytime_migrator';
-    EXECUTE 'DROP ROLE storytime_migrator';
-    RAISE NOTICE 'Dropped existing role: storytime_migrator';
-  END IF;
-END
-$$;
-
--- =============================================================================
--- PART 1: Create both roles first
--- =============================================================================
--- Both roles must exist before we can set cross-role default privileges.
-
 -- CHANGE THIS PASSWORD before running. Use: openssl rand -base64 32
 CREATE ROLE storytime_migrator WITH
   LOGIN
@@ -70,6 +38,9 @@ CREATE ROLE storytime_migrator WITH
   NOINHERIT
   CONNECTION LIMIT 5;
 
+-- =============================================================================
+-- STEP 2: Create the application user
+-- =============================================================================
 -- CHANGE THIS PASSWORD before running. Use: openssl rand -base64 32
 CREATE ROLE storytime_app WITH
   LOGIN
@@ -81,84 +52,49 @@ CREATE ROLE storytime_app WITH
   CONNECTION LIMIT 20;
 
 -- =============================================================================
--- PART 2: Migrator privileges (DDL + DML for migrations & seeding)
+-- STEP 3: Migrator privileges (DDL + DML for migrations & seeding)
 -- =============================================================================
-
 GRANT CONNECT ON DATABASE storytime_prod TO storytime_migrator;
-
--- Full schema privileges: CREATE tables, types, indexes
 GRANT CREATE, USAGE ON SCHEMA public TO storytime_migrator;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO storytime_migrator;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO storytime_migrator;
 
--- Full DML + DDL on all existing tables
-GRANT ALL PRIVILEGES
-  ON ALL TABLES IN SCHEMA public
-  TO storytime_migrator;
-
--- Full sequence access
-GRANT ALL PRIVILEGES
-  ON ALL SEQUENCES IN SCHEMA public
-  TO storytime_migrator;
-
--- Future objects created by the migrator are also owned by it
 ALTER DEFAULT PRIVILEGES FOR ROLE storytime_migrator IN SCHEMA public
   GRANT ALL PRIVILEGES ON TABLES TO storytime_migrator;
-
 ALTER DEFAULT PRIVILEGES FOR ROLE storytime_migrator IN SCHEMA public
   GRANT ALL PRIVILEGES ON SEQUENCES TO storytime_migrator;
 
 -- =============================================================================
--- PART 3: Application user privileges (DML only — no schema changes)
+-- STEP 4: Application user privileges (DML only)
 -- =============================================================================
-
 GRANT CONNECT ON DATABASE storytime_prod TO storytime_app;
-
--- Read-only schema access (can see tables, cannot create them)
 GRANT USAGE ON SCHEMA public TO storytime_app;
-
--- DML on all existing tables (SELECT, INSERT, UPDATE, DELETE only)
-GRANT SELECT, INSERT, UPDATE, DELETE
-  ON ALL TABLES IN SCHEMA public
-  TO storytime_app;
-
--- Sequence usage (required for @default(autoincrement()) / serial columns)
-GRANT USAGE, SELECT
-  ON ALL SEQUENCES IN SCHEMA public
-  TO storytime_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO storytime_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO storytime_app;
 
 -- =============================================================================
--- PART 4: Default privileges for future objects
+-- STEP 5: Default privileges for future objects
 -- =============================================================================
--- Prisma migrations run as storytime_migrator, so tables it creates must
--- automatically grant DML to storytime_app.
-
+-- Tables created by storytime_migrator automatically grant DML to storytime_app
 ALTER DEFAULT PRIVILEGES FOR ROLE storytime_migrator IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO storytime_app;
-
 ALTER DEFAULT PRIVILEGES FOR ROLE storytime_migrator IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO storytime_app;
 
--- Also cover tables created by the superuser (postgres), in case migrations
--- are ever run as postgres instead of storytime_migrator.
+-- Tables created by postgres (superuser) also grant DML to storytime_app
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO storytime_app;
-
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO storytime_app;
 
 -- =============================================================================
--- PART 5: Harden schema permissions
+-- STEP 6: Harden schema permissions
 -- =============================================================================
-
--- Prevent inherited CREATE via PUBLIC (needed on PostgreSQL < 15)
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
-
--- Explicitly deny DDL for the app user
 REVOKE CREATE ON SCHEMA public FROM storytime_app;
 
-COMMIT;
-
 -- =============================================================================
--- Verification (run these manually after the script succeeds):
+-- Verification (run manually after the script succeeds):
 -- =============================================================================
 --
 -- 1. Check both roles exist:
@@ -181,4 +117,23 @@ COMMIT;
 --    SELECT has_table_privilege('storytime_app', 'public."User"', 'TRUNCATE');
 --      → false
 --
+-- =============================================================================
+
+
+-- =============================================================================
+-- CLEANUP (only if you need to re-run this script from scratch):
+-- =============================================================================
+-- Run these commands BEFORE re-running the script above:
+--
+--   REVOKE ALL ON ALL TABLES IN SCHEMA public FROM storytime_app;
+--   REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM storytime_app;
+--   REVOKE ALL ON SCHEMA public FROM storytime_app;
+--   REVOKE CONNECT ON DATABASE storytime_prod FROM storytime_app;
+--   DROP ROLE IF EXISTS storytime_app;
+--
+--   REVOKE ALL ON ALL TABLES IN SCHEMA public FROM storytime_migrator;
+--   REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM storytime_migrator;
+--   REVOKE ALL ON SCHEMA public FROM storytime_migrator;
+--   REVOKE CONNECT ON DATABASE storytime_prod FROM storytime_migrator;
+--   DROP ROLE IF EXISTS storytime_migrator;
 -- =============================================================================

@@ -54,6 +54,10 @@ export class PrismaExceptionFilter
       }
       // P2003: Foreign key constraint failed
       case 'P2003': {
+        const field = (exception.meta?.field_name as string) || 'unknown';
+        this.logger.error(
+          `P2003 Foreign key constraint failed on field: ${field}`,
+        );
         statusCode = HttpStatus.BAD_REQUEST;
         message = 'The provided foreign key is invalid or does not exist.';
         error = 'Invalid Foreign Key';
