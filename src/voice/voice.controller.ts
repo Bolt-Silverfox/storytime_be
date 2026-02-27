@@ -75,7 +75,7 @@ export class VoiceController {
       new ParseFilePipeBuilder()
         .addFileTypeValidator({
           fileType:
-            /(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/m4a|audio\/mp4|audio\/ogg|audio\/webm)/,
+            /^(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/m4a|audio\/mp4|audio\/ogg|audio\/webm)$/,
         })
         .addMaxSizeValidator({
           maxSize: 25 * 1024 * 1024, // 25MB
