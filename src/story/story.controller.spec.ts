@@ -3,7 +3,7 @@ import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
 import { StoryQuotaService } from './story-quota.service';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 // Mock the Service so we test the Controller in isolation
@@ -19,6 +19,7 @@ const mockStoryService = {
   removeDownload: jest.fn(),
   removeFromLibrary: jest.fn(),
   getTopPicksFromParents: jest.fn(),
+  updateStory: jest.fn(),
 };
 
 const mockPrismaService = {
@@ -26,6 +27,9 @@ const mockPrismaService = {
     findFirst: jest
       .fn()
       .mockResolvedValue({ id: 'kid-123', parentId: 'user-1' }),
+  },
+  story: {
+    findFirst: jest.fn(),
   },
 };
 
@@ -185,6 +189,18 @@ describe('StoryController', () => {
       await expect(controller.getCreated(mockReq, 'kid-999')).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('should throw ForbiddenException when story belongs to another user', async () => {
+      mockPrismaService.story.findFirst.mockResolvedValue({
+        id: 'story-123',
+        isDeleted: false,
+        creatorKidId: 'other-kid',
+        creatorKid: { parentId: 'other-user' },
+      });
+      await expect(
+        controller.updateStory(mockReq, 'story-123', {} as any),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 });

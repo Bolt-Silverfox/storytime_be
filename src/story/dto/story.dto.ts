@@ -249,7 +249,12 @@ export class UserStoryProgressDto {
   @IsBoolean()
   completed?: boolean;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({
+    required: false,
+    minimum: 0,
+    maximum: 86400,
+    description: 'Session time in seconds (max 24h)',
+  })
   @IsOptional()
   @IsNumber()
   @Min(0)

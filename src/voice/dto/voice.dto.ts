@@ -30,6 +30,7 @@ export class CreateElevenLabsVoiceDto {
   @ApiProperty({ description: 'ElevenLabs Voice ID', example: 'abc123xyz' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(100)
   elevenLabsVoiceId: string;
 }
 
