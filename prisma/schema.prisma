@@ -465,7 +465,6 @@ model UserStoryProgress {
   deletedAt      DateTime?
 
   @@unique([userId, storyId])
-  @@index([userId])
   @@index([storyId])
   @@index([isDeleted])
   @@index([userId, completed, isDeleted, lastAccessed(sort: Desc)])
@@ -1009,7 +1008,6 @@ model DownloadedStory {
   downloadedAt DateTime @default(now())
 
   @@unique([kidId, storyId]) // Prevent duplicate downloads
-  @@index([kidId])
   @@index([storyId])
   @@index([kidId, downloadedAt(sort: Desc)])
   @@map("downloaded_stories")
