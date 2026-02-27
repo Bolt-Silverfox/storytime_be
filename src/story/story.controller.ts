@@ -106,9 +106,13 @@ export class StoryController {
     return kid;
   }
 
-  private async verifyStoryOwnership(storyId: string, userId: string) {
+  private async verifyStoryOwnership(
+    storyId: string,
+    userId: string,
+    includeDeleted = false,
+  ) {
     const story = await this.prisma.story.findFirst({
-      where: { id: storyId, isDeleted: false },
+      where: { id: storyId, ...(includeDeleted ? {} : { isDeleted: false }) },
       include: { creatorKid: { select: { parentId: true } } },
     });
     if (!story) {
@@ -448,7 +452,7 @@ export class StoryController {
     @Param('id') id: string,
     @Query('permanent') permanent: boolean = false,
   ) {
-    await this.verifyStoryOwnership(id, req.authUserData.userId);
+    await this.verifyStoryOwnership(id, req.authUserData.userId, true);
     return this.storyService.deleteStory(id, permanent);
   }
 
@@ -478,7 +482,7 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
   ) {
-    await this.verifyStoryOwnership(id, req.authUserData.userId);
+    await this.verifyStoryOwnership(id, req.authUserData.userId, true);
     return this.storyService.undoDeleteStory(id);
   }
 

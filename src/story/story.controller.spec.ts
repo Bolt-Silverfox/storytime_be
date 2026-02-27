@@ -3,6 +3,7 @@ import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
 import { StoryQuotaService } from './story-quota.service';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
+import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 // Mock the Service so we test the Controller in isolation
@@ -182,7 +183,7 @@ describe('StoryController', () => {
     it('should throw NotFoundException when kid does not belong to parent', async () => {
       mockPrismaService.kid.findFirst.mockResolvedValue(null);
       await expect(controller.getCreated(mockReq, 'kid-999')).rejects.toThrow(
-        'not found',
+        NotFoundException,
       );
     });
   });

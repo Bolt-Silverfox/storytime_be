@@ -809,7 +809,8 @@ export class StoryService {
     });
     if (!story) throw new NotFoundException('Story not found');
 
-    const sessionTime = Math.max(0, Math.floor(Number(dto.sessionTime ?? 0)));
+    const rawSession = Number(dto.sessionTime ?? 0);
+    const sessionTime = Number.isFinite(rawSession) ? Math.max(0, Math.floor(rawSession)) : 0;
 
     const existing = await this.prisma.storyProgress.findUnique({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
@@ -878,7 +879,8 @@ export class StoryService {
       where: { userId_storyId: { userId, storyId: dto.storyId } },
     });
 
-    const sessionTime = Math.max(0, Math.floor(Number(dto.sessionTime ?? 0)));
+    const rawSession = Number(dto.sessionTime ?? 0);
+    const sessionTime = Number.isFinite(rawSession) ? Math.max(0, Math.floor(rawSession)) : 0;
 
     // If restoring a soft-deleted record, reset totalTimeSpent instead of
     // accumulating stale time from before the removal.
@@ -1589,7 +1591,7 @@ export class StoryService {
   // --- PRIVATE HELPER: PERSIST STORY (Includes Image & Audio Gen) ---
   private async persistGeneratedStory(
     generatedStory: GeneratedStory & { textContent?: string },
-    kidName: string,
+    _kidName: string,
     creatorKidId?: string,
     voiceType?: VoiceType,
     seasonIds?: string[],
