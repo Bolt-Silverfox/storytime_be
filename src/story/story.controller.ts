@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   BadRequestException,
+  ForbiddenException,
   Logger,
   NotFoundException,
   Param,
@@ -105,6 +106,22 @@ export class StoryController {
     return kid;
   }
 
+  private async verifyStoryOwnership(storyId: string, userId: string) {
+    const story = await this.prisma.story.findFirst({
+      where: { id: storyId, isDeleted: false },
+      include: { creatorKid: { select: { parentId: true } } },
+    });
+    if (!story) {
+      throw new NotFoundException(`Story ${storyId} not found`);
+    }
+    if (story.creatorKidId && story.creatorKid?.parentId !== userId) {
+      throw new ForbiddenException(
+        'You do not have permission to modify this story',
+      );
+    }
+    return story;
+  }
+
   @Get()
   @ApiOperation({
     summary:
@@ -182,17 +199,21 @@ export class StoryController {
     // recommended and isMostLiked are intentionally excluded here
     // because they use orderings incompatible with cursor pagination,
     // and including them would leak into buildStoryWhereClause.
-    const parsedAge = age ? parseInt(age, 10) : undefined;
-    if (parsedAge !== undefined && Number.isNaN(parsedAge)) {
+    const parsedAge = age ? Number(age) : undefined;
+    if (parsedAge !== undefined && !Number.isFinite(parsedAge)) {
       throw new BadRequestException('age must be a valid number');
     }
-    const parsedMinAge = minAge ? parseInt(minAge, 10) : undefined;
-    if (parsedMinAge !== undefined && Number.isNaN(parsedMinAge)) {
+    const parsedMinAge = minAge ? Number(minAge) : undefined;
+    if (parsedMinAge !== undefined && !Number.isFinite(parsedMinAge)) {
       throw new BadRequestException('minAge must be a valid number');
     }
-    const parsedMaxAge = maxAge ? parseInt(maxAge, 10) : undefined;
-    if (parsedMaxAge !== undefined && Number.isNaN(parsedMaxAge)) {
+    const parsedMaxAge = maxAge ? Number(maxAge) : undefined;
+    if (parsedMaxAge !== undefined && !Number.isFinite(parsedMaxAge)) {
       throw new BadRequestException('maxAge must be a valid number');
+    }
+
+    if (kidId) {
+      await this.verifyKidOwnership(kidId, req.authUserData.userId);
     }
 
     const baseFilter = {
@@ -268,9 +289,9 @@ export class StoryController {
     @Query('limitTopLiked', new DefaultValuePipe(5), ParseIntPipe)
     limitTopLiked: number,
   ) {
-    const safeLimitRecommended = Math.min(limitRecommended, 50);
-    const safeLimitSeasonal = Math.min(limitSeasonal, 50);
-    const safeLimitTopLiked = Math.min(limitTopLiked, 50);
+    const safeLimitRecommended = Math.max(1, Math.min(limitRecommended, 50));
+    const safeLimitSeasonal = Math.max(1, Math.min(limitSeasonal, 50));
+    const safeLimitTopLiked = Math.max(1, Math.min(limitTopLiked, 50));
     return this.storyService.getHomePageStories(
       req.authUserData.userId,
       safeLimitRecommended,
@@ -389,10 +410,11 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async updateStory(
-    @Req() _req: AuthenticatedRequest,
+    @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() body: UpdateStoryDto,
   ) {
+    await this.verifyStoryOwnership(id, req.authUserData.userId);
     return this.storyService.updateStory(id, body);
   }
 
@@ -422,10 +444,11 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async deleteStory(
-    @Req() _req: AuthenticatedRequest,
+    @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Query('permanent') permanent: boolean = false,
   ) {
+    await this.verifyStoryOwnership(id, req.authUserData.userId);
     return this.storyService.deleteStory(id, permanent);
   }
 
@@ -452,9 +475,10 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async undoDeleteStory(
-    @Req() _req: AuthenticatedRequest,
+    @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
   ) {
+    await this.verifyStoryOwnership(id, req.authUserData.userId);
     return this.storyService.undoDeleteStory(id);
   }
 
@@ -480,10 +504,11 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async addImage(
-    @Req() _req: AuthenticatedRequest,
+    @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() body: StoryImageDto,
   ) {
+    await this.verifyStoryOwnership(id, req.authUserData.userId);
     return this.storyService.addImage(id, body);
   }
 
@@ -509,10 +534,11 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async addBranch(
-    @Req() _req: AuthenticatedRequest,
+    @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() body: StoryBranchDto,
   ) {
+    await this.verifyStoryOwnership(id, req.authUserData.userId);
     return this.storyService.addBranch(id, body);
   }
 
@@ -935,9 +961,16 @@ export class StoryController {
   @ApiBody({ type: CompleteDailyChallengeDto })
   @ApiResponse({ status: 200, type: DailyChallengeAssignmentDto })
   async completeDailyChallenge(
-    @Req() _req: AuthenticatedRequest,
+    @Req() req: AuthenticatedRequest,
     @Body() dto: CompleteDailyChallengeDto,
   ) {
+    const assignment = await this.storyService.getAssignmentById(
+      dto.assignmentId,
+    );
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
+    }
+    await this.verifyKidOwnership(assignment.kidId, req.authUserData.userId);
     return this.storyService.completeDailyChallenge(dto);
   }
 
@@ -957,8 +990,16 @@ export class StoryController {
   @ApiOperation({ summary: 'Get a daily challenge assignment by id' })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: DailyChallengeAssignmentDto })
-  async getAssignmentById(@Param('id') id: string) {
-    return this.storyService.getAssignmentById(id);
+  async getAssignmentById(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    const assignment = await this.storyService.getAssignmentById(id);
+    if (!assignment) {
+      throw new NotFoundException('Assignment not found');
+    }
+    await this.verifyKidOwnership(assignment.kidId, req.authUserData.userId);
+    return assignment;
   }
 
   @Post('daily-challenge/assign-all')
@@ -983,7 +1024,11 @@ export class StoryController {
     description: 'No daily challenge assignment found',
     type: ErrorResponseDto,
   })
-  async getTodaysDailyChallengeAssignment(@Query('kidId') kidId: string) {
+  async getTodaysDailyChallengeAssignment(
+    @Req() req: AuthenticatedRequest,
+    @Query('kidId') kidId: string,
+  ) {
+    await this.verifyKidOwnership(kidId, req.authUserData.userId);
     this.logger.log(
       `Getting today's daily challenge assignment for kid ${kidId}`,
     );
@@ -1019,9 +1064,11 @@ export class StoryController {
     type: ErrorResponseDto,
   })
   async getWeeklyAssignmentsForKid(
+    @Req() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
     @Query('weekStart') weekStart: string,
   ) {
+    await this.verifyKidOwnership(kidId, req.authUserData.userId);
     const weekStartDate = new Date(weekStart);
     weekStartDate.setHours(0, 0, 0, 0);
     return this.storyService.getWeeklyDailyChallengeAssignments(
@@ -1087,9 +1134,13 @@ export class StoryController {
     description: 'Bad Request',
     type: ErrorResponseDto,
   })
-  async generateStory(@Body() body: GenerateStoryDto) {
+  async generateStory(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: GenerateStoryDto,
+  ) {
     // If kidId is provided, use the specialized method
     if (body.kidId) {
+      await this.verifyKidOwnership(body.kidId, req.authUserData.userId);
       return this.storyService.generateStoryForKid(
         body.kidId,
         body.themes,
@@ -1310,9 +1361,11 @@ export class StoryController {
     description: 'Story removed from library successfully',
   })
   async removeFromLibrary(
+    @Req() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
+    await this.verifyKidOwnership(kidId, req.authUserData.userId);
     await this.storyService.removeFromLibrary(kidId, storyId);
     return { message: 'Story removed from library successfully' };
   }
@@ -1345,6 +1398,7 @@ export class StoryController {
     @Req() req: AuthenticatedRequest,
     @Body() body: ParentRecommendationDto,
   ) {
+    await this.verifyKidOwnership(body.kidId, req.authUserData.userId);
     return this.storyService.recommendStoryToKid(req.authUserData.userId, body);
   }
 

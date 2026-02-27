@@ -447,7 +447,7 @@ model StoryProgress {
   @@index([storyId])
   @@index([isDeleted])
   @@index([kidId, completed])
-  @@index([kidId, completed, lastAccessed(sort: Desc)])
+  @@index([kidId, completed, isDeleted, lastAccessed(sort: Desc)])
   @@map("story_progress")
 }
 

@@ -781,7 +781,7 @@ export class StoryService {
 
     const records = await this.withCursorErrorHandling(() =>
       this.prisma.favorite.findMany({
-        where: { kidId, isDeleted: false },
+        where: { kidId, isDeleted: false, story: { isDeleted: false } },
         include: { story: true },
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         ...(useCursor ? { take: take + 1 } : {}),
@@ -809,7 +809,7 @@ export class StoryService {
     });
     if (!story) throw new NotFoundException('Story not found');
 
-    const sessionTime = dto.sessionTime || 0;
+    const sessionTime = Math.max(0, Math.floor(Number(dto.sessionTime ?? 0)));
 
     const existing = await this.prisma.storyProgress.findUnique({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
@@ -878,7 +878,7 @@ export class StoryService {
       where: { userId_storyId: { userId, storyId: dto.storyId } },
     });
 
-    const sessionTime = dto.sessionTime || 0;
+    const sessionTime = Math.max(0, Math.floor(Number(dto.sessionTime ?? 0)));
 
     // If restoring a soft-deleted record, reset totalTimeSpent instead of
     // accumulating stale time from before the removal.
