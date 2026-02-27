@@ -306,14 +306,11 @@ jobs:
         run: pnpm db:generate && pnpm build
 
       - name: Run database migrations
-        env:
-          DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
         run: pnpm db:migrate:deploy
 
       - name: Seed database
         env:
           NODE_ENV: production
-          DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
         run: pnpm db:seed
 
       - name: Prepare deployment directory
