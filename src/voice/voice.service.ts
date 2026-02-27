@@ -174,33 +174,31 @@ export class VoiceService {
     return this.toVoiceResponseWithKey(user.preferredVoice);
   }
 
+  // Find the VOICE_CONFIG entry and VoiceType key for a given elevenLabsId.
+  private findVoiceConfig(elevenLabsId: string | null) {
+    if (!elevenLabsId) return undefined;
+    const entry = Object.entries(VOICE_CONFIG).find(
+      ([, config]) => config.elevenLabsId === elevenLabsId,
+    );
+    return entry ? { key: entry[0], config: entry[1] } : undefined;
+  }
+
   // Resolve DB UUID to VoiceType key so mobile can match against available voices.
   // Used by both setPreferredVoice and getPreferredVoice for consistent ids.
   private toVoiceResponseWithKey(voice: Voice): VoiceResponseDto {
     const response = this.toVoiceResponse(voice);
-    const elevenLabsId = voice.elevenLabsVoiceId;
-    if (elevenLabsId) {
-      const voiceTypeKey = Object.entries(VOICE_CONFIG).find(
-        ([, config]) => config.elevenLabsId === elevenLabsId,
-      )?.[0];
-      if (voiceTypeKey) {
-        response.id = voiceTypeKey;
-      }
+    const match = this.findVoiceConfig(voice.elevenLabsVoiceId);
+    if (match) {
+      response.id = match.key;
     }
     return response;
   }
 
-  // --- Helper to map Prisma Voice to VoiceResponseDto ---
   private toVoiceResponse(voice: Voice): VoiceResponseDto {
     let previewUrl = voice.url ?? undefined;
     let voiceAvatar = voice.voiceAvatar ?? undefined;
 
-    // Lookup VOICE_CONFIG for display name
-    const config = voice.elevenLabsVoiceId
-      ? Object.values(VOICE_CONFIG).find(
-          (c) => c.elevenLabsId === voice.elevenLabsVoiceId,
-        )
-      : undefined;
+    const config = this.findVoiceConfig(voice.elevenLabsVoiceId)?.config;
 
     // If it's an uploaded voice, the 'url' is the preview/audio itself
     if (voice.type === (VoiceSourceType.UPLOADED as string)) {

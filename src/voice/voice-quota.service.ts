@@ -372,11 +372,8 @@ export class VoiceQuotaService {
   // Uses compare-and-set: only locks when selectedSecondVoiceId is null.
   async lockFreeUserVoice(userId: string, voiceId: string): Promise<void> {
     const canonicalId = await this.resolveCanonicalVoiceId(voiceId);
-    const voice = await this.prisma.voice.findFirst({
-      where: { elevenLabsVoiceId: canonicalId, isDeleted: false },
-      select: { id: true },
-    });
-    if (!voice) {
+    const voiceUuid = await this.resolveVoiceUuid(canonicalId);
+    if (!voiceUuid) {
       this.logger.warn(
         `No voice record found for ElevenLabs ID ${canonicalId}. Skipping lock for user ${userId}.`,
       );
@@ -395,12 +392,12 @@ export class VoiceQuotaService {
     // Atomic compare-and-set: only set if currently null
     const { count } = await this.prisma.userUsage.updateMany({
       where: { userId, selectedSecondVoiceId: null },
-      data: { selectedSecondVoiceId: voice.id },
+      data: { selectedSecondVoiceId: voiceUuid },
     });
 
     if (count > 0) {
       this.logger.log(
-        `Locked free user ${userId} voice to ${voice.id} via setPreferredVoice`,
+        `Locked free user ${userId} voice to ${voiceUuid} via setPreferredVoice`,
       );
     }
   }
@@ -443,15 +440,16 @@ export class VoiceQuotaService {
     // Resolve UUID to VoiceType key so mobile can match against available voices
     let lockedVoiceId: string | null = null;
     if (lockedUuid) {
-      const lockedVoice =
-        lockedUuid === usage?.selectedSecondVoiceId
-          ? await this.prisma.voice.findFirst({
-              where: { id: lockedUuid, isDeleted: false },
-              select: { elevenLabsVoiceId: true },
-            })
-          : user?.preferredVoice
-            ? { elevenLabsVoiceId: user.preferredVoice.elevenLabsVoiceId }
-            : null;
+      // Determine source of locked voice: explicit lock vs user preference
+      let lockedVoice: { elevenLabsVoiceId: string | null } | null = null;
+      if (lockedUuid === usage?.selectedSecondVoiceId) {
+        lockedVoice = await this.prisma.voice.findFirst({
+          where: { id: lockedUuid, isDeleted: false },
+          select: { elevenLabsVoiceId: true },
+        });
+      } else if (user?.preferredVoice) {
+        lockedVoice = { elevenLabsVoiceId: user.preferredVoice.elevenLabsVoiceId };
+      }
 
       const elevenLabsId = lockedVoice?.elevenLabsVoiceId;
       // Find the VoiceType key whose config matches this elevenLabsId
