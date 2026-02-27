@@ -96,101 +96,106 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       let localSkipped = 0;
       let createdTitlesThisTx: string[] = [];
 
-      await prisma.$transaction(async (tx) => {
-        // Reset local trackers on possible transaction retries
-        localCount = 0;
-        localSkipped = 0;
-        createdTitlesThisTx = [];
+      await prisma.$transaction(
+        async (tx) => {
+          // Reset local trackers on possible transaction retries
+          localCount = 0;
+          localSkipped = 0;
+          createdTitlesThisTx = [];
 
-        for (const story of stories) {
-          if (!story.title) {
-            logger.error(`Skipping story without a title in ${file}`);
-            continue;
-          }
-          const normalizedTitle = story.title.trim().toLowerCase();
-          if (
-            existingTitles.has(normalizedTitle) ||
-            createdTitlesThisTx.includes(normalizedTitle)
-          ) {
-            localSkipped++;
-            continue;
-          }
+          for (const story of stories) {
+            if (!story.title) {
+              logger.error(`Skipping story without a title in ${file}`);
+              continue;
+            }
+            const normalizedTitle = story.title.trim().toLowerCase();
+            if (
+              existingTitles.has(normalizedTitle) ||
+              createdTitlesThisTx.includes(normalizedTitle)
+            ) {
+              localSkipped++;
+              continue;
+            }
 
-          // Handle both string and array formats for categories
-          const storyCategories = Array.isArray(story.category)
-            ? story.category
-            : [story.category];
-          const cleanCategories = storyCategories.filter(
-            (c: string) => c && c.length > 0,
-          );
+            // Handle both string and array formats for categories
+            const storyCategories = Array.isArray(story.category)
+              ? story.category
+              : [story.category];
+            const cleanCategories = storyCategories.filter(
+              (c: string) => c && c.length > 0,
+            );
 
-          // Handle both string and array formats for themes
-          const storyThemes = Array.isArray(story.theme)
-            ? story.theme
-            : [story.theme];
-          const cleanThemes = storyThemes.filter(
-            (t: string) => t && t.length > 0,
-          );
+            // Handle both string and array formats for themes
+            const storyThemes = Array.isArray(story.theme)
+              ? story.theme
+              : [story.theme];
+            const cleanThemes = storyThemes.filter(
+              (t: string) => t && t.length > 0,
+            );
 
-          await tx.story.create({
-            data: {
-              title: story.title,
-              description: story.description,
-              language: story.language,
-              coverImageUrl: story.coverImageUrl,
-              audioUrl: story.audioUrl ?? '',
-              isInteractive: story.isInteractive ?? false,
-              ageMin: story.ageMin ?? 0,
-              ageMax: story.ageMax ?? 9,
-              textContent: story.content,
-              recommended: story.recommended ?? false,
-              backgroundColor: story.backgroundColor || '#5E3A54',
-              wordCount: story.wordCount ?? 0,
-              durationSeconds: story.durationSeconds ?? null,
-              difficultyLevel: story.difficultyLevel ?? 1,
-              aiGenerated: story.aiGenerated ?? false,
-              categories: {
-                connectOrCreate: cleanCategories.map((name: string) => ({
-                  where: { name },
-                  create: {
-                    name,
-                    description: 'Auto-generated category',
-                  },
-                })),
-              },
-              themes: {
-                connectOrCreate: cleanThemes.map((name: string) => ({
-                  where: { name },
-                  create: {
-                    name,
-                    description: 'Auto-generated theme',
-                  },
-                })),
-              },
-              seasons: story.seasons
-                ? {
-                  connectOrCreate: story.seasons.map((name: string) => ({
+            await tx.story.create({
+              data: {
+                title: story.title,
+                description: story.description,
+                language: story.language,
+                coverImageUrl: story.coverImageUrl,
+                audioUrl: story.audioUrl ?? '',
+                isInteractive: story.isInteractive ?? false,
+                ageMin: story.ageMin ?? 0,
+                ageMax: story.ageMax ?? 9,
+                textContent: story.content,
+                recommended: story.recommended ?? false,
+                backgroundColor: story.backgroundColor || '#5E3A54',
+                wordCount: story.wordCount ?? 0,
+                durationSeconds: story.durationSeconds ?? null,
+                difficultyLevel: story.difficultyLevel ?? 1,
+                aiGenerated: story.aiGenerated ?? false,
+                categories: {
+                  connectOrCreate: cleanCategories.map((name: string) => ({
                     where: { name },
-                    create: { name },
+                    create: {
+                      name,
+                      description: 'Auto-generated category',
+                    },
                   })),
-                }
-                : undefined,
-              questions: {
-                create: (story.questions || []).map(
-                  (question: StoryQuestion) => ({
-                    question: question.question,
-                    options: question.options,
-                    correctOption: question.correctOption,
-                  }),
-                ),
+                },
+                themes: {
+                  connectOrCreate: cleanThemes.map((name: string) => ({
+                    where: { name },
+                    create: {
+                      name,
+                      description: 'Auto-generated theme',
+                    },
+                  })),
+                },
+                seasons: story.seasons
+                  ? {
+                      connectOrCreate: story.seasons.map(
+                        (name: string) => ({
+                          where: { name },
+                          create: { name },
+                        }),
+                      ),
+                    }
+                  : undefined,
+                questions: {
+                  create: (story.questions || []).map(
+                    (question: StoryQuestion) => ({
+                      question: question.question,
+                      options: question.options,
+                      correctOption: question.correctOption,
+                    }),
+                  ),
+                },
               },
-            },
-          });
+            });
 
-          createdTitlesThisTx.push(normalizedTitle);
-          localCount++;
-        }
-      });
+            createdTitlesThisTx.push(normalizedTitle);
+            localCount++;
+          }
+        },
+        { timeout: 30_000 },
+      );
 
       // Transaction succeeded, safely commit local tracking to global state
       createdTitlesThisTx.forEach((t) => existingTitles.add(t));
