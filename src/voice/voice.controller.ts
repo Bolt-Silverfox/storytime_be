@@ -37,6 +37,8 @@ import {
   SetPreferredVoiceDto,
   UploadVoiceDto,
   VoiceResponseDto,
+  VoiceType,
+  VOICE_TYPE_MIGRATION_MAP,
 } from './dto/voice.dto';
 import { SpeechToTextService } from './speech-to-text.service';
 import { VoiceService } from './voice.service';
@@ -166,7 +168,26 @@ export class VoiceController {
       }
     }
 
-    return this.voiceService.setPreferredVoice(userId, body);
+    const result = await this.voiceService.setPreferredVoice(userId, body);
+
+    // For free users selecting a non-default voice, also lock it in UserUsage
+    // so getVoiceAccess returns the correct lockedVoiceId immediately.
+    if (!access.isPremium && !access.lockedVoiceId) {
+      // Resolve the requested voice to check if it's the default
+      let resolvedKey = body.voiceId as VoiceType;
+      const migrated = VOICE_TYPE_MIGRATION_MAP[body.voiceId];
+      if (migrated) resolvedKey = migrated;
+
+      const isDefault =
+        Object.values(VoiceType).includes(resolvedKey) &&
+        resolvedKey === (DEFAULT_VOICE as VoiceType);
+
+      if (!isDefault) {
+        await this.voiceQuotaService.lockFreeUserVoice(userId, body.voiceId);
+      }
+    }
+
+    return result;
   }
 
   // --- Get preferred voice ---

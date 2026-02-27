@@ -398,9 +398,29 @@ export class VoiceQuotaService {
     return false;
   }
 
-  /**
-   * Get voice access info for a user
-   */
+  // Lock a free user's premium voice in UserUsage.selectedSecondVoiceId.
+  // Called from setPreferredVoice so the lock takes effect immediately
+  // (not deferred to TTS generation).
+  async lockFreeUserVoice(userId: string, voiceId: string): Promise<void> {
+    const canonicalId = await this.resolveCanonicalVoiceId(voiceId);
+    const voice = await this.prisma.voice.findFirst({
+      where: { elevenLabsVoiceId: canonicalId, isDeleted: false },
+      select: { id: true },
+    });
+    if (!voice) return;
+
+    const currentMonth = this.getCurrentMonth();
+    await this.prisma.userUsage.upsert({
+      where: { userId },
+      create: { userId, currentMonth, selectedSecondVoiceId: voice.id },
+      update: { selectedSecondVoiceId: voice.id },
+    });
+    this.logger.log(
+      `Locked free user ${userId} voice to ${voice.id} via setPreferredVoice`,
+    );
+  }
+
+  // Get voice access info for a user
   async getVoiceAccess(userId: string): Promise<{
     isPremium: boolean;
     unlimited: boolean;
@@ -422,17 +442,32 @@ export class VoiceQuotaService {
       };
     }
 
-    const usage = await this.prisma.userUsage.findUnique({
-      where: { userId },
-    });
+    const [usage, user] = await Promise.all([
+      this.prisma.userUsage.findUnique({ where: { userId } }),
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { preferredVoice: true },
+      }),
+    ]);
+
+    // Explicit TTS lock takes priority, fall back to preferredVoiceId
+    // for existing users who picked a voice before locking was added
+    const lockedUuid =
+      usage?.selectedSecondVoiceId ?? user?.preferredVoiceId ?? null;
 
     // Resolve UUID to VoiceType key so mobile can match against available voices
     let lockedVoiceId: string | null = null;
-    if (usage?.selectedSecondVoiceId) {
-      const lockedVoice = await this.prisma.voice.findFirst({
-        where: { id: usage.selectedSecondVoiceId, isDeleted: false },
-        select: { elevenLabsVoiceId: true },
-      });
+    if (lockedUuid) {
+      const lockedVoice =
+        lockedUuid === usage?.selectedSecondVoiceId
+          ? await this.prisma.voice.findFirst({
+              where: { id: lockedUuid, isDeleted: false },
+              select: { elevenLabsVoiceId: true },
+            })
+          : user?.preferredVoice
+            ? { elevenLabsVoiceId: user.preferredVoice.elevenLabsVoiceId }
+            : null;
+
       const elevenLabsId = lockedVoice?.elevenLabsVoiceId;
       // Find the VoiceType key whose config matches this elevenLabsId
       const voiceTypeKey = elevenLabsId
@@ -440,7 +475,15 @@ export class VoiceQuotaService {
             ([, config]) => config.elevenLabsId === elevenLabsId,
           )?.[0] ?? null)
         : null;
-      lockedVoiceId = voiceTypeKey ?? usage.selectedSecondVoiceId;
+
+      // Don't lock the default voice — free users can always use it
+      const defaultVoiceKey = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE;
+      if (voiceTypeKey && voiceTypeKey !== defaultVoiceKey) {
+        lockedVoiceId = voiceTypeKey;
+      } else if (!voiceTypeKey && lockedUuid) {
+        // UUID didn't resolve to a known VoiceType — still lock it
+        lockedVoiceId = lockedUuid;
+      }
     }
 
     return {

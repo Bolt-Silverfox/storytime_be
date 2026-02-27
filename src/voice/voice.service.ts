@@ -174,7 +174,6 @@ export class VoiceService {
     const response = this.toVoiceResponse(user.preferredVoice);
 
     // Resolve DB UUID to VoiceType key so mobile can match against available voices
-    // (fetchAvailableVoices uses VoiceType keys as ids, not DB UUIDs)
     const elevenLabsId = user.preferredVoice.elevenLabsVoiceId;
     if (elevenLabsId) {
       const voiceTypeKey = Object.entries(VOICE_CONFIG).find(
