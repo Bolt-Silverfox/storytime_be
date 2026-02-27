@@ -1,6 +1,10 @@
 // src/parent-favorites/parent-favorites.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  CursorPaginatedResponse,
+  PaginationUtil,
+} from '@/shared/utils/pagination.util';
 import { CreateParentFavoriteDto } from './dto/create-parent-favorite.dto';
 import { ParentFavoriteResponseDto } from './dto/parent-favorite-response.dto';
 
@@ -44,9 +48,17 @@ export class ParentFavoritesService {
     };
   }
 
-  async getFavorites(userId: string): Promise<ParentFavoriteResponseDto[]> {
+  async getFavorites(
+    userId: string,
+    cursor?: string,
+    limit?: number,
+  ): Promise<CursorPaginatedResponse<ParentFavoriteResponseDto>> {
+    const pageSize = limit ?? 20;
+
     const favorites = await this.prisma.parentFavorite.findMany({
       where: { userId },
+      take: pageSize + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       include: {
         story: {
           include: {
@@ -57,7 +69,7 @@ export class ParentFavoritesService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return favorites.map((fav) => ({
+    const mapped = favorites.map((fav) => ({
       id: fav.id,
       storyId: fav.storyId,
       title: fav.story.title,
@@ -73,6 +85,8 @@ export class ParentFavoritesService {
       durationSeconds: fav.story.durationSeconds ?? undefined,
       createdAt: fav.createdAt,
     }));
+
+    return PaginationUtil.buildCursorResponse(mapped, pageSize);
   }
 
   async removeFavorite(userId: string, storyId: string): Promise<string> {
