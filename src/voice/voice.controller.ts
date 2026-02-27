@@ -37,8 +37,6 @@ import {
   SetPreferredVoiceDto,
   UploadVoiceDto,
   VoiceResponseDto,
-  VoiceType,
-  VOICE_TYPE_MIGRATION_MAP,
 } from './dto/voice.dto';
 import { SpeechToTextService } from './speech-to-text.service';
 import { VoiceService } from './voice.service';
@@ -172,17 +170,15 @@ export class VoiceController {
 
     // For free users selecting a non-default voice, also lock it in UserUsage
     // so getVoiceAccess returns the correct lockedVoiceId immediately.
+    // Normalize to canonical ElevenLabs ID so UUIDs, VoiceType keys, and
+    // migrated names all compare correctly against DEFAULT_VOICE.
     if (!access.isPremium && !access.lockedVoiceId) {
-      // Resolve the requested voice to check if it's the default
-      let resolvedKey = body.voiceId as VoiceType;
-      const migrated = VOICE_TYPE_MIGRATION_MAP[body.voiceId];
-      if (migrated) resolvedKey = migrated;
+      const requestedCanonical =
+        await this.voiceQuotaService.resolveCanonicalVoiceId(body.voiceId);
+      const defaultCanonical =
+        await this.voiceQuotaService.resolveCanonicalVoiceId(DEFAULT_VOICE);
 
-      const isDefault =
-        Object.values(VoiceType).includes(resolvedKey) &&
-        resolvedKey === (DEFAULT_VOICE as VoiceType);
-
-      if (!isDefault) {
+      if (requestedCanonical !== defaultCanonical) {
         await this.voiceQuotaService.lockFreeUserVoice(userId, body.voiceId);
       }
     }

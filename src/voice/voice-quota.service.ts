@@ -401,6 +401,7 @@ export class VoiceQuotaService {
   // Lock a free user's premium voice in UserUsage.selectedSecondVoiceId.
   // Called from setPreferredVoice so the lock takes effect immediately
   // (not deferred to TTS generation).
+  // Uses compare-and-set: only locks when selectedSecondVoiceId is null.
   async lockFreeUserVoice(userId: string, voiceId: string): Promise<void> {
     const canonicalId = await this.resolveCanonicalVoiceId(voiceId);
     const voice = await this.prisma.voice.findFirst({
@@ -410,14 +411,25 @@ export class VoiceQuotaService {
     if (!voice) return;
 
     const currentMonth = this.getCurrentMonth();
+
+    // Ensure the usage record exists
     await this.prisma.userUsage.upsert({
       where: { userId },
       create: { userId, currentMonth, selectedSecondVoiceId: voice.id },
-      update: { selectedSecondVoiceId: voice.id },
+      update: {},
     });
-    this.logger.log(
-      `Locked free user ${userId} voice to ${voice.id} via setPreferredVoice`,
-    );
+
+    // Atomic compare-and-set: only set if currently null
+    const { count } = await this.prisma.userUsage.updateMany({
+      where: { userId, selectedSecondVoiceId: null },
+      data: { selectedSecondVoiceId: voice.id },
+    });
+
+    if (count > 0) {
+      this.logger.log(
+        `Locked free user ${userId} voice to ${voice.id} via setPreferredVoice`,
+      );
+    }
   }
 
   // Get voice access info for a user
