@@ -409,7 +409,7 @@ export class StoryService {
     );
     const enriched = await this.enrichWithReadStatus(filter.userId, data);
 
-    return { data: enriched, pagination };
+    return { data: this.sortByReadStatus(enriched), pagination };
   }
 
   private mapProgressRecord(record: {
@@ -428,10 +428,8 @@ export class StoryService {
     };
   }
 
-  /**
-   * Sort stories so unread appear first, then reading, then done.
-   * Preserves original order within each group (stable sort).
-   */
+  // Sort stories so unread appear first, then reading, then done.
+  // Preserves original order within each group (stable sort).
   private sortByReadStatus<T extends { readStatus: 'done' | 'reading' | null }>(
     stories: T[],
   ): T[] {
