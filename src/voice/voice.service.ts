@@ -161,10 +161,10 @@ export class VoiceService {
 
     if (!user || !user.preferredVoice) {
       return {
-        id: '',
-        name: '',
-        displayName: '',
-        type: '',
+        id: 'default',
+        name: 'default',
+        displayName: 'Default Voice',
+        type: VoiceSourceType.ELEVENLABS,
         previewUrl: undefined,
         voiceAvatar: undefined,
         elevenLabsVoiceId: undefined,

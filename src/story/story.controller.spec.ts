@@ -143,7 +143,7 @@ describe('StoryController', () => {
     });
 
     it('removeFromLibrary: should call removeFromLibrary service method', async () => {
-      await controller.removeFromLibrary(kidId, storyId);
+      await controller.removeFromLibrary(mockReq, kidId, storyId);
       expect(service.removeFromLibrary).toHaveBeenCalledWith(kidId, storyId);
     });
   });
