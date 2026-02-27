@@ -168,19 +168,10 @@ export class VoiceController {
 
     const result = await this.voiceService.setPreferredVoice(userId, body);
 
-    // For free users selecting a non-default voice, also lock it in UserUsage
-    // so getVoiceAccess returns the correct lockedVoiceId immediately.
-    // Normalize to canonical ElevenLabs ID so UUIDs, VoiceType keys, and
-    // migrated names all compare correctly against DEFAULT_VOICE.
+    // Lock voice for free users who haven't locked one yet.
+    // Free users get ONE voice total — the lock is permanent until they upgrade.
     if (!access.isPremium && !access.lockedVoiceId) {
-      const requestedCanonical =
-        await this.voiceQuotaService.resolveCanonicalVoiceId(body.voiceId);
-      const defaultCanonical =
-        await this.voiceQuotaService.resolveCanonicalVoiceId(DEFAULT_VOICE);
-
-      if (requestedCanonical !== defaultCanonical) {
-        await this.voiceQuotaService.lockFreeUserVoice(userId, body.voiceId);
-      }
+      await this.voiceQuotaService.lockFreeUserVoice(userId, body.voiceId);
     }
 
     return result;
