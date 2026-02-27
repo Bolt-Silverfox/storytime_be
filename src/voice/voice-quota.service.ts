@@ -45,7 +45,7 @@ export class VoiceQuotaService {
     elevenLabsVoiceId: string,
   ): Promise<string | null> {
     const voice = await this.prisma.voice.findFirst({
-      where: { elevenLabsVoiceId, isDeleted: false },
+      where: { elevenLabsVoiceId, isDeleted: false, userId: null },
       select: { id: true },
     });
     if (voice) return voice.id;
@@ -65,6 +65,7 @@ export class VoiceQuotaService {
         voiceAvatar: config.voiceAvatar,
         url: config.previewUrl,
         isDeleted: false,
+        userId: null,
       },
       select: { id: true },
     });
@@ -445,8 +446,17 @@ export class VoiceQuotaService {
       return true;
     }
 
+    // CAS returned 0 — could be a benign race where the same voice was locked concurrently
+    const current = await this.prisma.userUsage.findUnique({
+      where: { userId },
+      select: { selectedSecondVoiceId: true },
+    });
+    if (current?.selectedSecondVoiceId === voiceUuid) {
+      return true;
+    }
+
     this.logger.warn(
-      `CAS failed: free user ${userId} voice already locked. Requested ${voiceUuid}.`,
+      `CAS failed: free user ${userId} voice already locked to ${current?.selectedSecondVoiceId}. Requested ${voiceUuid}.`,
     );
     return false;
   }
