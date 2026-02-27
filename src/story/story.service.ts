@@ -358,7 +358,7 @@ export class StoryService {
     );
 
     return {
-      data: enrichedStories,
+      data: this.sortByReadStatus(enrichedStories),
       pagination: {
         currentPage: page,
         totalPages,
@@ -426,6 +426,20 @@ export class StoryService {
       totalTimeSpent: record.totalTimeSpent,
       lastAccessed: record.lastAccessed,
     };
+  }
+
+  /**
+   * Sort stories so unread appear first, then reading, then done.
+   * Preserves original order within each group (stable sort).
+   */
+  private sortByReadStatus<T extends { readStatus: 'done' | 'reading' | null }>(
+    stories: T[],
+  ): T[] {
+    const order: Record<string, number> = { done: 2, reading: 1 };
+    return [...stories].sort(
+      (a, b) =>
+        (order[a.readStatus ?? ''] ?? 0) - (order[b.readStatus ?? ''] ?? 0),
+    );
   }
 
   private async enrichWithReadStatus<T extends { id: string }>(
@@ -627,9 +641,9 @@ export class StoryService {
     const seaLen = seasonal.length;
 
     return {
-      recommended: enriched.slice(0, recLen),
-      seasonal: enriched.slice(recLen, recLen + seaLen),
-      topLiked: enriched.slice(recLen + seaLen),
+      recommended: this.sortByReadStatus(enriched.slice(0, recLen)),
+      seasonal: this.sortByReadStatus(enriched.slice(recLen, recLen + seaLen)),
+      topLiked: this.sortByReadStatus(enriched.slice(recLen + seaLen)),
     };
   }
 

@@ -171,7 +171,21 @@ export class VoiceService {
       };
     }
 
-    return this.toVoiceResponse(user.preferredVoice);
+    const response = this.toVoiceResponse(user.preferredVoice);
+
+    // Resolve DB UUID to VoiceType key so mobile can match against available voices
+    // (fetchAvailableVoices uses VoiceType keys as ids, not DB UUIDs)
+    const elevenLabsId = user.preferredVoice.elevenLabsVoiceId;
+    if (elevenLabsId) {
+      const voiceTypeKey = Object.entries(VOICE_CONFIG).find(
+        ([, config]) => config.elevenLabsId === elevenLabsId,
+      )?.[0];
+      if (voiceTypeKey) {
+        response.id = voiceTypeKey;
+      }
+    }
+
+    return response;
   }
 
   // --- Helper to map Prisma Voice to VoiceResponseDto ---
