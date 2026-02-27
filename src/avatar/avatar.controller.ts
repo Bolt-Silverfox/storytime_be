@@ -14,24 +14,28 @@ import {
   MaxFileSizeValidator,
   FileTypeValidator,
   BadRequestException,
-  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  ApiTags,
   ApiOperation,
   ApiResponse,
   ApiConsumes,
   ApiBody,
-  ApiQuery,
 } from '@nestjs/swagger';
+import {
+  ALLOWED_IMAGE_TYPES,
+  MAX_IMAGE_SIZE,
+} from '@/shared/constants/upload.constants';
 import { AvatarService } from './avatar.service';
 import {
   CreateAvatarDto,
   UpdateAvatarDto,
   AssignAvatarDto,
 } from './dto/avatar.dto';
-import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import { AdminGuard } from '@/shared/guards/admin.guard';
 import { Public } from '@/shared/decorators/public.decorator';
 import { SuccessResponse } from '@/shared/dtos/api-response.dto';
@@ -39,7 +43,7 @@ import { SuccessResponse } from '@/shared/dtos/api-response.dto';
 @Controller('avatars')
 @UseGuards(AuthSessionGuard)
 export class AvatarController {
-  constructor(private readonly avatarService: AvatarService) { }
+  constructor(private readonly avatarService: AvatarService) {}
 
   @Get('system')
   @ApiOperation({
@@ -406,8 +410,8 @@ export class AvatarController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|gif|webp)' }),
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
         ],
       }),
     )
@@ -513,8 +517,8 @@ export class AvatarController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|gif|webp)' }),
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
         ],
       }),
     )
@@ -616,8 +620,8 @@ export class AvatarController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|gif|webp)' }),
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
         ],
         fileIsRequired: false,
       }),
@@ -645,7 +649,7 @@ export class AvatarController {
 
   // ADMIN ONLY ENDPOINTS
 
-  @Get()
+  @Get('system/all')
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'List all system avatars',
@@ -816,7 +820,16 @@ export class AvatarController {
   async updateAvatar(
     @Param('id') id: string,
     @Body() updateAvatarDto: UpdateAvatarDto,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
+        ],
+        fileIsRequired: false,
+      }),
+    )
+    file?: Express.Multer.File,
   ) {
     const avatar = await this.avatarService.updateAvatar(
       id,

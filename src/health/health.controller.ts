@@ -11,7 +11,10 @@ import {
   RedisHealthIndicator,
   SmtpHealthIndicator,
   QueueHealthIndicator,
+  TTSCircuitBreakerHealthIndicator,
 } from './indicators';
+
+const TTS_HEALTH_KEY = 'tts-providers';
 
 @ApiTags('Health')
 @Controller('health')
@@ -24,6 +27,7 @@ export class HealthController {
     private readonly queueHealth: QueueHealthIndicator,
     private readonly memory: MemoryHealthIndicator,
     private readonly disk: DiskHealthIndicator,
+    private readonly ttsHealth: TTSCircuitBreakerHealthIndicator,
   ) {}
 
   /**
@@ -45,13 +49,17 @@ export class HealthController {
   @Get('ready')
   @ApiOperation({ summary: 'Readiness check (all dependencies)' })
   @ApiResponse({ status: 200, description: 'All dependencies are healthy' })
-  @ApiResponse({ status: 503, description: 'One or more dependencies are unhealthy' })
+  @ApiResponse({
+    status: 503,
+    description: 'One or more dependencies are unhealthy',
+  })
   @HealthCheck()
   async checkReady() {
     return this.health.check([
       () => this.prismaHealth.isHealthy('database'),
       () => this.redisHealth.isHealthy('redis'),
       () => this.queueHealth.isHealthy('email-queue'),
+      () => this.ttsHealth.isHealthy(TTS_HEALTH_KEY),
     ]);
   }
 
@@ -64,9 +72,7 @@ export class HealthController {
   @ApiResponse({ status: 503, description: 'Database is unhealthy' })
   @HealthCheck()
   async checkDatabase() {
-    return this.health.check([
-      () => this.prismaHealth.isHealthy('database'),
-    ]);
+    return this.health.check([() => this.prismaHealth.isHealthy('database')]);
   }
 
   /**
@@ -78,9 +84,7 @@ export class HealthController {
   @ApiResponse({ status: 503, description: 'Redis is unhealthy' })
   @HealthCheck()
   async checkRedis() {
-    return this.health.check([
-      () => this.redisHealth.isHealthy('redis'),
-    ]);
+    return this.health.check([() => this.redisHealth.isHealthy('redis')]);
   }
 
   /**
@@ -92,9 +96,7 @@ export class HealthController {
   @ApiResponse({ status: 503, description: 'SMTP is unhealthy' })
   @HealthCheck()
   async checkSmtp() {
-    return this.health.check([
-      () => this.smtpHealth.isHealthy('smtp'),
-    ]);
+    return this.health.check([() => this.smtpHealth.isHealthy('smtp')]);
   }
 
   /**
@@ -106,9 +108,7 @@ export class HealthController {
   @ApiResponse({ status: 503, description: 'Queue is unhealthy' })
   @HealthCheck()
   async checkQueue() {
-    return this.health.check([
-      () => this.queueHealth.isHealthy('email-queue'),
-    ]);
+    return this.health.check([() => this.queueHealth.isHealthy('email-queue')]);
   }
 
   /**
@@ -156,6 +156,25 @@ export class HealthController {
           path: '/',
           thresholdPercent: 0.9,
         }),
+      () => this.ttsHealth.isHealthy(TTS_HEALTH_KEY),
     ]);
+  }
+
+  /**
+   * TTS providers circuit breaker status
+   */
+  @Get('tts')
+  @ApiOperation({ summary: 'TTS providers circuit breaker health check' })
+  @ApiResponse({
+    status: 200,
+    description: 'All TTS circuit breakers are closed',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'One or more TTS circuit breakers are open',
+  })
+  @HealthCheck()
+  async checkTts() {
+    return this.health.check([() => this.ttsHealth.isHealthy(TTS_HEALTH_KEY)]);
   }
 }

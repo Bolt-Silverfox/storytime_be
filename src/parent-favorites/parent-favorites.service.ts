@@ -1,14 +1,21 @@
 // src/parent-favorites/parent-favorites.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  CursorPaginatedResponse,
+  PaginationUtil,
+} from '@/shared/utils/pagination.util';
 import { CreateParentFavoriteDto } from './dto/create-parent-favorite.dto';
 import { ParentFavoriteResponseDto } from './dto/parent-favorite-response.dto';
 
 @Injectable()
 export class ParentFavoritesService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
-  async addFavorite(userId: string, dto: CreateParentFavoriteDto): Promise<ParentFavoriteResponseDto> {
+  async addFavorite(
+    userId: string,
+    dto: CreateParentFavoriteDto,
+  ): Promise<ParentFavoriteResponseDto> {
     const favorite = await this.prisma.parentFavorite.create({
       data: {
         userId,
@@ -17,7 +24,7 @@ export class ParentFavoritesService {
       include: {
         story: {
           include: {
-            creatorKid: true,
+            categories: true,
           },
         },
       },
@@ -29,39 +36,57 @@ export class ParentFavoritesService {
       title: favorite.story.title,
       description: favorite.story.description,
       coverImageUrl: favorite.story.coverImageUrl,
-      author: favorite.story.creatorKid?.name ?? undefined,
+      categories: favorite.story.categories.map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        image: cat.image ?? undefined,
+        description: cat.description ?? undefined,
+      })),
       ageRange: `${favorite.story.ageMin}-${favorite.story.ageMax}`,
+      durationSeconds: favorite.story.durationSeconds ?? undefined,
       createdAt: favorite.createdAt,
     };
   }
 
-  async getFavorites(userId: string): Promise<ParentFavoriteResponseDto[]> {
+  async getFavorites(
+    userId: string,
+    cursor?: string,
+    limit?: number,
+  ): Promise<CursorPaginatedResponse<ParentFavoriteResponseDto>> {
+    const pageSize = limit ?? 20;
+
     const favorites = await this.prisma.parentFavorite.findMany({
       where: { userId },
+      take: pageSize + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       include: {
         story: {
           include: {
-            images: true,
-            branches: true,
-            themes: true,
             categories: true,
-            creatorKid: true,
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     });
 
-    return favorites.map((fav) => ({
+    const mapped = favorites.map((fav) => ({
       id: fav.id,
       storyId: fav.storyId,
       title: fav.story.title,
       description: fav.story.description,
       coverImageUrl: fav.story.coverImageUrl,
-      author: fav.story.creatorKid?.name ?? undefined,
+      categories: fav.story.categories.map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        image: cat.image ?? undefined,
+        description: cat.description ?? undefined,
+      })),
       ageRange: `${fav.story.ageMin}-${fav.story.ageMax}`,
+      durationSeconds: fav.story.durationSeconds ?? undefined,
       createdAt: fav.createdAt,
     }));
+
+    return PaginationUtil.buildCursorResponse(mapped, pageSize);
   }
 
   async removeFavorite(userId: string, storyId: string): Promise<string> {
@@ -77,5 +102,4 @@ export class ParentFavoritesService {
 
     return 'Favorite removed successfully';
   }
-
 }

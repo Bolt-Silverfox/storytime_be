@@ -9,7 +9,6 @@ import {
   IsString,
   MaxLength,
   IsArray,
-  ArrayMinSize,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -34,13 +33,19 @@ export class RegisterDto {
 
   @IsNotEmpty()
   @ApiProperty({ example: 'testPassword1#' })
-  @IsStrongPassword({
-    minLength: 8,
-    minLowercase: 1,
-    minUppercase: 1,
-    minNumbers: 1,
-    minSymbols: 1,
-  })
+  @IsStrongPassword(
+    {
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1,
+    },
+    {
+      message:
+        'Password must be at least 8 characters long and contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 symbol',
+    },
+  )
   @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   password: string;
   @ApiProperty({ example: 'firstname lastname' })
@@ -67,7 +72,7 @@ export class CompleteProfileDto {
   @ApiProperty({
     example: 'English',
     description: 'Language display name',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -75,7 +80,7 @@ export class CompleteProfileDto {
   @ApiProperty({
     example: 'en',
     description: 'Language code for i18n',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -86,7 +91,8 @@ export class CompleteProfileDto {
 
   @ApiProperty({
     example: ['expectation-uuid-1', 'expectation-uuid-2'],
-    description: 'Learning expectation IDs - character values parents want kids to learn',
+    description:
+      'Learning expectation IDs - character values parents want kids to learn',
     required: false,
     type: [String],
   })
@@ -139,14 +145,12 @@ export class updateProfileDto {
   )
   languageCode?: string;
 
-
   @ApiProperty({ example: 'NG' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.toUpperCase() : value,
   )
   @IsOptional()
   country?: string;
-
 }
 
 export class LoginDto {
@@ -253,19 +257,23 @@ export class UserDto {
   numberOfKids?: number;
 
   constructor(
-    user: Partial<UserDto> & { profile?: any; avatar?: any; kids?: any[] },
+    user: Partial<UserDto> & {
+      profile?: Partial<ProfileDto> | null;
+      avatar?: Partial<AvatarDto> | null;
+      kids?: { id: string }[];
+    },
   ) {
     this.profile = user.profile ? new ProfileDto(user.profile) : null;
 
     this.avatar = user.avatar
       ? {
-        id: user.avatar.id,
-        name: user.avatar.name,
-        url: user.avatar.url,
-        isSystemAvatar: user.avatar.isSystemAvatar,
-        publicId: user.avatar.publicId,
-        createdAt: user.avatar.createdAt,
-      }
+          id: user.avatar.id,
+          name: user.avatar.name,
+          url: user.avatar.url,
+          isSystemAvatar: user.avatar.isSystemAvatar,
+          publicId: user.avatar.publicId,
+          createdAt: user.avatar.createdAt,
+        }
       : null;
 
     this.id = user.id as string;
@@ -290,6 +298,13 @@ export class LoginResponseDto {
   refreshToken: string;
 }
 
+export class RefreshTokenDto {
+  @ApiProperty({ description: 'Refresh token', example: 'eyJhbGci...' })
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+}
+
 export class RefreshResponseDto {
   @ApiProperty({ type: UserDto })
   user: UserDto;
@@ -297,8 +312,6 @@ export class RefreshResponseDto {
   @ApiProperty({ example: 'token' })
   jwt: string;
 }
-
-
 
 export class kidDto {
   @ApiProperty({ example: 'firstname lastname' })
@@ -371,13 +384,19 @@ export class ResetPasswordDto {
   email: string;
 
   @ApiProperty({ example: 'NewStrongPassword1#' })
-  @IsStrongPassword({
-    minLength: 8,
-    minLowercase: 1,
-    minUppercase: 1,
-    minNumbers: 1,
-    minSymbols: 1,
-  })
+  @IsStrongPassword(
+    {
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1,
+    },
+    {
+      message:
+        'Password must be at least 8 characters long and contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 symbol',
+    },
+  )
   @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   newPassword: string;
 }
@@ -409,13 +428,19 @@ export class ChangePasswordDto {
   oldPassword: string;
 
   @ApiProperty({ example: 'NewStrongPassword1#' })
-  @IsStrongPassword({
-    minLength: 8,
-    minLowercase: 1,
-    minUppercase: 1,
-    minNumbers: 1,
-    minSymbols: 1,
-  })
+  @IsStrongPassword(
+    {
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1,
+    },
+    {
+      message:
+        'Password must be at least 8 characters long and contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 symbol',
+    },
+  )
   @MaxLength(32, { message: 'Password is too long (max 32 characters)' })
   newPassword: string;
 }

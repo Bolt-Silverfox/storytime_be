@@ -75,7 +75,9 @@ async function main(): Promise<void> {
   }
 
   console.log('');
-  console.log(`  Total: ${successful.length} succeeded, ${failed.length} failed`);
+  console.log(
+    `  Total: ${successful.length} succeeded, ${failed.length} failed`,
+  );
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('');
 

@@ -6,12 +6,26 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   Req,
   UseGuards,
   Logger,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody, ApiOkResponse, ApiParam, ApiResponse } from '@nestjs/swagger';
-import { AuthSessionGuard, AuthenticatedRequest } from '@/shared/guards/auth.guard';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiBody,
+  ApiOkResponse,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+} from '@nestjs/swagger';
+import { PaginationUtil } from '@/shared/utils/pagination.util';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import { ParentFavoritesService } from './parent-favorites.service';
 import { CreateParentFavoriteDto } from './dto/create-parent-favorite.dto';
 import { ParentFavoriteResponseDto } from './dto/parent-favorite-response.dto';
@@ -22,14 +36,17 @@ import { ErrorResponseDto } from '@/story/dto/story.dto';
 export class ParentFavoritesController {
   private readonly logger = new Logger(ParentFavoritesController.name);
 
-  constructor(private readonly parentFavoritesService: ParentFavoritesService) { }
+  constructor(
+    private readonly parentFavoritesService: ParentFavoritesService,
+  ) {}
 
   @Post()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Add a story to parent favorites',
-    description: 'Adds a story to the authenticated parent\'s list of favorites.',
+    description:
+      "Adds a story to the authenticated parent's list of favorites.",
   })
   @ApiBody({
     type: CreateParentFavoriteDto,
@@ -71,23 +88,50 @@ export class ParentFavoritesController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get all parent favorites',
-    description: 'Retrieves all stories favorited by the authenticated parent.',
+    summary: 'Get parent favorites with cursor pagination',
+    description:
+      'Retrieves stories favorited by the authenticated parent, paginated via cursor.',
   })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiOkResponse({
-    description: 'List of parent favorites retrieved successfully',
-    type: ParentFavoriteResponseDto,
-    isArray: true,
+    description: 'Paginated list of parent favorites',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/ParentFavoriteResponseDto' },
+        },
+        pagination: {
+          type: 'object',
+          properties: {
+            nextCursor: { type: 'string', nullable: true },
+            hasNextPage: { type: 'boolean' },
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized',
     type: ErrorResponseDto,
   })
-  async getFavorites(@Req() req: AuthenticatedRequest) {
+  async getFavorites(
+    @Req() req: AuthenticatedRequest,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
     const userId = req.authUserData.userId;
     this.logger.log(`Fetching favorites for parent ${userId}`);
-    return this.parentFavoritesService.getFavorites(userId);
+    const { cursor: safeCursor, limit: safeLimit } =
+      PaginationUtil.sanitizeCursorParams(cursor, limit);
+    return this.parentFavoritesService.getFavorites(
+      userId,
+      safeCursor,
+      safeLimit,
+    );
   }
 
   @Delete(':storyId')
@@ -95,7 +139,8 @@ export class ParentFavoritesController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Remove a story from parent favorites',
-    description: 'Removes a specific story from the authenticated parent\'s favorites.',
+    description:
+      "Removes a specific story from the authenticated parent's favorites.",
   })
   @ApiParam({
     name: 'storyId',

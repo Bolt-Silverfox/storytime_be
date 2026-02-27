@@ -47,7 +47,8 @@ export class SmtpHealthIndicator extends HealthIndicator {
       });
     } catch (error) {
       const duration = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
 
       this.logger.warn(`SMTP health check failed: ${errorMessage}`);
 

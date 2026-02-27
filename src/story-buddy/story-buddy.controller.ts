@@ -13,7 +13,7 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
-  ParseIntPipe,
+  Request,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -24,6 +24,7 @@ import {
   ApiBody,
   ApiQuery,
   ApiParam,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { StoryBuddyService } from './story-buddy.service';
 import {
@@ -31,9 +32,15 @@ import {
   UpdateStoryBuddyDto,
   SelectBuddyDto,
   GetBuddyMessageDto,
-  StoryBuddyResponseDto,
 } from './dto/story-buddy.dto';
-import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
+import {
+  ALLOWED_IMAGE_TYPES,
+  MAX_IMAGE_SIZE,
+} from '@/shared/constants/upload.constants';
 import { AdminGuard } from '@/shared/guards/admin.guard';
 import { Public } from '@/shared/decorators/public.decorator';
 import { SuccessResponse } from '@/shared/dtos/api-response.dto';
@@ -90,7 +97,8 @@ export class StoryBuddyController {
   @Get(':id')
   @ApiOperation({
     summary: 'Get story buddy by ID',
-    description: 'Retrieve a single story buddy by ID. Does not require authentication.',
+    description:
+      'Retrieve a single story buddy by ID. Does not require authentication.',
   })
   @ApiParam({
     name: 'id',
@@ -129,15 +137,21 @@ export class StoryBuddyController {
   })
   async getBuddyById(@Param('id') id: string) {
     const buddy = await this.storyBuddyService.getBuddyById(id);
-    return new SuccessResponse(200, buddy, 'Story buddy retrieved successfully');
+    return new SuccessResponse(
+      200,
+      buddy,
+      'Story buddy retrieved successfully',
+    );
   }
 
   // KID ENDPOINTS
 
   @Post('kids/:kidId/select')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Select story buddy for kid',
-    description: 'Assign a story buddy to a kid profile.',
+    description:
+      'Assign a story buddy to a kid profile. Only the parent can select a buddy for their child.',
   })
   @ApiParam({
     name: 'kidId',
@@ -171,24 +185,36 @@ export class StoryBuddyController {
     description: 'Bad Request - Buddy not available',
   })
   @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Not the parent of this kid',
+  })
+  @ApiResponse({
     status: 404,
     description: 'Kid or story buddy not found',
   })
   async selectBuddyForKid(
+    @Request() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
     @Body() selectBuddyDto: SelectBuddyDto,
   ) {
     const result = await this.storyBuddyService.selectBuddyForKid(
       kidId,
       selectBuddyDto.buddyId,
+      req.authUserData.userId,
     );
-    return new SuccessResponse(200, result, 'Story buddy selected successfully');
+    return new SuccessResponse(
+      200,
+      result,
+      'Story buddy selected successfully',
+    );
   }
 
   @Get('kids/:kidId/buddy')
+  @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get kid\'s current buddy',
-    description: 'Retrieve the current story buddy assigned to a kid.',
+    summary: "Get kid's current buddy",
+    description:
+      "Retrieve the current story buddy assigned to a kid. Only the parent can view their child's buddy.",
   })
   @ApiParam({
     name: 'kidId',
@@ -197,11 +223,11 @@ export class StoryBuddyController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Kid\'s buddy retrieved successfully',
+    description: "Kid's buddy retrieved successfully",
     schema: {
       example: {
         statusCode: 200,
-        message: 'Kid\'s buddy retrieved successfully',
+        message: "Kid's buddy retrieved successfully",
         data: {
           id: 'buddy-123-uuid',
           name: 'lumina',
@@ -214,18 +240,34 @@ export class StoryBuddyController {
     },
   })
   @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Not the parent of this kid',
+  })
+  @ApiResponse({
     status: 404,
     description: 'Kid not found or no buddy selected',
   })
-  async getKidCurrentBuddy(@Param('kidId') kidId: string) {
-    const buddy = await this.storyBuddyService.getKidCurrentBuddy(kidId);
-    return new SuccessResponse(200, buddy, 'Kid\'s buddy retrieved successfully');
+  async getKidCurrentBuddy(
+    @Request() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+  ) {
+    const buddy = await this.storyBuddyService.getKidCurrentBuddy(
+      kidId,
+      req.authUserData.userId,
+    );
+    return new SuccessResponse(
+      200,
+      buddy,
+      "Kid's buddy retrieved successfully",
+    );
   }
 
   @Get('kids/:kidId/welcome')
+  @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get welcome message from kid\'s buddy',
-    description: 'Retrieve a personalized welcome message from the kid\'s story buddy.',
+    summary: "Get welcome message from kid's buddy",
+    description:
+      "Retrieve a personalized welcome message from the kid's story buddy. Only the parent can access their child's messages.",
   })
   @ApiParam({
     name: 'kidId',
@@ -252,11 +294,21 @@ export class StoryBuddyController {
     },
   })
   @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Not the parent of this kid',
+  })
+  @ApiResponse({
     status: 404,
     description: 'Kid not found or no buddy selected',
   })
-  async getBuddyWelcome(@Param('kidId') kidId: string) {
-    const welcome = await this.storyBuddyService.getBuddyWelcome(kidId);
+  async getBuddyWelcome(
+    @Request() req: AuthenticatedRequest,
+    @Param('kidId') kidId: string,
+  ) {
+    const welcome = await this.storyBuddyService.getBuddyWelcome(
+      kidId,
+      req.authUserData.userId,
+    );
     return new SuccessResponse(
       200,
       welcome,
@@ -265,10 +317,11 @@ export class StoryBuddyController {
   }
 
   @Post('kids/:kidId/message')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get contextual message from buddy',
     description:
-      'Retrieve a contextual message from the kid\'s story buddy. Messages are handled by frontend.',
+      "Retrieve a contextual message from the kid's story buddy. Only the parent can access their child's messages.",
   })
   @ApiParam({
     name: 'kidId',
@@ -299,10 +352,15 @@ export class StoryBuddyController {
     },
   })
   @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Not the parent of this kid',
+  })
+  @ApiResponse({
     status: 404,
     description: 'Kid not found or no buddy selected',
   })
   async getBuddyMessage(
+    @Request() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
     @Body() getBuddyMessageDto: GetBuddyMessageDto,
   ) {
@@ -310,7 +368,8 @@ export class StoryBuddyController {
       kidId,
       getBuddyMessageDto.context,
       getBuddyMessageDto.contextId,
-      getBuddyMessageDto.message, // Pass the frontend-provided message
+      getBuddyMessageDto.message,
+      req.authUserData.userId,
     );
     return new SuccessResponse(
       200,
@@ -320,9 +379,11 @@ export class StoryBuddyController {
   }
 
   @Put('kids/:kidId/buddy')
+  @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Change kid\'s story buddy',
-    description: 'Change the story buddy assigned to a kid.',
+    summary: "Change kid's story buddy",
+    description:
+      "Change the story buddy assigned to a kid. Only the parent can change their child's buddy.",
   })
   @ApiParam({
     name: 'kidId',
@@ -352,16 +413,22 @@ export class StoryBuddyController {
     },
   })
   @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Not the parent of this kid',
+  })
+  @ApiResponse({
     status: 404,
     description: 'Kid or story buddy not found',
   })
   async changeBuddy(
+    @Request() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
     @Body() selectBuddyDto: SelectBuddyDto,
   ) {
     const result = await this.storyBuddyService.selectBuddyForKid(
       kidId,
       selectBuddyDto.buddyId,
+      req.authUserData.userId,
     );
     return new SuccessResponse(200, result, 'Story buddy changed successfully');
   }
@@ -526,8 +593,8 @@ export class StoryBuddyController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|gif|webp)' }),
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }), // 5MB
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
         ],
         fileIsRequired: false,
       }),
@@ -609,8 +676,8 @@ export class StoryBuddyController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
-          new FileTypeValidator({ fileType: '.(png|jpeg|jpg|gif|webp)' }),
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
         ],
         fileIsRequired: false,
       }),
@@ -637,7 +704,8 @@ export class StoryBuddyController {
     name: 'permanent',
     required: false,
     type: Boolean,
-    description: 'Permanently delete the story buddy (default: false - soft delete)'
+    description:
+      'Permanently delete the story buddy (default: false - soft delete)',
   })
   @ApiResponse({
     status: 200,
@@ -668,7 +736,7 @@ export class StoryBuddyController {
   })
   async deleteBuddy(
     @Param('id') id: string,
-    @Query('permanent') permanent: boolean = false
+    @Query('permanent') permanent: boolean = false,
   ) {
     await this.storyBuddyService.deleteBuddy(id, permanent);
     return new SuccessResponse(200, null, 'Story buddy deleted successfully');
@@ -724,7 +792,8 @@ export class StoryBuddyController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Get buddy statistics (Admin)',
-    description: 'Get statistics about story buddies usage. Admin access required.',
+    description:
+      'Get statistics about story buddies usage. Admin access required.',
   })
   @ApiResponse({
     status: 200,
@@ -753,6 +822,10 @@ export class StoryBuddyController {
   })
   async getBuddyStats() {
     const stats = await this.storyBuddyService.getBuddyStats();
-    return new SuccessResponse(200, stats, 'Buddy statistics retrieved successfully');
+    return new SuccessResponse(
+      200,
+      stats,
+      'Buddy statistics retrieved successfully',
+    );
   }
 }

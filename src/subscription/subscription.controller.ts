@@ -1,7 +1,10 @@
-import { Controller, Get, Post, Body, UseGuards, Req, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { SubscriptionService } from './subscription.service';
-import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import { SubscribeDto } from './dto/subscribe.dto';
 
 @ApiTags('subscription')
@@ -19,41 +22,44 @@ export class SubscriptionController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user subscription' })
-  async getMySubscription(@Req() req: any) {
-    return this.subscriptionService.getSubscriptionForUser(req.authUserData.userId);
+  async getMySubscription(@Req() req: AuthenticatedRequest) {
+    return this.subscriptionService.getSubscriptionForUser(
+      req.authUserData.userId,
+    );
   }
 
   @Post('subscribe')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiBody({ type: SubscribeDto })
-  @ApiOperation({ summary: 'Subscribe / change plan (optionally perform charge)' })
-  async subscribe(@Req() req: any, @Body() body: SubscribeDto) {
-    return this.subscriptionService.subscribe(req.authUserData.userId, body.plan, { paymentMethodId: body.paymentMethodId, transactionPin: body.transactionPin, charge: body.charge });
+  @ApiOperation({
+    summary: 'Subscribe to free plan (paid plans require IAP)',
+    description:
+      'For paid plans, complete the In-App Purchase first then use /payment/verify-purchase',
+  })
+  async subscribe(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: SubscribeDto,
+  ) {
+    return this.subscriptionService.subscribe(
+      req.authUserData.userId,
+      body.plan,
+    );
   }
 
   @Post('cancel')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cancel subscription (keeps access until endsAt)' })
-  async cancel(@Req() req: any) {
+  async cancel(@Req() req: AuthenticatedRequest) {
     return this.subscriptionService.cancel(req.authUserData.userId);
-  }
-
-  @Post('reactivate')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Reactivate / resubscribe' })
-  @ApiBody({ type: SubscribeDto })
-  async reactivate(@Req() req: any, @Body() body: SubscribeDto) {
-    return this.subscriptionService.reactivate(req.authUserData.userId, body.plan, { paymentMethodId: body.paymentMethodId, charge: body.charge, transactionPin: body.transactionPin });
   }
 
   @Get('history')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List payment transactions for user' })
-  async history(@Req() req: any) {
+  async history(@Req() req: AuthenticatedRequest) {
     return this.subscriptionService.listHistory(req.authUserData.userId);
   }
 }

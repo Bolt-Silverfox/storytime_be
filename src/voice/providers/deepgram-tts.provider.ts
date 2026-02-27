@@ -1,73 +1,97 @@
 import { ITextToSpeechProvider } from '../interfaces/speech-provider.interface';
-import { createClient, DeepgramClient } from '@deepgram/sdk';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SSMLFormatter } from '../utils/ssml-formatter';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 import { TextChunker } from '../utils/text-chunker';
-import { StreamConverter } from '../utils/stream-converter';
+import { VOICE_CONFIG_SETTINGS } from '../voice.config';
+
+/** Max audio response size (10 MB) to prevent memory exhaustion */
+const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+
+/** Race a promise against a timeout, clearing the timer on settle */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timeout`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
 
 @Injectable()
 export class DeepgramTTSProvider implements ITextToSpeechProvider {
-    private readonly logger = new Logger(DeepgramTTSProvider.name);
-    private deepgram: DeepgramClient;
-    public readonly name = 'Deepgram';
-    private apiKey: string;
+  private readonly logger = new Logger(DeepgramTTSProvider.name);
+  public readonly name = 'Deepgram';
+  private readonly apiKey: string | undefined;
 
-    constructor(
-        private readonly configService: ConfigService,
-        private readonly formatter: SSMLFormatter,
-        private readonly chunker: TextChunker,
-        private readonly converter: StreamConverter,
-    ) {
-        this.apiKey = this.configService.get<string>('DEEPGRAM_API_KEY') ?? '';
-        if (this.apiKey) {
-            this.deepgram = createClient(this.apiKey);
-        } else {
-            this.logger.warn('DEEPGRAM_API_KEY is not set');
-        }
+  constructor(
+    private readonly chunker: TextChunker,
+    private readonly httpService: HttpService,
+    private readonly configService: ConfigService,
+  ) {
+    this.apiKey = this.configService.get<string>('DEEPGRAM_API_KEY');
+    if (!this.apiKey) {
+      this.logger.warn('DEEPGRAM_API_KEY is not set — Deepgram TTS disabled');
+    }
+  }
+
+  async generateAudio(text: string, voiceId?: string): Promise<Buffer> {
+    if (!this.apiKey) {
+      throw new Error('Deepgram API key is not configured');
     }
 
-    async generateAudio(text: string, _voiceId?: string, model: string = 'aura-asteria-en', options?: any): Promise<Buffer> {
-        if (!this.deepgram) {
-            throw new Error('Deepgram client is not initialized');
-        }
+    const config = VOICE_CONFIG_SETTINGS.DEEPGRAM;
+    const model = voiceId ?? config.DEFAULT_MODEL;
 
-        // 1. Transform raw text into "Storyteller Mode" (SSML)
-        const ssmlText = this.formatter.format(text, options);
+    const chunks = this.chunker.chunk(text, config.CHUNK_SIZE);
+    const audioBuffers: Buffer[] = [];
 
-        // Deepgram has a 2000 char limit. Split text into chunks.
-        const MAX_CHARS = 1900; // Safety margin
-        const chunks = this.chunker.chunk(ssmlText, MAX_CHARS);
-        const audioBuffers: Buffer[] = [];
+    this.logger.log(
+      `Generating ${chunks.length} chunk(s) via Deepgram TTS with model ${model}`,
+    );
 
-        this.logger.log(`Splitting text into ${chunks.length} chunks for Deepgram`);
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
 
-        for (let i = 0; i < chunks.length; i++) {
-            const chunk = chunks[i];
-            // Ensure each chunk is wrapped in <speak> tags if not already
-            const chunkSSML = chunk.startsWith('<speak>') ? chunk : `<speak>${chunk}</speak>`;
+      try {
+        const response = await withTimeout(
+          firstValueFrom(
+            this.httpService.post<ArrayBuffer>(
+              `https://api.deepgram.com/v1/speak?model=${encodeURIComponent(model)}&encoding=${config.ENCODING}`,
+              { text: chunk },
+              {
+                headers: {
+                  Authorization: `Token ${this.apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                responseType: 'arraybuffer',
+                maxContentLength: MAX_AUDIO_BYTES,
+                maxBodyLength: MAX_AUDIO_BYTES,
+              },
+            ),
+          ),
+          config.TIMEOUT_MS,
+          'Deepgram TTS',
+        );
 
-            try {
-                const response = await this.deepgram.speak.request(
-                    { text: chunkSSML },
-                    {
-                        model: model,
-                        encoding: 'linear16',
-                        container: 'wav',
-                    },
-                );
-
-                const stream = await response.getStream();
-                if (!stream) {
-                    throw new Error('No audio stream returned from Deepgram');
-                }
-                audioBuffers.push(await this.converter.toBuffer(stream));
-            } catch (innerError) {
-                this.logger.error(`Failed on chunk ${i + 1}: ${innerError.message}`);
-                throw innerError;
-            }
-        }
-
-        return Buffer.concat(audioBuffers);
+        audioBuffers.push(Buffer.from(response.data));
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Deepgram TTS failed on chunk ${i + 1}/${chunks.length}: ${msg}`,
+        );
+        throw error;
+      }
     }
+
+    return Buffer.concat(audioBuffers);
+  }
 }

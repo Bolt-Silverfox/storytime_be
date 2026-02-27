@@ -4,7 +4,10 @@ import {
   BadRequestException,
   ConflictException,
   Logger,
+  Inject,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { Role, Prisma } from '@prisma/client';
@@ -18,17 +21,13 @@ import {
   PaginatedResponseDto,
   SubscriptionAnalyticsDto,
   RevenueAnalyticsDto,
-  UserDetailDto,
-  StoryDetailDto,
   CategoryDto,
   ThemeDto,
   SubscriptionDto,
   ActivityLogDto,
   AiCreditAnalyticsDto,
   UserGrowthMonthlyDto,
-  MetricWithTrendDto,
 } from './dto/admin-responses.dto';
-import { CreateSupportTicketDto } from '../help-support/dto/create-support-ticket.dto';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import {
   UserFilterDto,
@@ -40,9 +39,19 @@ import {
   UpdateUserDto,
   BulkActionDto,
 } from './dto/user-management.dto';
-import { categories, themes, defaultAgeGroups, systemAvatars } from '../../prisma/data';
+import {
+  categories,
+  themes,
+  defaultAgeGroups,
+  systemAvatars,
+} from '../../prisma/data';
 import { DateUtil } from '@/shared/utils/date.util';
 import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+  STORY_INVALIDATION_KEYS,
+} from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
@@ -54,15 +63,23 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
-  ) { }
-
-
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   // =====================
   // DASHBOARD STATISTICS
   // =====================
 
   async getDashboardStats(): Promise<DashboardStatsDto> {
+    // Check cache first
+    const cached = await this.cacheManager.get<DashboardStatsDto>(
+      CACHE_KEYS.DASHBOARD_STATS,
+    );
+    if (cached) {
+      this.logger.debug('Returning cached dashboard stats');
+      return cached;
+    }
+
     const now = new Date();
 
     // Timeframes
@@ -81,20 +98,37 @@ export class AdminService {
     const rangeYesterday = DateUtil.getRange(Timeframe.YESTERDAY, now); // For "New Users Today" comparison
 
     // Helper to count between dates
-    const countBetween = (model: any, start: Date, end: Date) => model.count({
-      where: { createdAt: { gte: start, lte: end }, isDeleted: false }
-    });
+    const countBetween = (
+      model: { count: (args: { where: object }) => Promise<number> },
+      start: Date,
+      end: Date,
+    ): Promise<number> =>
+      model.count({
+        where: { createdAt: { gte: start, lte: end }, isDeleted: false },
+      });
 
     // 1. Fetch Current Metrics
     const [
-      totalParents, totalKids, totalAdmins, totalStories, totalCategories, totalThemes,
-      activeUsers24h, activeUsers7d, activeUsers30d,
-      newUsersToday, newUsersThisMonth,
-      totalStoryProgress, totalFavorites,
-      totalSubscriptions, activeSubscriptionsCount,
-      totalRevenueResult
+      totalParents,
+      totalKids,
+      totalAdmins,
+      totalStories,
+      totalCategories,
+      totalThemes,
+      activeUsers24h,
+      activeUsers7d,
+      activeUsers30d,
+      newUsersToday,
+      newUsersThisMonth,
+      totalStoryProgress,
+      totalFavorites,
+      totalSubscriptions,
+      activeSubscriptionsCount,
+      totalRevenueResult,
     ] = await Promise.all([
-      this.prisma.user.count({ where: { role: Role.parent, isDeleted: false } }),
+      this.prisma.user.count({
+        where: { role: Role.parent, isDeleted: false },
+      }),
       this.prisma.kid.count({ where: { isDeleted: false } }),
       this.prisma.user.count({ where: { role: Role.admin, isDeleted: false } }),
       this.prisma.story.count({ where: { isDeleted: false } }),
@@ -102,9 +136,15 @@ export class AdminService {
       this.prisma.theme.count({ where: { isDeleted: false } }),
 
       // Active Users
-      this.prisma.user.count({ where: { updatedAt: { gte: range24h.start }, isDeleted: false } }),
-      this.prisma.user.count({ where: { updatedAt: { gte: range7d.start }, isDeleted: false } }),
-      this.prisma.user.count({ where: { updatedAt: { gte: range30d.start }, isDeleted: false } }),
+      this.prisma.user.count({
+        where: { updatedAt: { gte: range24h.start }, isDeleted: false },
+      }),
+      this.prisma.user.count({
+        where: { updatedAt: { gte: range7d.start }, isDeleted: false },
+      }),
+      this.prisma.user.count({
+        where: { updatedAt: { gte: range30d.start }, isDeleted: false },
+      }),
 
       // New Users
       countBetween(this.prisma.user, rangeToday.start, rangeToday.end),
@@ -120,7 +160,7 @@ export class AdminService {
         where: {
           status: 'active',
           OR: [{ endsAt: null }, { endsAt: { gt: now } }],
-        }
+        },
       }),
 
       // Revenue
@@ -130,7 +170,9 @@ export class AdminService {
       }),
     ]);
 
-    const totalUsersCount = await this.prisma.user.count({ where: { isDeleted: false } });
+    const totalUsersCount = await this.prisma.user.count({
+      where: { isDeleted: false },
+    });
     const totalRevenue = totalRevenueResult._sum.amount || 0;
 
     // 2. Fetch Previous Period Metrics for Trends
@@ -139,23 +181,54 @@ export class AdminService {
     const lastMonthEnd = rangeLastMonth.end;
 
     const [
-      prevTotalUsers, prevTotalParents, prevTotalKids, prevTotalAdmins,
-      prevTotalStories, prevTotalCategories, prevTotalThemes,
-      prevTotalStoryProgress, prevTotalFavorites,
-      prevTotalSubscriptions, prevActiveSubscriptionsCount,
-      prevTotalRevenueResult
+      prevTotalUsers,
+      prevTotalParents,
+      prevTotalKids,
+      prevTotalAdmins,
+      prevTotalStories,
+      prevTotalCategories,
+      prevTotalThemes,
+      prevTotalStoryProgress,
+      prevTotalFavorites,
+      prevTotalSubscriptions,
+      prevActiveSubscriptionsCount,
+      prevTotalRevenueResult,
     ] = await Promise.all([
-      this.prisma.user.count({ where: { createdAt: { lte: lastMonthEnd }, isDeleted: false } }),
-      this.prisma.user.count({ where: { role: Role.parent, createdAt: { lte: lastMonthEnd }, isDeleted: false } }),
-      this.prisma.kid.count({ where: { createdAt: { lte: lastMonthEnd }, isDeleted: false } }),
-      this.prisma.user.count({ where: { role: Role.admin, createdAt: { lte: lastMonthEnd }, isDeleted: false } }),
-      this.prisma.story.count({ where: { createdAt: { lte: lastMonthEnd }, isDeleted: false } }),
+      this.prisma.user.count({
+        where: { createdAt: { lte: lastMonthEnd }, isDeleted: false },
+      }),
+      this.prisma.user.count({
+        where: {
+          role: Role.parent,
+          createdAt: { lte: lastMonthEnd },
+          isDeleted: false,
+        },
+      }),
+      this.prisma.kid.count({
+        where: { createdAt: { lte: lastMonthEnd }, isDeleted: false },
+      }),
+      this.prisma.user.count({
+        where: {
+          role: Role.admin,
+          createdAt: { lte: lastMonthEnd },
+          isDeleted: false,
+        },
+      }),
+      this.prisma.story.count({
+        where: { createdAt: { lte: lastMonthEnd }, isDeleted: false },
+      }),
       this.prisma.category.count({ where: { isDeleted: false } }),
       this.prisma.theme.count({ where: { isDeleted: false } }),
 
-      this.prisma.storyProgress.count({ where: { lastAccessed: { lte: lastMonthEnd } } }),
-      this.prisma.favorite.count({ where: { createdAt: { lte: lastMonthEnd } } }),
-      this.prisma.subscription.count({ where: { startedAt: { lte: lastMonthEnd } } }),
+      this.prisma.storyProgress.count({
+        where: { lastAccessed: { lte: lastMonthEnd } },
+      }),
+      this.prisma.favorite.count({
+        where: { createdAt: { lte: lastMonthEnd } },
+      }),
+      this.prisma.subscription.count({
+        where: { startedAt: { lte: lastMonthEnd } },
+      }),
 
       // Active Subs History (Approximate)
       this.prisma.subscription.count({
@@ -163,7 +236,7 @@ export class AdminService {
           status: 'active',
           startedAt: { lte: lastMonthEnd },
           OR: [{ endsAt: null }, { endsAt: { gt: lastMonthEnd } }],
-        }
+        },
       }),
 
       this.prisma.paymentTransaction.aggregate({
@@ -176,12 +249,30 @@ export class AdminService {
 
     // Trends for "Active" & "New" metrics (Time shifting)
     const [
-      prevActiveUsers24h, prevActiveUsers7d, prevActiveUsers30d,
-      prevNewUsersToday, prevNewUsersThisMonth
+      prevActiveUsers24h,
+      prevActiveUsers7d,
+      prevActiveUsers30d,
+      _unused, // eslint-disable-line @typescript-eslint/no-unused-vars
+      prevNewUsersThisMonth,
     ] = await Promise.all([
-      this.prisma.user.count({ where: { updatedAt: { gte: prevRange24h.start, lt: prevRange24h.end }, isDeleted: false } }),
-      this.prisma.user.count({ where: { updatedAt: { gte: prevRange7d.start, lt: prevRange7d.end }, isDeleted: false } }),
-      this.prisma.user.count({ where: { updatedAt: { gte: prevRange30d.start, lt: prevRange30d.end }, isDeleted: false } }),
+      this.prisma.user.count({
+        where: {
+          updatedAt: { gte: prevRange24h.start, lt: prevRange24h.end },
+          isDeleted: false,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          updatedAt: { gte: prevRange7d.start, lt: prevRange7d.end },
+          isDeleted: false,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          updatedAt: { gte: prevRange30d.start, lt: prevRange30d.end },
+          isDeleted: false,
+        },
+      }),
 
       // New Users Today vs Yesterday
       countBetween(this.prisma.user, rangeYesterday.start, rangeYesterday.end),
@@ -205,8 +296,7 @@ export class AdminService {
     const prevPaidUsers = prevActiveSubscriptionsCount;
     const prevUnpaidUsers = prevTotalUsers - prevPaidUsers;
 
-
-    return {
+    const result: DashboardStatsDto = {
       totalUsers: totalUsersCount,
       totalParents,
       totalKids,
@@ -226,45 +316,141 @@ export class AdminService {
       unpaidUsers,
       totalSubscriptions,
       activeSubscriptions: activeSubscriptionsCount,
-      subscriptionPlans: subscriptionPlans.map(p => ({ plan: p.plan, count: p._count })),
+      subscriptionPlans: subscriptionPlans.map((p) => ({
+        plan: p.plan,
+        count: p._count,
+      })),
       totalRevenue: Number(totalRevenue.toFixed(2)),
-      conversionRate: totalUsersCount > 0 ? Number(((paidUsers / totalUsersCount) * 100).toFixed(2)) : 0,
+      conversionRate:
+        totalUsersCount > 0
+          ? Number(((paidUsers / totalUsersCount) * 100).toFixed(2))
+          : 0,
 
       performanceMetrics: {
         // User Metrics
-        totalUsers: DashboardUtil.calculateTrend(totalUsersCount, prevTotalUsers, TrendLabel.VS_LAST_MONTH),
-        totalParents: DashboardUtil.calculateTrend(totalParents, prevTotalParents, TrendLabel.VS_LAST_MONTH),
-        totalKids: DashboardUtil.calculateTrend(totalKids, prevTotalKids, TrendLabel.VS_LAST_MONTH),
-        totalAdmins: DashboardUtil.calculateTrend(totalAdmins, prevTotalAdmins, TrendLabel.VS_LAST_MONTH),
+        totalUsers: DashboardUtil.calculateTrend(
+          totalUsersCount,
+          prevTotalUsers,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+        totalParents: DashboardUtil.calculateTrend(
+          totalParents,
+          prevTotalParents,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+        totalKids: DashboardUtil.calculateTrend(
+          totalKids,
+          prevTotalKids,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+        totalAdmins: DashboardUtil.calculateTrend(
+          totalAdmins,
+          prevTotalAdmins,
+          TrendLabel.VS_LAST_MONTH,
+        ),
 
         // Engagement
-        activeUsers24h: DashboardUtil.calculateTrend(activeUsers24h, prevActiveUsers24h, TrendLabel.VS_PREV_24H),
-        activeUsers7d: DashboardUtil.calculateTrend(activeUsers7d, prevActiveUsers7d, TrendLabel.VS_PREV_7D),
-        activeUsers30d: DashboardUtil.calculateTrend(activeUsers30d, prevActiveUsers30d, TrendLabel.VS_PREV_30D),
-        newUsers: DashboardUtil.calculateTrend(newUsersThisMonth, prevNewUsersThisMonth, TrendLabel.VS_LAST_MONTH), // Monthly Trend
+        activeUsers24h: DashboardUtil.calculateTrend(
+          activeUsers24h,
+          prevActiveUsers24h,
+          TrendLabel.VS_PREV_24H,
+        ),
+        activeUsers7d: DashboardUtil.calculateTrend(
+          activeUsers7d,
+          prevActiveUsers7d,
+          TrendLabel.VS_PREV_7D,
+        ),
+        activeUsers30d: DashboardUtil.calculateTrend(
+          activeUsers30d,
+          prevActiveUsers30d,
+          TrendLabel.VS_PREV_30D,
+        ),
+        newUsers: DashboardUtil.calculateTrend(
+          newUsersThisMonth,
+          prevNewUsersThisMonth,
+          TrendLabel.VS_LAST_MONTH,
+        ), // Monthly Trend
 
-        averageSessionTime: DashboardUtil.calculateTrend(avgSessionTime, 0, TrendLabel.VS_LAST_MONTH),
-        totalStoryViews: DashboardUtil.calculateTrend(totalStoryProgress, prevTotalStoryProgress, TrendLabel.VS_LAST_MONTH),
-        totalFavorites: DashboardUtil.calculateTrend(totalFavorites, prevTotalFavorites, TrendLabel.VS_LAST_MONTH),
+        averageSessionTime: DashboardUtil.calculateTrend(
+          avgSessionTime,
+          0,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+        totalStoryViews: DashboardUtil.calculateTrend(
+          totalStoryProgress,
+          prevTotalStoryProgress,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+        totalFavorites: DashboardUtil.calculateTrend(
+          totalFavorites,
+          prevTotalFavorites,
+          TrendLabel.VS_LAST_MONTH,
+        ),
 
         // Content
-        totalStories: DashboardUtil.calculateTrend(totalStories, prevTotalStories, TrendLabel.VS_LAST_MONTH),
-        totalCategories: DashboardUtil.calculateTrend(totalCategories, prevTotalCategories, TrendLabel.VS_LAST_MONTH),
-        totalThemes: DashboardUtil.calculateTrend(totalThemes, prevTotalThemes, TrendLabel.VS_LAST_MONTH),
+        totalStories: DashboardUtil.calculateTrend(
+          totalStories,
+          prevTotalStories,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+        totalCategories: DashboardUtil.calculateTrend(
+          totalCategories,
+          prevTotalCategories,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+        totalThemes: DashboardUtil.calculateTrend(
+          totalThemes,
+          prevTotalThemes,
+          TrendLabel.VS_LAST_MONTH,
+        ),
 
         // Revenue & Subs
-        totalRevenue: DashboardUtil.calculateTrend(totalRevenue, prevTotalRevenue, TrendLabel.VS_LAST_MONTH),
-        totalSubscriptions: DashboardUtil.calculateTrend(totalSubscriptions, prevTotalSubscriptions, TrendLabel.VS_LAST_MONTH),
-        activeSubscriptions: DashboardUtil.calculateTrend(activeSubscriptionsCount, prevActiveSubscriptionsCount, TrendLabel.VS_LAST_MONTH),
-        paidUsers: DashboardUtil.calculateTrend(paidUsers, prevPaidUsers, TrendLabel.VS_LAST_MONTH),
-        unpaidUsers: DashboardUtil.calculateTrend(unpaidUsers, prevUnpaidUsers, TrendLabel.VS_LAST_MONTH),
-        conversionRate: DashboardUtil.calculateTrend(
-          totalUsersCount > 0 ? Number(((paidUsers / totalUsersCount) * 100).toFixed(2)) : 0,
-          prevTotalUsers > 0 ? Number(((prevPaidUsers / prevTotalUsers) * 100).toFixed(2)) : 0,
-          TrendLabel.VS_LAST_MONTH
+        totalRevenue: DashboardUtil.calculateTrend(
+          totalRevenue,
+          prevTotalRevenue,
+          TrendLabel.VS_LAST_MONTH,
         ),
-      }
+        totalSubscriptions: DashboardUtil.calculateTrend(
+          totalSubscriptions,
+          prevTotalSubscriptions,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+        activeSubscriptions: DashboardUtil.calculateTrend(
+          activeSubscriptionsCount,
+          prevActiveSubscriptionsCount,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+        paidUsers: DashboardUtil.calculateTrend(
+          paidUsers,
+          prevPaidUsers,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+        unpaidUsers: DashboardUtil.calculateTrend(
+          unpaidUsers,
+          prevUnpaidUsers,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+        conversionRate: DashboardUtil.calculateTrend(
+          totalUsersCount > 0
+            ? Number(((paidUsers / totalUsersCount) * 100).toFixed(2))
+            : 0,
+          prevTotalUsers > 0
+            ? Number(((prevPaidUsers / prevTotalUsers) * 100).toFixed(2))
+            : 0,
+          TrendLabel.VS_LAST_MONTH,
+        ),
+      },
     };
+
+    // Cache the result for 5 minutes
+    await this.cacheManager.set(
+      CACHE_KEYS.DASHBOARD_STATS,
+      result,
+      CACHE_TTL_MS.DASHBOARD,
+    );
+    this.logger.debug('Dashboard stats cached for 5 minutes');
+
+    return result;
   }
 
   async getUserGrowth(dateRange: DateRangeDto): Promise<UserGrowthDto[]> {
@@ -284,11 +470,7 @@ export class AdminService {
         isDeleted: false,
       },
       include: {
-        subscriptions: {
-          where: {
-            status: 'active',
-          },
-        },
+        subscription: true,
       },
       orderBy: {
         createdAt: 'asc',
@@ -302,7 +484,7 @@ export class AdminService {
           acc[date] = { total: 0, paid: 0 };
         }
         acc[date].total += 1;
-        if (user.subscriptions.length > 0) {
+        if (user.subscription?.status === 'active') {
           acc[date].paid += 1;
         }
         return acc;
@@ -321,10 +503,8 @@ export class AdminService {
       where: {
         createdAt: { lt: startDate },
         isDeleted: false,
-        subscriptions: {
-          some: {
-            status: 'active',
-          },
+        subscription: {
+          status: 'active',
         },
       },
     });
@@ -343,6 +523,15 @@ export class AdminService {
   }
 
   async getStoryStats(): Promise<StoryStatsDto> {
+    // Check cache first
+    const cached = await this.cacheManager.get<StoryStatsDto>(
+      CACHE_KEYS.STORY_STATS,
+    );
+    if (cached) {
+      this.logger.debug('Returning cached story stats');
+      return cached;
+    }
+
     const [
       totalStories,
       publishedStories,
@@ -365,7 +554,7 @@ export class AdminService {
       this.prisma.favorite.count(),
     ]);
 
-    return {
+    const result: StoryStatsDto = {
       totalStories,
       publishedStories,
       draftStories: 0,
@@ -375,9 +564,27 @@ export class AdminService {
       totalViews,
       totalFavorites,
     };
+
+    // Cache the result for 5 minutes
+    await this.cacheManager.set(
+      CACHE_KEYS.STORY_STATS,
+      result,
+      CACHE_TTL_MS.DASHBOARD,
+    );
+
+    return result;
   }
 
   async getContentBreakdown(): Promise<ContentBreakdownDto> {
+    // Check cache first
+    const cached = await this.cacheManager.get<ContentBreakdownDto>(
+      CACHE_KEYS.CONTENT_BREAKDOWN,
+    );
+    if (cached) {
+      this.logger.debug('Returning cached content breakdown');
+      return cached;
+    }
+
     const [languageStats, categoryStats, themeStats] = await Promise.all([
       this.prisma.story.groupBy({
         by: ['language'],
@@ -419,7 +626,7 @@ export class AdminService {
       {} as Record<string, number>,
     );
 
-    return {
+    const result: ContentBreakdownDto = {
       byLanguage: languageStats.map((stat) => ({
         language: stat.language,
         count: stat._count,
@@ -437,6 +644,15 @@ export class AdminService {
         count: theme._count.stories,
       })),
     };
+
+    // Cache the result for 5 minutes
+    await this.cacheManager.set(
+      CACHE_KEYS.CONTENT_BREAKDOWN,
+      result,
+      CACHE_TTL_MS.DASHBOARD,
+    );
+
+    return result;
   }
 
   async getSystemHealth(): Promise<SystemHealthDto> {
@@ -526,27 +742,22 @@ export class AdminService {
     if (hasActiveSub !== undefined && hasActiveSub !== null) {
       const now = new Date();
       // Normalize value - handle both boolean and string (query params may come as strings)
-      const wantsActiveSubscription = hasActiveSub === true || String(hasActiveSub) === 'true';
+      const wantsActiveSubscription =
+        hasActiveSub === true || String(hasActiveSub) === 'true';
 
       const activeSubscriptionCriteria = {
         status: 'active',
         isDeleted: false,
-        OR: [
-          { endsAt: null },
-          { endsAt: { gt: now } }
-        ]
+        OR: [{ endsAt: null }, { endsAt: { gt: now } }],
       };
 
       if (wantsActiveSubscription) {
-        where.subscriptions = {
-          some: activeSubscriptionCriteria
-        };
+        where.subscription = activeSubscriptionCriteria;
       } else {
-        where.NOT = {
-          subscriptions: {
-            some: activeSubscriptionCriteria
-          }
-        };
+        where.OR = [
+          { subscription: null },
+          { subscription: { NOT: activeSubscriptionCriteria } },
+        ];
       }
     }
 
@@ -557,15 +768,7 @@ export class AdminService {
         take: limit,
         orderBy: { [sortBy]: sortOrder },
         include: {
-          subscriptions: {
-            where: {
-              status: 'active',
-              isDeleted: false,
-              OR: [
-                { endsAt: null },
-                { endsAt: { gt: new Date() } }
-              ],
-            },
+          subscription: {
             select: {
               id: true,
               plan: true,
@@ -594,7 +797,6 @@ export class AdminService {
               kids: true,
               auth: true,
               parentFavorites: true,
-              subscriptions: true,
               paymentTransactions: true,
             },
           },
@@ -604,17 +806,39 @@ export class AdminService {
     ]);
 
     return {
-      data: users.map(user => {
-        // Sanitize user object
-        const { passwordHash, pinHash, kids, paymentTransactions, usage, subscriptions, ...safeUser } = user;
+      data: users.map((user) => {
+        // Sanitize user object - exclude sensitive fields
+        const {
+          passwordHash, // eslint-disable-line @typescript-eslint/no-unused-vars
+          pinHash, // eslint-disable-line @typescript-eslint/no-unused-vars
+          kids, // eslint-disable-line @typescript-eslint/no-unused-vars
+          paymentTransactions, // eslint-disable-line @typescript-eslint/no-unused-vars
+          usage, // eslint-disable-line @typescript-eslint/no-unused-vars
+          subscription, // eslint-disable-line @typescript-eslint/no-unused-vars
+          ...safeUser
+        } = user;
 
         // Calculate metrics
         const creditUsed = user.usage?.elevenLabsCount || 0;
         const activityLength = user.kids.reduce(
-          (total, kid) => total + kid.screenTimeSessions.reduce((sum, s) => sum + (s.duration || 0), 0),
-          0
+          (total, kid) =>
+            total +
+            kid.screenTimeSessions.reduce(
+              (sum, s) => sum + (s.duration || 0),
+              0,
+            ),
+          0,
         );
-        const amountSpent = user.paymentTransactions.reduce((sum, txn) => sum + txn.amount, 0);
+        const amountSpent = user.paymentTransactions.reduce(
+          (sum, txn) => sum + txn.amount,
+          0,
+        );
+
+        // Check if user has active subscription (same logic as getUserById)
+        const now = new Date();
+        const hasActiveSubscription =
+          user.subscription?.status === 'active' &&
+          (!user.subscription.endsAt || user.subscription.endsAt > now);
 
         return {
           ...safeUser,
@@ -622,12 +846,11 @@ export class AdminService {
           activityLength,
           creditUsed,
           amountSpent,
-          isPaidUser: user.subscriptions.length > 0,
-          activeSubscription: user.subscriptions[0] || null,
+          isPaidUser: hasActiveSubscription,
+          activeSubscription: hasActiveSubscription ? user.subscription : null,
           kidsCount: user._count.kids,
           sessionsCount: user._count.auth,
           favoritesCount: user._count.parentFavorites,
-          subscriptionsCount: user._count.subscriptions,
           transactionsCount: user._count.paymentTransactions,
         };
       }),
@@ -656,9 +879,7 @@ export class AdminService {
           },
         },
         avatar: true,
-        subscriptions: {
-          orderBy: { startedAt: 'desc' },
-        },
+        subscription: true,
         paymentTransactions: {
           orderBy: { createdAt: 'desc' },
           take: 10,
@@ -668,7 +889,6 @@ export class AdminService {
             auth: true,
             parentFavorites: true,
             voices: true,
-            subscriptions: true,
             supportTickets: true,
             paymentTransactions: true,
           },
@@ -682,9 +902,9 @@ export class AdminService {
 
     // Check if user has active subscription
     const now = new Date();
-    const hasActiveSubscription = user.subscriptions.some(sub =>
-      sub.status === 'active' && (!sub.endsAt || sub.endsAt > now)
-    );
+    const hasActiveSubscription =
+      user.subscription?.status === 'active' &&
+      (!user.subscription.endsAt || user.subscription.endsAt > now);
 
     const totalSpentResult = await this.prisma.paymentTransaction.aggregate({
       where: {
@@ -696,6 +916,7 @@ export class AdminService {
       },
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, pinHash, ...safeUser } = user;
 
     return {
@@ -706,7 +927,6 @@ export class AdminService {
         sessionsCount: user._count.auth,
         favoritesCount: user._count.parentFavorites,
         voicesCount: user._count.voices,
-        subscriptionsCount: user._count.subscriptions,
         ticketsCount: user._count.supportTickets,
         transactionsCount: user._count.paymentTransactions,
       },
@@ -748,10 +968,16 @@ export class AdminService {
     });
   }
 
-  async updateUser(userId: string, data: UpdateUserDto, currentAdminId?: string): Promise<any> {
+  async updateUser(
+    userId: string,
+    data: UpdateUserDto,
+    currentAdminId?: string,
+  ): Promise<any> {
     // Safety check: prevent self-demotion
     if (userId === currentAdminId && data.role && data.role !== Role.admin) {
-      throw new BadRequestException('You cannot demote yourself from admin status.');
+      throw new BadRequestException(
+        'You cannot demote yourself from admin status.',
+      );
     }
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -789,7 +1015,11 @@ export class AdminService {
     });
   }
 
-  async deleteUser(userId: string, permanent: boolean = false, currentAdminId?: string): Promise<any> {
+  async deleteUser(
+    userId: string,
+    permanent: boolean = false,
+    currentAdminId?: string,
+  ): Promise<any> {
     // Safety check: prevent self-deletion
     if (userId === currentAdminId) {
       throw new BadRequestException('You cannot delete your own account.');
@@ -834,7 +1064,7 @@ export class AdminService {
     const { userIds, action } = data;
 
     switch (action) {
-      case 'delete':
+      case 'delete': {
         const deleteResult = await this.prisma.user.updateMany({
           where: { id: { in: userIds } },
           data: {
@@ -843,8 +1073,9 @@ export class AdminService {
           },
         });
         return { count: deleteResult.count };
+      }
 
-      case 'restore':
+      case 'restore': {
         const restoreResult = await this.prisma.user.updateMany({
           where: { id: { in: userIds } },
           data: {
@@ -853,8 +1084,9 @@ export class AdminService {
           },
         });
         return { count: restoreResult.count };
+      }
 
-      case 'verify':
+      case 'verify': {
         const verifyResult = await this.prisma.user.updateMany({
           where: { id: { in: userIds } },
           data: {
@@ -862,6 +1094,7 @@ export class AdminService {
           },
         });
         return { count: verifyResult.count };
+      }
 
       default:
         throw new BadRequestException('Invalid action');
@@ -887,6 +1120,7 @@ export class AdminService {
       language,
       minAge,
       maxAge,
+      categoryId,
     } = filters;
 
     const skip = (page - 1) * limit;
@@ -906,6 +1140,7 @@ export class AdminService {
     if (language) where.language = language;
     if (minAge) where.ageMin = { gte: minAge };
     if (maxAge) where.ageMax = { lte: maxAge };
+    if (categoryId) where.categories = { some: { id: categoryId } };
 
     const [stories, total] = await Promise.all([
       this.prisma.story.findMany({
@@ -930,7 +1165,7 @@ export class AdminService {
     ]);
 
     return {
-      data: stories.map(story => ({
+      data: stories.map((story) => ({
         ...story,
         favoritesCount: story._count.favorites,
         viewsCount: story._count.progresses,
@@ -992,10 +1227,21 @@ export class AdminService {
       throw new NotFoundException(`Story with ID ${storyId} not found`);
     }
 
-    return this.prisma.story.update({
+    const result = await this.prisma.story.update({
       where: { id: storyId },
       data: { recommended: !story.recommended },
     });
+
+    // Invalidate story stats cache for immediate dashboard accuracy
+    try {
+      await this.cacheManager.del(CACHE_KEYS.STORY_STATS);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to invalidate story stats cache: ${error.message}`,
+      );
+    }
+
+    return result;
   }
 
   async deleteStory(storyId: string, permanent: boolean = false): Promise<any> {
@@ -1007,10 +1253,11 @@ export class AdminService {
       throw new NotFoundException(`Story with ID ${storyId} not found`);
     }
 
+    let result;
     if (permanent) {
-      return this.prisma.story.delete({ where: { id: storyId } });
+      result = await this.prisma.story.delete({ where: { id: storyId } });
     } else {
-      return this.prisma.story.update({
+      result = await this.prisma.story.update({
         where: { id: storyId },
         data: {
           isDeleted: true,
@@ -1018,6 +1265,19 @@ export class AdminService {
         },
       });
     }
+
+    // Invalidate dashboard caches for immediate accuracy
+    try {
+      await Promise.all(
+        STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to invalidate dashboard caches: ${error.message}`,
+      );
+    }
+
+    return result;
   }
 
   // =====================
@@ -1038,7 +1298,7 @@ export class AdminService {
       orderBy: { name: 'asc' },
     });
 
-    return categories.map(cat => ({
+    return categories.map((cat) => ({
       id: cat.id,
       name: cat.name,
       image: cat.image || undefined,
@@ -1065,7 +1325,7 @@ export class AdminService {
       orderBy: { name: 'asc' },
     });
 
-    return themes.map(theme => ({
+    return themes.map((theme) => ({
       id: theme.id,
       name: theme.name,
       image: theme.image || undefined,
@@ -1082,11 +1342,15 @@ export class AdminService {
   // SUBSCRIPTION ANALYTICS
   // =====================
 
-  async getSubscriptionAnalytics(dateRange?: DateRangeDto): Promise<SubscriptionAnalyticsDto> {
+  async getSubscriptionAnalytics(
+    dateRange?: DateRangeDto,
+  ): Promise<SubscriptionAnalyticsDto> {
     const startDate = dateRange?.startDate
       ? new Date(dateRange.startDate)
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const endDate = dateRange?.endDate ? new Date(dateRange.endDate) : new Date();
+    const endDate = dateRange?.endDate
+      ? new Date(dateRange.endDate)
+      : new Date();
 
     const [subscriptions, revenue, planBreakdown] = await Promise.all([
       // Get subscription growth
@@ -1119,10 +1383,7 @@ export class AdminService {
         by: ['plan'],
         where: {
           status: 'active',
-          OR: [
-            { endsAt: null },
-            { endsAt: { gt: new Date() } }
-          ],
+          OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
         },
         _count: true,
       }),
@@ -1132,15 +1393,15 @@ export class AdminService {
     const churnRate = await this.calculateChurnRate(startDate, endDate);
 
     return {
-      subscriptionGrowth: subscriptions.map(sub => ({
+      subscriptionGrowth: subscriptions.map((sub) => ({
         date: sub.startedAt.toISOString().split('T')[0],
         count: sub._count,
       })),
-      revenueGrowth: revenue.map(rev => ({
+      revenueGrowth: revenue.map((rev) => ({
         date: rev.createdAt.toISOString().split('T')[0],
         amount: rev._sum.amount || 0,
       })),
-      planBreakdown: planBreakdown.map(plan => ({
+      planBreakdown: planBreakdown.map((plan) => ({
         plan: plan.plan,
         count: plan._count,
       })),
@@ -1148,7 +1409,10 @@ export class AdminService {
     };
   }
 
-  private async calculateChurnRate(startDate: Date, endDate: Date): Promise<number> {
+  private async calculateChurnRate(
+    startDate: Date,
+    endDate: Date,
+  ): Promise<number> {
     const totalSubscriptionsAtStart = await this.prisma.subscription.count({
       where: {
         startedAt: { lt: startDate },
@@ -1165,8 +1429,8 @@ export class AdminService {
             endsAt: {
               gte: startDate,
               lte: endDate,
-            }
-          }
+            },
+          },
         ],
       },
     });
@@ -1180,11 +1444,15 @@ export class AdminService {
   // REVENUE ANALYTICS
   // =====================
 
-  async getRevenueAnalytics(dateRange?: DateRangeDto): Promise<RevenueAnalyticsDto> {
+  async getRevenueAnalytics(
+    dateRange?: DateRangeDto,
+  ): Promise<RevenueAnalyticsDto> {
     const startDate = dateRange?.startDate
       ? new Date(dateRange.startDate)
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const endDate = dateRange?.endDate ? new Date(dateRange.endDate) : new Date();
+    const endDate = dateRange?.endDate
+      ? new Date(dateRange.endDate)
+      : new Date();
 
     try {
       const dailyRevenue = await this.prisma.paymentTransaction.groupBy({
@@ -1227,24 +1495,34 @@ export class AdminService {
       // Group by year
       const yearlyRevenueMap = new Map<string, number>();
 
-      allTransactions.forEach(transaction => {
+      allTransactions.forEach((transaction) => {
         const date = new Date(transaction.createdAt);
         const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
         const yearKey = date.getFullYear().toString();
 
-        monthlyRevenueMap.set(monthKey, (monthlyRevenueMap.get(monthKey) || 0) + transaction.amount);
-        yearlyRevenueMap.set(yearKey, (yearlyRevenueMap.get(yearKey) || 0) + transaction.amount);
+        monthlyRevenueMap.set(
+          monthKey,
+          (monthlyRevenueMap.get(monthKey) || 0) + transaction.amount,
+        );
+        yearlyRevenueMap.set(
+          yearKey,
+          (yearlyRevenueMap.get(yearKey) || 0) + transaction.amount,
+        );
       });
 
-      const monthlyRevenue = Array.from(monthlyRevenueMap.entries()).map(([month, total]) => ({
-        month,
-        total_amount: total,
-      }));
+      const monthlyRevenue = Array.from(monthlyRevenueMap.entries()).map(
+        ([month, total]) => ({
+          month,
+          total_amount: total,
+        }),
+      );
 
-      const yearlyRevenue = Array.from(yearlyRevenueMap.entries()).map(([year, total]) => ({
-        year,
-        total_amount: total,
-      }));
+      const yearlyRevenue = Array.from(yearlyRevenueMap.entries()).map(
+        ([year, total]) => ({
+          year,
+          total_amount: total,
+        }),
+      );
 
       // Get top plans
       const subscriptionsWithRevenue = await this.prisma.subscription.findMany({
@@ -1267,11 +1545,20 @@ export class AdminService {
         },
       });
 
-      const planRevenueMap = new Map<string, { subscription_count: number; total_revenue: number }>();
+      const planRevenueMap = new Map<
+        string,
+        { subscription_count: number; total_revenue: number }
+      >();
 
-      subscriptionsWithRevenue.forEach(sub => {
-        const current = planRevenueMap.get(sub.plan) || { subscription_count: 0, total_revenue: 0 };
-        const userRevenue = sub.user.paymentTransactions.reduce((sum, t) => sum + t.amount, 0);
+      subscriptionsWithRevenue.forEach((sub) => {
+        const current = planRevenueMap.get(sub.plan) || {
+          subscription_count: 0,
+          total_revenue: 0,
+        };
+        const userRevenue = sub.user.paymentTransactions.reduce(
+          (sum, t) => sum + t.amount,
+          0,
+        );
 
         planRevenueMap.set(sub.plan, {
           subscription_count: current.subscription_count + 1,
@@ -1289,7 +1576,7 @@ export class AdminService {
         .slice(0, 10);
 
       return {
-        dailyRevenue: dailyRevenue.map(day => ({
+        dailyRevenue: dailyRevenue.map((day) => ({
           date: day.createdAt.toISOString().split('T')[0],
           amount: day._sum.amount || 0,
         })),
@@ -1426,6 +1713,17 @@ export class AdminService {
         }
       }
 
+      // Invalidate caches after seeding
+      try {
+        await Promise.all(
+          STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
+        );
+      } catch (cacheError) {
+        this.logger.warn(
+          `Failed to invalidate caches after seeding: ${cacheError.message}`,
+        );
+      }
+
       this.logger.log('✅ Database seeded successfully!');
       return { message: 'Database seeded successfully' };
     } catch (error) {
@@ -1438,27 +1736,128 @@ export class AdminService {
   // AI ANALYTICS
   // =====================
 
-  async getAiCreditAnalytics(): Promise<AiCreditAnalyticsDto> {
-    const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+  async getAiCreditAnalytics(
+    duration:
+      | 'yearly'
+      | 'quarterly'
+      | 'monthly'
+      | 'weekly'
+      | 'daily' = 'yearly',
+  ): Promise<AiCreditAnalyticsDto> {
+    const now = new Date();
+    let startDate: Date;
+    let labels: string[];
+    let getKey: (d: Date) => string;
+
+    switch (duration) {
+      case 'daily': {
+        // Last 24 hours, grouped by hour (aligned to hour boundary)
+        const hourAligned = new Date(now);
+        hourAligned.setMinutes(0, 0, 0);
+        startDate = new Date(hourAligned.getTime() - 24 * 60 * 60 * 1000);
+        labels = [];
+        for (let i = 0; i < 24; i++) {
+          const h = new Date(startDate.getTime() + i * 60 * 60 * 1000);
+          labels.push(
+            h.toLocaleString('en-US', { hour: '2-digit', hour12: true }),
+          );
+        }
+        getKey = (d: Date) =>
+          d.toLocaleString('en-US', { hour: '2-digit', hour12: true });
+        break;
+      }
+      case 'weekly': {
+        // Last 7 days, grouped by day (aligned to start of day)
+        const weekStart = new Date(now);
+        weekStart.setHours(0, 0, 0, 0);
+        startDate = new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+        labels = [];
+        for (let i = 0; i < 7; i++) {
+          const day = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+          labels.push(
+            day.toLocaleString('en-US', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+            }),
+          );
+        }
+        getKey = (d: Date) =>
+          d.toLocaleString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+          });
+        break;
+      }
+      case 'monthly': {
+        // Last 30 days, grouped by day (aligned to start of day)
+        const monthStart = new Date(now);
+        monthStart.setHours(0, 0, 0, 0);
+        startDate = new Date(monthStart.getTime() - 30 * 24 * 60 * 60 * 1000);
+        labels = [];
+        for (let i = 0; i < 30; i++) {
+          const day = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+          labels.push(
+            day.toLocaleString('en-US', { month: 'short', day: 'numeric' }),
+          );
+        }
+        getKey = (d: Date) =>
+          d.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+        break;
+      }
+      case 'quarterly': {
+        // Current year grouped by quarter
+        startDate = new Date(now.getFullYear(), 0, 1);
+        labels = ['Q1', 'Q2', 'Q3', 'Q4'];
+        getKey = (d: Date) => {
+          const q = Math.floor(d.getMonth() / 3) + 1;
+          return `Q${q}`;
+        };
+        break;
+      }
+      case 'yearly':
+      default: {
+        // 12 months of current year
+        startDate = new Date(now.getFullYear(), 0, 1);
+        labels = [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
+        getKey = (d: Date) => d.toLocaleString('en-US', { month: 'short' });
+        break;
+      }
+    }
 
     const logs = await this.prisma.activityLog.findMany({
       where: {
         action: 'AI_GENERATION',
-        createdAt: { gte: startOfYear },
+        createdAt: { gte: startDate },
       },
     });
 
-    // Helper to format month
-    const getMonthKey = (d: Date) => d.toLocaleString('default', { month: 'short' });
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
     // Initialize map
-    const dataMap = new Map<string, { elevenLabs: number; gemini: number; total: number }>();
-    months.forEach(m => dataMap.set(m, { elevenLabs: 0, gemini: 0, total: 0 }));
+    const dataMap = new Map<
+      string,
+      { elevenLabs: number; gemini: number; total: number }
+    >();
+    labels.forEach((label) => {
+      dataMap.set(label, { elevenLabs: 0, gemini: 0, total: 0 });
+    });
 
-    logs.forEach(log => {
-      const month = getMonthKey(log.createdAt);
-      if (!dataMap.has(month)) return; // Should allow current year only
+    logs.forEach((log) => {
+      const key = getKey(log.createdAt);
+      if (!dataMap.has(key)) return;
 
       let credits = 1;
       let provider = '';
@@ -1466,19 +1865,21 @@ export class AdminService {
         const details = JSON.parse(log.details || '{}');
         credits = details.credits || 1;
         provider = details.provider || '';
-      } catch (e) {
+      } catch {
         // Fallback
       }
 
-      const entry = dataMap.get(month)!;
-      if (provider === AiProviders.ElevenLabs) entry.elevenLabs += credits;
-      if (provider === AiProviders.Gemini) entry.gemini += credits;
+      const entry = dataMap.get(key)!;
+      if (provider === String(AiProviders.ElevenLabs))
+        entry.elevenLabs += credits;
+      if (provider === String(AiProviders.Gemini)) entry.gemini += credits;
       entry.total += credits;
     });
 
-    const yearly = months.map(m => ({
-      month: m,
-      ...dataMap.get(m)!,
+    const yearly = labels.map((label) => ({
+      label,
+      month: label,
+      ...dataMap.get(label)!,
     }));
 
     return { yearly };
@@ -1488,42 +1889,86 @@ export class AdminService {
   // CUSTOM USER ANALYTICS
   // =====================
 
-  async getUserGrowthMonthly(): Promise<UserGrowthMonthlyDto> {
+  async getUserGrowthMonthly(
+    duration: 'last_year' | 'last_month' | 'last_week' = 'last_year',
+  ): Promise<UserGrowthMonthlyDto> {
     const now = new Date();
-    // 12 months ago from 1st of current month
-    const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1); // Go back 11 months + current = 12
+    let startDate: Date;
+    let genLabels: () => string[];
+    let getLabel: (d: Date) => string;
+
+    switch (duration) {
+      case 'last_week': {
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        getLabel = (d: Date) =>
+          d.toLocaleString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+          });
+        genLabels = () => {
+          const labels: string[] = [];
+          for (let i = 0; i < 7; i++) {
+            const day = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+            labels.push(getLabel(day));
+          }
+          return labels;
+        };
+        break;
+      }
+      case 'last_month': {
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        getLabel = (d: Date) =>
+          d.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+        genLabels = () => {
+          const labels: string[] = [];
+          for (let i = 0; i < 30; i++) {
+            const day = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+            labels.push(getLabel(day));
+          }
+          return labels;
+        };
+        break;
+      }
+      case 'last_year':
+      default: {
+        startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+        getLabel = (d: Date) => d.toLocaleString('en-US', { month: 'short' });
+        genLabels = () => {
+          const labels: string[] = [];
+          const d = new Date(startDate);
+          while (d <= now) {
+            labels.push(getLabel(d));
+            d.setMonth(d.getMonth() + 1);
+          }
+          return [...new Set(labels)];
+        };
+        break;
+      }
+    }
+
+    const labels = genLabels();
 
     const users = await this.prisma.user.findMany({
       where: {
         createdAt: { gte: startDate },
         isDeleted: false,
       },
-      select: { createdAt: true, id: true, subscriptions: { where: { status: 'active' } } }
+      select: {
+        createdAt: true,
+        id: true,
+        subscription: true,
+      },
     });
 
-    const getMonthLabel = (d: Date) => {
-      return d.toLocaleString('default', { month: 'short' });
-    };
+    const freeCounts = new Array(labels.length).fill(0);
+    const paidCounts = new Array(labels.length).fill(0);
 
-    // Generate last 12 month labels
-    const labels: string[] = [];
-    const d = new Date(startDate);
-    while (d <= now) {
-      labels.push(getMonthLabel(d));
-      d.setMonth(d.getMonth() + 1);
-    }
-    // De-dupe labels if 'now' pushes slightly into next month logic or loop edge case
-    const uniqueLabels = [...new Set(labels)];
-
-    // Buckets
-    const freeCounts = new Array(uniqueLabels.length).fill(0);
-    const paidCounts = new Array(uniqueLabels.length).fill(0);
-
-    users.forEach(u => {
-      const label = getMonthLabel(u.createdAt);
-      const index = uniqueLabels.indexOf(label);
+    users.forEach((u) => {
+      const label = getLabel(u.createdAt);
+      const index = labels.indexOf(label);
       if (index !== -1) {
-        const isPaid = u.subscriptions.length > 0;
+        const isPaid = u.subscription?.status === 'active';
         if (isPaid) paidCounts[index]++;
         else freeCounts[index]++;
       }
@@ -1531,17 +1976,21 @@ export class AdminService {
 
     return {
       data: {
-        labels: uniqueLabels,
+        labels,
         freeUsers: freeCounts,
         paidUsers: paidCounts,
-      }
+      },
     };
   }
 
-
-  async getRecentActivity(limit: number = 50): Promise<ActivityLogDto[]> {
+  async getRecentActivity(
+    limit: number = 50,
+    userId?: string,
+  ): Promise<ActivityLogDto[]> {
+    const trimmed = userId?.trim();
+    if (userId !== undefined && !trimmed) return [];
     const activities = await this.prisma.activityLog.findMany({
-      where: { isDeleted: false },
+      where: { isDeleted: false, ...(trimmed && { userId: trimmed }) },
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -1562,7 +2011,7 @@ export class AdminService {
       },
     });
 
-    return activities.map(activity => ({
+    return activities.map((activity) => ({
       id: activity.id,
       userId: activity.userId || undefined,
       kidId: activity.kidId || undefined,
@@ -1585,12 +2034,15 @@ export class AdminService {
   // SYSTEM MANAGEMENT
   // =====================
 
-  async createBackup(): Promise<{ message: string; timestamp: Date }> {
+  createBackup(): { message: string; timestamp: Date } {
     // Implement backup logic based on your database
     return { message: 'Backup created successfully', timestamp: new Date() };
   }
 
-  async getSystemLogs(level?: string, limit: number = 100): Promise<ActivityLogDto[]> {
+  async getSystemLogs(
+    level?: string,
+    limit: number = 100,
+  ): Promise<ActivityLogDto[]> {
     const where: Prisma.ActivityLogWhereInput = { isDeleted: false };
     if (level) where.status = level;
 
@@ -1609,7 +2061,7 @@ export class AdminService {
       },
     });
 
-    return logs.map(log => ({
+    return logs.map((log) => ({
       id: log.id,
       userId: log.userId || undefined,
       kidId: log.kidId || undefined,
@@ -1653,7 +2105,7 @@ export class AdminService {
       orderBy: { startedAt: 'desc' },
     });
 
-    return subscriptions.map(sub => ({
+    return subscriptions.map((sub) => ({
       id: sub.id,
       plan: sub.plan,
       status: sub.status,
@@ -1673,9 +2125,13 @@ export class AdminService {
     return this.elevenLabsProvider.getSubscriptionInfo();
   }
 
-  async getAllSupportTickets(page: number = 1, limit: number = 10, status?: string) {
+  async getAllSupportTickets(
+    page: number = 1,
+    limit: number = 10,
+    status?: string,
+  ) {
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.SupportTicketWhereInput = {};
     if (status) where.status = status;
 
     const [tickets, total] = await Promise.all([
@@ -1705,9 +2161,221 @@ export class AdminService {
   }
 
   async updateSupportTicket(id: string, status: string) {
-    return this.prisma.supportTicket.update({
+    return await this.prisma.supportTicket.update({
       where: { id },
       data: { status },
+    });
+  }
+
+  // =====================
+  // EXPORT ENDPOINTS
+  // =====================
+
+  private sanitizeCsv(value: string | null | undefined): string {
+    const escaped = (value || '').replace(/"/g, '""');
+    if (/^[=+\-@\t\r]/.test(escaped)) {
+      return `\t${escaped}`;
+    }
+    return escaped;
+  }
+
+  async exportUsersAsCsv(filters: UserFilterDto): Promise<string> {
+    // Paginate through all matching users
+    const pageSize = 1000;
+    let page = 1;
+    const allUsers: any[] = [];
+    while (true) {
+      const result = await this.getAllUsers({
+        ...filters,
+        page,
+        limit: pageSize,
+      });
+      allUsers.push(...result.data);
+      if (result.data.length < pageSize) break;
+      page++;
+    }
+
+    const headers = [
+      'ID',
+      'Email',
+      'Name',
+      'Role',
+      'Email Verified',
+      'Is Paid',
+      'Subscription Plan',
+      'Registration Date',
+      'Is Deleted',
+      'Is Suspended',
+    ];
+
+    const rows = allUsers.map((user: any) => [
+      user.id,
+      `"${this.sanitizeCsv(user.email)}"`,
+      `"${this.sanitizeCsv(user.name)}"`,
+      user.role,
+      user.isEmailVerified,
+      user.isPaidUser,
+      user.activeSubscription?.plan || '',
+      user.registrationDate
+        ? new Date(user.registrationDate).toISOString()
+        : '',
+      user.isDeleted,
+      user.isSuspended || false,
+    ]);
+
+    const csv = [
+      headers.join(','),
+      ...rows.map((r: any[]) => r.join(',')),
+    ].join('\n');
+    return csv;
+  }
+
+  async exportAnalyticsData(
+    type: 'users' | 'revenue' | 'subscriptions',
+    format: 'csv' | 'json' = 'csv',
+    startDate?: string,
+    endDate?: string,
+  ): Promise<{ data: any; contentType: string; filename: string }> {
+    const dateRange = { startDate, endDate };
+
+    let rawData: any;
+    let csvContent = '';
+    let filename: string;
+
+    switch (type) {
+      case 'users': {
+        const growth = await this.getUserGrowth(dateRange);
+        rawData = growth;
+        filename = `users-analytics-${new Date().toISOString().split('T')[0]}`;
+        if (format === 'csv') {
+          const headers = [
+            'Date',
+            'New Users',
+            'Paid Users',
+            'Total Users',
+            'Total Paid Users',
+          ];
+          const rows = growth.map((g) =>
+            [
+              g.date,
+              g.newUsers,
+              g.paidUsers,
+              g.totalUsers,
+              g.totalPaidUsers,
+            ].join(','),
+          );
+          csvContent = [headers.join(','), ...rows].join('\n');
+        }
+        break;
+      }
+      case 'revenue': {
+        const revenue = await this.getRevenueAnalytics(dateRange);
+        rawData = revenue;
+        filename = `revenue-analytics-${new Date().toISOString().split('T')[0]}`;
+        if (format === 'csv') {
+          const headers = ['Date', 'Amount'];
+          const rows = revenue.dailyRevenue.map((r) =>
+            [r.date, r.amount].join(','),
+          );
+          csvContent = [headers.join(','), ...rows].join('\n');
+        }
+        break;
+      }
+      case 'subscriptions': {
+        const subs = await this.getSubscriptionAnalytics(dateRange);
+        rawData = subs;
+        filename = `subscriptions-analytics-${new Date().toISOString().split('T')[0]}`;
+        if (format === 'csv') {
+          const headers = ['Date', 'Count'];
+          const rows = subs.subscriptionGrowth.map((s) =>
+            [s.date, s.count].join(','),
+          );
+          csvContent = [headers.join(','), ...rows].join('\n');
+        }
+        break;
+      }
+      default:
+        throw new BadRequestException(`Invalid export type: ${type as string}`);
+    }
+
+    if (format === 'json') {
+      return {
+        data: rawData,
+        contentType: 'application/json',
+        filename: `${filename}.json`,
+      };
+    }
+
+    return {
+      data: csvContent,
+      contentType: 'text/csv',
+      filename: `${filename}.csv`,
+    };
+  }
+
+  // =====================
+  // USER SUSPENSION
+  // =====================
+
+  async suspendUser(userId: string): Promise<any> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    if (user.isSuspended) {
+      throw new BadRequestException('User is already suspended');
+    }
+
+    if (user.role === Role.admin) {
+      throw new BadRequestException('Cannot suspend an admin user');
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isSuspended: true,
+        suspendedAt: new Date(),
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isSuspended: true,
+        suspendedAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async unsuspendUser(userId: string): Promise<any> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    if (!user.isSuspended) {
+      throw new BadRequestException('User is not suspended');
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isSuspended: false,
+        suspendedAt: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isSuspended: true,
+        suspendedAt: true,
+        updatedAt: true,
+      },
     });
   }
 
@@ -1717,7 +2385,7 @@ export class AdminService {
     // Filter for tickets with specific subject
     const where: Prisma.SupportTicketWhereInput = {
       subject: 'Delete Account Request',
-      isDeleted: false
+      isDeleted: false,
     };
 
     const [tickets, total] = await Promise.all([
@@ -1735,13 +2403,18 @@ export class AdminService {
       this.prisma.supportTicket.count({ where }),
     ]);
 
-    const parsedTickets = tickets.map(ticket => {
+    const parsedTickets = tickets.map((ticket) => {
       const message = ticket.message || '';
 
       // Extract reasons
       const reasonsMatch = message.match(/Reasons: (.*?)(\n|$)/);
       const reasonsString = reasonsMatch ? reasonsMatch[1] : '';
-      const reasons = reasonsString ? reasonsString.split(',').map(r => r.trim()).filter(Boolean) : [];
+      const reasons = reasonsString
+        ? reasonsString
+            .split(',')
+            .map((r) => r.trim())
+            .filter(Boolean)
+        : [];
 
       // Extract notes
       const notesMatch = message.match(/Notes: (.*?)(\n|$)/);
@@ -1759,7 +2432,7 @@ export class AdminService {
         notes,
         createdAt: ticket.createdAt,
         status: ticket.status,
-        isPermanent
+        isPermanent,
       };
     });
 

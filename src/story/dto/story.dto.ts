@@ -4,7 +4,6 @@ import {
   IsArray,
   IsBoolean,
   IsDate,
-  IsEnum,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -12,9 +11,7 @@ import {
   IsString,
   IsUUID,
   Max,
-  MaxLength,
   Min,
-  MinLength,
   ValidateNested,
 } from 'class-validator';
 export { VoiceType } from '@/voice/dto/voice.dto';
@@ -252,9 +249,16 @@ export class UserStoryProgressDto {
   @IsBoolean()
   completed?: boolean;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({
+    required: false,
+    minimum: 0,
+    maximum: 86400,
+    description: 'Session time in seconds (max 24h)',
+  })
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(86400)
   sessionTime?: number;
 }
 
@@ -436,7 +440,7 @@ export class ErrorResponseDto {
   @ApiProperty({ example: 400, required: false })
   statusCode?: number;
   @ApiProperty({ required: false, description: 'Additional error details' })
-  details?: any;
+  details?: Record<string, unknown>;
 }
 
 export class GenerateStoryDto {
@@ -445,7 +449,6 @@ export class GenerateStoryDto {
   @IsArray()
   @IsString({ each: true })
   themes?: string[];
-
 
   @ApiProperty({ type: [String], required: false })
   @IsOptional()
@@ -529,13 +532,36 @@ export class PaginatedStoriesDto {
     isArray: true,
   })
   @IsArray()
-  data: any[];
+  data: Record<string, unknown>[];
 
   @ApiProperty({
     description: 'Pagination metadata',
     type: PaginationMetaDto,
   })
   pagination: PaginationMetaDto;
+}
+
+export class CursorPaginationMetaDto {
+  @ApiProperty({ description: 'Cursor for next page', nullable: true })
+  nextCursor: string | null;
+
+  @ApiProperty({ description: 'Whether more items exist' })
+  hasNextPage: boolean;
+}
+
+export class CursorPaginatedStoriesDto<T = Record<string, unknown>> {
+  @ApiProperty({
+    description: 'Array of paginated records',
+    isArray: true,
+  })
+  @IsArray()
+  data: T[];
+
+  @ApiProperty({
+    description: 'Cursor pagination metadata',
+    type: CursorPaginationMetaDto,
+  })
+  pagination: CursorPaginationMetaDto;
 }
 
 export class DownloadedStoryDto {
@@ -632,10 +658,10 @@ export class RecommendationResponseDto {
   story?: CreateStoryDto;
 
   @ApiProperty({ required: false })
-  user?: any;
+  user?: { id: string; name?: string | null; email?: string };
 
   @ApiProperty({ required: false })
-  kid?: any;
+  kid?: { id: string; name?: string | null };
 }
 
 export class RecommendationsStatsDto {
@@ -644,7 +670,9 @@ export class RecommendationsStatsDto {
 }
 
 export class TopPickStoryDto extends StoryDto {
-  @ApiProperty({ description: 'Number of times this story has been recommended by parents' })
+  @ApiProperty({
+    description: 'Number of times this story has been recommended by parents',
+  })
   @IsNumber()
   recommendationCount: number;
 
@@ -699,4 +727,33 @@ export class RestrictStoryDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+// --- Concrete cursor-paginated response DTOs (Swagger-friendly) ---
+
+export class CursorPaginatedStoryResponse {
+  @ApiProperty({ type: [StoryDto] })
+  @IsArray()
+  data: StoryDto[];
+
+  @ApiProperty({ type: CursorPaginationMetaDto })
+  pagination: CursorPaginationMetaDto;
+}
+
+export class CursorPaginatedStoryWithProgressResponse {
+  @ApiProperty({ type: [StoryWithProgressDto] })
+  @IsArray()
+  data: StoryWithProgressDto[];
+
+  @ApiProperty({ type: CursorPaginationMetaDto })
+  pagination: CursorPaginationMetaDto;
+}
+
+export class CursorPaginatedFavoriteResponse {
+  @ApiProperty({ type: [FavoriteDto] })
+  @IsArray()
+  data: FavoriteDto[];
+
+  @ApiProperty({ type: CursorPaginationMetaDto })
+  pagination: CursorPaginationMetaDto;
 }

@@ -5,15 +5,24 @@ on:
     branches: ['release-v*.*.*']
     types: [opened, synchronize, closed]
 
+concurrency:
+  group: staging-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
 jobs:
-  build-and-test:
+  # ===================
+  # Quality Checks (runs on all events)
+  # ===================
+  quality:
+    name: Code Quality
     runs-on: ubuntu-latest
-    environment: staging
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -21,31 +30,238 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-
-      - name: Create .env file
-        run: echo "${{ secrets.ENV_FILE }}" > .env
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Format check
+        run: pnpm run format -- --check
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Security audit
+        continue-on-error: true
+        run: pnpm audit --audit-level=high
+
+  # ===================
+  # Build (runs on all events)
+  # ===================
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storytime_build
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: storytime_build
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Create .env file
+        run: |
+          cat > .env << 'EOF'
+          ${{ secrets.ENV_FILE }}
+          EOF
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
       - name: Build
-        run: pnpm generate && pnpm build
+        run: pnpm build
 
-    # - name: Run tests
-    #   run: pnpm test
+      - name: Cleanup sensitive files
+        if: always()
+        run: rm -f .env
 
+  # ===================
+  # Test (runs on all events)
+  # ===================
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storytime_test
+      REDIS_URL: redis://localhost:6379
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: storytime_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Create .env file
+        run: |
+          cat > .env << 'EOF'
+          ${{ secrets.ENV_FILE }}
+          EOF
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Run database migrations
+        run: pnpm db:migrate:deploy
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Cleanup sensitive files
+        if: always()
+        run: rm -f .env
+
+  # ===================
+  # Auto-fix Formatting (only on open/sync, not on merge)
+  # ===================
+  auto-format:
+    name: Auto-fix Formatting
+    runs-on: ubuntu-latest
+    needs: [quality]
+    if: github.event.action != 'closed'
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Auto-fix formatting
+        run: |
+          pnpm run format || true
+          pnpm run lint --fix || true
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: auto-fix formatting and linting issues"
+          branch: ${{ github.head_ref }}
+
+  # ===================
+  # Deploy to Staging (only on merge, requires build/test success)
+  # ===================
   deploy:
-    needs: build-and-test
-    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    name: Deploy to Staging
+    needs: [build, test]
+    if: success() && github.event.action == 'closed' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
-    environment: staging
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_APP_URL }}
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -53,39 +269,139 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
 
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
       - name: Create .env file
-        run: echo "${{ secrets.ENV_FILE }}" > .env
+        run: |
+          cat > .env << 'EOF'
+          ${{ secrets.ENV_FILE }}
+          EOF
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm generate && pnpm build && npx prisma migrate deploy
+      - name: Build application
+        run: pnpm db:generate && pnpm build
 
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@master
+      - name: Run database migrations
+        run: pnpm db:migrate:deploy
+
+      - name: Seed database
+        run: pnpm db:seed
+
+      - name: Prepare deployment directory
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             mkdir -p /home/ubuntu/storytime/staging/storytime-api
-            exit 0
 
-      - name: Sync files and restart app
+      - name: Setup SSH key
         run: |
           echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
           chmod 600 /tmp/ssh_key
 
-          rsync -avz --exclude='.git' --exclude='.github' \
-            -e "ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no" \
+      - name: Add server host key
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          ssh-keyscan -H "$EC2_HOST" > /tmp/known_hosts
+          chmod 600 /tmp/known_hosts
+
+      - name: Sync files to server
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='.env.local' \
+            --exclude='coverage' \
+            --exclude='.turbo' \
+            -e "ssh -i /tmp/ssh_key -o UserKnownHostsFile=/tmp/known_hosts -o StrictHostKeyChecking=yes" \
             ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/staging/storytime-api/
 
-          ssh -i /tmp/ssh_key -o StrictHostKeyChecking=no \
-            ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} \
-            'bash -l -c "source ~/.nvm/nvm.sh && cd /home/ubuntu/storytime/staging/storytime-api && pnpm install --frozen-lockfile && pnpm deploy:staging"'
+      - name: Install dependencies and restart application
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            source ~/.nvm/nvm.sh
+            cd /home/ubuntu/storytime/staging/storytime-api
+            [ -f .env ] && chmod 600 .env
 
-          rm -f /tmp/ssh_key
+            # Install Node dependencies
+            pnpm install --frozen-lockfile
+
+            # Setup Python virtual environment for scripts
+            cd scripts
+            python3 -m venv .venv
+            .venv/bin/pip install -q -r requirements.txt
+            cd ..
+
+            # Restart application
+            pnpm deploy:staging
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Wait for app to start
+            sleep 10
+
+            # Health check
+            curl -sf http://localhost:3500/api/v1/health || exit 1
+
+            echo "Staging deployment verified successfully"
+
+      - name: Comment deployment status
+        if: success()
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `**Deployed to Staging**\n\nCommit: \`${context.sha.substring(0, 7)}\`\nTime: ${new Date().toISOString()}`
+            });
+
+      - name: Comment deployment failure
+        if: failure()
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `**Staging Deployment Failed**\n\nCommit: \`${context.sha.substring(0, 7)}\`\nCheck the [workflow logs](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.`
+            });
+
+      - name: Cleanup sensitive files
+        if: always()
+        run: |
+          rm -f /tmp/ssh_key /tmp/known_hosts
+          rm -f .env

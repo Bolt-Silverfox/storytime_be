@@ -1,5 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { NotificationCategory as PrismaCategory, NotificationType as PrismaType } from '@prisma/client';
+import { IsArray, IsBoolean, IsOptional, IsUUID } from 'class-validator';
+import {
+  NotificationCategory as PrismaCategory,
+  NotificationType as PrismaType,
+} from '@prisma/client';
 
 export const NotificationType = PrismaType;
 export type NotificationType = PrismaType;
@@ -32,6 +36,19 @@ export class CreateNotificationPreferenceDto {
 
 export class UpdateNotificationPreferenceDto {
   @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+}
+
+export class BulkUpdateNotificationPreferenceDto {
+  @ApiProperty()
+  @IsUUID()
+  id: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
   enabled?: boolean;
 }
 
@@ -78,7 +95,7 @@ export class NotificationDto {
   body: string;
 
   @ApiProperty()
-  data: any;
+  data: Record<string, unknown> | null;
 
   @ApiProperty()
   isRead: boolean;
@@ -89,6 +106,8 @@ export class NotificationDto {
 
 export class MarkReadDto {
   @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsUUID('4', { each: true })
   notificationIds: string[];
 }
 

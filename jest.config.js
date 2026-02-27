@@ -12,5 +12,7 @@ module.exports = {
     moduleNameMapper: {
       '^@/(.*)$': '<rootDir>/src/$1',
       '^src/(.*)$': '<rootDir>/src/$1',
+      '^googleapis$': '<rootDir>/__mocks__/googleapis.ts',
+      '^@andresaya/edge-tts$': '<rootDir>/__mocks__/@andresaya/edge-tts.ts',
     },
   };

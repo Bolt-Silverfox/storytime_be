@@ -2,12 +2,12 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { PrismaService } from '@/prisma/prisma.service';
 
@@ -26,12 +26,13 @@ export interface AuthenticatedRequest extends Request {
 
 @Injectable()
 export class AuthSessionGuard implements CanActivate {
+  private readonly logger = new Logger(AuthSessionGuard.name);
+
   constructor(
-    private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
-  ) { }
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -67,8 +68,12 @@ export class AuthSessionGuard implements CanActivate {
         where: { id: payload.authSessionId },
       });
 
-      if (!session) {
+      if (!session || session.isDeleted) {
         throw new UnauthorizedException('Session invalid or expired');
+      }
+
+      if (session.expiresAt < new Date()) {
+        throw new UnauthorizedException('Session expired');
       }
 
       (request as AuthenticatedRequest).authUserData = payload;
@@ -77,7 +82,8 @@ export class AuthSessionGuard implements CanActivate {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      throw new UnauthorizedException(error.message);
+      this.logger.error('AuthGuard error', error);
+      throw new UnauthorizedException('Authentication failed');
     }
   }
 }

@@ -1,4 +1,15 @@
 import { PrismaService } from '../prisma/prisma.service';
+
+/** Max session time in seconds (24 h), matching the DTO contract. */
+const MAX_SESSION_TIME = 86_400;
+
+/** Parse, clamp and floor a raw sessionTime value to a safe integer in [0, MAX_SESSION_TIME]. */
+function normalizeSessionTime(value: unknown): number {
+  const raw = Number(value ?? 0);
+  return Number.isFinite(raw)
+    ? Math.min(Math.max(0, Math.floor(raw)), MAX_SESSION_TIME)
+    : 0;
+}
 import {
   CreateStoryDto,
   UpdateStoryDto,
@@ -16,6 +27,7 @@ import {
   CategoryDto,
   ThemeDto,
   PaginatedStoriesDto,
+  CursorPaginatedStoriesDto,
   ParentRecommendationDto,
   RecommendationResponseDto,
   RecommendationsStatsDto,
@@ -27,12 +39,13 @@ import {
 import { UploadService } from '../upload/upload.service';
 import {
   StoryPath,
-  Voice,
   DailyChallengeAssignment,
   Category,
   Theme,
   DailyChallenge,
+  ParentRecommendation,
 } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TextToSpeechService } from './text-to-speech.service';
 import {
@@ -43,10 +56,19 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { GeminiService, GenerateStoryOptions } from './gemini.service';
+import {
+  GeminiService,
+  GenerateStoryOptions,
+  GeneratedStory,
+} from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
-import { VoiceType } from '../voice/dto/voice.dto';
+import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
+import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
+import {
+  DEFAULT_CURSOR_LIMIT,
+  PaginationUtil,
+} from '@/shared/utils/pagination.util';
 
 @Injectable()
 export class StoryService {
@@ -54,45 +76,72 @@ export class StoryService {
   // Average reading speed for children: ~150 words per minute
   private readonly WORDS_PER_MINUTE = 150;
 
+  /** Wraps a Prisma query to handle invalid cursor IDs gracefully */
+  private async withCursorErrorHandling<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new BadRequestException('Invalid cursor: record not found');
+      }
+      throw error;
+    }
+  }
+
+  /** Invalidate all story-related caches */
+  private async invalidateStoryCaches(): Promise<void> {
+    try {
+      await Promise.all(
+        STORY_INVALIDATION_KEYS.map((key) => this.cacheManager.del(key)),
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to invalidate story caches: ${msg}`);
+    }
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
-  ) { }
+  ) {}
 
   /**
    * Calculate estimated reading duration in seconds based on text content or word count
    */
   calculateDurationSeconds(textOrWordCount: string | number): number {
-    const wordCount = typeof textOrWordCount === 'string'
-      ? textOrWordCount.split(/\s+/).filter(word => word.length > 0).length
-      : textOrWordCount;
+    const wordCount =
+      typeof textOrWordCount === 'string'
+        ? textOrWordCount.split(/\s+/).filter((word) => word.length > 0).length
+        : textOrWordCount;
 
-    if (wordCount <= 0) return 0;
+    if (!Number.isFinite(wordCount) || wordCount <= 0) return 0;
 
     // Convert words per minute to seconds: (wordCount / wordsPerMinute) * 60
     return Math.ceil((wordCount / this.WORDS_PER_MINUTE) * 60);
   }
 
-  async getStories(filter: {
+  private async buildStoryWhereClause(filter: {
     theme?: string;
     category?: string;
     season?: string;
     recommended?: boolean;
+    isMostLiked?: boolean;
+    isSeasonal?: boolean;
     age?: number;
     minAge?: number;
     maxAge?: number;
     kidId?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<PaginatedStoriesDto> {
-    const page = filter.page || 1;
-    const limit = filter.limit || 12;
-    const skip = (page - 1) * limit;
-
-    const where: any = {
+  }): Promise<{
+    where: Prisma.StoryWhereInput;
+    recommendedStoryIds: string[];
+  }> {
+    const where: Prisma.StoryWhereInput = {
       isDeleted: false,
     };
 
@@ -100,22 +149,60 @@ export class StoryService {
     if (filter.category) {
       where.categories = { some: { id: filter.category } };
     }
-    if (filter.season) {
-      where.seasons = { some: { id: filter.season } };
+    // Seasonal Filter (Dynamic based on date)
+    if (filter.isSeasonal) {
+      const { activeSeasons, backfillSeasons } =
+        await this.getRelevantSeasons();
+      const seasonIds = [...activeSeasons.map((s) => s.id)];
+
+      if (backfillSeasons.length > 0) {
+        seasonIds.push(...backfillSeasons.map((s) => s.id));
+      }
+
+      if (seasonIds.length > 0) {
+        where.seasons = {
+          some: {
+            id: { in: seasonIds },
+          },
+        };
+      } else {
+        where.seasons = { some: { id: 'non-existent-id' } };
+      }
     }
+
     if (filter.recommended !== undefined && !filter.kidId) {
       where.recommended = filter.recommended;
     }
 
     let targetLevel: number | undefined;
+    let recommendedStoryIds: string[] = [];
+    let restrictedStoryIds: string[] = [];
 
+    // Batch kid-related queries into a single call to avoid N+1
     if (filter.kidId) {
       const kid = await this.prisma.kid.findUnique({
         where: { id: filter.kidId, isDeleted: false },
-        include: { preferredCategories: true },
+        include: {
+          preferredCategories: true,
+          // Fetch parent recommendations in the same query
+          parentRecommendations: {
+            where: { isDeleted: false },
+            select: { storyId: true },
+          },
+          // Fetch restricted stories in the same query
+          restrictedStories: {
+            select: { storyId: true },
+          },
+        },
       });
 
       if (kid) {
+        // Extract recommended and restricted story IDs from the batch query
+        recommendedStoryIds = kid.parentRecommendations.map(
+          (rec) => rec.storyId,
+        );
+        restrictedStoryIds = kid.restrictedStories.map((r) => r.storyId);
+
         if (kid.currentReadingLevel > 0) {
           targetLevel = kid.currentReadingLevel;
           where.difficultyLevel = {
@@ -149,67 +236,129 @@ export class StoryService {
     }
 
     // Add minAge and maxAge filter logic
-    if ((filter.minAge !== undefined || filter.maxAge !== undefined) && !targetLevel) {
+    if (
+      (filter.minAge !== undefined || filter.maxAge !== undefined) &&
+      !targetLevel
+    ) {
       // Overlap logic: story.ageMin <= filter.maxAge AND story.ageMax >= filter.minAge
       if (filter.minAge !== undefined) {
-        where.ageMax = { ...where.ageMax, gte: filter.minAge };
+        where.ageMax = {
+          ...((where.ageMax as object) || {}),
+          gte: filter.minAge,
+        };
       }
       if (filter.maxAge !== undefined) {
-        where.ageMin = { ...where.ageMin, lte: filter.maxAge };
+        where.ageMin = {
+          ...((where.ageMin as object) || {}),
+          lte: filter.maxAge,
+        };
       }
-    }
-
-    let recommendedStoryIds: string[] = [];
-    if (filter.kidId && filter.recommended !== false) {
-      const recommendations = await this.prisma.parentRecommendation.findMany({
-        where: { kidId: filter.kidId, isDeleted: false },
-        select: { storyId: true },
-      });
-      recommendedStoryIds = recommendations.map((rec) => rec.storyId);
     }
 
     if (recommendedStoryIds.length > 0 && filter.recommended === undefined) {
-      where.OR = [
-        { ...where },
-        { id: { in: recommendedStoryIds } },
-      ];
+      const recommendedClause: Prisma.StoryWhereInput = {
+        id: { in: recommendedStoryIds },
+      };
+
+      // If seasonal filter is active, enforce it on recommended stories too
+      if (filter.isSeasonal && where.seasons) {
+        recommendedClause.seasons = where.seasons;
+      }
+
+      where.OR = [{ ...(where as object) }, recommendedClause];
     }
 
-    // Exclude restricted stories if kidId is provided
-    if (filter.kidId) {
-      const restrictedStories = await this.prisma.restrictedStory.findMany({
-        where: { kidId: filter.kidId },
-        select: { storyId: true },
-      });
-      const restrictedStoryIds = restrictedStories.map((r) => r.storyId);
-      if (restrictedStoryIds.length > 0) {
-        where.id = { notIn: restrictedStoryIds, ...where.id };
-      }
+    // Exclude restricted stories (already fetched in batch query above)
+    if (restrictedStoryIds.length > 0) {
+      where.id = { notIn: restrictedStoryIds, ...((where.id as object) || {}) };
     }
 
     if (filter.recommended === true && filter.kidId) {
       where.id = { in: recommendedStoryIds };
     }
 
-    const totalCount = await this.prisma.story.count({ where });
-    const totalPages = Math.ceil(totalCount / limit);
+    return { where, recommendedStoryIds };
+  }
 
-    const stories = await this.prisma.story.findMany({
-      where,
-      skip,
-      take: limit,
-      include: {
-        images: true,
-        branches: true,
-        categories: true,
-        themes: true,
-        seasons: true,
-        questions: true,
-      },
-    });
+  async getStories(filter: {
+    userId: string;
+    theme?: string;
+    category?: string;
+    season?: string;
+    recommended?: boolean;
+    isMostLiked?: boolean;
+    isSeasonal?: boolean;
+    topPicksFromUs?: boolean;
+    age?: number;
+    minAge?: number;
+    maxAge?: number;
+    kidId?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedStoriesDto> {
+    const page = filter.page || 1;
+    const limit = filter.limit || 12;
+    const skip = (page - 1) * limit;
+
+    const { where } = await this.buildStoryWhereClause(filter);
+
+    // Handle topPicksFromUs filter - get random stories using shared helper
+    if (filter.topPicksFromUs) {
+      const randomStoryIds = await this.getRandomStoryIds(limit, skip);
+
+      if (randomStoryIds.length === 0) {
+        return {
+          data: [],
+          pagination: {
+            currentPage: page,
+            totalPages: 0,
+            pageSize: limit,
+            totalCount: 0,
+          },
+        };
+      }
+
+      // Apply random IDs to where clause
+      where.id = { in: randomStoryIds, ...((where.id as object) || {}) };
+    }
+
+    const orderBy = filter.isMostLiked
+      ? [
+          { parentFavorites: { _count: 'desc' as const } },
+          { createdAt: 'desc' as const },
+          { id: 'asc' as const },
+        ]
+      : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
+
+    // Run count and findMany in parallel to reduce latency by ~50%
+    // For topPicksFromUs, pagination is handled in the raw SQL query
+    const [totalCount, stories] = await Promise.all([
+      filter.topPicksFromUs
+        ? this.prisma.story.count({ where: { isDeleted: false } })
+        : this.prisma.story.count({ where }),
+      this.prisma.story.findMany({
+        where,
+        ...(filter.topPicksFromUs ? {} : { skip, take: limit }),
+        orderBy,
+        include: {
+          images: true,
+          branches: true,
+          categories: true,
+          themes: true,
+          seasons: true,
+          questions: true,
+        },
+      }),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+    const enrichedStories = await this.enrichWithReadStatus(
+      filter.userId,
+      stories,
+    );
 
     return {
-      data: stories,
+      data: this.sortByReadStatus(enrichedStories),
       pagination: {
         currentPage: page,
         totalPages,
@@ -217,6 +366,172 @@ export class StoryService {
         totalCount,
       },
     };
+  }
+
+  async getStoriesCursor(filter: {
+    userId: string;
+    theme?: string;
+    category?: string;
+    season?: string;
+    isSeasonal?: boolean;
+    age?: number;
+    minAge?: number;
+    maxAge?: number;
+    kidId?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<CursorPaginatedStoriesDto> {
+    const limit = filter.limit ?? DEFAULT_CURSOR_LIMIT;
+    const { where } = await this.buildStoryWhereClause(filter);
+
+    const orderBy = [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
+
+    const stories = await this.withCursorErrorHandling(() =>
+      this.prisma.story.findMany({
+        where,
+        take: limit + 1,
+        ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
+        orderBy,
+        include: {
+          images: true,
+          branches: true,
+          categories: true,
+          themes: true,
+          seasons: true,
+          questions: true,
+        },
+      }),
+    );
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      stories,
+      limit,
+    );
+    const enriched = await this.enrichWithReadStatus(filter.userId, data);
+
+    return { data: this.sortByReadStatus(enriched), pagination };
+  }
+
+  private mapProgressRecord(record: {
+    id: string;
+    progress: number;
+    totalTimeSpent: number;
+    lastAccessed: Date;
+    story: Record<string, unknown>;
+  }) {
+    return {
+      ...record.story,
+      progressId: record.id,
+      progress: record.progress,
+      totalTimeSpent: record.totalTimeSpent,
+      lastAccessed: record.lastAccessed,
+    };
+  }
+
+  // Sort stories so unread appear first, then reading, then done.
+  // Preserves original order within each group (stable sort).
+  // Applied post-fetch: pagination cursors use DB order (createdAt/id),
+  // so items may shift within a page if readStatus changes between requests.
+  private sortByReadStatus<T extends { readStatus: 'done' | 'reading' | null }>(
+    stories: T[],
+  ): T[] {
+    const order: Record<string, number> = { done: 2, reading: 1 };
+    return [...stories].sort(
+      (a, b) =>
+        (order[a.readStatus ?? ''] ?? 0) - (order[b.readStatus ?? ''] ?? 0),
+    );
+  }
+
+  private async enrichWithReadStatus<T extends { id: string }>(
+    userId: string,
+    stories: T[],
+  ): Promise<(T & { readStatus: 'done' | 'reading' | null })[]> {
+    const storyIds = [...new Set(stories.map((s) => s.id))];
+    if (storyIds.length === 0)
+      return stories.map((s) => ({
+        ...s,
+        readStatus: null as 'done' | 'reading' | null,
+      }));
+
+    const readProgress = await this.prisma.userStoryProgress.findMany({
+      where: { userId, storyId: { in: storyIds }, isDeleted: false },
+      select: { storyId: true, completed: true },
+    });
+    const progressMap = new Map(
+      readProgress.map((p) => [p.storyId, p.completed]),
+    );
+
+    return stories.map((story) => {
+      const progress = progressMap.get(story.id);
+      return {
+        ...story,
+        readStatus:
+          progress === undefined ? null : progress ? 'done' : 'reading',
+      };
+    });
+  }
+
+  // Threshold in days to consider a past season as "recent" for backfill
+  private readonly RECENT_SEASON_THRESHOLD_DAYS = 45;
+
+  private async getRelevantSeasons() {
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    const currentDay = today.getDate(); // 1-31
+    const currentDateStr = `${currentMonth
+      .toString()
+      .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
+
+    const allSeasons = await this.prisma.season.findMany({
+      where: { isDeleted: false },
+    });
+
+    const activeSeasons = allSeasons.filter((s) => {
+      if (!s.isActive) return false;
+      if (!s.startDate || !s.endDate) return false;
+
+      if (s.startDate > s.endDate) {
+        return currentDateStr >= s.startDate || currentDateStr <= s.endDate;
+      }
+      return currentDateStr >= s.startDate && currentDateStr <= s.endDate;
+    });
+
+    const backfillSeasons = allSeasons.filter((s) => {
+      if (activeSeasons.find((active) => active.id === s.id)) return false;
+      if (!s.startDate || !s.endDate) return false;
+
+      const [endMonth, endDay] = s.endDate.split('-').map(Number);
+
+      const seasonEndDate = new Date(today.getFullYear(), endMonth - 1, endDay);
+
+      const diffTime = today.getTime() - seasonEndDate.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays >= 0 && diffDays <= this.RECENT_SEASON_THRESHOLD_DAYS) {
+        return true;
+      }
+
+      if (diffDays < 0) {
+        const lastYearEnd = new Date(
+          today.getFullYear() - 1,
+          endMonth - 1,
+          endDay,
+        );
+        const diffLastYear = Math.ceil(
+          (today.getTime() - lastYearEnd.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        if (
+          diffLastYear >= 0 &&
+          diffLastYear <= this.RECENT_SEASON_THRESHOLD_DAYS
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+
+    return { activeSeasons, backfillSeasons };
   }
 
   async getHomePageStories(
@@ -235,7 +550,8 @@ export class StoryService {
     }
 
     // 1. Recommended Stories (based on preferred categories)
-    let recommended: any[] = [];
+    let recommended: Awaited<ReturnType<typeof this.prisma.story.findMany>> =
+      [];
     if (user.preferredCategories.length > 0) {
       recommended = await this.prisma.story.findMany({
         where: {
@@ -248,41 +564,22 @@ export class StoryService {
         },
         take: limitRecommended,
         include: { images: true, categories: true },
+        orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
       });
     } else {
       // Fallback if no preferences: just fresh stories
       recommended = await this.prisma.story.findMany({
         where: { isDeleted: false },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
         take: limitRecommended,
         include: { images: true, categories: true },
       });
     }
 
     // 2. Seasonal Stories (Logic: find active season based on today's date)
-    const today = new Date();
-    const currentMonth = today.getMonth() + 1; // 1-12
-    const currentDay = today.getDate(); // 1-31
-    const currentDateStr = `${currentMonth
-      .toString()
-      .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
+    const { activeSeasons, backfillSeasons } = await this.getRelevantSeasons();
 
-    // Find seasons that cover today
-    const allSeasons = await this.prisma.season.findMany({
-      where: { isDeleted: false }, // Fetch all to sort into active/past
-    });
-
-    const activeSeasons = allSeasons.filter((s) => {
-      if (!s.isActive) return false;
-      if (!s.startDate || !s.endDate) return false;
-      // Handle year wrap for winter (e.g. 12-01 to 02-28)
-      if (s.startDate > s.endDate) {
-        return currentDateStr >= s.startDate || currentDateStr <= s.endDate;
-      }
-      return currentDateStr >= s.startDate && currentDateStr <= s.endDate;
-    });
-
-    let seasonal: any[] = [];
+    let seasonal: Awaited<ReturnType<typeof this.prisma.story.findMany>> = [];
     let seasonalCount = 0;
 
     if (activeSeasons.length > 0) {
@@ -302,43 +599,26 @@ export class StoryService {
     }
 
     // Backfill if needed
-    if (seasonalCount < limitSeasonal) {
+    if (seasonalCount < limitSeasonal && backfillSeasons.length > 0) {
       const needed = limitSeasonal - seasonalCount;
       const existingIds = new Set(seasonal.map((s) => s.id));
 
-      // Strategy: Find "previous" seasons.
-      // We can define "previous" roughly by checking seasons that are NOT active
-      // and maybe have endDate < today? Or simply all non-active seasons.
-      // Let's take all inactive seasons and perhaps just pick random or recent ones?
-      // A simple heuristic for "previous" season: seasons that ended recently.
-
-      const previousSeasons = allSeasons.filter((s) => {
-        if (activeSeasons.find(active => active.id === s.id)) return false; // Skip active
-        // For simplistic "previous", we just take everything else that has dates.
-        return !!s.startDate && !!s.endDate;
+      const backfillStories = await this.prisma.story.findMany({
+        where: {
+          isDeleted: false,
+          seasons: {
+            some: {
+              id: { in: backfillSeasons.map((s) => s.id) },
+            },
+          },
+          id: { notIn: Array.from(existingIds) },
+        },
+        take: needed,
+        include: { images: true, themes: true, seasons: true },
+        orderBy: { createdAt: 'desc' },
       });
 
-      // Sort by endDate descending (pseudo-code since endDate is MM-DD string without year)
-      // Since we don't have years, sorting by MM-DD descending is a decent proxy for "latest in the year"
-
-      if (previousSeasons.length > 0) {
-        const backfillStories = await this.prisma.story.findMany({
-          where: {
-            isDeleted: false,
-            seasons: {
-              some: {
-                id: { in: previousSeasons.map(s => s.id) }
-              }
-            },
-            id: { notIn: Array.from(existingIds) }
-          },
-          take: needed,
-          include: { images: true, themes: true, seasons: true },
-          orderBy: { createdAt: 'desc' } // Fresh content from old seasons?
-        });
-
-        seasonal = [...seasonal, ...backfillStories];
-      }
+      seasonal = [...seasonal, ...backfillStories];
     }
 
     // 3. Top Liked by Parents
@@ -353,10 +633,17 @@ export class StoryService {
       include: { images: true },
     });
 
+    // Enrich all stories with readStatus in a single DB query
+    const allStories = [...recommended, ...seasonal, ...topLiked];
+    const enriched = await this.enrichWithReadStatus(userId, allStories);
+
+    const recLen = recommended.length;
+    const seaLen = seasonal.length;
+
     return {
-      recommended,
-      seasonal,
-      topLiked,
+      recommended: this.sortByReadStatus(enriched.slice(0, recLen)),
+      seasonal: this.sortByReadStatus(enriched.slice(recLen, recLen + seaLen)),
+      topLiked: this.sortByReadStatus(enriched.slice(recLen + seaLen)),
     };
   }
 
@@ -370,7 +657,7 @@ export class StoryService {
       }
     }
 
-    let audioUrl = data.audioUrl;
+    const audioUrl = data.audioUrl;
 
     const story = await this.prisma.story.create({
       data: {
@@ -384,8 +671,12 @@ export class StoryService {
         ageMax: data.ageMax ?? 9,
         images: data.images ? { create: data.images } : undefined,
         branches: data.branches ? { create: data.branches } : undefined,
-        categories: data.categoryIds ? { connect: data.categoryIds.map((id) => ({ id })) } : undefined,
-        themes: data.themeIds ? { connect: data.themeIds.map((id) => ({ id })) } : undefined,
+        categories: data.categoryIds
+          ? { connect: data.categoryIds.map((id) => ({ id })) }
+          : undefined,
+        themes: data.themeIds
+          ? { connect: data.themeIds.map((id) => ({ id })) }
+          : undefined,
         seasons: data.seasonIds
           ? { connect: data.seasonIds.map((id) => ({ id })) }
           : undefined,
@@ -393,7 +684,7 @@ export class StoryService {
       include: { images: true, branches: true },
     });
 
-    await this.cacheManager.del('categories:all');
+    await this.invalidateStoryCaches();
     return story;
   }
 
@@ -430,22 +721,28 @@ export class StoryService {
       include: { images: true, branches: true },
     });
 
-    await this.cacheManager.del('categories:all');
+    await this.invalidateStoryCaches();
     return updatedStory;
   }
 
   async deleteStory(id: string, permanent: boolean = false) {
-    const story = await this.prisma.story.findUnique({ where: { id, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id, ...(permanent ? {} : { isDeleted: false }) },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
+    let result;
     if (permanent) {
-      return await this.prisma.story.delete({ where: { id } });
+      result = await this.prisma.story.delete({ where: { id } });
     } else {
-      return await this.prisma.story.update({
+      result = await this.prisma.story.update({
         where: { id },
         data: { isDeleted: true, deletedAt: new Date() },
       });
     }
+
+    await this.invalidateStoryCaches();
+    return result;
   }
 
   async undoDeleteStory(id: string) {
@@ -453,55 +750,95 @@ export class StoryService {
     if (!story) throw new NotFoundException('Story not found');
     if (!story.isDeleted) throw new BadRequestException('Story is not deleted');
 
-    return await this.prisma.story.update({
+    const result = await this.prisma.story.update({
       where: { id },
       data: { isDeleted: false, deletedAt: null },
     });
+
+    await this.invalidateStoryCaches();
+    return result;
   }
 
-
   async addImage(storyId: string, image: StoryImageDto) {
-    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
     return await this.prisma.storyImage.create({ data: { ...image, storyId } });
   }
 
   async addBranch(storyId: string, branch: StoryBranchDto) {
-    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.storyBranch.create({ data: { ...branch, storyId } });
+    return await this.prisma.storyBranch.create({
+      data: { ...branch, storyId },
+    });
   }
 
   async addFavorite(dto: FavoriteDto) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.favorite.create({ data: { kidId: dto.kidId, storyId: dto.storyId } });
+    return await this.prisma.favorite.create({
+      data: { kidId: dto.kidId, storyId: dto.storyId },
+    });
   }
 
   async removeFavorite(kidId: string, storyId: string) {
     return await this.prisma.favorite.deleteMany({ where: { kidId, storyId } });
   }
 
-  async getFavorites(kidId: string) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+  async getFavorites(kidId: string, cursor?: string, limit?: number) {
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    return await this.prisma.favorite.findMany({ where: { kidId }, include: { story: true } });
+
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const records = await this.withCursorErrorHandling(() =>
+      this.prisma.favorite.findMany({
+        where: { kidId, isDeleted: false, story: { isDeleted: false } },
+        include: { story: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: records,
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    return PaginationUtil.buildCursorResponse(records, take);
   }
 
   async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
+
+    const sessionTime = normalizeSessionTime(dto.sessionTime);
 
     const existing = await this.prisma.storyProgress.findUnique({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
     });
-
-    const sessionTime = dto.sessionTime || 0;
-    const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
 
     const result = await this.prisma.storyProgress.upsert({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
@@ -509,7 +846,7 @@ export class StoryService {
         progress: dto.progress,
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
-        totalTimeSpent: newTotalTime,
+        totalTimeSpent: { increment: sessionTime },
       },
       create: {
         kidId: dto.kidId,
@@ -521,35 +858,58 @@ export class StoryService {
     });
 
     if (dto.completed && (!existing || !existing.completed)) {
-      this.adjustReadingLevel(dto.kidId, dto.storyId, newTotalTime).catch((e) =>
-        this.logger.error(`Failed to adjust reading level: ${e.message}`),
-      );
+      this.adjustReadingLevel(
+        dto.kidId,
+        dto.storyId,
+        result.totalTimeSpent,
+      ).catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.error(`Failed to adjust reading level: ${msg}`);
+      });
     }
     return result;
   }
 
   async getProgress(kidId: string, storyId: string) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.storyProgress.findUnique({ where: { kidId_storyId: { kidId, storyId } } });
+    return await this.prisma.storyProgress.findUnique({
+      where: { kidId_storyId: { kidId, storyId } },
+    });
   }
 
   // --- USER STORY PROGRESS (Parent/User - non-kid specific) ---
 
-  async setUserProgress(userId: string, dto: UserStoryProgressDto): Promise<UserStoryProgressResponseDto> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
+  async setUserProgress(
+    userId: string,
+    dto: UserStoryProgressDto,
+  ): Promise<UserStoryProgressResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+    });
     if (!user) throw new NotFoundException('User not found');
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     const existing = await this.prisma.userStoryProgress.findUnique({
       where: { userId_storyId: { userId, storyId: dto.storyId } },
     });
 
-    const sessionTime = dto.sessionTime || 0;
-    const newTotalTime = (existing?.totalTimeSpent || 0) + sessionTime;
+    const sessionTime = normalizeSessionTime(dto.sessionTime);
+
+    // If restoring a soft-deleted record, reset totalTimeSpent instead of
+    // accumulating stale time from before the removal.
+    const totalTimeSpentUpdate = existing?.isDeleted
+      ? sessionTime
+      : { increment: sessionTime };
 
     const result = await this.prisma.userStoryProgress.upsert({
       where: { userId_storyId: { userId, storyId: dto.storyId } },
@@ -557,7 +917,10 @@ export class StoryService {
         progress: dto.progress,
         completed: dto.completed ?? false,
         lastAccessed: new Date(),
-        totalTimeSpent: newTotalTime,
+        totalTimeSpent: totalTimeSpentUpdate,
+        // Restore soft-deleted records when user re-reads a removed story
+        isDeleted: false,
+        deletedAt: null,
       },
       create: {
         userId,
@@ -578,14 +941,21 @@ export class StoryService {
     };
   }
 
-  async getUserProgress(userId: string, storyId: string): Promise<UserStoryProgressResponseDto | null> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId, isDeleted: false } });
+  async getUserProgress(
+    userId: string,
+    storyId: string,
+  ): Promise<UserStoryProgressResponseDto | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+    });
     if (!user) throw new NotFoundException('User not found');
-    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
-    const progress = await this.prisma.userStoryProgress.findUnique({
-      where: { userId_storyId: { userId, storyId } },
+    const progress = await this.prisma.userStoryProgress.findFirst({
+      where: { userId, storyId, isDeleted: false },
     });
 
     if (!progress) return null;
@@ -600,40 +970,112 @@ export class StoryService {
     };
   }
 
-  async getUserContinueReading(userId: string) {
-    const progressRecords = await this.prisma.userStoryProgress.findMany({
-      where: { userId, progress: { gt: 0 }, completed: false, isDeleted: false },
-      orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
-    });
+  async getUserContinueReading(
+    userId: string,
+    cursor?: string,
+    limit?: number,
+  ) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
-    return progressRecords.map((record) => ({
-      ...record.story,
-      progress: record.progress,
-      totalTimeSpent: record.totalTimeSpent,
-      lastAccessed: record.lastAccessed,
-    }));
+    const progressRecords = await this.withCursorErrorHandling(() =>
+      this.prisma.userStoryProgress.findMany({
+        where: {
+          userId,
+          progress: { gt: 0 },
+          completed: false,
+          isDeleted: false,
+          story: { isDeleted: false },
+        },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
+        },
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: progressRecords.map((r) => this.mapProgressRecord(r)),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    // Cursor comes from progress table ID (Prisma cursor operates on this table).
+    // Build response from raw records first, then map to the enriched shape.
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      progressRecords,
+      take,
+    );
+    return { data: data.map((r) => this.mapProgressRecord(r)), pagination };
   }
 
-  async getUserCompletedStories(userId: string) {
-    const records = await this.prisma.userStoryProgress.findMany({
-      where: { userId, completed: true, isDeleted: false },
-      orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
-    });
+  async getUserCompletedStories(
+    userId: string,
+    cursor?: string,
+    limit?: number,
+  ) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
-    return records.map((r) => r.story);
+    const records = await this.withCursorErrorHandling(() =>
+      this.prisma.userStoryProgress.findMany({
+        where: {
+          userId,
+          completed: true,
+          isDeleted: false,
+          story: { isDeleted: false },
+        },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
+        },
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: records.map((r) => r.story),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      records,
+      take,
+    );
+    return { data: data.map((r) => r.story), pagination };
   }
 
   async removeFromUserLibrary(userId: string, storyId: string) {
     return await this.prisma.$transaction([
       this.prisma.parentFavorite.deleteMany({ where: { userId, storyId } }),
-      this.prisma.userStoryProgress.deleteMany({ where: { userId, storyId } }),
+      // Soft-delete progress so checkStoryAccess still recognises the story
+      // as "already read" and free users can re-read without spending quota.
+      this.prisma.userStoryProgress.updateMany({
+        where: { userId, storyId },
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          progress: 0,
+          completed: false,
+        },
+      }),
     ]);
   }
 
   async restrictStory(dto: RestrictStoryDto & { userId: string }) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
 
     // Ensure parent owns the kid
@@ -641,7 +1083,9 @@ export class StoryService {
       throw new ForbiddenException('You are not the parent of this kid');
     }
 
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     return await this.prisma.restrictedStory.upsert({
@@ -659,7 +1103,9 @@ export class StoryService {
   }
 
   async unrestrictStory(kidId: string, storyId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
 
     if (kid.parentId !== userId) {
@@ -680,7 +1126,9 @@ export class StoryService {
   }
 
   async getRestrictedStories(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
 
     if (kid.parentId !== userId) {
@@ -700,7 +1148,9 @@ export class StoryService {
   }
 
   async setDailyChallenge(dto: DailyChallengeDto) {
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
     return await this.prisma.dailyChallenge.create({ data: dto });
   }
@@ -714,7 +1164,9 @@ export class StoryService {
 
   // ... [Keep Assignment, Voice, and StoryPath methods] ...
 
-  private toDailyChallengeAssignmentDto(assignment: any): DailyChallengeAssignmentDto {
+  private toDailyChallengeAssignmentDto(
+    assignment: DailyChallengeAssignment,
+  ): DailyChallengeAssignmentDto {
     return {
       id: assignment.id,
       kidId: assignment.kidId,
@@ -725,10 +1177,16 @@ export class StoryService {
     };
   }
 
-  async assignDailyChallenge(dto: AssignDailyChallengeDto): Promise<DailyChallengeAssignmentDto> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+  async assignDailyChallenge(
+    dto: AssignDailyChallengeDto,
+  ): Promise<DailyChallengeAssignmentDto> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const challenge = await this.prisma.dailyChallenge.findUnique({ where: { id: dto.challengeId, isDeleted: false } });
+    const challenge = await this.prisma.dailyChallenge.findUnique({
+      where: { id: dto.challengeId, isDeleted: false },
+    });
     if (!challenge) throw new NotFoundException('Daily challenge not found');
 
     const assignment = await this.prisma.dailyChallengeAssignment.create({
@@ -737,7 +1195,9 @@ export class StoryService {
     return this.toDailyChallengeAssignmentDto(assignment);
   }
 
-  async completeDailyChallenge(dto: CompleteDailyChallengeDto): Promise<DailyChallengeAssignmentDto> {
+  async completeDailyChallenge(
+    dto: CompleteDailyChallengeDto,
+  ): Promise<DailyChallengeAssignmentDto> {
     const assignment = await this.prisma.dailyChallengeAssignment.update({
       where: { id: dto.assignmentId },
       data: { completed: true, completedAt: new Date() },
@@ -745,46 +1205,31 @@ export class StoryService {
     return this.toDailyChallengeAssignmentDto(assignment);
   }
 
-  async getAssignmentsForKid(kidId: string): Promise<DailyChallengeAssignmentDto[]> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+  async getAssignmentsForKid(
+    kidId: string,
+  ): Promise<DailyChallengeAssignmentDto[]> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const assignments = await this.prisma.dailyChallengeAssignment.findMany({ where: { kidId } });
-    return assignments.map((a: DailyChallengeAssignment) => this.toDailyChallengeAssignmentDto(a));
+    const assignments = await this.prisma.dailyChallengeAssignment.findMany({
+      where: { kidId },
+    });
+    return assignments.map((a: DailyChallengeAssignment) =>
+      this.toDailyChallengeAssignmentDto(a),
+    );
   }
 
-  async getAssignmentById(id: string): Promise<DailyChallengeAssignmentDto | null> {
-    const assignment = await this.prisma.dailyChallengeAssignment.findUnique({ where: { id } });
+  async getAssignmentById(
+    id: string,
+  ): Promise<DailyChallengeAssignmentDto | null> {
+    const assignment = await this.prisma.dailyChallengeAssignment.findUnique({
+      where: { id },
+    });
     return assignment ? this.toDailyChallengeAssignmentDto(assignment) : null;
   }
 
-
-
-  async getStoryAudioUrl(storyId: string, voiceId: VoiceType | string, userId?: string): Promise<string> {
-    const story = await this.prisma.story.findUnique({
-      where: { id: storyId, isDeleted: false },
-      select: { textContent: true },
-    });
-    if (!story) throw new NotFoundException(`Story with ID ${storyId} not found`);
-
-    // voiceId can be an enum or a uuid string
-    const cachedAudio = await this.prisma.storyAudioCache.findFirst({
-      where: { storyId, voiceType: voiceId }, // Schema still calls it voiceType
-    });
-    if (cachedAudio) return cachedAudio.audioUrl;
-
-    const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
-      storyId,
-      story?.textContent ?? '',
-      voiceId,
-      userId,
-    );
-    await this.prisma.storyAudioCache.create({
-      data: { storyId, voiceType: voiceId, audioUrl },
-    });
-    return audioUrl;
-  }
-
-  private toStoryPathDto(path: any): StoryPathDto {
+  private toStoryPathDto(path: StoryPath): StoryPathDto {
     return {
       id: path.id,
       kidId: path.kidId,
@@ -796,9 +1241,13 @@ export class StoryService {
   }
 
   async startStoryPath(dto: StartStoryPathDto): Promise<StoryPathDto> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     const storyPath = await this.prisma.storyPath.create({
@@ -816,7 +1265,9 @@ export class StoryService {
   }
 
   async getStoryPathsForKid(kidId: string): Promise<StoryPathDto[]> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
     const paths = await this.prisma.storyPath.findMany({ where: { kidId } });
     return paths.map((p: StoryPath) => this.toStoryPathDto(p));
@@ -843,7 +1294,9 @@ export class StoryService {
   }
 
   async getThemes(): Promise<ThemeDto[]> {
-    const themes = await this.prisma.theme.findMany({ where: { isDeleted: false } });
+    const themes = await this.prisma.theme.findMany({
+      where: { isDeleted: false },
+    });
     return themes.map((t: Theme) => ({
       ...t,
       image: t.image ?? undefined,
@@ -854,7 +1307,7 @@ export class StoryService {
   async getSeasons() {
     const seasons = await this.prisma.season.findMany({
       where: { isDeleted: false },
-      orderBy: { startDate: 'asc' }
+      orderBy: { startDate: 'asc' },
     });
     return seasons;
   }
@@ -863,7 +1316,9 @@ export class StoryService {
   async assignDailyChallengeToAllKids() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const kids = await this.prisma.kid.findMany({ where: { isDeleted: false } });
+    const kids = await this.prisma.kid.findMany({
+      where: { isDeleted: false },
+    });
     let totalAssigned = 0;
     for (const kid of kids) {
       let kidAge = 0;
@@ -872,41 +1327,65 @@ export class StoryService {
         if (match) kidAge = parseInt(match[1], 10);
       }
       const stories = await this.prisma.story.findMany({
-        where: { ageMin: { lte: kidAge }, ageMax: { gte: kidAge }, isDeleted: false },
+        where: {
+          ageMin: { lte: kidAge },
+          ageMax: { gte: kidAge },
+          isDeleted: false,
+        },
       });
       if (stories.length === 0) continue;
-      const pastAssignments = await this.prisma.dailyChallengeAssignment.findMany({
-        where: { kidId: kid.id },
-        include: { challenge: true },
-      });
+      const pastAssignments =
+        await this.prisma.dailyChallengeAssignment.findMany({
+          where: { kidId: kid.id },
+          include: { challenge: true },
+        });
       const usedStoryIds = new Set(
-        pastAssignments.map((a: DailyChallengeAssignment & { challenge: DailyChallenge }) => a.challenge.storyId),
+        pastAssignments.map(
+          (a: DailyChallengeAssignment & { challenge: DailyChallenge }) =>
+            a.challenge.storyId,
+        ),
       );
-      const availableStories = stories.filter((s: any) => !usedStoryIds.has(s.id));
-      const storyPool = availableStories.length > 0 ? availableStories : stories;
+      const availableStories = stories.filter(
+        (s: { id: string }) => !usedStoryIds.has(s.id),
+      );
+      const storyPool =
+        availableStories.length > 0 ? availableStories : stories;
       const story = storyPool[Math.floor(Math.random() * storyPool.length)];
       const wordOfTheDay = story.title;
-      const meaning = story.description.split('. ')[0] + (story.description.includes('.') ? '.' : '');
+      const description = story.description ?? '';
+      const meaning = description
+        ? description.split('. ')[0] + (description.includes('.') ? '.' : '')
+        : '';
       let challenge = await this.prisma.dailyChallenge.findFirst({
         where: { storyId: story.id, challengeDate: today, isDeleted: false },
       });
       if (!challenge) {
         challenge = await this.prisma.dailyChallenge.create({
-          data: { storyId: story.id, challengeDate: today, wordOfTheDay, meaning },
+          data: {
+            storyId: story.id,
+            challengeDate: today,
+            wordOfTheDay,
+            meaning,
+          },
         });
       }
-      const existingAssignment = await this.prisma.dailyChallengeAssignment.findFirst({
-        where: { kidId: kid.id, challengeId: challenge.id },
-      });
+      const existingAssignment =
+        await this.prisma.dailyChallengeAssignment.findFirst({
+          where: { kidId: kid.id, challengeId: challenge.id },
+        });
       if (!existingAssignment) {
         await this.prisma.dailyChallengeAssignment.create({
           data: { kidId: kid.id, challengeId: challenge.id },
         });
-        this.logger.log(`Assigned story '${story.title}' to kid '${kid.name ?? kid.id}' for daily challenge.`);
+        this.logger.log(
+          `Assigned story '${story.title}' to kid '${kid.name ?? kid.id}' for daily challenge.`,
+        );
         totalAssigned++;
       }
     }
-    this.logger.log(`Daily challenge assignment complete. Total assignments: ${totalAssigned}`);
+    this.logger.log(
+      `Daily challenge assignment complete. Total assignments: ${totalAssigned}`,
+    );
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
@@ -916,7 +1395,9 @@ export class StoryService {
   }
 
   async getTodaysDailyChallengeAssignment(kidId: string) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -925,23 +1406,34 @@ export class StoryService {
     const assignment = await this.prisma.dailyChallengeAssignment.findFirst({
       where: {
         kidId,
-        challenge: { challengeDate: { gte: today, lt: tomorrow }, isDeleted: false },
+        challenge: {
+          challengeDate: { gte: today, lt: tomorrow },
+          isDeleted: false,
+        },
       },
       include: { challenge: { include: { story: true } } },
     });
-    if (!assignment) throw new NotFoundException('No daily challenge assignment found for today');
+    if (!assignment)
+      throw new NotFoundException(
+        'No daily challenge assignment found for today',
+      );
     return assignment;
   }
 
   async getWeeklyDailyChallengeAssignments(kidId: string, weekStart: Date) {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found');
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 7);
     const assignments = await this.prisma.dailyChallengeAssignment.findMany({
       where: {
         kidId,
-        challenge: { challengeDate: { gte: weekStart, lt: weekEnd }, isDeleted: false },
+        challenge: {
+          challengeDate: { gte: weekStart, lt: weekEnd },
+          isDeleted: false,
+        },
       },
       include: { challenge: { include: { story: true } } },
       orderBy: { assignedAt: 'asc' },
@@ -966,7 +1458,11 @@ export class StoryService {
 
   async generateStoryWithAI(options: GenerateStoryOptions) {
     // Resolve Season IDs to names if needed for AI context
-    if (options.seasonIds && options.seasonIds.length > 0 && (!options.seasons || options.seasons.length === 0)) {
+    if (
+      options.seasonIds &&
+      options.seasonIds.length > 0 &&
+      (!options.seasons || options.seasons.length === 0)
+    ) {
       const seasons = await this.prisma.season.findMany({
         where: { id: { in: options.seasonIds }, isDeleted: false },
         select: { name: true },
@@ -980,10 +1476,9 @@ export class StoryService {
     // 2. Persist with Image & Audio
     return this.persistGeneratedStory(
       generatedStory,
-      options.kidName || 'Hero',
       options.creatorKidId,
       options.voiceType,
-      options.seasonIds
+      options.seasonIds,
     );
   }
 
@@ -1016,9 +1511,16 @@ export class StoryService {
 
     let themes = themeNames || [];
     if (themes.length === 0) {
-      const availableThemes = await this.prisma.theme.findMany({ where: { isDeleted: false } });
-      const randomTheme = availableThemes[Math.floor(Math.random() * availableThemes.length)];
-      themes = [randomTheme.name];
+      const availableThemes = await this.prisma.theme.findMany({
+        where: { isDeleted: false },
+      });
+      if (availableThemes.length === 0) {
+        themes = ['Adventure'];
+      } else {
+        const randomTheme =
+          availableThemes[Math.floor(Math.random() * availableThemes.length)];
+        themes = [randomTheme.name];
+      }
     }
 
     let categories = categoryNames || [];
@@ -1027,9 +1529,18 @@ export class StoryService {
       categories = [...new Set([...categories, ...prefCategoryNames])];
     }
     if (categories.length === 0) {
-      const availableCategories = await this.prisma.category.findMany({ where: { isDeleted: false } });
-      const randomCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
-      categories = [randomCategory.name];
+      const availableCategories = await this.prisma.category.findMany({
+        where: { isDeleted: false },
+      });
+      if (availableCategories.length === 0) {
+        categories = ['General'];
+      } else {
+        const randomCategory =
+          availableCategories[
+            Math.floor(Math.random() * availableCategories.length)
+          ];
+        categories = [randomCategory.name];
+      }
     }
 
     let contextString = '';
@@ -1043,6 +1554,8 @@ export class StoryService {
       const voiceName = kid.preferredVoice.name.toUpperCase();
       if (voiceName in VoiceType) {
         voiceType = VoiceType[voiceName as keyof typeof VoiceType];
+      } else if (VOICE_TYPE_MIGRATION_MAP[voiceName]) {
+        voiceType = VOICE_TYPE_MIGRATION_MAP[voiceName];
       } else if (kid.preferredVoice.elevenLabsVoiceId) {
         const elId = kid.preferredVoice.elevenLabsVoiceId.toUpperCase();
         if (elId in VoiceType) {
@@ -1087,7 +1600,7 @@ export class StoryService {
     };
 
     this.logger.log(
-      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}].`
+      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}].`,
     );
 
     // 2. Generate Content via AI
@@ -1096,20 +1609,18 @@ export class StoryService {
     // 3. Persist (with Image & Audio) - calling shared helper
     return this.persistGeneratedStory(
       generatedStory,
-      options.kidName!,
       kidId,
       voiceType,
-      seasonIds
+      seasonIds,
     );
   }
 
   // --- PRIVATE HELPER: PERSIST STORY (Includes Image & Audio Gen) ---
   private async persistGeneratedStory(
-    generatedStory: any,
-    kidName: string,
+    generatedStory: GeneratedStory & { textContent?: string },
     creatorKidId?: string,
     voiceType?: VoiceType,
-    seasonIds?: string[]
+    seasonIds?: string[],
   ) {
     // Resolve userId for tracking if creatorKidId is present
     let userId: string | undefined;
@@ -1121,32 +1632,41 @@ export class StoryService {
       if (kid) userId = kid.parentId;
     }
 
-    // 1. Generate Cover Image (Pollinations)
+    // 1. Generate Cover Image (Pollinations → Cloudinary)
     let coverImageUrl = '';
     try {
       this.logger.log(`Generating cover image for "${generatedStory.title}"`);
       coverImageUrl = await this.geminiService.generateStoryImage(
         generatedStory.title,
         generatedStory.description || `A story about ${generatedStory.title}`,
-        userId // Pass userId for tracking
+        userId, // Pass userId for tracking
       );
     } catch (e) {
-      this.logger.error(`Failed to generate story image: ${e.message}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Failed to generate story image: ${msg}`);
     }
 
     // 2. Prepare Relations (Categories/Themes)
-    const categoryConnect = generatedStory.category?.map((c: string) => ({
-      where: { name: c },
-      create: { name: c, description: 'Auto-generated category' },
-    })) || [];
+    const categoryConnect =
+      generatedStory.category?.map((c: string) => ({
+        where: { name: c },
+        create: { name: c, description: 'Auto-generated category' },
+      })) || [];
 
-    const themeConnect = generatedStory.theme?.map((t: string) => ({
-      where: { name: t },
-      create: { name: t, description: 'Auto-generated theme' },
-    })) || [];
+    const themeConnect =
+      generatedStory.theme?.map((t: string) => ({
+        where: { name: t },
+        create: { name: t, description: 'Auto-generated theme' },
+      })) || [];
 
-    const textContent = generatedStory.content || generatedStory.textContent || generatedStory.description || '';
-    const wordCount = textContent.split(/\s+/).filter((word: string) => word.length > 0).length;
+    const textContent =
+      generatedStory.content ||
+      generatedStory.textContent ||
+      generatedStory.description ||
+      '';
+    const wordCount = textContent
+      .split(/\s+/)
+      .filter((word: string) => word.length > 0).length;
     const durationSeconds = this.calculateDurationSeconds(wordCount);
 
     // 3. Create Story Record
@@ -1171,12 +1691,14 @@ export class StoryService {
         seasons:
           seasonIds && seasonIds.length > 0
             ? {
-              connect: seasonIds.map((id) => ({ id })),
-            }
+                connect: seasonIds.map((id) => ({ id })),
+              }
             : generatedStory.seasons
               ? {
-                connect: generatedStory.seasons.map((s: string) => ({ name: s })),
-              }
+                  connect: generatedStory.seasons.map((s: string) => ({
+                    name: s,
+                  })),
+                }
               : undefined,
       },
       include: { images: true, branches: true, categories: true, themes: true },
@@ -1189,85 +1711,193 @@ export class StoryService {
         const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
           story.id,
           story.textContent,
-          voiceType ?? DEFAULT_VOICE
+          voiceType ?? DEFAULT_VOICE,
         );
 
         // Update story with audio URL
         story = await this.prisma.story.update({
           where: { id: story.id },
           data: { audioUrl },
-          include: { images: true, branches: true, categories: true, themes: true, seasons: true },
+          include: {
+            images: true,
+            branches: true,
+            categories: true,
+            themes: true,
+            seasons: true,
+          },
         });
       } catch (error) {
-        this.logger.error(`Failed to generate audio for story ${story.id}: ${error.message}`);
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Failed to generate audio for story ${story.id}: ${msg}`,
+        );
       }
     }
 
-    await this.cacheManager.del('categories:all');
+    await this.invalidateStoryCaches();
 
     return story;
   }
 
-  private async adjustReadingLevel(kidId: string, storyId: string, totalTimeSeconds: number) {
-    const story = await this.prisma.story.findUnique({ where: { id: storyId, isDeleted: false } });
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, isDeleted: false } });
+  private async adjustReadingLevel(
+    kidId: string,
+    storyId: string,
+    totalTimeSeconds: number,
+  ) {
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, isDeleted: false },
+    });
     if (!story || !kid || story.wordCount === 0) return;
     const minutes = totalTimeSeconds / 60;
     const wpm = minutes > 0 ? story.wordCount / minutes : 0;
     let newLevel = kid.currentReadingLevel;
     if (wpm > 120 && story.difficultyLevel >= kid.currentReadingLevel) {
       newLevel = Math.min(10, kid.currentReadingLevel + 1);
-    }
-    else if (wpm < 40 && story.difficultyLevel >= kid.currentReadingLevel) {
+    } else if (wpm < 40 && story.difficultyLevel >= kid.currentReadingLevel) {
       newLevel = Math.max(1, kid.currentReadingLevel - 1);
     }
     if (newLevel !== kid.currentReadingLevel) {
-      await this.prisma.kid.update({ where: { id: kidId }, data: { currentReadingLevel: newLevel } });
+      await this.prisma.kid.update({
+        where: { id: kidId },
+        data: { currentReadingLevel: newLevel },
+      });
       this.logger.log(`Adjusted Kid ${kidId} reading level to ${newLevel}`);
     }
   }
 
-  async getContinueReading(kidId: string) {
-    const progressRecords = await this.prisma.storyProgress.findMany({
-      where: { kidId, progress: { gt: 0 }, completed: false, isDeleted: false },
-      orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
-    });
-    return progressRecords.map((record) => ({
-      ...record.story,
-      progress: record.progress,
-      totalTimeSpent: record.totalTimeSpent,
-      lastAccessed: record.lastAccessed,
-    }));
+  async getContinueReading(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const progressRecords = await this.withCursorErrorHandling(() =>
+      this.prisma.storyProgress.findMany({
+        where: {
+          kidId,
+          progress: { gt: 0 },
+          completed: false,
+          isDeleted: false,
+          story: { isDeleted: false },
+        },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
+        },
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: progressRecords.map((r) => this.mapProgressRecord(r)),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      progressRecords,
+      take,
+    );
+    return { data: data.map((r) => this.mapProgressRecord(r)), pagination };
   }
 
-  async getCompletedStories(kidId: string) {
-    const records = await this.prisma.storyProgress.findMany({
-      where: { kidId, completed: true, isDeleted: false },
-      orderBy: { lastAccessed: 'desc' },
-      include: { story: true },
-    });
-    return records.map(r => r.story);
+  async getCompletedStories(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const records = await this.withCursorErrorHandling(() =>
+      this.prisma.storyProgress.findMany({
+        where: {
+          kidId,
+          completed: true,
+          isDeleted: false,
+          story: { isDeleted: false },
+        },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        include: {
+          story: {
+            include: { categories: true },
+          },
+        },
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: records.map((r) => r.story),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      records,
+      take,
+    );
+    return { data: data.map((r) => r.story), pagination };
   }
 
-  async getCreatedStories(kidId: string) {
-    return await this.prisma.story.findMany({
-      where: { creatorKidId: kidId, isDeleted: false },
-      orderBy: { createdAt: 'desc' },
-    });
+  async getCreatedStories(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const stories = await this.withCursorErrorHandling(() =>
+      this.prisma.story.findMany({
+        where: { creatorKidId: kidId, isDeleted: false },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: stories,
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    return PaginationUtil.buildCursorResponse(stories, take);
   }
 
-  async getDownloads(kidId: string) {
-    const downloads = await this.prisma.downloadedStory.findMany({
-      where: { kidId },
-      include: { story: true },
-      orderBy: { downloadedAt: 'desc' },
-    });
-    return downloads.map((d) => d.story);
+  async getDownloads(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const downloads = await this.withCursorErrorHandling(() =>
+      this.prisma.downloadedStory.findMany({
+        where: { kidId },
+        include: { story: true },
+        orderBy: [{ downloadedAt: 'desc' }, { id: 'asc' }],
+        ...(useCursor ? { take: take + 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: downloads.map((d) => d.story),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      downloads,
+      take,
+    );
+    return { data: data.map((d) => d.story), pagination };
   }
 
   async addDownload(kidId: string, storyId: string) {
-    const story = await this.prisma.story.findUnique({ where: { id: storyId } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
     return await this.prisma.downloadedStory.upsert({
       where: { kidId_storyId: { kidId, storyId } },
@@ -1278,8 +1908,10 @@ export class StoryService {
 
   async removeDownload(kidId: string, storyId: string) {
     try {
-      return await this.prisma.downloadedStory.delete({ where: { kidId_storyId: { kidId, storyId } } });
-    } catch (error) {
+      return await this.prisma.downloadedStory.delete({
+        where: { kidId_storyId: { kidId, storyId } },
+      });
+    } catch {
       return { message: 'Download removed' };
     }
   }
@@ -1292,10 +1924,17 @@ export class StoryService {
     ]);
   }
 
-  async recommendStoryToKid(userId: string, dto: ParentRecommendationDto): Promise<RecommendationResponseDto> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: dto.kidId, parentId: userId, isDeleted: false } });
+  async recommendStoryToKid(
+    userId: string,
+    dto: ParentRecommendationDto,
+  ): Promise<RecommendationResponseDto> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: dto.kidId, parentId: userId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found or access denied');
-    const story = await this.prisma.story.findUnique({ where: { id: dto.storyId, isDeleted: false } });
+    const story = await this.prisma.story.findUnique({
+      where: { id: dto.storyId, isDeleted: false },
+    });
     if (!story) throw new NotFoundException('Story not found');
 
     const isRestricted = await this.prisma.restrictedStory.findUnique({
@@ -1309,43 +1948,83 @@ export class StoryService {
     }
 
     const existing = await this.prisma.parentRecommendation.findUnique({
-      where: { userId_kidId_storyId: { userId, kidId: dto.kidId, storyId: dto.storyId } },
+      where: {
+        userId_kidId_storyId: {
+          userId,
+          kidId: dto.kidId,
+          storyId: dto.storyId,
+        },
+      },
     });
     if (existing) {
       if (existing.isDeleted) {
         const restored = await this.prisma.parentRecommendation.update({
           where: { id: existing.id },
           data: { isDeleted: false, deletedAt: null, message: dto.message },
-          include: { story: true, user: { select: { id: true, name: true, email: true } }, kid: { select: { id: true, name: true } } },
+          include: {
+            story: true,
+            user: { select: { id: true, name: true, email: true } },
+            kid: { select: { id: true, name: true } },
+          },
         });
         return this.toRecommendationResponse(restored);
       }
-      throw new BadRequestException(`You have already recommended this story to ${kid.name}`);
+      throw new BadRequestException(
+        `You have already recommended this story to ${kid.name}`,
+      );
     }
     const recommendation = await this.prisma.parentRecommendation.create({
-      data: { userId, kidId: dto.kidId, storyId: dto.storyId, message: dto.message },
-      include: { story: true, user: { select: { id: true, name: true, email: true } }, kid: { select: { id: true, name: true } } },
+      data: {
+        userId,
+        kidId: dto.kidId,
+        storyId: dto.storyId,
+        message: dto.message,
+      },
+      include: {
+        story: true,
+        user: { select: { id: true, name: true, email: true } },
+        kid: { select: { id: true, name: true } },
+      },
     });
     return this.toRecommendationResponse(recommendation);
   }
 
-  async getKidRecommendations(kidId: string, userId: string): Promise<RecommendationResponseDto[]> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, parentId: userId, isDeleted: false } });
+  async getKidRecommendations(
+    kidId: string,
+    userId: string,
+  ): Promise<RecommendationResponseDto[]> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, parentId: userId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found or access denied');
     const recommendations = await this.prisma.parentRecommendation.findMany({
       where: { kidId, isDeleted: false },
-      include: { story: true, user: { select: { id: true, name: true, email: true } }, kid: { select: { id: true, name: true } } },
+      include: {
+        story: true,
+        user: { select: { id: true, name: true, email: true } },
+        kid: { select: { id: true, name: true } },
+      },
       orderBy: { recommendedAt: 'desc' },
     });
     return recommendations.map((rec) => this.toRecommendationResponse(rec));
   }
 
-  async deleteRecommendation(recommendationId: string, userId: string, permanent: boolean = false) {
-    const recommendation = await this.prisma.parentRecommendation.findUnique({ where: { id: recommendationId } });
-    if (!recommendation) throw new NotFoundException('Recommendation not found');
-    if (recommendation.userId !== userId) throw new ForbiddenException('Access denied');
+  async deleteRecommendation(
+    recommendationId: string,
+    userId: string,
+    permanent: boolean = false,
+  ) {
+    const recommendation = await this.prisma.parentRecommendation.findUnique({
+      where: { id: recommendationId },
+    });
+    if (!recommendation)
+      throw new NotFoundException('Recommendation not found');
+    if (recommendation.userId !== userId)
+      throw new ForbiddenException('Access denied');
     if (permanent) {
-      return this.prisma.parentRecommendation.delete({ where: { id: recommendationId } });
+      return this.prisma.parentRecommendation.delete({
+        where: { id: recommendationId },
+      });
     } else {
       return this.prisma.parentRecommendation.update({
         where: { id: recommendationId },
@@ -1354,14 +2033,27 @@ export class StoryService {
     }
   }
 
-  async getRecommendationStats(kidId: string, userId: string): Promise<RecommendationsStatsDto> {
-    const kid = await this.prisma.kid.findUnique({ where: { id: kidId, parentId: userId, isDeleted: false } });
+  async getRecommendationStats(
+    kidId: string,
+    userId: string,
+  ): Promise<RecommendationsStatsDto> {
+    const kid = await this.prisma.kid.findUnique({
+      where: { id: kidId, parentId: userId, isDeleted: false },
+    });
     if (!kid) throw new NotFoundException('Kid not found or access denied');
-    const totalCount = await this.prisma.parentRecommendation.count({ where: { kidId, isDeleted: false } });
+    const totalCount = await this.prisma.parentRecommendation.count({
+      where: { kidId, isDeleted: false },
+    });
     return { totalCount };
   }
 
-  private toRecommendationResponse(recommendation: any): RecommendationResponseDto {
+  private toRecommendationResponse(
+    recommendation: ParentRecommendation & {
+      story?: Record<string, unknown>;
+      user?: { id: string; name?: string | null; email?: string };
+      kid?: { id: string; name?: string | null };
+    },
+  ): RecommendationResponseDto {
     return {
       id: recommendation.id,
       userId: recommendation.userId,
@@ -1369,13 +2061,13 @@ export class StoryService {
       storyId: recommendation.storyId,
       message: recommendation.message ?? undefined,
       recommendedAt: recommendation.recommendedAt,
-      story: recommendation.story,
+      story: recommendation.story as CreateStoryDto | undefined,
       user: recommendation.user,
       kid: recommendation.kid,
     };
   }
 
-  async getTopPicksFromParents(limit: number = 10): Promise<any[]> {
+  async getTopPicksFromParents(limit: number = 10) {
     const topStories = await this.prisma.parentRecommendation.groupBy({
       by: ['storyId'],
       where: { isDeleted: false },
@@ -1398,12 +2090,63 @@ export class StoryService {
       },
     });
 
-    const countMap = new Map(topStories.map((s) => [s.storyId, s._count.storyId]));
+    const countMap = new Map(
+      topStories.map((s) => [s.storyId, s._count.storyId]),
+    );
     return stories
       .map((story) => ({
         ...story,
         recommendationCount: countMap.get(story.id) || 0,
       }))
       .sort((a, b) => b.recommendationCount - a.recommendationCount);
+  }
+
+  /**
+   * Get random story IDs using raw SQL for efficiency.
+   * @param limit - Maximum number of IDs to return
+   * @param offset - Number of results to skip (for pagination)
+   * @returns Array of random story IDs
+   */
+  private async getRandomStoryIds(
+    limit: number,
+    offset: number = 0,
+  ): Promise<string[]> {
+    const randomIds = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "stories"
+      WHERE "isDeleted" = false
+      ORDER BY RANDOM()
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
+
+    return randomIds.map((r) => r.id);
+  }
+
+  /**
+   * Get random stories for "Top Picks from Us" homepage section.
+   * Results are cached for 24 hours.
+   */
+  async getTopPicksFromUs(limit: number = 10) {
+    const sanitizedLimit = PaginationUtil.sanitizeLimit(limit, {
+      defaultValue: 10,
+      min: 1,
+      max: 50,
+    });
+
+    const randomIds = await this.getRandomStoryIds(sanitizedLimit);
+
+    if (randomIds.length === 0) {
+      return [];
+    }
+
+    // Fetch full story objects with relations
+    return this.prisma.story.findMany({
+      where: { id: { in: randomIds } },
+      include: {
+        themes: true,
+        categories: true,
+        images: true,
+      },
+    });
   }
 }

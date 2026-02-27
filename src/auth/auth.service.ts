@@ -27,10 +27,13 @@ import { generateToken } from '@/utils/generate-token';
 import { GoogleOAuthProfile } from '@/shared/types';
 import * as crypto from 'crypto';
 import { NotificationService } from '@/notification/notification.service';
-import { OAuth2Client, TokenPayload } from 'google-auth-library';
+import { OAuth2Client } from 'google-auth-library';
+import { ConfigService } from '@nestjs/config';
+import { EnvConfig } from '@/shared/config/env.validation';
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
 import appleSigninAuth from 'apple-signin-auth';
+import { Role, OnboardingStatus } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -42,8 +45,9 @@ export class AuthService {
     private readonly notificationService: NotificationService,
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
+    private readonly configService: ConfigService<EnvConfig, true>,
   ) {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (clientId) {
       this.googleClient = new OAuth2Client(clientId);
     }
@@ -52,9 +56,14 @@ export class AuthService {
   // ==================== AUTHENTICATION ====================
 
   async login(data: LoginDto): Promise<LoginResponseDto | null> {
+    // Single query: fetch user with profile, avatar, and kid count
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
-      include: { profile: true, avatar: true },
+      include: {
+        profile: true,
+        avatar: true,
+        _count: { select: { kids: true } },
+      },
     });
 
     if (!user) {
@@ -72,30 +81,35 @@ export class AuthService {
     }
 
     const tokenData = await this.tokenService.createTokenPair(user);
-    const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: user.id },
-    });
 
     return {
-      user: new UserDto({ ...user, numberOfKids }),
+      user: new UserDto({ ...user, numberOfKids: user._count.kids }),
       jwt: tokenData.jwt,
       refreshToken: tokenData.refreshToken,
     };
   }
 
   async refresh(refreshToken: string): Promise<RefreshResponseDto | null> {
-    const session = await this.tokenService.findSessionByRefreshToken(refreshToken);
+    // Session query now includes user with kid count
+    const session =
+      await this.tokenService.findSessionByRefreshToken(refreshToken);
 
     if (!session) {
       throw new UnauthorizedException('Invalid token');
     }
 
-    const jwt = this.tokenService.generateJwt(new UserDto(session.user), session.id);
-    const numberOfKids = await this.prisma.kid.count({
-      where: { parentId: session.user.id },
-    });
+    const jwt = this.tokenService.generateJwt(
+      new UserDto(session.user),
+      session.id,
+    );
 
-    return { user: new UserDto({ ...session.user, numberOfKids }), jwt };
+    return {
+      user: new UserDto({
+        ...session.user,
+        numberOfKids: session.user._count.kids,
+      }),
+      jwt,
+    };
   }
 
   async logout(sessionId: string): Promise<boolean> {
@@ -116,23 +130,25 @@ export class AuthService {
       throw new BadRequestException('Email already exists');
     }
 
-    let role = 'parent';
-    if (data.role === 'admin') {
-      if (data.adminSecret !== process.env.ADMIN_SECRET) {
+    let role: Role = Role.parent;
+    if (data.role === Role.admin) {
+      if (data.adminSecret !== this.configService.get<string>('ADMIN_SECRET')) {
         throw new ForbiddenException('Invalid admin secret');
       }
-      role = 'admin';
+      role = Role.admin;
     }
 
-    const hashedPassword = await this.passwordService.hashPassword(data.password);
+    const hashedPassword = await this.passwordService.hashPassword(
+      data.password,
+    );
 
     const user = await this.prisma.user.create({
       data: {
         name: data.fullName,
         email: data.email,
         passwordHash: hashedPassword,
-        role: role as any,
-        onboardingStatus: 'account_created',
+        role,
+        onboardingStatus: OnboardingStatus.account_created,
       },
       include: {
         profile: true,
@@ -150,7 +166,10 @@ export class AuthService {
     try {
       await this.notificationService.seedDefaultPreferences(user.id);
     } catch (error) {
-      this.logger.error('Failed to seed notification preferences:', error.message);
+      this.logger.error(
+        'Failed to seed notification preferences:',
+        error.message,
+      );
     }
 
     const tokenData = await this.tokenService.createTokenPair(user);
@@ -219,7 +238,7 @@ export class AuthService {
       where: { id: verificationToken.userId },
       data: {
         isEmailVerified: true,
-        onboardingStatus: 'email_verified',
+        onboardingStatus: OnboardingStatus.email_verified,
       },
     });
     await this.prisma.token.delete({ where: { id: verificationToken.id } });
@@ -237,18 +256,19 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    if (user.onboardingStatus === 'pin_setup') {
+    if (user.onboardingStatus === OnboardingStatus.pin_setup) {
       throw new BadRequestException('Onboarding already completed');
     }
 
     if (data.learningExpectationIds && data.learningExpectationIds.length > 0) {
-      const existingExpectations = await this.prisma.learningExpectation.findMany({
-        where: {
-          id: { in: data.learningExpectationIds },
-          isActive: true,
-          isDeleted: false,
-        },
-      });
+      const existingExpectations =
+        await this.prisma.learningExpectation.findMany({
+          where: {
+            id: { in: data.learningExpectationIds },
+            isActive: true,
+            isDeleted: false,
+          },
+        });
 
       if (existingExpectations.length !== data.learningExpectationIds.length) {
         throw new BadRequestException(
@@ -308,7 +328,7 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: userId },
-      data: { onboardingStatus: 'profile_setup' },
+      data: { onboardingStatus: OnboardingStatus.profile_setup },
     });
 
     const updatedUser = await this.prisma.user.findUnique({
@@ -368,9 +388,12 @@ export class AuthService {
     const updateData: Record<string, unknown> = {};
     if (data.country !== undefined) updateData.country = data.country;
     if (data.language !== undefined) updateData.language = data.language;
-    if (data.languageCode !== undefined) updateData.languageCode = data.languageCode;
-    if (data.explicitContent !== undefined) updateData.explicitContent = data.explicitContent;
-    if (data.maxScreenTimeMins !== undefined) updateData.maxScreenTimeMins = data.maxScreenTimeMins;
+    if (data.languageCode !== undefined)
+      updateData.languageCode = data.languageCode;
+    if (data.explicitContent !== undefined)
+      updateData.explicitContent = data.explicitContent;
+    if (data.maxScreenTimeMins !== undefined)
+      updateData.maxScreenTimeMins = data.maxScreenTimeMins;
 
     // Update profile
     if (Object.keys(updateData).length === 0 && !user.profile) {
@@ -422,19 +445,36 @@ export class AuthService {
 
   // ==================== PASSWORD OPERATIONS (Delegated) ====================
 
-  async requestPasswordReset(data: RequestResetDto, ip?: string, userAgent?: string) {
+  async requestPasswordReset(
+    data: RequestResetDto,
+    ip?: string,
+    userAgent?: string,
+  ) {
     return this.passwordService.requestPasswordReset(data, ip, userAgent);
   }
 
-  async validateResetToken(token: string, email: string, data: ValidateResetTokenDto) {
+  async validateResetToken(
+    token: string,
+    email: string,
+    data: ValidateResetTokenDto,
+  ) {
     return this.passwordService.validateResetToken(token, email, data);
   }
 
-  async resetPassword(token: string, email: string, newPassword: string, data: ResetPasswordDto) {
+  async resetPassword(
+    token: string,
+    email: string,
+    newPassword: string,
+    data: ResetPasswordDto,
+  ) {
     return this.passwordService.resetPassword(token, email, newPassword, data);
   }
 
-  async changePassword(userId: string, data: ChangePasswordDto, currentSessionId: string) {
+  async changePassword(
+    userId: string,
+    data: ChangePasswordDto,
+    currentSessionId: string,
+  ) {
     return this.passwordService.changePassword(userId, data, currentSessionId);
   }
 
@@ -449,18 +489,45 @@ export class AuthService {
       throw new ServiceUnavailableException('Google client not configured');
     }
 
+    // Build array of valid audience values (all platforms)
+    const validAudiences = [
+      this.configService.get<string>('GOOGLE_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_WEB_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_ANDROID_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_IOS_CLIENT_ID'),
+    ].filter((id): id is string => Boolean(id));
+
+    if (validAudiences.length === 0) {
+      throw new ServiceUnavailableException('No Google client IDs configured');
+    }
+
     let ticket;
     try {
       ticket = await this.googleClient.verifyIdToken({
         idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience: validAudiences,
       });
     } catch (err) {
-      this.logger.error('Google id_token verification failed', err);
+      this.logger.error('Google id_token verification failed');
+      this.logger.error(`Error: ${err.message}`);
+
+      // Decode token to show actual audience for debugging
+      try {
+        const decoded = JSON.parse(
+          Buffer.from(idToken.split('.')[1], 'base64').toString(),
+        );
+        this.logger.error(`Token audience (aud): ${decoded.aud}`);
+        this.logger.error(
+          `Valid audiences configured: ${validAudiences.join(', ')}`,
+        );
+      } catch {
+        // Ignore decode errors
+      }
+
       throw new UnauthorizedException('Invalid Google id_token');
     }
 
-    const payload = ticket.getPayload() as TokenPayload | undefined;
+    const payload = ticket.getPayload();
     if (!payload || !payload.email) {
       throw new UnauthorizedException('Invalid Google token payload');
     }
@@ -484,7 +551,9 @@ export class AuthService {
       googleId: payload.providerId,
       email: payload.email,
       picture: payload.picture,
-      name: `${payload.firstName || ''} ${payload.lastName || ''}`.trim() || undefined,
+      name:
+        `${payload.firstName || ''} ${payload.lastName || ''}`.trim() ||
+        undefined,
       emailVerified: payload.emailVerified,
     });
   }
@@ -492,19 +561,30 @@ export class AuthService {
   // ===============================
   // APPLE AUTH
   // ===============================
-  async loginWithAppleIdToken(idToken: string, firstName?: string, lastName?: string) {
+  async loginWithAppleIdToken(
+    idToken: string,
+    firstName?: string,
+    lastName?: string,
+  ) {
     if (!idToken) {
       throw new BadRequestException('id_token is required');
     }
 
     try {
-      const { sub: appleId, email, email_verified } = await appleSigninAuth.verifyIdToken(idToken, {
-        audience: [process.env.APPLE_CLIENT_ID, process.env.APPLE_SERVICE_ID],
-        nonce: 'NONCE',
-        ignoreExpiration: false
+      const {
+        sub: appleId,
+        email,
+        email_verified,
+      } = await appleSigninAuth.verifyIdToken(idToken, {
+        audience: [
+          this.configService.get<string>('APPLE_CLIENT_ID'),
+          this.configService.get<string>('APPLE_SERVICE_ID'),
+        ],
+        ignoreExpiration: false,
       });
 
-      const name = firstName && lastName ? `${firstName} ${lastName}` : undefined;
+      const name =
+        firstName && lastName ? `${firstName} ${lastName}` : undefined;
 
       return this._upsertOrReturnUserFromOAuthPayload({
         appleId,
@@ -512,13 +592,11 @@ export class AuthService {
         emailVerified: email_verified === 'true' || email_verified === true,
         name,
       });
-
     } catch (err) {
       this.logger.error('Apple id_token verification failed', err);
       throw new UnauthorizedException('Invalid Apple id_token');
     }
   }
-
 
   // ====================================================
   // INTERNAL: Unified OAuth upsert logic
@@ -568,7 +646,8 @@ export class AuthService {
     // 3. Create new user
     if (!user) {
       const randomPassword = crypto.randomBytes(16).toString('hex');
-      const hashedPassword = await this.passwordService.hashPassword(randomPassword);
+      const hashedPassword =
+        await this.passwordService.hashPassword(randomPassword);
 
       user = await this.prisma.user.create({
         data: {
@@ -578,7 +657,7 @@ export class AuthService {
           isEmailVerified: emailVerified === true,
           googleId: googleId || null,
           appleId: appleId || null,
-          role: 'parent',
+          role: Role.parent,
           profile: {
             create: {
               country: 'NG',
@@ -592,7 +671,10 @@ export class AuthService {
       try {
         await this.notificationService.seedDefaultPreferences(user.id);
       } catch (error) {
-        this.logger.error('Failed to seed notification preferences:', error.message);
+        this.logger.error(
+          'Failed to seed notification preferences:',
+          error.message,
+        );
       }
     }
 

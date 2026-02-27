@@ -1,11 +1,35 @@
 import {
-  Injectable, Logger, ServiceUnavailableException,
-  InternalServerErrorException
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { HttpService } from '@nestjs/axios';
+import { GoogleGenAI } from '@google/genai';
+import { EnvConfig } from '@/shared/config/env.validation';
+import { firstValueFrom } from 'rxjs';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
+import { UploadService } from '../upload/upload.service';
+
+/** Hugging Face Inference API endpoint for cover image generation */
+const HF_IMAGE_API_URL =
+  'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell';
+
+/** Circuit breaker states */
+enum CircuitState {
+  CLOSED = 'CLOSED', // Normal operation
+  OPEN = 'OPEN', // Failing fast, not calling API
+  HALF_OPEN = 'HALF_OPEN', // Testing if service recovered
+}
+
+/** Circuit breaker configuration */
+const CIRCUIT_CONFIG = {
+  failureThreshold: 5, // Open circuit after 5 consecutive failures
+  resetTimeoutMs: 60000, // Try again after 1 minute
+  halfOpenMaxAttempts: 1, // Allow 1 test request in half-open state
+};
 
 export interface GenerateStoryOptions {
   theme: string[];
@@ -44,38 +68,112 @@ export interface GeneratedStory {
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
-  private genAI: GoogleGenerativeAI;
+  private readonly genAI: GoogleGenAI;
+  private readonly hfToken: string;
+
+  // Circuit breaker state
+  private circuitState: CircuitState = CircuitState.CLOSED;
+  private failureCount = 0;
+  private lastFailureTime = 0;
+  private halfOpenAttempts = 0;
 
   constructor(
-    private configService: ConfigService,
+    private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly httpService: HttpService,
     private readonly voiceQuotaService: VoiceQuotaService,
+    private readonly uploadService: UploadService,
   ) {
-    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (!apiKey) {
-      this.logger.warn(
-        'GEMINI_API_KEY not configured. Story generation will not be available.',
-      );
-      return;
+    this.genAI = new GoogleGenAI({
+      apiKey: this.configService.get<string>('GEMINI_API_KEY'),
+    });
+    this.hfToken = this.configService.get<string>('HF_TOKEN');
+  }
+
+  /**
+   * Check if circuit allows requests
+   * Returns true if request should proceed, false if should fail fast
+   */
+  private canMakeRequest(): boolean {
+    const now = Date.now();
+
+    switch (this.circuitState) {
+      case CircuitState.CLOSED:
+        return true;
+
+      case CircuitState.OPEN:
+        // Check if enough time has passed to try again
+        if (now - this.lastFailureTime >= CIRCUIT_CONFIG.resetTimeoutMs) {
+          this.circuitState = CircuitState.HALF_OPEN;
+          this.halfOpenAttempts = 0;
+          this.logger.log('Circuit breaker transitioning to HALF_OPEN state');
+          return true;
+        }
+        return false;
+
+      case CircuitState.HALF_OPEN:
+        // Allow limited test requests
+        if (this.halfOpenAttempts < CIRCUIT_CONFIG.halfOpenMaxAttempts) {
+          this.halfOpenAttempts++;
+          return true;
+        }
+        return false;
+
+      default:
+        return true;
     }
-    this.genAI = new GoogleGenerativeAI(apiKey);
+  }
+
+  /**
+   * Record a successful request - reset circuit breaker
+   */
+  private recordSuccess(): void {
+    if (this.circuitState === CircuitState.HALF_OPEN) {
+      this.logger.log('Circuit breaker closing after successful request');
+    }
+    this.failureCount = 0;
+    this.circuitState = CircuitState.CLOSED;
+  }
+
+  /**
+   * Record a failed request - potentially open circuit
+   */
+  private recordFailure(): void {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+
+    if (this.circuitState === CircuitState.HALF_OPEN) {
+      // Failed during test, go back to open
+      this.circuitState = CircuitState.OPEN;
+      this.logger.warn('Circuit breaker re-opening after failed test request');
+    } else if (this.failureCount >= CIRCUIT_CONFIG.failureThreshold) {
+      this.circuitState = CircuitState.OPEN;
+      this.logger.warn(
+        `Circuit breaker OPEN after ${this.failureCount} consecutive failures. ` +
+          `Will retry in ${CIRCUIT_CONFIG.resetTimeoutMs / 1000}s`,
+      );
+    }
   }
 
   async generateStory(options: GenerateStoryOptions): Promise<GeneratedStory> {
-    if (!this.genAI) {
-      throw new Error(
-        'Gemini API is not configured. Please set GEMINI_API_KEY environment variable.',
+    // Circuit breaker check - fail fast if circuit is open
+    if (!this.canMakeRequest()) {
+      this.logger.warn('Circuit breaker is OPEN - failing fast');
+      throw new ServiceUnavailableException(
+        'The AI storyteller is temporarily unavailable. Please try again in a minute.',
       );
     }
-
-    // UPDATED: Changed model from 'gemini-1.5-flash' to 'gemini-2.5-flash'
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = this.buildPrompt(options);
 
     try {
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const result = await this.genAI.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+      });
+      const text = result.text;
+      if (!text) {
+        throw new Error('Gemini returned an empty response');
+      }
 
       // Parse the JSON response
       const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
@@ -86,16 +184,21 @@ export class GeminiService {
         throw new Error('Invalid story structure received from Gemini');
       }
 
-
-
-
       // Track usage if userId is provided
       if (options.userId) {
         // Run in background to not block response
-        this.voiceQuotaService.trackGeminiStory(options.userId).catch(err =>
-          this.logger.error(`Failed to track Gemini story usage for user ${options.userId}:`, err)
-        );
+        this.voiceQuotaService
+          .trackGeminiStory(options.userId)
+          .catch((err) =>
+            this.logger.error(
+              `Failed to track Gemini story usage for user ${options.userId}:`,
+              err,
+            ),
+          );
       }
+
+      // Record success for circuit breaker
+      this.recordSuccess();
 
       return {
         ...story,
@@ -109,21 +212,43 @@ export class GeminiService {
     } catch (error) {
       this.logger.error('Failed to generate story with Gemini:', error);
 
+      // Only count transient API errors toward circuit breaker
+      // Parse errors and validation errors are not API instability
+      const errorObj =
+        error != null && typeof error === 'object'
+          ? (error as Record<string, unknown>)
+          : {};
+      const httpStatus = Number(errorObj.status ?? errorObj.code);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const isTransientError =
+        httpStatus === 429 ||
+        httpStatus === 503 ||
+        errorMessage.includes('fetch failed') ||
+        errorMessage.includes('ETIMEDOUT');
+
+      if (isTransientError) {
+        this.recordFailure();
+      }
+
       // 1. Check for Network/Fetch errors
-      if (error.message && (error.message.includes('fetch failed') || error.message.includes('ETIMEDOUT'))) {
+      if (
+        errorMessage.includes('fetch failed') ||
+        errorMessage.includes('ETIMEDOUT')
+      ) {
         throw new ServiceUnavailableException(
-          'We are having trouble connecting to the AI service right now. Please check your internet connection or try again in a moment.'
+          'We are having trouble connecting to the AI service right now. Please check your internet connection or try again in a moment.',
         );
       }
 
       // 2. Check for API Overload/Rate Limits
-      if (error.status === 429 || error.status === 503) {
+      if (httpStatus === 429 || httpStatus === 503) {
         throw new ServiceUnavailableException(
-          'The AI storyteller is a bit busy right now. Please try again in 1 minute.'
+          'The AI storyteller is a bit busy right now. Please try again in 1 minute.',
         );
       }
 
-      // 3. Fallback for other code errors
+      // 3. Fallback for other errors (parse errors, validation, etc.)
       throw new InternalServerErrorException(
         'Something went wrong generating the story. Please try again.',
       );
@@ -179,25 +304,27 @@ Include exactly 5 comprehension questions that test understanding of the story. 
 Important: Return ONLY the JSON object, no additional text or markdown formatting.`;
   }
 
-  private validateStoryStructure(story: any): boolean {
+  private validateStoryStructure(story: unknown): story is GeneratedStory {
     if (!story || typeof story !== 'object') return false;
 
+    const storyObj = story as Record<string, unknown>;
     const requiredFields = ['title', 'description', 'content', 'questions'];
     for (const field of requiredFields) {
-      if (!story[field]) return false;
+      if (!storyObj[field]) return false;
     }
 
-    if (!Array.isArray(story.questions) || story.questions.length < 1)
-      return false;
+    const questions = storyObj.questions;
+    if (!Array.isArray(questions) || questions.length < 1) return false;
 
-    for (const question of story.questions) {
+    for (const question of questions) {
+      const q = question as Record<string, unknown>;
       if (
-        !question.question ||
-        !Array.isArray(question.options) ||
-        question.options.length !== 4 ||
-        typeof question.answer !== 'number' ||
-        question.answer < 0 ||
-        question.answer > 3
+        !q.question ||
+        !Array.isArray(q.options) ||
+        q.options.length !== 4 ||
+        typeof q.answer !== 'number' ||
+        q.answer < 0 ||
+        q.answer > 3
       ) {
         return false;
       }
@@ -209,22 +336,63 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
   async generateStoryImage(
     title: string,
     description: string,
-    userId?: string, // Added userId for tracking
+    userId?: string,
   ): Promise<string> {
     const imagePrompt = `Children's story book cover for "${title}". ${description}. Colorful, vibrant, detailed, 4k, digital art style, friendly characters, magical atmosphere`;
-    const encodedPrompt = encodeURIComponent(imagePrompt);
-    const seed = Math.floor(Math.random() * 100000);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&seed=${seed}`;
 
-    this.logger.log(`Generated Pollinations Image URL: ${imageUrl}`);
+    this.logger.log(
+      `Generating cover image for "${title}" via Hugging Face FLUX`,
+    );
 
-    // Track usage if userId is provided
-    if (userId) {
-      this.voiceQuotaService.trackGeminiImage(userId).catch(err =>
-        this.logger.error(`Failed to track Gemini image usage for user ${userId}:`, err)
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          HF_IMAGE_API_URL,
+          { inputs: imagePrompt },
+          {
+            headers: {
+              Authorization: `Bearer ${this.hfToken}`,
+              Accept: 'image/png',
+            },
+            responseType: 'arraybuffer',
+            timeout: 60000,
+          },
+        ),
+      );
+
+      const buffer = Buffer.from(response.data as ArrayBuffer);
+      if (buffer.length < 1024) {
+        throw new Error(
+          `Hugging Face returned invalid image data (${buffer.length} bytes)`,
+        );
+      }
+
+      const result = await this.uploadService.uploadImageFromBuffer(
+        buffer,
+        'covers',
+      );
+      this.logger.log(
+        `Cover image uploaded to Cloudinary: ${result.secure_url}`,
+      );
+
+      if (userId) {
+        this.voiceQuotaService
+          .trackGeminiImage(userId)
+          .catch((err) =>
+            this.logger.error(
+              `Failed to track image usage for user ${userId}:`,
+              err,
+            ),
+          );
+      }
+
+      return result.secure_url;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Cover image generation failed for "${title}": ${msg}`);
+      throw new InternalServerErrorException(
+        'Failed to generate cover image. Please try again.',
       );
     }
-
-    return imageUrl;
   }
 }

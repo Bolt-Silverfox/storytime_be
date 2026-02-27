@@ -100,16 +100,23 @@ export class TokenService {
    * Decode a JWT without verification (for inspection only)
    */
   decodeJwt(token: string): TokenPayload | null {
-    return this.jwtService.decode(token) as TokenPayload | null;
+    return this.jwtService.decode(token);
   }
 
   /**
    * Find a session by hashed refresh token
+   * Includes user with kid count to avoid separate query
    */
   async findSessionByRefreshToken(refreshToken: string) {
     return this.prisma.session.findUnique({
       where: { token: this.hashToken(refreshToken) },
-      include: { user: true },
+      include: {
+        user: {
+          include: {
+            _count: { select: { kids: true } },
+          },
+        },
+      },
     });
   }
 
@@ -147,7 +154,10 @@ export class TokenService {
   /**
    * Delete all sessions for a user except the specified one
    */
-  async deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void> {
+  async deleteOtherSessions(
+    userId: string,
+    exceptSessionId: string,
+  ): Promise<void> {
     await this.prisma.session.deleteMany({
       where: {
         userId,

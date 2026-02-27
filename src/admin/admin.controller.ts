@@ -11,7 +11,10 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  Res,
+  BadRequestException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { AdminService } from './admin.service';
 import { Admin } from './decorators/admin.decorator';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
@@ -26,16 +29,13 @@ import {
   UpdateUserRoleDto,
   BulkActionDto,
 } from './dto/user-management.dto';
+import { ExportAnalyticsDto } from './dto/admin-export.dto';
 import { PaginationUtil } from '../shared/utils/pagination.util';
-import { DeletionRequestDto } from './dto/admin-deletion-request.dto';
 import {
   DashboardStatsDto,
   StoryStatsDto,
   ContentBreakdownDto,
   SystemHealthDto,
-  PaginatedResponseDto,
-  SubscriptionAnalyticsDto,
-  RevenueAnalyticsDto,
 } from './dto/admin-responses.dto';
 import {
   ApiBearerAuth,
@@ -55,7 +55,7 @@ import {
 @Admin()
 @ApiTags('admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) { }
+  constructor(private readonly adminService: AdminService) {}
 
   // =====================
   // DASHBOARD & ANALYTICS
@@ -65,7 +65,8 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get dashboard metrics',
-    description: 'Returns comprehensive platform KPIs including users, stories, subscriptions, and revenue statistics.',
+    description:
+      'Returns comprehensive platform KPIs including users, stories, subscriptions, and revenue statistics.',
   })
   @ApiOkResponse({
     description: 'Dashboard metrics retrieved successfully',
@@ -96,20 +97,20 @@ export class AdminController {
           subscriptionPlans: [
             { plan: 'monthly', count: 120 },
             { plan: 'yearly', count: 60 },
-            { plan: 'family', count: 20 }
+            { plan: 'family', count: 20 },
           ],
-          totalRevenue: 12500.50,
-          conversionRate: 14.4
-        }
-      }
-    }
+          totalRevenue: 12500.5,
+          conversionRate: 14.4,
+        },
+      },
+    },
   })
   async getDashboardStats(): Promise<DashboardStatsDto> {
     const stats = await this.adminService.getDashboardStats();
     return {
       statusCode: 200,
       message: 'Dashboard metrics retrieved successfully',
-      data: stats
+      data: stats,
     } as any;
   }
 
@@ -117,21 +118,22 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get user growth analytics',
-    description: 'Returns day-by-day user growth statistics with paid/unpaid breakdown between optional startDate/endDate.',
+    description:
+      'Returns day-by-day user growth statistics with paid/unpaid breakdown between optional startDate/endDate.',
   })
   @ApiQuery({
     name: 'startDate',
     required: false,
     type: String,
     description: 'Start date for analytics (ISO format, default: 30 days ago)',
-    example: '2023-10-01'
+    example: '2023-10-01',
   })
   @ApiQuery({
     name: 'endDate',
     required: false,
     type: String,
     description: 'End date for analytics (ISO format, default: today)',
-    example: '2023-10-31'
+    example: '2023-10-31',
   })
   @ApiOkResponse({
     description: 'User growth analytics retrieved successfully',
@@ -145,25 +147,25 @@ export class AdminController {
             newUsers: 10,
             paidUsers: 2,
             totalUsers: 1000,
-            totalPaidUsers: 150
+            totalPaidUsers: 150,
           },
           {
             date: '2023-10-02',
             newUsers: 8,
             paidUsers: 1,
             totalUsers: 1008,
-            totalPaidUsers: 151
-          }
-        ]
-      }
-    }
+            totalPaidUsers: 151,
+          },
+        ],
+      },
+    },
   })
   async getUserGrowth(@Query() dateRange: DateRangeDto) {
     const data = await this.adminService.getUserGrowth(dateRange);
     return {
       statusCode: 200,
       message: 'User growth analytics retrieved successfully',
-      data
+      data,
     };
   }
 
@@ -171,21 +173,22 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get subscription analytics',
-    description: 'Returns detailed subscription metrics including growth, revenue, plan breakdown, and churn rate.',
+    description:
+      'Returns detailed subscription metrics including growth, revenue, plan breakdown, and churn rate.',
   })
   @ApiQuery({
     name: 'startDate',
     required: false,
     type: String,
     description: 'Start date for analytics (ISO format, default: 30 days ago)',
-    example: '2023-10-01'
+    example: '2023-10-01',
   })
   @ApiQuery({
     name: 'endDate',
     required: false,
     type: String,
     description: 'End date for analytics (ISO format, default: today)',
-    example: '2023-10-31'
+    example: '2023-10-31',
   })
   @ApiOkResponse({
     description: 'Subscription analytics retrieved successfully',
@@ -196,28 +199,28 @@ export class AdminController {
         data: {
           subscriptionGrowth: [
             { date: '2023-10-01', count: 5 },
-            { date: '2023-10-02', count: 3 }
+            { date: '2023-10-02', count: 3 },
           ],
           revenueGrowth: [
             { date: '2023-10-01', amount: 500 },
-            { date: '2023-10-02', amount: 300 }
+            { date: '2023-10-02', amount: 300 },
           ],
           planBreakdown: [
             { plan: 'monthly', count: 120 },
             { plan: 'yearly', count: 60 },
-            { plan: 'family', count: 20 }
+            { plan: 'family', count: 20 },
           ],
-          churnRate: 2.5
-        }
-      }
-    }
+          churnRate: 2.5,
+        },
+      },
+    },
   })
   async getSubscriptionAnalytics(@Query() dateRange: DateRangeDto) {
     const data = await this.adminService.getSubscriptionAnalytics(dateRange);
     return {
       statusCode: 200,
       message: 'Subscription analytics retrieved successfully',
-      data
+      data,
     };
   }
 
@@ -225,21 +228,22 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get revenue analytics',
-    description: 'Returns detailed revenue breakdown by day, month, year, and top subscription plans.',
+    description:
+      'Returns detailed revenue breakdown by day, month, year, and top subscription plans.',
   })
   @ApiQuery({
     name: 'startDate',
     required: false,
     type: String,
     description: 'Start date for analytics (ISO format, default: 30 days ago)',
-    example: '2023-10-01'
+    example: '2023-10-01',
   })
   @ApiQuery({
     name: 'endDate',
     required: false,
     type: String,
     description: 'End date for analytics (ISO format, default: today)',
-    example: '2023-10-31'
+    example: '2023-10-31',
   })
   @ApiOkResponse({
     description: 'Revenue analytics retrieved successfully',
@@ -250,38 +254,38 @@ export class AdminController {
         data: {
           dailyRevenue: [
             { date: '2023-10-01', amount: 500 },
-            { date: '2023-10-02', amount: 750 }
+            { date: '2023-10-02', amount: 750 },
           ],
           monthlyRevenue: [
             { month: '2023-10', total_amount: 12500 },
-            { month: '2023-09', total_amount: 11800 }
+            { month: '2023-09', total_amount: 11800 },
           ],
           yearlyRevenue: [
             { year: '2023', total_amount: 85000 },
-            { year: '2022', total_amount: 72000 }
+            { year: '2022', total_amount: 72000 },
           ],
           topPlans: [
             {
               plan: 'yearly',
               subscription_count: 60,
-              total_revenue: 6000
+              total_revenue: 6000,
             },
             {
               plan: 'monthly',
               subscription_count: 120,
-              total_revenue: 4800
-            }
-          ]
-        }
-      }
-    }
+              total_revenue: 4800,
+            },
+          ],
+        },
+      },
+    },
   })
   async getRevenueAnalytics(@Query() dateRange: DateRangeDto) {
     const data = await this.adminService.getRevenueAnalytics(dateRange);
     return {
       statusCode: 200,
       message: 'Revenue analytics retrieved successfully',
-      data
+      data,
     };
   }
 
@@ -289,7 +293,8 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get story statistics',
-    description: 'Returns comprehensive story metrics including counts, AI-generated stories, recommendations, and engagement.',
+    description:
+      'Returns comprehensive story metrics including counts, AI-generated stories, recommendations, and engagement.',
   })
   @ApiOkResponse({
     description: 'Story statistics retrieved successfully',
@@ -305,17 +310,17 @@ export class AdminController {
           recommendedStories: 75,
           deletedStories: 15,
           totalViews: 12500,
-          totalFavorites: 2300
-        }
-      }
-    }
+          totalFavorites: 2300,
+        },
+      },
+    },
   })
   async getStoryStats(): Promise<StoryStatsDto> {
     const stats = await this.adminService.getStoryStats();
     return {
       statusCode: 200,
       message: 'Story statistics retrieved successfully',
-      data: stats
+      data: stats,
     } as any;
   }
 
@@ -323,7 +328,8 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get content breakdown',
-    description: 'Returns content distribution by language, age group, category, and theme.',
+    description:
+      'Returns content distribution by language, age group, category, and theme.',
   })
   @ApiOkResponse({
     description: 'Content breakdown retrieved successfully',
@@ -335,33 +341,33 @@ export class AdminController {
           byLanguage: [
             { language: 'English', count: 250 },
             { language: 'Spanish', count: 50 },
-            { language: 'French', count: 25 }
+            { language: 'French', count: 25 },
           ],
           byAgeGroup: [
             { ageRange: '3-5', count: 100 },
             { ageRange: '6-8', count: 150 },
-            { ageRange: '9-12', count: 75 }
+            { ageRange: '9-12', count: 75 },
           ],
           byCategory: [
             { categoryName: 'Animal Stories', count: 80 },
             { categoryName: 'Adventure & Action', count: 70 },
-            { categoryName: 'Bedtime Stories', count: 60 }
+            { categoryName: 'Bedtime Stories', count: 60 },
           ],
           byTheme: [
             { themeName: 'Adventure', count: 120 },
             { themeName: 'Friendship', count: 90 },
-            { themeName: 'Courage', count: 70 }
-          ]
-        }
-      }
-    }
+            { themeName: 'Courage', count: 70 },
+          ],
+        },
+      },
+    },
   })
   async getContentBreakdown(): Promise<ContentBreakdownDto> {
     const breakdown = await this.adminService.getContentBreakdown();
     return {
       statusCode: 200,
       message: 'Content breakdown retrieved successfully',
-      data: breakdown
+      data: breakdown,
     } as any;
   }
 
@@ -369,7 +375,8 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get system health status',
-    description: 'Returns system health metrics including database connectivity, response time, uptime, and memory utilization.',
+    description:
+      'Returns system health metrics including database connectivity, response time, uptime, and memory utilization.',
   })
   @ApiOkResponse({
     description: 'System health status retrieved successfully',
@@ -381,25 +388,25 @@ export class AdminController {
           status: 'healthy',
           database: {
             connected: true,
-            responseTime: 45
+            responseTime: 45,
           },
           uptime: 86400,
           memoryUsage: {
             used: 512,
             total: 1024,
-            percentage: 50
+            percentage: 50,
           },
-          timestamp: '2023-10-15T10:30:00Z'
-        }
-      }
-    }
+          timestamp: '2023-10-15T10:30:00Z',
+        },
+      },
+    },
   })
   async getSystemHealth(): Promise<SystemHealthDto> {
     const health = await this.adminService.getSystemHealth();
     return {
       statusCode: 200,
       message: 'System health status retrieved successfully',
-      data: health
+      data: health,
     } as any;
   }
 
@@ -414,7 +421,14 @@ export class AdminController {
     required: false,
     type: Number,
     description: 'Number of activity logs to return (default: 50, max: 100)',
-    example: 50
+    example: 50,
+  })
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    type: String,
+    description: 'Filter activity logs by a specific user ID',
+    example: 'user-123',
   })
   @ApiOkResponse({
     description: 'Recent activity logs retrieved successfully',
@@ -439,24 +453,28 @@ export class AdminController {
               id: 'user-123',
               email: 'parent@example.com',
               name: 'John Doe',
-              role: 'parent'
+              role: 'parent',
             },
             kid: {
               id: 'kid-123',
-              name: 'Emma Doe'
-            }
-          }
-        ]
-      }
-    }
+              name: 'Emma Doe',
+            },
+          },
+        ],
+      },
+    },
   })
-  async getRecentActivity(@Query('limit') limit?: number) {
+  async getRecentActivity(
+    @Query('limit') limit?: number,
+    @Query('userId') userId?: string,
+  ) {
     const { limit: l } = PaginationUtil.sanitize(1, limit, 100);
-    const data = await this.adminService.getRecentActivity(l);
+    const trimmedUserId = userId?.trim() || undefined;
+    const data = await this.adminService.getRecentActivity(l, trimmedUserId);
     return {
       statusCode: 200,
       message: 'Recent activity logs retrieved successfully',
-      data
+      data,
     };
   }
 
@@ -464,17 +482,29 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get AI credit analytics',
-    description: 'Returns usage stats for AI services (ElevenLabs, Gemini), grouped by month for the current year',
+    description:
+      'Returns usage stats for AI services (ElevenLabs, Gemini), grouped by the selected duration (daily/weekly/monthly/quarterly/yearly).',
   })
   @ApiOkResponse({
     description: 'AI credit analytics retrieved successfully',
   })
-  async getAiCreditStats() {
-    const data = await this.adminService.getAiCreditAnalytics();
+  async getAiCreditStats(
+    @Query('duration')
+    duration: string = 'yearly',
+  ) {
+    const valid = ['yearly', 'quarterly', 'monthly', 'weekly', 'daily'];
+    if (!valid.includes(duration)) {
+      throw new BadRequestException(
+        `Invalid duration. Must be one of: ${valid.join(', ')}`,
+      );
+    }
+    const data = await this.adminService.getAiCreditAnalytics(
+      duration as 'yearly' | 'quarterly' | 'monthly' | 'weekly' | 'daily',
+    );
     return {
       statusCode: 200,
       message: 'AI credit analytics retrieved successfully',
-      data
+      data,
     };
   }
 
@@ -482,88 +512,204 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get monthly user growth (Free vs Paid)',
-    description: 'Returns user growth data for the last 12 months, split by subscription status',
+    description:
+      'Returns user growth data for the selected duration (last_week/last_month/last_year), split by subscription status',
   })
   @ApiOkResponse({
     description: 'User growth data retrieved successfully',
   })
-  async getUserGrowthMonthly() {
-    const data = await this.adminService.getUserGrowthMonthly();
+  async getUserGrowthMonthly(
+    @Query('duration')
+    duration: string = 'last_year',
+  ) {
+    const valid = ['last_year', 'last_month', 'last_week'];
+    if (!valid.includes(duration)) {
+      throw new BadRequestException(
+        `Invalid duration. Must be one of: ${valid.join(', ')}`,
+      );
+    }
+    const data = await this.adminService.getUserGrowthMonthly(
+      duration as 'last_year' | 'last_month' | 'last_week',
+    );
     return {
       statusCode: 200,
       message: 'User growth data retrieved successfully',
-      data: data.data
+      data: data.data,
     };
+  }
+
+  // =====================
+  // EXPORT ENDPOINTS
+  // =====================
+
+  @Get('dashboard/export')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Export analytics data',
+    description:
+      'Export analytics data (users, revenue, subscriptions) as CSV or JSON.',
+  })
+  @ApiQuery({
+    name: 'type',
+    required: true,
+    enum: ['users', 'revenue', 'subscriptions'],
+    description: 'Type of analytics data to export',
+  })
+  @ApiQuery({
+    name: 'format',
+    required: false,
+    enum: ['csv', 'json'],
+    description: 'Export format (default: csv)',
+  })
+  @ApiQuery({
+    name: 'startDate',
+    required: false,
+    type: String,
+    description: 'Start date for analytics (ISO format)',
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: false,
+    type: String,
+    description: 'End date for analytics (ISO format)',
+  })
+  @ApiOkResponse({ description: 'Analytics data exported successfully' })
+  async exportAnalytics(
+    @Query() exportDto: ExportAnalyticsDto,
+    @Res() res: Response,
+  ) {
+    const result = await this.adminService.exportAnalyticsData(
+      exportDto.type,
+      exportDto.format || 'csv',
+      exportDto.startDate,
+      exportDto.endDate,
+    );
+
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"`,
+    );
+    res.send(result.data);
   }
 
   // =====================
   // USER MANAGEMENT
   // =====================
 
-  @Get('users')
+  @Get('users/export')
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'List all users',
-    description: 'Returns paginated list of users with filters for search, role, subscription status, and date ranges.',
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Page number (default: 1)',
-    example: 1
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Items per page (default: 10, max: 100)',
-    example: 10
+    summary: 'Export users as CSV',
+    description:
+      'Export all users matching the given filters as a CSV file. Supports the same filters as the users list endpoint.',
   })
   @ApiQuery({
     name: 'search',
     required: false,
     type: String,
     description: 'Search term for email or name',
-    example: 'john'
   })
   @ApiQuery({
     name: 'role',
     required: false,
     enum: ['admin', 'parent', 'kid'],
-    description: 'Filter by user role'
+    description: 'Filter by user role',
   })
   @ApiQuery({
     name: 'isEmailVerified',
     required: false,
     type: Boolean,
-    description: 'Filter by email verification status'
-  })
-  @ApiQuery({
-    name: 'isDeleted',
-    required: false,
-    type: Boolean,
-    description: 'Filter by deletion status'
+    description: 'Filter by email verification status',
   })
   @ApiQuery({
     name: 'hasActiveSubscription',
     required: false,
     type: Boolean,
-    description: 'Filter by subscription status'
+    description: 'Filter by subscription status',
+  })
+  @ApiOkResponse({ description: 'Users exported as CSV' })
+  async exportUsers(
+    @Query() filters: UserFilterDto,
+    @Res() res: Response,
+    @Query('hasActiveSubscription') rawHasActiveSub?: string,
+  ) {
+    if (rawHasActiveSub !== undefined) {
+      filters.hasActiveSubscription = rawHasActiveSub === 'true';
+    }
+    const csv = await this.adminService.exportUsersAsCsv(filters);
+
+    const filename = `users-export-${new Date().toISOString().split('T')[0]}.csv`;
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  }
+
+  @Get('users')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'List all users',
+    description:
+      'Returns paginated list of users with filters for search, role, subscription status, and date ranges.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10, max: 100)',
+    example: 10,
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for email or name',
+    example: 'john',
+  })
+  @ApiQuery({
+    name: 'role',
+    required: false,
+    enum: ['admin', 'parent', 'kid'],
+    description: 'Filter by user role',
+  })
+  @ApiQuery({
+    name: 'isEmailVerified',
+    required: false,
+    type: Boolean,
+    description: 'Filter by email verification status',
+  })
+  @ApiQuery({
+    name: 'isDeleted',
+    required: false,
+    type: Boolean,
+    description: 'Filter by deletion status',
+  })
+  @ApiQuery({
+    name: 'hasActiveSubscription',
+    required: false,
+    type: Boolean,
+    description: 'Filter by subscription status',
   })
   @ApiQuery({
     name: 'createdAfter',
     required: false,
     type: String,
     description: 'Filter users created after date (ISO format)',
-    example: '2023-10-01'
+    example: '2023-10-01',
   })
   @ApiQuery({
     name: 'createdBefore',
     required: false,
     type: String,
     description: 'Filter users created before date (ISO format)',
-    example: '2023-10-31'
+    example: '2023-10-31',
   })
   @ApiOkResponse({
     description: 'Users retrieved successfully',
@@ -587,40 +733,46 @@ export class AdminController {
               id: 'sub-123',
               plan: 'monthly',
               status: 'active',
-              endsAt: '2023-11-15T10:30:00Z'
+              endsAt: '2023-11-15T10:30:00Z',
             },
             profile: {
               id: 'profile-123',
               language: 'english',
-              country: 'US'
+              country: 'US',
             },
             avatar: {
               id: 'avatar-123',
               name: 'Default Avatar',
-              url: 'https://example.com/avatar.png'
+              url: 'https://example.com/avatar.png',
             },
             kidsCount: 2,
             sessionsCount: 5,
             favoritesCount: 12,
             subscriptionsCount: 1,
-            transactionsCount: 3
-          }
+            transactionsCount: 3,
+          },
         ],
         meta: {
           total: 1250,
           page: 1,
           limit: 10,
-          totalPages: 125
-        }
-      }
-    }
+          totalPages: 125,
+        },
+      },
+    },
   })
-  async getAllUsers(@Query() filters: UserFilterDto, @Query('hasActiveSubscription') rawHasActiveSub?: string) {
+  async getAllUsers(
+    @Query() filters: UserFilterDto,
+    @Query('hasActiveSubscription') rawHasActiveSub?: string,
+  ) {
     // Fix for enableImplicitConversion corrupting 'false' string to boolean true
     if (rawHasActiveSub !== undefined) {
       filters.hasActiveSubscription = rawHasActiveSub === 'true';
     }
-    const { page, limit } = PaginationUtil.sanitize(filters.page, filters.limit);
+    const { page, limit } = PaginationUtil.sanitize(
+      filters.page,
+      filters.limit,
+    );
     filters.page = page;
     filters.limit = limit;
 
@@ -629,7 +781,7 @@ export class AdminController {
       statusCode: 200,
       message: 'Users retrieved successfully',
       data: result.data,
-      meta: result.meta
+      meta: result.meta,
     };
   }
 
@@ -644,21 +796,21 @@ export class AdminController {
     required: false,
     type: Number,
     description: 'Page number (default: 1)',
-    example: 1
+    example: 1,
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
     description: 'Items per page (default: 10, max: 100)',
-    example: 10
+    example: 10,
   })
   @ApiQuery({
     name: 'search',
     required: false,
     type: String,
     description: 'Search term for email or name',
-    example: 'john'
+    example: 'john',
   })
   @ApiOkResponse({
     description: 'Paid users retrieved successfully',
@@ -674,22 +826,25 @@ export class AdminController {
             isPaidUser: true,
             activeSubscription: {
               plan: 'monthly',
-              status: 'active'
+              status: 'active',
             },
-            createdAt: '2023-10-01T12:00:00Z'
-          }
+            createdAt: '2023-10-01T12:00:00Z',
+          },
         ],
         meta: {
           total: 180,
           page: 1,
           limit: 10,
-          totalPages: 18
-        }
-      }
-    }
+          totalPages: 18,
+        },
+      },
+    },
   })
   async getPaidUsers(@Query() filters: UserFilterDto) {
-    const { page, limit } = PaginationUtil.sanitize(filters.page, filters.limit);
+    const { page, limit } = PaginationUtil.sanitize(
+      filters.page,
+      filters.limit,
+    );
     filters.page = page;
     filters.limit = limit;
 
@@ -699,7 +854,7 @@ export class AdminController {
       statusCode: 200,
       message: 'Paid users retrieved successfully',
       data: result.data,
-      meta: result.meta
+      meta: result.meta,
     };
   }
 
@@ -707,28 +862,29 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get unpaid users',
-    description: 'Returns paginated list of users without active subscriptions.',
+    description:
+      'Returns paginated list of users without active subscriptions.',
   })
   @ApiQuery({
     name: 'page',
     required: false,
     type: Number,
     description: 'Page number (default: 1)',
-    example: 1
+    example: 1,
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
     description: 'Items per page (default: 10, max: 100)',
-    example: 10
+    example: 10,
   })
   @ApiQuery({
     name: 'search',
     required: false,
     type: String,
     description: 'Search term for email or name',
-    example: 'john'
+    example: 'john',
   })
   @ApiOkResponse({
     description: 'Unpaid users retrieved successfully',
@@ -742,20 +898,23 @@ export class AdminController {
             email: 'freemium@example.com',
             name: 'Jane Smith',
             isPaidUser: false,
-            createdAt: '2023-11-01T10:00:00Z'
-          }
+            createdAt: '2023-11-01T10:00:00Z',
+          },
         ],
         meta: {
           total: 1070,
           page: 1,
           limit: 10,
-          totalPages: 107
-        }
-      }
-    }
+          totalPages: 107,
+        },
+      },
+    },
   })
   async getUnpaidUsers(@Query() filters: UserFilterDto) {
-    const { page, limit } = PaginationUtil.sanitize(filters.page, filters.limit);
+    const { page, limit } = PaginationUtil.sanitize(
+      filters.page,
+      filters.limit,
+    );
     filters.page = page;
     filters.limit = limit;
 
@@ -765,7 +924,7 @@ export class AdminController {
       statusCode: 200,
       message: 'Unpaid users retrieved successfully',
       data: result.data,
-      meta: result.meta
+      meta: result.meta,
     };
   }
 
@@ -773,21 +932,22 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'List account deletion requests',
-    description: 'Returns parsed list of account deletion requests including reasons and notes.',
+    description:
+      'Returns parsed list of account deletion requests including reasons and notes.',
   })
   @ApiQuery({
     name: 'page',
     required: false,
     type: Number,
     description: 'Page number (default: 1)',
-    example: 1
+    example: 1,
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
     description: 'Items per page (default: 10, max: 100)',
-    example: 10
+    example: 10,
   })
   @ApiOkResponse({
     description: 'Deletion requests retrieved successfully',
@@ -805,17 +965,17 @@ export class AdminController {
             notes: 'I prefer another app',
             createdAt: '2023-10-01T12:00:00Z',
             status: 'open',
-            isPermanent: false
-          }
+            isPermanent: false,
+          },
         ],
         meta: {
           total: 5,
           page: 1,
           limit: 10,
-          totalPages: 1
-        }
-      }
-    }
+          totalPages: 1,
+        },
+      },
+    },
   })
   async getDeletionRequests(
     @Query('page') page?: number,
@@ -827,7 +987,7 @@ export class AdminController {
       statusCode: 200,
       message: 'Deletion requests retrieved successfully',
       data: result.data,
-      meta: result.meta
+      meta: result.meta,
     };
   }
 
@@ -835,13 +995,14 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get user by ID',
-    description: 'Returns detailed user information including profile, kids, subscriptions, payment history, and activity statistics.',
+    description:
+      'Returns detailed user information including profile, kids, subscriptions, payment history, and activity statistics.',
   })
   @ApiParam({
     name: 'userId',
     type: String,
     description: 'User ID',
-    example: 'user-123-uuid'
+    example: 'user-123-uuid',
   })
   @ApiOkResponse({
     description: 'User details retrieved successfully',
@@ -860,7 +1021,7 @@ export class AdminController {
           createdAt: '2023-10-01T12:00:00Z',
           updatedAt: '2023-10-15T10:30:00Z',
           isPaidUser: true,
-          totalSpent: 125.50,
+          totalSpent: 125.5,
           profile: {
             id: 'profile-123',
             explicitContent: false,
@@ -868,7 +1029,7 @@ export class AdminController {
             language: 'english',
             country: 'US',
             createdAt: '2023-10-01T12:00:00Z',
-            updatedAt: '2023-10-15T10:30:00Z'
+            updatedAt: '2023-10-15T10:30:00Z',
           },
           kids: [
             {
@@ -879,9 +1040,9 @@ export class AdminController {
               avatar: {
                 id: 'avatar-456',
                 name: 'Kid Avatar',
-                url: 'https://example.com/kid-avatar.png'
-              }
-            }
+                url: 'https://example.com/kid-avatar.png',
+              },
+            },
           ],
           avatar: {
             id: 'avatar-123',
@@ -889,25 +1050,23 @@ export class AdminController {
             url: 'https://example.com/avatar.png',
             isSystemAvatar: true,
             publicId: 'avatar_123',
-            createdAt: '2023-10-01T12:00:00Z'
+            createdAt: '2023-10-01T12:00:00Z',
           },
-          subscriptions: [
-            {
-              id: 'sub-123',
-              plan: 'monthly',
-              status: 'active',
-              startedAt: '2023-10-01T12:00:00Z',
-              endsAt: '2023-11-01T12:00:00Z'
-            }
-          ],
+          subscription: {
+            id: 'sub-123',
+            plan: 'monthly',
+            status: 'active',
+            startedAt: '2023-10-01T12:00:00Z',
+            endsAt: '2023-11-01T12:00:00Z',
+          },
           paymentTransactions: [
             {
               id: 'txn-123',
               amount: 9.99,
               currency: 'USD',
               status: 'success',
-              createdAt: '2023-10-01T12:00:00Z'
-            }
+              createdAt: '2023-10-01T12:00:00Z',
+            },
           ],
           stats: {
             sessionsCount: 5,
@@ -915,11 +1074,11 @@ export class AdminController {
             voicesCount: 1,
             subscriptionsCount: 1,
             ticketsCount: 2,
-            transactionsCount: 3
-          }
-        }
-      }
-    }
+            transactionsCount: 3,
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -928,16 +1087,16 @@ export class AdminController {
       example: {
         statusCode: 404,
         message: 'User with ID user-123 not found',
-        error: 'Not Found'
-      }
-    }
+        error: 'Not Found',
+      },
+    },
   })
   async getUserById(@Param('userId') userId: string) {
     const data = await this.adminService.getUserById(userId);
     return {
       statusCode: 200,
       message: 'User details retrieved successfully',
-      data
+      data,
     };
   }
 
@@ -946,7 +1105,8 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Create admin user',
-    description: 'Creates a new admin user with verified email and hashed password.',
+    description:
+      'Creates a new admin user with verified email and hashed password.',
   })
   @ApiBody({
     description: 'Admin user creation data',
@@ -955,9 +1115,9 @@ export class AdminController {
         email: 'admin@example.com',
         password: 'SecurePass123!',
         name: 'Admin User',
-        title: 'Mr'
-      }
-    }
+        title: 'Mr',
+      },
+    },
   })
   @ApiCreatedResponse({
     description: 'Admin user created successfully',
@@ -970,10 +1130,10 @@ export class AdminController {
           email: 'admin@example.com',
           name: 'Admin User',
           role: 'admin',
-          createdAt: '2023-10-15T10:30:00Z'
-        }
-      }
-    }
+          createdAt: '2023-10-15T10:30:00Z',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 409,
@@ -982,9 +1142,9 @@ export class AdminController {
       example: {
         statusCode: 409,
         message: 'User with this email already exists',
-        error: 'Conflict'
-      }
-    }
+        error: 'Conflict',
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -993,16 +1153,16 @@ export class AdminController {
       example: {
         statusCode: 400,
         message: ['password must be longer than or equal to 8 characters'],
-        error: 'Bad Request'
-      }
-    }
+        error: 'Bad Request',
+      },
+    },
   })
   async createAdmin(@Body() createAdminDto: CreateAdminDto) {
     const data = await this.adminService.createAdmin(createAdminDto);
     return {
       statusCode: 201,
       message: 'Admin user created successfully',
-      data
+      data,
     };
   }
 
@@ -1010,13 +1170,14 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update user',
-    description: 'Updates user information including name, title, role, or email. Enforces unique email validation.',
+    description:
+      'Updates user information including name, title, role, or email. Enforces unique email validation.',
   })
   @ApiParam({
     name: 'userId',
     type: String,
     description: 'User ID',
-    example: 'user-123-uuid'
+    example: 'user-123-uuid',
   })
   @ApiBody({
     description: 'User update data',
@@ -1025,9 +1186,9 @@ export class AdminController {
         name: 'Updated Name',
         title: 'Dr',
         role: 'admin',
-        email: 'updated@example.com'
-      }
-    }
+        email: 'updated@example.com',
+      },
+    },
   })
   @ApiOkResponse({
     description: 'User updated successfully',
@@ -1042,10 +1203,10 @@ export class AdminController {
           title: 'Dr',
           role: 'admin',
           isEmailVerified: true,
-          updatedAt: '2023-10-15T10:30:00Z'
-        }
-      }
-    }
+          updatedAt: '2023-10-15T10:30:00Z',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -1054,9 +1215,9 @@ export class AdminController {
       example: {
         statusCode: 404,
         message: 'User with ID user-123 not found',
-        error: 'Not Found'
-      }
-    }
+        error: 'Not Found',
+      },
+    },
   })
   @ApiResponse({
     status: 409,
@@ -1065,20 +1226,24 @@ export class AdminController {
       example: {
         statusCode: 409,
         message: 'Email already in use',
-        error: 'Conflict'
-      }
-    }
+        error: 'Conflict',
+      },
+    },
   })
   async updateUser(
     @Req() req: AuthenticatedRequest,
     @Param('userId') userId: string,
     @Body() updateUserDto: UpdateUserDto,
   ) {
-    const data = await this.adminService.updateUser(userId, updateUserDto, req.authUserData.userId);
+    const data = await this.adminService.updateUser(
+      userId,
+      updateUserDto,
+      req.authUserData.userId,
+    );
     return {
       statusCode: 200,
       message: 'User updated successfully',
-      data
+      data,
     };
   }
 
@@ -1087,23 +1252,24 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Delete user',
-    description: 'Soft deletes a user by default. Use permanent=true query parameter for permanent deletion.',
+    description:
+      'Soft deletes a user by default. Use permanent=true query parameter for permanent deletion.',
   })
   @ApiParam({
     name: 'userId',
     type: String,
     description: 'User ID',
-    example: 'user-123-uuid'
+    example: 'user-123-uuid',
   })
   @ApiQuery({
     name: 'permanent',
     required: false,
     type: Boolean,
     description: 'Permanently delete user (default: false - soft delete)',
-    example: false
+    example: false,
   })
   @ApiNoContentResponse({
-    description: 'User deleted successfully'
+    description: 'User deleted successfully',
   })
   @ApiResponse({
     status: 404,
@@ -1112,19 +1278,23 @@ export class AdminController {
       example: {
         statusCode: 404,
         message: 'User with ID user-123 not found',
-        error: 'Not Found'
-      }
-    }
+        error: 'Not Found',
+      },
+    },
   })
   async deleteUser(
     @Req() req: AuthenticatedRequest,
     @Param('userId') userId: string,
     @Query('permanent') permanent?: boolean,
   ) {
-    await this.adminService.deleteUser(userId, permanent, req.authUserData.userId);
+    await this.adminService.deleteUser(
+      userId,
+      permanent,
+      req.authUserData.userId,
+    );
     return {
       statusCode: 204,
-      message: permanent ? 'User permanently deleted' : 'User soft deleted'
+      message: permanent ? 'User permanently deleted' : 'User soft deleted',
     };
   }
 
@@ -1138,7 +1308,7 @@ export class AdminController {
     name: 'userId',
     type: String,
     description: 'User ID',
-    example: 'user-123-uuid'
+    example: 'user-123-uuid',
   })
   @ApiOkResponse({
     description: 'User restored successfully',
@@ -1152,10 +1322,10 @@ export class AdminController {
           name: 'John Doe',
           isDeleted: false,
           deletedAt: null,
-          updatedAt: '2023-10-15T10:30:00Z'
-        }
-      }
-    }
+          updatedAt: '2023-10-15T10:30:00Z',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -1164,16 +1334,103 @@ export class AdminController {
       example: {
         statusCode: 404,
         message: 'User with ID user-123 not found',
-        error: 'Not Found'
-      }
-    }
+        error: 'Not Found',
+      },
+    },
   })
   async restoreUser(@Param('userId') userId: string) {
     const data = await this.adminService.restoreUser(userId);
     return {
       statusCode: 200,
       message: 'User restored successfully',
-      data
+      data,
+    };
+  }
+
+  @Patch('users/:userId/suspend')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Suspend a user',
+    description:
+      'Suspends a user account, preventing them from accessing the platform. Cannot suspend admin users.',
+  })
+  @ApiParam({
+    name: 'userId',
+    type: String,
+    description: 'User ID',
+    example: 'user-123-uuid',
+  })
+  @ApiOkResponse({
+    description: 'User suspended successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'User suspended successfully',
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          name: 'John Doe',
+          role: 'parent',
+          isSuspended: true,
+          suspendedAt: '2023-10-15T10:30:00Z',
+          updatedAt: '2023-10-15T10:30:00Z',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'User is already suspended or is an admin',
+  })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async suspendUser(@Param('userId') userId: string) {
+    const data = await this.adminService.suspendUser(userId);
+    return {
+      statusCode: 200,
+      message: 'User suspended successfully',
+      data,
+    };
+  }
+
+  @Patch('users/:userId/unsuspend')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Unsuspend a user',
+    description:
+      'Removes suspension from a user account, restoring their access.',
+  })
+  @ApiParam({
+    name: 'userId',
+    type: String,
+    description: 'User ID',
+    example: 'user-123-uuid',
+  })
+  @ApiOkResponse({
+    description: 'User unsuspended successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'User unsuspended successfully',
+        data: {
+          id: 'user-123',
+          email: 'user@example.com',
+          name: 'John Doe',
+          role: 'parent',
+          isSuspended: false,
+          suspendedAt: null,
+          updatedAt: '2023-10-15T10:30:00Z',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'User is not suspended' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async unsuspendUser(@Param('userId') userId: string) {
+    const data = await this.adminService.unsuspendUser(userId);
+    return {
+      statusCode: 200,
+      message: 'User unsuspended successfully',
+      data,
     };
   }
 
@@ -1181,17 +1438,18 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update user role',
-    description: 'Promote or change user role (admin, parent, kid). Prevents self-demotion.',
+    description:
+      'Promote or change user role (admin, parent, kid). Prevents self-demotion.',
   })
   @ApiParam({
     name: 'userId',
     type: String,
     description: 'User ID',
-    example: 'user-123-uuid'
+    example: 'user-123-uuid',
   })
   @ApiBody({
     description: 'User role update data',
-    schema: { example: { role: 'admin' } }
+    schema: { example: { role: 'admin' } },
   })
   @ApiOkResponse({
     description: 'User role updated successfully',
@@ -1205,10 +1463,10 @@ export class AdminController {
           name: 'John Doe',
           role: 'admin',
           isEmailVerified: true,
-          updatedAt: '2023-10-15T10:30:00Z'
-        }
-      }
-    }
+          updatedAt: '2023-10-15T10:30:00Z',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -1217,9 +1475,9 @@ export class AdminController {
       example: {
         statusCode: 400,
         message: 'You cannot demote yourself from admin status.',
-        error: 'Bad Request'
-      }
-    }
+        error: 'Bad Request',
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -1228,9 +1486,9 @@ export class AdminController {
       example: {
         statusCode: 404,
         message: 'User with ID user-123 not found',
-        error: 'Not Found'
-      }
-    }
+        error: 'Not Found',
+      },
+    },
   })
   async updateUserRole(
     @Req() req: AuthenticatedRequest,
@@ -1240,12 +1498,12 @@ export class AdminController {
     const data = await this.adminService.updateUser(
       userId,
       { role: updateUserRoleDto.role },
-      req.authUserData.userId
+      req.authUserData.userId,
     );
     return {
       statusCode: 200,
       message: 'User role updated successfully',
-      data
+      data,
     };
   }
 
@@ -1254,16 +1512,17 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Bulk user actions',
-    description: 'Perform bulk actions (delete, restore, verify) on multiple users.',
+    description:
+      'Perform bulk actions (delete, restore, verify) on multiple users.',
   })
   @ApiBody({
     description: 'Bulk action data',
     schema: {
       example: {
         userIds: ['user-123', 'user-456', 'user-789'],
-        action: 'verify' // 'delete', 'restore', or 'verify'
-      }
-    }
+        action: 'verify', // 'delete', 'restore', or 'verify'
+      },
+    },
   })
   @ApiOkResponse({
     description: 'Bulk action completed successfully',
@@ -1273,10 +1532,10 @@ export class AdminController {
         message: 'Bulk action completed successfully',
         data: {
           count: 3,
-          action: 'verify'
-        }
-      }
-    }
+          action: 'verify',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -1285,9 +1544,9 @@ export class AdminController {
       example: {
         statusCode: 400,
         message: 'Invalid action',
-        error: 'Bad Request'
-      }
-    }
+        error: 'Bad Request',
+      },
+    },
   })
   async bulkUserAction(@Body() bulkActionDto: BulkActionDto) {
     const result = await this.adminService.bulkUserAction(bulkActionDto);
@@ -1296,8 +1555,8 @@ export class AdminController {
       message: 'Bulk action completed successfully',
       data: {
         count: result.count,
-        action: bulkActionDto.action
-      }
+        action: bulkActionDto.action,
+      },
     };
   }
 
@@ -1309,67 +1568,74 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'List all stories',
-    description: 'Returns paginated list of stories with filters for search, recommendations, AI generation, language, and age range.',
+    description:
+      'Returns paginated list of stories with filters for search, recommendations, AI generation, language, and age range.',
   })
   @ApiQuery({
     name: 'page',
     required: false,
     type: Number,
     description: 'Page number (default: 1)',
-    example: 1
+    example: 1,
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
     description: 'Items per page (default: 10, max: 100)',
-    example: 10
+    example: 10,
   })
   @ApiQuery({
     name: 'search',
     required: false,
     type: String,
     description: 'Search term for title or description',
-    example: 'magic'
+    example: 'magic',
   })
   @ApiQuery({
     name: 'recommended',
     required: false,
     type: Boolean,
-    description: 'Filter by recommended status'
+    description: 'Filter by recommended status',
   })
   @ApiQuery({
     name: 'aiGenerated',
     required: false,
     type: Boolean,
-    description: 'Filter by AI-generated status'
+    description: 'Filter by AI-generated status',
   })
   @ApiQuery({
     name: 'isDeleted',
     required: false,
     type: Boolean,
-    description: 'Filter by deletion status'
+    description: 'Filter by deletion status',
   })
   @ApiQuery({
     name: 'language',
     required: false,
     type: String,
     description: 'Filter by language',
-    example: 'english'
+    example: 'english',
   })
   @ApiQuery({
     name: 'minAge',
     required: false,
     type: Number,
     description: 'Minimum age filter',
-    example: 3
+    example: 3,
   })
   @ApiQuery({
     name: 'maxAge',
     required: false,
     type: Number,
     description: 'Maximum age filter',
-    example: 12
+    example: 12,
+  })
+  @ApiQuery({
+    name: 'categoryId',
+    required: false,
+    type: String,
+    description: 'Filter stories by category ID',
   })
   @ApiOkResponse({
     description: 'Stories retrieved successfully',
@@ -1391,26 +1657,22 @@ export class AdminController {
             isDeleted: false,
             createdAt: '2023-10-01T12:00:00Z',
             updatedAt: '2023-10-15T10:30:00Z',
-            categories: [
-              { id: 'cat-1', name: 'Fantasy & Magic' }
-            ],
-            themes: [
-              { id: 'theme-1', name: 'Adventure' }
-            ],
+            categories: [{ id: 'cat-1', name: 'Fantasy & Magic' }],
+            themes: [{ id: 'theme-1', name: 'Adventure' }],
             favoritesCount: 45,
             viewsCount: 120,
             parentFavoritesCount: 15,
-            downloadsCount: 30
-          }
+            downloadsCount: 30,
+          },
         ],
         meta: {
           total: 325,
           page: 1,
           limit: 10,
-          totalPages: 33
-        }
-      }
-    }
+          totalPages: 33,
+        },
+      },
+    },
   })
   async getAllStories(@Query() filters: StoryFilterDto) {
     const result = await this.adminService.getAllStories(filters);
@@ -1418,7 +1680,7 @@ export class AdminController {
       statusCode: 200,
       message: 'Stories retrieved successfully',
       data: result.data,
-      meta: result.meta
+      meta: result.meta,
     };
   }
 
@@ -1426,13 +1688,14 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get story by ID',
-    description: 'Returns detailed story information including images, categories, themes, branches, questions, and engagement metrics.',
+    description:
+      'Returns detailed story information including images, categories, themes, branches, questions, and engagement metrics.',
   })
   @ApiParam({
     name: 'storyId',
     type: String,
     description: 'Story ID',
-    example: 'story-123-uuid'
+    example: 'story-123-uuid',
   })
   @ApiOkResponse({
     description: 'Story details retrieved successfully',
@@ -1463,15 +1726,11 @@ export class AdminController {
             {
               id: 'img-123',
               url: 'https://example.com/forest-1.jpg',
-              caption: 'The enchanted forest entrance'
-            }
+              caption: 'The enchanted forest entrance',
+            },
           ],
-          categories: [
-            { id: 'cat-1', name: 'Fantasy & Magic' }
-          ],
-          themes: [
-            { id: 'theme-1', name: 'Adventure' }
-          ],
+          categories: [{ id: 'cat-1', name: 'Fantasy & Magic' }],
+          themes: [{ id: 'theme-1', name: 'Adventure' }],
           branches: [
             {
               id: 'branch-1',
@@ -1479,26 +1738,26 @@ export class AdminController {
               optionA: 'Take the left path',
               optionB: 'Take the right path',
               nextA: 'story-124',
-              nextB: 'story-125'
-            }
+              nextB: 'story-125',
+            },
           ],
           questions: [
             {
               id: 'question-1',
-              question: 'What was the main character\'s name?',
+              question: "What was the main character's name?",
               options: ['Alice', 'Bob', 'Charlie', 'Diana'],
-              correctOption: 0
-            }
+              correctOption: 0,
+            },
           ],
           stats: {
             favoritesCount: 45,
             viewsCount: 120,
             parentFavoritesCount: 15,
-            downloadsCount: 30
-          }
-        }
-      }
-    }
+            downloadsCount: 30,
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -1507,16 +1766,16 @@ export class AdminController {
       example: {
         statusCode: 404,
         message: 'Story with ID story-123 not found',
-        error: 'Not Found'
-      }
-    }
+        error: 'Not Found',
+      },
+    },
   })
   async getStoryById(@Param('storyId') storyId: string) {
     const data = await this.adminService.getStoryById(storyId);
     return {
       statusCode: 200,
       message: 'Story details retrieved successfully',
-      data
+      data,
     };
   }
 
@@ -1530,7 +1789,7 @@ export class AdminController {
     name: 'storyId',
     type: String,
     description: 'Story ID',
-    example: 'story-123-uuid'
+    example: 'story-123-uuid',
   })
   @ApiOkResponse({
     description: 'Story recommendation toggled successfully',
@@ -1542,10 +1801,10 @@ export class AdminController {
           id: 'story-123',
           title: 'The Magic Forest',
           recommended: true,
-          updatedAt: '2023-10-15T10:30:00Z'
-        }
-      }
-    }
+          updatedAt: '2023-10-15T10:30:00Z',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -1554,16 +1813,16 @@ export class AdminController {
       example: {
         statusCode: 404,
         message: 'Story with ID story-123 not found',
-        error: 'Not Found'
-      }
-    }
+        error: 'Not Found',
+      },
+    },
   })
   async toggleStoryRecommendation(@Param('storyId') storyId: string) {
     const data = await this.adminService.toggleStoryRecommendation(storyId);
     return {
       statusCode: 200,
       message: 'Story recommendation toggled successfully',
-      data
+      data,
     };
   }
 
@@ -1572,23 +1831,24 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Delete story',
-    description: 'Soft deletes a story by default. Use permanent=true query parameter for permanent deletion.',
+    description:
+      'Soft deletes a story by default. Use permanent=true query parameter for permanent deletion.',
   })
   @ApiParam({
     name: 'storyId',
     type: String,
     description: 'Story ID',
-    example: 'story-123-uuid'
+    example: 'story-123-uuid',
   })
   @ApiQuery({
     name: 'permanent',
     required: false,
     type: Boolean,
     description: 'Permanently delete story (default: false - soft delete)',
-    example: false
+    example: false,
   })
   @ApiNoContentResponse({
-    description: 'Story deleted successfully'
+    description: 'Story deleted successfully',
   })
   @ApiResponse({
     status: 404,
@@ -1597,9 +1857,9 @@ export class AdminController {
       example: {
         statusCode: 404,
         message: 'Story with ID story-123 not found',
-        error: 'Not Found'
-      }
-    }
+        error: 'Not Found',
+      },
+    },
   })
   async deleteStory(
     @Param('storyId') storyId: string,
@@ -1608,7 +1868,7 @@ export class AdminController {
     await this.adminService.deleteStory(storyId, permanent);
     return {
       statusCode: 204,
-      message: permanent ? 'Story permanently deleted' : 'Story soft deleted'
+      message: permanent ? 'Story permanently deleted' : 'Story soft deleted',
     };
   }
 
@@ -1620,7 +1880,8 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'List all categories',
-    description: 'Returns all categories with story counts and kid preference statistics.',
+    description:
+      'Returns all categories with story counts and kid preference statistics.',
   })
   @ApiOkResponse({
     description: 'Categories retrieved successfully',
@@ -1638,8 +1899,8 @@ export class AdminController {
             deletedAt: null,
             _count: {
               stories: 80,
-              preferredByKids: 45
-            }
+              preferredByKids: 45,
+            },
           },
           {
             id: 'cat-2',
@@ -1650,19 +1911,19 @@ export class AdminController {
             deletedAt: null,
             _count: {
               stories: 70,
-              preferredByKids: 35
-            }
-          }
-        ]
-      }
-    }
+              preferredByKids: 35,
+            },
+          },
+        ],
+      },
+    },
   })
   async getCategories() {
     const data = await this.adminService.getCategories();
     return {
       statusCode: 200,
       message: 'Categories retrieved successfully',
-      data
+      data,
     };
   }
 
@@ -1687,8 +1948,8 @@ export class AdminController {
             isDeleted: false,
             deletedAt: null,
             _count: {
-              stories: 120
-            }
+              stories: 120,
+            },
           },
           {
             id: 'theme-2',
@@ -1698,19 +1959,19 @@ export class AdminController {
             isDeleted: false,
             deletedAt: null,
             _count: {
-              stories: 90
-            }
-          }
-        ]
-      }
-    }
+              stories: 90,
+            },
+          },
+        ],
+      },
+    },
   })
   async getThemes() {
     const data = await this.adminService.getThemes();
     return {
       statusCode: 200,
       message: 'Themes retrieved successfully',
-      data
+      data,
     };
   }
 
@@ -1722,14 +1983,15 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'List all subscriptions',
-    description: 'Returns all subscriptions with user details. Optional status filter.',
+    description:
+      'Returns all subscriptions with user details. Optional status filter.',
   })
   @ApiQuery({
     name: 'status',
     required: false,
     type: String,
     description: 'Filter by subscription status',
-    example: 'active'
+    example: 'active',
   })
   @ApiOkResponse({
     description: 'Subscriptions retrieved successfully',
@@ -1749,8 +2011,8 @@ export class AdminController {
             user: {
               id: 'user-123',
               email: 'parent@example.com',
-              name: 'John Doe'
-            }
+              name: 'John Doe',
+            },
           },
           {
             id: 'sub-124',
@@ -1763,19 +2025,19 @@ export class AdminController {
             user: {
               id: 'user-124',
               email: 'parent2@example.com',
-              name: 'Jane Smith'
-            }
-          }
-        ]
-      }
-    }
+              name: 'Jane Smith',
+            },
+          },
+        ],
+      },
+    },
   })
   async getSubscriptions(@Query('status') status?: string) {
     const data = await this.adminService.getSubscriptions(status);
     return {
       statusCode: 200,
       message: 'Subscriptions retrieved successfully',
-      data
+      data,
     };
   }
 
@@ -1787,7 +2049,8 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Seed database',
-    description: 'Seeds the database with initial categories, themes, avatars, and age groups.',
+    description:
+      'Seeds the database with initial categories, themes, avatars, and age groups.',
   })
   @ApiOkResponse({
     description: 'Database seeded successfully',
@@ -1796,10 +2059,10 @@ export class AdminController {
         statusCode: 200,
         message: 'Database seeded successfully',
         data: {
-          message: 'Database seeded successfully'
-        }
-      }
-    }
+          message: 'Database seeded successfully',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -1808,16 +2071,16 @@ export class AdminController {
       example: {
         statusCode: 400,
         message: 'Failed to seed database',
-        error: 'Bad Request'
-      }
-    }
+        error: 'Bad Request',
+      },
+    },
   })
   async seedDatabase() {
     const data = await this.adminService.seedDatabase();
     return {
       statusCode: 200,
       message: 'Database seeded successfully',
-      data
+      data,
     };
   }
 
@@ -1835,17 +2098,17 @@ export class AdminController {
         message: 'Backup created successfully',
         data: {
           message: 'Backup created successfully',
-          timestamp: '2023-10-15T10:30:00Z'
-        }
-      }
-    }
+          timestamp: '2023-10-15T10:30:00Z',
+        },
+      },
+    },
   })
-  async createBackup() {
-    const data = await this.adminService.createBackup();
+  createBackup() {
+    const data = this.adminService.createBackup();
     return {
       statusCode: 200,
       message: 'Backup created successfully',
-      data
+      data,
     };
   }
 
@@ -1853,21 +2116,22 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get system logs',
-    description: 'Returns system activity logs with optional filtering by log level.',
+    description:
+      'Returns system activity logs with optional filtering by log level.',
   })
   @ApiQuery({
     name: 'level',
     required: false,
     type: String,
     description: 'Filter by log level',
-    example: 'SUCCESS'
+    example: 'SUCCESS',
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
     description: 'Number of logs to return (default: 100, max: 500)',
-    example: 100
+    example: 100,
   })
   @ApiOkResponse({
     description: 'System logs retrieved successfully',
@@ -1891,12 +2155,12 @@ export class AdminController {
             user: {
               id: 'user-123',
               email: 'parent@example.com',
-              name: 'John Doe'
-            }
-          }
-        ]
-      }
-    }
+              name: 'John Doe',
+            },
+          },
+        ],
+      },
+    },
   })
   async getSystemLogs(
     @Query('level') level?: string,
@@ -1907,11 +2171,9 @@ export class AdminController {
     return {
       statusCode: 200,
       message: 'System logs retrieved successfully',
-      data
+      data,
     };
   }
-
-
 
   // =====================
   // INTEGRATIONS
@@ -1925,7 +2187,7 @@ export class AdminController {
     return {
       statusCode: 200,
       message: 'ElevenLabs balance retrieved',
-      data
+      data,
     };
   }
 
@@ -1950,14 +2212,19 @@ export class AdminController {
       statusCode: 200,
       message: 'Support tickets retrieved',
       data: result.data,
-      meta: result.meta
+      meta: result.meta,
     };
   }
 
   @Patch('support/tickets/:id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update support ticket status' })
-  @ApiBody({ schema: { type: 'object', properties: { status: { type: 'string', example: 'resolved' } } } })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { status: { type: 'string', example: 'resolved' } },
+    },
+  })
   async updateSupportTicket(
     @Param('id') id: string,
     @Body('status') status: string,
@@ -1966,7 +2233,7 @@ export class AdminController {
     return {
       statusCode: 200,
       message: 'Support ticket updated',
-      data: result
+      data: result,
     };
   }
 }

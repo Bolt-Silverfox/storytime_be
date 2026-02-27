@@ -1,4 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { StoryService } from './story.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from './gemini.service';
@@ -10,12 +12,25 @@ import { Cache } from '@nestjs/cache-manager';
 // Mock dependencies
 const mockPrismaService = {
   kid: { findUnique: jest.fn() },
-  story: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), count: jest.fn() },
+  user: { findUnique: jest.fn() },
+  story: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    count: jest.fn(),
+  },
   theme: { findMany: jest.fn() },
   category: { findMany: jest.fn() },
-  downloadedStory: { findMany: jest.fn(), upsert: jest.fn(), delete: jest.fn(), deleteMany: jest.fn() },
+  season: { findMany: jest.fn() },
+  downloadedStory: {
+    findMany: jest.fn(),
+    upsert: jest.fn(),
+    delete: jest.fn(),
+    deleteMany: jest.fn(),
+  },
   favorite: { deleteMany: jest.fn() },
   storyProgress: { deleteMany: jest.fn() },
+  userStoryProgress: { findMany: jest.fn() },
   parentRecommendation: { groupBy: jest.fn() },
   $transaction: jest.fn((args) => args), // Pass through transaction
 };
@@ -36,10 +51,26 @@ describe('StoryService - Library & Generation', () => {
         StoryService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: GeminiService, useValue: mockGeminiService },
-        { provide: ElevenLabsService, useValue: { generateAudioBuffer: jest.fn().mockResolvedValue({}) } },
-        { provide: UploadService, useValue: { uploadAudioBuffer: jest.fn().mockResolvedValue('url') } },
-        { provide: TextToSpeechService, useValue: { textToSpeechCloudUrl: jest.fn().mockResolvedValue('http://audio.url') } },
-        { provide: 'CACHE_MANAGER', useValue: { del: jest.fn(), get: jest.fn(), set: jest.fn() } },
+        {
+          provide: ElevenLabsService,
+          useValue: { generateAudioBuffer: jest.fn().mockResolvedValue({}) },
+        },
+        {
+          provide: UploadService,
+          useValue: { uploadAudioBuffer: jest.fn().mockResolvedValue('url') },
+        },
+        {
+          provide: TextToSpeechService,
+          useValue: {
+            textToSpeechCloudUrl: jest
+              .fn()
+              .mockResolvedValue('http://audio.url'),
+          },
+        },
+        {
+          provide: 'CACHE_MANAGER',
+          useValue: { del: jest.fn(), get: jest.fn(), set: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -55,7 +86,12 @@ describe('StoryService - Library & Generation', () => {
       const kidId = 'kid-123';
 
       // Mock Data
-      prisma.kid.findUnique.mockResolvedValue({ id: kidId, name: 'Tise', preferredCategories: [], excludedTags: [] });
+      prisma.kid.findUnique.mockResolvedValue({
+        id: kidId,
+        name: 'Tise',
+        preferredCategories: [],
+        excludedTags: [],
+      });
       prisma.theme.findMany.mockResolvedValue([{ id: 'theme-1' }]);
       prisma.category.findMany.mockResolvedValue([{ id: 'cat-1' }]);
 
@@ -65,21 +101,29 @@ describe('StoryService - Library & Generation', () => {
         content: 'Content',
         theme: ['Theme'],
         category: ['Cat'],
-        ageMin: 5, ageMax: 8, questions: []
+        ageMin: 5,
+        ageMax: 8,
+        questions: [],
       });
       gemini.generateStoryImage.mockResolvedValue('image-url');
-      prisma.story.create.mockResolvedValue({ id: 'story-123', textContent: 'Content', title: 'AI Story' });
+      prisma.story.create.mockResolvedValue({
+        id: 'story-123',
+        textContent: 'Content',
+        title: 'AI Story',
+      });
 
       // Call Method
       await service.generateStoryForKid(kidId, ['Theme'], ['Cat']);
 
       // VERIFY: Did we save creatorKidId?
-      expect(prisma.story.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({
-          creatorKidId: kidId, // <--- THIS IS THE CRITICAL CHECK
-          title: 'AI Story',
+      expect(prisma.story.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            creatorKidId: kidId, // <--- THIS IS THE CRITICAL CHECK
+            title: 'AI Story',
+          }),
         }),
-      }));
+      );
     });
   });
 
@@ -89,45 +133,89 @@ describe('StoryService - Library & Generation', () => {
       it('should filter by minAge and maxAge', async () => {
         prisma.story.count.mockResolvedValue(1);
         prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ minAge: 3, maxAge: 5 });
+        await service.getStories({ userId: 'user-1', minAge: 3, maxAge: 5 });
 
-        expect(prisma.story.findMany).toHaveBeenCalledWith(expect.objectContaining({
-          where: expect.objectContaining({
-            isDeleted: false,
-            // Check overlap logic: story.ageMin <= 5 AND story.ageMax >= 3
-            ageMin: { lte: 5 },
-            ageMax: { gte: 3 },
-          })
-        }));
+        expect(prisma.story.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              isDeleted: false,
+              // Check overlap logic: story.ageMin <= 5 AND story.ageMax >= 3
+              ageMin: { lte: 5 },
+              ageMax: { gte: 3 },
+            }),
+          }),
+        );
       });
 
       it('should filter by minAge only', async () => {
         prisma.story.count.mockResolvedValue(1);
         prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ minAge: 4 });
+        await service.getStories({ userId: 'user-1', minAge: 4 });
 
-        expect(prisma.story.findMany).toHaveBeenCalledWith(expect.objectContaining({
-          where: expect.objectContaining({
-            isDeleted: false,
-            ageMax: { gte: 4 },
-          })
-        }));
+        expect(prisma.story.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              isDeleted: false,
+              ageMax: { gte: 4 },
+            }),
+          }),
+        );
       });
 
       it('should filter by maxAge only', async () => {
         prisma.story.count.mockResolvedValue(1);
         prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ maxAge: 8 });
+        await service.getStories({ userId: 'user-1', maxAge: 8 });
 
-        expect(prisma.story.findMany).toHaveBeenCalledWith(expect.objectContaining({
-          where: expect.objectContaining({
+        expect(prisma.story.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              isDeleted: false,
+              ageMin: { lte: 8 },
+            }),
+          }),
+        );
+      });
+
+      it('should enrich stories with readStatus from user progress', async () => {
+        const stories = [
+          { id: 'story-1', title: 'Completed Story' },
+          { id: 'story-2', title: 'In Progress Story' },
+          { id: 'story-3', title: 'Unread Story' },
+        ];
+        prisma.story.count.mockResolvedValue(3);
+        prisma.story.findMany.mockResolvedValue(stories);
+        prisma.userStoryProgress.findMany.mockResolvedValue([
+          { storyId: 'story-1', completed: true },
+          { storyId: 'story-2', completed: false },
+        ]);
+
+        const result = await service.getStories({ userId: 'user-1' });
+
+        expect(result.data[0]).toEqual(
+          expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
+        );
+        expect(result.data[1]).toEqual(
+          expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+        );
+        expect(result.data[2]).toEqual(
+          expect.objectContaining({ id: 'story-3', readStatus: null }),
+        );
+        expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
+        expect(prisma.userStoryProgress.findMany).toHaveBeenCalledWith({
+          where: {
+            userId: 'user-1',
+            storyId: { in: ['story-1', 'story-2', 'story-3'] },
             isDeleted: false,
-            ageMin: { lte: 8 },
-          })
-        }));
+          },
+          select: { storyId: true, completed: true },
+        });
       });
     });
 
@@ -136,13 +224,37 @@ describe('StoryService - Library & Generation', () => {
     it('getCreatedStories: should filter by creatorKidId', async () => {
       await service.getCreatedStories(kidId);
 
-      expect(prisma.story.findMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: {
-          creatorKidId: kidId, // <--- Ensures we only fetch THEIR stories
-          isDeleted: false,
+      expect(prisma.story.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            creatorKidId: kidId,
+            isDeleted: false,
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        }),
+      );
+    });
+
+    it('getCreatedStories: should return cursor-paginated when limit provided', async () => {
+      const stories = [
+        { id: 'story-1', title: 'Story 1' },
+        { id: 'story-2', title: 'Story 2' },
+        { id: 'story-3', title: 'Story 3' },
+      ];
+      prisma.story.findMany.mockResolvedValue(stories);
+
+      const result = await service.getCreatedStories(kidId, undefined, 2);
+
+      expect(result).toEqual({
+        data: [
+          { id: 'story-1', title: 'Story 1' },
+          { id: 'story-2', title: 'Story 2' },
+        ],
+        pagination: {
+          nextCursor: 'story-2',
+          hasNextPage: true,
         },
-        orderBy: { createdAt: 'desc' },
-      }));
+      });
     });
 
     it('addDownload: should use upsert to prevent duplicates', async () => {
@@ -151,10 +263,12 @@ describe('StoryService - Library & Generation', () => {
 
       await service.addDownload(kidId, storyId);
 
-      expect(prisma.downloadedStory.upsert).toHaveBeenCalledWith(expect.objectContaining({
-        where: { kidId_storyId: { kidId, storyId } },
-        create: { kidId, storyId },
-      }));
+      expect(prisma.downloadedStory.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { kidId_storyId: { kidId, storyId } },
+          create: { kidId, storyId },
+        }),
+      );
     });
 
     it('removeFromLibrary: should delete from Favorites, Downloads, and Progress', async () => {
@@ -164,13 +278,67 @@ describe('StoryService - Library & Generation', () => {
 
       // Verify transaction contents
       expect(prisma.$transaction).toHaveBeenCalled();
-      expect(prisma.favorite.deleteMany).toHaveBeenCalledWith({ where: { kidId, storyId } });
-      expect(prisma.downloadedStory.deleteMany).toHaveBeenCalledWith({ where: { kidId, storyId } });
-      expect(prisma.storyProgress.deleteMany).toHaveBeenCalledWith({ where: { kidId, storyId } });
+      expect(prisma.favorite.deleteMany).toHaveBeenCalledWith({
+        where: { kidId, storyId },
+      });
+      expect(prisma.downloadedStory.deleteMany).toHaveBeenCalledWith({
+        where: { kidId, storyId },
+      });
+      expect(prisma.storyProgress.deleteMany).toHaveBeenCalledWith({
+        where: { kidId, storyId },
+      });
     });
   });
 
-  // --- 3. TOP PICKS TESTS ---
+  // --- 3. HOME PAGE STORIES ---
+  describe('getHomePageStories', () => {
+    it('should enrich recommended, seasonal, and topLiked with readStatus', async () => {
+      const userId = 'user-1';
+      prisma.user.findUnique.mockResolvedValue({
+        id: userId,
+        isDeleted: false,
+        preferredCategories: [{ id: 'cat-1' }],
+      });
+
+      const recommended = [{ id: 'story-1', title: 'Recommended' }];
+      const topLiked = [
+        { id: 'story-2', title: 'Top Liked In Progress' },
+        { id: 'story-3', title: 'Top Liked Unread' },
+      ];
+
+      // story.findMany: 1st call = recommended, 2nd call = topLiked
+      // (no seasonal call since season.findMany returns [])
+      prisma.story.findMany
+        .mockResolvedValueOnce(recommended)
+        .mockResolvedValueOnce(topLiked);
+
+      prisma.season.findMany.mockResolvedValue([]);
+
+      prisma.userStoryProgress.findMany.mockResolvedValue([
+        { storyId: 'story-1', completed: true },
+        { storyId: 'story-2', completed: false },
+        // story-3 has no progress (unread)
+      ]);
+
+      const result = await service.getHomePageStories(userId);
+
+      expect(result.recommended[0]).toEqual(
+        expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
+      );
+      expect(result.seasonal).toEqual([]);
+      expect(result.topLiked[0]).toEqual(
+        expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+      );
+      expect(result.topLiked[1]).toEqual(
+        expect.objectContaining({ id: 'story-3', readStatus: null }),
+      );
+
+      // Verify only 1 DB call for progress (not 1 per section)
+      expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // --- 4. TOP PICKS TESTS ---
   describe('getTopPicksFromParents', () => {
     it('should return stories sorted by recommendation count', async () => {
       const mockGroupByResult = [
@@ -178,8 +346,20 @@ describe('StoryService - Library & Generation', () => {
         { storyId: 'story-2', _count: { storyId: 3 } },
       ];
       const mockStories = [
-        { id: 'story-2', title: 'Story Two', themes: [], categories: [], images: [] },
-        { id: 'story-1', title: 'Story One', themes: [], categories: [], images: [] },
+        {
+          id: 'story-2',
+          title: 'Story Two',
+          themes: [],
+          categories: [],
+          images: [],
+        },
+        {
+          id: 'story-1',
+          title: 'Story One',
+          themes: [],
+          categories: [],
+          images: [],
+        },
       ];
 
       prisma.parentRecommendation.groupBy.mockResolvedValue(mockGroupByResult);
@@ -214,7 +394,9 @@ describe('StoryService - Library & Generation', () => {
     });
 
     it('should include themes, categories, and images in the result', async () => {
-      const mockGroupByResult = [{ storyId: 'story-1', _count: { storyId: 2 } }];
+      const mockGroupByResult = [
+        { storyId: 'story-1', _count: { storyId: 2 } },
+      ];
       const mockStory = {
         id: 'story-1',
         title: 'Test Story',
@@ -232,6 +414,43 @@ describe('StoryService - Library & Generation', () => {
       expect(result[0]).toHaveProperty('categories');
       expect(result[0]).toHaveProperty('images');
       expect(result[0].themes).toEqual([{ id: 'theme-1', name: 'Adventure' }]);
+    });
+  });
+
+  // --- 5. CURSOR ERROR HANDLING ---
+  describe('withCursorErrorHandling (via getCreatedStories)', () => {
+    it('should throw BadRequestException for invalid cursor (P2025)', async () => {
+      prisma.story.findMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Record not found', {
+          code: 'P2025',
+          clientVersion: '5.0.0',
+        }),
+      );
+
+      await expect(
+        service.getCreatedStories('kid-1', 'invalid-cursor', 10),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should re-throw non-P2025 Prisma errors', async () => {
+      prisma.story.findMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint', {
+          code: 'P2002',
+          clientVersion: '5.0.0',
+        }),
+      );
+
+      await expect(
+        service.getCreatedStories('kid-1', 'some-cursor', 10),
+      ).rejects.toThrow(Prisma.PrismaClientKnownRequestError);
+    });
+
+    it('should re-throw non-Prisma errors', async () => {
+      prisma.story.findMany.mockRejectedValue(new Error('Network error'));
+
+      await expect(
+        service.getCreatedStories('kid-1', 'some-cursor', 10),
+      ).rejects.toThrow('Network error');
     });
   });
 });

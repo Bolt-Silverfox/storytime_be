@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { NotificationCategory } from '@prisma/client';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import {
   EMAIL_QUEUE_NAME,
   EMAIL_JOB_NAMES,
@@ -51,7 +51,7 @@ export class EmailQueueService {
    * Add an email to the queue for async processing
    */
   async queueEmail(options: QueueEmailOptions): Promise<QueuedEmailResult> {
-    const jobId = uuidv4();
+    const jobId = randomUUID();
 
     try {
       const priority =
@@ -82,7 +82,8 @@ export class EmailQueueService {
 
       return { queued: true, jobId };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to queue email ${jobId}: ${errorMessage}`);
 
       return {

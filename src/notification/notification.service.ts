@@ -9,20 +9,34 @@ import { EnvConfig } from '@/shared/config/env.validation';
 import * as nodemailer from 'nodemailer';
 import { NotificationRegistry, Notifications } from './notification.registry';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationPreference, NotificationCategory as PrismaCategory, NotificationType as PrismaNotificationType } from '@prisma/client';
+import {
+  NotificationPreference,
+  NotificationCategory as PrismaCategory,
+  NotificationType as PrismaNotificationType,
+} from '@prisma/client';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
+  BulkUpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
 } from './dto/notification.dto';
 import { InAppProvider } from './providers/in-app.provider';
 import { EmailProvider } from './providers/email.provider';
+import { PushProvider } from './providers/push.provider';
 import {
   INotificationProvider,
   NotificationPayload,
   NotificationResult,
 } from './providers/notification-provider.interface';
-import { EmailQueueService, QueuedEmailResult } from './queue/email-queue.service';
+import {
+  EmailQueueService,
+  QueuedEmailResult,
+} from './queue/email-queue.service';
+import {
+  DeviceTokenResponseDto,
+  DeviceTokenListResponseDto,
+  DevicePlatform,
+} from './dto/device-token.dto';
 
 @Injectable()
 export class NotificationService {
@@ -36,6 +50,7 @@ export class NotificationService {
     private readonly inAppProvider: InAppProvider,
     private readonly emailProvider: EmailProvider,
     private readonly emailQueueService: EmailQueueService,
+    private readonly pushProvider: PushProvider,
   ) {
     // Initialize legacy email transporter (for backward compatibility / sync sends)
     this.transporter = nodemailer.createTransport({
@@ -55,11 +70,12 @@ export class NotificationService {
     this.providers = new Map<string, INotificationProvider>();
     this.providers.set('email', this.emailProvider);
     this.providers.set('in_app', this.inAppProvider);
+    this.providers.set('push', this.pushProvider);
   }
 
   async sendNotification(
     type: Notifications,
-    data: Record<string, any>,
+    data: Record<string, unknown>,
     targetUserId?: string,
   ): Promise<{
     success: boolean;
@@ -113,20 +129,24 @@ export class NotificationService {
 
       const results = await this.sendViaProvider(payload, channels);
 
-      const success = results.some(r => r.success);
+      const success = results.some((r) => r.success);
       return {
         success,
-        messageId: results.find(r => r.messageId)?.messageId,
-        error: results.find(r => !r.success)?.error,
+        messageId: results.find((r) => r.messageId)?.messageId,
+        error: results.find((r) => !r.success)?.error,
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
       this.logger.error(
-        `Failed to send notification: ${error.message}`,
-        error.stack,
+        `Failed to send notification: ${errorMessage}`,
+        errorStack,
       );
       return {
         success: false,
-        error: error?.message || 'Unknown error',
+        error: errorMessage,
       };
     }
   }
@@ -156,7 +176,9 @@ export class NotificationService {
       to: email,
       subject,
       html: htmlContent,
-      metadata: options?.templateName ? { templateName: options.templateName } : undefined,
+      metadata: options?.templateName
+        ? { templateName: options.templateName }
+        : undefined,
     });
   }
 
@@ -262,13 +284,17 @@ export class NotificationService {
         const result = await provider.send(payload);
         results.push(result);
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        const errorStack = error instanceof Error ? error.stack : undefined;
+
         this.logger.error(
-          `Failed to send via ${channel}: ${error.message}`,
-          error.stack,
+          `Failed to send via ${channel}: ${errorMessage}`,
+          errorStack,
         );
         results.push({
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errorMessage,
         });
       }
     }
@@ -386,6 +412,40 @@ export class NotificationService {
       data: dto,
     });
     return this.toNotificationPreferenceDto(pref);
+  }
+
+  async bulkUpdate(
+    userId: string,
+    dtos: BulkUpdateNotificationPreferenceDto[],
+  ): Promise<NotificationPreferenceDto[]> {
+    const ids = dtos.map((dto) => dto.id);
+
+    // Verify all preferences belong to the requesting user
+    const owned = await this.prisma.notificationPreference.findMany({
+      where: { id: { in: ids }, userId, isDeleted: false },
+      select: { id: true },
+    });
+
+    const ownedIds = new Set(owned.map((p) => p.id));
+    const unauthorized = ids.filter((id) => !ownedIds.has(id));
+    if (unauthorized.length > 0) {
+      throw new NotFoundException(
+        `Notification preferences not found: ${unauthorized.join(', ')}`,
+      );
+    }
+
+    const updates = dtos.map((dto) =>
+      this.prisma.notificationPreference.update({
+        where: {
+          id: dto.id,
+          isDeleted: false,
+        },
+        data: { enabled: dto.enabled },
+      }),
+    );
+
+    const results = await this.prisma.$transaction(updates);
+    return results.map((pref) => this.toNotificationPreferenceDto(pref));
   }
 
   async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {
@@ -603,7 +663,9 @@ export class NotificationService {
       skipDuplicates: true,
     });
 
-    this.logger.log(`Seeded ${preferences.length} default preferences for user ${userId}`);
+    this.logger.log(
+      `Seeded ${preferences.length} default preferences for user ${userId}`,
+    );
   }
 
   /**
@@ -648,7 +710,7 @@ export class NotificationService {
     offset: number = 0,
     unreadOnly: boolean = false,
   ) {
-    const where: any = {
+    const where: { userId: string; isDeleted: boolean; isRead?: boolean } = {
       userId,
       isDeleted: false,
     };
@@ -668,9 +730,9 @@ export class NotificationService {
     ]);
 
     return {
-      notifications: notifications.map(n => ({
+      notifications: notifications.map((n) => ({
         ...n,
-        category: n.category as PrismaCategory,
+        category: n.category,
       })),
       total,
     };
@@ -722,5 +784,236 @@ export class NotificationService {
     });
 
     return this.toNotificationPreferenceDto(restored);
+  }
+
+  // ============================================
+  // Device Token Management
+  // ============================================
+
+  /**
+   * Register a device token for push notifications.
+   * If the token already exists for this user, update it.
+   * If the token exists for a different user, reassign it.
+   */
+  async registerDeviceToken(
+    userId: string,
+    token: string,
+    platform: DevicePlatform,
+    deviceName?: string,
+  ): Promise<DeviceTokenResponseDto> {
+    // Validate platform enum
+    if (!Object.values(DevicePlatform).includes(platform)) {
+      throw new BadRequestException(
+        `Invalid platform. Must be one of: ${Object.values(DevicePlatform).join(', ')}`,
+      );
+    }
+
+    // Check if token exists
+    const existingToken = await this.prisma.deviceToken.findUnique({
+      where: { token },
+    });
+
+    if (existingToken) {
+      // If same user, just update
+      if (existingToken.userId === userId) {
+        const updated = await this.prisma.deviceToken.update({
+          where: { token },
+          data: {
+            platform,
+            deviceName,
+            isActive: true,
+            isDeleted: false,
+            deletedAt: null,
+          },
+        });
+        this.logger.log(`Updated device token for user ${userId}`);
+        return this.toDeviceTokenResponse(updated);
+      }
+
+      // Different user - reassign the token
+      const updated = await this.prisma.deviceToken.update({
+        where: { token },
+        data: {
+          userId,
+          platform,
+          deviceName,
+          isActive: true,
+          isDeleted: false,
+          deletedAt: null,
+        },
+      });
+      this.logger.log(
+        `Reassigned device token from user ${existingToken.userId} to ${userId}`,
+      );
+      return this.toDeviceTokenResponse(updated);
+    }
+
+    // Deactivate old tokens and create new one atomically
+    const newToken = await this.prisma.$transaction(async (tx) => {
+      if (deviceName) {
+        await tx.deviceToken.updateMany({
+          where: {
+            userId,
+            platform,
+            deviceName,
+            isDeleted: false,
+            token: { not: token },
+          },
+          data: { isActive: false, isDeleted: true, deletedAt: new Date() },
+        });
+      }
+      return tx.deviceToken.create({
+        data: {
+          userId,
+          token,
+          platform,
+          deviceName,
+        },
+      });
+    });
+    this.logger.log(`Registered new device token for user ${userId}`);
+    return this.toDeviceTokenResponse(newToken);
+  }
+
+  /**
+   * Get all active devices for a user.
+   */
+  async getUserDevices(userId: string): Promise<DeviceTokenListResponseDto> {
+    const devices = await this.prisma.deviceToken.findMany({
+      where: {
+        userId,
+        isActive: true,
+        isDeleted: false,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      devices: devices.map((d) => this.toDeviceTokenResponse(d)),
+      total: devices.length,
+    };
+  }
+
+  /**
+   * Unregister a device token (soft delete).
+   */
+  async unregisterDeviceToken(userId: string, token: string): Promise<void> {
+    const deviceToken = await this.prisma.deviceToken.findFirst({
+      where: {
+        userId,
+        token,
+        isDeleted: false,
+      },
+    });
+
+    if (!deviceToken) {
+      throw new NotFoundException('Device token not found');
+    }
+
+    await this.prisma.deviceToken.update({
+      where: { id: deviceToken.id },
+      data: {
+        isActive: false,
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+    });
+
+    this.logger.log(`Unregistered device token for user ${userId}`);
+  }
+
+  /**
+   * Send a test push notification to verify setup.
+   */
+  async sendTestPush(
+    userId: string,
+    title: string,
+    body: string,
+    specificToken?: string,
+  ): Promise<NotificationResult> {
+    this.logger.log(
+      `sendTestPush called for user=${userId.substring(0, 8)}, specificToken=${specificToken ? 'yes' : 'no'}, pushReady=${this.pushProvider.isReady()}`,
+    );
+
+    if (specificToken) {
+      // Verify token ownership before sending
+      const deviceToken = await this.prisma.deviceToken.findFirst({
+        where: {
+          userId,
+          token: specificToken,
+          isDeleted: false,
+        },
+      });
+
+      if (!deviceToken) {
+        this.logger.warn(
+          `sendTestPush: token not found for user=${userId.substring(0, 8)}, hasToken=false`,
+        );
+        throw new NotFoundException(
+          'Device token not found or does not belong to this user',
+        );
+      }
+
+      this.logger.log(
+        `sendTestPush: sending to specific token id=${deviceToken.id}, isActive=${deviceToken.isActive}`,
+      );
+      const result = await this.pushProvider.sendToTokens(
+        [specificToken],
+        title,
+        body,
+      );
+      this.logger.log(
+        `sendTestPush result: success=${result.success}, error=${result.error ?? 'none'}, messageId=${result.messageId ?? 'none'}`,
+      );
+      return result;
+    }
+
+    // Send to all user devices
+    this.logger.log(
+      `sendTestPush: sending to all devices for user=${userId.substring(0, 8)}`,
+    );
+    const result = await this.pushProvider.send({
+      userId,
+      category: PrismaCategory.SYSTEM_ALERT,
+      title,
+      body,
+    });
+    this.logger.log(
+      `sendTestPush result: success=${result.success}, error=${result.error ?? 'none'}, messageId=${result.messageId ?? 'none'}`,
+    );
+    return result;
+  }
+
+  /**
+   * Check if push notifications are properly configured.
+   */
+  isPushReady(): boolean {
+    return this.pushProvider.isReady();
+  }
+
+  private toDeviceTokenResponse(token: {
+    id: string;
+    userId: string;
+    token: string;
+    platform: string;
+    deviceName: string | null;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }): DeviceTokenResponseDto {
+    return {
+      id: token.id,
+      userId: token.userId,
+      // Mask token for security - show first 8 and last 4 chars
+      token:
+        token.token.length > 12
+          ? `${token.token.substring(0, 8)}...${token.token.substring(token.token.length - 4)}`
+          : token.token,
+      platform: token.platform as DevicePlatform,
+      deviceName: token.deviceName || undefined,
+      isActive: token.isActive,
+      createdAt: token.createdAt,
+      updatedAt: token.updatedAt,
+    };
   }
 }
