@@ -64,15 +64,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE storytime_migrator IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE storytime_migrator IN SCHEMA public
   GRANT ALL PRIVILEGES ON SEQUENCES TO storytime_migrator;
 
--- Grant the app user access to tables/sequences created by the migrator
--- (this is critical — Prisma migrations run as storytime_migrator, so the
--- default privileges must also grant DML to storytime_app)
-ALTER DEFAULT PRIVILEGES FOR ROLE storytime_migrator IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO storytime_app;
-
-ALTER DEFAULT PRIVILEGES FOR ROLE storytime_migrator IN SCHEMA public
-  GRANT USAGE, SELECT ON SEQUENCES TO storytime_app;
-
 -- =============================================================================
 -- PART 2: Application User (storytime_app)
 -- =============================================================================
@@ -107,6 +98,15 @@ GRANT USAGE, SELECT
   ON ALL SEQUENCES IN SCHEMA public
   TO storytime_app;
 
+-- Grant the app user access to tables/sequences created by the migrator
+-- (this is critical — Prisma migrations run as storytime_migrator, so the
+-- default privileges must also grant DML to storytime_app)
+ALTER DEFAULT PRIVILEGES FOR ROLE storytime_migrator IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO storytime_app;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE storytime_migrator IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO storytime_app;
+
 -- Default privileges for tables created by the superuser (postgres)
 -- In case migrations are ever run as postgres instead of storytime_migrator
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
@@ -114,6 +114,9 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO storytime_app;
+
+-- Prevent inherited CREATE via PUBLIC on older/upgraded PostgreSQL databases
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
 -- Explicitly deny schema-level DDL (belt and suspenders — the role
 -- already lacks CREATEDB/CREATEROLE, but this prevents CREATE TABLE
