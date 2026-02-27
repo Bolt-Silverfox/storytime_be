@@ -985,6 +985,7 @@ export class StoryService {
           progress: { gt: 0 },
           completed: false,
           isDeleted: false,
+          story: { isDeleted: false },
         },
         orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
         include: {
@@ -1023,7 +1024,12 @@ export class StoryService {
 
     const records = await this.withCursorErrorHandling(() =>
       this.prisma.userStoryProgress.findMany({
-        where: { userId, completed: true, isDeleted: false },
+        where: {
+          userId,
+          completed: true,
+          isDeleted: false,
+          story: { isDeleted: false },
+        },
         orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
         include: {
           story: {
@@ -1773,6 +1779,7 @@ export class StoryService {
           progress: { gt: 0 },
           completed: false,
           isDeleted: false,
+          story: { isDeleted: false },
         },
         orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
         include: {
@@ -1805,7 +1812,12 @@ export class StoryService {
 
     const records = await this.withCursorErrorHandling(() =>
       this.prisma.storyProgress.findMany({
-        where: { kidId, completed: true, isDeleted: false },
+        where: {
+          kidId,
+          completed: true,
+          isDeleted: false,
+          story: { isDeleted: false },
+        },
         orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
         include: {
           story: {
