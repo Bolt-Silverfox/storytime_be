@@ -90,14 +90,27 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
         continue;
       }
 
+      let localCount = 0;
+      let localSkipped = 0;
+      let createdTitlesThisTx: string[] = [];
+
       await prisma.$transaction(async (tx) => {
+        // Reset local trackers on possible transaction retries
+        localCount = 0;
+        localSkipped = 0;
+        createdTitlesThisTx = [];
+
         for (const story of stories) {
           if (!story.title) {
             logger.error(`Skipping story without a title in ${file}`);
             continue;
           }
-          if (existingTitles.has(story.title.trim().toLowerCase())) {
-            skipped++;
+          const normalizedTitle = story.title.trim().toLowerCase();
+          if (
+            existingTitles.has(normalizedTitle) ||
+            createdTitlesThisTx.includes(normalizedTitle)
+          ) {
+            localSkipped++;
             continue;
           }
 
@@ -171,10 +184,16 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
               },
             },
           });
-          existingTitles.add(story.title.trim().toLowerCase());
-          count++;
+
+          createdTitlesThisTx.push(normalizedTitle);
+          localCount++;
         }
       });
+
+      // Transaction succeeded, safely commit local tracking to global state
+      createdTitlesThisTx.forEach((t) => existingTitles.add(t));
+      count += localCount;
+      skipped += localSkipped;
     }
 
     logger.success(
