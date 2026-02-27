@@ -120,6 +120,7 @@ export class StoryContentAudioDto {
     type: 'string',
   })
   @IsOptional()
+  @MaxLength(100)
   voiceId?: VoiceType | string;
 }
 
