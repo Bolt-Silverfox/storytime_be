@@ -654,10 +654,14 @@ export class StoryBuddyService {
    * Check if image is from Cloudinary (contains cloudinary signature)
    */
   private isCloudinaryImage(imageUrl: string): boolean {
-    return (
-      imageUrl.includes('res.cloudinary.com') ||
-      imageUrl.includes('cloudinary.com')
-    );
+    try {
+      const { hostname } = new URL(imageUrl);
+      return (
+        hostname === 'res.cloudinary.com' || hostname.endsWith('.cloudinary.com')
+      );
+    } catch {
+      return false;
+    }
   }
 
   /**
