@@ -213,10 +213,11 @@ export class VoiceQuotaService {
           !(id in VOICE_TYPE_MIGRATION_MAP),
       );
 
+    // Include deleted voices — we still need the UUID → elevenLabsId mapping
     const voiceRecords =
       uuidCandidates.length > 0
         ? await this.prisma.voice.findMany({
-            where: { id: { in: uuidCandidates }, isDeleted: false },
+            where: { id: { in: uuidCandidates } },
             select: { id: true, elevenLabsVoiceId: true },
           })
         : [];
