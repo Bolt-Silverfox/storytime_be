@@ -657,7 +657,8 @@ export class StoryBuddyService {
     try {
       const { hostname } = new URL(imageUrl);
       return (
-        hostname === 'res.cloudinary.com' || hostname.endsWith('.cloudinary.com')
+        hostname === 'res.cloudinary.com' ||
+        hostname.endsWith('.cloudinary.com')
       );
     } catch {
       return false;
