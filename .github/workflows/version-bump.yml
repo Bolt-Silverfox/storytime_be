@@ -57,7 +57,9 @@ jobs:
           BRANCH_REF: ${{ github.event.ref }}
           TARGET_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          BUMP_BRANCH="chore/bump-v${TARGET_VERSION}"
+          # Include sanitized source branch to avoid collisions between develop-v* and hotfix/v*
+          SAFE_REF=$(echo "$BRANCH_REF" | tr '/' '-')
+          BUMP_BRANCH="chore/bump-v${TARGET_VERSION}-${SAFE_REF}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BUMP_BRANCH"
