@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,11 +18,12 @@ jobs:
 
       - name: Extract version from branch name
         id: version
+        env:
+          BRANCH_REF: ${{ github.event.ref }}
         run: |
-          BRANCH="${{ github.event.ref }}"
-          VERSION=$(echo "$BRANCH" | grep -oP 'v\K\d+\.\d+\.\d+')
+          VERSION=$(echo "$BRANCH_REF" | grep -oP 'v\K\d+\.\d+\.\d+')
           if [ -z "$VERSION" ]; then
-            echo "No version found in branch name: $BRANCH"
+            echo "No version found in branch name: $BRANCH_REF"
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -29,26 +31,41 @@ jobs:
 
       - name: Check if bump is needed
         id: check
+        env:
+          TARGET_VERSION: ${{ steps.version.outputs.version }}
         run: |
           CURRENT=$(node -p "require('./package.json').version")
-          if [ "$CURRENT" = "${{ steps.version.outputs.version }}" ]; then
+          if [ "$CURRENT" = "$TARGET_VERSION" ]; then
             echo "needed=false" >> "$GITHUB_OUTPUT"
             echo "Version already at $CURRENT — skipping"
           else
             echo "needed=true" >> "$GITHUB_OUTPUT"
-            echo "Bumping from $CURRENT to ${{ steps.version.outputs.version }}"
+            echo "Bumping from $CURRENT to $TARGET_VERSION"
           fi
 
       - name: Bump package.json version
         if: steps.check.outputs.needed == 'true'
+        env:
+          TARGET_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+          npm version "$TARGET_VERSION" --no-git-tag-version
 
-      - name: Commit version bump
+      - name: Create version bump PR
         if: steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_REF: ${{ github.event.ref }}
+          TARGET_VERSION: ${{ steps.version.outputs.version }}
         run: |
+          BUMP_BRANCH="chore/bump-v${TARGET_VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BUMP_BRANCH"
           git add package.json
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-          git push
+          git commit -m "chore: bump version to ${TARGET_VERSION}"
+          git push origin "$BUMP_BRANCH"
+          gh pr create \
+            --base "$BRANCH_REF" \
+            --head "$BUMP_BRANCH" \
+            --title "chore: bump version to ${TARGET_VERSION}" \
+            --body "Automated version bump for \`${BRANCH_REF}\` branch."
