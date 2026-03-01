@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import {
   LoginDto,
@@ -599,6 +600,177 @@ export class AuthService {
   }
 
   // ====================================================
+  // LINKED ACCOUNTS
+  // ====================================================
+
+  async getLinkedAccounts(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, googleId: true, appleId: true, passwordHash: true },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    const accounts: { provider: string; email: string | null; linkedAt: string | null }[] = [];
+
+    // Email is considered linked if user has a real password (not a random OAuth-generated one)
+    // We detect this by checking if passwordHash exists (all users have one, but OAuth users got random ones)
+    // For simplicity, email provider is always shown if user has an email
+    accounts.push({ provider: 'email', email: user.email, linkedAt: null });
+
+    if (user.googleId) {
+      accounts.push({ provider: 'google', email: user.email, linkedAt: null });
+    }
+
+    if (user.appleId) {
+      accounts.push({ provider: 'apple', email: user.email, linkedAt: null });
+    }
+
+    return {
+      success: true,
+      message: 'Linked accounts retrieved',
+      statusCode: 200,
+      data: accounts,
+    };
+  }
+
+  async linkGoogle(userId: string, idToken: string) {
+    const clientIds = [
+      this.configService.get<string>('GOOGLE_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_ANDROID_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_IOS_CLIENT_ID'),
+    ].filter(Boolean);
+
+    const ticket = await this.googleClient.verifyIdToken({
+      idToken,
+      audience: clientIds,
+    });
+    const payload = ticket.getPayload();
+    if (!payload || !payload.sub) {
+      throw new BadRequestException('Invalid Google ID token');
+    }
+
+    const googleId = payload.sub;
+
+    // Check if this Google account is already linked to another user
+    const existingUser = await this.prisma.user.findFirst({
+      where: { googleId },
+    });
+    if (existingUser && existingUser.id !== userId) {
+      throw new ConflictException(
+        'This Google account is already linked to another user.',
+      );
+    }
+
+    // Check if current user already has Google linked
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!currentUser) throw new NotFoundException('User not found');
+    if (currentUser.googleId) {
+      throw new BadRequestException('Google account is already linked.');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { googleId },
+    });
+
+    return {
+      success: true,
+      message: 'Google account linked successfully',
+      statusCode: 200,
+      data: null,
+    };
+  }
+
+  async linkApple(userId: string, idToken: string) {
+    const APPLE_CLIENT_ID = this.configService.get<string>('APPLE_CLIENT_ID');
+    const APPLE_SERVICE_ID = this.configService.get<string>('APPLE_SERVICE_ID');
+
+    const { sub: appleId } = await appleSigninAuth.verifyIdToken(idToken, {
+      audience: [APPLE_CLIENT_ID, APPLE_SERVICE_ID].filter(Boolean),
+      ignoreExpiration: false,
+    });
+
+    if (!appleId) {
+      throw new BadRequestException('Invalid Apple ID token');
+    }
+
+    // Check if this Apple account is already linked to another user
+    const existingUser = await this.prisma.user.findFirst({
+      where: { appleId },
+    });
+    if (existingUser && existingUser.id !== userId) {
+      throw new ConflictException(
+        'This Apple account is already linked to another user.',
+      );
+    }
+
+    // Check if current user already has Apple linked
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!currentUser) throw new NotFoundException('User not found');
+    if (currentUser.appleId) {
+      throw new BadRequestException('Apple account is already linked.');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { appleId },
+    });
+
+    return {
+      success: true,
+      message: 'Apple account linked successfully',
+      statusCode: 200,
+      data: null,
+    };
+  }
+
+  async unlinkProvider(userId: string, provider: string) {
+    if (!['google', 'apple'].includes(provider)) {
+      throw new BadRequestException('Invalid provider. Must be "google" or "apple".');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { googleId: true, appleId: true },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    // Count linked providers (email is always linked)
+    let linkedCount = 1; // email
+    if (user.googleId) linkedCount++;
+    if (user.appleId) linkedCount++;
+
+    if (linkedCount <= 1) {
+      throw new BadRequestException(
+        'Cannot unlink. You must have at least one linked sign-in method.',
+      );
+    }
+
+    const fieldToUnlink = provider === 'google' ? 'googleId' : 'appleId';
+    if (!user[fieldToUnlink]) {
+      throw new BadRequestException(`${provider} account is not linked.`);
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { [fieldToUnlink]: null },
+    });
+
+    return {
+      success: true,
+      message: `${provider} account unlinked successfully`,
+      statusCode: 200,
+      data: null,
+    };
+  }
+
+  // ====================================================
   // INTERNAL: Unified OAuth upsert logic
   // ====================================================
   private async _upsertOrReturnUserFromOAuthPayload(payload: {
@@ -626,19 +798,21 @@ export class AuthService {
       });
     }
 
-    // 2. Try find by email
+    // 2. Try find by email — if account exists but provider isn't linked, return 409
     if (!user) {
       const existing = await this.prisma.user.findUnique({ where: { email } });
 
       if (existing) {
-        user = await this.prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            isEmailVerified: emailVerified ? true : existing.isEmailVerified,
-            googleId: googleId || existing.googleId,
-            appleId: appleId || existing.appleId,
-          },
-          include: { profile: true, avatar: true },
+        const existingProviders: string[] = ['email'];
+        if (existing.googleId) existingProviders.push('google');
+        if (existing.appleId) existingProviders.push('apple');
+
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'ACCOUNT_EXISTS_LINK_REQUIRED',
+          message:
+            'An account with this email already exists. Log in with your original method, then link this provider from Profile → Linked Accounts.',
+          existingProviders,
         });
       }
     }
