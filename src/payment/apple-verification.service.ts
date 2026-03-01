@@ -361,7 +361,7 @@ export class AppleVerificationService {
 
   /**
    * Fetch transaction info from a specific Apple StoreKit API host.
-   * Returns the decoded transaction on 200, throws on 404 or other errors.
+   * Returns the decoded transaction on 200, null on 404, throws on other errors.
    */
   private fetchTransactionFromHost(
     hostname: string,
@@ -396,13 +396,9 @@ export class AppleVerificationService {
                 reject(new Error('Failed to parse Apple response'));
               }
             } else if (res.statusCode === 404) {
-              reject(new Error(`Apple API returned 404 from ${hostname}`));
+              resolve(null);
             } else {
-              reject(
-                new Error(
-                  `Apple API returned ${res.statusCode} from ${hostname}`,
-                ),
-              );
+              reject(new Error(`Apple API returned ${res.statusCode} from ${hostname}`));
             }
           });
         },
