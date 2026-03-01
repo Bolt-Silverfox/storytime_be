@@ -51,6 +51,9 @@ interface AppleTransactionInfo {
   revocationReason?: number;
 }
 
+const PRODUCTION_HOST = 'api.storekit.itunes.apple.com';
+const SANDBOX_HOST = 'api.storekit-sandbox.itunes.apple.com';
+
 /**
  * Service to verify Apple App Store purchases using App Store Server API v2.
  */
@@ -104,6 +107,16 @@ export class AppleVerificationService {
 
       if (!transactionInfo) {
         return { success: false };
+      }
+
+      // Flag sandbox purchases in production (TestFlight uses sandbox)
+      if (
+        this.environment === 'production' &&
+        transactionInfo.environment === 'Sandbox'
+      ) {
+        this.logger.warn(
+          `Sandbox transaction ${this.sanitizeForLog(transactionId)} verified in production (TestFlight)`,
+        );
       }
 
       // Check if revoked
@@ -206,9 +219,7 @@ export class AppleVerificationService {
     token: string,
   ): Promise<AppleSubscriptionStatus | null> {
     const baseUrl =
-      this.environment === 'production'
-        ? 'api.storekit.itunes.apple.com'
-        : 'api.storekit-sandbox.itunes.apple.com';
+      this.environment === 'production' ? PRODUCTION_HOST : SANDBOX_HOST;
 
     const requestPath = `/inApps/v1/subscriptions/${originalTransactionId}`;
 
@@ -330,21 +341,21 @@ export class AppleVerificationService {
     return `${signatureInput}.${signatureB64}`;
   }
 
-  private async getTransactionInfo(
+  /**
+   * Fetch transaction info from a specific Apple StoreKit API host.
+   * Returns the decoded transaction on 200, null on 404, throws on other errors.
+   */
+  private fetchTransactionFromHost(
+    hostname: string,
     transactionId: string,
     token: string,
   ): Promise<AppleTransactionInfo | null> {
-    const baseUrl =
-      this.environment === 'production'
-        ? 'api.storekit.itunes.apple.com'
-        : 'api.storekit-sandbox.itunes.apple.com';
-
     const path = `/inApps/v1/transactions/${transactionId}`;
 
     return new Promise((resolve, reject) => {
       const req = https.request(
         {
-          hostname: baseUrl,
+          hostname,
           path,
           method: 'GET',
           headers: {
@@ -361,17 +372,14 @@ export class AppleVerificationService {
                 const response = JSON.parse(data) as {
                   signedTransactionInfo: string;
                 };
-                // The signedTransactionInfo is a JWS, decode the payload
                 const decoded = this.decodeJWS(response.signedTransactionInfo);
                 resolve(decoded as AppleTransactionInfo);
               } catch {
                 reject(new Error('Failed to parse Apple response'));
               }
             } else if (res.statusCode === 404) {
-              this.logger.warn(`Transaction ${transactionId} not found`);
               resolve(null);
             } else {
-              this.logger.error(`Apple API error: ${res.statusCode} - ${data}`);
               reject(new Error(`Apple API returned ${res.statusCode}`));
             }
           });
@@ -380,12 +388,57 @@ export class AppleVerificationService {
 
       req.on('error', reject);
       req.setTimeout(15000, () => {
-        // 15 second timeout (Apple recommended range)
         req.destroy();
         reject(new Error('Apple API request timeout'));
       });
       req.end();
     });
+  }
+
+  /**
+   * Get transaction info, trying production first then falling back to sandbox
+   * on 401 (Apple's recommended pattern for handling TestFlight/sandbox purchases).
+   */
+  private async getTransactionInfo(
+    transactionId: string,
+    token: string,
+  ): Promise<AppleTransactionInfo | null> {
+    const primaryHost =
+      this.environment === 'production' ? PRODUCTION_HOST : SANDBOX_HOST;
+    const fallbackHost =
+      this.environment === 'production' ? SANDBOX_HOST : PRODUCTION_HOST;
+
+    try {
+      return await this.fetchTransactionFromHost(
+        primaryHost,
+        transactionId,
+        token,
+      );
+    } catch (error) {
+      const msg = this.errorMessage(error);
+
+      // On 401, try the other environment (TestFlight uses sandbox)
+      if (msg.includes('401')) {
+        this.logger.log(
+          `Transaction not found on ${primaryHost}, trying ${fallbackHost}`,
+        );
+        try {
+          return await this.fetchTransactionFromHost(
+            fallbackHost,
+            transactionId,
+            token,
+          );
+        } catch (fallbackError) {
+          this.logger.error(
+            `Apple API fallback also failed: ${this.errorMessage(fallbackError)}`,
+          );
+          throw fallbackError;
+        }
+      }
+
+      this.logger.error(`Apple API error: ${msg}`);
+      throw error;
+    }
   }
 
   private decodeJWS(jws: string): unknown {
