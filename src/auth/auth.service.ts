@@ -644,17 +644,31 @@ export class AuthService {
   }
 
   async linkGoogle(userId: string, idToken: string) {
+    if (!this.googleClient) {
+      throw new ServiceUnavailableException('Google client not configured');
+    }
+
     const clientIds = [
       this.configService.get<string>('GOOGLE_CLIENT_ID'),
       this.configService.get<string>('GOOGLE_ANDROID_CLIENT_ID'),
       this.configService.get<string>('GOOGLE_IOS_CLIENT_ID'),
     ].filter(Boolean);
 
-    const ticket = await this.googleClient.verifyIdToken({
-      idToken,
-      audience: clientIds,
-    });
-    const payload = ticket.getPayload();
+    if (clientIds.length === 0) {
+      throw new ServiceUnavailableException('No Google client IDs configured');
+    }
+
+    let payload;
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: clientIds,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Invalid Google id_token');
+    }
+
     if (!payload || !payload.sub) {
       throw new BadRequestException('Invalid Google ID token');
     }
@@ -696,11 +710,22 @@ export class AuthService {
   async linkApple(userId: string, idToken: string) {
     const APPLE_CLIENT_ID = this.configService.get<string>('APPLE_CLIENT_ID');
     const APPLE_SERVICE_ID = this.configService.get<string>('APPLE_SERVICE_ID');
+    const audiences = [APPLE_CLIENT_ID, APPLE_SERVICE_ID].filter(Boolean);
 
-    const { sub: appleId } = await appleSigninAuth.verifyIdToken(idToken, {
-      audience: [APPLE_CLIENT_ID, APPLE_SERVICE_ID].filter(Boolean),
-      ignoreExpiration: false,
-    });
+    if (audiences.length === 0) {
+      throw new ServiceUnavailableException('Apple client IDs not configured');
+    }
+
+    let appleId: string | undefined;
+    try {
+      const verified = await appleSigninAuth.verifyIdToken(idToken, {
+        audience: audiences,
+        ignoreExpiration: false,
+      });
+      appleId = verified.sub;
+    } catch {
+      throw new UnauthorizedException('Invalid Apple id_token');
+    }
 
     if (!appleId) {
       throw new BadRequestException('Invalid Apple ID token');
