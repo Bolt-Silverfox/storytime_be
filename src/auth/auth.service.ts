@@ -606,12 +606,21 @@ export class AuthService {
   async getLinkedAccounts(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { email: true, googleId: true, appleId: true, passwordHash: true },
+      select: {
+        email: true,
+        googleId: true,
+        appleId: true,
+        passwordHash: true,
+      },
     });
 
     if (!user) throw new NotFoundException('User not found');
 
-    const accounts: { provider: string; email: string | null; linkedAt: string | null }[] = [];
+    const accounts: {
+      provider: string;
+      email: string | null;
+      linkedAt: string | null;
+    }[] = [];
 
     // Email is considered linked if user has a real password (not a random OAuth-generated one)
     // We detect this by checking if passwordHash exists (all users have one, but OAuth users got random ones)
@@ -731,7 +740,9 @@ export class AuthService {
 
   async unlinkProvider(userId: string, provider: string) {
     if (!['google', 'apple'].includes(provider)) {
-      throw new BadRequestException('Invalid provider. Must be "google" or "apple".');
+      throw new BadRequestException(
+        'Invalid provider. Must be "google" or "apple".',
+      );
     }
 
     const user = await this.prisma.user.findUnique({
