@@ -37,6 +37,7 @@ import {
   ThrottlerConfig,
 } from './shared/config/throttle.config';
 import { AdminModule } from './admin/admin.module';
+import { CouponModule } from './coupon/coupon.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -126,6 +127,7 @@ import { HealthModule } from './health/health.module';
     AchievementProgressModule,
     ParentFavoriteModule,
     AdminModule,
+    CouponModule,
     HealthModule,
   ],
   providers: [

@@ -123,6 +123,9 @@ model User {
   restrictedStories     RestrictedStory[]
   // NEW: Learning expectations (marketing data)
   learningExpectations  UserLearningExpectation[]
+  couponRedemptions     CouponRedemption[]
+  // Coupon-granted premium access expiry date
+  premiumAccessUntil    DateTime?
 
   @@index([isDeleted])
   @@index([email, isDeleted])
@@ -1131,4 +1134,47 @@ model ParagraphAudioCache {
   @@unique([storyId, textHash, voiceId, provider])
   @@index([storyId])
   @@map("paragraph_audio_cache")
+}
+
+// -------------------------
+// COUPON SYSTEM
+// -------------------------
+enum CouponType {
+  PERCENTAGE
+  FLAT
+  FREE_TRIAL_DAYS
+}
+
+model Coupon {
+  id          String            @id @default(uuid())
+  code        String            @unique
+  type        CouponType
+  value       Float             // percentage (0-100), flat amount, or trial days
+  maxUses     Int?              // null = unlimited
+  usedCount   Int               @default(0)
+  validFrom   DateTime
+  validUntil  DateTime?         // null = no expiry
+  plan        String?           // null = any plan, "Monthly" or "Yearly"
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  redemptions CouponRedemption[]
+
+  @@index([code])
+  @@index([isActive])
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id        String   @id @default(uuid())
+  couponId  String
+  userId    String
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([couponId, userId])
+  @@index([couponId])
+  @@index([userId])
+  @@map("coupon_redemptions")
 }

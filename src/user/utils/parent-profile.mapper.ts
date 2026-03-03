@@ -24,6 +24,7 @@ export interface UserWithRelations {
   createdAt: Date;
   updatedAt: Date;
   subscription?: Subscription | null;
+  premiumAccessUntil?: Date | null;
 }
 
 export function mapParentProfile(user: UserWithRelations | null) {
@@ -54,11 +55,21 @@ export function mapParentProfile(user: UserWithRelations | null) {
     biometricsEnabled: !!user.biometricsEnabled,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
-    subscriptionStatus: getSubscriptionStatus(user.subscription),
+    subscriptionStatus: getSubscriptionStatus(
+      user.subscription,
+      user.premiumAccessUntil,
+    ),
   };
 }
 
-function getSubscriptionStatus(subscription?: Subscription | null): string {
+function getSubscriptionStatus(
+  subscription?: Subscription | null,
+  premiumAccessUntil?: Date | null,
+): string {
+  // Coupon-granted premium access
+  if (premiumAccessUntil && premiumAccessUntil > new Date()) {
+    return SUBSCRIPTION_STATUS.ACTIVE;
+  }
   if (!subscription) return SUBSCRIPTION_STATUS.FREE;
   return subscription.status === SUBSCRIPTION_STATUS.ACTIVE
     ? SUBSCRIPTION_STATUS.ACTIVE
