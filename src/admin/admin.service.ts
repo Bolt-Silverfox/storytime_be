@@ -2739,6 +2739,9 @@ export class AdminService {
   async seedTopicSubscriptions(
     topic: string = 'all_users',
   ): Promise<{ emitted: boolean }> {
+    if (!/^[a-zA-Z0-9\-_.~%]+$/.test(topic)) {
+      throw new BadRequestException('Invalid topic name: must contain only valid FCM topic characters');
+    }
     this.eventEmitter.emit('notification.seed-topic', { topic });
     this.logger.log(`Topic seed event emitted for topic: ${topic}`);
     return { emitted: true };
