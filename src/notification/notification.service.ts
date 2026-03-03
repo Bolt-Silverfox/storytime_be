@@ -596,33 +596,18 @@ export class NotificationService {
       PrismaNotificationType.push,
     ];
 
-    // Upsert preferences for each category + channel combination
-    for (const category of categories) {
+    // Upsert preferences for each category + channel combination in a single transaction
+    const upserts = categories.flatMap((category) => {
       const enabled = preferences[category];
-
-      for (const type of channels) {
-        await this.prisma.notificationPreference.upsert({
-          where: {
-            userId_category_type: {
-              userId,
-              category,
-              type,
-            },
-          },
-          create: {
-            userId,
-            category,
-            type,
-            enabled,
-          },
-          update: {
-            enabled,
-            isDeleted: false,
-            deletedAt: null,
-          },
-        });
-      }
-    }
+      return channels.map((type) =>
+        this.prisma.notificationPreference.upsert({
+          where: { userId_category_type: { userId, category, type } },
+          create: { userId, category, type, enabled },
+          update: { enabled, isDeleted: false, deletedAt: null },
+        }),
+      );
+    });
+    await this.prisma.$transaction(upserts);
 
     return this.getUserPreferencesGrouped(userId);
   }

@@ -163,7 +163,17 @@ export class UserController {
     },
   })
   @ApiOperation({ summary: 'Upload and assign a new avatar image' })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype.startsWith('image/')) {
+          return cb(new BadRequestException('Only image files are allowed'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
   async uploadAndAssignAvatar(
     @Req() req: AuthenticatedRequest,
     @UploadedFile() file: Express.Multer.File,

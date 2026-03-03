@@ -17,7 +17,11 @@ export class SubscriptionService {
   async isPremiumUser(userId: string): Promise<boolean> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true, subscription: true, premiumAccessUntil: true },
+      select: {
+        role: true,
+        premiumAccessUntil: true,
+        subscription: { select: { status: true, endsAt: true } },
+      },
     });
     if (!user) return false;
     if (user.role === Role.admin) return true;

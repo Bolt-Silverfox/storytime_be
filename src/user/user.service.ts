@@ -539,19 +539,21 @@ export class UserService {
     url: string,
     publicId: string,
   ) {
-    const avatar = await this.prisma.avatar.create({
-      data: {
-        url,
-        publicId,
-        name: `user_avatar_${userId}_${Date.now()}`,
-        isSystemAvatar: false,
-      },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const avatar = await tx.avatar.create({
+        data: {
+          url,
+          publicId,
+          name: `user_avatar_${userId}_${Date.now()}`,
+          isSystemAvatar: false,
+        },
+      });
 
-    return this.prisma.user.update({
-      where: { id: userId, isDeleted: false },
-      data: { avatarId: avatar.id },
-      include: { avatar: true },
+      return tx.user.update({
+        where: { id: userId, isDeleted: false },
+        data: { avatarId: avatar.id },
+        include: { avatar: true },
+      });
     });
   }
 
