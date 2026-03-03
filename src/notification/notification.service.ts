@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
 import * as nodemailer from 'nodemailer';
@@ -32,6 +33,7 @@ import {
   EmailQueueService,
   QueuedEmailResult,
 } from './queue/email-queue.service';
+import { PushQueueService } from './queue/push-queue.service';
 import {
   DeviceTokenResponseDto,
   DeviceTokenListResponseDto,
@@ -51,6 +53,7 @@ export class NotificationService {
     private readonly emailProvider: EmailProvider,
     private readonly emailQueueService: EmailQueueService,
     private readonly pushProvider: PushProvider,
+    private readonly pushQueueService: PushQueueService,
   ) {
     // Initialize legacy email transporter (for backward compatibility / sync sends)
     this.transporter = nodemailer.createTransport({
@@ -827,6 +830,8 @@ export class NotificationService {
           },
         });
         this.logger.log(`Updated device token for user ${userId}`);
+        // Re-subscribe to all_users topic (ensures subscription even if previously lost)
+        await this.pushProvider.subscribeToTopic([token], 'all_users');
         return this.toDeviceTokenResponse(updated);
       }
 
@@ -845,6 +850,8 @@ export class NotificationService {
       this.logger.log(
         `Reassigned device token from user ${existingToken.userId} to ${userId}`,
       );
+      // Subscribe reassigned token to all_users topic
+      await this.pushProvider.subscribeToTopic([token], 'all_users');
       return this.toDeviceTokenResponse(updated);
     }
 
@@ -872,6 +879,10 @@ export class NotificationService {
       });
     });
     this.logger.log(`Registered new device token for user ${userId}`);
+
+    // Subscribe the new token to the all_users topic for broadcast notifications
+    await this.pushProvider.subscribeToTopic([token], 'all_users');
+
     return this.toDeviceTokenResponse(newToken);
   }
 
@@ -982,6 +993,73 @@ export class NotificationService {
       `sendTestPush result: success=${result.success}, error=${result.error ?? 'none'}, messageId=${result.messageId ?? 'none'}`,
     );
     return result;
+  }
+
+  /**
+   * Subscribe all existing active device tokens to the all_users topic.
+   * Run once to seed existing devices. Processes in batches of 1000 (Firebase limit).
+   */
+  async subscribeAllExistingDevicesToTopic(
+    topic: string = 'all_users',
+  ): Promise<{ total: number; batches: number }> {
+    const devices = await this.prisma.deviceToken.findMany({
+      where: { isActive: true, isDeleted: false },
+      select: { token: true },
+    });
+
+    if (devices.length === 0) {
+      this.logger.log('No active device tokens to subscribe');
+      return { total: 0, batches: 0 };
+    }
+
+    const BATCH_SIZE = 1000;
+    const tokens = devices.map((d) => d.token);
+    let batches = 0;
+
+    for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+      const batch = tokens.slice(i, i + BATCH_SIZE);
+      await this.pushProvider.subscribeToTopic(batch, topic);
+      batches++;
+      this.logger.log(
+        `Subscribed batch ${batches} (${batch.length} tokens) to topic: ${topic}`,
+      );
+    }
+
+    this.logger.log(
+      `Finished subscribing ${tokens.length} tokens in ${batches} batches to topic: ${topic}`,
+    );
+    return { total: tokens.length, batches };
+  }
+
+  // ============================================
+  // Event Listeners (cross-module communication)
+  // ============================================
+
+  @OnEvent('notification.broadcast')
+  async handleBroadcastNotification(payload: {
+    topic: string;
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+  }): Promise<void> {
+    this.logger.log(
+      `Handling broadcast event for topic "${payload.topic}": "${payload.title}"`,
+    );
+    const result = await this.pushQueueService.queueTopicPush(
+      payload.topic,
+      payload.title,
+      payload.body,
+      payload.data,
+    );
+    this.logger.log(
+      `Broadcast queued: jobId=${result.jobId}, success=${result.queued}`,
+    );
+  }
+
+  @OnEvent('notification.seed-topic')
+  async handleSeedTopic(payload: { topic: string }): Promise<void> {
+    this.logger.log(`Handling seed-topic event for topic "${payload.topic}"`);
+    await this.subscribeAllExistingDevicesToTopic(payload.topic);
   }
 
   /**
