@@ -5,16 +5,73 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { CouponType } from '@prisma/client';
+import { CouponType, Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 
-const FREE_TRIAL_DAYS_PER_DAY_MS = 24 * 60 * 60 * 1000;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class CouponService {
   private readonly logger = new Logger(CouponService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Shared: load a coupon by code and validate all business rules.
+   * Returns the coupon or throws/returns an invalid result.
+   * When `throwOnError` is true, throws NestJS HTTP exceptions.
+   * When false, returns `{ valid: false, message }` for soft validation responses.
+   */
+  private async assertCouponRedeemable(
+    code: string,
+    userId: string,
+    throwOnError: true,
+  ): Promise<ReturnType<typeof this.prisma.coupon.findUnique> extends Promise<infer T> ? NonNullable<T> : never>;
+  private async assertCouponRedeemable(
+    code: string,
+    userId: string,
+    throwOnError: false,
+  ): Promise<{ valid: false; message: string } | { valid: true; coupon: Awaited<ReturnType<typeof this.prisma.coupon.findUniqueOrThrow>> }>;
+  private async assertCouponRedeemable(
+    code: string,
+    userId: string,
+    throwOnError: boolean,
+  ): Promise<unknown> {
+    const coupon = await this.prisma.coupon.findUnique({
+      where: { code: code.toUpperCase() },
+    });
+    const fail = (message: string) => {
+      if (throwOnError) throw new BadRequestException(message);
+      return { valid: false as const, message };
+    };
+
+    if (!coupon) {
+      if (throwOnError) throw new NotFoundException('Invalid coupon code');
+      return { valid: false as const, message: 'Invalid coupon code' };
+    }
+    if (!coupon.isActive) return fail('This coupon is no longer active');
+
+    const now = new Date();
+    if (now < coupon.validFrom) return fail('This coupon is not yet valid');
+    if (coupon.validUntil && now > coupon.validUntil) return fail('This coupon has expired');
+    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
+      return fail('This coupon has reached its usage limit');
+    }
+    if (coupon.type !== CouponType.FREE_TRIAL_DAYS) {
+      return fail('This coupon type cannot be redeemed here');
+    }
+
+    const existingRedemption = await this.prisma.couponRedemption.findUnique({
+      where: { couponId_userId: { couponId: coupon.id, userId } },
+    });
+    if (existingRedemption) {
+      if (throwOnError) throw new ConflictException('You have already redeemed this coupon');
+      return { valid: false as const, message: 'You have already redeemed this coupon' };
+    }
+
+    if (throwOnError) return coupon;
+    return { valid: true as const, coupon };
+  }
 
   /**
    * Validate a coupon code for the requesting user.
@@ -24,40 +81,10 @@ export class CouponService {
     userId: string,
     code: string,
   ): Promise<{ valid: boolean; freeDays?: number; message: string }> {
-    const coupon = await this.prisma.coupon.findUnique({
-      where: { code: code.toUpperCase() },
-    });
+    const result = await this.assertCouponRedeemable(code, userId, false);
+    if (!result.valid) return result;
 
-    if (!coupon) {
-      return { valid: false, message: 'Invalid coupon code' };
-    }
-    if (!coupon.isActive) {
-      return { valid: false, message: 'This coupon is no longer active' };
-    }
-
-    const now = new Date();
-    if (now < coupon.validFrom) {
-      return { valid: false, message: 'This coupon is not yet valid' };
-    }
-    if (coupon.validUntil && now > coupon.validUntil) {
-      return { valid: false, message: 'This coupon has expired' };
-    }
-    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
-      return { valid: false, message: 'This coupon has reached its usage limit' };
-    }
-    if (coupon.type !== CouponType.FREE_TRIAL_DAYS) {
-      return { valid: false, message: 'This coupon type cannot be redeemed here' };
-    }
-
-    // Check if this user already redeemed this coupon
-    const existingRedemption = await this.prisma.couponRedemption.findUnique({
-      where: { couponId_userId: { couponId: coupon.id, userId } },
-    });
-    if (existingRedemption) {
-      return { valid: false, message: 'You have already redeemed this coupon' };
-    }
-
-    const freeDays = Math.floor(coupon.value);
+    const freeDays = Math.floor(result.coupon.value);
     return {
       valid: true,
       freeDays,
@@ -78,34 +105,8 @@ export class CouponService {
     freeDays: number;
     message: string;
   }> {
-    const coupon = await this.prisma.coupon.findUnique({
-      where: { code: code.toUpperCase() },
-    });
-
-    if (!coupon) throw new NotFoundException('Invalid coupon code');
-    if (!coupon.isActive) throw new BadRequestException('This coupon is no longer active');
-
+    const coupon = await this.assertCouponRedeemable(code, userId, true);
     const now = new Date();
-    if (now < coupon.validFrom) {
-      throw new BadRequestException('This coupon is not yet valid');
-    }
-    if (coupon.validUntil && now > coupon.validUntil) {
-      throw new BadRequestException('This coupon has expired');
-    }
-    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
-      throw new BadRequestException('This coupon has reached its usage limit');
-    }
-    if (coupon.type !== CouponType.FREE_TRIAL_DAYS) {
-      throw new BadRequestException('This coupon type cannot be redeemed here');
-    }
-
-    // Check for duplicate redemption
-    const existingRedemption = await this.prisma.couponRedemption.findUnique({
-      where: { couponId_userId: { couponId: coupon.id, userId } },
-    });
-    if (existingRedemption) {
-      throw new ConflictException('You have already redeemed this coupon');
-    }
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId, isDeleted: false },
@@ -114,7 +115,7 @@ export class CouponService {
     if (!user) throw new NotFoundException('User not found');
 
     const freeDays = Math.floor(coupon.value);
-    const freeDaysMs = freeDays * FREE_TRIAL_DAYS_PER_DAY_MS;
+    const freeDaysMs = freeDays * MS_PER_DAY;
 
     // Extend existing premium access or start from now — whichever is later
     const baseDate =
@@ -123,20 +124,48 @@ export class CouponService {
         : now;
     const premiumAccessUntil = new Date(baseDate.getTime() + freeDaysMs);
 
-    // Atomically create redemption, update user, increment coupon usedCount
-    await this.prisma.$transaction([
-      this.prisma.couponRedemption.create({
-        data: { couponId: coupon.id, userId },
-      }),
-      this.prisma.user.update({
-        where: { id: userId },
-        data: { premiumAccessUntil },
-      }),
-      this.prisma.coupon.update({
-        where: { id: coupon.id },
-        data: { usedCount: { increment: 1 } },
-      }),
-    ]);
+    // Atomically create redemption, update user, and increment usedCount.
+    // Uses interactive transaction so we can guard against concurrent maxUses races:
+    // two requests that both pass the pre-check above could otherwise both succeed.
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if (coupon.maxUses !== null) {
+          // Only increment if the limit has not yet been reached concurrently
+          const updated = await tx.coupon.updateMany({
+            where: { id: coupon.id, usedCount: { lt: coupon.maxUses } },
+            data: { usedCount: { increment: 1 } },
+          });
+          if (updated.count === 0) {
+            throw new BadRequestException(
+              'This coupon has reached its usage limit',
+            );
+          }
+        } else {
+          await tx.coupon.update({
+            where: { id: coupon.id },
+            data: { usedCount: { increment: 1 } },
+          });
+        }
+
+        await tx.couponRedemption.create({
+          data: { couponId: coupon.id, userId },
+        });
+
+        await tx.user.update({
+          where: { id: userId },
+          data: { premiumAccessUntil },
+        });
+      });
+    } catch (err) {
+      // P2002 unique constraint = same user redeemed concurrently; map to 409
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new ConflictException('You have already redeemed this coupon');
+      }
+      throw err;
+    }
 
     this.logger.log(
       `User ${userId} redeemed coupon ${coupon.code} (+${freeDays} days, until ${premiumAccessUntil.toISOString()})`,

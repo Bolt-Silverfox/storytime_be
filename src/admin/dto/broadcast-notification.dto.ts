@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsObject, IsOptional, IsString, Matches } from 'class-validator';
 
 export class BroadcastNotificationDto {
   @ApiProperty({ example: 'New Story Available!' })
@@ -21,6 +21,7 @@ export class BroadcastNotificationDto {
   })
   @IsOptional()
   @IsString()
+  @Matches(/^[a-zA-Z0-9\-_.~%]+$/, { message: 'Topic must contain only valid FCM topic characters' })
   topic?: string;
 
   @ApiPropertyOptional({
