@@ -1045,21 +1045,35 @@ export class NotificationService {
     this.logger.log(
       `Handling broadcast event for topic "${payload.topic}": "${payload.title}"`,
     );
-    const result = await this.pushQueueService.queueTopicPush(
-      payload.topic,
-      payload.title,
-      payload.body,
-      payload.data,
-    );
-    this.logger.log(
-      `Broadcast queued: jobId=${result.jobId}, success=${result.queued}`,
-    );
+    try {
+      const result = await this.pushQueueService.queueTopicPush(
+        payload.topic,
+        payload.title,
+        payload.body,
+        payload.data,
+      );
+      this.logger.log(
+        `Broadcast queued: jobId=${result.jobId}, success=${result.queued}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `Failed to queue broadcast for topic "${payload.topic}": ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+    }
   }
 
   @OnEvent('notification.seed-topic')
   async handleSeedTopic(payload: { topic: string }): Promise<void> {
     this.logger.log(`Handling seed-topic event for topic "${payload.topic}"`);
-    await this.subscribeAllExistingDevicesToTopic(payload.topic);
+    try {
+      await this.subscribeAllExistingDevicesToTopic(payload.topic);
+    } catch (err) {
+      this.logger.error(
+        `Failed to seed topic "${payload.topic}": ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+    }
   }
 
   /**
