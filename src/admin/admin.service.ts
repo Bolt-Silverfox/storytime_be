@@ -10,7 +10,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
-import { Role, Prisma } from '@prisma/client';
+import { Role, Prisma, CouponType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {
   DashboardStatsDto,
@@ -39,12 +39,14 @@ import {
   UpdateUserDto,
   BulkActionDto,
 } from './dto/user-management.dto';
+import { CreateCouponDto, UpdateCouponDto } from './dto/coupon.dto';
 import {
   categories,
   themes,
   defaultAgeGroups,
   systemAvatars,
 } from '../../prisma/data';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DateUtil } from '@/shared/utils/date.util';
 import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';
 import {
@@ -53,6 +55,7 @@ import {
   STORY_INVALIDATION_KEYS,
 } from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
+import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
 
@@ -64,6 +67,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // =====================
@@ -880,6 +884,7 @@ export class AdminService {
         },
         avatar: true,
         subscription: true,
+        usage: true,
         paymentTransactions: {
           orderBy: { createdAt: 'desc' },
           take: 10,
@@ -2167,6 +2172,32 @@ export class AdminService {
     });
   }
 
+  async createSupportTicket(
+    userId: string,
+    dto: import('./dto/create-admin-ticket.dto').CreateAdminTicketDto,
+  ) {
+    // Verify user exists if creating on behalf of someone
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    return this.prisma.supportTicket.create({
+      data: {
+        userId,
+        subject: dto.subject,
+        message: dto.message,
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+  }
+
   // =====================
   // EXPORT ENDPOINTS
   // =====================
@@ -2379,6 +2410,33 @@ export class AdminService {
     });
   }
 
+  async resetUserQuota(userId: string, body: import('./dto/reset-quota.dto').ResetQuotaDto) {
+    const usage = await this.prisma.userUsage.findUnique({
+      where: { userId },
+    });
+
+    if (!usage) {
+      throw new NotFoundException('User usage record not found');
+    }
+
+    const updateData: Prisma.UserUsageUpdateInput = {};
+
+    if (body.resetStoryQuota) updateData.uniqueStoriesRead = 0;
+    if (body.resetBonusStories) updateData.bonusStories = 0;
+    if (body.resetElevenLabsCount) updateData.elevenLabsCount = 0;
+    if (body.resetGeminiStory) updateData.geminiStoryCount = 0;
+    if (body.resetGeminiImage) updateData.geminiImageCount = 0;
+    if (body.resetVoiceLock) {
+      updateData.selectedSecondVoice = { disconnect: true };
+      updateData.elevenLabsTrialStory = { disconnect: true };
+    }
+
+    return this.prisma.userUsage.update({
+      where: { userId },
+      data: updateData,
+    });
+  }
+
   async getDeletionRequests(page: number = 1, limit: number = 10) {
     const skip = (page - 1) * limit;
 
@@ -2445,5 +2503,244 @@ export class AdminService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  // =====================
+  // COUPONS
+  // =====================
+
+  async createCoupon(dto: CreateCouponDto) {
+    const existing = await this.prisma.coupon.findUnique({
+      where: { code: dto.code },
+    });
+    if (existing) {
+      throw new ConflictException(`Coupon code "${dto.code}" already exists`);
+    }
+
+    return this.prisma.coupon.create({
+      data: {
+        code: dto.code.toUpperCase(),
+        type: dto.type,
+        value: dto.value,
+        maxUses: dto.maxUses ?? null,
+        validFrom: new Date(dto.validFrom),
+        validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
+        plan: dto.plan ?? null,
+      },
+    });
+  }
+
+  async listCoupons(page: number, limit: number, isActive?: boolean) {
+    const skip = (page - 1) * limit;
+    const where: Prisma.CouponWhereInput = {};
+    if (isActive !== undefined) {
+      where.isActive = isActive;
+    }
+
+    const [coupons, total] = await Promise.all([
+      this.prisma.coupon.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: { select: { redemptions: true } },
+        },
+      }),
+      this.prisma.coupon.count({ where }),
+    ]);
+
+    return {
+      data: coupons,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getCouponById(id: string) {
+    const coupon = await this.prisma.coupon.findUnique({
+      where: { id },
+      include: {
+        redemptions: {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    if (!coupon) {
+      throw new NotFoundException('Coupon not found');
+    }
+    return coupon;
+  }
+
+  async updateCoupon(id: string, dto: UpdateCouponDto) {
+    const coupon = await this.prisma.coupon.findUnique({ where: { id } });
+    if (!coupon) {
+      throw new NotFoundException('Coupon not found');
+    }
+
+    const data: Prisma.CouponUpdateInput = {};
+    if (dto.maxUses !== undefined) data.maxUses = dto.maxUses;
+    if (dto.validUntil !== undefined)
+      data.validUntil = dto.validUntil ? new Date(dto.validUntil) : null;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.plan !== undefined) data.plan = dto.plan;
+    if (dto.value !== undefined) data.value = dto.value;
+
+    return this.prisma.coupon.update({ where: { id }, data });
+  }
+
+  async deleteCoupon(id: string) {
+    const coupon = await this.prisma.coupon.findUnique({ where: { id } });
+    if (!coupon) {
+      throw new NotFoundException('Coupon not found');
+    }
+    return this.prisma.coupon.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  async validateCoupon(code: string, plan?: string) {
+    const coupon = await this.prisma.coupon.findUnique({
+      where: { code: code.toUpperCase() },
+    });
+
+    if (!coupon) {
+      return { valid: false, reason: 'Coupon not found' };
+    }
+    if (!coupon.isActive) {
+      return { valid: false, reason: 'Coupon is inactive' };
+    }
+
+    const now = new Date();
+    if (now < coupon.validFrom) {
+      return { valid: false, reason: 'Coupon is not yet valid' };
+    }
+    if (coupon.validUntil && now > coupon.validUntil) {
+      return { valid: false, reason: 'Coupon has expired' };
+    }
+    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
+      return { valid: false, reason: 'Coupon usage limit reached' };
+    }
+    if (coupon.plan && plan && coupon.plan !== plan) {
+      return {
+        valid: false,
+        reason: `Coupon is only valid for the ${coupon.plan} plan`,
+      };
+    }
+
+    return {
+      valid: true,
+      coupon: {
+        code: coupon.code,
+        type: coupon.type,
+        value: coupon.value,
+        plan: coupon.plan,
+      },
+    };
+  }
+
+  async redeemCoupon(code: string, userId: string) {
+    const coupon = await this.prisma.coupon.findUnique({
+      where: { code: code.toUpperCase() },
+    });
+    if (!coupon) {
+      throw new NotFoundException('Coupon not found');
+    }
+    if (!coupon.isActive) {
+      throw new BadRequestException('Coupon is inactive');
+    }
+
+    const now = new Date();
+    if (now < coupon.validFrom) {
+      throw new BadRequestException('Coupon is not yet valid');
+    }
+    if (coupon.validUntil && now > coupon.validUntil) {
+      throw new BadRequestException('Coupon has expired');
+    }
+    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
+      throw new BadRequestException('Coupon usage limit reached');
+    }
+
+    // Check if user already redeemed this coupon
+    const existingRedemption = await this.prisma.couponRedemption.findUnique({
+      where: { couponId_userId: { couponId: coupon.id, userId } },
+    });
+    if (existingRedemption) {
+      throw new ConflictException('User has already redeemed this coupon');
+    }
+
+    // Verify user exists
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Create redemption and increment usedCount in a transaction
+    const [redemption] = await this.prisma.$transaction([
+      this.prisma.couponRedemption.create({
+        data: { couponId: coupon.id, userId },
+        include: {
+          coupon: { select: { code: true, type: true, value: true } },
+          user: { select: { id: true, name: true, email: true } },
+        },
+      }),
+      this.prisma.coupon.update({
+        where: { id: coupon.id },
+        data: { usedCount: { increment: 1 } },
+      }),
+    ]);
+
+    return redemption;
+  }
+
+  // =====================
+  // BROADCAST NOTIFICATIONS
+  // =====================
+
+  /**
+   * Broadcast a push notification to all users via FCM topic.
+   * Emits a 'notification.broadcast' event handled by the notification module.
+   */
+  async broadcastNotification(
+    dto: BroadcastNotificationDto,
+  ): Promise<{ queued: boolean; topic: string }> {
+    const topic = dto.topic ?? 'all_users';
+
+    this.eventEmitter.emit('notification.broadcast', {
+      topic,
+      title: dto.title,
+      body: dto.body,
+      data: dto.data,
+    });
+
+    this.logger.log(
+      `Broadcast notification emitted to topic "${topic}": "${dto.title}"`,
+    );
+
+    return { queued: true, topic };
+  }
+
+  /**
+   * Seed all existing device tokens to a topic.
+   * Emits a 'notification.seed-topic' event.
+   */
+  async seedTopicSubscriptions(
+    topic: string = 'all_users',
+  ): Promise<{ emitted: boolean }> {
+    this.eventEmitter.emit('notification.seed-topic', { topic });
+    this.logger.log(`Topic seed event emitted for topic: ${topic}`);
+    return { emitted: true };
   }
 }
