@@ -534,6 +534,27 @@ export class UserService {
     });
   }
 
+  async createAndAssignAvatar(
+    userId: string,
+    url: string,
+    publicId: string,
+  ) {
+    const avatar = await this.prisma.avatar.create({
+      data: {
+        url,
+        publicId,
+        name: `user_avatar_${userId}_${Date.now()}`,
+        isSystemAvatar: false,
+      },
+    });
+
+    return this.prisma.user.update({
+      where: { id: userId, isDeleted: false },
+      data: { avatarId: avatar.id },
+      include: { avatar: true },
+    });
+  }
+
   async setPin(userId: string, pin: string) {
     if (!/^\d{6}$/.test(pin))
       throw new BadRequestException('PIN must be exactly 6 digits');

@@ -14,6 +14,8 @@ import {
   Query,
   HttpException,
   HttpStatus,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,8 +25,11 @@ import {
   ApiBody,
   ApiBearerAuth,
   ApiQuery,
+  ApiConsumes,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UserService } from './user.service';
+import { UploadService } from '@/upload/upload.service';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -59,7 +64,10 @@ class UpdateUserRoleDto {
 @ApiTags('user')
 @Controller('user')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly uploadService: UploadService,
+  ) {}
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
   // ============================================================
@@ -141,6 +149,33 @@ export class UserController {
     return this.userService.updateAvatarForParent(
       req.authUserData.userId,
       body,
+    );
+  }
+
+  @Post('me/upload-avatar')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({ summary: 'Upload and assign a new avatar image' })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadAndAssignAvatar(
+    @Req() req: AuthenticatedRequest,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+    const uploadResult = await this.uploadService.uploadFile(file);
+    return this.userService.createAndAssignAvatar(
+      req.authUserData.userId,
+      uploadResult.secure_url,
+      uploadResult.public_id,
     );
   }
 
