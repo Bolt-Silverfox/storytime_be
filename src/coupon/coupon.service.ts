@@ -5,7 +5,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { CouponType, Prisma } from '@prisma/client';
+import { type Coupon, CouponType, Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -26,7 +26,7 @@ export class CouponService {
     code: string,
     userId: string,
     throwOnError: true,
-  ): Promise<ReturnType<typeof this.prisma.coupon.findUnique> extends Promise<infer T> ? NonNullable<T> : never>;
+  ): Promise<Coupon>;
   private async assertCouponRedeemable(
     code: string,
     userId: string,
@@ -152,17 +152,21 @@ export class CouponService {
         });
 
         await tx.user.update({
-          where: { id: userId },
+          // Guard against user being soft-deleted between the pre-check and the transaction
+          where: { id: userId, isDeleted: false },
           data: { premiumAccessUntil },
         });
       });
     } catch (err) {
-      // P2002 unique constraint = same user redeemed concurrently; map to 409
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        throw new ConflictException('You have already redeemed this coupon');
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        // P2002 unique constraint = same user redeemed concurrently; map to 409
+        if (err.code === 'P2002') {
+          throw new ConflictException('You have already redeemed this coupon');
+        }
+        // P2025 record not found = user was deleted between pre-check and transaction
+        if (err.code === 'P2025') {
+          throw new NotFoundException('User not found');
+        }
       }
       throw err;
     }
@@ -175,7 +179,7 @@ export class CouponService {
       success: true,
       premiumAccessUntil,
       freeDays,
-      message: `You have ${freeDays} day${freeDays === 1 ? '' : 's'} of free premium access! Enjoy until ${premiumAccessUntil.toLocaleDateString()}.`,
+      message: `You have ${freeDays} day${freeDays === 1 ? '' : 's'} of free premium access! Premium expires on ${premiumAccessUntil.toISOString().slice(0, 10)}.`,
     };
   }
 }

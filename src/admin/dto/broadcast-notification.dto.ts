@@ -1,10 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsObject, IsOptional, IsString, Matches } from 'class-validator';
+import { IsNotEmpty, IsObject, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 export class BroadcastNotificationDto {
   @ApiProperty({ example: 'New Story Available!' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(65)
   title: string;
 
   @ApiProperty({
@@ -13,6 +14,7 @@ export class BroadcastNotificationDto {
   })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(200)
   body: string;
 
   @ApiPropertyOptional({
