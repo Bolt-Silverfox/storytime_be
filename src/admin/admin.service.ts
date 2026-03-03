@@ -2744,7 +2744,7 @@ export class AdminService {
   ): Promise<{ queued: boolean; topic: string }> {
     const topic = dto.topic ?? 'all_users';
 
-    this.eventEmitter.emit('notification.broadcast', {
+    await this.eventEmitter.emitAsync('notification.broadcast', {
       topic,
       title: dto.title,
       body: dto.body,
@@ -2768,7 +2768,7 @@ export class AdminService {
     if (!/^[a-zA-Z0-9\-_.~%]+$/.test(topic)) {
       throw new BadRequestException('Invalid topic name: must contain only valid FCM topic characters');
     }
-    this.eventEmitter.emit('notification.seed-topic', { topic });
+    await this.eventEmitter.emitAsync('notification.seed-topic', { topic });
     this.logger.log(`Topic seed event emitted for topic: ${topic}`);
     return { emitted: true };
   }
