@@ -56,6 +56,7 @@ import {
 } from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
+import { CouponService } from '../coupon/coupon.service';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
 
@@ -68,6 +69,7 @@ export class AdminService {
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly eventEmitter: EventEmitter2,
+    private readonly couponService: CouponService,
   ) {}
 
   // =====================
@@ -2676,59 +2678,9 @@ export class AdminService {
   }
 
   async redeemCoupon(code: string, userId: string) {
-    const coupon = await this.prisma.coupon.findUnique({
-      where: { code: code.toUpperCase() },
-    });
-    if (!coupon) {
-      throw new NotFoundException('Coupon not found');
-    }
-    if (!coupon.isActive) {
-      throw new BadRequestException('Coupon is inactive');
-    }
-
-    const now = new Date();
-    if (now < coupon.validFrom) {
-      throw new BadRequestException('Coupon is not yet valid');
-    }
-    if (coupon.validUntil && now > coupon.validUntil) {
-      throw new BadRequestException('Coupon has expired');
-    }
-    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
-      throw new BadRequestException('Coupon usage limit reached');
-    }
-
-    // Check if user already redeemed this coupon
-    const existingRedemption = await this.prisma.couponRedemption.findUnique({
-      where: { couponId_userId: { couponId: coupon.id, userId } },
-    });
-    if (existingRedemption) {
-      throw new ConflictException('User has already redeemed this coupon');
-    }
-
-    // Verify user exists
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-    });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    // Create redemption and increment usedCount in a transaction
-    const [redemption] = await this.prisma.$transaction([
-      this.prisma.couponRedemption.create({
-        data: { couponId: coupon.id, userId },
-        include: {
-          coupon: { select: { code: true, type: true, value: true } },
-          user: { select: { id: true, name: true, email: true } },
-        },
-      }),
-      this.prisma.coupon.update({
-        where: { id: coupon.id },
-        data: { usedCount: { increment: 1 } },
-      }),
-    ]);
-
-    return redemption;
+    // Delegate to CouponService so premiumAccessUntil is set atomically,
+    // race-safe usedCount increment is applied, and all validation is shared.
+    return this.couponService.redeemCoupon(userId, code);
   }
 
   // =====================
