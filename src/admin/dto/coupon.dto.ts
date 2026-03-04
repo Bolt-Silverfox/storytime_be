@@ -23,13 +23,19 @@ export class CreateCouponDto {
   @IsEnum(CouponType)
   type: CouponType;
 
-  @ApiProperty({ example: 25, description: 'Percentage (0-100), flat amount, or trial days' })
+  @ApiProperty({
+    example: 25,
+    description: 'Percentage (0-100), flat amount, or trial days',
+  })
   @IsNumber()
   @Min(0)
   @Max(999)
   value: number;
 
-  @ApiPropertyOptional({ example: 100, description: 'Max uses (null = unlimited)' })
+  @ApiPropertyOptional({
+    example: 100,
+    description: 'Max uses (null = unlimited)',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)

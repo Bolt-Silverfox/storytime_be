@@ -534,11 +534,7 @@ export class UserService {
     });
   }
 
-  async createAndAssignAvatar(
-    userId: string,
-    url: string,
-    publicId: string,
-  ) {
+  async createAndAssignAvatar(userId: string, url: string, publicId: string) {
     return this.prisma.$transaction(async (tx) => {
       const avatar = await tx.avatar.create({
         data: {
