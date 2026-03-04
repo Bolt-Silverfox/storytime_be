@@ -590,11 +590,19 @@ export class NotificationService {
     userId: string,
     preferences: Record<string, boolean>,
   ): Promise<Record<string, { push: boolean; in_app: boolean }>> {
-    const validCategories = new Set(Object.values(PrismaCategory));
+    // Only user-facing categories can be toggled; auth/system categories are excluded
+    const allowedCategories = new Set<PrismaCategory>([
+      PrismaCategory.SUBSCRIPTION_REMINDER,
+      PrismaCategory.SUBSCRIPTION_ALERT,
+      PrismaCategory.NEW_STORY,
+      PrismaCategory.STORY_FINISHED,
+      PrismaCategory.INCOMPLETE_STORY_REMINDER,
+      PrismaCategory.DAILY_LISTENING_REMINDER,
+    ]);
     for (const key of Object.keys(preferences)) {
-      if (!validCategories.has(key as PrismaCategory)) {
+      if (!allowedCategories.has(key as PrismaCategory)) {
         throw new BadRequestException(
-          `Unknown notification category: "${key}"`,
+          `Unknown or non-configurable notification category: "${key}"`,
         );
       }
     }
