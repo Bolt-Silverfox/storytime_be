@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsObject, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsObject,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 export class BroadcastNotificationDto {
   @ApiProperty({ example: 'New Story Available!' })
@@ -9,8 +16,7 @@ export class BroadcastNotificationDto {
   title: string;
 
   @ApiProperty({
-    example:
-      "Check out 'The Magic Forest' - a new adventure awaits!",
+    example: "Check out 'The Magic Forest' - a new adventure awaits!",
   })
   @IsString()
   @IsNotEmpty()
@@ -23,7 +29,9 @@ export class BroadcastNotificationDto {
   })
   @IsOptional()
   @IsString()
-  @Matches(/^[a-zA-Z0-9\-_.~%]+$/, { message: 'Topic must contain only valid FCM topic characters' })
+  @Matches(/^[a-zA-Z0-9\-_.~%]+$/, {
+    message: 'Topic must contain only valid FCM topic characters',
+  })
   topic?: string;
 
   @ApiPropertyOptional({

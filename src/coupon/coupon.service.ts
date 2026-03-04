@@ -31,7 +31,15 @@ export class CouponService {
     code: string,
     userId: string,
     throwOnError: false,
-  ): Promise<{ valid: false; message: string } | { valid: true; coupon: Awaited<ReturnType<typeof this.prisma.coupon.findUniqueOrThrow>> }>;
+  ): Promise<
+    | { valid: false; message: string }
+    | {
+        valid: true;
+        coupon: Awaited<
+          ReturnType<typeof this.prisma.coupon.findUniqueOrThrow>
+        >;
+      }
+  >;
   private async assertCouponRedeemable(
     code: string,
     userId: string,
@@ -53,7 +61,8 @@ export class CouponService {
 
     const now = new Date();
     if (now < coupon.validFrom) return fail('This coupon is not yet valid');
-    if (coupon.validUntil && now > coupon.validUntil) return fail('This coupon has expired');
+    if (coupon.validUntil && now > coupon.validUntil)
+      return fail('This coupon has expired');
     if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
       return fail('This coupon has reached its usage limit');
     }
@@ -65,8 +74,12 @@ export class CouponService {
       where: { couponId_userId: { couponId: coupon.id, userId } },
     });
     if (existingRedemption) {
-      if (throwOnError) throw new ConflictException('You have already redeemed this coupon');
-      return { valid: false as const, message: 'You have already redeemed this coupon' };
+      if (throwOnError)
+        throw new ConflictException('You have already redeemed this coupon');
+      return {
+        valid: false as const,
+        message: 'You have already redeemed this coupon',
+      };
     }
 
     if (throwOnError) return coupon;
