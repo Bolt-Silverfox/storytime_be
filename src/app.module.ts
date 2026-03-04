@@ -39,6 +39,7 @@ import {
 import { AdminModule } from './admin/admin.module';
 import { CouponModule } from './coupon/coupon.module';
 import { HealthModule } from './health/health.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
@@ -104,6 +105,7 @@ import { HealthModule } from './health/health.module';
         },
       }),
     }),
+    EventEmitterModule.forRoot(),
     SharedModule,
     AuthModule,
     UserModule,
