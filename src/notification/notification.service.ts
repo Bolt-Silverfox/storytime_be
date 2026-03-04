@@ -590,6 +590,15 @@ export class NotificationService {
     userId: string,
     preferences: Record<string, boolean>,
   ): Promise<Record<string, { push: boolean; in_app: boolean }>> {
+    const validCategories = new Set(Object.values(PrismaCategory));
+    for (const key of Object.keys(preferences)) {
+      if (!validCategories.has(key as PrismaCategory)) {
+        throw new BadRequestException(
+          `Unknown notification category: "${key}"`,
+        );
+      }
+    }
+
     const categories = Object.keys(preferences) as PrismaCategory[];
     const channels: PrismaNotificationType[] = [
       PrismaNotificationType.in_app,
@@ -1045,6 +1054,8 @@ export class NotificationService {
         `Failed to queue broadcast for topic "${payload.topic}": ${(err as Error).message}`,
         (err as Error).stack,
       );
+      // Re-throw so emitAsync in broadcastNotification can detect failure
+      throw err;
     }
   }
 
@@ -1058,6 +1069,7 @@ export class NotificationService {
         `Failed to seed topic "${payload.topic}": ${(err as Error).message}`,
         (err as Error).stack,
       );
+      throw err;
     }
   }
 
