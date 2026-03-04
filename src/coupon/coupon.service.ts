@@ -168,6 +168,9 @@ export class CouponService {
           throw new NotFoundException('User not found');
         }
       }
+      this.logger.error(
+        `Unexpected error redeeming coupon ${coupon.code} for user ${userId}: ${(err as Error).message}`,
+      );
       throw err;
     }
 

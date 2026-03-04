@@ -778,36 +778,40 @@ export class AuthService {
       );
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-      select: { googleId: true, appleId: true },
-    });
+    // Wrap check-and-update in a transaction to prevent TOCTOU: two concurrent
+    // unlink calls could both pass the linkedCount guard and leave the user with
+    // only email (which may not be a usable login method for OAuth-only accounts).
+    await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId, isDeleted: false },
+        select: { googleId: true, appleId: true },
+      });
 
-    if (!user) throw new NotFoundException('User not found');
+      if (!user) throw new NotFoundException('User not found');
 
-    // Count linked providers. Email is counted as a fallback login method, but
-    // OAuth-only users received a randomly generated passwordHash and cannot
-    // actually sign in with email/password. A future `hasPassword: Boolean`
-    // column would let us count email only when the user explicitly set a password.
-    // For now, we require at least 2 total linked methods before allowing unlink.
-    let linkedCount = 1; // email (best-effort — see note above)
-    if (user.googleId) linkedCount++;
-    if (user.appleId) linkedCount++;
+      const fieldToUnlink = provider === 'google' ? 'googleId' : 'appleId';
+      if (!user[fieldToUnlink]) {
+        throw new BadRequestException(`${provider} account is not linked.`);
+      }
 
-    if (linkedCount <= 1) {
-      throw new BadRequestException(
-        'Cannot unlink. You must have at least one linked sign-in method.',
-      );
-    }
+      // Count linked providers. Email is counted as a fallback login method, but
+      // OAuth-only users have a randomly generated passwordHash and cannot sign in
+      // with email/password. A future `hasPassword: Boolean` column would let us
+      // count email only when the user explicitly set a password.
+      let linkedCount = 1; // email (best-effort — see note above)
+      if (user.googleId) linkedCount++;
+      if (user.appleId) linkedCount++;
 
-    const fieldToUnlink = provider === 'google' ? 'googleId' : 'appleId';
-    if (!user[fieldToUnlink]) {
-      throw new BadRequestException(`${provider} account is not linked.`);
-    }
+      if (linkedCount <= 1) {
+        throw new BadRequestException(
+          'Cannot unlink. You must have at least one linked sign-in method.',
+        );
+      }
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { [fieldToUnlink]: null },
+      await tx.user.update({
+        where: { id: userId },
+        data: { [fieldToUnlink]: null },
+      });
     });
 
     return {
