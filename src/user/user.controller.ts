@@ -14,6 +14,7 @@ import {
   Query,
   HttpException,
   HttpStatus,
+  Logger,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -64,6 +65,8 @@ class UpdateUserRoleDto {
 @ApiTags('user')
 @Controller('user')
 export class UserController {
+  private readonly logger = new Logger(UserController.name);
+
   constructor(
     private readonly userService: UserService,
     private readonly uploadService: UploadService,
@@ -190,9 +193,13 @@ export class UserController {
       );
     } catch (err) {
       // Compensating action: clean up the Cloudinary asset if the DB transaction fails
-      await this.uploadService.deleteImage(uploadResult.public_id).catch(() => {
-        /* best-effort cleanup — log failure but don't shadow original error */
-      });
+      await this.uploadService.deleteImage(uploadResult.public_id).catch(
+        (cleanupErr: Error) => {
+          this.logger.warn(
+            `Failed to clean up Cloudinary asset "${uploadResult.public_id}" after DB failure: ${cleanupErr.message}`,
+          );
+        },
+      );
       throw err;
     }
   }

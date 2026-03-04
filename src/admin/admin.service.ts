@@ -2718,23 +2718,16 @@ export class AdminService {
   ): Promise<{ queued: boolean; topic: string }> {
     const topic = dto.topic ?? 'all_users';
 
-    try {
-      await this.eventEmitter.emitAsync('notification.broadcast', {
-        topic,
-        title: dto.title,
-        body: dto.body,
-        data: dto.data,
-      });
-      this.logger.log(
-        `Broadcast notification emitted to topic "${topic}": "${dto.title}"`,
-      );
-      return { queued: true, topic };
-    } catch (err) {
-      this.logger.error(
-        `Broadcast notification failed for topic "${topic}": ${(err as Error).message}`,
-      );
-      return { queued: false, topic };
-    }
+    await this.eventEmitter.emitAsync('notification.broadcast', {
+      topic,
+      title: dto.title,
+      body: dto.body,
+      data: dto.data,
+    });
+    this.logger.log(
+      `Broadcast notification emitted to topic "${topic}": "${dto.title}"`,
+    );
+    return { queued: true, topic };
   }
 
   /**
@@ -2747,8 +2740,15 @@ export class AdminService {
     if (!/^[a-zA-Z0-9\-_.~%]+$/.test(topic)) {
       throw new BadRequestException('Invalid topic name: must contain only valid FCM topic characters');
     }
-    await this.eventEmitter.emitAsync('notification.seed-topic', { topic });
-    this.logger.log(`Topic seed event emitted for topic: ${topic}`);
-    return { emitted: true };
+    try {
+      await this.eventEmitter.emitAsync('notification.seed-topic', { topic });
+      this.logger.log(`Topic seed event emitted for topic: ${topic}`);
+      return { emitted: true };
+    } catch (err) {
+      this.logger.error(
+        `Seed-topic subscription failed for "${topic}": ${(err as Error).message}`,
+      );
+      throw err;
+    }
   }
 }
