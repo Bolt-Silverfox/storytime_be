@@ -2412,7 +2412,10 @@ export class AdminService {
     });
   }
 
-  async resetUserQuota(userId: string, body: import('./dto/reset-quota.dto').ResetQuotaDto) {
+  async resetUserQuota(
+    userId: string,
+    body: import('./dto/reset-quota.dto').ResetQuotaDto,
+  ) {
     const usage = await this.prisma.userUsage.findUnique({
       where: { userId },
     });
@@ -2690,7 +2693,9 @@ export class AdminService {
     topic: string = 'all_users',
   ): Promise<{ emitted: boolean }> {
     if (!/^[a-zA-Z0-9\-_.~%]+$/.test(topic)) {
-      throw new BadRequestException('Invalid topic name: must contain only valid FCM topic characters');
+      throw new BadRequestException(
+        'Invalid topic name: must contain only valid FCM topic characters',
+      );
     }
     try {
       await this.eventEmitter.emitAsync('notification.seed-topic', { topic });
