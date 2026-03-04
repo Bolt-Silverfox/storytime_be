@@ -98,7 +98,8 @@ export class CouponService {
     if (!result.valid) return result;
 
     const freeDays = Math.floor(result.coupon.value);
-    if (freeDays <= 0) return { valid: false, message: 'This coupon has no valid free days' };
+    if (freeDays <= 0)
+      return { valid: false, message: 'This coupon has no valid free days' };
     return {
       valid: true,
       freeDays,
@@ -129,7 +130,8 @@ export class CouponService {
     if (!user) throw new NotFoundException('User not found');
 
     const freeDays = Math.floor(coupon.value);
-    if (freeDays <= 0) throw new BadRequestException('This coupon has no valid free days');
+    if (freeDays <= 0)
+      throw new BadRequestException('This coupon has no valid free days');
     const freeDaysMs = freeDays * MS_PER_DAY;
 
     // Extend existing premium access or start from now — whichever is later
