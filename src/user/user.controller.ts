@@ -171,7 +171,10 @@ export class UserController {
       limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
       fileFilter: (_req, file, cb) => {
         if (!file.mimetype.startsWith('image/')) {
-          return cb(new BadRequestException('Only image files are allowed'), false);
+          return cb(
+            new BadRequestException('Only image files are allowed'),
+            false,
+          );
         }
         cb(null, true);
       },
@@ -193,13 +196,13 @@ export class UserController {
       );
     } catch (err) {
       // Compensating action: clean up the Cloudinary asset if the DB transaction fails
-      await this.uploadService.deleteImage(uploadResult.public_id).catch(
-        (cleanupErr: Error) => {
+      await this.uploadService
+        .deleteImage(uploadResult.public_id)
+        .catch((cleanupErr: Error) => {
           this.logger.warn(
             `Failed to clean up Cloudinary asset "${uploadResult.public_id}" after DB failure: ${cleanupErr.message}`,
           );
-        },
-      );
+        });
       throw err;
     }
   }
