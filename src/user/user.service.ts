@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import {
   Prisma,
   User,
@@ -540,7 +541,7 @@ export class UserService {
         data: {
           url,
           publicId,
-          name: `user_avatar_${userId}_${Date.now()}`,
+          name: `user_avatar_${userId}_${randomUUID()}`,
           isSystemAvatar: false,
         },
       });
