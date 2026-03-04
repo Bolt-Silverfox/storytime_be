@@ -34,7 +34,7 @@ import { EnvConfig } from '@/shared/config/env.validation';
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
 import appleSigninAuth from 'apple-signin-auth';
-import { Role, OnboardingStatus } from '@prisma/client';
+import { Role, OnboardingStatus, Prisma } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -675,29 +675,31 @@ export class AuthService {
 
     const googleId = payload.sub;
 
-    // Check if this Google account is already linked to another user
-    const existingUser = await this.prisma.user.findFirst({
-      where: { googleId },
-    });
-    if (existingUser && existingUser.id !== userId) {
-      throw new ConflictException(
-        'This Google account is already linked to another user.',
-      );
+    // Atomic link: updateMany with `googleId: null` guard ensures we only write
+    // if the field is unset. The DB unique index catches cross-user conflicts (P2002).
+    let updated: { count: number };
+    try {
+      updated = await this.prisma.user.updateMany({
+        where: { id: userId, googleId: null },
+        data: { googleId },
+      });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'This Google account is already linked to another user.',
+        );
+      }
+      throw err;
     }
-
-    // Check if current user already has Google linked
-    const currentUser = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-    if (!currentUser) throw new NotFoundException('User not found');
-    if (currentUser.googleId) {
+    if (updated.count === 0) {
+      // Either user does not exist or googleId is already set
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (!user) throw new NotFoundException('User not found');
       throw new BadRequestException('Google account is already linked.');
     }
-
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { googleId },
-    });
 
     return {
       success: true,
@@ -731,29 +733,31 @@ export class AuthService {
       throw new BadRequestException('Invalid Apple ID token');
     }
 
-    // Check if this Apple account is already linked to another user
-    const existingUser = await this.prisma.user.findFirst({
-      where: { appleId },
-    });
-    if (existingUser && existingUser.id !== userId) {
-      throw new ConflictException(
-        'This Apple account is already linked to another user.',
-      );
+    // Atomic link: updateMany with `appleId: null` guard ensures we only write
+    // if the field is unset. The DB unique index catches cross-user conflicts (P2002).
+    let updated: { count: number };
+    try {
+      updated = await this.prisma.user.updateMany({
+        where: { id: userId, appleId: null },
+        data: { appleId },
+      });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'This Apple account is already linked to another user.',
+        );
+      }
+      throw err;
     }
-
-    // Check if current user already has Apple linked
-    const currentUser = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-    if (!currentUser) throw new NotFoundException('User not found');
-    if (currentUser.appleId) {
+    if (updated.count === 0) {
+      // Either user does not exist or appleId is already set
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (!user) throw new NotFoundException('User not found');
       throw new BadRequestException('Apple account is already linked.');
     }
-
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { appleId },
-    });
 
     return {
       success: true,
@@ -777,8 +781,12 @@ export class AuthService {
 
     if (!user) throw new NotFoundException('User not found');
 
-    // Count linked providers (email is always linked)
-    let linkedCount = 1; // email
+    // Count linked providers. Email is counted as a fallback login method, but
+    // OAuth-only users received a randomly generated passwordHash and cannot
+    // actually sign in with email/password. A future `hasPassword: Boolean`
+    // column would let us count email only when the user explicitly set a password.
+    // For now, we require at least 2 total linked methods before allowing unlink.
+    let linkedCount = 1; // email (best-effort — see note above)
     if (user.googleId) linkedCount++;
     if (user.appleId) linkedCount++;
 

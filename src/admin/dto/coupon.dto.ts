@@ -26,6 +26,7 @@ export class CreateCouponDto {
   @ApiProperty({ example: 25, description: 'Percentage (0-100), flat amount, or trial days' })
   @IsNumber()
   @Min(0)
+  @Max(999)
   value: number;
 
   @ApiPropertyOptional({ example: 100, description: 'Max uses (null = unlimited)' })
