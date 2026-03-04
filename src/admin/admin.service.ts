@@ -10,7 +10,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
-import { Role, Prisma, CouponType } from '@prisma/client';
+import { Role, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {
   DashboardStatsDto,
@@ -2541,16 +2541,17 @@ export class AdminService {
   // =====================
 
   async createCoupon(dto: CreateCouponDto) {
+    const normalizedCode = dto.code.toUpperCase();
     const existing = await this.prisma.coupon.findUnique({
-      where: { code: dto.code },
+      where: { code: normalizedCode },
     });
     if (existing) {
-      throw new ConflictException(`Coupon code "${dto.code}" already exists`);
+      throw new ConflictException(`Coupon code "${normalizedCode}" already exists`);
     }
 
     return this.prisma.coupon.create({
       data: {
-        code: dto.code.toUpperCase(),
+        code: normalizedCode,
         type: dto.type,
         value: dto.value,
         maxUses: dto.maxUses ?? null,

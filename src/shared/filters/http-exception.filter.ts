@@ -65,6 +65,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
       request.url,
     );
 
-    response.status(statusCode).json(errorBody);
+    // Preserve extra fields from structured exception responses (e.g. existingProviders in 409s)
+    const extras =
+      typeof exceptionResponse === 'object' && exceptionResponse !== null
+        ? Object.fromEntries(
+            Object.entries(exceptionResponse as Record<string, unknown>).filter(
+              ([k]) => !['statusCode', 'error', 'message'].includes(k),
+            ),
+          )
+        : {};
+
+    response.status(statusCode).json({ ...errorBody, ...extras });
   }
 }

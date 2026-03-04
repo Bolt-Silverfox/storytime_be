@@ -2358,8 +2358,8 @@ export class AdminController {
     @Query('isActive') isActive?: string,
   ) {
     const data = await this.adminService.listCoupons(
-      parseInt(page ?? '1') || 1,
-      parseInt(limit ?? '20') || 20,
+      Math.max(1, parseInt(page ?? '1') || 1),
+      Math.min(100, Math.max(1, parseInt(limit ?? '20') || 20)),
       isActive === undefined ? undefined : isActive === 'true',
     );
     return { statusCode: 200, ...data };
