@@ -1022,33 +1022,44 @@ export class NotificationService {
   async subscribeAllExistingDevicesToTopic(
     topic: string = 'all_users',
   ): Promise<{ total: number; batches: number }> {
-    const devices = await this.prisma.deviceToken.findMany({
-      where: { isActive: true, isDeleted: false },
-      select: { token: true },
-    });
-
-    if (devices.length === 0) {
-      this.logger.log('No active device tokens to subscribe');
-      return { total: 0, batches: 0 };
-    }
-
     const BATCH_SIZE = 1000;
-    const tokens = devices.map((d) => d.token);
+    let cursor: string | undefined;
+    let total = 0;
     let batches = 0;
 
-    for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
-      const batch = tokens.slice(i, i + BATCH_SIZE);
-      await this.pushProvider.subscribeToTopic(batch, topic);
+    while (true) {
+      const devices = await this.prisma.deviceToken.findMany({
+        where: { isActive: true, isDeleted: false },
+        select: { id: true, token: true },
+        take: BATCH_SIZE,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        orderBy: { id: 'asc' },
+      });
+
+      if (devices.length === 0) break;
+
+      const tokens = devices.map((d) => d.token);
+      await this.pushProvider.subscribeToTopic(tokens, topic);
       batches++;
+      total += tokens.length;
+      cursor = devices[devices.length - 1].id;
+
       this.logger.log(
-        `Subscribed batch ${batches} (${batch.length} tokens) to topic: ${topic}`,
+        `Subscribed batch ${batches} (${tokens.length} tokens) to topic: ${topic}`,
+      );
+
+      if (devices.length < BATCH_SIZE) break;
+    }
+
+    if (total === 0) {
+      this.logger.log('No active device tokens to subscribe');
+    } else {
+      this.logger.log(
+        `Finished subscribing ${total} tokens in ${batches} batches to topic: ${topic}`,
       );
     }
 
-    this.logger.log(
-      `Finished subscribing ${tokens.length} tokens in ${batches} batches to topic: ${topic}`,
-    );
-    return { total: tokens.length, batches };
+    return { total, batches };
   }
 
   // ============================================
@@ -1074,7 +1085,7 @@ export class NotificationService {
       );
       if (!result.queued) {
         throw new Error(
-          `Broadcast enqueue returned queued=false (jobId=${result.jobId})`,
+          `Broadcast enqueue returned queued=false (jobId=${result.jobId}): ${result.error ?? 'unknown error'}`,
         );
       }
       this.logger.log(`Broadcast queued: jobId=${result.jobId}`);
