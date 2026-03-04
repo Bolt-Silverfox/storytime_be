@@ -148,6 +148,7 @@ export class AuthService {
         name: data.fullName,
         email: data.email,
         passwordHash: hashedPassword,
+        hasLocalPassword: true,
         role,
         onboardingStatus: OnboardingStatus.account_created,
       },
@@ -610,7 +611,7 @@ export class AuthService {
         email: true,
         googleId: true,
         appleId: true,
-        passwordHash: true,
+        hasLocalPassword: true,
       },
     });
 
@@ -622,10 +623,9 @@ export class AuthService {
       linkedAt: string | null;
     }[] = [];
 
-    // Email is considered linked if user has a real password (not a random OAuth-generated one)
-    // We detect this by checking if passwordHash exists (all users have one, but OAuth users got random ones)
-    // For simplicity, email provider is always shown if user has an email
-    accounts.push({ provider: 'email', email: user.email, linkedAt: null });
+    if (user.hasLocalPassword) {
+      accounts.push({ provider: 'email', email: user.email, linkedAt: null });
+    }
 
     if (user.googleId) {
       accounts.push({ provider: 'google', email: user.email, linkedAt: null });
@@ -650,6 +650,7 @@ export class AuthService {
 
     const clientIds = [
       this.configService.get<string>('GOOGLE_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_WEB_CLIENT_ID'),
       this.configService.get<string>('GOOGLE_ANDROID_CLIENT_ID'),
       this.configService.get<string>('GOOGLE_IOS_CLIENT_ID'),
     ].filter(Boolean);
@@ -784,7 +785,7 @@ export class AuthService {
     await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
         where: { id: userId, isDeleted: false },
-        select: { googleId: true, appleId: true },
+        select: { googleId: true, appleId: true, hasLocalPassword: true },
       });
 
       if (!user) throw new NotFoundException('User not found');
@@ -794,11 +795,9 @@ export class AuthService {
         throw new BadRequestException(`${provider} account is not linked.`);
       }
 
-      // Count linked providers. Email is counted as a fallback login method, but
-      // OAuth-only users have a randomly generated passwordHash and cannot sign in
-      // with email/password. A future `hasPassword: Boolean` column would let us
-      // count email only when the user explicitly set a password.
-      let linkedCount = 1; // email (best-effort — see note above)
+      // Count linked sign-in methods: email/password only if user has a real password,
+      // plus any linked OAuth providers.
+      let linkedCount = user.hasLocalPassword ? 1 : 0;
       if (user.googleId) linkedCount++;
       if (user.appleId) linkedCount++;
 
@@ -855,7 +854,8 @@ export class AuthService {
       const existing = await this.prisma.user.findUnique({ where: { email } });
 
       if (existing) {
-        const existingProviders: string[] = ['email'];
+        const existingProviders: string[] = [];
+        if (existing.hasLocalPassword) existingProviders.push('email');
         if (existing.googleId) existingProviders.push('google');
         if (existing.appleId) existingProviders.push('apple');
 
