@@ -695,8 +695,10 @@ export class AuthService {
       throw err;
     }
     if (updated.count === 0) {
-      // Either user does not exist or googleId is already set
-      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      // Either user does not exist (or is soft-deleted), or googleId is already set
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId, isDeleted: false },
+      });
       if (!user) throw new NotFoundException('User not found');
       throw new BadRequestException('Google account is already linked.');
     }
@@ -753,8 +755,10 @@ export class AuthService {
       throw err;
     }
     if (updated.count === 0) {
-      // Either user does not exist or appleId is already set
-      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      // Either user does not exist (or is soft-deleted), or appleId is already set
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId, isDeleted: false },
+      });
       if (!user) throw new NotFoundException('User not found');
       throw new BadRequestException('Apple account is already linked.');
     }
@@ -775,7 +779,7 @@ export class AuthService {
     }
 
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: userId, isDeleted: false },
       select: { googleId: true, appleId: true },
     });
 
