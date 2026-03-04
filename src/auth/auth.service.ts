@@ -681,7 +681,7 @@ export class AuthService {
     let updated: { count: number };
     try {
       updated = await this.prisma.user.updateMany({
-        where: { id: userId, googleId: null },
+        where: { id: userId, googleId: null, isDeleted: false },
         data: { googleId },
       });
     } catch (err) {
@@ -741,7 +741,7 @@ export class AuthService {
     let updated: { count: number };
     try {
       updated = await this.prisma.user.updateMany({
-        where: { id: userId, appleId: null },
+        where: { id: userId, appleId: null, isDeleted: false },
         data: { appleId },
       });
     } catch (err) {
