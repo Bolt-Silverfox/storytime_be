@@ -2718,18 +2718,23 @@ export class AdminService {
   ): Promise<{ queued: boolean; topic: string }> {
     const topic = dto.topic ?? 'all_users';
 
-    await this.eventEmitter.emitAsync('notification.broadcast', {
-      topic,
-      title: dto.title,
-      body: dto.body,
-      data: dto.data,
-    });
-
-    this.logger.log(
-      `Broadcast notification emitted to topic "${topic}": "${dto.title}"`,
-    );
-
-    return { queued: true, topic };
+    try {
+      await this.eventEmitter.emitAsync('notification.broadcast', {
+        topic,
+        title: dto.title,
+        body: dto.body,
+        data: dto.data,
+      });
+      this.logger.log(
+        `Broadcast notification emitted to topic "${topic}": "${dto.title}"`,
+      );
+      return { queued: true, topic };
+    } catch (err) {
+      this.logger.error(
+        `Broadcast notification failed for topic "${topic}": ${(err as Error).message}`,
+      );
+      return { queued: false, topic };
+    }
   }
 
   /**

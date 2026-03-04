@@ -182,11 +182,19 @@ export class UserController {
       throw new BadRequestException('No file provided');
     }
     const uploadResult = await this.uploadService.uploadFile(file);
-    return this.userService.createAndAssignAvatar(
-      req.authUserData.userId,
-      uploadResult.secure_url,
-      uploadResult.public_id,
-    );
+    try {
+      return await this.userService.createAndAssignAvatar(
+        req.authUserData.userId,
+        uploadResult.secure_url,
+        uploadResult.public_id,
+      );
+    } catch (err) {
+      // Compensating action: clean up the Cloudinary asset if the DB transaction fails
+      await this.uploadService.deleteImage(uploadResult.public_id).catch(() => {
+        /* best-effort cleanup — log failure but don't shadow original error */
+      });
+      throw err;
+    }
   }
 
   @Post('me/pin')
