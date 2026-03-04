@@ -832,8 +832,10 @@ export class NotificationService {
           },
         });
         this.logger.log(`Updated device token for user ${userId}`);
-        // Re-subscribe to all_users topic (ensures subscription even if previously lost)
-        await this.pushProvider.subscribeToTopic([token], 'all_users');
+        // Re-subscribe to all_users topic (best-effort; don't fail token save on FCM side effects)
+        this.pushProvider.subscribeToTopic([token], 'all_users').catch((err) =>
+          this.logger.warn(`Failed to subscribe updated token to all_users: ${(err as Error).message}`),
+        );
         return this.toDeviceTokenResponse(updated);
       }
 
@@ -852,8 +854,10 @@ export class NotificationService {
       this.logger.log(
         `Reassigned device token from user ${existingToken.userId} to ${userId}`,
       );
-      // Subscribe reassigned token to all_users topic
-      await this.pushProvider.subscribeToTopic([token], 'all_users');
+      // Subscribe reassigned token to all_users topic (best-effort)
+      this.pushProvider.subscribeToTopic([token], 'all_users').catch((err) =>
+        this.logger.warn(`Failed to subscribe reassigned token to all_users: ${(err as Error).message}`),
+      );
       return this.toDeviceTokenResponse(updated);
     }
 
@@ -882,8 +886,10 @@ export class NotificationService {
     });
     this.logger.log(`Registered new device token for user ${userId}`);
 
-    // Subscribe the new token to the all_users topic for broadcast notifications
-    await this.pushProvider.subscribeToTopic([token], 'all_users');
+    // Subscribe the new token to the all_users topic (best-effort; don't fail registration on FCM side effects)
+    this.pushProvider.subscribeToTopic([token], 'all_users').catch((err) =>
+      this.logger.warn(`Failed to subscribe new token to all_users: ${(err as Error).message}`),
+    );
 
     return this.toDeviceTokenResponse(newToken);
   }
@@ -1054,9 +1060,10 @@ export class NotificationService {
         payload.body,
         payload.data,
       );
-      this.logger.log(
-        `Broadcast queued: jobId=${result.jobId}, success=${result.queued}`,
-      );
+      if (!result.queued) {
+        throw new Error(`Broadcast enqueue returned queued=false (jobId=${result.jobId})`);
+      }
+      this.logger.log(`Broadcast queued: jobId=${result.jobId}`);
     } catch (err) {
       this.logger.error(
         `Failed to queue broadcast for topic "${payload.topic}": ${(err as Error).message}`,
