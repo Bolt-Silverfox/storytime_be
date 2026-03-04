@@ -2546,7 +2546,9 @@ export class AdminService {
       where: { code: normalizedCode },
     });
     if (existing) {
-      throw new ConflictException(`Coupon code "${normalizedCode}" already exists`);
+      throw new ConflictException(
+        `Coupon code "${normalizedCode}" already exists`,
+      );
     }
 
     return this.prisma.coupon.create({
