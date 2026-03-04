@@ -46,7 +46,7 @@ export class CouponService {
     throwOnError: boolean,
   ): Promise<unknown> {
     const coupon = await this.prisma.coupon.findUnique({
-      where: { code: code.toUpperCase() },
+      where: { code: code.trim().toUpperCase() },
     });
     const fail = (message: string) => {
       if (throwOnError) throw new BadRequestException(message);
