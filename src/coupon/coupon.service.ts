@@ -163,9 +163,12 @@ export class CouponService {
         if (err.code === 'P2002') {
           throw new ConflictException('You have already redeemed this coupon');
         }
-        // P2025 record not found = user was deleted between pre-check and transaction
+        // P2025 record not found = user or coupon deleted between pre-check and transaction
         if (err.code === 'P2025') {
-          throw new NotFoundException('User not found');
+          this.logger.warn(
+            `P2025 during redemption: coupon ${coupon.code} or user ${userId} no longer exists`,
+          );
+          throw new NotFoundException('Coupon or account no longer available');
         }
       }
       this.logger.error(
