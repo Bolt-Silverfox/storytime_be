@@ -144,6 +144,7 @@ export class CouponService {
           id: coupon.id,
           isActive: true,
           type: CouponType.FREE_TRIAL_DAYS,
+          validFrom: { lte: now },
           OR: [{ validUntil: null }, { validUntil: { gte: now } }],
         };
 
