@@ -121,25 +121,14 @@ export class CouponService {
     message: string;
   }> {
     const coupon = await this.assertCouponRedeemable(code, userId, true);
-    const now = new Date();
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-      select: { premiumAccessUntil: true },
-    });
-    if (!user) throw new NotFoundException('User not found');
 
     const freeDays = Math.floor(coupon.value);
     if (freeDays <= 0)
       throw new BadRequestException('This coupon has no valid free days');
     const freeDaysMs = freeDays * MS_PER_DAY;
 
-    // Extend existing premium access or start from now — whichever is later
-    const baseDate =
-      user.premiumAccessUntil && user.premiumAccessUntil > now
-        ? user.premiumAccessUntil
-        : now;
-    const premiumAccessUntil = new Date(baseDate.getTime() + freeDaysMs);
+    // Declared outside so the post-transaction log/return can access it.
+    let premiumAccessUntil!: Date;
 
     // Atomically create redemption, update user, and increment usedCount.
     // Uses interactive transaction so we can guard against concurrent maxUses races:
@@ -168,11 +157,40 @@ export class CouponService {
           data: { couponId: coupon.id, userId },
         });
 
-        await tx.user.update({
-          // Guard against user being soft-deleted between the pre-check and the transaction
+        // CAS-style update to prevent lost premium extensions under concurrent redemptions.
+        // Read premiumAccessUntil inside the transaction and pass it as the expected value
+        // in updateMany. PostgreSQL re-evaluates the WHERE clause on committed data at
+        // UPDATE time, so a concurrent commit causes count=0 (optimistic lock failure).
+        const currentUser = await tx.user.findUnique({
           where: { id: userId, isDeleted: false },
-          data: { premiumAccessUntil },
+          select: { premiumAccessUntil: true },
         });
+        if (!currentUser) throw new NotFoundException('User not found');
+
+        const now = new Date();
+        const baseDate =
+          currentUser.premiumAccessUntil &&
+          currentUser.premiumAccessUntil > now
+            ? currentUser.premiumAccessUntil
+            : now;
+        const candidate = new Date(baseDate.getTime() + freeDaysMs);
+
+        const casResult = await tx.user.updateMany({
+          where: {
+            id: userId,
+            isDeleted: false,
+            premiumAccessUntil: currentUser.premiumAccessUntil,
+          },
+          data: { premiumAccessUntil: candidate },
+        });
+
+        if (casResult.count === 0) {
+          throw new ConflictException(
+            'Concurrent premium update detected. Please retry.',
+          );
+        }
+
+        premiumAccessUntil = candidate;
       });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
