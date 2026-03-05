@@ -3,6 +3,7 @@ import {
   Logger,
   BadRequestException,
   ConflictException,
+  HttpException,
   NotFoundException,
 } from '@nestjs/common';
 import { type Coupon, CouponType, Prisma } from '@prisma/client';
@@ -192,6 +193,11 @@ export class CouponService {
         premiumAccessUntil = candidate;
       });
     } catch (err) {
+      // Rethrow intentional HTTP exceptions (BadRequest, Conflict, NotFound)
+      // without logging them as unexpected errors
+      if (err instanceof HttpException) {
+        throw err;
+      }
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
         // P2002 unique constraint = same user redeemed concurrently; map to 409
         if (err.code === 'P2002') {
