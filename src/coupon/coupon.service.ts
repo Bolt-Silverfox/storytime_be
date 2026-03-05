@@ -169,8 +169,7 @@ export class CouponService {
 
         const now = new Date();
         const baseDate =
-          currentUser.premiumAccessUntil &&
-          currentUser.premiumAccessUntil > now
+          currentUser.premiumAccessUntil && currentUser.premiumAccessUntil > now
             ? currentUser.premiumAccessUntil
             : now;
         const candidate = new Date(baseDate.getTime() + freeDaysMs);
