@@ -136,22 +136,35 @@ export class CouponService {
     // two requests that both pass the pre-check above could otherwise both succeed.
     try {
       await this.prisma.$transaction(async (tx) => {
+        // Re-validate coupon constraints inside the transaction to close the
+        // TOCTOU gap: between assertCouponRedeemable and now, the coupon could
+        // have been deactivated, expired, or had its type changed.
+        const now = new Date();
+        const couponGuard = {
+          id: coupon.id,
+          isActive: true,
+          type: CouponType.FREE_TRIAL_DAYS,
+          OR: [{ validUntil: null }, { validUntil: { gte: now } }],
+        };
+
         if (coupon.maxUses !== null) {
-          // Only increment if the limit has not yet been reached concurrently
           const updated = await tx.coupon.updateMany({
-            where: { id: coupon.id, usedCount: { lt: coupon.maxUses } },
+            where: { ...couponGuard, usedCount: { lt: coupon.maxUses } },
             data: { usedCount: { increment: 1 } },
           });
           if (updated.count === 0) {
             throw new BadRequestException(
-              'This coupon has reached its usage limit',
+              'Coupon is no longer valid or has reached its usage limit',
             );
           }
         } else {
-          await tx.coupon.update({
-            where: { id: coupon.id },
+          const updated = await tx.coupon.updateMany({
+            where: couponGuard,
             data: { usedCount: { increment: 1 } },
           });
+          if (updated.count === 0) {
+            throw new BadRequestException('Coupon is no longer valid');
+          }
         }
 
         await tx.couponRedemption.create({
@@ -168,7 +181,6 @@ export class CouponService {
         });
         if (!currentUser) throw new NotFoundException('User not found');
 
-        const now = new Date();
         const baseDate =
           currentUser.premiumAccessUntil && currentUser.premiumAccessUntil > now
             ? currentUser.premiumAccessUntil
