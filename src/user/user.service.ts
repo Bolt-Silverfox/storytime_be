@@ -558,15 +558,12 @@ export class UserService {
         include: { avatar: true },
       });
 
-      // Delete the previous custom avatar if it exists and wasn't a system avatar
+      // Delete the previous custom avatar if it exists and wasn't a system avatar.
+      // deleteMany is idempotent — safe if the record was already deleted concurrently.
       if (user?.avatarId) {
-        const previous = await tx.avatar.findUnique({
-          where: { id: user.avatarId },
-          select: { isSystemAvatar: true },
+        await tx.avatar.deleteMany({
+          where: { id: user.avatarId, isSystemAvatar: false },
         });
-        if (previous && !previous.isSystemAvatar) {
-          await tx.avatar.delete({ where: { id: user.avatarId } });
-        }
       }
 
       return updated;
