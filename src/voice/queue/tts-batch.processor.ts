@@ -59,35 +59,52 @@ export class TtsBatchProcessor extends WorkerHost {
 
       for (let j = 0; j < results.length; j++) {
         const result = results[j];
-        const paragraphIndex = chunk[j].index;
+        const paragraph = chunk[j];
+        const paragraphIndex = paragraph.index;
+        const allIndices = [
+          paragraphIndex,
+          ...(paragraph.duplicateIndices ?? []),
+        ];
 
-        try {
-          if (result.status === 'fulfilled') {
-            await this.queueService.markParagraphCompleted(
-              batchJobId,
-              paragraphIndex,
-              result.value.audioUrl,
-            );
+        if (result.status === 'fulfilled') {
+          try {
+            for (const idx of allIndices) {
+              await this.queueService.markParagraphCompleted(
+                batchJobId,
+                idx,
+                result.value.audioUrl,
+              );
+            }
             completedCount++;
-          } else {
-            const errorMessage =
-              result.reason instanceof Error
-                ? result.reason.message
-                : String(result.reason);
-            this.logger.warn(
-              `TTS batch ${batchJobId}: paragraph ${paragraphIndex} failed — ${errorMessage}`,
+          } catch (redisErr) {
+            this.logger.error(
+              `TTS batch ${batchJobId}: Redis write failed for completed paragraph ${paragraphIndex}`,
+              redisErr,
             );
-            await this.queueService.markParagraphFailed(
-              batchJobId,
-              paragraphIndex,
-            );
-            failedCount++;
+            throw redisErr;
           }
-        } catch (redisErr) {
-          this.logger.error(
-            `TTS batch ${batchJobId}: failed to update Redis for paragraph ${paragraphIndex}`,
-            redisErr,
+        } else {
+          const errorMessage =
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason);
+          this.logger.warn(
+            `TTS batch ${batchJobId}: TTS generation failed for paragraph ${paragraphIndex} — ${errorMessage}`,
           );
+          try {
+            for (const idx of allIndices) {
+              await this.queueService.markParagraphFailed(
+                batchJobId,
+                idx,
+              );
+            }
+          } catch (redisErr) {
+            this.logger.error(
+              `TTS batch ${batchJobId}: Redis write failed for failed paragraph ${paragraphIndex}`,
+              redisErr,
+            );
+            throw redisErr;
+          }
           failedCount++;
         }
       }
