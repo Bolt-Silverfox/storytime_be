@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Get,
   NotFoundException,
+  Param,
   Patch,
   Post,
   Query,
@@ -12,6 +13,7 @@ import {
   UseGuards,
   UseInterceptors,
   ParseFilePipeBuilder,
+  ParseUUIDPipe,
   HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -43,6 +45,8 @@ import {
 import { SpeechToTextService } from './speech-to-text.service';
 import { VoiceService } from './voice.service';
 import { VoiceQuotaService } from './voice-quota.service';
+import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
+import { EAGER_PARAGRAPH_COUNT } from './queue/tts-batch-queue.constants';
 
 @ApiTags('Voice')
 @Controller('voice')
@@ -54,6 +58,7 @@ export class VoiceController {
     private readonly textToSpeechService: TextToSpeechService,
     private readonly speechToTextService: SpeechToTextService,
     private readonly voiceQuotaService: VoiceQuotaService,
+    private readonly ttsBatchQueueService: TtsBatchQueueService,
   ) {}
 
   @Post('upload')
@@ -340,12 +345,33 @@ export class VoiceController {
       usedProvider,
       preferredProvider,
       providerStatus,
-    } = await this.textToSpeechService.batchTextToSpeechCloudUrls(
+      remainingUncached,
+      batchProvider,
+      isPremium,
+    } = await this.textToSpeechService.batchTextToSpeechEager(
       dto.storyId,
       story.textContent,
       resolvedVoice,
       req.authUserData.userId,
+      EAGER_PARAGRAPH_COUNT,
     );
+
+    // If there are remaining uncached paragraphs, queue them for background generation
+    let batchJobId: string | undefined;
+    let pendingParagraphs: number | undefined;
+
+    if (remainingUncached.length > 0) {
+      batchJobId = await this.ttsBatchQueueService.queueBatch({
+        storyId: dto.storyId,
+        voiceId: resolvedVoice,
+        userId: req.authUserData.userId,
+        isPremium,
+        provider: batchProvider,
+        paragraphs: remainingUncached,
+        totalParagraphs,
+      });
+      pendingParagraphs = remainingUncached.length;
+    }
 
     return {
       message: 'Batch audio generated successfully',
@@ -356,8 +382,38 @@ export class VoiceController {
       usedProvider,
       ...(preferredProvider ? { preferredProvider } : {}),
       ...(providerStatus ? { providerStatus } : {}),
+      ...(batchJobId ? { batchJobId } : {}),
+      ...(pendingParagraphs !== undefined ? { pendingParagraphs } : {}),
       statusCode: 200,
     };
+  }
+
+  @Get('story/audio/batch/status/:batchJobId')
+  @UseGuards(AuthSessionGuard)
+  @Throttle({ short: { limit: 30, ttl: 60_000 } })
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Poll status of background TTS batch generation' })
+  @ApiResponse({
+    status: 200,
+    description: 'Batch status with completed paragraphs',
+  })
+  @ApiResponse({ status: 404, description: 'Batch not found or expired' })
+  async getBatchStatus(
+    @Param('batchJobId', ParseUUIDPipe) batchJobId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const status = await this.ttsBatchQueueService.getBatchStatus(
+      batchJobId,
+      req.authUserData.userId,
+    );
+
+    if (!status) {
+      throw new NotFoundException(
+        'Batch not found or expired. Completed paragraphs remain usable.',
+      );
+    }
+
+    return status;
   }
 
   // --- Speech to Text ---
