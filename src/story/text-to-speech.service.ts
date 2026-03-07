@@ -190,6 +190,28 @@ export class TextToSpeechService {
   }
 
   /**
+   * Public wrapper around generateTTS for use by the batch queue processor.
+   * Generates TTS for a single paragraph with a locked provider (no fallback).
+   */
+  async generateSingleParagraphTTS(
+    storyId: string,
+    text: string,
+    voiceType: string,
+    userId: string,
+    options: {
+      isPremium: boolean;
+      providerOverride: 'elevenlabs' | 'deepgram' | 'edgetts';
+    },
+  ): Promise<{ audioUrl: string; provider: string }> {
+    const result = await this.generateTTS(storyId, text, voiceType, userId, {
+      skipQuotaCheck: true,
+      isPremium: options.isPremium,
+      providerOverride: options.providerOverride,
+    });
+    return { audioUrl: result.audioUrl, provider: result.provider };
+  }
+
+  /**
    * Internal TTS generation that tracks which provider was used.
    * When `providerOverride` is set, only that provider is attempted
    * (no fallback chain). Used by batch mode to ensure voice consistency.
@@ -607,6 +629,143 @@ export class TextToSpeechService {
     }
   }
 
+  /**
+   * Eagerly generates the first few uncached paragraphs and returns
+   * the remaining uncached paragraphs for background queue processing.
+   */
+  async batchTextToSpeechEager(
+    storyId: string,
+    fullText: string,
+    voiceType?: VoiceType | string,
+    userId?: string,
+    eagerCount = 2,
+  ): Promise<{
+    results: Array<{ index: number; text: string; audioUrl: string | null }>;
+    totalParagraphs: number;
+    wasTruncated: boolean;
+    usedProvider: 'elevenlabs' | 'deepgram' | 'edgetts' | 'none';
+    preferredProvider?: 'elevenlabs' | 'deepgram' | 'edgetts';
+    providerStatus?: 'degraded';
+    /** Remaining uncached paragraphs for background generation */
+    remainingUncached: Array<{ index: number; text: string; hash: string }>;
+    /** The provider locked in for this batch */
+    batchProvider: 'elevenlabs' | 'deepgram' | 'edgetts';
+    isPremium: boolean;
+  }> {
+    if (!fullText?.trim())
+      return {
+        results: [],
+        totalParagraphs: 0,
+        wasTruncated: false,
+        usedProvider: 'none',
+        remainingUncached: [],
+        batchProvider: 'edgetts',
+        isPremium: false,
+      };
+
+    const resolvedType =
+      VOICE_TYPE_MIGRATION_MAP[voiceType as string] ?? voiceType ?? DEFAULT_VOICE;
+
+    const { allParagraphCount, wasTruncated, hashMap } =
+      this.prepareBatchParagraphs(storyId, fullText);
+
+    const { batchProvider, isPremium, preferredProvider } =
+      await this.determineBatchProvider(storyId, voiceType, userId);
+
+    const { cached, uncached } = await this.rebuildCacheForProvider(
+      batchProvider,
+      hashMap,
+      storyId,
+      resolvedType,
+    );
+
+    this.logger.log(
+      `Eager batch story ${storyId}: ${cached.length} cached (${batchProvider}), ${uncached.length} to generate`,
+    );
+
+    if (uncached.length === 0) {
+      return {
+        results: cached.sort((a, b) => a.index - b.index),
+        totalParagraphs: allParagraphCount,
+        wasTruncated,
+        usedProvider: batchProvider,
+        ...(batchProvider !== preferredProvider ? { preferredProvider } : {}),
+        remainingUncached: [],
+        batchProvider,
+        isPremium,
+      };
+    }
+
+    // Eagerly generate only the first `eagerCount` uncached paragraphs
+    const eagerParagraphs = uncached.slice(0, eagerCount);
+    const remainingUncached = uncached.slice(eagerCount);
+
+    const eagerResults = await this.generateBatchForProvider(
+      eagerParagraphs,
+      batchProvider,
+      storyId,
+      resolvedType,
+      userId,
+      isPremium,
+    );
+
+    // If eager generation fails, propagate the error (don't queue)
+    if (eagerResults.failedCount === eagerParagraphs.length) {
+      // All eager paragraphs failed — try to return what we have
+      this.logger.warn(
+        `Eager batch story ${storyId}: all ${eagerParagraphs.length} eager paragraphs failed with ${batchProvider}`,
+      );
+    }
+
+    // Replicate generated audioUrls to duplicate paragraphs (same hash)
+    const eagerUrlByHash = new Map<string, string | null>();
+    for (const { hash, audioUrl } of eagerResults.results) {
+      eagerUrlByHash.set(hash, audioUrl);
+    }
+
+    const duplicates: Array<{
+      index: number;
+      text: string;
+      audioUrl: string | null;
+    }> = [];
+    for (const [hash, entries] of hashMap) {
+      const url = eagerUrlByHash.get(hash);
+      if (url === undefined) continue;
+      for (let i = 1; i < entries.length; i++) {
+        duplicates.push({
+          index: entries[i].index,
+          text: entries[i].text,
+          audioUrl: url,
+        });
+      }
+    }
+
+    // Filter remaining uncached: remove any whose hash was already generated eagerly
+    const filteredRemaining = remainingUncached.filter(
+      (p) => !eagerUrlByHash.has(p.hash),
+    );
+
+    const isDegraded = [
+      this.elevenLabsBreaker,
+      this.deepgramBreaker,
+      this.edgeTtsBreaker,
+    ].some((b) => b.getSnapshot().state === CircuitState.OPEN);
+
+    return {
+      results: [...cached, ...eagerResults.results, ...duplicates].sort(
+        (a, b) => a.index - b.index,
+      ),
+      totalParagraphs: allParagraphCount,
+      wasTruncated,
+      usedProvider: batchProvider,
+      ...(batchProvider !== preferredProvider ? { preferredProvider } : {}),
+      ...(isDegraded ? { providerStatus: 'degraded' as const } : {}),
+      remainingUncached: filteredRemaining,
+      batchProvider,
+      isPremium,
+    };
+  }
+
   async batchTextToSpeechCloudUrls(
     storyId: string,
     fullText: string,
@@ -632,92 +791,13 @@ export class TextToSpeechService {
       VOICE_TYPE_MIGRATION_MAP[voiceType as string] ??
       voiceType ??
       DEFAULT_VOICE;
-    const allParagraphs = splitByWordCountPreservingSentences(
-      fullText,
-      WORDS_PER_CHUNK,
-    );
 
-    const wasTruncated = allParagraphs.length > MAX_BATCH_PARAGRAPHS;
-    if (wasTruncated) {
-      this.logger.warn(
-        `Story ${storyId} has ${allParagraphs.length} paragraphs, capping at ${MAX_BATCH_PARAGRAPHS}`,
-      );
-    }
-    const paragraphs = allParagraphs.slice(0, MAX_BATCH_PARAGRAPHS);
+    const { allParagraphCount, wasTruncated, hashMap } =
+      this.prepareBatchParagraphs(storyId, fullText);
 
-    // Pre-check cache with a single bulk query instead of N individual lookups.
-    // Group by hash to handle duplicate paragraph text (e.g. repeated refrains).
-    const hashMap = new Map<string, Array<{ index: number; text: string }>>();
-    for (let idx = 0; idx < paragraphs.length; idx++) {
-      const hash = this.hashText(paragraphs[idx]);
-      const entries = hashMap.get(hash) ?? [];
-      entries.push({ index: idx, text: paragraphs[idx] });
-      hashMap.set(hash, entries);
-    }
+    const { batchProvider, isPremium, preferredProvider } =
+      await this.determineBatchProvider(storyId, voiceType, userId);
 
-    // ── Determine the batch provider BEFORE cache lookup ──
-    // This ensures we only use cache hits from the same provider,
-    // guaranteeing every paragraph in the story sounds the same.
-    const quotaVoiceId = await this.resolveCanonicalVoiceId(type);
-    let isPremium = false;
-    let useElevenLabsBatch = false;
-    if (userId && quotaVoiceId) {
-      isPremium = await this.subscriptionService.isPremiumUser(userId);
-      if (isPremium) {
-        useElevenLabsBatch = await this.voiceQuota.canUseVoiceForStory(
-          storyId,
-          quotaVoiceId,
-        );
-        if (!useElevenLabsBatch) {
-          this.logger.log(
-            `Story ${storyId} has reached the premium voice limit. Skipping ElevenLabs for voice ${type}.`,
-          );
-        }
-      } else {
-        // Free user: allow ElevenLabs only for their one trial story
-        useElevenLabsBatch = await this.voiceQuota.canFreeUserUseElevenLabs(
-          userId,
-          quotaVoiceId,
-          storyId,
-        );
-        if (!useElevenLabsBatch) {
-          this.logger.debug(
-            `Free user ${userId}: ElevenLabs trial not available for batch story ${storyId}, using Deepgram/Edge TTS.`,
-          );
-        }
-      }
-    } else if (userId && !quotaVoiceId) {
-      // Unknown voice — resolve isPremium for downstream TTS flow but skip ElevenLabs
-      isPremium = await this.subscriptionService.isPremiumUser(userId);
-      this.logger.warn(
-        `Batch story ${storyId}: unrecognised voice ${type}, skipping ElevenLabs.`,
-      );
-    }
-
-    // Pick the single provider for this batch.
-    // Circuit breaker fast-fail: if the preferred provider is OPEN, downgrade.
-    let batchProvider: 'elevenlabs' | 'deepgram' | 'edgetts' =
-      useElevenLabsBatch ? 'elevenlabs' : 'deepgram';
-
-    if (
-      batchProvider === 'elevenlabs' &&
-      !this.elevenLabsBreaker.canExecute()
-    ) {
-      this.logger.warn(
-        `ElevenLabs circuit breaker OPEN for batch story ${storyId}. Downgrading to Deepgram.`,
-      );
-      batchProvider = 'deepgram';
-    }
-    if (batchProvider === 'deepgram' && !this.deepgramBreaker.canExecute()) {
-      this.logger.warn(
-        `Deepgram circuit breaker OPEN for batch story ${storyId}. Downgrading to Edge TTS.`,
-      );
-      batchProvider = 'edgetts';
-    }
-
-    // ── Cache lookup: only accept hits from the SAME provider ──
-    // Paragraphs cached by a different provider are treated as uncached
-    // so they get regenerated, ensuring consistent voice across the story.
     let { cached, uncached } = await this.rebuildCacheForProvider(
       batchProvider,
       hashMap,
@@ -732,24 +812,19 @@ export class TextToSpeechService {
     if (uncached.length === 0) {
       return {
         results: cached.sort((a, b) => a.index - b.index),
-        totalParagraphs: allParagraphs.length,
+        totalParagraphs: allParagraphCount,
         wasTruncated,
         usedProvider: batchProvider,
       };
     }
 
     // ── Provider failover chain for batch generation ──
-    // All uncached paragraphs are sent to ONE provider. If that provider
-    // fails, we retry the ENTIRE batch with the next provider in the chain
-    // so users always get a complete story with consistent voice.
     const providerChain: Array<'elevenlabs' | 'deepgram' | 'edgetts'> = [];
     if (batchProvider === 'elevenlabs')
       providerChain.push('elevenlabs', 'deepgram', 'edgetts');
     else if (batchProvider === 'deepgram')
       providerChain.push('deepgram', 'edgetts');
     else providerChain.push('edgetts');
-
-    const preferredProvider = batchProvider;
 
     type BatchResult = {
       index: number;
@@ -856,12 +931,123 @@ export class TextToSpeechService {
       results: [...cached, ...generated, ...duplicates].sort(
         (a, b) => a.index - b.index,
       ),
-      totalParagraphs: allParagraphs.length,
+      totalParagraphs: allParagraphCount,
       wasTruncated,
       usedProvider: actualProvider,
       ...(actualProvider !== preferredProvider ? { preferredProvider } : {}),
       ...(isDegraded ? { providerStatus: 'degraded' as const } : {}),
     };
+  }
+
+  /** Split text into paragraphs, build hash map, apply truncation */
+  private prepareBatchParagraphs(
+    storyId: string,
+    fullText: string,
+  ): {
+    allParagraphCount: number;
+    wasTruncated: boolean;
+    hashMap: Map<string, Array<{ index: number; text: string }>>;
+  } {
+    const allParagraphs = splitByWordCountPreservingSentences(
+      fullText,
+      WORDS_PER_CHUNK,
+    );
+
+    const wasTruncated = allParagraphs.length > MAX_BATCH_PARAGRAPHS;
+    if (wasTruncated) {
+      this.logger.warn(
+        `Story ${storyId} has ${allParagraphs.length} paragraphs, capping at ${MAX_BATCH_PARAGRAPHS}`,
+      );
+    }
+    const paragraphs = allParagraphs.slice(0, MAX_BATCH_PARAGRAPHS);
+
+    const hashMap = new Map<string, Array<{ index: number; text: string }>>();
+    for (let idx = 0; idx < paragraphs.length; idx++) {
+      const hash = this.hashText(paragraphs[idx]);
+      const entries = hashMap.get(hash) ?? [];
+      entries.push({ index: idx, text: paragraphs[idx] });
+      hashMap.set(hash, entries);
+    }
+
+    return {
+      allParagraphCount: allParagraphs.length,
+      wasTruncated,
+      hashMap,
+    };
+  }
+
+  /** Determine which TTS provider to use for the entire batch */
+  private async determineBatchProvider(
+    storyId: string,
+    voiceType: VoiceType | string | undefined,
+    userId: string | undefined,
+  ): Promise<{
+    batchProvider: 'elevenlabs' | 'deepgram' | 'edgetts';
+    isPremium: boolean;
+    preferredProvider: 'elevenlabs' | 'deepgram' | 'edgetts';
+  }> {
+    const type =
+      VOICE_TYPE_MIGRATION_MAP[voiceType as string] ??
+      voiceType ??
+      DEFAULT_VOICE;
+
+    const quotaVoiceId = await this.resolveCanonicalVoiceId(type);
+    let isPremium = false;
+    let useElevenLabsBatch = false;
+
+    if (userId && quotaVoiceId) {
+      isPremium = await this.subscriptionService.isPremiumUser(userId);
+      if (isPremium) {
+        useElevenLabsBatch = await this.voiceQuota.canUseVoiceForStory(
+          storyId,
+          quotaVoiceId,
+        );
+        if (!useElevenLabsBatch) {
+          this.logger.log(
+            `Story ${storyId} has reached the premium voice limit. Skipping ElevenLabs for voice ${type}.`,
+          );
+        }
+      } else {
+        useElevenLabsBatch = await this.voiceQuota.canFreeUserUseElevenLabs(
+          userId,
+          quotaVoiceId,
+          storyId,
+        );
+        if (!useElevenLabsBatch) {
+          this.logger.debug(
+            `Free user ${userId}: ElevenLabs trial not available for batch story ${storyId}, using Deepgram/Edge TTS.`,
+          );
+        }
+      }
+    } else if (userId && !quotaVoiceId) {
+      isPremium = await this.subscriptionService.isPremiumUser(userId);
+      this.logger.warn(
+        `Batch story ${storyId}: unrecognised voice ${type}, skipping ElevenLabs.`,
+      );
+    }
+
+    let batchProvider: 'elevenlabs' | 'deepgram' | 'edgetts' =
+      useElevenLabsBatch ? 'elevenlabs' : 'deepgram';
+
+    if (
+      batchProvider === 'elevenlabs' &&
+      !this.elevenLabsBreaker.canExecute()
+    ) {
+      this.logger.warn(
+        `ElevenLabs circuit breaker OPEN for batch story ${storyId}. Downgrading to Deepgram.`,
+      );
+      batchProvider = 'deepgram';
+    }
+    if (batchProvider === 'deepgram' && !this.deepgramBreaker.canExecute()) {
+      this.logger.warn(
+        `Deepgram circuit breaker OPEN for batch story ${storyId}. Downgrading to Edge TTS.`,
+      );
+      batchProvider = 'edgetts';
+    }
+
+    const preferredProvider = useElevenLabsBatch ? 'elevenlabs' : batchProvider;
+
+    return { batchProvider, isPremium, preferredProvider };
   }
 
   /**
