@@ -6,7 +6,7 @@ import {
 } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
-import { createClient, RedisClientType } from 'redis';
+import Redis from 'ioredis';
 
 @Injectable()
 export class RedisHealthIndicator extends HealthIndicator {
@@ -16,13 +16,12 @@ export class RedisHealthIndicator extends HealthIndicator {
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     const startTime = Date.now();
-    let client: RedisClientType | null = null;
+    let client: Redis | null = null;
 
     try {
       const redisUrl = this.configService.get('REDIS_URL');
 
-      client = createClient({ url: redisUrl });
-      await client.connect();
+      client = new Redis(redisUrl);
 
       // Test connection with PING
       const pong = await client.ping();
@@ -32,7 +31,7 @@ export class RedisHealthIndicator extends HealthIndicator {
       const usedMemoryMatch = info.match(/used_memory_human:(\S+)/);
       const usedMemory = usedMemoryMatch ? usedMemoryMatch[1] : 'unknown';
 
-      await client.disconnect();
+      await client.quit();
 
       const duration = Date.now() - startTime;
 
@@ -48,7 +47,7 @@ export class RedisHealthIndicator extends HealthIndicator {
 
       if (client) {
         try {
-          await client.disconnect();
+          await client.quit();
         } catch {
           // Ignore disconnect errors
         }
