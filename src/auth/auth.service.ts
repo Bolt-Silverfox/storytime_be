@@ -35,6 +35,7 @@ import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
 import appleSigninAuth from 'apple-signin-auth';
 import { Role, OnboardingStatus, Prisma } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class AuthService {
@@ -47,6 +48,7 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
     private readonly configService: ConfigService<EnvConfig, true>,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (clientId) {
@@ -82,6 +84,13 @@ export class AuthService {
     }
 
     const tokenData = await this.tokenService.createTokenPair(user);
+
+    this.eventEmitter.emit('admin.sse.activity', {
+      type: 'LOGIN',
+      userId: user.id,
+      email: user.email,
+      timestamp: new Date().toISOString(),
+    });
 
     return {
       user: new UserDto({ ...user, numberOfKids: user._count.kids }),
@@ -173,6 +182,14 @@ export class AuthService {
         error.message,
       );
     }
+
+    this.eventEmitter.emit('admin.sse.activity', {
+      type: 'SIGNUP',
+      userId: user.id,
+      email: user.email,
+      timestamp: new Date().toISOString(),
+    });
+    this.eventEmitter.emit('admin.sse.stats', { trigger: 'user_created' });
 
     const tokenData = await this.tokenService.createTokenPair(user);
 
