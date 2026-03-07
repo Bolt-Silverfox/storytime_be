@@ -664,7 +664,9 @@ export class TextToSpeechService {
       };
 
     const resolvedType =
-      VOICE_TYPE_MIGRATION_MAP[voiceType as string] ?? voiceType ?? DEFAULT_VOICE;
+      VOICE_TYPE_MIGRATION_MAP[voiceType as string] ??
+      voiceType ??
+      DEFAULT_VOICE;
 
     const { allParagraphCount, wasTruncated, hashMap } =
       this.prepareBatchParagraphs(storyId, fullText);
