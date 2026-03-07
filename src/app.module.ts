@@ -98,6 +98,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
       useFactory: (config: ConfigService<EnvConfig, true>) => ({
         connection: {
           url: config.get('REDIS_URL'),
+          maxRetriesPerRequest: null,
         },
         defaultJobOptions: {
           removeOnComplete: { age: 24 * 3600, count: 1000 },
