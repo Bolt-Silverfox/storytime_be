@@ -114,17 +114,21 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     audioUrl: string,
   ): Promise<void> {
     const completedKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:completed`;
+    const metaKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:meta`;
     const pipeline = this.redis.pipeline();
     pipeline.hset(completedKey, String(index), audioUrl);
     pipeline.expire(completedKey, TTS_BATCH_REDIS_TTL);
+    pipeline.expire(metaKey, TTS_BATCH_REDIS_TTL);
     await pipeline.exec();
   }
 
   async markParagraphFailed(batchJobId: string, index: number): Promise<void> {
     const failedKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:failed`;
+    const metaKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:meta`;
     const pipeline = this.redis.pipeline();
     pipeline.sadd(failedKey, String(index));
     pipeline.expire(failedKey, TTS_BATCH_REDIS_TTL);
+    pipeline.expire(metaKey, TTS_BATCH_REDIS_TTL);
     await pipeline.exec();
   }
 
@@ -137,7 +141,10 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     if (updates.status !== undefined) fields.status = updates.status;
     if (updates.error !== undefined) fields.error = updates.error;
     if (Object.keys(fields).length > 0) {
-      await this.redis.hset(metaKey, fields);
+      const pipeline = this.redis.pipeline();
+      pipeline.hset(metaKey, fields);
+      pipeline.expire(metaKey, TTS_BATCH_REDIS_TTL);
+      await pipeline.exec();
     }
   }
 }

@@ -11,7 +11,12 @@ export interface TtsBatchJobData {
   userId: string;
   isPremium: boolean;
   provider: 'elevenlabs' | 'deepgram' | 'edgetts';
-  paragraphs: Array<{ index: number; text: string; hash: string }>;
+  paragraphs: Array<{
+    index: number;
+    text: string;
+    hash: string;
+    duplicateIndices?: number[];
+  }>;
   totalParagraphs: number;
 }
 
