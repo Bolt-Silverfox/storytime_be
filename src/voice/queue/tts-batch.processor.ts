@@ -94,9 +94,7 @@ export class TtsBatchProcessor extends WorkerHost {
     }
 
     const success = failedCount === 0;
-    const status = success
-      ? TtsBatchStatus.COMPLETED
-      : TtsBatchStatus.FAILED;
+    const status = success ? TtsBatchStatus.COMPLETED : TtsBatchStatus.FAILED;
 
     await this.queueService.updateBatchMeta(batchJobId, {
       status,
@@ -131,10 +129,7 @@ export class TtsBatchProcessor extends WorkerHost {
         error: error.message,
       })
       .catch((err) =>
-        this.logger.error(
-          `Failed to update batch meta for ${batchJobId}`,
-          err,
-        ),
+        this.logger.error(`Failed to update batch meta for ${batchJobId}`, err),
       );
   }
 
