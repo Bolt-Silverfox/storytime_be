@@ -32,9 +32,7 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     await this.redis.quit();
   }
 
-  async queueBatch(
-    data: Omit<TtsBatchJobData, 'batchJobId'>,
-  ): Promise<string> {
+  async queueBatch(data: Omit<TtsBatchJobData, 'batchJobId'>): Promise<string> {
     const batchJobId = randomUUID();
 
     const jobData: TtsBatchJobData = { ...data, batchJobId };
@@ -122,10 +120,7 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     await pipeline.exec();
   }
 
-  async markParagraphFailed(
-    batchJobId: string,
-    index: number,
-  ): Promise<void> {
+  async markParagraphFailed(batchJobId: string, index: number): Promise<void> {
     const failedKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:failed`;
     const pipeline = this.redis.pipeline();
     pipeline.sadd(failedKey, String(index));
