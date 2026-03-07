@@ -711,28 +711,30 @@ export class TextToSpeechService {
       isPremium,
     );
 
-    // If eager generation fails, propagate the error (don't queue)
-    if (eagerResults.failedCount === eagerParagraphs.length) {
-      // All eager paragraphs failed — try to return what we have
+    const eagerFailed = eagerResults.failedCount === eagerParagraphs.length;
+    if (eagerFailed) {
       this.logger.warn(
         `Eager batch story ${storyId}: all ${eagerParagraphs.length} eager paragraphs failed with ${batchProvider}`,
       );
     }
 
     // Replicate generated audioUrls to duplicate paragraphs (same hash)
-    const eagerUrlByHash = new Map<string, string | null>();
+    // Only store successful results — null audioUrls should not poison the filter
+    const eagerUrlByHash = new Map<string, string>();
     for (const { hash, audioUrl } of eagerResults.results) {
-      eagerUrlByHash.set(hash, audioUrl);
+      if (audioUrl) {
+        eagerUrlByHash.set(hash, audioUrl);
+      }
     }
 
     const duplicates: Array<{
       index: number;
       text: string;
-      audioUrl: string | null;
+      audioUrl: string;
     }> = [];
     for (const [hash, entries] of hashMap) {
       const url = eagerUrlByHash.get(hash);
-      if (url === undefined) continue;
+      if (!url) continue;
       for (let i = 1; i < entries.length; i++) {
         duplicates.push({
           index: entries[i].index,
@@ -742,7 +744,7 @@ export class TextToSpeechService {
       }
     }
 
-    // Filter remaining uncached: remove any whose hash was already generated eagerly
+    // Filter remaining uncached: remove any whose hash was successfully generated eagerly
     const filteredRemaining = remainingUncached.filter(
       (p) => !eagerUrlByHash.has(p.hash),
     );
@@ -762,6 +764,7 @@ export class TextToSpeechService {
       usedProvider: batchProvider,
       ...(batchProvider !== preferredProvider ? { preferredProvider } : {}),
       ...(isDegraded ? { providerStatus: 'degraded' as const } : {}),
+      eagerFailed,
       remainingUncached: filteredRemaining,
       batchProvider,
       isPremium,
@@ -867,7 +870,7 @@ export class TextToSpeechService {
         uncached,
         provider,
         storyId,
-        voiceType,
+        type,
         userId,
         isPremium,
       );
@@ -1031,6 +1034,11 @@ export class TextToSpeechService {
     let batchProvider: 'elevenlabs' | 'deepgram' | 'edgetts' =
       useElevenLabsBatch ? 'elevenlabs' : 'deepgram';
 
+    // Capture preferred provider before breaker downgrades
+    const preferredProvider: 'elevenlabs' | 'deepgram' = useElevenLabsBatch
+      ? 'elevenlabs'
+      : 'deepgram';
+
     if (
       batchProvider === 'elevenlabs' &&
       !this.elevenLabsBreaker.canExecute()
@@ -1046,8 +1054,6 @@ export class TextToSpeechService {
       );
       batchProvider = 'edgetts';
     }
-
-    const preferredProvider = useElevenLabsBatch ? 'elevenlabs' : batchProvider;
 
     return { batchProvider, isPremium, preferredProvider };
   }
@@ -1083,7 +1089,12 @@ export class TextToSpeechService {
     }
 
     const cached: Array<{ index: number; text: string; audioUrl: string }> = [];
-    const uncached: Array<{ index: number; text: string; hash: string }> = [];
+    const uncached: Array<{
+      index: number;
+      text: string;
+      hash: string;
+      duplicateIndices?: number[];
+    }> = [];
 
     for (const [hash, hashEntries] of hashMap) {
       const cachedUrl = cacheMap.get(hash);
@@ -1092,11 +1103,17 @@ export class TextToSpeechService {
           cached.push({ index, text, audioUrl: cachedUrl });
         }
       } else {
-        uncached.push({
+        const entry: (typeof uncached)[number] = {
           index: hashEntries[0].index,
           text: hashEntries[0].text,
           hash,
-        });
+        };
+        if (hashEntries.length > 1) {
+          entry.duplicateIndices = hashEntries
+            .slice(1)
+            .map((e) => e.index);
+        }
+        uncached.push(entry);
       }
     }
 
