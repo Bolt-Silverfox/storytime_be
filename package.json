@@ -1,6 +1,6 @@
 {
   "name": "storytime_be",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "packageManager": "pnpm@10.15.1",
   "engines": {
     "node": ">=20.0.0",
