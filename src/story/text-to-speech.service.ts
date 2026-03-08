@@ -649,7 +649,12 @@ export class TextToSpeechService {
     /** Whether all eager paragraphs failed to generate */
     eagerFailed: boolean;
     /** Remaining uncached paragraphs for background generation */
-    remainingUncached: Array<{ index: number; text: string; hash: string }>;
+    remainingUncached: Array<{
+      index: number;
+      text: string;
+      hash: string;
+      duplicateIndices?: number[];
+    }>;
     /** The provider locked in for this batch */
     batchProvider: 'elevenlabs' | 'deepgram' | 'edgetts';
     isPremium: boolean;
@@ -748,10 +753,16 @@ export class TextToSpeechService {
       }
     }
 
-    // Filter remaining uncached: remove any whose hash was successfully generated eagerly
-    const filteredRemaining = remainingUncached.filter(
+    // Re-add eager paragraphs that failed (audioUrl is null) back into the background queue
+    const failedEager = eagerParagraphs.filter(
       (p) => !eagerUrlByHash.has(p.hash),
     );
+
+    // Filter remaining uncached: remove any whose hash was successfully generated eagerly
+    const filteredRemaining = [
+      ...failedEager,
+      ...remainingUncached.filter((p) => !eagerUrlByHash.has(p.hash)),
+    ];
 
     const isDegraded = [
       this.elevenLabsBreaker,
@@ -760,9 +771,9 @@ export class TextToSpeechService {
     ].some((b) => b.getSnapshot().state === CircuitState.OPEN);
 
     return {
-      results: [...cached, ...eagerResults.results, ...duplicates].sort(
-        (a, b) => a.index - b.index,
-      ),
+      results: [...cached, ...eagerResults.results, ...duplicates]
+        .sort((a, b) => a.index - b.index)
+        .map(({ index, text, audioUrl }) => ({ index, text, audioUrl })),
       totalParagraphs: allParagraphCount,
       wasTruncated,
       usedProvider: batchProvider,
@@ -937,9 +948,9 @@ export class TextToSpeechService {
     ].some((b) => b.getSnapshot().state === CircuitState.OPEN);
 
     return {
-      results: [...cached, ...generated, ...duplicates].sort(
-        (a, b) => a.index - b.index,
-      ),
+      results: [...cached, ...generated, ...duplicates]
+        .sort((a, b) => a.index - b.index)
+        .map(({ index, text, audioUrl }) => ({ index, text, audioUrl })),
       totalParagraphs: allParagraphCount,
       wasTruncated,
       usedProvider: actualProvider,
