@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -28,13 +29,16 @@ export class SseAuthGuard implements CanActivate {
         where: { id: payload.sub },
       });
 
-      if (!user || user.role !== 'admin') {
+      if (!user || user.role !== Role.admin) {
         throw new UnauthorizedException('Admin access required');
       }
 
       request.user = user;
       return true;
-    } catch {
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
       throw new UnauthorizedException('Invalid token');
     }
   }
