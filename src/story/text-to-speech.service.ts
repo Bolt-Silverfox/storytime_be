@@ -1084,7 +1084,12 @@ export class TextToSpeechService {
     voiceId: string,
   ): Promise<{
     cached: Array<{ index: number; text: string; audioUrl: string }>;
-    uncached: Array<{ index: number; text: string; hash: string }>;
+    uncached: Array<{
+      index: number;
+      text: string;
+      hash: string;
+      duplicateIndices?: number[];
+    }>;
   }> {
     const entries = await this.prisma.paragraphAudioCache.findMany({
       where: {
