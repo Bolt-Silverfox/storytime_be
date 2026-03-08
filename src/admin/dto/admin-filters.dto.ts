@@ -27,6 +27,9 @@ export class PaginationDto {
   @IsString()
   sortBy?: string = 'createdAt';
 
+  // Note: sortBy is validated at the service layer to allow computed
+  // fields like 'isPaidUser' that map to relation-based ordering.
+
   @IsOptional()
   @IsEnum(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';

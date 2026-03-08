@@ -761,12 +761,38 @@ export class AdminService {
       }
     }
 
+    // Build orderBy — handle computed fields that don't map to User columns
+    const VALID_USER_SORT_FIELDS = [
+      'createdAt',
+      'updatedAt',
+      'email',
+      'name',
+      'role',
+      'isEmailVerified',
+      'isDeleted',
+      'isSuspended',
+    ] as const;
+
+    let orderBy: Prisma.UserOrderByWithRelationInput;
+    if (sortBy === 'isPaidUser') {
+      // Sort by subscription status (relation-based ordering)
+      orderBy = { subscription: { status: sortOrder } };
+    } else if (
+      VALID_USER_SORT_FIELDS.includes(
+        sortBy as (typeof VALID_USER_SORT_FIELDS)[number],
+      )
+    ) {
+      orderBy = { [sortBy]: sortOrder };
+    } else {
+      orderBy = { createdAt: sortOrder };
+    }
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy,
         include: {
           subscription: {
             select: {
