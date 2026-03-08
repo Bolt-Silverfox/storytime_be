@@ -3,7 +3,7 @@ import {
   IVoiceCloningProvider,
 } from '../interfaces/speech-provider.interface';
 import { ElevenLabsClient } from 'elevenlabs';
-import { Injectable, Logger } from '@nestjs/common';
+import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { StreamConverter } from '../utils/stream-converter';
 
@@ -187,6 +187,19 @@ export class ElevenLabsTTSProvider
       this.logger.error(
         `Failed to fetch ElevenLabs subscription info: ${(error as Error).message}`,
       );
+
+      // Prevent ElevenLabs 401/403 from propagating as-is, which would
+      // cause the frontend auth interceptor to trigger "session expired".
+      if (error && typeof error === 'object') {
+        const err = error as Record<string, unknown>;
+        const status = (err.status || err.statusCode) as number | undefined;
+        if (status === 401 || status === 403) {
+          throw new BadGatewayException(
+            'ElevenLabs API authentication error',
+          );
+        }
+      }
+
       throw error;
     }
   }
