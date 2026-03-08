@@ -1,4 +1,9 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Subject, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -11,18 +16,25 @@ export interface SseEvent {
 
 @Injectable()
 export class AdminSseService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(AdminSseService.name);
   private readonly events$ = new Subject<SseEvent>();
   private healthInterval: NodeJS.Timeout | null = null;
 
   constructor(private readonly adminService: AdminService) {}
 
   onModuleInit() {
-    this.healthInterval = setInterval(async () => {
-      try {
-        const health = await this.adminService.getSystemHealth();
-        this.push({ type: 'dashboard.health', data: health });
-      } catch {}
+    this.healthInterval = setInterval(() => {
+      this.emitHealthCheck();
     }, 30_000);
+  }
+
+  private async emitHealthCheck() {
+    try {
+      const health = await this.adminService.getSystemHealth();
+      this.push({ type: 'dashboard.health', data: health });
+    } catch (error) {
+      this.logger.error('Health check failed', error);
+    }
   }
 
   onModuleDestroy() {
@@ -55,7 +67,9 @@ export class AdminSseService implements OnModuleInit, OnModuleDestroy {
     try {
       const stats = await this.adminService.getDashboardStats();
       this.push({ type: 'dashboard.stats', data: stats });
-    } catch {}
+    } catch (error) {
+      this.logger.error('Failed to fetch dashboard stats', error);
+    }
   }
 
   @OnEvent('admin.sse.health')
