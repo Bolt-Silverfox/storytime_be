@@ -646,6 +646,8 @@ export class TextToSpeechService {
     usedProvider: 'elevenlabs' | 'deepgram' | 'edgetts' | 'none';
     preferredProvider?: 'elevenlabs' | 'deepgram' | 'edgetts';
     providerStatus?: 'degraded';
+    /** Whether all eager paragraphs failed to generate */
+    eagerFailed: boolean;
     /** Remaining uncached paragraphs for background generation */
     remainingUncached: Array<{ index: number; text: string; hash: string }>;
     /** The provider locked in for this batch */
@@ -658,6 +660,7 @@ export class TextToSpeechService {
         totalParagraphs: 0,
         wasTruncated: false,
         usedProvider: 'none',
+        eagerFailed: false,
         remainingUncached: [],
         batchProvider: 'edgetts',
         isPremium: false,
@@ -692,6 +695,7 @@ export class TextToSpeechService {
         wasTruncated,
         usedProvider: batchProvider,
         ...(batchProvider !== preferredProvider ? { preferredProvider } : {}),
+        eagerFailed: false,
         remainingUncached: [],
         batchProvider,
         isPremium,
