@@ -1109,9 +1109,7 @@ export class TextToSpeechService {
           hash,
         };
         if (hashEntries.length > 1) {
-          entry.duplicateIndices = hashEntries
-            .slice(1)
-            .map((e) => e.index);
+          entry.duplicateIndices = hashEntries.slice(1).map((e) => e.index);
         }
         uncached.push(entry);
       }

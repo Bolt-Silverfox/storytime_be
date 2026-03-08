@@ -93,10 +93,7 @@ export class TtsBatchProcessor extends WorkerHost {
           );
           try {
             for (const idx of allIndices) {
-              await this.queueService.markParagraphFailed(
-                batchJobId,
-                idx,
-              );
+              await this.queueService.markParagraphFailed(batchJobId, idx);
             }
           } catch (redisErr) {
             this.logger.error(
