@@ -975,8 +975,8 @@ export class AdminService {
     return {
       ...safeUser,
       isPaidUser: hasActiveSubscription,
-      totalSpent: primarySpend?.[1] ?? 0,
-      totalSpentCurrency: primarySpend?.[0] ?? null,
+      amountSpent: primarySpend?.[1] ?? 0,
+      currency: primarySpend?.[0] ?? null,
       stats: {
         sessionsCount: user._count.auth,
         favoritesCount: user._count.parentFavorites,
