@@ -2729,7 +2729,7 @@ export class AdminService {
    */
   async broadcastNotification(
     dto: BroadcastNotificationDto,
-  ): Promise<{ queued: boolean; topic: string }> {
+  ): Promise<{ sent: boolean; topic: string }> {
     const topic = dto.topic ?? 'all_users';
 
     await this.eventEmitter.emitAsync('notification.broadcast', {
@@ -2741,7 +2741,7 @@ export class AdminService {
     this.logger.log(
       `Broadcast notification emitted to topic "${topic}": "${dto.title}"`,
     );
-    return { queued: true, topic };
+    return { sent: true, topic };
   }
 
   /**
