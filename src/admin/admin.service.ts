@@ -824,7 +824,7 @@ export class AdminService {
           },
           paymentTransactions: {
             where: { status: 'success' },
-            select: { amount: true },
+            select: { amount: true, currency: true },
           },
           _count: {
             select: {
@@ -863,10 +863,18 @@ export class AdminService {
             ),
           0,
         );
-        const amountSpent = user.paymentTransactions.reduce(
-          (sum, txn) => sum + txn.amount,
-          0,
-        );
+        // Group spending by currency (most users have one currency)
+        const spendingByCurrency = new Map<string, number>();
+        for (const txn of user.paymentTransactions) {
+          const curr = txn.currency ?? 'USD';
+          spendingByCurrency.set(curr, (spendingByCurrency.get(curr) ?? 0) + txn.amount);
+        }
+        // Primary currency = the one with the most spending
+        const primaryCurrency = [...spendingByCurrency.entries()].sort(
+          (a, b) => b[1] - a[1],
+        )[0];
+        const amountSpent = primaryCurrency?.[1] ?? 0;
+        const currency = primaryCurrency?.[0] ?? null;
 
         // Check if user has active subscription (same logic as getUserById)
         const now = new Date();
@@ -880,6 +888,7 @@ export class AdminService {
           activityLength,
           creditUsed,
           amountSpent,
+          currency,
           isPaidUser: hasActiveSubscription,
           activeSubscription: hasActiveSubscription ? user.subscription : null,
           kidsCount: user._count.kids,
@@ -941,15 +950,18 @@ export class AdminService {
       user.subscription?.status === 'active' &&
       (!user.subscription.endsAt || user.subscription.endsAt > now);
 
-    const totalSpentResult = await this.prisma.paymentTransaction.aggregate({
-      where: {
-        userId: userId,
-        status: 'success',
-      },
-      _sum: {
-        amount: true,
-      },
+    const userTransactions = await this.prisma.paymentTransaction.findMany({
+      where: { userId, status: 'success' },
+      select: { amount: true, currency: true },
     });
+    const spendingByCurrency = new Map<string, number>();
+    for (const txn of userTransactions) {
+      const curr = txn.currency ?? 'USD';
+      spendingByCurrency.set(curr, (spendingByCurrency.get(curr) ?? 0) + txn.amount);
+    }
+    const primarySpend = [...spendingByCurrency.entries()].sort(
+      (a, b) => b[1] - a[1],
+    )[0];
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, pinHash, ...safeUser } = user;
@@ -957,7 +969,8 @@ export class AdminService {
     return {
       ...safeUser,
       isPaidUser: hasActiveSubscription,
-      totalSpent: totalSpentResult._sum.amount || 0,
+      totalSpent: primarySpend?.[1] ?? 0,
+      totalSpentCurrency: primarySpend?.[0] ?? null,
       stats: {
         sessionsCount: user._count.auth,
         favoritesCount: user._count.parentFavorites,
