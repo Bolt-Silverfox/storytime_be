@@ -253,7 +253,7 @@ describe('AdminService', () => {
 
       expect(result.id).toBe(userId);
       expect(result.isPaidUser).toBe(true);
-      expect(result.totalSpent).toBe(100);
+      expect(result.amountSpent).toBe(100);
       expect(result.stats.sessionsCount).toBe(10);
     });
 

@@ -1030,7 +1030,8 @@ export class AdminController {
           createdAt: '2023-10-01T12:00:00Z',
           updatedAt: '2023-10-15T10:30:00Z',
           isPaidUser: true,
-          totalSpent: 125.5,
+          amountSpent: 125.5,
+          currency: 'USD',
           profile: {
             id: 'profile-123',
             explicitContent: false,
