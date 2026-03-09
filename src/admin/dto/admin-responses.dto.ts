@@ -562,6 +562,13 @@ export class UserDetailDto {
   totalSpent: number;
 
   @ApiProperty({
+    description: 'Currency of total amount spent',
+    example: 'USD',
+    nullable: true,
+  })
+  totalSpentCurrency: string | null;
+
+  @ApiProperty({
     description: 'User profile',
     example: {
       id: 'profile-123',
