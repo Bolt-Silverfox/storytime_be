@@ -70,7 +70,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       typeof exceptionResponse === 'object' && exceptionResponse !== null
         ? Object.fromEntries(
             Object.entries(exceptionResponse as Record<string, unknown>).filter(
-              ([k]) => !['statusCode', 'error', 'message'].includes(k),
+              ([k]) => !['statusCode', 'error', 'message', 'path', 'timestamp', 'success'].includes(k),
             ),
           )
         : {};

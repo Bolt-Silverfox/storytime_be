@@ -187,7 +187,7 @@ export class UserController {
     if (!file) {
       throw new BadRequestException('No file provided');
     }
-    const uploadResult = await this.uploadService.uploadFile(file);
+    const uploadResult = await this.uploadService.uploadImage(file, 'avatars');
     try {
       return await this.userService.createAndAssignAvatar(
         req.authUserData.userId,
