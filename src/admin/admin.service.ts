@@ -867,7 +867,10 @@ export class AdminService {
         const spendingByCurrency = new Map<string, number>();
         for (const txn of user.paymentTransactions) {
           const curr = txn.currency ?? 'USD';
-          spendingByCurrency.set(curr, (spendingByCurrency.get(curr) ?? 0) + txn.amount);
+          spendingByCurrency.set(
+            curr,
+            (spendingByCurrency.get(curr) ?? 0) + txn.amount,
+          );
         }
         // Primary currency = the one with the most spending
         const primaryCurrency = [...spendingByCurrency.entries()].sort(
@@ -957,7 +960,10 @@ export class AdminService {
     const spendingByCurrency = new Map<string, number>();
     for (const txn of userTransactions) {
       const curr = txn.currency ?? 'USD';
-      spendingByCurrency.set(curr, (spendingByCurrency.get(curr) ?? 0) + txn.amount);
+      spendingByCurrency.set(
+        curr,
+        (spendingByCurrency.get(curr) ?? 0) + txn.amount,
+      );
     }
     const primarySpend = [...spendingByCurrency.entries()].sort(
       (a, b) => b[1] - a[1],
