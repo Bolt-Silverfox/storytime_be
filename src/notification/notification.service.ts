@@ -40,6 +40,16 @@ import {
   DevicePlatform,
 } from './dto/device-token.dto';
 
+/** User-facing notification categories that can be toggled in settings. */
+const USER_CONFIGURABLE_CATEGORIES: PrismaCategory[] = [
+  PrismaCategory.SUBSCRIPTION_REMINDER,
+  PrismaCategory.SUBSCRIPTION_ALERT,
+  PrismaCategory.NEW_STORY,
+  PrismaCategory.STORY_FINISHED,
+  PrismaCategory.INCOMPLETE_STORY_REMINDER,
+  PrismaCategory.DAILY_LISTENING_REMINDER,
+];
+
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
@@ -591,14 +601,9 @@ export class NotificationService {
     preferences: Record<string, boolean>,
   ): Promise<Record<string, { push: boolean; in_app: boolean }>> {
     // Only user-facing categories can be toggled; auth/system categories are excluded
-    const allowedCategories = new Set<PrismaCategory>([
-      PrismaCategory.SUBSCRIPTION_REMINDER,
-      PrismaCategory.SUBSCRIPTION_ALERT,
-      PrismaCategory.NEW_STORY,
-      PrismaCategory.STORY_FINISHED,
-      PrismaCategory.INCOMPLETE_STORY_REMINDER,
-      PrismaCategory.DAILY_LISTENING_REMINDER,
-    ]);
+    const allowedCategories = new Set<PrismaCategory>(
+      USER_CONFIGURABLE_CATEGORIES,
+    );
     for (const key of Object.keys(preferences)) {
       if (!allowedCategories.has(key as PrismaCategory)) {
         throw new BadRequestException(
@@ -635,18 +640,7 @@ export class NotificationService {
    * Called during user registration.
    */
   async seedDefaultPreferences(userId: string): Promise<void> {
-    // User-facing categories that should have preferences (excludes auth/system categories)
-    const userFacingCategories: PrismaCategory[] = [
-      // Subscription & Billing
-      PrismaCategory.SUBSCRIPTION_REMINDER,
-      PrismaCategory.SUBSCRIPTION_ALERT,
-      // Engagement / Discovery
-      PrismaCategory.NEW_STORY,
-      PrismaCategory.STORY_FINISHED,
-      // Reminders
-      PrismaCategory.INCOMPLETE_STORY_REMINDER,
-      PrismaCategory.DAILY_LISTENING_REMINDER,
-    ];
+    const userFacingCategories = USER_CONFIGURABLE_CATEGORIES;
 
     const channels: PrismaNotificationType[] = [
       PrismaNotificationType.in_app,

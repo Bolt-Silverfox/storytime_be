@@ -1161,7 +1161,6 @@ model Coupon {
   updatedAt   DateTime          @updatedAt
   redemptions CouponRedemption[]
 
-  @@index([code])
   @@index([isActive])
   @@map("coupons")
 }
