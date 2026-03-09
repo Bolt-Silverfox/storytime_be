@@ -2202,10 +2202,7 @@ export class AdminService {
     });
   }
 
-  async createSupportTicket(
-    userId: string,
-    dto: CreateAdminTicketDto,
-  ) {
+  async createSupportTicket(userId: string, dto: CreateAdminTicketDto) {
     // Verify user exists if creating on behalf of someone
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -2440,10 +2437,7 @@ export class AdminService {
     });
   }
 
-  async resetUserQuota(
-    userId: string,
-    body: ResetQuotaDto,
-  ) {
+  async resetUserQuota(userId: string, body: ResetQuotaDto) {
     const usage = await this.prisma.userUsage.findUnique({
       where: { userId },
     });
