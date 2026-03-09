@@ -13,6 +13,7 @@ import {
   Req,
   Res,
   BadRequestException,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AdminService } from './admin.service';
@@ -38,6 +39,7 @@ import {
   RedeemCouponDto,
 } from './dto/coupon.dto';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
+import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
 import { ExportAnalyticsDto } from './dto/admin-export.dto';
 import { PaginationUtil } from '../shared/utils/pagination.util';
 import {
@@ -2442,6 +2444,35 @@ export class AdminController {
       statusCode: 201,
       message: 'Broadcast notification queued',
       data,
+    };
+  }
+
+  // =====================
+  // SUBSCRIPTION ACTIVATION
+  // =====================
+
+  @Post('users/:userId/activate-subscription')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Manually activate subscription for a user' })
+  @ApiParam({ name: 'userId', type: String })
+  @ApiBody({ type: ActivateSubscriptionDto })
+  @ApiCreatedResponse({ description: 'Subscription activated successfully' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @HttpCode(HttpStatus.CREATED)
+  async activateSubscription(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: ActivateSubscriptionDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const subscription = await this.adminService.activateSubscription(
+      userId,
+      dto,
+      req.authUserData.userId,
+    );
+    return {
+      statusCode: 201,
+      message: 'Subscription activated successfully',
+      data: subscription,
     };
   }
 
