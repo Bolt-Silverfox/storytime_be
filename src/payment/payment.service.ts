@@ -304,7 +304,7 @@ export class PaymentService {
       timestamp: new Date().toISOString(),
     });
     this.eventEmitter.emit('admin.sse.stats', {
-      trigger: 'subscription_created',
+      trigger: existingSub ? 'subscription_renewed' : 'subscription_created',
     });
 
     return {
