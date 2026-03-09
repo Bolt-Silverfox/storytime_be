@@ -5,7 +5,7 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { Subject, Observable } from 'rxjs';
+import { Subject, Observable, defer, from, concat } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { AdminService } from '../admin.service';
 
@@ -43,7 +43,14 @@ export class AdminSseService implements OnModuleInit, OnModuleDestroy {
   }
 
   getEventStream(): Observable<MessageEvent> {
-    return this.events$.asObservable().pipe(
+    const initialHealth$ = defer(() =>
+      from(this.adminService.getSystemHealth().then((health) => ({
+        type: 'dashboard.health' as const,
+        data: health,
+      }))),
+    );
+
+    return concat(initialHealth$, this.events$.asObservable()).pipe(
       map(
         (event) =>
           ({
