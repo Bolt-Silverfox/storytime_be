@@ -361,16 +361,23 @@ export class VoiceController {
     let pendingParagraphs: number | undefined;
 
     if (remainingUncached.length > 0) {
-      batchJobId = await this.ttsBatchQueueService.queueBatch({
-        storyId: dto.storyId,
-        voiceId: resolvedVoice,
-        userId: req.authUserData.userId,
-        isPremium,
-        provider: batchProvider,
-        paragraphs: remainingUncached,
-        totalParagraphs,
-      });
-      pendingParagraphs = remainingUncached.length;
+      try {
+        batchJobId = await this.ttsBatchQueueService.queueBatch({
+          storyId: dto.storyId,
+          voiceId: resolvedVoice,
+          userId: req.authUserData.userId,
+          isPremium,
+          provider: batchProvider,
+          paragraphs: remainingUncached,
+          totalParagraphs,
+        });
+        pendingParagraphs = remainingUncached.length;
+      } catch (error) {
+        this.logger.error(
+          `Failed to queue TTS batch for story ${dto.storyId}: ${(error as Error).message}`,
+        );
+        // Return eager results without batchJobId — client gets usable audio instead of 500
+      }
     }
 
     return {

@@ -21,7 +21,13 @@ export class RedisHealthIndicator extends HealthIndicator {
     try {
       const redisUrl = this.configService.get('REDIS_URL');
 
-      client = new Redis(redisUrl);
+      client = new Redis(redisUrl, {
+        retryStrategy: () => null, // No reconnect attempts for health probe
+        enableOfflineQueue: false,
+        lazyConnect: true,
+      });
+
+      await client.connect();
 
       // Test connection with PING
       const pong = await client.ping();
@@ -30,8 +36,6 @@ export class RedisHealthIndicator extends HealthIndicator {
       const info = await client.info('memory');
       const usedMemoryMatch = info.match(/used_memory_human:(\S+)/);
       const usedMemory = usedMemoryMatch ? usedMemoryMatch[1] : 'unknown';
-
-      await client.quit();
 
       const duration = Date.now() - startTime;
 
@@ -45,14 +49,6 @@ export class RedisHealthIndicator extends HealthIndicator {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
 
-      if (client) {
-        try {
-          await client.quit();
-        } catch {
-          // Ignore disconnect errors
-        }
-      }
-
       throw new HealthCheckError(
         'Redis health check failed',
         this.getStatus(key, false, {
@@ -60,6 +56,14 @@ export class RedisHealthIndicator extends HealthIndicator {
           error: errorMessage,
         }),
       );
+    } finally {
+      if (client) {
+        try {
+          client.disconnect();
+        } catch {
+          // Ignore disconnect errors
+        }
+      }
     }
   }
 }
