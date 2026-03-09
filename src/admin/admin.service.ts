@@ -59,6 +59,7 @@ import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { ResetQuotaDto } from './dto/reset-quota.dto';
 import { CouponService } from '../coupon/coupon.service';
+import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
 
@@ -2765,5 +2766,59 @@ export class AdminService {
       );
       throw err;
     }
+  }
+
+  // =====================
+  // SUBSCRIPTION ACTIVATION
+  // =====================
+
+  /**
+   * Manually activate or update a subscription for a user.
+   * Used when Google Play/Apple subscriptions weren't detected automatically.
+   */
+  async activateSubscription(
+    userId: string,
+    dto: ActivateSubscriptionDto,
+    adminUserId: string,
+  ) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, isDeleted: false },
+    });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    const subscription = await this.prisma.subscription.upsert({
+      where: { userId },
+      create: {
+        userId,
+        plan: dto.plan,
+        status: 'active',
+        platform: dto.platform,
+        productId: dto.productId ?? null,
+        endsAt: new Date(dto.endsAt),
+        purchaseToken: `admin-activated-${Date.now()}`,
+      },
+      update: {
+        plan: dto.plan,
+        status: 'active',
+        platform: dto.platform,
+        productId: dto.productId ?? null,
+        endsAt: new Date(dto.endsAt),
+        purchaseToken: `admin-activated-${Date.now()}`,
+        isDeleted: false,
+        deletedAt: null,
+      },
+      include: {
+        user: { select: { id: true, email: true, name: true } },
+      },
+    });
+
+    this.logger.log(
+      `Admin ${adminUserId} activated subscription for user ${userId}: ` +
+        `plan=${dto.plan}, platform=${dto.platform}, endsAt=${dto.endsAt}, reason="${dto.reason}"`,
+    );
+
+    return subscription;
   }
 }
