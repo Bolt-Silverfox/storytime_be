@@ -56,14 +56,20 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     pipeline.expire(failedKey, TTS_BATCH_REDIS_TTL);
     await pipeline.exec();
 
-    await this.batchQueue.add(
-      TTS_BATCH_JOB_NAMES.GENERATE_PARAGRAPHS,
-      jobData,
-      {
-        ...TTS_BATCH_QUEUE_OPTIONS,
-        jobId: batchJobId,
-      },
-    );
+    try {
+      await this.batchQueue.add(
+        TTS_BATCH_JOB_NAMES.GENERATE_PARAGRAPHS,
+        jobData,
+        {
+          ...TTS_BATCH_QUEUE_OPTIONS,
+          jobId: batchJobId,
+        },
+      );
+    } catch (error) {
+      // Clean up Redis state keys so getBatchStatus won't report a stuck batch
+      await this.redis.del(metaKey, completedKey, failedKey);
+      throw error;
+    }
 
     this.logger.log(
       `TTS batch queued: ${batchJobId} — ${data.paragraphs.length} paragraphs for story ${data.storyId}`,

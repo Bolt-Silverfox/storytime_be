@@ -56,6 +56,8 @@ import {
 } from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
+import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
+import { ResetQuotaDto } from './dto/reset-quota.dto';
 import { CouponService } from '../coupon/coupon.service';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
@@ -2202,7 +2204,7 @@ export class AdminService {
 
   async createSupportTicket(
     userId: string,
-    dto: import('./dto/create-admin-ticket.dto').CreateAdminTicketDto,
+    dto: CreateAdminTicketDto,
   ) {
     // Verify user exists if creating on behalf of someone
     const user = await this.prisma.user.findUnique({
@@ -2440,7 +2442,7 @@ export class AdminService {
 
   async resetUserQuota(
     userId: string,
-    body: import('./dto/reset-quota.dto').ResetQuotaDto,
+    body: ResetQuotaDto,
   ) {
     const usage = await this.prisma.userUsage.findUnique({
       where: { userId },

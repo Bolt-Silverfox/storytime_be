@@ -82,7 +82,7 @@ export class UpdateCouponDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  @Max(100)
+  @Max(999)
   value?: number;
 }
 

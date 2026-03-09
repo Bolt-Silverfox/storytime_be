@@ -196,10 +196,28 @@ export class AppleVerificationService {
 
     try {
       const token = this.generateJWT();
-      const statusData = await this.fetchSubscriptionStatus(
+      const primaryHost =
+        this.environment === 'production' ? PRODUCTION_HOST : SANDBOX_HOST;
+      const fallbackHost =
+        this.environment === 'production' ? SANDBOX_HOST : PRODUCTION_HOST;
+
+      let statusData = await this.fetchSubscriptionStatus(
+        primaryHost,
         originalTransactionId,
         token,
       );
+
+      // If not found on primary host, try fallback (TestFlight uses sandbox)
+      if (!statusData) {
+        this.logger.log(
+          `Subscription not found on ${primaryHost}, trying ${fallbackHost}`,
+        );
+        statusData = await this.fetchSubscriptionStatus(
+          fallbackHost,
+          originalTransactionId,
+          token,
+        );
+      }
 
       if (!statusData) {
         return { autoRenewActive: false, error: 'Subscription not found' };
@@ -215,18 +233,16 @@ export class AppleVerificationService {
   }
 
   private async fetchSubscriptionStatus(
+    hostname: string,
     originalTransactionId: string,
     token: string,
   ): Promise<AppleSubscriptionStatus | null> {
-    const baseUrl =
-      this.environment === 'production' ? PRODUCTION_HOST : SANDBOX_HOST;
-
     const requestPath = `/inApps/v1/subscriptions/${originalTransactionId}`;
 
     return new Promise((resolve, reject) => {
       const req = https.request(
         {
-          hostname: baseUrl,
+          hostname,
           path: requestPath,
           method: 'GET',
           headers: {

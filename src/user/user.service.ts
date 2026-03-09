@@ -543,6 +543,10 @@ export class UserService {
         select: { avatarId: true },
       });
 
+      if (!user) {
+        throw new NotFoundException(`User ${userId} not found or deleted`);
+      }
+
       const avatar = await tx.avatar.create({
         data: {
           url,

@@ -869,6 +869,22 @@ export class NotificationService {
       return this.toDeviceTokenResponse(updated);
     }
 
+    // Collect old tokens before deactivating (for FCM topic unsubscribe)
+    let oldTokenStrings: string[] = [];
+    if (deviceName) {
+      const oldTokens = await this.prisma.deviceToken.findMany({
+        where: {
+          userId,
+          platform,
+          deviceName,
+          isDeleted: false,
+          token: { not: token },
+        },
+        select: { token: true },
+      });
+      oldTokenStrings = oldTokens.map((t) => t.token);
+    }
+
     // Deactivate old tokens and create new one atomically
     const newToken = await this.prisma.$transaction(async (tx) => {
       if (deviceName) {
@@ -893,6 +909,17 @@ export class NotificationService {
       });
     });
     this.logger.log(`Registered new device token for user ${userId}`);
+
+    // Best-effort unsubscribe old tokens from broadcast topic
+    if (oldTokenStrings.length > 0) {
+      this.pushProvider
+        .unsubscribeFromTopic(oldTokenStrings, 'all_users')
+        .catch((err) =>
+          this.logger.warn(
+            `Failed to unsubscribe old tokens from all_users: ${(err as Error).message}`,
+          ),
+        );
+    }
 
     // Subscribe the new token to the all_users topic (best-effort; don't fail registration on FCM side effects)
     this.pushProvider
@@ -949,6 +976,15 @@ export class NotificationService {
         deletedAt: new Date(),
       },
     });
+
+    // Best-effort unsubscribe from broadcast topic
+    this.pushProvider
+      .unsubscribeFromTopic([token], 'all_users')
+      .catch((err) =>
+        this.logger.warn(
+          `Failed to unsubscribe token from all_users: ${(err as Error).message}`,
+        ),
+      );
 
     this.logger.log(`Unregistered device token for user ${userId}`);
   }
