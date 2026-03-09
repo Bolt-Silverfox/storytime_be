@@ -44,10 +44,12 @@ export class AdminSseService implements OnModuleInit, OnModuleDestroy {
 
   getEventStream(): Observable<MessageEvent> {
     const initialHealth$ = defer(() =>
-      from(this.adminService.getSystemHealth().then((health) => ({
-        type: 'dashboard.health' as const,
-        data: health,
-      }))),
+      from(
+        this.adminService.getSystemHealth().then((health) => ({
+          type: 'dashboard.health' as const,
+          data: health,
+        })),
+      ),
     );
 
     return concat(initialHealth$, this.events$.asObservable()).pipe(
