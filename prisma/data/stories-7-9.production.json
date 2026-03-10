@@ -5540,7 +5540,13 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Summer",
+      "Winter",
+      "Spring",
+      "Autumn"
+    ]
   },
   {
     "title": "The Rainy Holiday Adventure",
@@ -5605,7 +5611,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Autumn"
+    ]
   },
   {
     "title": "The Harmattan Holiday Surprise",
@@ -5670,7 +5679,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter"
+    ]
   },
   {
     "title": "Chidi's Dry Season Holiday",
@@ -5733,7 +5745,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Summer"
+    ]
   },
   {
     "title": "The Holiday Calendar",
@@ -5796,7 +5811,13 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter",
+      "Summer",
+      "Spring",
+      "Autumn"
+    ]
   },
   {
     "title": "The Holiday That Brought Everyone Together",
@@ -5859,7 +5880,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter"
+    ]
   },
   {
     "title": "The Festival of Our Traditions",
@@ -5922,7 +5946,11 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Autumn",
+      "Summer"
+    ]
   },
   {
     "title": "The Day the Nation Rested",
@@ -5986,7 +6014,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Summer"
+    ]
   },
   {
     "title": "The Sharing Garden",
