@@ -40,6 +40,7 @@ import {
 } from './dto/coupon.dto';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
+import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
 import { ExportAnalyticsDto } from './dto/admin-export.dto';
 import { PaginationUtil } from '../shared/utils/pagination.util';
 import {
@@ -2473,6 +2474,32 @@ export class AdminController {
       statusCode: 201,
       message: 'Subscription activated successfully',
       data: subscription,
+    };
+  }
+
+  // =====================
+  // PURCHASE VERIFICATION
+  // =====================
+
+  @Post('users/:userId/verify-purchase')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Verify a purchase receipt on behalf of a user' })
+  @ApiParam({ name: 'userId', type: String })
+  @ApiBody({ type: VerifyPurchaseDto })
+  @ApiOkResponse({ description: 'Purchase verification result' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @HttpCode(HttpStatus.OK)
+  async verifyPurchase(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: VerifyPurchaseDto,
+  ) {
+    const result = await this.adminService.verifyUserPurchase(userId, dto);
+    return {
+      statusCode: 200,
+      message: result.success
+        ? 'Purchase verified successfully'
+        : 'Purchase verification failed',
+      data: result,
     };
   }
 
