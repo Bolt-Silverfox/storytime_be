@@ -310,10 +310,9 @@ export class StoryService {
     // Handle topPicksFromUs filter - get random stories using shared helper
     if (filter.topPicksFromUs) {
       const overFetchLimit = shouldShuffle ? Math.min(limit * 3, 150) : limit;
-      const randomStoryIds = await this.getRandomStoryIds(
-        overFetchLimit,
-        shouldShuffle ? 0 : skip,
-      );
+      const randomStoryIds = shouldShuffle
+        ? await this.getRandomStoryIds(overFetchLimit)
+        : await this.getDeterministicStoryIds(limit, skip);
 
       if (randomStoryIds.length === 0) {
         return {
@@ -382,13 +381,16 @@ export class StoryService {
     });
 
     // For mostLiked with shuffle, randomize tiebreakers within same like count
+    // and readStatus so that unread-first ordering from sortByReadStatus is preserved.
     if (filter.isMostLiked && shouldShuffle) {
-      sortedStories = this.shuffleTiedStories(
-        sortedStories,
-        (s) =>
+      sortedStories = this.shuffleTiedStories(sortedStories, (s) => {
+        const favCount =
           (s as unknown as { _count?: { parentFavorites?: number } })._count
-            ?.parentFavorites ?? 0,
-      );
+            ?.parentFavorites ?? 0;
+        const readStatus =
+          (s as unknown as { readStatus?: string }).readStatus ?? 'unseen';
+        return `${readStatus}:${favCount}`;
+      });
     }
 
     // Slice over-fetched results back to requested limit
@@ -505,22 +507,28 @@ export class StoryService {
   }
 
   /**
-   * Shuffle stories that share the same score (e.g. equal like counts)
-   * while preserving the relative order between different score groups.
+   * Shuffle stories that share the same grouping key (e.g. equal like counts
+   * and readStatus) while preserving the relative order between different groups.
+   * The key function should return a string that encodes all ordering-relevant
+   * dimensions so that, e.g., unseen and done stories with the same favourite
+   * count are never mixed.
    */
-  private shuffleTiedStories<T>(stories: T[], getScore: (s: T) => number): T[] {
-    const groups = new Map<number, T[]>();
+  private shuffleTiedStories<T>(
+    stories: T[],
+    getKey: (s: T) => string,
+  ): T[] {
+    const groups = new Map<string, T[]>();
     for (const s of stories) {
-      const score = getScore(s);
-      if (!groups.has(score)) groups.set(score, []);
-      groups.get(score)!.push(s);
+      const key = getKey(s);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(s);
     }
     for (const group of groups.values()) {
       this.fisherYatesShuffle(group);
     }
-    return [...groups.entries()]
-      .sort(([a], [b]) => b - a)
-      .flatMap(([, g]) => g);
+    // Preserve insertion order — callers feed already-sorted input so the
+    // first occurrence of each key reflects the correct group ordering.
+    return [...groups.values()].flatMap((g) => g);
   }
 
   private async enrichWithReadStatus<T extends { id: string }>(
@@ -2184,23 +2192,42 @@ export class StoryService {
 
   /**
    * Get random story IDs using raw SQL for efficiency.
+   * Only suitable for single-page results (page 1) because ORDER BY RANDOM()
+   * produces a different ordering on each call, causing overlapping pages.
    * @param limit - Maximum number of IDs to return
-   * @param offset - Number of results to skip (for pagination)
    * @returns Array of random story IDs
    */
-  private async getRandomStoryIds(
-    limit: number,
-    offset: number = 0,
-  ): Promise<string[]> {
+  private async getRandomStoryIds(limit: number): Promise<string[]> {
     const randomIds = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT id FROM "stories"
       WHERE "isDeleted" = false
       ORDER BY RANDOM()
       LIMIT ${limit}
-      OFFSET ${offset}
     `;
 
     return randomIds.map((r) => r.id);
+  }
+
+  /**
+   * Get story IDs using a deterministic (createdAt DESC) ordering.
+   * Safe for paginated requests beyond page 1 where stable ordering is required.
+   * @param limit - Maximum number of IDs to return
+   * @param offset - Number of results to skip (for pagination)
+   * @returns Array of story IDs in stable order
+   */
+  private async getDeterministicStoryIds(
+    limit: number,
+    offset: number = 0,
+  ): Promise<string[]> {
+    const ids = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "stories"
+      WHERE "isDeleted" = false
+      ORDER BY "createdAt" DESC, id ASC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
+
+    return ids.map((r) => r.id);
   }
 
   /**
