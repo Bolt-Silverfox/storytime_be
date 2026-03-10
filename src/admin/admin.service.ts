@@ -870,7 +870,8 @@ export class AdminService {
         // Group spending by currency (most users have one currency)
         const spendingByCurrency = new Map<string, number>();
         for (const txn of user.paymentTransactions) {
-          const curr = txn.currency ?? 'USD';
+          if (!txn.currency) continue;
+          const curr = txn.currency;
           spendingByCurrency.set(
             curr,
             (spendingByCurrency.get(curr) ?? 0) + txn.amount,
@@ -963,7 +964,8 @@ export class AdminService {
     });
     const spendingByCurrency = new Map<string, number>();
     for (const txn of userTransactions) {
-      const curr = txn.currency ?? 'USD';
+      if (!txn.currency) continue;
+      const curr = txn.currency;
       spendingByCurrency.set(
         curr,
         (spendingByCurrency.get(curr) ?? 0) + txn.amount,
