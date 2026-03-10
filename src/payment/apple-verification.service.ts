@@ -301,7 +301,7 @@ export class AppleVerificationService {
             } else {
               reject(
                 new Error(
-                  `Apple subscription status API returned ${res.statusCode}`,
+                  `Apple subscription status API returned ${res.statusCode} from ${hostname}`,
                 ),
               );
             }
@@ -312,7 +312,7 @@ export class AppleVerificationService {
       req.on('error', reject);
       req.setTimeout(15000, () => {
         req.destroy();
-        reject(new Error('Apple subscription status request timeout'));
+        reject(new Error(`Apple subscription status request timeout on ${hostname}`));
       });
       req.end();
     });
@@ -359,7 +359,7 @@ export class AppleVerificationService {
 
   /**
    * Fetch transaction info from a specific Apple StoreKit API host.
-   * Returns the decoded transaction on 200, null on 404, throws on other errors.
+   * Returns the decoded transaction on 200, throws on 404 or other errors.
    */
   private fetchTransactionFromHost(
     hostname: string,
@@ -394,9 +394,13 @@ export class AppleVerificationService {
                 reject(new Error('Failed to parse Apple response'));
               }
             } else if (res.statusCode === 404) {
-              resolve(null);
+              reject(
+                new Error(
+                  `Apple API returned 404 from ${hostname}`,
+                ),
+              );
             } else {
-              reject(new Error(`Apple API returned ${res.statusCode}`));
+              reject(new Error(`Apple API returned ${res.statusCode} from ${hostname}`));
             }
           });
         },
@@ -405,7 +409,7 @@ export class AppleVerificationService {
       req.on('error', reject);
       req.setTimeout(15000, () => {
         req.destroy();
-        reject(new Error('Apple API request timeout'));
+        reject(new Error(`Apple API request timeout on ${hostname}`));
       });
       req.end();
     });
@@ -413,7 +417,7 @@ export class AppleVerificationService {
 
   /**
    * Get transaction info, trying production first then falling back to sandbox
-   * on 401 (Apple's recommended pattern for handling TestFlight/sandbox purchases).
+   * on 401/404 (Apple's recommended pattern for handling TestFlight/sandbox purchases).
    */
   private async getTransactionInfo(
     transactionId: string,
@@ -433,8 +437,8 @@ export class AppleVerificationService {
     } catch (error) {
       const msg = this.errorMessage(error);
 
-      // On 401, try the other environment (TestFlight uses sandbox)
-      if (msg.includes('401')) {
+      // On 401 or 404, try the other environment (TestFlight uses sandbox)
+      if (msg.includes('401') || msg.includes('404')) {
         this.logger.log(
           `Transaction not found on ${primaryHost}, trying ${fallbackHost}`,
         );
@@ -445,8 +449,16 @@ export class AppleVerificationService {
             token,
           );
         } catch (fallbackError) {
+          const fallbackMsg = this.errorMessage(fallbackError);
+          // If both hosts return 404, the transaction doesn't exist anywhere
+          if (fallbackMsg.includes('404')) {
+            this.logger.warn(
+              `Transaction not found on either ${primaryHost} or ${fallbackHost}`,
+            );
+            return null;
+          }
           this.logger.error(
-            `Apple API fallback also failed: ${this.errorMessage(fallbackError)}`,
+            `Apple API fallback also failed: ${fallbackMsg}`,
           );
           throw fallbackError;
         }
