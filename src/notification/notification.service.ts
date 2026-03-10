@@ -523,6 +523,12 @@ export class NotificationService {
     category: PrismaCategory,
     enabled: boolean,
   ): Promise<NotificationPreferenceDto[]> {
+    if (!USER_CONFIGURABLE_CATEGORIES.includes(category)) {
+      throw new BadRequestException(
+        `Unknown or non-configurable notification category: "${category}"`,
+      );
+    }
+
     const channels: PrismaNotificationType[] = [
       PrismaNotificationType.in_app,
       PrismaNotificationType.push,
