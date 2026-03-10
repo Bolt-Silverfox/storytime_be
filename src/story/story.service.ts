@@ -295,6 +295,7 @@ export class StoryService {
     kidId?: string;
     page?: number;
     limit?: number;
+    shuffle?: boolean;
   }): Promise<PaginatedStoriesDto> {
     const page = filter.page || 1;
     const limit = filter.limit || 12;
@@ -302,9 +303,17 @@ export class StoryService {
 
     const { where } = await this.buildStoryWhereClause(filter);
 
+    // Shuffle only applies on page 1 (home screen carousels).
+    // Beyond page 1 (paginated "See All"), disable shuffle to avoid overlapping pages.
+    const shouldShuffle = filter.shuffle === true && page === 1;
+
     // Handle topPicksFromUs filter - get random stories using shared helper
     if (filter.topPicksFromUs) {
-      const randomStoryIds = await this.getRandomStoryIds(limit, skip);
+      const overFetchLimit = shouldShuffle ? Math.min(limit * 3, 150) : limit;
+      const randomStoryIds = await this.getRandomStoryIds(
+        overFetchLimit,
+        shouldShuffle ? 0 : skip,
+      );
 
       if (randomStoryIds.length === 0) {
         return {
@@ -338,7 +347,15 @@ export class StoryService {
         : this.prisma.story.count({ where }),
       this.prisma.story.findMany({
         where,
-        ...(filter.topPicksFromUs ? {} : { skip, take: limit }),
+        ...(filter.topPicksFromUs
+          ? {}
+          : {
+              skip,
+              take:
+                filter.isMostLiked && shouldShuffle
+                  ? Math.min(limit * 2, 100)
+                  : limit,
+            }),
         orderBy,
         include: {
           images: true,
@@ -347,6 +364,9 @@ export class StoryService {
           themes: true,
           seasons: true,
           questions: true,
+          ...(filter.isMostLiked && shouldShuffle
+            ? { _count: { select: { parentFavorites: true } } }
+            : {}),
         },
       }),
     ]);
@@ -357,8 +377,37 @@ export class StoryService {
       stories,
     );
 
+    let sortedStories = this.sortByReadStatus(enrichedStories, {
+      shuffleUnseen: shouldShuffle,
+    });
+
+    // For mostLiked with shuffle, randomize tiebreakers within same like count
+    if (filter.isMostLiked && shouldShuffle) {
+      sortedStories = this.shuffleTiedStories(
+        sortedStories,
+        (s) =>
+          (s as unknown as { _count?: { parentFavorites?: number } })._count
+            ?.parentFavorites ?? 0,
+      );
+    }
+
+    // Slice over-fetched results back to requested limit
+    if (filter.topPicksFromUs || (filter.isMostLiked && shouldShuffle)) {
+      sortedStories = sortedStories.slice(0, limit);
+    }
+
+    // Strip _count from response to avoid leaking internal fields
+    const cleanedStories =
+      shouldShuffle && filter.isMostLiked
+        ? (sortedStories.map((s) => {
+            const { _count, ...rest } = s as Record<string, unknown>;
+            void _count;
+            return rest;
+          }) as typeof sortedStories)
+        : sortedStories;
+
     return {
-      data: this.sortByReadStatus(enrichedStories),
+      data: cleanedStories,
       pagination: {
         currentPage: page,
         totalPages,
@@ -430,16 +479,48 @@ export class StoryService {
 
   // Sort stories so unread appear first, then reading, then done.
   // Preserves original order within each group (stable sort).
-  // Applied post-fetch: pagination cursors use DB order (createdAt/id),
-  // so items may shift within a page if readStatus changes between requests.
+  // When shuffleUnseen is true, Fisher-Yates shuffle the unseen bucket
+  // so home screen sections show varied stories on each request.
   private sortByReadStatus<T extends { readStatus: 'done' | 'reading' | null }>(
     stories: T[],
+    options?: { shuffleUnseen?: boolean },
   ): T[] {
-    const order: Record<string, number> = { done: 2, reading: 1 };
-    return [...stories].sort(
-      (a, b) =>
-        (order[a.readStatus ?? ''] ?? 0) - (order[b.readStatus ?? ''] ?? 0),
-    );
+    const unseen = stories.filter((s) => s.readStatus === null);
+    const reading = stories.filter((s) => s.readStatus === 'reading');
+    const done = stories.filter((s) => s.readStatus === 'done');
+
+    if (options?.shuffleUnseen) {
+      this.fisherYatesShuffle(unseen);
+    }
+
+    return [...unseen, ...reading, ...done];
+  }
+
+  /** In-place Fisher-Yates shuffle. */
+  private fisherYatesShuffle<T>(arr: T[]): void {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+
+  /**
+   * Shuffle stories that share the same score (e.g. equal like counts)
+   * while preserving the relative order between different score groups.
+   */
+  private shuffleTiedStories<T>(stories: T[], getScore: (s: T) => number): T[] {
+    const groups = new Map<number, T[]>();
+    for (const s of stories) {
+      const score = getScore(s);
+      if (!groups.has(score)) groups.set(score, []);
+      groups.get(score)!.push(s);
+    }
+    for (const group of groups.values()) {
+      this.fisherYatesShuffle(group);
+    }
+    return [...groups.entries()]
+      .sort(([a], [b]) => b - a)
+      .flatMap(([, g]) => g);
   }
 
   private async enrichWithReadStatus<T extends { id: string }>(
