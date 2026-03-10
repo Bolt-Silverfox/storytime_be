@@ -260,11 +260,12 @@ export class StoryController {
       cursor !== undefined &&
       topPicksFromUs !== 'true' &&
       isMostLiked !== 'true' &&
-      recommended !== 'true';
+      recommended !== 'true' &&
+      shuffle !== 'true';
 
     if (cursor !== undefined && !useCursorMode) {
       this.logger.warn(
-        `Cursor pagination ignored: cursor="${cursor}" bypassed because topPicksFromUs=${topPicksFromUs}, isMostLiked=${isMostLiked}, recommended=${recommended}. Falling back to offset pagination.`,
+        `Cursor pagination ignored: cursor="${cursor}" bypassed because topPicksFromUs=${topPicksFromUs}, isMostLiked=${isMostLiked}, recommended=${recommended}, shuffle=${shuffle}. Falling back to offset pagination.`,
       );
     }
 
