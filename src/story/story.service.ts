@@ -393,8 +393,9 @@ export class StoryService {
       });
     }
 
-    // Slice over-fetched results back to requested limit
-    if (filter.topPicksFromUs || (filter.isMostLiked && shouldShuffle)) {
+    // Slice over-fetched results back to requested limit (only needed when
+    // we over-fetched during shuffle; deterministic paths already return exact limit)
+    if (shouldShuffle && (filter.topPicksFromUs || filter.isMostLiked)) {
       sortedStories = sortedStories.slice(0, limit);
     }
 
