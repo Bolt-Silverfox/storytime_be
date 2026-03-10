@@ -19,7 +19,10 @@ export enum SubscriptionPlatform {
 }
 
 export class ActivateSubscriptionDto {
-  @ApiProperty({ enum: SubscriptionPlan, description: 'Subscription plan type' })
+  @ApiProperty({
+    enum: SubscriptionPlan,
+    description: 'Subscription plan type',
+  })
   @IsEnum(SubscriptionPlan)
   plan: SubscriptionPlan;
 
