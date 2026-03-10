@@ -98,7 +98,10 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     const completedParagraphs: Array<{ index: number; audioUrl: string }> = [];
     for (const [key, value] of Object.entries(completedMap)) {
       if (key === '_placeholder') continue;
-      completedParagraphs.push({ index: Number(key), audioUrl: value as string });
+      completedParagraphs.push({
+        index: Number(key),
+        audioUrl: value,
+      });
     }
 
     const failedParagraphs = failedMembers
