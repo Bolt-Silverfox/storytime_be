@@ -312,7 +312,9 @@ export class AppleVerificationService {
       req.on('error', reject);
       req.setTimeout(15000, () => {
         req.destroy();
-        reject(new Error(`Apple subscription status request timeout on ${hostname}`));
+        reject(
+          new Error(`Apple subscription status request timeout on ${hostname}`),
+        );
       });
       req.end();
     });
@@ -394,13 +396,13 @@ export class AppleVerificationService {
                 reject(new Error('Failed to parse Apple response'));
               }
             } else if (res.statusCode === 404) {
+              reject(new Error(`Apple API returned 404 from ${hostname}`));
+            } else {
               reject(
                 new Error(
-                  `Apple API returned 404 from ${hostname}`,
+                  `Apple API returned ${res.statusCode} from ${hostname}`,
                 ),
               );
-            } else {
-              reject(new Error(`Apple API returned ${res.statusCode} from ${hostname}`));
             }
           });
         },
@@ -457,9 +459,7 @@ export class AppleVerificationService {
             );
             return null;
           }
-          this.logger.error(
-            `Apple API fallback also failed: ${fallbackMsg}`,
-          );
+          this.logger.error(`Apple API fallback also failed: ${fallbackMsg}`);
           throw fallbackError;
         }
       }
