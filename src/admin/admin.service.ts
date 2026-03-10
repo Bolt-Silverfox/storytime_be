@@ -173,7 +173,7 @@ export class AdminService {
 
       // Revenue
       this.prisma.paymentTransaction.aggregate({
-        where: { status: 'success' },
+        where: { status: 'success', deletedAt: null },
         _sum: { amount: true },
       }),
     ]);
@@ -248,7 +248,11 @@ export class AdminService {
       }),
 
       this.prisma.paymentTransaction.aggregate({
-        where: { status: 'success', createdAt: { lte: lastMonthEnd } },
+        where: {
+          status: 'success',
+          deletedAt: null,
+          createdAt: { lte: lastMonthEnd },
+        },
         _sum: { amount: true },
       }),
     ]);
@@ -823,7 +827,7 @@ export class AdminService {
             },
           },
           paymentTransactions: {
-            where: { status: 'success' },
+            where: { status: 'success', deletedAt: null },
             select: { amount: true, currency: true },
           },
           _count: {
@@ -954,7 +958,7 @@ export class AdminService {
       (!user.subscription.endsAt || user.subscription.endsAt > now);
 
     const userTransactions = await this.prisma.paymentTransaction.findMany({
-      where: { userId, status: 'success' },
+      where: { userId, status: 'success', deletedAt: null },
       select: { amount: true, currency: true },
     });
     const spendingByCurrency = new Map<string, number>();
@@ -1427,6 +1431,7 @@ export class AdminService {
             lte: endDate,
           },
           status: 'success',
+          deletedAt: null,
         },
         _sum: {
           amount: true,
@@ -1517,6 +1522,7 @@ export class AdminService {
             lte: endDate,
           },
           status: 'success',
+          deletedAt: null,
         },
         _sum: {
           amount: true,
@@ -1534,6 +1540,7 @@ export class AdminService {
             lte: endDate,
           },
           status: 'success',
+          deletedAt: null,
         },
         select: {
           amount: true,
@@ -1589,6 +1596,7 @@ export class AdminService {
               paymentTransactions: {
                 where: {
                   status: 'success',
+                  deletedAt: null,
                 },
                 select: {
                   amount: true,
