@@ -16455,7 +16455,11 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter",
+      "Spring"
+    ]
   },
   {
     "title": "The First Snowflake",
@@ -16518,7 +16522,11 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter",
+      "Spring"
+    ]
   },
   {
     "title": "The First Robin",
@@ -16582,7 +16590,11 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter",
+      "Spring"
+    ]
   },
   {
     "title": "The Rainy Day Parade",
@@ -16646,7 +16658,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Spring"
+    ]
   },
   {
     "title": "The Baby Bird Arrives",
@@ -16711,7 +16726,11 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Summer",
+      "Spring"
+    ]
   },
   {
     "title": "The Firefly Jar",
@@ -16775,7 +16794,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Summer"
+    ]
   },
   {
     "title": "The Ice Cream Truck",
@@ -16840,7 +16862,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Summer"
+    ]
   },
   {
     "title": "The Pumpkin Patch",
@@ -16905,7 +16930,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Halloween"
+    ]
   },
   {
     "title": "The Leaf Pile Jump",
@@ -16969,7 +16997,11 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter",
+      "Autumn"
+    ]
   },
   {
     "title": "The First Snowflake",
@@ -17033,7 +17065,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter"
+    ]
   },
   {
     "title": "The Snowman Builder",
@@ -17098,7 +17133,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter"
+    ]
   },
   {
     "title": "The Cozy Scarf",
@@ -17163,7 +17201,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter"
+    ]
   },
   {
     "title": "The Birthday Balloon",
@@ -17227,7 +17268,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Spring"
+    ]
   },
   {
     "title": "The Gratitude Jar",
@@ -17291,7 +17335,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Summer"
+    ]
   },
   {
     "title": "Captain Brave",
