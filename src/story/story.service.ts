@@ -513,10 +513,7 @@ export class StoryService {
    * dimensions so that, e.g., unseen and done stories with the same favourite
    * count are never mixed.
    */
-  private shuffleTiedStories<T>(
-    stories: T[],
-    getKey: (s: T) => string,
-  ): T[] {
+  private shuffleTiedStories<T>(stories: T[], getKey: (s: T) => string): T[] {
     const groups = new Map<string, T[]>();
     for (const s of stories) {
       const key = getKey(s);
