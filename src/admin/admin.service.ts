@@ -2458,6 +2458,10 @@ export class AdminService {
       updateData.elevenLabsTrialStory = { disconnect: true };
     }
 
+    if (Object.keys(updateData).length === 0) {
+      throw new BadRequestException('No quota fields selected for reset');
+    }
+
     return this.prisma.userUsage.update({
       where: { userId },
       data: updateData,

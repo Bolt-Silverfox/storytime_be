@@ -15,6 +15,7 @@ import {
   ParseFilePipeBuilder,
   ParseUUIDPipe,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -51,6 +52,8 @@ import { EAGER_PARAGRAPH_COUNT } from './queue/tts-batch-queue.constants';
 @ApiTags('Voice')
 @Controller('voice')
 export class VoiceController {
+  private readonly logger = new Logger(VoiceController.name);
+
   constructor(
     private readonly voiceService: VoiceService,
     private readonly storyService: StoryService,
