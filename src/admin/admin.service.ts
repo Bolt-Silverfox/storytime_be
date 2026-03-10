@@ -60,6 +60,10 @@ import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { ResetQuotaDto } from './dto/reset-quota.dto';
 import { CouponService } from '../coupon/coupon.service';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
+import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
+import { GoogleVerificationService } from '../payment/google-verification.service';
+import { AppleVerificationService } from '../payment/apple-verification.service';
+import { PRODUCT_ID_TO_PLAN } from '../subscription/subscription.constants';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
 
@@ -73,6 +77,8 @@ export class AdminService {
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly eventEmitter: EventEmitter2,
     private readonly couponService: CouponService,
+    private readonly googleVerificationService: GoogleVerificationService,
+    private readonly appleVerificationService: AppleVerificationService,
   ) {}
 
   // =====================
@@ -2858,5 +2864,67 @@ export class AdminService {
     });
 
     return subscription;
+  }
+
+  // =====================
+  // PURCHASE VERIFICATION
+  // =====================
+
+  /**
+   * Verify a purchase receipt on behalf of a user without creating a subscription.
+   * Returns the verification result for admin inspection.
+   */
+  async verifyUserPurchase(userId: string, dto: VerifyPurchaseDto) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, isDeleted: false },
+    });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    try {
+      let result;
+      if (dto.platform === 'google') {
+        result = await this.googleVerificationService.verify({
+          purchaseToken: dto.purchaseToken,
+          productId: dto.productId,
+          packageName: dto.packageName,
+        });
+      } else {
+        result = await this.appleVerificationService.verify({
+          transactionId: dto.purchaseToken,
+          productId: dto.productId,
+        });
+      }
+
+      const plan = PRODUCT_ID_TO_PLAN[dto.productId] ?? null;
+
+      this.logger.log(
+        `Admin verified purchase for user ${userId}: ` +
+          `platform=${dto.platform}, productId=${dto.productId}, success=${result.success}`,
+      );
+
+      return {
+        success: result.success,
+        productId: dto.productId,
+        plan,
+        expirationTime: result.expirationTime ?? null,
+        platform: dto.platform,
+        metadata: result.metadata ?? {},
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Admin purchase verification failed for user ${userId}: ${error.message}`,
+      );
+
+      return {
+        success: false,
+        productId: dto.productId,
+        plan: PRODUCT_ID_TO_PLAN[dto.productId] ?? null,
+        expirationTime: null,
+        platform: dto.platform,
+        error: error.message ?? 'Verification failed',
+      };
+    }
   }
 }
