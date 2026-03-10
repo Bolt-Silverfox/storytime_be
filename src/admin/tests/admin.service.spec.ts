@@ -245,9 +245,9 @@ describe('AdminService', () => {
       };
 
       prisma.user.findUnique.mockResolvedValue(mockUser);
-      prisma.paymentTransaction.aggregate.mockResolvedValue({
-        _sum: { amount: 100 },
-      });
+      prisma.paymentTransaction.findMany.mockResolvedValue([
+        { amount: 100, currency: 'USD' },
+      ]);
 
       const result = await service.getUserById(userId);
 
