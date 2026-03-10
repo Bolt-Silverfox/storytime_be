@@ -2781,12 +2781,23 @@ export class AdminService {
     dto: ActivateSubscriptionDto,
     adminUserId: string,
   ) {
+    const now = new Date();
+    const endsAt = new Date(dto.endsAt);
+
+    if (endsAt <= now) {
+      throw new BadRequestException('endsAt must be a future date');
+    }
+
     const user = await this.prisma.user.findFirst({
       where: { id: userId, isDeleted: false },
     });
     if (!user) {
       throw new NotFoundException(`User ${userId} not found`);
     }
+
+    const existingSub = await this.prisma.subscription.findUnique({
+      where: { userId },
+    });
 
     const subscription = await this.prisma.subscription.upsert({
       where: { userId },
@@ -2796,7 +2807,8 @@ export class AdminService {
         status: 'active',
         platform: dto.platform,
         productId: dto.productId ?? null,
-        endsAt: new Date(dto.endsAt),
+        startedAt: now,
+        endsAt,
         purchaseToken: `admin-activated-${Date.now()}`,
       },
       update: {
@@ -2804,7 +2816,8 @@ export class AdminService {
         status: 'active',
         platform: dto.platform,
         productId: dto.productId ?? null,
-        endsAt: new Date(dto.endsAt),
+        startedAt: now,
+        endsAt,
         purchaseToken: `admin-activated-${Date.now()}`,
         isDeleted: false,
         deletedAt: null,
@@ -2818,6 +2831,31 @@ export class AdminService {
       `Admin ${adminUserId} activated subscription for user ${userId}: ` +
         `plan=${dto.plan}, platform=${dto.platform}, endsAt=${dto.endsAt}, reason="${dto.reason}"`,
     );
+
+    await this.prisma.activityLog.create({
+      data: {
+        userId,
+        action: 'ADMIN_ACTIVATE_SUBSCRIPTION',
+        status: 'SUCCESS',
+        details: JSON.stringify({
+          plan: dto.plan,
+          platform: dto.platform,
+          endsAt: dto.endsAt,
+          reason: dto.reason,
+          adminUserId,
+          isRenewal: !!existingSub,
+        }),
+      },
+    });
+
+    this.eventEmitter.emit('admin.sse.activity', {
+      type: 'SUBSCRIPTION',
+      userId,
+      timestamp: now.toISOString(),
+    });
+    this.eventEmitter.emit('admin.sse.stats', {
+      trigger: existingSub ? 'subscription_renewed' : 'subscription_created',
+    });
 
     return subscription;
   }
