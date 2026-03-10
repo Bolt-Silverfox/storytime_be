@@ -159,6 +159,12 @@ export class StoryController {
     type: Number,
     description: 'Maximum number of items to return for pagination',
   })
+  @ApiQuery({
+    name: 'shuffle',
+    required: false,
+    type: String,
+    description: 'Shuffle unseen stories for variety on home screen sections',
+  })
   @ApiOkResponse({
     description: 'List of stories',
     type: CreateStoryDto,
@@ -198,6 +204,7 @@ export class StoryController {
     @Query('cursor') cursor?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
     @Query('limit') limitParam?: string,
+    @Query('shuffle') shuffle?: string,
   ): Promise<PaginatedStoriesDto | CursorPaginatedStoriesDto> {
     // Base filter shared by both pagination modes.
     // recommended and isMostLiked are intentionally excluded here
@@ -279,6 +286,7 @@ export class StoryController {
       topPicksFromUs: topPicksFromUs === 'true',
       page: safePage,
       limit,
+      shuffle: shuffle === 'true',
     });
   }
 
