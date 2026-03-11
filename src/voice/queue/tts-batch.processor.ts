@@ -13,11 +13,10 @@ import { QuotaExhaustedError } from '../errors/quota-exhausted.error';
 
 const MAX_CONCURRENT_PER_JOB = 5;
 
+type TtsProvider = 'elevenlabs' | 'deepgram' | 'edgetts';
+
 /** Fallback chain when a provider's quota is exhausted */
-const PROVIDER_FALLBACK: Record<
-  string,
-  Array<'elevenlabs' | 'deepgram' | 'edgetts'>
-> = {
+const PROVIDER_FALLBACK: Record<TtsProvider, TtsProvider[]> = {
   elevenlabs: ['deepgram', 'edgetts'],
   deepgram: ['edgetts'],
   edgetts: [],
