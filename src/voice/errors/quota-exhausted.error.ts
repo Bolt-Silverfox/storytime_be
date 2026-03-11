@@ -11,5 +11,6 @@ export class QuotaExhaustedError extends Error {
     super(`${provider} quota exhausted (402 Payment Required)`);
     this.name = 'QuotaExhaustedError';
     this.provider = provider;
+    Object.setPrototypeOf(this, QuotaExhaustedError.prototype);
   }
 }
