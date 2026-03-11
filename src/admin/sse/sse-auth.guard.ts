@@ -24,7 +24,7 @@ export class SseAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync(token);
+      const payload = await this.jwtService.verifyAsync(token as string);
       const user = await this.prisma.user.findFirst({
         where: { id: payload.sub, isDeleted: false },
       });

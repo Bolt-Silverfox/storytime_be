@@ -5,6 +5,8 @@ import { StoryQuotaService } from './story-quota.service';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
+import { UpdateStoryDto } from './dto/story.dto';
 
 // Mock the Service so we test the Controller in isolation
 const mockStoryQuotaService = {
@@ -35,7 +37,7 @@ const mockPrismaService = {
 
 const mockReq = {
   authUserData: { userId: 'user-1' },
-} as any;
+} as unknown as AuthenticatedRequest;
 
 describe('StoryController', () => {
   let controller: StoryController;
@@ -194,7 +196,11 @@ describe('StoryController', () => {
     it('should throw NotFoundException when story does not exist', async () => {
       mockPrismaService.story.findFirst.mockResolvedValue(null);
       await expect(
-        controller.updateStory(mockReq, 'non-existent-story', {} as any),
+        controller.updateStory(
+          mockReq,
+          'non-existent-story',
+          {} as UpdateStoryDto,
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -206,7 +212,7 @@ describe('StoryController', () => {
         creatorKid: { parentId: 'other-user' },
       });
       await expect(
-        controller.updateStory(mockReq, 'story-123', {} as any),
+        controller.updateStory(mockReq, 'story-123', {} as UpdateStoryDto),
       ).rejects.toThrow(ForbiddenException);
       expect(mockStoryService.updateStory).not.toHaveBeenCalled();
     });
