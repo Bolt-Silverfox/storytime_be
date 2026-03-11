@@ -98,7 +98,7 @@ export class CouponService {
     const result = await this.assertCouponRedeemable(code, userId, false);
     if (!result.valid) return result;
 
-    const freeDays = Math.floor(result.coupon.value as number);
+    const freeDays = Math.floor(result.coupon.value);
     if (freeDays <= 0)
       return { valid: false, message: 'This coupon has no valid free days' };
     return {
