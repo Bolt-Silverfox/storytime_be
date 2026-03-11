@@ -194,9 +194,7 @@ export class ElevenLabsTTSProvider
         const err = error as Record<string, unknown>;
         const status = (err.status || err.statusCode) as number | undefined;
         if (status === 401 || status === 403) {
-          throw new BadGatewayException(
-            'ElevenLabs API authentication error',
-          );
+          throw new BadGatewayException('ElevenLabs API authentication error');
         }
       }
 
