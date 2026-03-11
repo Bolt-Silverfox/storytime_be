@@ -6,6 +6,7 @@ import { ElevenLabsClient } from 'elevenlabs';
 import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { StreamConverter } from '../utils/stream-converter';
+import { QuotaExhaustedError } from '../errors/quota-exhausted.error';
 
 /** Configuration for retry behavior */
 const RETRY_CONFIG = {
@@ -94,6 +95,15 @@ export class ElevenLabsTTSProvider
         return await operation();
       } catch (error) {
         lastError = error as Error;
+
+        // 402 = quota/credits exhausted — fail immediately, no retry
+        if (this.isQuotaExhaustedError(error)) {
+          this.logger.warn(
+            `ElevenLabs ${operationName}: quota exhausted (402), failing immediately`,
+          );
+          throw new QuotaExhaustedError('ElevenLabs');
+        }
+
         const isRateLimit = this.isRateLimitError(error);
         const isRetryable = isRateLimit || this.isTransientError(error);
 
@@ -114,6 +124,14 @@ export class ElevenLabsTTSProvider
     }
 
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  private isQuotaExhaustedError(error: unknown): boolean {
+    if (error && typeof error === 'object') {
+      const err = error as Record<string, unknown>;
+      return err.status === 402 || err.statusCode === 402;
+    }
+    return false;
   }
 
   private isRateLimitError(error: unknown): boolean {
