@@ -147,8 +147,9 @@ export class TtsBatchProcessor extends WorkerHost {
 
       // Retry quota-failed paragraphs with the fallback provider
       if (retryParagraphs.length > 0 && fallbackProvider) {
+        const retryProvider = fallbackProvider; // narrowed to non-null
         this.logger.log(
-          `TTS batch ${batchJobId}: retrying ${retryParagraphs.length} quota-failed paragraphs with ${fallbackProvider}`,
+          `TTS batch ${batchJobId}: retrying ${retryParagraphs.length} quota-failed paragraphs with ${retryProvider}`,
         );
         const retryResults = await Promise.allSettled(
           retryParagraphs.map(async ({ index, text }) => {
@@ -157,7 +158,7 @@ export class TtsBatchProcessor extends WorkerHost {
               text,
               voiceId,
               userId,
-              { isPremium, providerOverride: fallbackProvider! },
+              { isPremium, providerOverride: retryProvider },
             );
             return { index, audioUrl: result.audioUrl };
           }),
@@ -190,6 +191,13 @@ export class TtsBatchProcessor extends WorkerHost {
               throw redisErr;
             }
           } else {
+            const retryErrorMsg =
+              retryResult.reason instanceof Error
+                ? retryResult.reason.message
+                : String(retryResult.reason);
+            this.logger.warn(
+              `TTS batch ${batchJobId}: retry with ${retryProvider} failed for paragraph ${retryParagraph.index} — ${retryErrorMsg}`,
+            );
             try {
               for (const idx of allRetryIndices) {
                 await this.queueService.markParagraphFailed(batchJobId, idx);
