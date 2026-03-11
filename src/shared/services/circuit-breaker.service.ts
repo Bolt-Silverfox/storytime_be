@@ -32,8 +32,7 @@ export function isTransientError(error: unknown): boolean {
 
   // HTTP status-based classification
   const status = Number(err.status ?? err.statusCode ?? err.code ?? 0);
-  if (status === 402 || status === 429 || (status >= 500 && status < 600))
-    return true;
+  if (status === 429 || (status >= 500 && status < 600)) return true;
 
   // Message-based classification for network-level failures
   const message =
