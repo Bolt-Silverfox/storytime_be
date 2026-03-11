@@ -4,6 +4,7 @@ import { ParentFavoritesService } from './parent-favorites.service';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { CreateParentFavoriteDto } from './dto/create-parent-favorite.dto';
 import { ParentFavoriteResponseDto } from './dto/parent-favorite-response.dto';
+import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 
 describe('ParentFavoritesController', () => {
   let controller: ParentFavoritesController;
@@ -14,7 +15,7 @@ describe('ParentFavoritesController', () => {
 
   const mockReq = {
     authUserData: { userId: mockUserId },
-  } as any;
+  } as unknown as AuthenticatedRequest;
 
   const mockFavoriteResponse: ParentFavoriteResponseDto = {
     id: 'fav-001',
@@ -126,7 +127,7 @@ describe('ParentFavoritesController', () => {
   describe('removeFavorite', () => {
     it('should call service.removeFavorite with userId and storyId, and return the result', async () => {
       const successMessage = 'Favorite removed successfully';
-      service.removeFavorite.mockResolvedValue(successMessage as any);
+      service.removeFavorite.mockResolvedValue(successMessage);
 
       const result = await controller.removeFavorite(mockReq, mockStoryId);
 

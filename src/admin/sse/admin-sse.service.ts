@@ -24,7 +24,7 @@ export class AdminSseService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.healthInterval = setInterval(() => {
-      this.emitHealthCheck();
+      void this.emitHealthCheck();
     }, 30_000);
   }
 
