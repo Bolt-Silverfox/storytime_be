@@ -19,12 +19,12 @@ export class SseAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const token = request.query?.token;
 
-    if (!token) {
-      throw new UnauthorizedException('Missing token');
+    if (typeof token !== 'string' || token.length === 0) {
+      throw new UnauthorizedException('Missing or invalid token');
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync(token as string);
+      const payload = await this.jwtService.verifyAsync(token);
       const user = await this.prisma.user.findFirst({
         where: { id: payload.sub, isDeleted: false },
       });
