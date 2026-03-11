@@ -398,7 +398,11 @@ export class AppleVerificationService {
             } else if (res.statusCode === 404) {
               resolve(null);
             } else {
-              reject(new Error(`Apple API returned ${res.statusCode} from ${hostname}`));
+              reject(
+                new Error(
+                  `Apple API returned ${res.statusCode} from ${hostname}`,
+                ),
+              );
             }
           });
         },
