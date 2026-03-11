@@ -21,7 +21,7 @@ export class RedisHealthIndicator extends HealthIndicator {
     try {
       const redisUrl = this.configService.get('REDIS_URL');
 
-      client = new Redis(redisUrl, {
+      client = new Redis(redisUrl as string, {
         retryStrategy: () => null, // No reconnect attempts for health probe
         enableOfflineQueue: false,
         lazyConnect: true,

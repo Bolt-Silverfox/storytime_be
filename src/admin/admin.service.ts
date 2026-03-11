@@ -2277,14 +2277,14 @@ export class AdminService {
     // Paginate through all matching users
     const pageSize = 1000;
     let page = 1;
-    const allUsers: any[] = [];
+    const allUsers: Record<string, unknown>[] = [];
     while (true) {
       const result = await this.getAllUsers({
         ...filters,
         page,
         limit: pageSize,
       });
-      allUsers.push(...result.data);
+      allUsers.push(...(result.data as Record<string, unknown>[]));
       if (result.data.length < pageSize) break;
       page++;
     }
@@ -2302,25 +2302,24 @@ export class AdminService {
       'Is Suspended',
     ];
 
-    const rows = allUsers.map((user: any) => [
+    const rows = allUsers.map((user) => [
       user.id,
-      `"${this.sanitizeCsv(user.email)}"`,
-      `"${this.sanitizeCsv(user.name)}"`,
+      `"${this.sanitizeCsv(user.email as string | null | undefined)}"`,
+      `"${this.sanitizeCsv(user.name as string | null | undefined)}"`,
       user.role,
       user.isEmailVerified,
       user.isPaidUser,
-      user.activeSubscription?.plan || '',
+      (user.activeSubscription as Record<string, unknown> | null)?.plan || '',
       user.registrationDate
-        ? new Date(user.registrationDate).toISOString()
+        ? new Date(
+            user.registrationDate as string | number | Date,
+          ).toISOString()
         : '',
       user.isDeleted,
       user.isSuspended || false,
     ]);
 
-    const csv = [
-      headers.join(','),
-      ...rows.map((r: any[]) => r.join(',')),
-    ].join('\n');
+    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     return csv;
   }
 
