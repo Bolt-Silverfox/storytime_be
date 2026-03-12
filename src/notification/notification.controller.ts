@@ -19,49 +19,42 @@ import {
   ApiQuery,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { NotificationPreferenceService } from './services/notification-preference.service';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
+import { NotificationService } from './notification.service';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
   BulkUpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
 } from './dto/notification.dto';
-import {
-  AuthSessionGuard,
-  AuthenticatedRequest,
-} from '@/shared/guards/auth.guard';
 
 @ApiTags('notification-preferences')
 @Controller('notification-preferences')
 export class NotificationController {
-  constructor(
-    private readonly notificationPreferenceService: NotificationPreferenceService,
-  ) {}
+  constructor(private readonly notificationService: NotificationService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create notification preferences (bulk)' })
   @ApiBody({ type: [CreateNotificationPreferenceDto] })
   @ApiResponse({ status: 201, type: [NotificationPreferenceDto] })
   async create(@Body() dtos: CreateNotificationPreferenceDto[]) {
-    return Promise.all(
-      dtos.map((dto) => this.notificationPreferenceService.create(dto)),
-    );
+    return Promise.all(dtos.map((dto) => this.notificationService.create(dto)));
   }
 
-  @Patch('bulk')
+  @Patch()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Bulk update notification preferences' })
+  @ApiOperation({ summary: 'Update multiple notification preferences' })
   @ApiBody({ type: [BulkUpdateNotificationPreferenceDto] })
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
-  async bulkUpdatePreferences(
+  async bulkUpdate(
     @Req() req: AuthenticatedRequest,
     @Body() dtos: BulkUpdateNotificationPreferenceDto[],
   ) {
-    return this.notificationPreferenceService.bulkUpdate(
-      req.authUserData.userId,
-      dtos,
-    );
+    return this.notificationService.bulkUpdate(req.authUserData.userId, dtos);
   }
 
   @Patch(':id')
@@ -73,7 +66,7 @@ export class NotificationController {
     @Param('id') id: string,
     @Body() dto: UpdateNotificationPreferenceDto,
   ) {
-    return this.notificationPreferenceService.update(id, dto);
+    return this.notificationService.update(id, dto);
   }
 
   @Delete(':id')
@@ -94,7 +87,7 @@ export class NotificationController {
     @Param('id') id: string,
     @Query('permanent') permanent: boolean = false,
   ) {
-    await this.notificationPreferenceService.delete(id, permanent);
+    await this.notificationService.delete(id, permanent);
     return { message: 'Notification preference deleted successfully' };
   }
 
@@ -103,7 +96,7 @@ export class NotificationController {
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: NotificationPreferenceDto })
   async undoDelete(@Param('id') id: string) {
-    return this.notificationPreferenceService.undoDelete(id);
+    return this.notificationService.undoDelete(id);
   }
 
   @Get('users/:userId')
@@ -113,7 +106,7 @@ export class NotificationController {
   @ApiParam({ name: 'userId', type: String })
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
   async getForUser(@Param('userId') userId: string) {
-    return this.notificationPreferenceService.getForUser(userId);
+    return this.notificationService.getForUser(userId);
   }
 
   @Get('kids/:kidId')
@@ -123,7 +116,7 @@ export class NotificationController {
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
   async getForKid(@Param('kidId') kidId: string) {
-    return this.notificationPreferenceService.getForKid(kidId);
+    return this.notificationService.getForKid(kidId);
   }
 
   @Get(':id')
@@ -131,6 +124,6 @@ export class NotificationController {
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: NotificationPreferenceDto })
   async getById(@Param('id') id: string) {
-    return this.notificationPreferenceService.getById(id);
+    return this.notificationService.getById(id);
   }
 }

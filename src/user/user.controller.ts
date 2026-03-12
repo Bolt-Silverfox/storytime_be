@@ -14,6 +14,9 @@ import {
   Query,
   HttpException,
   HttpStatus,
+  Logger,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,10 +26,11 @@ import {
   ApiBody,
   ApiBearerAuth,
   ApiQuery,
+  ApiConsumes,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UserService } from './user.service';
-import { UserDeletionService } from './services/user-deletion.service';
-import { UserPinService } from './services/user-pin.service';
+import { UploadService } from '@/upload/upload.service';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -61,10 +65,11 @@ class UpdateUserRoleDto {
 @ApiTags('user')
 @Controller('user')
 export class UserController {
+  private readonly logger = new Logger(UserController.name);
+
   constructor(
     private readonly userService: UserService,
-    private readonly userDeletionService: UserDeletionService,
-    private readonly userPinService: UserPinService,
+    private readonly uploadService: UploadService,
   ) {}
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
@@ -150,12 +155,64 @@ export class UserController {
     );
   }
 
+  @Post('me/upload-avatar')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({ summary: 'Upload and assign a new avatar image' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype.startsWith('image/')) {
+          return cb(
+            new BadRequestException('Only image files are allowed'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async uploadAndAssignAvatar(
+    @Req() req: AuthenticatedRequest,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+    const uploadResult = await this.uploadService.uploadImage(file, 'avatars');
+    try {
+      return await this.userService.createAndAssignAvatar(
+        req.authUserData.userId,
+        uploadResult.secure_url,
+        uploadResult.public_id,
+      );
+    } catch (err) {
+      // Compensating action: clean up the Cloudinary asset if the DB transaction fails
+      await this.uploadService
+        .deleteImage(uploadResult.public_id)
+        .catch((cleanupErr: Error) => {
+          this.logger.warn(
+            `Failed to clean up Cloudinary asset "${uploadResult.public_id}" after DB failure: ${cleanupErr.message}`,
+          );
+        });
+      throw err;
+    }
+  }
+
   @Post('me/pin')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Set or update PIN' })
   async setPin(@Req() req: AuthenticatedRequest, @Body() body: SetPinDto) {
-    return this.userPinService.setPin(req.authUserData.userId, body.pin);
+    return this.userService.setPin(req.authUserData.userId, body.pin);
   }
 
   @Post('me/pin/verify')
@@ -185,7 +242,7 @@ export class UserController {
     },
   })
   async verifyPin(@Req() req: AuthenticatedRequest, @Body() body: SetPinDto) {
-    return this.userPinService.verifyPin(req.authUserData.userId, body.pin);
+    return this.userService.verifyPin(req.authUserData.userId, body.pin);
   }
 
   @Post('me/pin/request-reset')
@@ -206,7 +263,7 @@ export class UserController {
     },
   })
   async requestPinResetOtp(@Req() req: AuthenticatedRequest) {
-    return this.userPinService.requestPinResetOtp(req.authUserData.userId);
+    return this.userService.requestPinResetOtp(req.authUserData.userId);
   }
 
   @Post('me/pin/validate-otp')
@@ -231,7 +288,7 @@ export class UserController {
     @Req() req: AuthenticatedRequest,
     @Body() body: ValidatePinResetOtpDto,
   ) {
-    return this.userPinService.validatePinResetOtp(
+    return this.userService.validatePinResetOtp(
       req.authUserData.userId,
       body.otp,
     );
@@ -265,7 +322,7 @@ export class UserController {
     if (body.newPin !== body.confirmNewPin) {
       throw new BadRequestException('New PIN and confirmation do not match');
     }
-    return this.userPinService.resetPinWithOtp(
+    return this.userService.resetPinWithOtp(
       req.authUserData.userId,
       body.otp,
       body.newPin,
@@ -334,7 +391,7 @@ export class UserController {
     @Req() req: AuthenticatedRequest,
     @Query('permanent') permanent: boolean = false,
   ) {
-    const result = await this.userDeletionService.deleteUserAccount(
+    const result = await this.userService.deleteUserAccount(
       req.authUserData.userId,
       permanent,
     );
@@ -396,7 +453,7 @@ export class UserController {
     @Query('permanent') permanent: boolean = false,
   ) {
     // Verify password and create support ticket
-    await this.userDeletionService.verifyPasswordAndLogDeletion(
+    await this.userService.verifyPasswordAndLogDeletion(
       req.authUserData.userId,
       body.password,
       body.reasons,
@@ -465,7 +522,7 @@ export class UserController {
     },
   })
   async undoDeleteMyAccount(@Req() req: AuthenticatedRequest) {
-    const restoredUser = await this.userDeletionService.undoDeleteMyAccount(
+    const restoredUser = await this.userService.undoDeleteMyAccount(
       req.authUserData.userId,
     );
 
@@ -544,7 +601,7 @@ export class UserController {
     @Param('id') id: string,
     @Query('permanent') permanent: boolean = false,
   ) {
-    return await this.userDeletionService.deleteUserAccount(id, permanent);
+    return await this.userService.deleteUserAccount(id, permanent);
   }
 
   @Post(':id/undo-delete')
@@ -577,7 +634,7 @@ export class UserController {
       throw new ForbiddenException('Admins only');
     }
 
-    const restoredUser = await this.userDeletionService.undoDeleteUser(id);
+    const restoredUser = await this.userService.undoDeleteUser(id);
 
     return {
       statusCode: 200,

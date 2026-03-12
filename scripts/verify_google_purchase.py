@@ -4,17 +4,18 @@ Python script to verify Google Play purchases using WIF
 Called by Node.js backend as a subprocess
 """
 import sys
-import json
 import os
+import json
 from google.auth import aws
 from google.auth.transport.requests import Request
 import requests
 
-
 def _get_credentials():
-    """Get Google API credentials via WIF"""
-    WORKLOAD_POOL_PROVIDER = "projects/483343108270/locations/global/workloadIdentityPools/deenai-aws-pool/providers/deenai-aws-provider"
-    SERVICE_ACCOUNT_EMAIL = "app-distribution@deen-ai-481006.iam.gserviceaccount.com"
+    """Get authenticated Google credentials using WIF"""
+    WORKLOAD_POOL_PROVIDER = os.environ.get("GOOGLE_WIF_PROVIDER",
+        "projects/483343108270/locations/global/workloadIdentityPools/deenai-aws-pool/providers/deenai-aws-provider")
+    SERVICE_ACCOUNT_EMAIL = os.environ.get("GOOGLE_SERVICE_ACCOUNT_EMAIL",
+        "app-distribution@deen-ai-481006.iam.gserviceaccount.com")
     SCOPES = ["https://www.googleapis.com/auth/androidpublisher"]
 
     # Get AWS region
@@ -58,7 +59,6 @@ def _get_credentials():
     # Refresh credentials
     request = Request()
     credentials.refresh(request)
-
     return credentials
 
 
@@ -124,7 +124,6 @@ def verify_purchase(package_name, product_id, purchase_token):
             "error": str(e),
             "errorType": type(e).__name__
         }
-
 
 def acknowledge_subscription(package_name, product_id, purchase_token):
     """Acknowledge a Google Play subscription purchase using WIF"""
@@ -204,7 +203,10 @@ def cancel_subscription(package_name, product_id, purchase_token):
     try:
         credentials = _get_credentials()
 
-        url = f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{package_name}/purchases/subscriptions/{product_id}/tokens/{purchase_token}:cancel"
+        url = (
+            f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+            f"{package_name}/purchases/subscriptions/{product_id}/tokens/{purchase_token}:cancel"
+        )
         response = requests.post(
             url,
             headers={
@@ -214,12 +216,13 @@ def cancel_subscription(package_name, product_id, purchase_token):
             timeout=10
         )
 
+        # 204 No Content = success, 200 also acceptable
         if response.status_code in (200, 204):
             return {"success": True}
         else:
             return {
                 "success": False,
-                "error": f"Cancellation failed with status {response.status_code}",
+                "error": f"Cancel failed with status {response.status_code}",
                 "statusCode": response.status_code,
                 "details": response.text
             }
@@ -233,43 +236,59 @@ def cancel_subscription(package_name, product_id, purchase_token):
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
+    if len(sys.argv) < 2:
+        print(json.dumps({
+            "success": False,
+            "error": "Usage: verify_google_purchase.py <verify|cancel> <package_name> <product_id> <purchase_token>"
+        }))
+        sys.exit(1)
 
-    # Backward compatibility: if 3 args with no action keyword, assume verify
-    if len(args) == 3 and args[0] not in ('verify', 'cancel'):
-        package_name, product_id, purchase_token = args
-        result = verify_purchase(package_name, product_id, purchase_token)
-    elif len(args) == 4:
-        action = args[0]
-        package_name, product_id, purchase_token = args[1], args[2], args[3]
+    action = sys.argv[1]
 
-        if action == 'verify':
-            result = verify_purchase(package_name, product_id, purchase_token)
-        elif action == 'cancel':
-            result = cancel_subscription(package_name, product_id, purchase_token)
-        else:
-            result = {
+    if action == "verify":
+        if len(sys.argv) != 5:
+            print(json.dumps({
                 "success": False,
-                "error": f"Unknown action: {action}. Expected 'verify', 'cancel', or 'acknowledge'"
-            }
-    elif len(args) == 5 and args[0] == 'acknowledge':
-        ack_type = args[1]  # "subscription" or "product"
-        package_name, product_id, purchase_token = args[2], args[3], args[4]
-
-        if ack_type == 'subscription':
-            result = acknowledge_subscription(package_name, product_id, purchase_token)
-        elif ack_type == 'product':
-            result = acknowledge_product(package_name, product_id, purchase_token)
+                "error": "Usage: verify_google_purchase.py verify <package_name> <product_id> <purchase_token>"
+            }))
+            sys.exit(1)
+        result = verify_purchase(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif action == "cancel":
+        if len(sys.argv) != 5:
+            print(json.dumps({
+                "success": False,
+                "error": "Usage: verify_google_purchase.py cancel <package_name> <product_id> <purchase_token>"
+            }))
+            sys.exit(1)
+        result = cancel_subscription(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif action == "acknowledge":
+        if len(sys.argv) != 6:
+            print(json.dumps({
+                "success": False,
+                "error": "Usage: verify_google_purchase.py acknowledge <type> <package_name> <product_id> <purchase_token>"
+            }))
+            sys.exit(1)
+        ack_type = sys.argv[2]  # "subscription" or "product"
+        if ack_type == "subscription":
+            result = acknowledge_subscription(sys.argv[3], sys.argv[4], sys.argv[5])
+        elif ack_type == "product":
+            result = acknowledge_product(sys.argv[3], sys.argv[4], sys.argv[5])
         else:
-            result = {
+            print(json.dumps({
                 "success": False,
                 "error": f"Unknown acknowledge type: {ack_type}. Use 'subscription' or 'product'."
-            }
+            }))
+            sys.exit(1)
     else:
-        result = {
-            "success": False,
-            "error": "Usage: verify_google_purchase.py [verify|cancel|acknowledge] <args...>"
-        }
+        # Backward compatibility: treat 3 positional args as verify
+        if len(sys.argv) == 4:
+            result = verify_purchase(sys.argv[1], sys.argv[2], sys.argv[3])
+        else:
+            print(json.dumps({
+                "success": False,
+                "error": f"Unknown action: {action}. Use 'verify' or 'cancel'."
+            }))
+            sys.exit(1)
 
     print(json.dumps(result))
     sys.exit(0 if result["success"] else 1)

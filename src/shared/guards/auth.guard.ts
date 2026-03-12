@@ -77,7 +77,7 @@ export class AuthSessionGuard implements CanActivate {
         throw new UnauthorizedException('Session invalid or expired');
       }
 
-      if (session.deletedAt !== null) {
+      if (session.deletedAt !== null || session.isDeleted) {
         this.logger.warn(
           `Auth failure: session is soft-deleted [sessionId=${session.id}]`,
         );

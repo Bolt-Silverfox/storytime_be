@@ -7,6 +7,6 @@ export const FREE_TIER_LIMITS = {
   },
   VOICES: {
     DEFAULT_VOICE,
-    CUSTOM_SLOTS: 0, // Free users get ONLY the default voice
+    CUSTOM_SLOTS: 0, // Free users can only use the default voice
   },
 };

@@ -4,7 +4,9 @@ import { GoogleOAuthProfile } from '@/shared/types';
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
   Post,
   Put,
   Req,
@@ -23,6 +25,7 @@ import { PasswordService } from './services/password.service';
 import {
   LoginDto,
   LoginResponseDto,
+  RefreshTokenDto,
   RefreshResponseDto,
   RefreshTokenDto,
   RegisterDto,
@@ -373,6 +376,70 @@ export class AuthController {
       body.id_token,
       body.firstName,
       body.lastName,
+    );
+  }
+
+  // ===== LINKED ACCOUNTS =====
+  @Get('linked-accounts')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get linked auth providers for current user' })
+  @ApiResponse({ status: 200, description: 'Linked accounts retrieved.' })
+  async getLinkedAccounts(@Req() req: AuthenticatedRequest) {
+    return this.authService.getLinkedAccounts(req.authUserData['userId']);
+  }
+
+  @Post('link/google')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Link Google account to current user' })
+  @ApiBody({
+    description: 'Google id_token',
+    schema: { example: { id_token: 'eyJhbGci...' } },
+  })
+  async linkGoogle(
+    @Req() req: AuthenticatedRequest,
+    @Body('id_token') idToken: string,
+  ) {
+    if (!idToken) {
+      throw new BadRequestException('id_token is required');
+    }
+    return this.authService.linkGoogle(req.authUserData['userId'], idToken);
+  }
+
+  @Post('link/apple')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Link Apple account to current user' })
+  @ApiBody({
+    description: 'Apple id_token',
+    schema: { example: { id_token: '...' } },
+  })
+  async linkApple(
+    @Req() req: AuthenticatedRequest,
+    @Body('id_token') idToken: string,
+  ) {
+    if (!idToken) {
+      throw new BadRequestException('id_token is required');
+    }
+    return this.authService.linkApple(req.authUserData['userId'], idToken);
+  }
+
+  @Delete('unlink/:provider')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unlink an auth provider (google or apple)' })
+  @ApiResponse({ status: 200, description: 'Provider unlinked.' })
+  @ApiResponse({ status: 400, description: 'Cannot unlink last provider.' })
+  async unlinkProvider(
+    @Req() req: AuthenticatedRequest,
+    @Param('provider') provider: string,
+  ) {
+    return this.authService.unlinkProvider(
+      req.authUserData['userId'],
+      provider,
     );
   }
 

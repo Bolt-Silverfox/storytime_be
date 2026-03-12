@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -29,6 +30,29 @@ export class SubscriptionService {
     private readonly cacheMetrics: CacheMetricsService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  async isPremiumUser(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        premiumAccessUntil: true,
+        subscription: { select: { status: true, endsAt: true } },
+      },
+    });
+    if (!user) return false;
+    if (user.role === Role.admin) return true;
+
+    // Check coupon-granted premium access
+    if (user.premiumAccessUntil && user.premiumAccessUntil > new Date()) {
+      return true;
+    }
+
+    const sub = user.subscription;
+    if (!sub || sub.status !== SUBSCRIPTION_STATUS.ACTIVE) return false;
+
+    return sub.endsAt === null || sub.endsAt > new Date();
+  }
 
   getPlans() {
     return PLANS;

@@ -1,89 +1,58 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { StoryService } from './story.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { GeminiService } from './gemini.service';
+import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from './text-to-speech.service';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { StoryFavoriteService } from './story-favorite.service';
-import { StoryDownloadService } from './story-download.service';
-import { StoryProgressService } from './story-progress.service';
-import { StoryPathService } from './story-path.service';
-import { StoryMetadataService } from './story-metadata.service';
-import { DailyChallengeService } from './daily-challenge.service';
-import { STORY_CORE_REPOSITORY } from './repositories/story-core.repository.interface';
-import { AppEvents } from '@/shared/events';
 
-const mockStoryRepository = {
-  findStories: jest.fn(),
-  countStories: jest.fn(),
-  findStoryById: jest.fn(),
-  createStory: jest.fn(),
-  updateStory: jest.fn(),
-  deleteStory: jest.fn(),
-  softDeleteStory: jest.fn(),
-  deleteStoryPermanently: jest.fn(),
-  restoreStory: jest.fn(),
-  restrictStory: jest.fn(),
-  unrestrictStory: jest.fn(),
-  findRestrictedStories: jest.fn(),
+// Mock dependencies
+const mockPrismaService = {
+  kid: { findUnique: jest.fn() },
+  user: { findUnique: jest.fn() },
+  story: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    count: jest.fn(),
+  },
+  theme: { findMany: jest.fn() },
+  category: { findMany: jest.fn() },
+  season: { findMany: jest.fn() },
+  downloadedStory: {
+    findMany: jest.fn(),
+    upsert: jest.fn(),
+    delete: jest.fn(),
+    deleteMany: jest.fn(),
+  },
+  favorite: { deleteMany: jest.fn() },
+  storyProgress: { deleteMany: jest.fn() },
+  userStoryProgress: { findMany: jest.fn() },
+  parentRecommendation: { groupBy: jest.fn() },
+  $transaction: jest.fn((args) => args), // Pass through transaction
 };
 
-const mockFavoriteService = {
-  addFavorite: jest.fn(),
-  removeFavorite: jest.fn(),
-  getFavorites: jest.fn(),
+const mockGeminiService = {
+  generateStory: jest.fn(),
+  generateStoryImage: jest.fn(),
 };
 
-const mockDownloadService = {
-  addDownload: jest.fn(),
-  getDownloads: jest.fn(),
-  removeDownload: jest.fn(),
-  deleteDownloadsForStory: jest.fn(),
-};
-
-const mockProgressService = {
-  setProgress: jest.fn(),
-  getProgress: jest.fn(),
-  getCompletedStories: jest.fn(),
-  getContinueReading: jest.fn(),
-  deleteStoryProgress: jest.fn(),
-};
-
-const mockTextToSpeechService = {
-  textToSpeechCloudUrl: jest.fn().mockResolvedValue('http://audio.url'),
-  synthesizeStory: jest.fn().mockResolvedValue('http://synthesized.url'),
-};
-
-const mockMetadataService = {
-  getSeasons: jest.fn(),
-  getCategories: jest.fn(),
-  getThemes: jest.fn(),
-  addImage: jest.fn(),
-  addBranch: jest.fn(),
-};
-
-const mockCacheManager = {
-  del: jest.fn(),
-  get: jest.fn(),
-  set: jest.fn(),
-};
-
-const mockEventEmitter = {
-  emit: jest.fn(),
-};
-
-describe('StoryService', () => {
+describe('StoryService - Library & Generation', () => {
   let service: StoryService;
-  let storyRepository: typeof mockStoryRepository;
+  let prisma: typeof mockPrismaService;
+  let gemini: typeof mockGeminiService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StoryService,
-        { provide: STORY_CORE_REPOSITORY, useValue: mockStoryRepository },
+        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: GeminiService, useValue: mockGeminiService },
         {
-          provide: 'CACHE_MANAGER',
-          useValue: mockCacheManager,
+          provide: ElevenLabsService,
+          useValue: { generateAudioBuffer: jest.fn().mockResolvedValue({}) },
         },
         {
           provide: UploadService,
@@ -91,547 +60,398 @@ describe('StoryService', () => {
         },
         {
           provide: TextToSpeechService,
-          useValue: mockTextToSpeechService,
+          useValue: {
+            textToSpeechCloudUrl: jest
+              .fn()
+              .mockResolvedValue('http://audio.url'),
+          },
         },
         {
-          provide: EventEmitter2,
-          useValue: mockEventEmitter,
-        },
-        { provide: StoryFavoriteService, useValue: mockFavoriteService },
-        { provide: StoryDownloadService, useValue: mockDownloadService },
-        { provide: StoryProgressService, useValue: mockProgressService },
-        {
-          provide: StoryPathService,
-          useValue: {},
-        },
-        {
-          provide: StoryMetadataService,
-          useValue: mockMetadataService,
-        },
-        {
-          provide: DailyChallengeService,
-          useValue: {},
+          provide: 'CACHE_MANAGER',
+          useValue: { del: jest.fn(), get: jest.fn(), set: jest.fn() },
         },
       ],
     }).compile();
 
     service = module.get<StoryService>(StoryService);
-    storyRepository = module.get(STORY_CORE_REPOSITORY);
+    prisma = module.get(PrismaService);
+    gemini = module.get(GeminiService);
     jest.clearAllMocks();
   });
 
+  // --- 1. GENERATION TEST (The Fix) ---
+  describe('generateStoryForKid', () => {
+    it('should save the story with creatorKidId', async () => {
+      const kidId = 'kid-123';
+
+      // Mock Data
+      prisma.kid.findUnique.mockResolvedValue({
+        id: kidId,
+        name: 'Tise',
+        preferredCategories: [],
+        excludedTags: [],
+      });
+      prisma.theme.findMany.mockResolvedValue([{ id: 'theme-1' }]);
+      prisma.category.findMany.mockResolvedValue([{ id: 'cat-1' }]);
+
+      gemini.generateStory.mockResolvedValue({
+        title: 'AI Story',
+        description: 'Desc',
+        content: 'Content',
+        theme: ['Theme'],
+        category: ['Cat'],
+        ageMin: 5,
+        ageMax: 8,
+        questions: [],
+      });
+      gemini.generateStoryImage.mockResolvedValue('image-url');
+      prisma.story.create.mockResolvedValue({
+        id: 'story-123',
+        textContent: 'Content',
+        title: 'AI Story',
+      });
+
+      // Call Method
+      await service.generateStoryForKid(kidId, ['Theme'], ['Cat']);
+
+      // VERIFY: Did we save creatorKidId?
+      expect(prisma.story.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            creatorKidId: kidId, // <--- THIS IS THE CRITICAL CHECK
+            title: 'AI Story',
+          }),
+        }),
+      );
+    });
+  });
+
+  // --- 2. LIBRARY TESTS ---
   describe('Library Methods', () => {
     describe('getStories', () => {
       it('should filter by minAge and maxAge', async () => {
-        storyRepository.findStories.mockResolvedValue([]);
-        storyRepository.countStories.mockResolvedValue(0);
+        prisma.story.count.mockResolvedValue(1);
+        prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ minAge: 3, maxAge: 5 });
+        await service.getStories({ userId: 'user-1', minAge: 3, maxAge: 5 });
 
-        expect(storyRepository.findStories).toHaveBeenCalledWith(
+        expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
             where: expect.objectContaining({
               isDeleted: false,
-              minAge: { gte: 3 },
-              maxAge: { lte: 5 },
+              // Check overlap logic: story.ageMin <= 5 AND story.ageMax >= 3
+              ageMin: { lte: 5 },
+              ageMax: { gte: 3 },
             }),
           }),
         );
       });
 
       it('should filter by minAge only', async () => {
-        storyRepository.findStories.mockResolvedValue([]);
-        storyRepository.countStories.mockResolvedValue(0);
+        prisma.story.count.mockResolvedValue(1);
+        prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ minAge: 4 });
+        await service.getStories({ userId: 'user-1', minAge: 4 });
 
-        expect(storyRepository.findStories).toHaveBeenCalledWith(
+        expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
             where: expect.objectContaining({
               isDeleted: false,
-              minAge: { gte: 4 },
+              ageMax: { gte: 4 },
             }),
           }),
         );
       });
 
       it('should filter by maxAge only', async () => {
-        storyRepository.findStories.mockResolvedValue([]);
-        storyRepository.countStories.mockResolvedValue(0);
+        prisma.story.count.mockResolvedValue(1);
+        prisma.story.findMany.mockResolvedValue([]);
+        prisma.userStoryProgress.findMany.mockResolvedValue([]);
 
-        await service.getStories({ maxAge: 8 });
+        await service.getStories({ userId: 'user-1', maxAge: 8 });
 
-        expect(storyRepository.findStories).toHaveBeenCalledWith(
+        expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
             where: expect.objectContaining({
               isDeleted: false,
-              maxAge: { lte: 8 },
+              ageMin: { lte: 8 },
             }),
           }),
         );
+      });
+
+      it('should enrich stories with readStatus from user progress', async () => {
+        const stories = [
+          { id: 'story-1', title: 'Completed Story' },
+          { id: 'story-2', title: 'In Progress Story' },
+          { id: 'story-3', title: 'Unread Story' },
+        ];
+        prisma.story.count.mockResolvedValue(3);
+        prisma.story.findMany.mockResolvedValue(stories);
+        prisma.userStoryProgress.findMany.mockResolvedValue([
+          { storyId: 'story-1', completed: true },
+          { storyId: 'story-2', completed: false },
+        ]);
+
+        const result = await service.getStories({ userId: 'user-1' });
+
+        // sortByReadStatus orders: null (unread) first, then reading, then done
+        expect(result.data[0]).toEqual(
+          expect.objectContaining({ id: 'story-3', readStatus: null }),
+        );
+        expect(result.data[1]).toEqual(
+          expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+        );
+        expect(result.data[2]).toEqual(
+          expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
+        );
+        expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
+        expect(prisma.userStoryProgress.findMany).toHaveBeenCalledWith({
+          where: {
+            userId: 'user-1',
+            storyId: { in: ['story-1', 'story-2', 'story-3'] },
+            isDeleted: false,
+          },
+          select: { storyId: true, completed: true },
+        });
       });
     });
 
     const kidId = 'kid-123';
 
     it('getCreatedStories: should filter by creatorKidId', async () => {
-      storyRepository.findStories.mockResolvedValue([]);
-
       await service.getCreatedStories(kidId);
 
-      expect(storyRepository.findStories).toHaveBeenCalledWith(
+      expect(prisma.story.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
             creatorKidId: kidId,
             isDeleted: false,
           },
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         }),
       );
     });
 
-    it('addDownload: should delegate to downloadService', async () => {
+    it('getCreatedStories: should return cursor-paginated when limit provided', async () => {
+      const stories = [
+        { id: 'story-1', title: 'Story 1' },
+        { id: 'story-2', title: 'Story 2' },
+        { id: 'story-3', title: 'Story 3' },
+      ];
+      prisma.story.findMany.mockResolvedValue(stories);
+
+      const result = await service.getCreatedStories(kidId, undefined, 2);
+
+      expect(result).toEqual({
+        data: [
+          { id: 'story-1', title: 'Story 1' },
+          { id: 'story-2', title: 'Story 2' },
+        ],
+        pagination: {
+          nextCursor: 'story-2',
+          hasNextPage: true,
+        },
+      });
+    });
+
+    it('addDownload: should use upsert to prevent duplicates', async () => {
       const storyId = 'story-456';
-      mockDownloadService.addDownload.mockResolvedValue({ kidId, storyId });
+      prisma.story.findUnique.mockResolvedValue({ id: storyId }); // Story exists
 
       await service.addDownload(kidId, storyId);
 
-      expect(mockDownloadService.addDownload).toHaveBeenCalledWith(
-        kidId,
-        storyId,
+      expect(prisma.downloadedStory.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { kidId_storyId: { kidId, storyId } },
+          create: { kidId, storyId },
+        }),
       );
     });
 
-    it('removeFromLibrary: should delegate to favorite, download, and progress services', async () => {
+    it('removeFromLibrary: should delete from Favorites, Downloads, and Progress', async () => {
       const storyId = 'story-456';
-      mockFavoriteService.removeFavorite.mockResolvedValue(undefined);
-      mockDownloadService.deleteDownloadsForStory.mockResolvedValue(undefined);
-      mockProgressService.deleteStoryProgress.mockResolvedValue(undefined);
 
       await service.removeFromLibrary(kidId, storyId);
 
-      expect(mockFavoriteService.removeFavorite).toHaveBeenCalledWith(
-        kidId,
-        storyId,
-      );
-      expect(mockDownloadService.deleteDownloadsForStory).toHaveBeenCalledWith(
-        kidId,
-        storyId,
-      );
-      expect(mockProgressService.deleteStoryProgress).toHaveBeenCalledWith(
-        kidId,
-        storyId,
-      );
+      // Verify transaction contents
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.favorite.deleteMany).toHaveBeenCalledWith({
+        where: { kidId, storyId },
+      });
+      expect(prisma.downloadedStory.deleteMany).toHaveBeenCalledWith({
+        where: { kidId, storyId },
+      });
+      expect(prisma.storyProgress.deleteMany).toHaveBeenCalledWith({
+        where: { kidId, storyId },
+      });
     });
   });
 
-  describe('getStoryById', () => {
-    it('should return the story when found', async () => {
-      const mockStory = { id: 'story-1', title: 'Test Story' };
-      mockStoryRepository.findStoryById.mockResolvedValue(mockStory);
+  // --- 3. HOME PAGE STORIES ---
+  describe('getHomePageStories', () => {
+    it('should enrich recommended, seasonal, and topLiked with readStatus', async () => {
+      const userId = 'user-1';
+      prisma.user.findUnique.mockResolvedValue({
+        id: userId,
+        isDeleted: false,
+        preferredCategories: [{ id: 'cat-1' }],
+      });
 
-      const result = await service.getStoryById('story-1');
+      const recommended = [{ id: 'story-1', title: 'Recommended' }];
+      const topLiked = [
+        { id: 'story-2', title: 'Top Liked In Progress' },
+        { id: 'story-3', title: 'Top Liked Unread' },
+      ];
 
-      expect(result).toEqual(mockStory);
-      expect(mockStoryRepository.findStoryById).toHaveBeenCalledWith('story-1');
-    });
+      // story.findMany: 1st call = recommended, 2nd call = topLiked
+      // (no seasonal call since season.findMany returns [])
+      prisma.story.findMany
+        .mockResolvedValueOnce(recommended)
+        .mockResolvedValueOnce(topLiked);
 
-    it('should throw NotFoundException when story does not exist', async () => {
-      mockStoryRepository.findStoryById.mockResolvedValue(null);
+      prisma.season.findMany.mockResolvedValue([]);
 
-      await expect(service.getStoryById('nonexistent')).rejects.toThrow(
-        NotFoundException,
+      prisma.userStoryProgress.findMany.mockResolvedValue([
+        { storyId: 'story-1', completed: true },
+        { storyId: 'story-2', completed: false },
+        // story-3 has no progress (unread)
+      ]);
+
+      const result = await service.getHomePageStories(userId);
+
+      expect(result.recommended[0]).toEqual(
+        expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
       );
-      expect(mockStoryRepository.findStoryById).toHaveBeenCalledWith(
-        'nonexistent',
+      expect(result.seasonal).toEqual([]);
+      // sortByReadStatus orders: null (unread) first, then reading, then done
+      expect(result.topLiked[0]).toEqual(
+        expect.objectContaining({ id: 'story-3', readStatus: null }),
       );
+      expect(result.topLiked[1]).toEqual(
+        expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+      );
+
+      // Verify only 1 DB call for progress (not 1 per section)
+      expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('createStory', () => {
-    const createDto = {
-      title: 'New Story',
-      description: 'A great story',
-      textContent: 'Once upon a time...',
-    };
+  // --- 4. TOP PICKS TESTS ---
+  describe('getTopPicksFromParents', () => {
+    it('should return stories sorted by recommendation count', async () => {
+      const mockGroupByResult = [
+        { storyId: 'story-1', _count: { storyId: 5 } },
+        { storyId: 'story-2', _count: { storyId: 3 } },
+      ];
+      const mockStories = [
+        {
+          id: 'story-2',
+          title: 'Story Two',
+          themes: [],
+          categories: [],
+          images: [],
+        },
+        {
+          id: 'story-1',
+          title: 'Story One',
+          themes: [],
+          categories: [],
+          images: [],
+        },
+      ];
 
-    const mockCreatedStory = {
-      id: 'story-new',
-      title: 'New Story',
-      description: 'A great story',
-      textContent: 'Once upon a time...',
-      creatorKidId: null,
-      createdAt: new Date('2026-01-01'),
-    };
+      prisma.parentRecommendation.groupBy.mockResolvedValue(mockGroupByResult);
+      prisma.story.findMany.mockResolvedValue(mockStories);
 
-    it('should create a story and return it', async () => {
-      mockStoryRepository.createStory.mockResolvedValue(mockCreatedStory);
-      mockCacheManager.del.mockResolvedValue(undefined);
+      const result = await service.getTopPicksFromParents(10);
 
-      const result = await service.createStory(createDto as any);
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('story-1');
+      expect(result[0].recommendationCount).toBe(5);
+      expect(result[1].id).toBe('story-2');
+      expect(result[1].recommendationCount).toBe(3);
+    });
 
-      expect(result).toEqual(mockCreatedStory);
-      expect(mockStoryRepository.createStory).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'New Story' }),
-        { images: true },
+    it('should respect the limit parameter', async () => {
+      prisma.parentRecommendation.groupBy.mockResolvedValue([]);
+
+      await service.getTopPicksFromParents(5);
+
+      expect(prisma.parentRecommendation.groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 5 }),
       );
     });
 
-    it('should emit a STORY_CREATED event', async () => {
-      mockStoryRepository.createStory.mockResolvedValue(mockCreatedStory);
-      mockCacheManager.del.mockResolvedValue(undefined);
+    it('should return empty array when no recommendations exist', async () => {
+      prisma.parentRecommendation.groupBy.mockResolvedValue([]);
 
-      await service.createStory(createDto as any);
+      const result = await service.getTopPicksFromParents(10);
 
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
-        AppEvents.STORY_CREATED,
-        expect.objectContaining({
-          storyId: 'story-new',
-          title: 'New Story',
-          aiGenerated: false,
-        }),
-      );
+      expect(result).toEqual([]);
+      expect(prisma.story.findMany).not.toHaveBeenCalled();
     });
 
-    it('should invalidate story caches after creation', async () => {
-      mockStoryRepository.createStory.mockResolvedValue(mockCreatedStory);
-      mockCacheManager.del.mockResolvedValue(undefined);
-
-      await service.createStory(createDto as any);
-
-      expect(mockCacheManager.del).toHaveBeenCalled();
-    });
-
-    it('should connect categories when categoryIds are provided', async () => {
-      const dtoWithCategories = {
-        ...createDto,
-        categoryIds: ['cat-1', 'cat-2'],
-      };
-      mockStoryRepository.createStory.mockResolvedValue(mockCreatedStory);
-      mockCacheManager.del.mockResolvedValue(undefined);
-
-      await service.createStory(dtoWithCategories as any);
-
-      expect(mockStoryRepository.createStory).toHaveBeenCalledWith(
-        expect.objectContaining({
-          categories: { connect: [{ id: 'cat-1' }, { id: 'cat-2' }] },
-        }),
-        { images: true },
-      );
-    });
-
-    it('should connect themes when themeIds are provided', async () => {
-      const dtoWithThemes = {
-        ...createDto,
-        themeIds: ['theme-1'],
-      };
-      mockStoryRepository.createStory.mockResolvedValue(mockCreatedStory);
-      mockCacheManager.del.mockResolvedValue(undefined);
-
-      await service.createStory(dtoWithThemes as any);
-
-      expect(mockStoryRepository.createStory).toHaveBeenCalledWith(
-        expect.objectContaining({
-          themes: { connect: [{ id: 'theme-1' }] },
-        }),
-        { images: true },
-      );
-    });
-  });
-
-  describe('updateStory', () => {
-    it('should update and return the story', async () => {
-      const updatedStory = { id: 'story-1', title: 'Updated Title' };
-      mockStoryRepository.updateStory.mockResolvedValue(updatedStory);
-      mockCacheManager.del.mockResolvedValue(undefined);
-
-      const result = await service.updateStory('story-1', {
-        title: 'Updated Title',
-      } as any);
-
-      expect(result).toEqual(updatedStory);
-      expect(mockStoryRepository.updateStory).toHaveBeenCalledWith(
-        'story-1',
-        expect.objectContaining({ title: 'Updated Title' }),
-        { images: true },
-      );
-    });
-
-    it('should invalidate story caches after update', async () => {
-      mockStoryRepository.updateStory.mockResolvedValue({ id: 'story-1' });
-      mockCacheManager.del.mockResolvedValue(undefined);
-
-      await service.updateStory('story-1', { title: 'New' } as any);
-
-      expect(mockCacheManager.del).toHaveBeenCalled();
-    });
-  });
-
-  describe('deleteStory', () => {
-    it('should soft delete by default', async () => {
-      const deletedStory = { id: 'story-1', isDeleted: true };
-      mockStoryRepository.softDeleteStory.mockResolvedValue(deletedStory);
-      mockCacheManager.del.mockResolvedValue(undefined);
-
-      const result = await service.deleteStory('story-1');
-
-      expect(result).toEqual(deletedStory);
-      expect(mockStoryRepository.softDeleteStory).toHaveBeenCalledWith(
-        'story-1',
-      );
-      expect(mockStoryRepository.deleteStoryPermanently).not.toHaveBeenCalled();
-    });
-
-    it('should permanently delete when permanent=true', async () => {
-      const deletedStory = { id: 'story-1' };
-      mockStoryRepository.deleteStoryPermanently.mockResolvedValue(
-        deletedStory,
-      );
-      mockCacheManager.del.mockResolvedValue(undefined);
-
-      const result = await service.deleteStory('story-1', true);
-
-      expect(result).toEqual(deletedStory);
-      expect(mockStoryRepository.deleteStoryPermanently).toHaveBeenCalledWith(
-        'story-1',
-      );
-      expect(mockStoryRepository.softDeleteStory).not.toHaveBeenCalled();
-    });
-
-    it('should invalidate story caches after deletion', async () => {
-      mockStoryRepository.softDeleteStory.mockResolvedValue({ id: 'story-1' });
-      mockCacheManager.del.mockResolvedValue(undefined);
-
-      await service.deleteStory('story-1');
-
-      expect(mockCacheManager.del).toHaveBeenCalled();
-    });
-  });
-
-  describe('getStoryAudioUrl', () => {
-    it('should return audio URL from TTS service for existing story', async () => {
+    it('should include themes, categories, and images in the result', async () => {
+      const mockGroupByResult = [
+        { storyId: 'story-1', _count: { storyId: 2 } },
+      ];
       const mockStory = {
         id: 'story-1',
-        textContent: 'Once upon a time...',
-        description: 'A fairy tale',
+        title: 'Test Story',
+        themes: [{ id: 'theme-1', name: 'Adventure' }],
+        categories: [{ id: 'cat-1', name: 'Fantasy' }],
+        images: [{ url: 'http://example.com/img.png' }],
       };
-      mockStoryRepository.findStoryById.mockResolvedValue(mockStory);
-      mockTextToSpeechService.synthesizeStory.mockResolvedValue(
-        'http://audio.example.com/story-1.mp3',
-      );
 
-      const result = await service.getStoryAudioUrl('story-1', 'charlie');
+      prisma.parentRecommendation.groupBy.mockResolvedValue(mockGroupByResult);
+      prisma.story.findMany.mockResolvedValue([mockStory]);
 
-      expect(result).toBe('http://audio.example.com/story-1.mp3');
-      expect(mockTextToSpeechService.synthesizeStory).toHaveBeenCalledWith(
-        'story-1',
-        'Once upon a time...',
-        'charlie',
-        undefined,
-      );
+      const result = await service.getTopPicksFromParents(10);
+
+      expect(result[0]).toHaveProperty('themes');
+      expect(result[0]).toHaveProperty('categories');
+      expect(result[0]).toHaveProperty('images');
+      expect(result[0].themes).toEqual([{ id: 'theme-1', name: 'Adventure' }]);
     });
+  });
 
-    it('should fall back to description when textContent is empty', async () => {
-      const mockStory = {
-        id: 'story-2',
-        textContent: '',
-        description: 'Fallback description',
-      };
-      mockStoryRepository.findStoryById.mockResolvedValue(mockStory);
-      mockTextToSpeechService.synthesizeStory.mockResolvedValue(
-        'http://audio.example.com/story-2.mp3',
+  // --- 5. CURSOR ERROR HANDLING ---
+  describe('withCursorErrorHandling (via getCreatedStories)', () => {
+    it('should throw BadRequestException for invalid cursor (P2025)', async () => {
+      prisma.story.findMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Record not found', {
+          code: 'P2025',
+          clientVersion: '5.0.0',
+        }),
       );
-
-      await service.getStoryAudioUrl('story-2', 'charlie');
-
-      expect(mockTextToSpeechService.synthesizeStory).toHaveBeenCalledWith(
-        'story-2',
-        'Fallback description',
-        'charlie',
-        undefined,
-      );
-    });
-
-    it('should throw NotFoundException when story does not exist', async () => {
-      mockStoryRepository.findStoryById.mockResolvedValue(null);
 
       await expect(
-        service.getStoryAudioUrl('nonexistent', 'charlie'),
-      ).rejects.toThrow(NotFoundException);
+        service.getCreatedStories('kid-1', 'invalid-cursor', 10),
+      ).rejects.toThrow(BadRequestException);
     });
 
-    it('should pass userId to TTS service when provided', async () => {
-      const mockStory = {
-        id: 'story-1',
-        textContent: 'Text',
-        description: '',
-      };
-      mockStoryRepository.findStoryById.mockResolvedValue(mockStory);
-      mockTextToSpeechService.synthesizeStory.mockResolvedValue('http://url');
-
-      await service.getStoryAudioUrl('story-1', 'charlie', 'user-42');
-
-      expect(mockTextToSpeechService.synthesizeStory).toHaveBeenCalledWith(
-        'story-1',
-        'Text',
-        'charlie',
-        'user-42',
+    it('should re-throw non-P2025 Prisma errors', async () => {
+      prisma.story.findMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint', {
+          code: 'P2002',
+          clientVersion: '5.0.0',
+        }),
       );
-    });
-  });
 
-  describe('Favorites (delegated to StoryFavoriteService)', () => {
-    it('addFavorite: should delegate to favoriteService', async () => {
-      const dto = { kidId: 'kid-1', storyId: 'story-1' };
-      const mockResult = { id: 'fav-1', ...dto };
-      mockFavoriteService.addFavorite.mockResolvedValue(mockResult);
-
-      const result = await service.addFavorite(dto as any);
-
-      expect(result).toEqual(mockResult);
-      expect(mockFavoriteService.addFavorite).toHaveBeenCalledWith(dto);
+      await expect(
+        service.getCreatedStories('kid-1', 'some-cursor', 10),
+      ).rejects.toThrow(Prisma.PrismaClientKnownRequestError);
     });
 
-    it('removeFavorite: should delegate to favoriteService', async () => {
-      mockFavoriteService.removeFavorite.mockResolvedValue(undefined);
+    it('should re-throw non-Prisma errors', async () => {
+      prisma.story.findMany.mockRejectedValue(new Error('Network error'));
 
-      await service.removeFavorite('kid-1', 'story-1');
-
-      expect(mockFavoriteService.removeFavorite).toHaveBeenCalledWith(
-        'kid-1',
-        'story-1',
-      );
-    });
-
-    it('getFavorites: should delegate to favoriteService', async () => {
-      const mockFavorites = [
-        { id: 'fav-1', storyId: 'story-1' },
-        { id: 'fav-2', storyId: 'story-2' },
-      ];
-      mockFavoriteService.getFavorites.mockResolvedValue(mockFavorites);
-
-      const result = await service.getFavorites('kid-1');
-
-      expect(result).toEqual(mockFavorites);
-      expect(mockFavoriteService.getFavorites).toHaveBeenCalledWith('kid-1');
-    });
-  });
-
-  describe('Progress (delegated to StoryProgressService)', () => {
-    it('setProgress: should delegate to progressService', async () => {
-      const dto = {
-        kidId: 'kid-1',
-        storyId: 'story-1',
-        progress: 50,
-        sessionTime: 120,
-      };
-      const mockResult = { id: 'prog-1', ...dto };
-      mockProgressService.setProgress.mockResolvedValue(mockResult);
-
-      const result = await service.setProgress(dto as any);
-
-      expect(result).toEqual(mockResult);
-      expect(mockProgressService.setProgress).toHaveBeenCalledWith(dto);
-    });
-
-    it('getProgress: should delegate to progressService', async () => {
-      const mockResult = { progress: 75, storyId: 'story-1' };
-      mockProgressService.getProgress.mockResolvedValue(mockResult);
-
-      const result = await service.getProgress('kid-1', 'story-1');
-
-      expect(result).toEqual(mockResult);
-      expect(mockProgressService.getProgress).toHaveBeenCalledWith(
-        'kid-1',
-        'story-1',
-      );
-    });
-
-    it('getCompletedStories: should delegate to progressService', async () => {
-      const mockCompleted = [{ storyId: 'story-1', completedAt: new Date() }];
-      mockProgressService.getCompletedStories.mockResolvedValue(mockCompleted);
-
-      const result = await service.getCompletedStories('kid-1');
-
-      expect(result).toEqual(mockCompleted);
-      expect(mockProgressService.getCompletedStories).toHaveBeenCalledWith(
-        'kid-1',
-      );
-    });
-
-    it('getContinueReading: should delegate to progressService', async () => {
-      const mockReading = [{ storyId: 'story-2', progress: 30 }];
-      mockProgressService.getContinueReading.mockResolvedValue(mockReading);
-
-      const result = await service.getContinueReading('kid-1');
-
-      expect(result).toEqual(mockReading);
-      expect(mockProgressService.getContinueReading).toHaveBeenCalledWith(
-        'kid-1',
-      );
-    });
-  });
-
-  describe('Metadata (delegated to StoryMetadataService)', () => {
-    it('getCategories: should delegate to metadataService', async () => {
-      const mockCategories = [
-        { id: 'cat-1', name: 'Adventure' },
-        { id: 'cat-2', name: 'Fantasy' },
-      ];
-      mockMetadataService.getCategories.mockResolvedValue(mockCategories);
-
-      const result = await service.getCategories();
-
-      expect(result).toEqual(mockCategories);
-      expect(mockMetadataService.getCategories).toHaveBeenCalled();
-    });
-
-    it('getThemes: should delegate to metadataService', async () => {
-      const mockThemes = [
-        { id: 'theme-1', name: 'Friendship' },
-        { id: 'theme-2', name: 'Courage' },
-      ];
-      mockMetadataService.getThemes.mockResolvedValue(mockThemes);
-
-      const result = await service.getThemes();
-
-      expect(result).toEqual(mockThemes);
-      expect(mockMetadataService.getThemes).toHaveBeenCalled();
-    });
-
-    it('getSeasons: should delegate to metadataService', async () => {
-      const mockSeasons = [
-        { id: 'season-1', name: 'Winter' },
-        { id: 'season-2', name: 'Summer' },
-      ];
-      mockMetadataService.getSeasons.mockResolvedValue(mockSeasons);
-
-      const result = await service.getSeasons();
-
-      expect(result).toEqual(mockSeasons);
-      expect(mockMetadataService.getSeasons).toHaveBeenCalled();
-    });
-  });
-
-  describe('undoDeleteStory', () => {
-    it('should restore a soft-deleted story', async () => {
-      const restoredStory = { id: 'story-1', isDeleted: false };
-      mockStoryRepository.restoreStory.mockResolvedValue(restoredStory);
-      mockCacheManager.del.mockResolvedValue(undefined);
-
-      const result = await service.undoDeleteStory('story-1');
-
-      expect(result).toEqual(restoredStory);
-      expect(mockStoryRepository.restoreStory).toHaveBeenCalledWith('story-1');
-    });
-
-    it('should invalidate caches after restoring', async () => {
-      mockStoryRepository.restoreStory.mockResolvedValue({ id: 'story-1' });
-      mockCacheManager.del.mockResolvedValue(undefined);
-
-      await service.undoDeleteStory('story-1');
-
-      expect(mockCacheManager.del).toHaveBeenCalled();
+      await expect(
+        service.getCreatedStories('kid-1', 'some-cursor', 10),
+      ).rejects.toThrow('Network error');
     });
   });
 });

@@ -1,10 +1,8 @@
 import {
   Body,
   Controller,
-  Delete,
   ForbiddenException,
   Get,
-  Inject,
   NotFoundException,
   Param,
   Patch,
@@ -15,7 +13,9 @@ import {
   UseGuards,
   UseInterceptors,
   ParseFilePipeBuilder,
+  ParseUUIDPipe,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -23,58 +23,45 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
-  ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import {
-  ApiQueueTextSynthesis,
-  ApiQueueStorySynthesis,
-  ApiGetJobStatus,
-  ApiGetJobResult,
-  ApiCancelJob,
-  ApiGetUserPendingJobs,
-  ApiGetQueueStats,
-} from './decorators';
-import { randomUUID } from 'crypto';
+import { Throttle } from '@nestjs/throttler';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
-import {
-  STORY_REPOSITORY,
-  IStoryRepository,
-} from '../story/repositories/story.repository.interface';
+import { StoryService } from '../story/story.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { DEFAULT_VOICE } from './voice.constants';
 import {
-  AsyncStorySynthesisDto,
+  BatchStoryAudioDto,
   CreateElevenLabsVoiceDto,
   SetPreferredVoiceDto,
-  StoryContentAudioDto,
   UploadVoiceDto,
   VoiceResponseDto,
-  VoiceType,
 } from './dto/voice.dto';
 import { SpeechToTextService } from './speech-to-text.service';
 import { VoiceService } from './voice.service';
 import { VoiceQuotaService } from './voice-quota.service';
-import { VoiceQueueService, VoicePriority } from './queue';
+import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
+import { EAGER_PARAGRAPH_COUNT } from './queue/tts-batch-queue.constants';
 
 @ApiTags('Voice')
 @Controller('voice')
 export class VoiceController {
+  private readonly logger = new Logger(VoiceController.name);
+
   constructor(
     private readonly voiceService: VoiceService,
-    @Inject(STORY_REPOSITORY)
-    private readonly storyRepository: IStoryRepository,
-    public readonly uploadService: UploadService,
+    private readonly storyService: StoryService,
+    private readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly speechToTextService: SpeechToTextService,
     private readonly voiceQuotaService: VoiceQuotaService,
-    private readonly voiceQueueService: VoiceQueueService,
+    private readonly ttsBatchQueueService: TtsBatchQueueService,
   ) {}
 
   @Post('upload')
@@ -94,7 +81,20 @@ export class VoiceController {
   @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: 'Upload a custom voice (audio file)' })
   async uploadVoiceFile(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({
+          fileType:
+            /^(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/m4a|audio\/mp4|audio\/ogg|audio\/webm)$/,
+        })
+        .addMaxSizeValidator({
+          maxSize: 25 * 1024 * 1024, // 25MB
+        })
+        .build({
+          errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        }),
+    )
+    file: Express.Multer.File,
     @Body() dto: UploadVoiceDto,
     @Req() req: AuthenticatedRequest,
   ) {
@@ -156,7 +156,41 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Body() body: SetPreferredVoiceDto,
   ): Promise<VoiceResponseDto> {
-    return this.voiceService.setPreferredVoice(req.authUserData.userId, body);
+    const userId = req.authUserData.userId;
+    const access = await this.voiceQuotaService.getVoiceAccess(userId);
+
+    if (!access.isPremium && access.lockedVoiceId) {
+      // Canonicalize both sides to ElevenLabs IDs so VoiceType keys,
+      // UUIDs, and migrated names all compare correctly.
+      const lockedCanonical =
+        await this.voiceQuotaService.resolveCanonicalVoiceId(
+          access.lockedVoiceId,
+        );
+      const requestedCanonical =
+        await this.voiceQuotaService.resolveCanonicalVoiceId(body.voiceId);
+
+      if (lockedCanonical !== requestedCanonical) {
+        throw new ForbiddenException(
+          'Free users cannot change their voice after selecting one. Upgrade to premium to unlock all voices.',
+        );
+      }
+    }
+
+    // Lock voice for free users who haven't locked one yet.
+    // Must happen before setPreferredVoice to prevent out-of-sync state.
+    if (!access.isPremium && !access.lockedVoiceId) {
+      const locked = await this.voiceQuotaService.lockFreeUserVoice(
+        userId,
+        body.voiceId,
+      );
+      if (!locked) {
+        throw new ForbiddenException(
+          'Unable to lock voice selection. Please try again.',
+        );
+      }
+    }
+
+    return this.voiceService.setPreferredVoice(userId, body);
   }
 
   // --- Get preferred voice ---
@@ -166,7 +200,7 @@ export class VoiceController {
   @ApiOperation({ summary: 'Get preferred voice for the user' })
   async getPreferredVoice(
     @Req() req: AuthenticatedRequest,
-  ): Promise<VoiceResponseDto | null> {
+  ): Promise<VoiceResponseDto> {
     return this.voiceService.getPreferredVoice(req.authUserData.userId);
   }
 
@@ -188,13 +222,42 @@ export class VoiceController {
         isPremium: { type: 'boolean' },
         unlimited: { type: 'boolean' },
         defaultVoice: { type: 'string' },
-        selectedSecondVoice: { type: 'string', nullable: true },
         maxVoices: { type: 'number' },
+        lockedVoiceId: { type: 'string', nullable: true },
+        elevenLabsTrialStoryId: { type: 'string', nullable: true },
+        usedVoicesForStory: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'VoiceType keys already used on the given story (premium only)',
+        },
+        maxVoicesPerStory: {
+          type: 'number',
+          description: 'Max distinct voices allowed per story for premium',
+        },
       },
     },
   })
-  async getVoiceAccess(@Req() req: AuthenticatedRequest) {
-    return this.voiceQuotaService.getVoiceAccess(req.authUserData.userId);
+  @ApiQuery({
+    name: 'storyId',
+    required: false,
+    type: String,
+    description: 'Optional story ID to retrieve per-story voice usage',
+  })
+  async getVoiceAccess(
+    @Req() req: AuthenticatedRequest,
+    @Query('storyId') storyId?: string,
+  ) {
+    if (storyId) {
+      const story = await this.storyService.getStoryById(storyId);
+      if (!story) {
+        throw new NotFoundException(`Story ${storyId} not found`);
+      }
+    }
+    return this.voiceQuotaService.getVoiceAccess(
+      req.authUserData.userId,
+      storyId,
+    );
   }
 
   // --- List available ElevenLabs voices ---
@@ -207,60 +270,59 @@ export class VoiceController {
   }
 
   // --- Text to Speech ---
-  @Get('story/audio/:id')
+
+  @Post('story/audio/batch')
   @UseGuards(AuthSessionGuard)
+  @Throttle({ short: { limit: 3, ttl: 60_000 } })
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Generate audio for stored text using ID' })
-  @ApiParam({ name: 'id', type: String })
-  @ApiQuery({
-    name: 'voiceId',
-    required: false,
-    type: String,
-    description: 'VoiceType enum value or Voice UUID',
+  @ApiOperation({ summary: 'Generate audio for all paragraphs of a story' })
+  @ApiResponse({
+    status: 200,
+    description: 'Batch audio generated successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        paragraphs: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              index: { type: 'number' },
+              text: { type: 'string' },
+              audioUrl: { type: 'string', nullable: true },
+            },
+          },
+        },
+        totalParagraphs: { type: 'number' },
+        wasTruncated: { type: 'boolean' },
+        voiceId: { type: 'string' },
+        usedProvider: {
+          type: 'string',
+          enum: ['elevenlabs', 'deepgram', 'edgetts', 'none'],
+          description:
+            'The TTS provider that generated the audio. "none" when text is empty.',
+        },
+        preferredProvider: {
+          type: 'string',
+          enum: ['elevenlabs', 'deepgram', 'edgetts'],
+          nullable: true,
+          description:
+            'The originally preferred provider (present only when a fallback occurred)',
+        },
+        providerStatus: {
+          type: 'string',
+          enum: ['degraded'],
+          nullable: true,
+          description: 'Present when a TTS provider circuit breaker is open',
+        },
+        statusCode: { type: 'number' },
+      },
+    },
   })
-  @ApiResponse({ status: 200, description: 'Audio generated successfully' })
-  async getTextToSpeechById(
-    @Param('id') id: string,
-    @Req() req: AuthenticatedRequest,
-    @Query('voiceId') voiceId?: VoiceType | string,
-  ) {
-    const resolvedVoice = voiceId ?? DEFAULT_VOICE;
-    const canUse = await this.voiceQuotaService.canUseVoice(
-      req.authUserData.userId,
-      resolvedVoice,
-    );
-    if (!canUse) {
-      throw new ForbiddenException(
-        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
-      );
-    }
-
-    const story = await this.storyRepository.findStoryById(id);
-    if (!story) throw new NotFoundException('Story not found');
-
-    const audioUrl = await this.textToSpeechService.synthesizeStory(
-      story.id,
-      story.textContent || story.description || '',
-      resolvedVoice,
-      req.authUserData.userId,
-    );
-
-    return {
-      message: 'Audio generated successfully',
-      audioUrl,
-      voiceId: resolvedVoice,
-      statusCode: 200,
-    };
-  }
-
-  @Post('story/audio')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Convert raw text to speech and return audio URL' })
-  @ApiResponse({ status: 200, description: 'Audio generated successfully' })
-  @ApiBody({ type: StoryContentAudioDto })
-  async textToSpeech(
-    @Body() dto: StoryContentAudioDto,
+  @ApiBody({ type: BatchStoryAudioDto })
+  async batchTextToSpeech(
+    @Body() dto: BatchStoryAudioDto,
     @Req() req: AuthenticatedRequest,
   ) {
     const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
@@ -274,19 +336,94 @@ export class VoiceController {
       );
     }
 
-    const audioUrl = await this.textToSpeechService.synthesizeStory(
-      randomUUID().toString(),
-      dto.content,
+    const story = await this.storyService.getStoryById(dto.storyId);
+    if (!story || !story.textContent) {
+      throw new NotFoundException('Story not found or has no content.');
+    }
+
+    const {
+      results: paragraphs,
+      totalParagraphs,
+      wasTruncated,
+      usedProvider,
+      preferredProvider,
+      providerStatus,
+      remainingUncached,
+      batchProvider,
+      isPremium,
+    } = await this.textToSpeechService.batchTextToSpeechEager(
+      dto.storyId,
+      story.textContent,
       resolvedVoice,
+      req.authUserData.userId,
+      EAGER_PARAGRAPH_COUNT,
+    );
+
+    // If there are remaining uncached paragraphs, queue them for background generation
+    let batchJobId: string | undefined;
+    let pendingParagraphs: number | undefined;
+
+    if (remainingUncached.length > 0) {
+      try {
+        batchJobId = await this.ttsBatchQueueService.queueBatch({
+          storyId: dto.storyId,
+          voiceId: resolvedVoice,
+          userId: req.authUserData.userId,
+          isPremium,
+          provider: batchProvider,
+          paragraphs: remainingUncached,
+          totalParagraphs,
+        });
+        pendingParagraphs = remainingUncached.length;
+      } catch (error) {
+        this.logger.error(
+          `Failed to queue TTS batch for story ${dto.storyId}: ${(error as Error).message}`,
+        );
+        // Return eager results without batchJobId — client gets usable audio instead of 500
+      }
+    }
+
+    return {
+      message: 'Batch audio generated successfully',
+      paragraphs,
+      totalParagraphs,
+      wasTruncated,
+      voiceId: resolvedVoice,
+      usedProvider,
+      ...(preferredProvider ? { preferredProvider } : {}),
+      ...(providerStatus ? { providerStatus } : {}),
+      ...(batchJobId ? { batchJobId } : {}),
+      ...(pendingParagraphs !== undefined ? { pendingParagraphs } : {}),
+      statusCode: 200,
+    };
+  }
+
+  @Get('story/audio/batch/status/:batchJobId')
+  @UseGuards(AuthSessionGuard)
+  @Throttle({ short: { limit: 30, ttl: 60_000 } })
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Poll status of background TTS batch generation' })
+  @ApiResponse({
+    status: 200,
+    description: 'Batch status with completed paragraphs',
+  })
+  @ApiResponse({ status: 404, description: 'Batch not found or expired' })
+  async getBatchStatus(
+    @Param('batchJobId', ParseUUIDPipe) batchJobId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const status = await this.ttsBatchQueueService.getBatchStatus(
+      batchJobId,
       req.authUserData.userId,
     );
 
-    return {
-      message: 'Audio generated successfully',
-      audioUrl,
-      voiceId: resolvedVoice,
-      statusCode: 200,
-    };
+    if (!status) {
+      throw new NotFoundException(
+        'Batch not found or expired. Completed paragraphs remain usable.',
+      );
+    }
+
+    return status;
   }
 
   // --- Speech to Text ---
@@ -310,7 +447,7 @@ export class VoiceController {
       new ParseFilePipeBuilder()
         .addFileTypeValidator({
           fileType:
-            /(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/ogg|audio\/webm)/,
+            /^(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/m4a|audio\/mp4|audio\/ogg|audio\/webm)$/,
         })
         .addMaxSizeValidator({
           maxSize: 50 * 1024 * 1024, // 50MB
@@ -326,88 +463,5 @@ export class VoiceController {
       file.mimetype,
     );
     return { text };
-  }
-
-  // === ASYNC VOICE SYNTHESIS ENDPOINTS ===
-
-  @Post('synthesize/async')
-  @UseGuards(AuthSessionGuard)
-  @ApiQueueTextSynthesis()
-  async queueTextSynthesis(
-    @Req() req: AuthenticatedRequest,
-    @Body() dto: StoryContentAudioDto,
-  ) {
-    const userId = req.authUserData.userId;
-
-    return this.voiceQueueService.queueTextSynthesis({
-      userId,
-      text: dto.content,
-      voiceType: dto.voiceId as VoiceType | undefined,
-      priority: VoicePriority.NORMAL,
-      metadata: {
-        clientIp: req.ip,
-        userAgent: req.headers['user-agent'],
-      },
-    });
-  }
-
-  @Post('synthesize/story/async')
-  @UseGuards(AuthSessionGuard)
-  @ApiQueueStorySynthesis()
-  async queueStorySynthesis(
-    @Req() req: AuthenticatedRequest,
-    @Body() dto: AsyncStorySynthesisDto,
-  ) {
-    const userId = req.authUserData.userId;
-
-    return this.voiceQueueService.queueStorySynthesis({
-      userId,
-      storyId: dto.storyId,
-      voiceType: dto.voiceId as VoiceType | undefined,
-      updateStory: dto.updateStory,
-      priority: VoicePriority.NORMAL,
-      metadata: {
-        clientIp: req.ip,
-        userAgent: req.headers['user-agent'],
-      },
-    });
-  }
-
-  @Get('synthesize/status/:jobId')
-  @UseGuards(AuthSessionGuard)
-  @ApiGetJobStatus()
-  async getJobStatus(@Param('jobId') jobId: string) {
-    return this.voiceQueueService.getJobStatus(jobId);
-  }
-
-  @Get('synthesize/result/:jobId')
-  @UseGuards(AuthSessionGuard)
-  @ApiGetJobResult()
-  async getJobResult(@Param('jobId') jobId: string) {
-    return this.voiceQueueService.getJobResult(jobId);
-  }
-
-  @Delete('synthesize/job/:jobId')
-  @UseGuards(AuthSessionGuard)
-  @ApiCancelJob()
-  async cancelJob(
-    @Req() req: AuthenticatedRequest,
-    @Param('jobId') jobId: string,
-  ) {
-    return this.voiceQueueService.cancelJob(jobId, req.authUserData.userId);
-  }
-
-  @Get('synthesize/pending')
-  @UseGuards(AuthSessionGuard)
-  @ApiGetUserPendingJobs()
-  async getUserPendingJobs(@Req() req: AuthenticatedRequest) {
-    return this.voiceQueueService.getUserPendingJobs(req.authUserData.userId);
-  }
-
-  @Get('synthesize/queue-stats')
-  @UseGuards(AuthSessionGuard)
-  @ApiGetQueueStats()
-  async getQueueStats() {
-    return this.voiceQueueService.getQueueStats();
   }
 }

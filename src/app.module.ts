@@ -38,6 +38,7 @@ import {
   ThrottlerConfig,
 } from './shared/config/throttle.config';
 import { AdminModule } from './admin/admin.module';
+import { CouponModule } from './coupon/coupon.module';
 import { HealthModule } from './health/health.module';
 import { BullBoardConfigModule } from './admin/bull-board.module';
 
@@ -98,6 +99,7 @@ import { BullBoardConfigModule } from './admin/bull-board.module';
       useFactory: (config: ConfigService<EnvConfig, true>) => ({
         connection: {
           url: config.get('REDIS_URL'),
+          maxRetriesPerRequest: null,
         },
         defaultJobOptions: {
           removeOnComplete: { age: 24 * 3600, count: 1000 },
@@ -107,13 +109,9 @@ import { BullBoardConfigModule } from './admin/bull-board.module';
     }),
     // Event-driven architecture for decoupled, scalable services
     EventEmitterModule.forRoot({
-      // Use wildcards for flexible event matching
       wildcard: true,
-      // Delimiter for namespaced events (e.g., 'user.registered')
       delimiter: '.',
-      // Enable detailed event tracking in development only
       verboseMemoryLeak: process.env.NODE_ENV === 'development',
-      // Max listeners (default is 10, increase for complex event flows)
       maxListeners: 20,
       ignoreErrors: false,
     }),
@@ -140,6 +138,7 @@ import { BullBoardConfigModule } from './admin/bull-board.module';
     AchievementProgressModule,
     ParentFavoriteModule,
     AdminModule,
+    CouponModule,
     HealthModule,
     BullBoardConfigModule,
   ],

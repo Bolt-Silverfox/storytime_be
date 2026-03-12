@@ -1,14 +1,11 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { DateFormatUtil } from '@/shared/utils/date-format.util';
-import { STORY_REPOSITORY, IStoryRepository } from './repositories';
+import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionService } from '../subscription/subscription.service';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
-import { AppEvents, QuotaExhaustedEvent, QuotaTypes } from '@/shared/events';
 
 export interface StoryAccessResult {
   canAccess: boolean;
-  reason?: 'already_read' | 'limit_reached' | 'premium';
+  reason?: 'already_read' | 'kid_created' | 'limit_reached' | 'premium';
   remaining?: number;
   totalAllowed?: number;
 }
@@ -28,10 +25,8 @@ export class StoryQuotaService {
   private readonly logger = new Logger(StoryQuotaService.name);
 
   constructor(
-    @Inject(STORY_REPOSITORY)
-    private readonly storyRepository: IStoryRepository,
+    private readonly prisma: PrismaService,
     private readonly subscriptionService: SubscriptionService,
-    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -42,21 +37,35 @@ export class StoryQuotaService {
     storyId: string,
   ): Promise<StoryAccessResult> {
     // 1. Check if premium user
-    const isPremium = await this.isPremiumUser(userId);
+    const isPremium = await this.subscriptionService.isPremiumUser(userId);
     if (isPremium) {
       return { canAccess: true, reason: 'premium' };
     }
 
-    // 2. Check if story was already read (re-reading is always free)
-    const existingProgress = await this.storyRepository.findUserStoryProgress(
-      userId,
-      storyId,
-    );
+    // 2. Check if story was already read (re-reading is always free).
+    // Deliberately does NOT filter isDeleted — soft-deleted progress records
+    // still count as "already read" so users can re-read after library removal.
+    const existingProgress = await this.prisma.userStoryProgress.findUnique({
+      where: { userId_storyId: { userId, storyId } },
+    });
     if (existingProgress) {
       return { canAccess: true, reason: 'already_read' };
     }
 
-    // 3. Get/create usage record with bonus calculation
+    // 3. Check if one of the user's kids created this story (always accessible)
+    const createdByKid = await this.prisma.story.findFirst({
+      where: {
+        id: storyId,
+        isDeleted: false,
+        creatorKid: { parentId: userId, isDeleted: false },
+      },
+      select: { id: true },
+    });
+    if (createdByKid) {
+      return { canAccess: true, reason: 'kid_created' };
+    }
+
+    // 4. Get/create usage record with bonus calculation
     const usage = await this.getOrCreateUsageWithBonus(userId);
     const totalAllowed =
       FREE_TIER_LIMITS.STORIES.BASE_LIMIT + usage.bonusStories;
@@ -66,16 +75,6 @@ export class StoryQuotaService {
       this.logger.log(
         `User ${userId} reached story limit (${usage.uniqueStoriesRead}/${totalAllowed})`,
       );
-
-      // Emit quota exhausted event
-      this.eventEmitter.emit(AppEvents.QUOTA_EXHAUSTED, {
-        userId,
-        quotaType: QuotaTypes.STORY,
-        used: usage.uniqueStoriesRead,
-        limit: totalAllowed,
-        exhaustedAt: new Date(),
-      } satisfies QuotaExhaustedEvent);
-
       return {
         canAccess: false,
         reason: 'limit_reached',
@@ -92,10 +91,10 @@ export class StoryQuotaService {
    * Should be called after user successfully accesses a story for the first time
    */
   async recordNewStoryAccess(userId: string, storyId: string): Promise<void> {
-    const currentMonth = DateFormatUtil.getCurrentMonthString();
+    const currentMonth = this.getCurrentMonth();
 
     // Use interactive transaction to handle race condition atomically
-    await this.storyRepository.executeTransaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       // Check inside transaction to prevent race conditions
       const existing = await tx.userStoryProgress.findUnique({
         where: { userId_storyId: { userId, storyId } },
@@ -138,7 +137,7 @@ export class StoryQuotaService {
    * Get user's story quota status
    */
   async getQuotaStatus(userId: string): Promise<StoryQuotaStatus> {
-    const isPremium = await this.isPremiumUser(userId);
+    const isPremium = await this.subscriptionService.isPremiumUser(userId);
     if (isPremium) {
       return { isPremium: true, unlimited: true };
     }
@@ -164,10 +163,10 @@ export class StoryQuotaService {
    */
   private async getOrCreateUsageWithBonus(userId: string) {
     const now = new Date();
-    const currentMonth = DateFormatUtil.getCurrentMonthString();
+    const currentMonth = this.getCurrentMonth();
     const baseLimit = FREE_TIER_LIMITS.STORIES.BASE_LIMIT;
 
-    return await this.storyRepository.executeTransaction(async (tx) => {
+    return await this.prisma.$transaction(async (tx) => {
       let usage = await tx.userUsage.findUnique({ where: { userId } });
 
       if (!usage) {
@@ -242,10 +241,8 @@ export class StoryQuotaService {
     return weeksPassed * FREE_TIER_LIMITS.STORIES.WEEKLY_BONUS;
   }
 
-  /**
-   * Check if user has an active premium subscription (uses cached SubscriptionService)
-   */
-  private async isPremiumUser(userId: string): Promise<boolean> {
-    return this.subscriptionService.isPremiumUser(userId);
+  private getCurrentMonth(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }
 }

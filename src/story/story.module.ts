@@ -3,8 +3,8 @@ import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '@/auth/auth.module';
-import { UploadModule } from '../upload/upload.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { UploadModule } from '../upload/upload.module';
 import { NotificationModule } from '../notification/notification.module';
 import { GeminiService } from './gemini.service';
 import { StoryController } from './story.controller';
@@ -52,6 +52,7 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
     HttpModule,
     ScheduleModule.forRoot(),
     AuthModule,
+    SubscriptionModule,
     UploadModule,
     SubscriptionModule,
     NotificationModule,

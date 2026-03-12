@@ -30,7 +30,14 @@ describe('HelpSupportService', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: jest.fn().mockReturnValue('team@storytime.app'),
+            get: jest.fn().mockImplementation((key: string) => {
+              switch (key) {
+                case 'DEFAULT_SENDER_EMAIL':
+                  return 'team@storytime.app';
+                default:
+                  return undefined;
+              }
+            }),
           },
         },
       ],

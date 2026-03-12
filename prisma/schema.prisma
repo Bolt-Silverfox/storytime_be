@@ -73,6 +73,7 @@ model User {
   id                      String                   @id @default(uuid())
   email                   String                   @unique
   passwordHash            String
+  hasLocalPassword        Boolean                  @default(false)
   name                    String?
   avatarId                String?
   avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
@@ -90,6 +91,9 @@ model User {
   // SOFT DELETE FIELDS
   isDeleted               Boolean                  @default(false)
   deletedAt               DateTime?
+  // SUSPENSION FIELDS
+  isSuspended             Boolean                  @default(false)
+  suspendedAt             DateTime?
   profile                 Profile?
   auth                    Session[]
   Token                   Token[]
@@ -123,6 +127,9 @@ model User {
   restrictedStories     RestrictedStory[]
   // NEW: Learning expectations (marketing data)
   learningExpectations  UserLearningExpectation[]
+  couponRedemptions     CouponRedemption[]
+  // Coupon-granted premium access expiry date
+  premiumAccessUntil    DateTime?
 
   @@index([isDeleted])
   @@index([email, isDeleted])
@@ -333,7 +340,7 @@ model Story {
   paths                 StoryPath[]
   categories            Category[]             @relation("StoryCategories")
   themes                Theme[]                @relation("StoryThemes")
-  storyAudioCaches      StoryAudioCache[]
+  paragraphAudioCaches  ParagraphAudioCache[]
   questions             StoryQuestion[]
   seasons               Season[]               @relation("StorySeasons")
   // Add this field to track who created it (for AI generation)
@@ -346,6 +353,7 @@ model Story {
   // ADDED: Restricted stories
   restrictedStories     RestrictedStory[]
   paragraphAudioCaches  ParagraphAudioCache[]
+  elevenLabsTrialUsers  UserUsage[] @relation("ElevenLabsTrial")
 
   @@index([isDeleted])
   @@index([createdAt])
@@ -354,6 +362,7 @@ model Story {
   @@index([aiGenerated, isDeleted])
   @@index([recommended, isDeleted])
   @@index([ageMin, ageMax])
+  @@index([isDeleted, createdAt(sort: Desc)])
   @@map("stories")
 }
 
@@ -409,6 +418,7 @@ model Favorite {
   @@index([storyId])
   @@index([kidId, storyId])
   @@index([isDeleted])
+  @@index([kidId, isDeleted, createdAt(sort: Desc)])
   @@map("favorites")
 }
 
@@ -448,6 +458,7 @@ model StoryProgress {
   @@index([storyId])
   @@index([isDeleted])
   @@index([kidId, completed])
+  @@index([kidId, completed, isDeleted, lastAccessed(sort: Desc)])
   @@map("story_progress")
 }
 
@@ -465,9 +476,9 @@ model UserStoryProgress {
   deletedAt      DateTime?
 
   @@unique([userId, storyId])
-  @@index([userId])
   @@index([storyId])
   @@index([isDeleted])
+  @@index([userId, completed, isDeleted, lastAccessed(sort: Desc)])
   @@map("user_story_progress")
 }
 
@@ -475,17 +486,16 @@ model UserStoryProgress {
 // PAYMENT MODELS (RESTORED)
 // -------------------------
 model Subscription {
-  id        String    @id @default(uuid())
-  userId    String    @unique
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan      String
-  status    String    @default("active")
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan          String
+  status        String    @default("active")
   startedAt     DateTime  @default(now())
   endsAt        DateTime?
-  // Store platform-specific data for subscription management
-  platform      String?   // "google" or "apple"
-  productId     String?   // e.g. "com.storytime.monthly"
-  purchaseToken String?   // token from the platform for cancellation/status
+  platform      String? // "google" or "apple"
+  productId     String? // e.g. "com.storytime.monthly"
+  purchaseToken String? // token from the platform
   // SOFT DELETE FIELDS
   isDeleted     Boolean   @default(false)
   deletedAt     DateTime?
@@ -602,6 +612,7 @@ model Voice {
   @@index([name])
   @@index([type, isDeleted])
   @@index([isDeleted])
+  @@index([elevenLabsVoiceId])
   @@map("voices")
 }
 
@@ -781,24 +792,6 @@ model Theme {
   @@index([isDeleted])
 }
 
-model StoryAudioCache {
-  id        String    @id @default(uuid())
-  storyId   String
-  voiceType String
-  story     Story     @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  audioUrl  String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  // SOFT DELETE FIELDS
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
-  @@unique([storyId, audioUrl])
-  @@unique([storyId, voiceType])
-  @@index([storyId])
-  @@index([isDeleted])
-  @@map("story_audio_cache")
-}
 
 // -------------------------
 // PARAGRAPH AUDIO CACHE
@@ -1044,8 +1037,8 @@ model DownloadedStory {
   downloadedAt DateTime @default(now())
 
   @@unique([kidId, storyId]) // Prevent duplicate downloads
-  @@index([kidId])
   @@index([storyId])
+  @@index([kidId, downloadedAt(sort: Desc)])
   @@map("downloaded_stories")
 }
 
@@ -1117,9 +1110,14 @@ model UserUsage {
   selectedSecondVoiceId String?   // The one custom voice free users can select (beyond default)
   selectedSecondVoice   Voice?    @relation("SecondVoiceSelection", fields: [selectedSecondVoiceId], references: [id], onDelete: SetNull)
 
+  // Free tier ElevenLabs trial — the one story that gets ElevenLabs audio
+  elevenLabsTrialStoryId String?
+  elevenLabsTrialStory   Story?  @relation("ElevenLabsTrial", fields: [elevenLabsTrialStoryId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([elevenLabsTrialStoryId])
   @@map("user_usages")
 }
 
@@ -1150,4 +1148,65 @@ model DeviceToken {
   @@index([userId, isActive])
   @@index([isDeleted])
   @@map("device_tokens")
+}
+
+// -------------------------
+// PARAGRAPH AUDIO CACHE
+// -------------------------
+model ParagraphAudioCache {
+  id        String   @id @default(uuid())
+  storyId   String
+  textHash  String
+  voiceId   String
+  provider  String   @default("unknown")
+  audioUrl  String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storyId, textHash, voiceId, provider])
+  @@index([storyId])
+  @@map("paragraph_audio_cache")
+}
+
+// -------------------------
+// COUPON SYSTEM
+// -------------------------
+enum CouponType {
+  PERCENTAGE
+  FLAT
+  FREE_TRIAL_DAYS
+}
+
+model Coupon {
+  id          String            @id @default(uuid())
+  code        String            @unique
+  type        CouponType
+  value       Float             // percentage (0-100), flat amount, or trial days
+  maxUses     Int?              // null = unlimited
+  usedCount   Int               @default(0)
+  validFrom   DateTime
+  validUntil  DateTime?         // null = no expiry
+  plan        String?           // null = any plan, "Monthly" or "Yearly"
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  redemptions CouponRedemption[]
+
+  @@index([isActive])
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id        String   @id @default(uuid())
+  couponId  String
+  userId    String
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([couponId, userId])
+  @@index([couponId])
+  @@index([userId])
+  @@map("coupon_redemptions")
 }
