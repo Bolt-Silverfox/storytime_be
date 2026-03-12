@@ -7,7 +7,7 @@ import {
 } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
-import { createClient, RedisClientType } from 'redis';
+import Redis from 'ioredis';
 
 @Injectable()
 export class RedisHealthIndicator extends HealthIndicator {
@@ -17,12 +17,17 @@ export class RedisHealthIndicator extends HealthIndicator {
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     const startTime = Date.now();
-    let client: RedisClientType | null = null;
+    let client: Redis | null = null;
 
     try {
       const redisUrl = this.configService.get('REDIS_URL');
 
-      client = createClient({ url: redisUrl });
+      client = new Redis(redisUrl as string, {
+        retryStrategy: () => null, // No reconnect attempts for health probe
+        enableOfflineQueue: false,
+        lazyConnect: true,
+      });
+
       await client.connect();
 
       // Test connection with PING
@@ -32,8 +37,6 @@ export class RedisHealthIndicator extends HealthIndicator {
       const info = await client.info('memory');
       const usedMemoryMatch = info.match(/used_memory_human:(\S+)/);
       const usedMemory = usedMemoryMatch ? usedMemoryMatch[1] : 'unknown';
-
-      await client.disconnect();
 
       const duration = Date.now() - startTime;
 
@@ -46,14 +49,6 @@ export class RedisHealthIndicator extends HealthIndicator {
       const duration = Date.now() - startTime;
       const errorMessage = ErrorHandler.extractMessage(error);
 
-      if (client) {
-        try {
-          await client.disconnect();
-        } catch {
-          // Ignore disconnect errors
-        }
-      }
-
       throw new HealthCheckError(
         'Redis health check failed',
         this.getStatus(key, false, {
@@ -61,6 +56,14 @@ export class RedisHealthIndicator extends HealthIndicator {
           error: errorMessage,
         }),
       );
+    } finally {
+      if (client) {
+        try {
+          client.disconnect();
+        } catch {
+          // Ignore disconnect errors
+        }
+      }
     }
   }
 }

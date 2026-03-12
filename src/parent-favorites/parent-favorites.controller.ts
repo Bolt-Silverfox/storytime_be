@@ -88,26 +88,30 @@ export class ParentFavoritesController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get all parent favorites',
+    summary: 'Get parent favorites with cursor pagination',
     description:
-      'Retrieves all stories favorited by the authenticated parent. Supports optional cursor-based pagination for mobile infinite scroll.',
+      'Retrieves stories favorited by the authenticated parent, paginated via cursor.',
   })
-  @ApiQuery({
-    name: 'cursor',
-    required: false,
-    type: String,
-    description: 'Opaque cursor for cursor-based pagination',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Number of items per page (default 10, max 100)',
-  })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiOkResponse({
-    description: 'List of parent favorites retrieved successfully',
-    type: ParentFavoriteResponseDto,
-    isArray: true,
+    description: 'Paginated list of parent favorites',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/ParentFavoriteResponseDto' },
+        },
+        pagination: {
+          type: 'object',
+          properties: {
+            nextCursor: { type: 'string', nullable: true },
+            hasNextPage: { type: 'boolean' },
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 401,
@@ -121,20 +125,13 @@ export class ParentFavoritesController {
   ) {
     const userId = req.authUserData.userId;
     this.logger.log(`Fetching favorites for parent ${userId}`);
-
-    // If cursor or limit is present, use cursor-based pagination
-    if (cursor !== undefined || limit !== undefined) {
-      const { cursorId, limit: safeLimit } =
-        PaginationUtil.sanitizeCursorParams(cursor, limit);
-      return this.parentFavoritesService.getFavoritesPaginated(
-        userId,
-        cursorId,
-        safeLimit,
-      );
-    }
-
-    // Default: return all favorites (backward compatibility)
-    return this.parentFavoritesService.getFavorites(userId);
+    const { cursorId, limit: safeLimit } =
+      PaginationUtil.sanitizeOpaqueCursorParams(cursor, limit);
+    return this.parentFavoritesService.getFavoritesPaginated(
+      userId,
+      cursorId,
+      safeLimit,
+    );
   }
 
   @Delete(':storyId')

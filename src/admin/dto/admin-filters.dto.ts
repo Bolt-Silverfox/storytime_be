@@ -27,6 +27,9 @@ export class PaginationDto {
   @IsString()
   sortBy?: string = 'createdAt';
 
+  // Note: sortBy is validated at the service layer to allow computed
+  // fields like 'isPaidUser' that map to relation-based ordering.
+
   @IsOptional()
   @IsEnum(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
@@ -96,8 +99,15 @@ export class StoryFilterDto extends PaginationDto {
   recommended?: boolean;
 
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @Transform(({ value, obj }) => {
+    const v = value ?? obj?.isAiGenerated;
+    if (v === undefined || v === null) return undefined;
+    return v === 'true' || v === true;
+  })
   aiGenerated?: boolean;
+
+  @IsOptional()
+  isAiGenerated?: boolean;
 
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)

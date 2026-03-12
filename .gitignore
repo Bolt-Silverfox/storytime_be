@@ -62,3 +62,5 @@ pnpm-workspace.yaml
 .vscode
 CLAUDE.md
 .claude
+
+helper-scripts

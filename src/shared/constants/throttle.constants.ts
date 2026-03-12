@@ -20,40 +20,6 @@ export const THROTTLE_LIMITS = {
       TTL: 3600000, // 1 hour
       LIMIT: 3,
     },
-    REFRESH: {
-      TTL: 60000, // 1 minute
-      LIMIT: 10, // Allow reasonable token refreshes
-    },
-    PASSWORD_RESET_REQUEST: {
-      TTL: 3600000, // 1 hour
-      LIMIT: 3, // Prevent email bombing
-    },
-    PASSWORD_RESET: {
-      TTL: 3600000, // 1 hour
-      LIMIT: 5, // Allow a few attempts with different tokens
-    },
-    EMAIL_VERIFICATION: {
-      TTL: 300000, // 5 minutes
-      LIMIT: 3, // Prevent verification email spam
-    },
-    OAUTH: {
-      TTL: 60000, // 1 minute
-      LIMIT: 10, // Social login attempts
-    },
-  },
-  PAYMENT: {
-    VERIFY_PURCHASE: {
-      TTL: 60000, // 1 minute
-      LIMIT: 5, // Purchase verification
-    },
-    CANCEL: {
-      TTL: 3600000, // 1 hour
-      LIMIT: 3, // Subscription cancellation
-    },
-    STATUS: {
-      TTL: 10000, // 10 seconds
-      LIMIT: 10, // Status checks
-    },
   },
   GENERATION: {
     FREE: {
@@ -65,11 +31,9 @@ export const THROTTLE_LIMITS = {
       LIMIT: 50,
     },
   },
-  DEVICE: {
-    REGISTER: {
-      TTL: 60000, // 1 minute
-      LIMIT: 10,
-    },
+  NOTIFICATION_PREFERENCES: {
+    TTL: 60000, // 1 minute
+    LIMIT: 5,
   },
   PREMIUM_MULTIPLIER: 5,
 };

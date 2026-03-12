@@ -1,131 +1,75 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StoryController } from './story.controller';
 import { StoryService } from './story.service';
-import { StoryGenerationService } from './story-generation.service';
-import { StoryProgressService } from './story-progress.service';
-import { StoryRecommendationService } from './story-recommendation.service';
-import { DailyChallengeService } from './daily-challenge.service';
 import { StoryQuotaService } from './story-quota.service';
-import { StoryQueueService } from './queue';
-import { AuthSessionGuard } from '../shared/guards/auth.guard';
-import { SubscriptionThrottleGuard } from '../shared/guards/subscription-throttle.guard';
-import { StoryAccessGuard } from '../shared/guards/story-access.guard';
+import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
+import { UpdateStoryDto } from './dto/story.dto';
 
-// Mock the Services so we test the Controller in isolation
+// Mock the Service so we test the Controller in isolation
+const mockStoryQuotaService = {
+  recordNewStoryAccess: jest.fn(),
+};
+
 const mockStoryService = {
-  getStories: jest.fn(),
-  getCategories: jest.fn(),
-  getThemes: jest.fn(),
-  getSeasons: jest.fn(),
-  createStory: jest.fn(),
-  updateStory: jest.fn(),
-  deleteStory: jest.fn(),
-  undoDeleteStory: jest.fn(),
-  addImage: jest.fn(),
-  addBranch: jest.fn(),
-  addFavorite: jest.fn(),
-  removeFavorite: jest.fn(),
-  getFavorites: jest.fn(),
-  getStoryById: jest.fn(),
+  generateStoryForKid: jest.fn(),
   getCreatedStories: jest.fn(),
   getDownloads: jest.fn(),
   addDownload: jest.fn(),
   removeDownload: jest.fn(),
   removeFromLibrary: jest.fn(),
-  startStoryPath: jest.fn(),
-  updateStoryPath: jest.fn(),
-  getStoryPathsForKid: jest.fn(),
-  getStoryPathById: jest.fn(),
-};
-
-const mockStoryGenerationService = {
-  generateStoryForKid: jest.fn(),
-  generateStoryWithAI: jest.fn(),
-};
-
-const mockStoryProgressService = {
-  setProgress: jest.fn(),
-  getProgress: jest.fn(),
-  getContinueReading: jest.fn(),
-  getCompletedStories: jest.fn(),
-};
-
-const mockStoryRecommendationService = {
   getTopPicksFromParents: jest.fn(),
-  getTopPicksFromUs: jest.fn(),
-  recommendStoryToKid: jest.fn(),
-  getKidRecommendations: jest.fn(),
-  deleteRecommendation: jest.fn(),
-  getRecommendationStats: jest.fn(),
-  restrictStory: jest.fn(),
-  unrestrictStory: jest.fn(),
-  getRestrictedStories: jest.fn(),
-  getHomePageStories: jest.fn(),
+  updateStory: jest.fn(),
 };
 
-const mockDailyChallengeService = {
-  setDailyChallenge: jest.fn(),
-  getDailyChallenge: jest.fn(),
-  assignDailyChallenge: jest.fn(),
-  completeDailyChallenge: jest.fn(),
-  getAssignmentsForKid: jest.fn(),
-  getAssignmentById: jest.fn(),
-  assignDailyChallengeToAllKids: jest.fn(),
-  getTodaysDailyChallengeAssignment: jest.fn(),
-  getWeeklyDailyChallengeAssignments: jest.fn(),
+const mockPrismaService = {
+  kid: {
+    findFirst: jest
+      .fn()
+      .mockResolvedValue({ id: 'kid-123', parentId: 'user-1' }),
+  },
+  story: {
+    findFirst: jest.fn(),
+  },
 };
 
-const mockStoryQuotaService = {
-  getQuotaStatus: jest.fn(),
-  recordNewStoryAccess: jest.fn(),
-};
-
-const mockStoryQueueService = {
-  queueStoryGeneration: jest.fn(),
-  queueStoryForKid: jest.fn(),
-  getJobStatus: jest.fn(),
-  getJobResult: jest.fn(),
-  cancelJob: jest.fn(),
-  getUserPendingJobs: jest.fn(),
-  getQueueStats: jest.fn(),
-};
+const mockReq = {
+  authUserData: { userId: 'user-1' },
+} as unknown as AuthenticatedRequest;
 
 describe('StoryController', () => {
   let controller: StoryController;
+  let service: typeof mockStoryService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [StoryController],
       providers: [
         { provide: StoryService, useValue: mockStoryService },
-        {
-          provide: StoryGenerationService,
-          useValue: mockStoryGenerationService,
-        },
-        { provide: StoryProgressService, useValue: mockStoryProgressService },
-        {
-          provide: StoryRecommendationService,
-          useValue: mockStoryRecommendationService,
-        },
-        { provide: DailyChallengeService, useValue: mockDailyChallengeService },
         { provide: StoryQuotaService, useValue: mockStoryQuotaService },
-        { provide: StoryQueueService, useValue: mockStoryQueueService },
+        { provide: PrismaService, useValue: mockPrismaService },
         {
           provide: 'CACHE_MANAGER',
           useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() },
         },
       ],
     })
-      .overrideGuard(AuthSessionGuard)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      .overrideGuard(require('../shared/guards/auth.guard').AuthSessionGuard) // Bypass Auth Guard
       .useValue({ canActivate: () => true })
       .overrideGuard(SubscriptionThrottleGuard)
-      .useValue({ canActivate: () => true })
-      .overrideGuard(StoryAccessGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
     controller = module.get<StoryController>(StoryController);
+    service = module.get(StoryService);
     jest.clearAllMocks();
+    mockPrismaService.kid.findFirst.mockResolvedValue({
+      id: 'kid-123',
+      parentId: 'user-1',
+    });
   });
 
   // --- 1. TEST THE GENERATION ENDPOINT ---
@@ -135,21 +79,25 @@ describe('StoryController', () => {
       const theme = 'Space';
       const category = 'Adventure';
 
-      await controller.generateStoryForKid(kidId, theme, category);
+      await controller.generateStoryForKid(mockReq, kidId, theme, category);
 
       // Verify the controller converts single strings to arrays for the service
-      expect(
-        mockStoryGenerationService.generateStoryForKid,
-      ).toHaveBeenCalledWith(kidId, ['Space'], ['Adventure']);
+      expect(service.generateStoryForKid).toHaveBeenCalledWith(
+        kidId,
+        ['Space'],
+        ['Adventure'],
+      );
     });
 
     it('should handle missing theme/category params', async () => {
       const kidId = 'kid-123';
-      await controller.generateStoryForKid(kidId);
+      await controller.generateStoryForKid(mockReq, kidId);
 
-      expect(
-        mockStoryGenerationService.generateStoryForKid,
-      ).toHaveBeenCalledWith(kidId, undefined, undefined);
+      expect(service.generateStoryForKid).toHaveBeenCalledWith(
+        kidId,
+        undefined,
+        undefined,
+      );
     });
   });
 
@@ -159,26 +107,51 @@ describe('StoryController', () => {
     const storyId = 'story-456';
 
     it('getCreated: should call getCreatedStories service method', async () => {
-      await controller.getCreated(kidId);
-      expect(mockStoryService.getCreatedStories).toHaveBeenCalledWith(kidId);
+      await controller.getCreated(mockReq, kidId);
+      expect(service.getCreatedStories).toHaveBeenCalledWith(
+        kidId,
+        undefined,
+        undefined,
+      );
     });
 
     it('getDownloads: should call getDownloads service method', async () => {
-      await controller.getDownloads(kidId);
-      expect(mockStoryService.getDownloads).toHaveBeenCalledWith(kidId);
+      await controller.getDownloads(mockReq, kidId);
+      expect(service.getDownloads).toHaveBeenCalledWith(
+        kidId,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('getCreated: should pass sanitized cursor and limit to service', async () => {
+      await controller.getCreated(mockReq, kidId, 'abc', '10');
+      expect(service.getCreatedStories).toHaveBeenCalledWith(kidId, 'abc', 10);
+    });
+
+    it('getCreated: should default limit when not provided with cursor', async () => {
+      await controller.getCreated(mockReq, kidId, 'abc');
+      expect(service.getCreatedStories).toHaveBeenCalledWith(kidId, 'abc', 20);
+    });
+
+    it('getDownloads: should pass sanitized cursor and limit to service', async () => {
+      await controller.getDownloads(mockReq, kidId, 'xyz', '5');
+      expect(service.getDownloads).toHaveBeenCalledWith(kidId, 'xyz', 5);
+    });
+
+    it('getDownloads: should default limit when not provided with cursor', async () => {
+      await controller.getDownloads(mockReq, kidId, 'xyz');
+      expect(service.getDownloads).toHaveBeenCalledWith(kidId, 'xyz', 20);
     });
 
     it('addDownload: should call addDownload service method', async () => {
-      await controller.addDownload(kidId, storyId);
-      expect(mockStoryService.addDownload).toHaveBeenCalledWith(kidId, storyId);
+      await controller.addDownload(mockReq, kidId, storyId);
+      expect(service.addDownload).toHaveBeenCalledWith(kidId, storyId);
     });
 
     it('removeFromLibrary: should call removeFromLibrary service method', async () => {
-      await controller.removeFromLibrary(kidId, storyId);
-      expect(mockStoryService.removeFromLibrary).toHaveBeenCalledWith(
-        kidId,
-        storyId,
-      );
+      await controller.removeFromLibrary(mockReq, kidId, storyId);
+      expect(service.removeFromLibrary).toHaveBeenCalledWith(kidId, storyId);
     });
   });
 
@@ -186,36 +159,62 @@ describe('StoryController', () => {
   describe('getTopPicksFromParents', () => {
     it('should call service with capped limit of 50 when exceeding max', async () => {
       await controller.getTopPicksFromParents(100);
-      expect(
-        mockStoryRecommendationService.getTopPicksFromParents,
-      ).toHaveBeenCalledWith(50);
+      expect(service.getTopPicksFromParents).toHaveBeenCalledWith(50);
     });
 
     it('should call service with provided limit when within bounds', async () => {
       await controller.getTopPicksFromParents(25);
-      expect(
-        mockStoryRecommendationService.getTopPicksFromParents,
-      ).toHaveBeenCalledWith(25);
+      expect(service.getTopPicksFromParents).toHaveBeenCalledWith(25);
     });
 
     it('should use default limit of 10', async () => {
       await controller.getTopPicksFromParents(10);
-      expect(
-        mockStoryRecommendationService.getTopPicksFromParents,
-      ).toHaveBeenCalledWith(10);
+      expect(service.getTopPicksFromParents).toHaveBeenCalledWith(10);
     });
 
     it('should return the result from the service', async () => {
       const mockResult = [
         { id: 'story-1', title: 'Top Story', recommendationCount: 5 },
       ];
-      mockStoryRecommendationService.getTopPicksFromParents.mockResolvedValue(
-        mockResult,
-      );
+      service.getTopPicksFromParents.mockResolvedValue(mockResult);
 
       const result = await controller.getTopPicksFromParents(10);
 
       expect(result).toEqual(mockResult);
+    });
+  });
+
+  // --- 4. IDOR PROTECTION ---
+  describe('IDOR protection', () => {
+    it('should throw NotFoundException when kid does not belong to parent', async () => {
+      mockPrismaService.kid.findFirst.mockResolvedValue(null);
+      await expect(controller.getCreated(mockReq, 'kid-999')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw NotFoundException when story does not exist', async () => {
+      mockPrismaService.story.findFirst.mockResolvedValue(null);
+      await expect(
+        controller.updateStory(
+          mockReq,
+          'non-existent-story',
+          {} as UpdateStoryDto,
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when story belongs to another user', async () => {
+      mockPrismaService.story.findFirst.mockResolvedValue({
+        id: 'story-123',
+        isDeleted: false,
+        creatorKidId: 'other-kid',
+        creatorKid: { parentId: 'other-user' },
+      });
+      await expect(
+        controller.updateStory(mockReq, 'story-123', {} as UpdateStoryDto),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockStoryService.updateStory).not.toHaveBeenCalled();
     });
   });
 });

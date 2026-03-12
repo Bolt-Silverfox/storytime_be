@@ -68,7 +68,12 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
   }
 
   async send(payload: NotificationPayload): Promise<NotificationResult> {
+    this.logger.log(
+      `send() called for user=${payload.userId.substring(0, 8)}, title="${payload.title}", isInitialized=${this.isInitialized}`,
+    );
+
     if (!this.isInitialized) {
+      this.logger.error('send() aborted: Firebase not initialized');
       return {
         success: false,
         error: 'Firebase not initialized. Check configuration.',
@@ -86,8 +91,14 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
         select: { id: true, token: true },
       });
 
+      this.logger.log(
+        `send() found ${deviceTokens.length} active token(s) for user=${payload.userId.substring(0, 8)}`,
+      );
+
       if (deviceTokens.length === 0) {
-        this.logger.debug(`No active device tokens for user ${payload.userId}`);
+        this.logger.warn(
+          `No active device tokens for user ${payload.userId.substring(0, 8)}`,
+        );
         return {
           success: true,
           messageId: 'no_tokens',
@@ -111,58 +122,45 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
           },
         },
         apns: {
-          headers: {
-            'apns-priority': '10',
-          },
           payload: {
             aps: {
               sound: 'default',
               badge: 1,
-              'content-available': 1,
             },
           },
         },
       };
 
       // Send to all devices
-      this.logger.debug(
-        `Sending push notification to ${tokens.length} devices for user ${payload.userId}`,
-      );
       const response = await admin.messaging().sendEachForMulticast(message);
 
       this.logger.log(
-        `Push notification sent to user ${payload.userId}: ${response.successCount}/${tokens.length} success, ${response.failureCount} failures`,
+        `Push notification sent: ${response.successCount} success, ${response.failureCount} failures`,
       );
 
-      // Handle failed tokens (mark as inactive)
-      await this.handleFailedTokens(deviceTokens, response.responses);
-
-      // Collect detailed error information from failed sends
-      const errorDetails: string[] = [];
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success && resp.error) {
-          errorDetails.push(
-            `token[${idx}]: ${resp.error.code} - ${resp.error.message}`,
-          );
-          this.logger.warn(
-            `FCM send failed for token[${idx}]: ${resp.error.code} - ${resp.error.message}`,
+      // Log individual token errors for debugging
+      response.responses.forEach((resp, i) => {
+        if (!resp.success) {
+          this.logger.error(
+            `send() token[${i}] (id=${deviceTokens[i].id}) failed: code=${resp.error?.code}, message=${resp.error?.message}`,
           );
         }
       });
+
+      // Handle failed tokens (mark as inactive)
+      await this.handleFailedTokens(deviceTokens, response.responses);
 
       return {
         success: response.successCount > 0,
         messageId: `batch_${response.successCount}/${tokens.length}`,
         error:
-          errorDetails.length > 0
-            ? `${response.failureCount} token(s) failed: ${errorDetails.join('; ')}`
+          response.failureCount > 0
+            ? `${response.failureCount} tokens failed`
             : undefined,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
-        `Failed to send push notification to user ${payload.userId}: ${errorMessage}`,
+        `Failed to send push notification: ${error instanceof Error ? error.message : 'Unknown error'}`,
         error instanceof Error ? error.stack : undefined,
       );
       return {
@@ -185,7 +183,12 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
     body: string,
     data?: Record<string, string>,
   ): Promise<NotificationResult> {
+    this.logger.log(
+      `sendToTokens() called with ${tokens.length} token(s), isInitialized=${this.isInitialized}`,
+    );
+
     if (!this.isInitialized) {
+      this.logger.error('sendToTokens() aborted: Firebase not initialized');
       return {
         success: false,
         error: 'Firebase not initialized',
@@ -208,30 +211,22 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
             aps: {
               sound: 'default',
               badge: 1,
-              'content-available': 1,
             },
           },
         },
       };
 
-      this.logger.debug(
-        `Sending direct push notification to ${tokens.length} tokens`,
-      );
       const response = await admin.messaging().sendEachForMulticast(message);
 
       this.logger.log(
-        `Direct push sent: ${response.successCount}/${tokens.length} success`,
+        `sendToTokens() FCM response: successCount=${response.successCount}, failureCount=${response.failureCount}`,
       );
 
-      // Collect error details for failed sends
-      const errorDetails: string[] = [];
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success && resp.error) {
-          errorDetails.push(
-            `token[${idx}]: ${resp.error.code} - ${resp.error.message}`,
-          );
-          this.logger.warn(
-            `Direct FCM send failed for token[${idx}]: ${resp.error.code} - ${resp.error.message}`,
+      // Log individual token errors for debugging
+      response.responses.forEach((resp, i) => {
+        if (!resp.success) {
+          this.logger.error(
+            `sendToTokens() token[${i}] failed: code=${resp.error?.code}, message=${resp.error?.message}`,
           );
         }
       });
@@ -240,15 +235,16 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
         success: response.successCount > 0,
         messageId: `direct_${response.successCount}/${tokens.length}`,
         error:
-          errorDetails.length > 0
-            ? `${response.failureCount} token(s) failed: ${errorDetails.join('; ')}`
+          response.failureCount > 0
+            ? `${response.failureCount} token(s) failed: ${response.responses
+                .filter((r) => !r.success)
+                .map((r) => r.error?.code ?? 'unknown')
+                .join(', ')}`
             : undefined,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
-        `Failed to send direct push notification: ${errorMessage}`,
+        `sendToTokens() exception: ${error instanceof Error ? error.message : String(error)}`,
         error instanceof Error ? error.stack : undefined,
       );
       return {

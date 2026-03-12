@@ -5,6 +5,7 @@ import { AuthSessionGuard } from './guards/auth.guard';
 import { AdminGuard } from './guards/admin.guard';
 import { EventsModule } from './events';
 import { CacheMetricsService } from './services/cache-metrics.service';
+import { CircuitBreakerService } from './services/circuit-breaker.service';
 
 @Global()
 @Module({
@@ -20,7 +21,7 @@ import { CacheMetricsService } from './services/cache-metrics.service';
       }),
     }),
   ],
-  providers: [AuthSessionGuard, AdminGuard, CacheMetricsService],
-  exports: [AuthSessionGuard, AdminGuard, JwtModule, CacheMetricsService],
+  providers: [AuthSessionGuard, AdminGuard, CacheMetricsService, CircuitBreakerService],
+  exports: [AuthSessionGuard, AdminGuard, JwtModule, CacheMetricsService, CircuitBreakerService],
 })
 export class SharedModule {}

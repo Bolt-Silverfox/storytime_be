@@ -1,14 +1,26 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EnvConfig } from '@/shared/config/env.validation';
 import * as nodemailer from 'nodemailer';
 import { NotificationRegistry, Notifications } from './notification.registry';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  NotificationPreference,
   NotificationCategory as PrismaCategory,
   NotificationType as PrismaNotificationType,
 } from '@prisma/client';
+import {
+  CreateNotificationPreferenceDto,
+  UpdateNotificationPreferenceDto,
+  BulkUpdateNotificationPreferenceDto,
+  NotificationPreferenceDto,
+} from './dto/notification.dto';
 import { InAppProvider } from './providers/in-app.provider';
 import { EmailProvider } from './providers/email.provider';
 import { PushProvider } from './providers/push.provider';
@@ -21,7 +33,22 @@ import {
   EmailQueueService,
   QueuedEmailResult,
 } from './queue/email-queue.service';
-import { AppEvents, NotificationSentEvent } from '@/shared/events';
+import { PushQueueService } from './queue/push-queue.service';
+import {
+  DeviceTokenResponseDto,
+  DeviceTokenListResponseDto,
+  DevicePlatform,
+} from './dto/device-token.dto';
+
+/** User-facing notification categories that can be toggled in settings. */
+const USER_CONFIGURABLE_CATEGORIES: PrismaCategory[] = [
+  PrismaCategory.SUBSCRIPTION_REMINDER,
+  PrismaCategory.SUBSCRIPTION_ALERT,
+  PrismaCategory.NEW_STORY,
+  PrismaCategory.STORY_FINISHED,
+  PrismaCategory.INCOMPLETE_STORY_REMINDER,
+  PrismaCategory.DAILY_LISTENING_REMINDER,
+];
 
 @Injectable()
 export class NotificationService {
@@ -36,7 +63,7 @@ export class NotificationService {
     private readonly emailProvider: EmailProvider,
     private readonly emailQueueService: EmailQueueService,
     private readonly pushProvider: PushProvider,
-    private readonly eventEmitter: EventEmitter2,
+    private readonly pushQueueService: PushQueueService,
   ) {
     // Initialize legacy email transporter (for backward compatibility / sync sends)
     this.transporter = nodemailer.createTransport({
@@ -71,12 +98,12 @@ export class NotificationService {
     try {
       const notification = NotificationRegistry[type];
       if (!notification) {
-        throw new BadRequestException(`Invalid notification type: ${type}`);
+        throw new Error(`Invalid notification type: ${type}`);
       }
 
       const err = notification.validate(data);
       if (err) {
-        throw new BadRequestException(`Validation failed for ${type}: ${err}`);
+        throw new Error(`Validation failed for ${type}: ${err}`);
       }
 
       const template = await notification.getTemplate(data);
@@ -269,19 +296,6 @@ export class NotificationService {
       try {
         const result = await provider.send(payload);
         results.push(result);
-
-        // Emit notification sent event for successful sends
-        if (result.success && payload.userId) {
-          const notificationType = channel as 'push' | 'in_app' | 'email';
-          this.eventEmitter.emit(AppEvents.NOTIFICATION_SENT, {
-            notificationId:
-              result.messageId ?? `${payload.userId}-${Date.now()}`,
-            userId: payload.userId,
-            category: payload.category,
-            type: notificationType,
-            sentAt: new Date(),
-          } satisfies NotificationSentEvent);
-        }
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error';
@@ -346,5 +360,825 @@ export class NotificationService {
       const enabled = prefMap.get(channel);
       return enabled === undefined || enabled === true;
     });
+  }
+
+  private toNotificationPreferenceDto(
+    pref: NotificationPreference,
+  ): NotificationPreferenceDto {
+    return {
+      id: pref.id,
+      type: pref.type,
+      category: pref.category,
+      enabled: pref.enabled,
+      userId: pref.userId ?? undefined,
+      kidId: pref.kidId ?? undefined,
+      createdAt: pref.createdAt,
+      updatedAt: pref.updatedAt,
+    };
+  }
+
+  async create(
+    dto: CreateNotificationPreferenceDto,
+  ): Promise<NotificationPreferenceDto> {
+    // Verify user or kid exists and is not soft deleted
+    if (dto.userId) {
+      const user = await this.prisma.user.findUnique({
+        where: {
+          id: dto.userId,
+          isDeleted: false, // CANNOT CREATE PREFERENCES FOR SOFT DELETED USERS
+        },
+      });
+      if (!user) throw new NotFoundException('User not found');
+    }
+
+    if (dto.kidId) {
+      const kid = await this.prisma.kid.findUnique({
+        where: {
+          id: dto.kidId,
+          isDeleted: false, // CANNOT CREATE PREFERENCES FOR SOFT DELETED KIDS
+        },
+      });
+      if (!kid) throw new NotFoundException('Kid not found');
+    }
+
+    const pref = await this.prisma.notificationPreference.create({
+      data: {
+        type: dto.type,
+        category: dto.category,
+        enabled: dto.enabled,
+        userId: dto.userId,
+        kidId: dto.kidId,
+      },
+    });
+    return this.toNotificationPreferenceDto(pref);
+  }
+
+  async update(
+    id: string,
+    dto: UpdateNotificationPreferenceDto,
+  ): Promise<NotificationPreferenceDto> {
+    const pref = await this.prisma.notificationPreference.update({
+      where: {
+        id,
+        isDeleted: false, // CANNOT UPDATE SOFT DELETED PREFERENCES
+      },
+      data: dto,
+    });
+    return this.toNotificationPreferenceDto(pref);
+  }
+
+  async bulkUpdate(
+    userId: string,
+    dtos: BulkUpdateNotificationPreferenceDto[],
+  ): Promise<NotificationPreferenceDto[]> {
+    const ids = dtos.map((dto) => dto.id);
+
+    // Verify all preferences belong to the requesting user
+    const owned = await this.prisma.notificationPreference.findMany({
+      where: { id: { in: ids }, userId, isDeleted: false },
+      select: { id: true },
+    });
+
+    const ownedIds = new Set(owned.map((p) => p.id));
+    const unauthorized = ids.filter((id) => !ownedIds.has(id));
+    if (unauthorized.length > 0) {
+      throw new NotFoundException(
+        `Notification preferences not found: ${unauthorized.join(', ')}`,
+      );
+    }
+
+    const updates = dtos.map((dto) =>
+      this.prisma.notificationPreference.update({
+        where: {
+          id: dto.id,
+          isDeleted: false,
+        },
+        data: { enabled: dto.enabled },
+      }),
+    );
+
+    const results = await this.prisma.$transaction(updates);
+    return results.map((pref) => this.toNotificationPreferenceDto(pref));
+  }
+
+  async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId,
+        isDeleted: false, // CANNOT GET PREFERENCES FOR SOFT DELETED USERS
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const prefs = await this.prisma.notificationPreference.findMany({
+      where: {
+        userId,
+        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
+      },
+    });
+    return prefs.map((p) => this.toNotificationPreferenceDto(p));
+  }
+
+  async getForKid(kidId: string): Promise<NotificationPreferenceDto[]> {
+    const kid = await this.prisma.kid.findUnique({
+      where: {
+        id: kidId,
+        isDeleted: false, // CANNOT GET PREFERENCES FOR SOFT DELETED KIDS
+      },
+    });
+
+    if (!kid) {
+      throw new NotFoundException('Kid not found');
+    }
+
+    const prefs = await this.prisma.notificationPreference.findMany({
+      where: {
+        kidId,
+        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
+      },
+    });
+    return prefs.map((p) => this.toNotificationPreferenceDto(p));
+  }
+
+  async getById(id: string): Promise<NotificationPreferenceDto> {
+    const pref = await this.prisma.notificationPreference.findUnique({
+      where: {
+        id,
+        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
+      },
+    });
+    if (!pref) throw new NotFoundException('Notification preference not found');
+    return this.toNotificationPreferenceDto(pref);
+  }
+
+  /**
+   * Toggle a category preference for both in_app and push channels.
+   * Used by the settings UI when the user toggles a category on/off.
+   */
+  async toggleCategoryPreference(
+    userId: string,
+    category: PrismaCategory,
+    enabled: boolean,
+  ): Promise<NotificationPreferenceDto[]> {
+    if (!USER_CONFIGURABLE_CATEGORIES.includes(category)) {
+      throw new BadRequestException(
+        `Unknown or non-configurable notification category: "${category}"`,
+      );
+    }
+
+    const channels: PrismaNotificationType[] = [
+      PrismaNotificationType.in_app,
+      PrismaNotificationType.push,
+    ];
+
+    const results: NotificationPreferenceDto[] = [];
+
+    for (const type of channels) {
+      const pref = await this.prisma.notificationPreference.upsert({
+        where: {
+          userId_category_type: {
+            userId,
+            category,
+            type,
+          },
+        },
+        create: {
+          userId,
+          category,
+          type,
+          enabled,
+        },
+        update: {
+          enabled,
+          isDeleted: false, // Restore if previously soft deleted
+          deletedAt: null,
+        },
+      });
+      results.push(this.toNotificationPreferenceDto(pref));
+    }
+
+    return results;
+  }
+
+  /**
+   * Get user preferences in grouped format.
+   * Returns a map of category -> {push: bool, in_app: bool}.
+   */
+  async getUserPreferencesGrouped(
+    userId: string,
+  ): Promise<Record<string, { push: boolean; in_app: boolean }>> {
+    const prefs = await this.prisma.notificationPreference.findMany({
+      where: {
+        userId,
+        isDeleted: false,
+      },
+    });
+
+    // Group by category with per-channel status
+    const grouped: Record<string, { push: boolean; in_app: boolean }> = {};
+
+    for (const pref of prefs) {
+      if (!grouped[pref.category]) {
+        grouped[pref.category] = {
+          push: true, // Default to enabled
+          in_app: true, // Default to enabled
+        };
+      }
+
+      if (pref.type === PrismaNotificationType.push) {
+        grouped[pref.category].push = pref.enabled;
+      } else if (pref.type === PrismaNotificationType.in_app) {
+        grouped[pref.category].in_app = pref.enabled;
+      }
+    }
+
+    return grouped;
+  }
+
+  /**
+   * Update user preferences in bulk. Each category update affects both push and in_app channels.
+   * Example: { "NEW_STORY": true, "STORY_FINISHED": false }
+   */
+  async updateUserPreferences(
+    userId: string,
+    preferences: Record<string, boolean>,
+  ): Promise<Record<string, { push: boolean; in_app: boolean }>> {
+    // Only user-facing categories can be toggled; auth/system categories are excluded
+    const allowedCategories = new Set<PrismaCategory>(
+      USER_CONFIGURABLE_CATEGORIES,
+    );
+    for (const key of Object.keys(preferences)) {
+      if (!allowedCategories.has(key as PrismaCategory)) {
+        throw new BadRequestException(
+          `Unknown or non-configurable notification category: "${key}"`,
+        );
+      }
+    }
+
+    const categories = Object.keys(preferences) as PrismaCategory[];
+    const channels: PrismaNotificationType[] = [
+      PrismaNotificationType.in_app,
+      PrismaNotificationType.push,
+    ];
+
+    // Upsert preferences for each category + channel combination in a single transaction
+    const upserts = categories.flatMap((category) => {
+      const enabled = preferences[category];
+      return channels.map((type) =>
+        this.prisma.notificationPreference.upsert({
+          where: { userId_category_type: { userId, category, type } },
+          create: { userId, category, type, enabled },
+          update: { enabled, isDeleted: false, deletedAt: null },
+        }),
+      );
+    });
+    await this.prisma.$transaction(upserts);
+
+    return this.getUserPreferencesGrouped(userId);
+  }
+
+  /**
+   * Seed default notification preferences for a new user.
+   * Creates preferences for all user-facing categories with enabled: true.
+   * Called during user registration.
+   */
+  async seedDefaultPreferences(userId: string): Promise<void> {
+    const userFacingCategories = USER_CONFIGURABLE_CATEGORIES;
+
+    const channels: PrismaNotificationType[] = [
+      PrismaNotificationType.in_app,
+      PrismaNotificationType.push,
+    ];
+
+    const preferences = userFacingCategories.flatMap((category) =>
+      channels.map((type) => ({
+        userId,
+        category,
+        type,
+        enabled: true,
+      })),
+    );
+
+    // Use createMany with skipDuplicates to avoid errors if preferences already exist
+    await this.prisma.notificationPreference.createMany({
+      data: preferences,
+      skipDuplicates: true,
+    });
+
+    this.logger.log(
+      `Seeded ${preferences.length} default preferences for user ${userId}`,
+    );
+  }
+
+  /**
+   * Soft delete or permanently delete a notification preference
+   * @param id Notification preference ID
+   * @param permanent Whether to permanently delete (default: false)
+   */
+  async delete(id: string, permanent: boolean = false): Promise<void> {
+    const pref = await this.prisma.notificationPreference.findUnique({
+      where: {
+        id,
+        isDeleted: false, // CANNOT DELETE ALREADY DELETED PREFERENCES
+      },
+    });
+
+    if (!pref) {
+      throw new NotFoundException('Notification preference not found');
+    }
+
+    if (permanent) {
+      await this.prisma.notificationPreference.delete({
+        where: { id },
+      });
+    } else {
+      await this.prisma.notificationPreference.update({
+        where: { id },
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Restore a soft deleted notification preference
+   * @param id Notification preference ID
+   */
+  async getInAppNotifications(
+    userId: string,
+    limit: number = 20,
+    offset: number = 0,
+    unreadOnly: boolean = false,
+  ) {
+    const where: { userId: string; isDeleted: boolean; isRead?: boolean } = {
+      userId,
+      isDeleted: false,
+    };
+
+    if (unreadOnly) {
+      where.isRead = false;
+    }
+
+    const [notifications, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where,
+        take: limit,
+        skip: offset,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.notification.count({ where }),
+    ]);
+
+    return {
+      notifications: notifications.map((n) => ({
+        ...n,
+        category: n.category,
+      })),
+      total,
+    };
+  }
+
+  async markAsRead(userId: string, notificationIds: string[]) {
+    return this.prisma.notification.updateMany({
+      where: {
+        id: { in: notificationIds },
+        userId,
+      },
+      data: {
+        isRead: true,
+      },
+    });
+  }
+
+  async markAllAsRead(userId: string) {
+    return this.prisma.notification.updateMany({
+      where: {
+        userId,
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+      },
+    });
+  }
+
+  async undoDelete(id: string): Promise<NotificationPreferenceDto> {
+    const pref = await this.prisma.notificationPreference.findUnique({
+      where: { id },
+    });
+
+    if (!pref) {
+      throw new NotFoundException('Notification preference not found');
+    }
+
+    if (!pref.isDeleted) {
+      throw new BadRequestException('Notification preference is not deleted');
+    }
+
+    const restored = await this.prisma.notificationPreference.update({
+      where: { id },
+      data: {
+        isDeleted: false,
+        deletedAt: null,
+      },
+    });
+
+    return this.toNotificationPreferenceDto(restored);
+  }
+
+  // ============================================
+  // Device Token Management
+  // ============================================
+
+  /**
+   * Register a device token for push notifications.
+   * If the token already exists for this user, update it.
+   * If the token exists for a different user, reassign it.
+   */
+  async registerDeviceToken(
+    userId: string,
+    token: string,
+    platform: DevicePlatform,
+    deviceName?: string,
+  ): Promise<DeviceTokenResponseDto> {
+    // Validate platform enum
+    if (!Object.values(DevicePlatform).includes(platform)) {
+      throw new BadRequestException(
+        `Invalid platform. Must be one of: ${Object.values(DevicePlatform).join(', ')}`,
+      );
+    }
+
+    // Check if token exists
+    const existingToken = await this.prisma.deviceToken.findUnique({
+      where: { token },
+    });
+
+    if (existingToken) {
+      // If same user, just update
+      if (existingToken.userId === userId) {
+        const updated = await this.prisma.deviceToken.update({
+          where: { token },
+          data: {
+            platform,
+            deviceName,
+            isActive: true,
+            isDeleted: false,
+            deletedAt: null,
+          },
+        });
+        this.logger.log(`Updated device token for user ${userId}`);
+        // Re-subscribe to all_users topic (best-effort; don't fail token save on FCM side effects)
+        this.pushProvider
+          .subscribeToTopic([token], 'all_users')
+          .catch((err) =>
+            this.logger.warn(
+              `Failed to subscribe updated token to all_users: ${(err as Error).message}`,
+            ),
+          );
+        return this.toDeviceTokenResponse(updated);
+      }
+
+      // Different user - reassign the token
+      const updated = await this.prisma.deviceToken.update({
+        where: { token },
+        data: {
+          userId,
+          platform,
+          deviceName,
+          isActive: true,
+          isDeleted: false,
+          deletedAt: null,
+        },
+      });
+      this.logger.log(
+        `Reassigned device token from user ${existingToken.userId} to ${userId}`,
+      );
+      // Subscribe reassigned token to all_users topic (best-effort)
+      this.pushProvider
+        .subscribeToTopic([token], 'all_users')
+        .catch((err) =>
+          this.logger.warn(
+            `Failed to subscribe reassigned token to all_users: ${(err as Error).message}`,
+          ),
+        );
+      return this.toDeviceTokenResponse(updated);
+    }
+
+    // Collect old tokens before deactivating (for FCM topic unsubscribe)
+    let oldTokenStrings: string[] = [];
+    if (deviceName) {
+      const oldTokens = await this.prisma.deviceToken.findMany({
+        where: {
+          userId,
+          platform,
+          deviceName,
+          isDeleted: false,
+          token: { not: token },
+        },
+        select: { token: true },
+      });
+      oldTokenStrings = oldTokens.map((t) => t.token);
+    }
+
+    // Deactivate old tokens and create new one atomically
+    const newToken = await this.prisma.$transaction(async (tx) => {
+      if (deviceName) {
+        await tx.deviceToken.updateMany({
+          where: {
+            userId,
+            platform,
+            deviceName,
+            isDeleted: false,
+            token: { not: token },
+          },
+          data: { isActive: false, isDeleted: true, deletedAt: new Date() },
+        });
+      }
+      return tx.deviceToken.create({
+        data: {
+          userId,
+          token,
+          platform,
+          deviceName,
+        },
+      });
+    });
+    this.logger.log(`Registered new device token for user ${userId}`);
+
+    // Best-effort unsubscribe old tokens from broadcast topic
+    if (oldTokenStrings.length > 0) {
+      this.pushProvider
+        .unsubscribeFromTopic(oldTokenStrings, 'all_users')
+        .catch((err) =>
+          this.logger.warn(
+            `Failed to unsubscribe old tokens from all_users: ${(err as Error).message}`,
+          ),
+        );
+    }
+
+    // Subscribe the new token to the all_users topic (best-effort; don't fail registration on FCM side effects)
+    this.pushProvider
+      .subscribeToTopic([token], 'all_users')
+      .catch((err) =>
+        this.logger.warn(
+          `Failed to subscribe new token to all_users: ${(err as Error).message}`,
+        ),
+      );
+
+    return this.toDeviceTokenResponse(newToken);
+  }
+
+  /**
+   * Get all active devices for a user.
+   */
+  async getUserDevices(userId: string): Promise<DeviceTokenListResponseDto> {
+    const devices = await this.prisma.deviceToken.findMany({
+      where: {
+        userId,
+        isActive: true,
+        isDeleted: false,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      devices: devices.map((d) => this.toDeviceTokenResponse(d)),
+      total: devices.length,
+    };
+  }
+
+  /**
+   * Unregister a device token (soft delete).
+   */
+  async unregisterDeviceToken(userId: string, token: string): Promise<void> {
+    const deviceToken = await this.prisma.deviceToken.findFirst({
+      where: {
+        userId,
+        token,
+        isDeleted: false,
+      },
+    });
+
+    if (!deviceToken) {
+      throw new NotFoundException('Device token not found');
+    }
+
+    await this.prisma.deviceToken.update({
+      where: { id: deviceToken.id },
+      data: {
+        isActive: false,
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+    });
+
+    // Best-effort unsubscribe from broadcast topic
+    this.pushProvider
+      .unsubscribeFromTopic([token], 'all_users')
+      .catch((err) =>
+        this.logger.warn(
+          `Failed to unsubscribe token from all_users: ${(err as Error).message}`,
+        ),
+      );
+
+    this.logger.log(`Unregistered device token for user ${userId}`);
+  }
+
+  /**
+   * Send a test push notification to verify setup.
+   */
+  async sendTestPush(
+    userId: string,
+    title: string,
+    body: string,
+    specificToken?: string,
+  ): Promise<NotificationResult> {
+    this.logger.log(
+      `sendTestPush called for user=${userId.substring(0, 8)}, specificToken=${specificToken ? 'yes' : 'no'}, pushReady=${this.pushProvider.isReady()}`,
+    );
+
+    if (specificToken) {
+      // Verify token ownership before sending
+      const deviceToken = await this.prisma.deviceToken.findFirst({
+        where: {
+          userId,
+          token: specificToken,
+          isDeleted: false,
+        },
+      });
+
+      if (!deviceToken) {
+        this.logger.warn(
+          `sendTestPush: token not found for user=${userId.substring(0, 8)}, hasToken=false`,
+        );
+        throw new NotFoundException(
+          'Device token not found or does not belong to this user',
+        );
+      }
+
+      this.logger.log(
+        `sendTestPush: sending to specific token id=${deviceToken.id}, isActive=${deviceToken.isActive}`,
+      );
+      const result = await this.pushProvider.sendToTokens(
+        [specificToken],
+        title,
+        body,
+      );
+      this.logger.log(
+        `sendTestPush result: success=${result.success}, error=${result.error ?? 'none'}, messageId=${result.messageId ?? 'none'}`,
+      );
+      return result;
+    }
+
+    // Send to all user devices
+    this.logger.log(
+      `sendTestPush: sending to all devices for user=${userId.substring(0, 8)}`,
+    );
+    const result = await this.pushProvider.send({
+      userId,
+      category: PrismaCategory.SYSTEM_ALERT,
+      title,
+      body,
+    });
+    this.logger.log(
+      `sendTestPush result: success=${result.success}, error=${result.error ?? 'none'}, messageId=${result.messageId ?? 'none'}`,
+    );
+    return result;
+  }
+
+  /**
+   * Subscribe all existing active device tokens to the all_users topic.
+   * Run once to seed existing devices. Processes in batches of 1000 (Firebase limit).
+   */
+  async subscribeAllExistingDevicesToTopic(
+    topic: string = 'all_users',
+  ): Promise<{ total: number; batches: number }> {
+    const BATCH_SIZE = 1000;
+    let cursor: string | undefined;
+    let total = 0;
+    let batches = 0;
+
+    while (true) {
+      const devices = await this.prisma.deviceToken.findMany({
+        where: { isActive: true, isDeleted: false },
+        select: { id: true, token: true },
+        take: BATCH_SIZE,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        orderBy: { id: 'asc' },
+      });
+
+      if (devices.length === 0) break;
+
+      const tokens = devices.map((d) => d.token);
+      await this.pushProvider.subscribeToTopic(tokens, topic);
+      batches++;
+      total += tokens.length;
+      cursor = devices[devices.length - 1].id;
+
+      this.logger.log(
+        `Subscribed batch ${batches} (${tokens.length} tokens) to topic: ${topic}`,
+      );
+
+      if (devices.length < BATCH_SIZE) break;
+    }
+
+    if (total === 0) {
+      this.logger.log('No active device tokens to subscribe');
+    } else {
+      this.logger.log(
+        `Finished subscribing ${total} tokens in ${batches} batches to topic: ${topic}`,
+      );
+    }
+
+    return { total, batches };
+  }
+
+  // ============================================
+  // Event Listeners (cross-module communication)
+  // ============================================
+
+  @OnEvent('notification.broadcast')
+  async handleBroadcastNotification(payload: {
+    topic: string;
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+  }): Promise<void> {
+    this.logger.log(
+      `Handling broadcast event for topic "${payload.topic}": "${payload.title}"`,
+    );
+    try {
+      const result = await this.pushQueueService.queueTopicPush(
+        payload.topic,
+        payload.title,
+        payload.body,
+        payload.data,
+      );
+      if (!result.queued) {
+        throw new Error(
+          `Broadcast enqueue returned queued=false (jobId=${result.jobId}): ${result.error ?? 'unknown error'}`,
+        );
+      }
+      this.logger.log(`Broadcast queued: jobId=${result.jobId}`);
+    } catch (err) {
+      this.logger.error(
+        `Failed to queue broadcast for topic "${payload.topic}": ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      // Re-throw so emitAsync in broadcastNotification can detect failure
+      throw err;
+    }
+  }
+
+  @OnEvent('notification.seed-topic')
+  async handleSeedTopic(payload: { topic: string }): Promise<void> {
+    this.logger.log(`Handling seed-topic event for topic "${payload.topic}"`);
+    try {
+      await this.subscribeAllExistingDevicesToTopic(payload.topic);
+    } catch (err) {
+      this.logger.error(
+        `Failed to seed topic "${payload.topic}": ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      throw err;
+    }
+  }
+
+  /**
+   * Check if push notifications are properly configured.
+   */
+  isPushReady(): boolean {
+    return this.pushProvider.isReady();
+  }
+
+  private toDeviceTokenResponse(token: {
+    id: string;
+    userId: string;
+    token: string;
+    platform: string;
+    deviceName: string | null;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }): DeviceTokenResponseDto {
+    return {
+      id: token.id,
+      userId: token.userId,
+      // Mask token for security - show first 8 and last 4 chars
+      token:
+        token.token.length > 12
+          ? `${token.token.substring(0, 8)}...${token.token.substring(token.token.length - 4)}`
+          : token.token,
+      platform: token.platform as DevicePlatform,
+      deviceName: token.deviceName || undefined,
+      isActive: token.isActive,
+      createdAt: token.createdAt,
+      updatedAt: token.updatedAt,
+    };
   }
 }

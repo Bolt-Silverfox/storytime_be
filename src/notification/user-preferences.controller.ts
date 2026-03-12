@@ -1,4 +1,5 @@
 import { Controller, Get, Patch, Body, Req, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiOperation,
@@ -11,16 +12,15 @@ import {
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
 import { ParseBooleanRecordPipe } from '@/shared/pipes';
-import { NotificationPreferenceService } from './services/notification-preference.service';
+import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
+import { NotificationService } from './notification.service';
 
 @ApiTags('users')
 @ApiBearerAuth()
 @UseGuards(AuthSessionGuard)
 @Controller('users/me')
 export class UserPreferencesController {
-  constructor(
-    private readonly notificationPreferenceService: NotificationPreferenceService,
-  ) {}
+  constructor(private readonly notificationService: NotificationService) {}
 
   @Get('notification-preferences')
   @ApiOperation({
@@ -47,12 +47,18 @@ export class UserPreferencesController {
     },
   })
   async getUserPreferences(@Req() req: AuthenticatedRequest) {
-    return this.notificationPreferenceService.getUserPreferencesGrouped(
+    return this.notificationService.getUserPreferencesGrouped(
       req.authUserData.userId,
     );
   }
 
   @Patch('notification-preferences')
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.NOTIFICATION_PREFERENCES.LIMIT,
+      ttl: THROTTLE_LIMITS.NOTIFICATION_PREFERENCES.TTL,
+    },
+  })
   @ApiOperation({
     summary: 'Update notification preferences for the authenticated user',
     description:
@@ -87,7 +93,7 @@ export class UserPreferencesController {
     @Req() req: AuthenticatedRequest,
     @Body(ParseBooleanRecordPipe) preferences: Record<string, boolean>,
   ) {
-    return this.notificationPreferenceService.updateUserPreferences(
+    return this.notificationService.updateUserPreferences(
       req.authUserData.userId,
       preferences,
     );

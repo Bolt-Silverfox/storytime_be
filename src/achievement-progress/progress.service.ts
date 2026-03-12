@@ -110,6 +110,8 @@ export class ProgressService {
         where: {
           kidId: { in: kidIds },
           completed: true,
+          isDeleted: false,
+          story: { isDeleted: false },
         },
       });
 

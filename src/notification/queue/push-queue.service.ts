@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { NotificationCategory } from '@prisma/client';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import {
   PUSH_QUEUE_NAME,
   PUSH_JOB_NAMES,
@@ -58,7 +58,7 @@ export class PushQueueService {
    * Add a push notification to the queue for async processing
    */
   async queuePush(options: QueuePushOptions): Promise<QueuedPushResult> {
-    const jobId = uuidv4();
+    const jobId = randomUUID();
 
     try {
       const priority =
@@ -113,7 +113,7 @@ export class PushQueueService {
     data?: Record<string, string>,
     delay?: number,
   ): Promise<QueuedPushResult> {
-    const jobId = uuidv4();
+    const jobId = randomUUID();
 
     try {
       const jobData: PushTopicJobData = {

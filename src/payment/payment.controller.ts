@@ -1,14 +1,18 @@
 import { Controller, Post, Body, UseGuards, Req, Get } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiBody,
+  ApiOkResponse,
+} from '@nestjs/swagger';
+import { SubscriptionStatusResponseDto } from './dto/subscription-status-response.dto';
 import { PaymentService } from './payment.service';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
 import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
-import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 
 @ApiTags('payment')
 @Controller('payment')
@@ -16,13 +20,7 @@ export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
   @Post('verify-purchase')
-  @UseGuards(AuthSessionGuard, ThrottlerGuard)
-  @Throttle({
-    short: {
-      limit: THROTTLE_LIMITS.RESOURCE_CREATE.limit,
-      ttl: THROTTLE_LIMITS.RESOURCE_CREATE.ttl,
-    },
-  })
+  @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Verify an In-App Purchase from Google Play or App Store',
@@ -38,13 +36,7 @@ export class PaymentController {
   }
 
   @Post('cancel')
-  @UseGuards(AuthSessionGuard, ThrottlerGuard)
-  @Throttle({
-    short: {
-      limit: THROTTLE_LIMITS.AUTH_PASSWORD_RESET.limit,
-      ttl: THROTTLE_LIMITS.AUTH_PASSWORD_RESET.ttl,
-    },
-  })
+  @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cancel subscription (keeps access until endsAt)' })
   async cancel(@Req() req: AuthenticatedRequest) {
@@ -52,15 +44,10 @@ export class PaymentController {
   }
 
   @Get('status')
-  @UseGuards(AuthSessionGuard, ThrottlerGuard)
-  @Throttle({
-    short: {
-      limit: THROTTLE_LIMITS.DEFAULT.limit,
-      ttl: THROTTLE_LIMITS.DEFAULT.ttl,
-    },
-  })
+  @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current subscription status' })
+  @ApiOkResponse({ type: SubscriptionStatusResponseDto })
   async status(@Req() req: AuthenticatedRequest) {
     return this.paymentService.getSubscription(req.authUserData.userId);
   }

@@ -106,6 +106,7 @@ async function bootstrap() {
       'Authorization',
       'Accept',
       'X-Requested-With',
+      'X-API-Key',
     ],
     credentials: true,
     preflightContinue: false,

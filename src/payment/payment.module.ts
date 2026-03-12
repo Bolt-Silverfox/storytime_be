@@ -15,6 +15,10 @@ import { AppleVerificationService } from './apple-verification.service';
     AppleVerificationService,
   ],
   controllers: [PaymentController],
-  exports: [PaymentService],
+  exports: [
+    PaymentService,
+    GoogleVerificationService,
+    AppleVerificationService,
+  ],
 })
 export class PaymentModule {}

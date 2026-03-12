@@ -55,7 +55,7 @@ export class InAppNotificationController {
     // Cursor mode: if cursor param is present, use cursor-based pagination
     if (cursor !== undefined) {
       const { cursorId, limit: safeLimit } =
-        PaginationUtil.sanitizeCursorParams(cursor, limit);
+        PaginationUtil.sanitizeOpaqueCursorParams(cursor, limit);
       return this.inAppNotificationService.getInAppNotificationsCursor(
         req.authUserData.userId,
         cursorId,

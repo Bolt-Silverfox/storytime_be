@@ -3,13 +3,10 @@ import {
   IVoiceCloningProvider,
 } from '../interfaces/speech-provider.interface';
 import { ElevenLabsClient } from 'elevenlabs';
-import {
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { StreamConverter } from '../utils/stream-converter';
+import { QuotaExhaustedError } from '../errors/quota-exhausted.error';
 
 /** Configuration for retry behavior */
 const RETRY_CONFIG = {
@@ -57,9 +54,7 @@ export class ElevenLabsTTSProvider
     },
   ): Promise<Buffer> {
     if (!this.client) {
-      throw new ServiceUnavailableException(
-        'ElevenLabs client is not initialized',
-      );
+      throw new Error('ElevenLabs client is not initialized');
     }
 
     return this.withRetry(async () => {
@@ -79,7 +74,6 @@ export class ElevenLabsTTSProvider
       const audioStream = await this.client.textToSpeech.convert(
         voiceId,
         convertOptions,
-        { timeoutInSeconds: 30 },
       );
 
       return await this.converter.toBuffer(audioStream);
@@ -101,6 +95,15 @@ export class ElevenLabsTTSProvider
         return await operation();
       } catch (error) {
         lastError = error as Error;
+
+        // 402 = quota/credits exhausted — fail immediately, no retry
+        if (this.isQuotaExhaustedError(error)) {
+          this.logger.warn(
+            `ElevenLabs ${operationName}: quota exhausted (402), failing immediately`,
+          );
+          throw new QuotaExhaustedError('ElevenLabs');
+        }
+
         const isRateLimit = this.isRateLimitError(error);
         const isRetryable = isRateLimit || this.isTransientError(error);
 
@@ -121,6 +124,14 @@ export class ElevenLabsTTSProvider
     }
 
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  private isQuotaExhaustedError(error: unknown): boolean {
+    if (error && typeof error === 'object') {
+      const err = error as Record<string, unknown>;
+      return err.status === 402 || err.statusCode === 402;
+    }
+    return false;
   }
 
   private isRateLimitError(error: unknown): boolean {
@@ -158,9 +169,7 @@ export class ElevenLabsTTSProvider
 
   async addVoice(name: string, fileBuffer: Buffer): Promise<string> {
     if (!this.client) {
-      throw new ServiceUnavailableException(
-        'ElevenLabs client is not initialized',
-      );
+      throw new Error('ElevenLabs client is not initialized');
     }
 
     try {
@@ -169,14 +178,12 @@ export class ElevenLabsTTSProvider
         type: 'audio/mpeg',
       });
 
-      const response = await this.client.voices.add(
-        {
-          name,
-          files: [blob as unknown as File],
-          description: 'Cloned via StoryTime App',
-        },
-        { timeoutInSeconds: 30 },
-      );
+      const response = await this.client.voices.add({
+        name,
+
+        files: [blob as any],
+        description: 'Cloned via StoryTime App',
+      });
 
       return response.voice_id;
     } catch (error) {
@@ -187,19 +194,28 @@ export class ElevenLabsTTSProvider
     }
   }
 
-  async getSubscriptionInfo(): Promise<unknown> {
+  async getSubscriptionInfo(): Promise<any> {
     if (!this.client) {
-      throw new ServiceUnavailableException(
-        'ElevenLabs client is not initialized',
-      );
+      throw new Error('ElevenLabs client is not initialized');
     }
 
     try {
-      return await this.client.user.getSubscription({ timeoutInSeconds: 30 });
+      return await this.client.user.getSubscription();
     } catch (error) {
       this.logger.error(
         `Failed to fetch ElevenLabs subscription info: ${(error as Error).message}`,
       );
+
+      // Prevent ElevenLabs 401/403 from propagating as-is, which would
+      // cause the frontend auth interceptor to trigger "session expired".
+      if (error && typeof error === 'object') {
+        const err = error as Record<string, unknown>;
+        const status = (err.status || err.statusCode) as number | undefined;
+        if (status === 401 || status === 403) {
+          throw new BadGatewayException('ElevenLabs API authentication error');
+        }
+      }
+
       throw error;
     }
   }

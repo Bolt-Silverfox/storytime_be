@@ -11,9 +11,10 @@ import {
   RedisHealthIndicator,
   SmtpHealthIndicator,
   QueueHealthIndicator,
-  FirebaseHealthIndicator,
-  CloudinaryHealthIndicator,
+  TTSCircuitBreakerHealthIndicator,
 } from './indicators';
+
+const TTS_HEALTH_KEY = 'tts-providers';
 
 @ApiTags('Health')
 @Controller('health')
@@ -24,10 +25,9 @@ export class HealthController {
     private readonly redisHealth: RedisHealthIndicator,
     private readonly smtpHealth: SmtpHealthIndicator,
     private readonly queueHealth: QueueHealthIndicator,
-    private readonly firebaseHealth: FirebaseHealthIndicator,
-    private readonly cloudinaryHealth: CloudinaryHealthIndicator,
     private readonly memory: MemoryHealthIndicator,
     private readonly disk: DiskHealthIndicator,
+    private readonly ttsHealth: TTSCircuitBreakerHealthIndicator,
   ) {}
 
   /**
@@ -58,7 +58,8 @@ export class HealthController {
     return this.health.check([
       () => this.prismaHealth.isHealthy('database'),
       () => this.redisHealth.isHealthy('redis'),
-      () => this.queueHealth.isHealthy('queues'),
+      () => this.queueHealth.isHealthy('email-queue'),
+      () => this.ttsHealth.isHealthy(TTS_HEALTH_KEY),
     ]);
   }
 
@@ -99,83 +100,15 @@ export class HealthController {
   }
 
   /**
-   * All queues health check (email, story, voice)
+   * Queue health check
    */
-  @Get('queues')
-  @ApiOperation({ summary: 'All queues health check' })
-  @ApiResponse({ status: 200, description: 'All queues are healthy' })
-  @ApiResponse({ status: 503, description: 'One or more queues are unhealthy' })
-  @HealthCheck()
-  async checkQueues() {
-    return this.health.check([() => this.queueHealth.isHealthy('queues')]);
-  }
-
-  /**
-   * Email queue health check
-   */
-  @Get('queues/email')
+  @Get('queue')
   @ApiOperation({ summary: 'Email queue health check' })
-  @ApiResponse({ status: 200, description: 'Email queue is healthy' })
-  @ApiResponse({ status: 503, description: 'Email queue is unhealthy' })
+  @ApiResponse({ status: 200, description: 'Queue is healthy' })
+  @ApiResponse({ status: 503, description: 'Queue is unhealthy' })
   @HealthCheck()
-  async checkEmailQueue() {
-    return this.health.check([
-      () => this.queueHealth.checkQueue('email-queue', 'email'),
-    ]);
-  }
-
-  /**
-   * Story queue health check
-   */
-  @Get('queues/story')
-  @ApiOperation({ summary: 'Story generation queue health check' })
-  @ApiResponse({ status: 200, description: 'Story queue is healthy' })
-  @ApiResponse({ status: 503, description: 'Story queue is unhealthy' })
-  @HealthCheck()
-  async checkStoryQueue() {
-    return this.health.check([
-      () => this.queueHealth.checkQueue('story-queue', 'story'),
-    ]);
-  }
-
-  /**
-   * Voice queue health check
-   */
-  @Get('queues/voice')
-  @ApiOperation({ summary: 'Voice synthesis queue health check' })
-  @ApiResponse({ status: 200, description: 'Voice queue is healthy' })
-  @ApiResponse({ status: 503, description: 'Voice queue is unhealthy' })
-  @HealthCheck()
-  async checkVoiceQueue() {
-    return this.health.check([
-      () => this.queueHealth.checkQueue('voice-queue', 'voice'),
-    ]);
-  }
-
-  /**
-   * Firebase/FCM health check
-   */
-  @Get('firebase')
-  @ApiOperation({ summary: 'Firebase/FCM health check' })
-  @ApiResponse({ status: 200, description: 'Firebase is healthy' })
-  @ApiResponse({ status: 503, description: 'Firebase is unhealthy' })
-  @HealthCheck()
-  async checkFirebase() {
-    return this.health.check([() => this.firebaseHealth.isHealthy('firebase')]);
-  }
-
-  /**
-   * Cloudinary health check
-   */
-  @Get('cloudinary')
-  @ApiOperation({ summary: 'Cloudinary health check' })
-  @ApiResponse({ status: 200, description: 'Cloudinary is healthy' })
-  @ApiResponse({ status: 503, description: 'Cloudinary is unhealthy' })
-  @HealthCheck()
-  async checkCloudinary() {
-    return this.health.check([
-      () => this.cloudinaryHealth.isHealthy('cloudinary'),
-    ]);
+  async checkQueue() {
+    return this.health.check([() => this.queueHealth.isHealthy('email-queue')]);
   }
 
   /**
@@ -202,24 +135,6 @@ export class HealthController {
   }
 
   /**
-   * External services health check (Firebase, Cloudinary)
-   */
-  @Get('external')
-  @ApiOperation({ summary: 'External services health check' })
-  @ApiResponse({ status: 200, description: 'External services are healthy' })
-  @ApiResponse({
-    status: 503,
-    description: 'One or more external services unhealthy',
-  })
-  @HealthCheck()
-  async checkExternal() {
-    return this.health.check([
-      () => this.firebaseHealth.isHealthy('firebase'),
-      () => this.cloudinaryHealth.isHealthy('cloudinary'),
-    ]);
-  }
-
-  /**
    * Complete health check - all indicators
    * Use for monitoring dashboards
    */
@@ -230,16 +145,10 @@ export class HealthController {
   @HealthCheck()
   async checkFull() {
     return this.health.check([
-      // Core infrastructure
       () => this.prismaHealth.isHealthy('database'),
       () => this.redisHealth.isHealthy('redis'),
       () => this.smtpHealth.isHealthy('smtp'),
-      // All queues
-      () => this.queueHealth.isHealthy('queues'),
-      // External services
-      () => this.firebaseHealth.isHealthy('firebase'),
-      () => this.cloudinaryHealth.isHealthy('cloudinary'),
-      // System resources
+      () => this.queueHealth.isHealthy('email-queue'),
       () => this.memory.checkHeap('memory_heap', 500 * 1024 * 1024),
       () => this.memory.checkRSS('memory_rss', 1024 * 1024 * 1024),
       () =>
@@ -247,6 +156,25 @@ export class HealthController {
           path: '/',
           thresholdPercent: 0.9,
         }),
+      () => this.ttsHealth.isHealthy(TTS_HEALTH_KEY),
     ]);
+  }
+
+  /**
+   * TTS providers circuit breaker status
+   */
+  @Get('tts')
+  @ApiOperation({ summary: 'TTS providers circuit breaker health check' })
+  @ApiResponse({
+    status: 200,
+    description: 'All TTS circuit breakers are closed',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'One or more TTS circuit breakers are open',
+  })
+  @HealthCheck()
+  async checkTts() {
+    return this.health.check([() => this.ttsHealth.isHealthy(TTS_HEALTH_KEY)]);
   }
 }

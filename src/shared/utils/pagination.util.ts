@@ -1,3 +1,14 @@
+/** Default page size for cursor-based pagination. */
+export const DEFAULT_CURSOR_LIMIT = 20;
+
+export interface CursorPaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    nextCursor: string | null;
+    hasNextPage: boolean;
+  };
+}
+
 export interface SanitizeLimitOptions {
   defaultValue?: number;
   min?: number;
@@ -83,11 +94,11 @@ export class PaginationUtil {
   }
 
   /**
-   * Sanitize cursor pagination parameters.
-   * Decodes the cursor and clamps the limit.
+   * Sanitize cursor pagination parameters with opaque base64url decoding.
+   * Decodes base64url-encoded cursor and clamps the limit.
    * Returns null cursorId for invalid cursors (starts from beginning).
    */
-  static sanitizeCursorParams(
+  static sanitizeOpaqueCursorParams(
     cursor: string | undefined,
     limit: unknown,
     maxLimit = 100,
@@ -98,5 +109,61 @@ export class PaginationUtil {
       max: maxLimit,
     });
     return { cursorId, limit: sanitizedLimit };
+  }
+
+  /**
+   * Sanitizes cursor-based pagination parameters.
+   * @param cursor - The cursor string (last record ID)
+   * @param limit - The page size limit
+   * @param maxLimit - Maximum allowed limit (default 50)
+   * @returns Sanitized cursor and limit
+   */
+  static sanitizeCursorParams(cursor: unknown, limit: unknown, maxLimit = 50) {
+    const sanitizedCursor =
+      typeof cursor === 'string' && cursor.trim().length > 0
+        ? cursor.trim()
+        : undefined;
+
+    const hasLimit = limit !== undefined && limit !== null && limit !== '';
+    if (!sanitizedCursor && !hasLimit) {
+      return { cursor: undefined, limit: undefined };
+    }
+
+    const sanitizedLimit = PaginationUtil.sanitizeLimit(limit, {
+      defaultValue: DEFAULT_CURSOR_LIMIT,
+      max: maxLimit,
+    });
+    return { cursor: sanitizedCursor, limit: sanitizedLimit };
+  }
+
+  /**
+   * Builds a cursor-paginated response from a "take N+1" result set.
+   * Uses `slice` instead of `pop` to avoid mutating the input array.
+   */
+  static buildCursorResponse<T>(
+    records: T[],
+    limit: number,
+    getCursorId: (item: T) => string = (item) => {
+      const id = (item as Record<string, unknown>).id;
+      if (typeof id !== 'string') {
+        throw new Error(
+          'buildCursorResponse: item has no string "id" field. Provide a custom getCursorId.',
+        );
+      }
+      return id;
+    },
+  ): CursorPaginatedResponse<T> {
+    const hasNextPage = records.length > limit;
+    const data = hasNextPage ? records.slice(0, limit) : records;
+    return {
+      data,
+      pagination: {
+        nextCursor:
+          hasNextPage && data.length > 0
+            ? getCursorId(data[data.length - 1])
+            : null,
+        hasNextPage,
+      },
+    };
   }
 }
