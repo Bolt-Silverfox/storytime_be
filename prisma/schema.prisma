@@ -878,6 +878,7 @@ model QuestionAnswer {
   @@index([userId])
   @@index([questionId])
   @@index([storyId])
+  @@unique([userId, questionId], name: "userId_questionId_unique")
   @@index([kidId, answeredAt])
   @@index([isDeleted])
   @@map("question_answers")
