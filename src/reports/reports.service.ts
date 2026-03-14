@@ -101,6 +101,17 @@ export class ReportsService {
 
     const isCorrect = question.correctOption === dto.selectedOption;
 
+    // Check existence before upsert to know if this is a new answer
+    const existing = await this.prisma.questionAnswer.findUnique({
+      where: {
+        userId_questionId_unique: {
+          userId,
+          questionId: dto.questionId,
+        },
+      },
+      select: { id: true },
+    });
+
     const answer = await this.prisma.questionAnswer.upsert({
       where: {
         userId_questionId_unique: {
@@ -124,13 +135,15 @@ export class ReportsService {
       select: { id: true, isCorrect: true },
     });
 
-    // Badge progress is idempotent — safe to call on both create and update
-    await this.badgeProgressEngine.recordActivity(
-      userId,
-      'quiz_answered',
-      undefined,
-      { questionId: dto.questionId, isCorrect },
-    );
+    // Only record badge progress for new answers to avoid inflating counts
+    if (!existing) {
+      await this.badgeProgressEngine.recordActivity(
+        userId,
+        'quiz_answered',
+        undefined,
+        { questionId: dto.questionId, isCorrect },
+      );
+    }
 
     return { answerId: answer.id, isCorrect };
   }
