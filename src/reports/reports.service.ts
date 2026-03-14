@@ -7,7 +7,7 @@ import {
   DailyLimitDto,
 } from './dto/reports.dto';
 // import { SetDailyLimitDto } from '@/control/control.dto';
-import { QuestionAnswerDto } from '../story/dto/story.dto'; // Import from story module
+import { SubmitQuestionAnswerDto } from '../story/dto/story.dto';
 import { BadgeProgressEngine } from '../achievement-progress/badge-progress.engine';
 
 @Injectable()
@@ -73,11 +73,12 @@ export class ReportsService {
   /**
    * Record a question answer
    */
-  async recordAnswer(dto: QuestionAnswerDto) {
+  async recordAnswer(dto: SubmitQuestionAnswerDto, userId: string) {
     const question = await this.prisma.storyQuestion.findUnique({
       where: { id: dto.questionId },
       select: {
         id: true,
+        storyId: true,
         options: true,
         correctOption: true,
       },
@@ -85,6 +86,10 @@ export class ReportsService {
 
     if (!question) {
       throw new BadRequestException('Question not found');
+    }
+
+    if (question.storyId !== dto.storyId) {
+      throw new BadRequestException('Question does not belong to this story');
     }
 
     if (
@@ -96,9 +101,40 @@ export class ReportsService {
 
     const isCorrect = question.correctOption === dto.selectedOption;
 
+    // Check for existing answer to prevent duplicates
+    const existing = await this.prisma.questionAnswer.findFirst({
+      where: {
+        userId,
+        questionId: dto.questionId,
+        isDeleted: false,
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      // Update existing answer instead of creating duplicate
+      const answer = await this.prisma.questionAnswer.update({
+        where: { id: existing.id },
+        data: {
+          selectedOption: dto.selectedOption,
+          isCorrect,
+          answeredAt: new Date(),
+        },
+        select: {
+          id: true,
+          isCorrect: true,
+        },
+      });
+
+      return {
+        answerId: answer.id,
+        isCorrect,
+      };
+    }
+
     const answer = await this.prisma.questionAnswer.create({
       data: {
-        kidId: dto.kidId,
+        userId,
         questionId: dto.questionId,
         storyId: dto.storyId,
         selectedOption: dto.selectedOption,
@@ -110,20 +146,12 @@ export class ReportsService {
       },
     });
 
-    // Trigger badge progress for quiz answered
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: dto.kidId },
-      select: { parentId: true },
-    });
-
-    if (kid?.parentId) {
-      await this.badgeProgressEngine.recordActivity(
-        kid.parentId,
-        'quiz_answered',
-        dto.kidId,
-        { questionId: dto.questionId, isCorrect },
-      );
-    }
+    await this.badgeProgressEngine.recordActivity(
+      userId,
+      'quiz_answered',
+      undefined,
+      { questionId: dto.questionId, isCorrect },
+    );
 
     return {
       answerId: answer.id,
@@ -478,6 +506,8 @@ export class ReportsService {
     });
 
     // Quiz performance this week
+    // TODO: Also query by userId (via kid.parentId) once kid profiles are implemented.
+    // Currently, interactive mode answers are recorded against userId, not kidId.
     const answers = await this.prisma.questionAnswer.findMany({
       where: {
         kidId,
