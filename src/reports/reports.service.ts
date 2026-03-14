@@ -101,51 +101,30 @@ export class ReportsService {
 
     const isCorrect = question.correctOption === dto.selectedOption;
 
-    // Check for existing answer to prevent duplicates
-    const existing = await this.prisma.questionAnswer.findFirst({
+    const answer = await this.prisma.questionAnswer.upsert({
       where: {
-        userId,
-        questionId: dto.questionId,
+        userId_questionId_unique: {
+          userId,
+          questionId: dto.questionId,
+        },
+      },
+      update: {
+        selectedOption: dto.selectedOption,
+        isCorrect,
+        answeredAt: new Date(),
         isDeleted: false,
       },
-      select: { id: true },
-    });
-
-    if (existing) {
-      // Update existing answer instead of creating duplicate
-      const answer = await this.prisma.questionAnswer.update({
-        where: { id: existing.id },
-        data: {
-          selectedOption: dto.selectedOption,
-          isCorrect,
-          answeredAt: new Date(),
-        },
-        select: {
-          id: true,
-          isCorrect: true,
-        },
-      });
-
-      return {
-        answerId: answer.id,
-        isCorrect,
-      };
-    }
-
-    const answer = await this.prisma.questionAnswer.create({
-      data: {
+      create: {
         userId,
         questionId: dto.questionId,
         storyId: dto.storyId,
         selectedOption: dto.selectedOption,
         isCorrect,
       },
-      select: {
-        id: true,
-        isCorrect: true,
-      },
+      select: { id: true, isCorrect: true },
     });
 
+    // Badge progress is idempotent — safe to call on both create and update
     await this.badgeProgressEngine.recordActivity(
       userId,
       'quiz_answered',
@@ -153,10 +132,7 @@ export class ReportsService {
       { questionId: dto.questionId, isCorrect },
     );
 
-    return {
-      answerId: answer.id,
-      isCorrect,
-    };
+    return { answerId: answer.id, isCorrect };
   }
 
   /**
