@@ -127,6 +127,7 @@ model User {
   couponRedemptions     CouponRedemption[]
   // Coupon-granted premium access expiry date
   premiumAccessUntil    DateTime?
+  questionAnswers       QuestionAnswer[]
 
   @@index([isDeleted])
   @@index([email, isDeleted])
@@ -495,6 +496,7 @@ model Subscription {
 
   @@index([userId, status])
   @@index([status, isDeleted])
+  @@index([purchaseToken])
   @@index([isDeleted])
   @@map("subscriptions")
 }
@@ -858,8 +860,10 @@ model ScreenTimeSession {
 
 model QuestionAnswer {
   id             String        @id @default(uuid())
-  kidId          String
-  kid            Kid           @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  kidId          String?
+  kid            Kid?          @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   questionId     String
   question       StoryQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
   storyId        String
@@ -871,6 +875,7 @@ model QuestionAnswer {
   deletedAt      DateTime?
 
   @@index([kidId])
+  @@index([userId])
   @@index([questionId])
   @@index([storyId])
   @@index([kidId, answeredAt])
@@ -1177,4 +1182,25 @@ model CouponRedemption {
   @@index([couponId])
   @@index([userId])
   @@map("coupon_redemptions")
+}
+
+// -------------------------
+// WEBHOOK EVENTS
+// -------------------------
+model WebhookEvent {
+  id              String    @id @default(uuid())
+  platform        String // "apple" | "google"
+  eventType       String // e.g. "DID_RENEW", "SUBSCRIPTION_RENEWED"
+  externalEventId String // Apple: notificationUUID, Google: messageId
+  payload         Json // Full decoded payload for debugging
+  status          String    @default("received") // received | processed | skipped | failed
+  errorMessage    String?
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@unique([platform, externalEventId])
+  @@index([platform, eventType])
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@map("webhook_events")
 }
