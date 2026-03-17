@@ -227,6 +227,14 @@ export class VoiceQuotaService {
         .map((v) => [v.id, v.elevenLabsVoiceId!]),
     );
 
+    // Build reverse map: elevenLabsId → VoiceType key for reliable dedup
+    const elevenLabsToVoiceType = new Map(
+      Object.entries(VOICE_CONFIG).map(([key, config]) => [
+        config.elevenLabsId,
+        key,
+      ]),
+    );
+
     // Resolve each cached voiceId to its VoiceType key
     const voiceTypeKeys = distinctVoices.map((v) => {
       // Already a VoiceType key
@@ -237,13 +245,10 @@ export class VoiceQuotaService {
       const migrated = VOICE_TYPE_MIGRATION_MAP[v.voiceId];
       if (migrated) return migrated;
 
-      // UUID or elevenLabsId → look up the elevenLabsId, then find VoiceType key
+      // UUID → elevenLabsId via DB lookup, or assume it's already an elevenLabsId
       const elevenLabsId = uuidToElevenLabs.get(v.voiceId) ?? v.voiceId;
-      const entry = Object.entries(VOICE_CONFIG).find(
-        ([, config]) => config.elevenLabsId === elevenLabsId,
-      );
-      // Keep non-system voices in canonical form for downstream comparison
-      return entry ? entry[0] : elevenLabsId;
+      // elevenLabsId → VoiceType key via reverse map
+      return elevenLabsToVoiceType.get(elevenLabsId) ?? elevenLabsId;
     });
 
     return [...new Set(voiceTypeKeys)];
