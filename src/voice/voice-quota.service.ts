@@ -7,6 +7,14 @@ import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { VOICE_CONFIG } from './voice.constants';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from './dto/voice.dto';
 
+/** Reverse lookup: elevenLabsId → VoiceType key (built once at module load). */
+const ELEVEN_LABS_TO_VOICE_TYPE = new Map(
+  Object.entries(VOICE_CONFIG).map(([key, config]) => [
+    config.elevenLabsId,
+    key,
+  ]),
+);
+
 @Injectable()
 export class VoiceQuotaService {
   private readonly logger = new Logger(VoiceQuotaService.name);
@@ -51,9 +59,10 @@ export class VoiceQuotaService {
     if (voice) return voice.id;
 
     // Auto-seed from VOICE_CONFIG if this is a known system voice
-    const configEntry = Object.entries(VOICE_CONFIG).find(
-      ([, config]) => config.elevenLabsId === elevenLabsVoiceId,
-    );
+    const voiceTypeKey = ELEVEN_LABS_TO_VOICE_TYPE.get(elevenLabsVoiceId);
+    const configEntry = voiceTypeKey
+      ? ([voiceTypeKey, VOICE_CONFIG[voiceTypeKey as VoiceType]] as const)
+      : undefined;
     if (!configEntry) return null;
 
     const [key, config] = configEntry;
@@ -227,14 +236,6 @@ export class VoiceQuotaService {
         .map((v) => [v.id, v.elevenLabsVoiceId!]),
     );
 
-    // Build reverse map: elevenLabsId → VoiceType key for reliable dedup
-    const elevenLabsToVoiceType = new Map(
-      Object.entries(VOICE_CONFIG).map(([key, config]) => [
-        config.elevenLabsId,
-        key,
-      ]),
-    );
-
     // Resolve each cached voiceId to its VoiceType key
     const voiceTypeKeys = distinctVoices.map((v) => {
       // Already a VoiceType key
@@ -247,8 +248,8 @@ export class VoiceQuotaService {
 
       // UUID → elevenLabsId via DB lookup, or assume it's already an elevenLabsId
       const elevenLabsId = uuidToElevenLabs.get(v.voiceId) ?? v.voiceId;
-      // elevenLabsId → VoiceType key via reverse map
-      return elevenLabsToVoiceType.get(elevenLabsId) ?? elevenLabsId;
+      // elevenLabsId → VoiceType key via module-level reverse map
+      return ELEVEN_LABS_TO_VOICE_TYPE.get(elevenLabsId) ?? elevenLabsId;
     });
 
     return [...new Set(voiceTypeKeys)];
@@ -559,9 +560,7 @@ export class VoiceQuotaService {
       const elevenLabsId = lockedVoice?.elevenLabsVoiceId;
       // Find the VoiceType key whose config matches this elevenLabsId
       const voiceTypeKey = elevenLabsId
-        ? (Object.entries(VOICE_CONFIG).find(
-            ([, config]) => config.elevenLabsId === elevenLabsId,
-          )?.[0] ?? null)
+        ? (ELEVEN_LABS_TO_VOICE_TYPE.get(elevenLabsId) ?? null)
         : null;
 
       // Report the locked voice — free users get ONE voice total
