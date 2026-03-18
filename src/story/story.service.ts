@@ -75,6 +75,7 @@ export class StoryService {
   private readonly logger = new Logger(StoryService.name);
   // Average reading speed for children: ~150 words per minute
   private readonly WORDS_PER_MINUTE = 150;
+  private readonly CATEGORY_HOLIDAY_SEASONAL = 'Holiday/Seasonal';
 
   /** Wraps a Prisma query to handle invalid cursor IDs gracefully */
   private async withCursorErrorHandling<T>(fn: () => Promise<T>): Promise<T> {
@@ -148,6 +149,9 @@ export class StoryService {
     if (filter.theme) where.themes = { some: { id: filter.theme } };
     if (filter.category) {
       where.categories = { some: { id: filter.category } };
+    }
+    if (filter.season) {
+      where.seasons = { some: { id: filter.season } };
     }
     // Seasonal Filter (Dynamic based on date)
     if (filter.isSeasonal) {
@@ -303,6 +307,17 @@ export class StoryService {
 
     const { where } = await this.buildStoryWhereClause(filter);
 
+    let shouldSortBySeason = !!filter.isSeasonal;
+    if (filter.category && !shouldSortBySeason) {
+      const category = await this.prisma.category.findUnique({
+        where: { id: filter.category },
+        select: { name: true },
+      });
+      if (category?.name === this.CATEGORY_HOLIDAY_SEASONAL) {
+        shouldSortBySeason = true;
+      }
+    }
+
     // Shuffle only applies on page 1 (home screen carousels).
     // Beyond page 1 (paginated "See All"), disable shuffle to avoid overlapping pages.
     const shouldShuffle = filter.shuffle === true && page === 1;
@@ -340,13 +355,13 @@ export class StoryService {
 
     // Run count and findMany in parallel to reduce latency by ~50%
     // For topPicksFromUs, pagination is handled in the raw SQL query
-    const [totalCount, stories] = await Promise.all([
+    const [totalCount, queriedStories] = await Promise.all([
       filter.topPicksFromUs
         ? this.prisma.story.count({ where: { isDeleted: false } })
         : this.prisma.story.count({ where }),
       this.prisma.story.findMany({
         where,
-        ...(filter.topPicksFromUs
+        ...(filter.topPicksFromUs || shouldSortBySeason
           ? {}
           : {
               skip,
@@ -369,6 +384,12 @@ export class StoryService {
         },
       }),
     ]);
+
+    let stories = queriedStories;
+    if (shouldSortBySeason) {
+      await this.sortStoriesBySeasonRecency(stories);
+      stories = stories.slice(skip, skip + limit);
+    }
 
     const totalPages = Math.ceil(totalCount / limit);
     const enrichedStories = await this.enrichWithReadStatus(
@@ -559,6 +580,61 @@ export class StoryService {
 
   // Threshold in days to consider a past season as "recent" for backfill
   private readonly RECENT_SEASON_THRESHOLD_DAYS = 45;
+
+  private async sortStoriesBySeasonRecency(stories: any[]) {
+    const allSeasons = await this.prisma.season.findMany({
+      where: { isDeleted: false },
+    });
+
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    const currentDay = today.getDate(); // 1-31
+    const currentDateStr = `${currentMonth
+      .toString()
+      .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
+
+    const getScore = (s: any) => {
+      if (!s.startDate || !s.endDate) return Infinity;
+      let isActive = false;
+      if (s.startDate > s.endDate) {
+        isActive = currentDateStr >= s.startDate || currentDateStr <= s.endDate;
+      } else {
+        isActive =
+          currentDateStr >= s.startDate && currentDateStr <= s.endDate;
+      }
+      if (isActive) return -1;
+
+      const [endMonth, endDay] = s.endDate.split('-').map(Number);
+      const thisYearEnd = new Date(today.getFullYear(), endMonth - 1, endDay);
+      let diffTime = today.getTime() - thisYearEnd.getTime();
+      let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays < 0) {
+        const lastYearEnd = new Date(
+          today.getFullYear() - 1,
+          endMonth - 1,
+          endDay,
+        );
+        diffDays = Math.ceil(
+          (today.getTime() - lastYearEnd.getTime()) / (1000 * 60 * 60 * 24),
+        );
+      }
+      return diffDays;
+    };
+
+    allSeasons.sort((a, b) => getScore(a) - getScore(b));
+    const rankMap = new Map(allSeasons.map((s, idx) => [s.id, idx]));
+
+    stories.sort((a, b) => {
+      const rankA = a.seasons?.length
+        ? Math.min(...a.seasons.map((s: any) => rankMap.get(s.id) ?? Infinity))
+        : Infinity;
+      const rankB = b.seasons?.length
+        ? Math.min(...b.seasons.map((s: any) => rankMap.get(s.id) ?? Infinity))
+        : Infinity;
+      return rankA - rankB;
+    });
+  }
 
   private async getRelevantSeasons() {
     const today = new Date();
