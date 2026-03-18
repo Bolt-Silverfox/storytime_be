@@ -600,14 +600,13 @@ export class StoryService {
       if (s.startDate > s.endDate) {
         isActive = currentDateStr >= s.startDate || currentDateStr <= s.endDate;
       } else {
-        isActive =
-          currentDateStr >= s.startDate && currentDateStr <= s.endDate;
+        isActive = currentDateStr >= s.startDate && currentDateStr <= s.endDate;
       }
       if (isActive) return -1;
 
       const [endMonth, endDay] = s.endDate.split('-').map(Number);
       const thisYearEnd = new Date(today.getFullYear(), endMonth - 1, endDay);
-      let diffTime = today.getTime() - thisYearEnd.getTime();
+      const diffTime = today.getTime() - thisYearEnd.getTime();
       let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
       if (diffDays < 0) {
