@@ -281,7 +281,7 @@ export class StoryService {
   }
 
   async getStories(filter: {
-    userId: string;
+    userId?: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -371,10 +371,9 @@ export class StoryService {
     ]);
 
     const totalPages = Math.ceil(totalCount / limit);
-    const enrichedStories = await this.enrichWithReadStatus(
-      filter.userId,
-      stories,
-    );
+    const enrichedStories = filter.userId
+      ? await this.enrichWithReadStatus(filter.userId, stories)
+      : stories.map((s) => ({ ...s, readStatus: null }));
 
     let sortedStories = this.sortByReadStatus(enrichedStories, {
       shuffleUnseen: shouldShuffle,
@@ -420,7 +419,7 @@ export class StoryService {
   }
 
   async getStoriesCursor(filter: {
-    userId: string;
+    userId?: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -458,7 +457,9 @@ export class StoryService {
       stories,
       limit,
     );
-    const enriched = await this.enrichWithReadStatus(filter.userId, data);
+    const enriched = filter.userId
+      ? await this.enrichWithReadStatus(filter.userId, data)
+      : data.map((s) => ({ ...s, readStatus: null }));
 
     return { data: this.sortByReadStatus(enriched), pagination };
   }
@@ -621,30 +622,33 @@ export class StoryService {
   }
 
   async getHomePageStories(
-    userId: string,
+    userId: string | undefined,
     limitRecommended: number = 5,
     limitSeasonal: number = 5,
     limitTopLiked: number = 5,
   ) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-      include: { preferredCategories: true },
-    });
+    const user = userId
+      ? await this.prisma.user.findUnique({
+          where: { id: userId, isDeleted: false },
+          include: { preferredCategories: true },
+        })
+      : null;
 
-    if (!user) {
+    if (userId && !user) {
       throw new NotFoundException('User not found');
     }
 
     // 1. Recommended Stories (based on preferred categories)
     let recommended: Awaited<ReturnType<typeof this.prisma.story.findMany>> =
       [];
-    if (user.preferredCategories.length > 0) {
+    const preferredCategories = user?.preferredCategories ?? [];
+    if (preferredCategories.length > 0) {
       recommended = await this.prisma.story.findMany({
         where: {
           isDeleted: false,
           categories: {
             some: {
-              id: { in: user.preferredCategories.map((c: Category) => c.id) },
+              id: { in: preferredCategories.map((c: Category) => c.id) },
             },
           },
         },
@@ -721,7 +725,9 @@ export class StoryService {
 
     // Enrich all stories with readStatus in a single DB query
     const allStories = [...recommended, ...seasonal, ...topLiked];
-    const enriched = await this.enrichWithReadStatus(userId, allStories);
+    const enriched = userId
+      ? await this.enrichWithReadStatus(userId, allStories)
+      : allStories.map((s) => ({ ...s, readStatus: null }));
 
     const recLen = recommended.length;
     const seaLen = seasonal.length;
