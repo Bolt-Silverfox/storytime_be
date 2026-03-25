@@ -236,8 +236,7 @@ export class StoryController {
     }
 
     const authenticatedUserId = req.authUserData?.userId;
-    const resolvedKidId =
-      kidId && authenticatedUserId ? kidId : undefined;
+    const resolvedKidId = kidId && authenticatedUserId ? kidId : undefined;
 
     if (resolvedKidId && authenticatedUserId) {
       await this.verifyKidOwnership(resolvedKidId, authenticatedUserId);
