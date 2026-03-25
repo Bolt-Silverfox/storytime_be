@@ -235,17 +235,21 @@ export class StoryController {
       throw new BadRequestException('maxAge must be a non-negative number');
     }
 
-    if (kidId && req.authUserData?.userId) {
-      await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    const authenticatedUserId = req.authUserData?.userId;
+    const resolvedKidId =
+      kidId && authenticatedUserId ? kidId : undefined;
+
+    if (resolvedKidId && authenticatedUserId) {
+      await this.verifyKidOwnership(resolvedKidId, authenticatedUserId);
     }
 
     const baseFilter = {
-      userId: req.authUserData?.userId,
+      userId: authenticatedUserId,
       theme,
       category,
       season,
       isSeasonal: isSeasonal === 'true',
-      kidId,
+      kidId: resolvedKidId,
       age: parsedAge,
       minAge: parsedMinAge,
       maxAge: parsedMaxAge,
