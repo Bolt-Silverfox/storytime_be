@@ -81,6 +81,8 @@ import {
 } from '@/shared/constants/cache-keys.constants';
 import { StoryQuotaService } from './story-quota.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
+import { Public } from '@/shared/decorators/public.decorator';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -185,6 +187,7 @@ export class StoryController {
     description: 'Not Found',
     type: ErrorResponseDto,
   })
+  @OptionalAuth()
   @Throttle({
     long: { limit: THROTTLE_LIMITS.LONG.LIMIT, ttl: THROTTLE_LIMITS.LONG.TTL },
   }) // 100 per minute
@@ -232,12 +235,12 @@ export class StoryController {
       throw new BadRequestException('maxAge must be a non-negative number');
     }
 
-    if (kidId) {
+    if (kidId && req.authUserData?.userId) {
       await this.verifyKidOwnership(kidId, req.authUserData.userId);
     }
 
     const baseFilter = {
-      userId: req.authUserData.userId,
+      userId: req.authUserData?.userId,
       theme,
       category,
       season,
@@ -292,6 +295,7 @@ export class StoryController {
   }
 
   @Get('homepage/parent')
+  @OptionalAuth()
   @ApiOperation({
     summary: 'Get parent homepage stories (Recommended, Seasonal, Top Liked)',
   })
@@ -315,7 +319,7 @@ export class StoryController {
     const safeLimitSeasonal = Math.max(1, Math.min(limitSeasonal, 50));
     const safeLimitTopLiked = Math.max(1, Math.min(limitTopLiked, 50));
     return this.storyService.getHomePageStories(
-      req.authUserData.userId,
+      req.authUserData?.userId,
       safeLimitRecommended,
       safeLimitSeasonal,
       safeLimitTopLiked,
@@ -323,6 +327,7 @@ export class StoryController {
   }
 
   @Get('categories')
+  @Public()
   @UseInterceptors(CacheInterceptor)
   @CacheKey('categories:all')
   @CacheTTL(4 * 60 * 60 * 1000)
@@ -352,6 +357,7 @@ export class StoryController {
   }
 
   @Get('themes')
+  @Public()
   @ApiOperation({ summary: 'Get all themes' })
   @ApiOkResponse({
     description: 'List of themes',
@@ -378,6 +384,7 @@ export class StoryController {
   }
 
   @Get('seasons')
+  @Public()
   @ApiOperation({ summary: 'Get all seasons' })
   @ApiOkResponse({
     description: 'List of seasons',
@@ -1224,6 +1231,7 @@ export class StoryController {
   }
 
   @Get(':id')
+  @OptionalAuth()
   @UseGuards(StoryAccessGuard)
   @CheckStoryQuota()
   @ApiOperation({ summary: 'Get a story by id' })
