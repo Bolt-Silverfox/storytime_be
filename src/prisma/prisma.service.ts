@@ -15,8 +15,8 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    // Configure connection pool via datasource URL parameters
-    // These can be overridden in DATABASE_URL: ?connection_limit=10&pool_timeout=10
+    // Use Prisma Accelerate for connection pooling
+    // The DATABASE_URL should be a prisma:// URL for Accelerate
     super({
       datasources: {
         db: {
