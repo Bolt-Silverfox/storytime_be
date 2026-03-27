@@ -10,7 +10,9 @@
 import { PrismaClient, NotificationCategory } from '@prisma/client';
 
 if (!process.env.DIRECT_DATABASE_URL) {
-  throw new Error('DIRECT_DATABASE_URL environment variable is required for seeding');
+  throw new Error(
+    'DIRECT_DATABASE_URL environment variable is required for seeding',
+  );
 }
 
 const prisma = new PrismaClient({
