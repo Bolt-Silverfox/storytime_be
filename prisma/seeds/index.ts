@@ -13,7 +13,11 @@ import { seedStoryBuddies } from './story-buddies.seed';
 import { seedStories } from './stories.seed';
 
 if (!process.env.DIRECT_DATABASE_URL) {
-  throw new Error('DIRECT_DATABASE_URL environment variable is required for seeding');
+if (!process.env.DIRECT_DATABASE_URL) {
+  throw new Error(
+    'DIRECT_DATABASE_URL environment variable is required for seeding',
+  );
+}
 }
 
 const prisma = new PrismaClient({
