@@ -40,6 +40,7 @@ import { AdminModule } from './admin/admin.module';
 import { CouponModule } from './coupon/coupon.module';
 import { HealthModule } from './health/health.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { GuestModule } from './guest/guest.module';
 
 @Module({
   imports: [
@@ -132,6 +133,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     AdminModule,
     CouponModule,
     HealthModule,
+    GuestModule,
   ],
   providers: [
     {

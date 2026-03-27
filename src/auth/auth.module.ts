@@ -10,6 +10,7 @@ import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GoogleOAuthStrategy } from './strategies/google-oauth.strategy';
 import { TokenService } from './services/token.service';
 import { PasswordService } from './services/password.service';
+import { GuestModule } from '@/guest/guest.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PasswordService } from './services/password.service';
     }),
 
     forwardRef(() => NotificationModule),
+    GuestModule,
   ],
 
   controllers: [AuthController],
