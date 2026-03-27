@@ -207,7 +207,7 @@ jobs:
         run: pnpm db:generate
 
       - name: Run database migrations
-        run: DIRECT_DATABASE_URL="${{ secrets.DIRECT_DATABASE_URL }}" pnpm db:migrate:deploy
+        run: pnpm db:migrate:deploy
 
       - name: Run tests
         run: pnpm test
@@ -273,7 +273,7 @@ jobs:
       name: production
       url: ${{ vars.PROD_APP_URL }}
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
 
     steps:
       - name: Checkout
