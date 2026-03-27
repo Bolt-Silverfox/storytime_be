@@ -64,6 +64,7 @@ async function bootstrap() {
       'Accept',
       'X-Requested-With',
       'X-API-Key',
+      'X-Guest-Session-Id',
     ],
     credentials: true,
     preflightContinue: false,
