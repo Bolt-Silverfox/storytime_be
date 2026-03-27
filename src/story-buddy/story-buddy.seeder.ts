@@ -2,6 +2,12 @@ import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { storyBuddiesData } from '../../prisma/data';
 
+if (!process.env.DIRECT_DATABASE_URL) {
+  throw new Error(
+    'DIRECT_DATABASE_URL environment variable is required for story buddy seeding',
+  );
+}
+
 const prisma = new PrismaClient({
   datasourceUrl: process.env.DIRECT_DATABASE_URL,
 });
