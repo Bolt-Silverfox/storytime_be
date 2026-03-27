@@ -32,6 +32,7 @@ import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
+import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import { StoryService } from '../story/story.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
@@ -272,7 +273,7 @@ export class VoiceController {
   // --- Text to Speech ---
 
   @Post('story/audio/batch')
-  @UseGuards(AuthSessionGuard)
+  @OptionalAuth()
   @Throttle({ short: { limit: 3, ttl: 60_000 } })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate audio for all paragraphs of a story' })
@@ -325,16 +326,31 @@ export class VoiceController {
     @Body() dto: BatchStoryAudioDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
-    const canUse = await this.voiceQuotaService.canUseVoice(
-      req.authUserData.userId,
-      resolvedVoice,
-    );
-    if (!canUse) {
-      throw new ForbiddenException(
-        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+    const isGuest = !req.authUserData;
+    const userId = req.authUserData?.userId ?? 'guest';
+
+    // For guest users, only allow the default voice and skip quota checks
+    if (isGuest) {
+      if (dto.voiceId && dto.voiceId !== DEFAULT_VOICE) {
+        throw new ForbiddenException(
+          'Guest users can only use the default voice. Sign in to access all voices.',
+        );
+      }
+    } else {
+      // For authenticated users, perform voice quota checks
+      const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
+      const canUse = await this.voiceQuotaService.canUseVoice(
+        userId,
+        resolvedVoice,
       );
+      if (!canUse) {
+        throw new ForbiddenException(
+          'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+        );
+      }
     }
+
+    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
 
     const story = await this.storyService.getStoryById(dto.storyId);
     if (!story || !story.textContent) {
@@ -355,7 +371,7 @@ export class VoiceController {
       dto.storyId,
       story.textContent,
       resolvedVoice,
-      req.authUserData.userId,
+      userId,
       EAGER_PARAGRAPH_COUNT,
     );
 
@@ -368,7 +384,7 @@ export class VoiceController {
         batchJobId = await this.ttsBatchQueueService.queueBatch({
           storyId: dto.storyId,
           voiceId: resolvedVoice,
-          userId: req.authUserData.userId,
+          userId,
           isPremium,
           provider: batchProvider,
           paragraphs: remainingUncached,
