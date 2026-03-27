@@ -11,29 +11,21 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiHeader } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
+import { Public } from '@/shared/decorators/public.decorator';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { GuestSessionService } from './guest-session.service';
 import { PrismaService } from '@/prisma/prisma.service';
+import {
+  UpdateGuestProgressDto,
+  CreateGuestSessionResponseDto,
+  GuestProgressResponseDto,
+  GuestHistoryResponseDto,
+} from './dto/guest.dto';
 
-interface UpdateProgressDto {
-  storyId: string;
-  progress: number;
-}
-
-interface ProgressResponse {
-  storyId: string;
-  progress: number;
-  lastAccessed: Date;
-}
-
-interface HistoryResponse {
-  stories: Array<{
-    storyId: string;
-    progress: number;
-    lastAccessed: Date;
-  }>;
-}
+/** TTL for guest sessions in seconds (7 days) */
+const GUEST_SESSION_TTL = 7 * 24 * 60 * 60;
 
 @ApiTags('Guest')
 @Controller('guest')
@@ -44,6 +36,29 @@ export class GuestController {
     private readonly guestSessionService: GuestSessionService,
     private readonly prisma: PrismaService,
   ) {}
+
+  /**
+   * Create a new guest session
+   */
+  @Post('session')
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @ApiOperation({ summary: 'Create a new guest session' })
+  @ApiResponse({
+    status: 201,
+    description: 'Guest session created successfully',
+    type: CreateGuestSessionResponseDto,
+  })
+  async createSession(): Promise<CreateGuestSessionResponseDto> {
+    const session = await this.guestSessionService.createGuestSession();
+    this.logger.log(`Guest session created: ${session.sessionId}`);
+
+    return {
+      sessionId: session.sessionId,
+      createdAt: session.createdAt,
+      expiresIn: GUEST_SESSION_TTL,
+    };
+  }
 
   /**
    * Update reading progress for a story
@@ -68,7 +83,7 @@ export class GuestController {
   })
   async updateProgress(
     @Req() req: AuthenticatedRequest,
-    @Body() dto: UpdateProgressDto,
+    @Body() dto: UpdateGuestProgressDto,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ): Promise<{ success: boolean }> {
     const userId = req.authUserData?.userId;
@@ -126,16 +141,13 @@ export class GuestController {
   @ApiResponse({
     status: 200,
     description: 'Progress retrieved successfully',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Not Found - no progress found',
+    type: GuestProgressResponseDto,
   })
   async getProgress(
     @Req() req: AuthenticatedRequest,
     @Param('storyId') storyId: string,
     @Headers('x-guest-session-id') guestSessionId?: string,
-  ): Promise<ProgressResponse | null> {
+  ): Promise<GuestProgressResponseDto | null> {
     const userId = req.authUserData?.userId;
 
     if (!userId && !guestSessionId) {
@@ -206,11 +218,12 @@ export class GuestController {
   @ApiResponse({
     status: 200,
     description: 'History retrieved successfully',
+    type: GuestHistoryResponseDto,
   })
   async getHistory(
     @Req() req: AuthenticatedRequest,
     @Headers('x-guest-session-id') guestSessionId?: string,
-  ): Promise<HistoryResponse> {
+  ): Promise<GuestHistoryResponseDto> {
     const userId = req.authUserData?.userId;
 
     if (!userId && !guestSessionId) {

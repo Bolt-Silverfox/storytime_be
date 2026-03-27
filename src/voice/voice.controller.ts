@@ -327,11 +327,12 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
   ) {
     const isGuest = !req.authUserData;
-    const userId = req.authUserData?.userId ?? 'guest';
+    const userId =
+      req.authUserData?.userId ?? '00000000-0000-0000-0000-000000000000';
 
     // For guest users, only allow the default voice and skip quota checks
     if (isGuest) {
-      if (dto.voiceId && dto.voiceId !== DEFAULT_VOICE) {
+      if (dto.voiceId && dto.voiceId !== (DEFAULT_VOICE as string)) {
         throw new ForbiddenException(
           'Guest users can only use the default voice. Sign in to access all voices.',
         );
