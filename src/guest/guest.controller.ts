@@ -116,11 +116,14 @@ export class GuestController {
       });
     } else if (guestSessionId) {
       // Guest user - update in Redis
-      await this.guestSessionService.updateGuestProgress(
+      const updated = await this.guestSessionService.updateGuestProgress(
         guestSessionId,
         dto.storyId,
         clampedProgress,
       );
+      if (!updated) {
+        throw new NotFoundException('Guest session not found');
+      }
     }
 
     return { success: true };
@@ -158,9 +161,11 @@ export class GuestController {
 
     if (userId) {
       // Authenticated user - get from database
-      const progress = await this.prisma.userStoryProgress.findUnique({
+      const progress = await this.prisma.userStoryProgress.findFirst({
         where: {
-          userId_storyId: { userId, storyId },
+          userId,
+          storyId,
+          isDeleted: false,
         },
         select: {
           storyId: true,
@@ -235,7 +240,7 @@ export class GuestController {
     if (userId) {
       // Authenticated user - get from database
       const progressRecords = await this.prisma.userStoryProgress.findMany({
-        where: { userId },
+        where: { userId, isDeleted: false },
         select: {
           storyId: true,
           progress: true,
