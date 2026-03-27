@@ -1,8 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { EnvConfig } from '@/shared/config/env.validation';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { v4 as uuidv4 } from 'uuid';
-import Redis from 'ioredis';
 
 /**
  * Reading progress entry for a story
@@ -33,35 +32,23 @@ export interface GuestSession {
  */
 const GUEST_SESSION_PREFIX = 'guest:session:';
 /**
- * TTL for guest sessions in seconds (7 days)
+ * TTL for guest sessions in milliseconds (7 days)
  */
-const GUEST_SESSION_TTL = 7 * 24 * 60 * 60;
+const GUEST_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * TTL for guest sessions in seconds (7 days) — used in API responses
+ */
+export const GUEST_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 /**
- * Service for managing guest sessions and tracking reading progress
+ * Service for managing guest sessions and tracking reading progress.
+ * Uses the global CacheModule (Keyv + KeyvRedis) instead of a standalone Redis connection.
  */
 @Injectable()
 export class GuestSessionService {
   private readonly logger = new Logger(GuestSessionService.name);
-  private readonly redis: Redis;
 
-  constructor(private readonly configService: ConfigService<EnvConfig, true>) {
-    const redisUrl = this.configService.get('REDIS_URL');
-    if (!redisUrl) {
-      throw new Error('REDIS_URL environment variable is not configured');
-    }
-    this.redis = new Redis(redisUrl, {
-      maxRetriesPerRequest: null,
-    });
-
-    this.redis.on('error', (error) => {
-      this.logger.error('Redis connection error:', error);
-    });
-
-    this.redis.on('connect', () => {
-      this.logger.log('Redis connected for guest sessions');
-    });
-  }
+  constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache) {}
 
   /**
    * Creates a new guest session with a unique UUID
@@ -79,7 +66,7 @@ export class GuestSessionService {
     };
 
     const key = this.getSessionKey(sessionId);
-    await this.redis.setex(key, GUEST_SESSION_TTL, JSON.stringify(session));
+    await this.cacheManager.set(key, session, GUEST_SESSION_TTL_MS);
 
     this.logger.debug(`Created guest session: ${sessionId}`);
     return session;
@@ -99,30 +86,22 @@ export class GuestSessionService {
     }
 
     const key = this.getSessionKey(sessionId);
-    const data = await this.redis.get(key);
+    const session = await this.cacheManager.get<GuestSession>(key);
 
-    if (!data) {
+    if (!session) {
       return null;
     }
 
-    try {
-      const session = JSON.parse(data) as GuestSession;
-      // Convert date strings back to Date objects
-      session.createdAt = new Date(session.createdAt);
-      session.lastActiveAt = new Date(session.lastActiveAt);
-
-      // Convert reading history dates
-      for (const storyId in session.readingHistory) {
-        session.readingHistory[storyId].lastReadAt = new Date(
-          session.readingHistory[storyId].lastReadAt,
-        );
-      }
-
-      return session;
-    } catch (error) {
-      this.logger.error(`Failed to parse guest session ${sessionId}:`, error);
-      return null;
+    // Convert date strings back to Date objects (cache may serialize as strings)
+    session.createdAt = new Date(session.createdAt);
+    session.lastActiveAt = new Date(session.lastActiveAt);
+    for (const storyId in session.readingHistory) {
+      session.readingHistory[storyId].lastReadAt = new Date(
+        session.readingHistory[storyId].lastReadAt,
+      );
     }
+
+    return session;
   }
 
   /**
@@ -158,9 +137,9 @@ export class GuestSessionService {
     // Update last active timestamp
     session.lastActiveAt = new Date();
 
-    // Save back to Redis with TTL refresh
+    // Save back to cache with TTL refresh
     const key = this.getSessionKey(sessionId);
-    await this.redis.setex(key, GUEST_SESSION_TTL, JSON.stringify(session));
+    await this.cacheManager.set(key, session, GUEST_SESSION_TTL_MS);
 
     this.logger.debug(
       `Updated progress for session ${sessionId}, story ${storyId}: ${clampedProgress}%`,
@@ -206,54 +185,15 @@ export class GuestSessionService {
   }
 
   /**
-   * Deletes a guest session from Redis
+   * Deletes a guest session from cache
    * @param sessionId - The session ID to delete
-   * @returns true if the session was deleted, false if it didn't exist
    */
-  async deleteGuestSession(sessionId: string): Promise<boolean> {
+  async deleteGuestSession(sessionId: string): Promise<void> {
     const key = this.getSessionKey(sessionId);
-    const result = await this.redis.del(key);
-
-    const deleted = result > 0;
-    if (deleted) {
-      this.logger.debug(`Deleted guest session: ${sessionId}`);
-    }
-
-    return deleted;
+    await this.cacheManager.del(key);
+    this.logger.debug(`Deleted guest session: ${sessionId}`);
   }
 
-  /**
-   * Refreshes the TTL for a guest session (extends it by 7 days)
-   * @param sessionId - The session ID to refresh
-   * @returns true if the session was refreshed, false if it didn't exist
-   */
-  async refreshSessionTTL(sessionId: string): Promise<boolean> {
-    const key = this.getSessionKey(sessionId);
-    const result = await this.redis.expire(key, GUEST_SESSION_TTL);
-
-    const refreshed = result === 1;
-    if (refreshed) {
-      this.logger.debug(`Refreshed TTL for guest session: ${sessionId}`);
-    }
-
-    return refreshed;
-  }
-
-  /**
-   * Gets the remaining TTL for a guest session in seconds
-   * @param sessionId - The session ID
-   * @returns Remaining TTL in seconds, or -1 if session doesn't exist
-   */
-  async getSessionTTL(sessionId: string): Promise<number> {
-    const key = this.getSessionKey(sessionId);
-    return await this.redis.ttl(key);
-  }
-
-  /**
-   * Generates the Redis key for a guest session
-   * @param sessionId - The session ID
-   * @returns The Redis key
-   */
   private isValidUUID(value: string): boolean {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       value,
@@ -262,14 +202,5 @@ export class GuestSessionService {
 
   private getSessionKey(sessionId: string): string {
     return `${GUEST_SESSION_PREFIX}${sessionId}`;
-  }
-
-  /**
-   * Cleanup method to close Redis connection
-   * Call this when shutting down the service
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.redis.quit();
-    this.logger.log('Redis connection closed for guest sessions');
   }
 }
