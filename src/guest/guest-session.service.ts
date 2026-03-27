@@ -91,6 +91,11 @@ export class GuestSessionService {
    * @returns The guest session data, or null if not found
    */
   async getGuestSession(sessionId: string): Promise<GuestSession | null> {
+    if (!this.isValidUUID(sessionId)) {
+      this.logger.warn(`Invalid guest session ID format: ${sessionId.slice(0, 50)}`);
+      return null;
+    }
+
     const key = this.getSessionKey(sessionId);
     const data = await this.redis.get(key);
 
@@ -247,6 +252,12 @@ export class GuestSessionService {
    * @param sessionId - The session ID
    * @returns The Redis key
    */
+  private isValidUUID(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    );
+  }
+
   private getSessionKey(sessionId: string): string {
     return `${GUEST_SESSION_PREFIX}${sessionId}`;
   }
