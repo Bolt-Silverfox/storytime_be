@@ -307,7 +307,7 @@ jobs:
         run: pnpm db:migrate:deploy
 
       - name: Seed database
-        run: pnpm db:seed
+        run: DIRECT_DATABASE_URL="${{ secrets.DIRECT_DATABASE_URL }}" pnpm db:seed
 
       - name: Prepare deployment directory
         uses: appleboy/ssh-action@v1.0.3
