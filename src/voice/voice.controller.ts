@@ -327,8 +327,8 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
   ) {
     const isGuest = !req.authUserData;
-    const userId =
-      req.authUserData?.userId ?? '00000000-0000-0000-0000-000000000000';
+    const userId = req.authUserData?.userId;
+    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
 
     // For guest users, only allow the default voice and skip quota checks
     if (isGuest) {
@@ -337,9 +337,8 @@ export class VoiceController {
           'Guest users can only use the default voice. Sign in to access all voices.',
         );
       }
-    } else {
+    } else if (userId) {
       // For authenticated users, perform voice quota checks
-      const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
       const canUse = await this.voiceQuotaService.canUseVoice(
         userId,
         resolvedVoice,
@@ -350,8 +349,6 @@ export class VoiceController {
         );
       }
     }
-
-    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
 
     const story = await this.storyService.getStoryById(dto.storyId);
     if (!story || !story.textContent) {
@@ -372,7 +369,7 @@ export class VoiceController {
       dto.storyId,
       story.textContent,
       resolvedVoice,
-      userId,
+      isGuest ? undefined : userId,
       EAGER_PARAGRAPH_COUNT,
     );
 
@@ -385,8 +382,8 @@ export class VoiceController {
         batchJobId = await this.ttsBatchQueueService.queueBatch({
           storyId: dto.storyId,
           voiceId: resolvedVoice,
-          userId,
-          isPremium,
+          userId: userId ?? 'guest',
+          isPremium: isGuest ? false : isPremium,
           provider: batchProvider,
           paragraphs: remainingUncached,
           totalParagraphs,
