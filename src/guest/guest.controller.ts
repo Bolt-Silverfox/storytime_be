@@ -15,7 +15,10 @@ import { Throttle } from '@nestjs/throttler';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import { Public } from '@/shared/decorators/public.decorator';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
-import { GuestSessionService } from './guest-session.service';
+import {
+  GuestSessionService,
+  GUEST_SESSION_TTL_SECONDS,
+} from './guest-session.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import {
   UpdateGuestProgressDto,
@@ -23,9 +26,6 @@ import {
   GuestProgressResponseDto,
   GuestHistoryResponseDto,
 } from './dto/guest.dto';
-
-/** TTL for guest sessions in seconds (7 days) */
-const GUEST_SESSION_TTL = 7 * 24 * 60 * 60;
 
 @ApiTags('Guest')
 @Controller('guest')
@@ -56,7 +56,7 @@ export class GuestController {
     return {
       sessionId: session.sessionId,
       createdAt: session.createdAt,
-      expiresIn: GUEST_SESSION_TTL,
+      expiresIn: GUEST_SESSION_TTL_SECONDS,
     };
   }
 
