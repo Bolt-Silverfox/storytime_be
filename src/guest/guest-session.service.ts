@@ -92,7 +92,9 @@ export class GuestSessionService {
    */
   async getGuestSession(sessionId: string): Promise<GuestSession | null> {
     if (!this.isValidUUID(sessionId)) {
-      this.logger.warn(`Invalid guest session ID format: ${sessionId.slice(0, 50)}`);
+      this.logger.warn(
+        `Invalid guest session ID format: ${sessionId.slice(0, 50)}`,
+      );
       return null;
     }
 
