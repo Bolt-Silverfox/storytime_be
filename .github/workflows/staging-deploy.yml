@@ -304,7 +304,7 @@ jobs:
         run: pnpm db:generate && pnpm build
 
       - name: Run database migrations
-        run: pnpm db:migrate:deploy
+        run: DIRECT_DATABASE_URL="${{ secrets.DIRECT_DATABASE_URL }}" pnpm db:migrate:deploy
 
       - name: Seed database
         run: pnpm db:seed
