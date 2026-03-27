@@ -207,7 +207,7 @@ jobs:
         run: pnpm db:generate
 
       - name: Run database migrations
-        run: pnpm db:migrate:deploy
+        run: DIRECT_DATABASE_URL="${{ secrets.DIRECT_DATABASE_URL }}" pnpm db:migrate:deploy
 
       - name: Run tests
         run: pnpm test
