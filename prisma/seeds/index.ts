@@ -12,7 +12,9 @@ import { seedAvatars } from './avatars.seed';
 import { seedStoryBuddies } from './story-buddies.seed';
 import { seedStories } from './stories.seed';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DIRECT_DATABASE_URL,
+});
 
 /**
  * Main seed orchestrator

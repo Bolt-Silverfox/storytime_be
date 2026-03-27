@@ -9,7 +9,9 @@
  */
 import { PrismaClient, NotificationCategory } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DIRECT_DATABASE_URL,
+});
 
 const testNotifications = [
   {
