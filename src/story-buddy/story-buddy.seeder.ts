@@ -2,7 +2,9 @@ import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { storyBuddiesData } from '../../prisma/data';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DIRECT_DATABASE_URL,
+});
 
 @Injectable()
 export class StoryBuddySeederService implements OnModuleInit {

@@ -36,7 +36,9 @@ cloudinary.config({
   secure: true,
 });
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DIRECT_DATABASE_URL,
+});
 
 const HF_API_URL =
   'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell';
