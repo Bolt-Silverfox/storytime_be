@@ -65,7 +65,9 @@ export class GuestSessionService {
       });
 
       this.keyv.on('error', (err) => {
-        this.logger.warn(`Redis connection error, using in-memory fallback: ${err.message}`);
+        this.logger.warn(
+          `Redis connection error, using in-memory fallback: ${err.message}`,
+        );
       });
 
       this.useRedis = true;

@@ -274,10 +274,7 @@ export class VoiceController {
       };
     }
 
-    return this.voiceQuotaService.getVoiceAccess(
-      userId,
-      storyId,
-    );
+    return this.voiceQuotaService.getVoiceAccess(userId, storyId);
   }
 
   // --- List available ElevenLabs voices ---
@@ -402,7 +399,7 @@ export class VoiceController {
         batchJobId = await this.ttsBatchQueueService.queueBatch({
           storyId: dto.storyId,
           voiceId: resolvedVoice,
-          userId: isGuest ? guestSessionId ?? 'guest' : userId,
+          userId: isGuest ? (guestSessionId ?? 'guest') : userId,
           isPremium: isGuest ? false : isPremium,
           provider: batchProvider,
           paragraphs: remainingUncached,
@@ -449,7 +446,9 @@ export class VoiceController {
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
     const isGuest = !req.authUserData;
-    const userId = isGuest ? guestSessionId ?? 'guest' : req.authUserData?.userId;
+    const userId = isGuest
+      ? (guestSessionId ?? 'guest')
+      : req.authUserData?.userId;
 
     const status = await this.ttsBatchQueueService.getBatchStatus(
       batchJobId,

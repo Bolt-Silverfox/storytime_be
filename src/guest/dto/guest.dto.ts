@@ -1,5 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsString, Max, Min, IsOptional, IsBoolean, IsArray, IsDate, IsUUID } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  Max,
+  Min,
+  IsOptional,
+  IsBoolean,
+  IsArray,
+  IsDate,
+  IsUUID,
+} from 'class-validator';
 
 export class UpdateGuestProgressDto {
   @ApiProperty({ description: 'Story ID' })
