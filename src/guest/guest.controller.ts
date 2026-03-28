@@ -265,10 +265,9 @@ export class GuestController {
         throw new NotFoundException('Guest session not found');
       }
 
-      const history =
-        await this.guestSessionService.getGuestReadingHistory(guestSessionId);
+      const history = session.readingHistory;
 
-      if (!history) {
+      if (!history || Object.keys(history).length === 0) {
         return { stories: [] };
       }
 
