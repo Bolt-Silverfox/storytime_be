@@ -1,7 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
+import Keyv from 'keyv';
+import KeyvRedis from '@keyv/redis';
+import { CacheableMemory } from 'cacheable';
 
 /**
  * Reading progress entry for a story
@@ -25,6 +27,8 @@ export interface GuestSession {
   lastActiveAt: Date;
   /** Map of story IDs to their reading progress */
   readingHistory: Record<string, StoryProgress>;
+  /** Number of unique stories read (for quota tracking) */
+  uniqueStoriesRead: number;
 }
 
 /**
@@ -42,13 +46,41 @@ export const GUEST_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 /**
  * Service for managing guest sessions and tracking reading progress.
- * Uses the global CacheModule (Keyv + KeyvRedis) instead of a standalone Redis connection.
+ * Uses Redis via Keyv for persistence, with in-memory fallback for local development.
  */
 @Injectable()
 export class GuestSessionService {
   private readonly logger = new Logger(GuestSessionService.name);
+  private readonly keyv: Keyv;
+  private readonly useRedis: boolean;
 
-  constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache) {}
+  constructor(private readonly configService: ConfigService) {
+    const redisUrl =
+      this.configService.get<string>('REDIS_URL') || 'redis://localhost:6379';
+
+    // Try to use Redis, fall back to in-memory if connection fails
+    try {
+      this.keyv = new Keyv({
+        store: new KeyvRedis(redisUrl),
+      });
+
+      this.keyv.on('error', (err) => {
+        this.logger.warn(`Redis connection error, using in-memory fallback: ${err.message}`);
+      });
+
+      this.useRedis = true;
+      this.logger.log('GuestSessionService using Redis for persistence');
+    } catch (error) {
+      this.logger.warn('Failed to connect to Redis, using in-memory cache');
+      this.keyv = new Keyv({
+        store: new CacheableMemory({
+          ttl: GUEST_SESSION_TTL_MS,
+          lruSize: 1000,
+        }),
+      });
+      this.useRedis = false;
+    }
+  }
 
   /**
    * Creates a new guest session with a unique UUID
@@ -63,10 +95,11 @@ export class GuestSessionService {
       createdAt: now,
       lastActiveAt: now,
       readingHistory: {},
+      uniqueStoriesRead: 0,
     };
 
     const key = this.getSessionKey(sessionId);
-    await this.cacheManager.set(key, session, GUEST_SESSION_TTL_MS);
+    await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
 
     this.logger.debug(`Created guest session: ${sessionId}`);
     return session;
@@ -78,15 +111,12 @@ export class GuestSessionService {
    * @returns The guest session data, or null if not found
    */
   async getGuestSession(sessionId: string): Promise<GuestSession | null> {
-    if (!this.isValidUUID(sessionId)) {
-      this.logger.warn(
-        `Invalid guest session ID format: ${sessionId.slice(0, 50)}`,
-      );
+    if (!sessionId) {
       return null;
     }
 
     const key = this.getSessionKey(sessionId);
-    const session = await this.cacheManager.get<GuestSession>(key);
+    const session = await this.keyv.get<GuestSession>(key);
 
     if (!session) {
       return null;
@@ -139,7 +169,7 @@ export class GuestSessionService {
 
     // Save back to cache with TTL refresh
     const key = this.getSessionKey(sessionId);
-    await this.cacheManager.set(key, session, GUEST_SESSION_TTL_MS);
+    await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
 
     this.logger.debug(
       `Updated progress for session ${sessionId}, story ${storyId}: ${clampedProgress}%`,
@@ -190,14 +220,86 @@ export class GuestSessionService {
    */
   async deleteGuestSession(sessionId: string): Promise<void> {
     const key = this.getSessionKey(sessionId);
-    await this.cacheManager.del(key);
+    await this.keyv.delete(key);
     this.logger.debug(`Deleted guest session: ${sessionId}`);
   }
 
-  private isValidUUID(value: string): boolean {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      value,
+  /**
+   * Records that a guest accessed a new unique story
+   * @param sessionId - The session ID
+   * @param storyId - The story ID
+   * @returns true if this was a new story (quota consumed), false if already read
+   */
+  async recordNewStoryAccess(
+    sessionId: string,
+    storyId: string,
+  ): Promise<boolean> {
+    const session = await this.getGuestSession(sessionId);
+
+    if (!session) {
+      this.logger.warn(
+        `Attempted to record story access for non-existent session: ${sessionId}`,
+      );
+      return false;
+    }
+
+    // Check if story was already read
+    if (session.readingHistory[storyId]) {
+      return false; // Already read, no quota consumed
+    }
+
+    // This is a new story - increment counter
+    session.uniqueStoriesRead += 1;
+
+    // Add to reading history with 0 progress
+    session.readingHistory[storyId] = {
+      progress: 0,
+      lastReadAt: new Date(),
+    };
+
+    // Update last active timestamp
+    session.lastActiveAt = new Date();
+
+    // Save back to cache with TTL refresh
+    const key = this.getSessionKey(sessionId);
+    await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
+
+    this.logger.debug(
+      `Recorded new story access for session ${sessionId}, story ${storyId}. Total: ${session.uniqueStoriesRead}`,
     );
+
+    return true;
+  }
+
+  /**
+   * Gets the quota status for a guest session
+   * @param sessionId - The session ID
+   * @returns The quota status, or null if session not found
+   */
+  async getGuestQuotaStatus(sessionId: string): Promise<{
+    isPremium: false;
+    unlimited: false;
+    used: number;
+    baseLimit: number;
+    totalAllowed: number;
+    remaining: number;
+  } | null> {
+    const session = await this.getGuestSession(sessionId);
+
+    if (!session) {
+      return null;
+    }
+
+    const GUEST_STORY_LIMIT = 3; // Guests can read 3 unique stories per session
+
+    return {
+      isPremium: false,
+      unlimited: false,
+      used: session.uniqueStoriesRead,
+      baseLimit: GUEST_STORY_LIMIT,
+      totalAllowed: GUEST_STORY_LIMIT,
+      remaining: Math.max(0, GUEST_STORY_LIMIT - session.uniqueStoriesRead),
+    };
   }
 
   private getSessionKey(sessionId: string): string {

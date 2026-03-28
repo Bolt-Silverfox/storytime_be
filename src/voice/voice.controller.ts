@@ -16,6 +16,7 @@ import {
   ParseUUIDPipe,
   HttpStatus,
   Logger,
+  Headers,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -49,6 +50,7 @@ import { VoiceService } from './voice.service';
 import { VoiceQuotaService } from './voice-quota.service';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
 import { EAGER_PARAGRAPH_COUNT } from './queue/tts-batch-queue.constants';
+import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 
 @ApiTags('Voice')
 @Controller('voice')
@@ -207,8 +209,7 @@ export class VoiceController {
 
   // --- Get voice access status ---
   @Get('access')
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
+  @OptionalAuth()
   @ApiOperation({
     summary: 'Get voice access status for the user',
     description:
@@ -249,14 +250,32 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Query('storyId') storyId?: string,
   ) {
+    const userId = req.authUserData?.userId;
+    const isGuest = !userId;
+
     if (storyId) {
       const story = await this.storyService.getStoryById(storyId);
       if (!story) {
         throw new NotFoundException(`Story ${storyId} not found`);
       }
     }
+
+    // For guests, return default access info
+    if (isGuest) {
+      return {
+        isPremium: false,
+        unlimited: false,
+        defaultVoice: FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE,
+        maxVoices: 1,
+        lockedVoiceId: FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE,
+        elevenLabsTrialStoryId: null,
+        usedVoicesForStory: [],
+        maxVoicesPerStory: 1,
+      };
+    }
+
     return this.voiceQuotaService.getVoiceAccess(
-      req.authUserData.userId,
+      userId,
       storyId,
     );
   }
@@ -276,7 +295,6 @@ export class VoiceController {
   @Post('story/audio/batch')
   @OptionalAuth()
   @Throttle({ short: { limit: 3, ttl: 60_000 } })
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate audio for all paragraphs of a story' })
   @ApiResponse({
     status: 200,
@@ -326,6 +344,7 @@ export class VoiceController {
   async batchTextToSpeech(
     @Body() dto: BatchStoryAudioDto,
     @Req() req: AuthenticatedRequest,
+    @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
     const isGuest = !req.authUserData;
     const userId = req.authUserData?.userId;
@@ -383,7 +402,7 @@ export class VoiceController {
         batchJobId = await this.ttsBatchQueueService.queueBatch({
           storyId: dto.storyId,
           voiceId: resolvedVoice,
-          userId: userId ?? 'guest',
+          userId: isGuest ? guestSessionId ?? 'guest' : userId,
           isPremium: isGuest ? false : isPremium,
           provider: batchProvider,
           paragraphs: remainingUncached,
@@ -427,9 +446,10 @@ export class VoiceController {
   async getBatchStatus(
     @Param('batchJobId', ParseUUIDPipe) batchJobId: string,
     @Req() req: AuthenticatedRequest,
+    @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
     const isGuest = !req.authUserData;
-    const userId = isGuest ? 'guest' : req.authUserData?.userId;
+    const userId = isGuest ? guestSessionId ?? 'guest' : req.authUserData?.userId;
 
     const status = await this.ttsBatchQueueService.getBatchStatus(
       batchJobId,
