@@ -9,8 +9,9 @@ import {
   NotFoundException,
   Logger,
   Req,
+  ForbiddenException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiHeader } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiHeader, ApiParam } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import { Public } from '@/shared/decorators/public.decorator';
@@ -20,11 +21,13 @@ import {
   GUEST_SESSION_TTL_SECONDS,
 } from './guest-session.service';
 import { PrismaService } from '@/prisma/prisma.service';
+import { StoryService } from '@/story/story.service';
 import {
   UpdateGuestProgressDto,
   CreateGuestSessionResponseDto,
   GuestProgressResponseDto,
   GuestHistoryResponseDto,
+  GuestStoryResponseDto,
 } from './dto/guest.dto';
 
 @ApiTags('Guest')
@@ -35,6 +38,7 @@ export class GuestController {
   constructor(
     private readonly guestSessionService: GuestSessionService,
     private readonly prisma: PrismaService,
+    private readonly storyService: StoryService,
   ) {}
 
   /**
@@ -61,14 +65,129 @@ export class GuestController {
   }
 
   /**
+   * Get a story by ID for guest users
+   * Requires valid guest session via x-guest-session-id header
+   */
+  @Get('stories/:storyId')
+  @Public()
+  @ApiOperation({ summary: 'Get a story by ID for guest users' })
+  @ApiParam({ name: 'storyId', description: 'Story ID' })
+  @ApiHeader({
+    name: 'x-guest-session-id',
+    description: 'Guest session ID (required)',
+    required: true,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Story retrieved successfully',
+    type: GuestStoryResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or expired guest session',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - story not found',
+  })
+  async getStoryForGuest(
+    @Param('storyId') storyId: string,
+    @Headers('x-guest-session-id') guestSessionId?: string,
+  ): Promise<GuestStoryResponseDto> {
+    if (!guestSessionId) {
+      throw new BadRequestException('x-guest-session-id header is required');
+    }
+
+    // Validate guest session
+    const session =
+      await this.guestSessionService.getGuestSession(guestSessionId);
+    if (!session) {
+      throw new BadRequestException('Invalid or expired guest session');
+    }
+
+    // Check if story was already read (re-reading is always free)
+    const alreadyRead = !!session.readingHistory[storyId];
+
+    // If not already read, check quota
+    if (!alreadyRead) {
+      const quotaStatus =
+        await this.guestSessionService.getGuestQuotaStatus(guestSessionId);
+      if (quotaStatus && quotaStatus.remaining <= 0) {
+        throw new ForbiddenException(
+          'You have reached your story limit. Sign up to continue reading!',
+        );
+      }
+    }
+
+    // Get story data
+    const story = await this.storyService.getStoryById(storyId);
+    if (!story) {
+      throw new NotFoundException('Story not found');
+    }
+
+    // Record story access for quota tracking (only if not already read)
+    await this.guestSessionService.recordNewStoryAccess(guestSessionId, storyId);
+
+    return story;
+  }
+
+  /**
+   * Get story quota status for guest users
+   * Requires valid guest session via x-guest-session-id header
+   */
+  @Get('quota')
+  @Public()
+  @ApiOperation({ summary: 'Get story quota status for guest users' })
+  @ApiHeader({
+    name: 'x-guest-session-id',
+    description: 'Guest session ID (required)',
+    required: true,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Quota status retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        isPremium: { type: 'boolean' },
+        unlimited: { type: 'boolean' },
+        used: { type: 'number' },
+        baseLimit: { type: 'number' },
+        totalAllowed: { type: 'number' },
+        remaining: { type: 'number' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or expired guest session',
+  })
+  async getGuestQuotaStatus(
+    @Headers('x-guest-session-id') guestSessionId?: string,
+  ) {
+    if (!guestSessionId) {
+      throw new BadRequestException('x-guest-session-id header is required');
+    }
+
+    const quotaStatus =
+      await this.guestSessionService.getGuestQuotaStatus(guestSessionId);
+
+    if (!quotaStatus) {
+      throw new BadRequestException('Invalid or expired guest session');
+    }
+
+    return quotaStatus;
+  }
+
+  /**
    * Update reading progress for a story
-   * Works for both guests (via X-Guest-Session-Id header) and authenticated users
+   * Works for both guests (via x-guest-session-id header) and authenticated users
    */
   @Post('progress')
   @OptionalAuth()
   @ApiOperation({ summary: 'Update reading progress for a story' })
   @ApiHeader({
-    name: 'X-Guest-Session-Id',
+    name: 'x-guest-session-id',
     description: 'Guest session ID (required for unauthenticated users)',
     required: false,
   })
@@ -90,7 +209,7 @@ export class GuestController {
 
     if (!userId && !guestSessionId) {
       throw new BadRequestException(
-        'Either authentication or X-Guest-Session-Id header is required',
+        'Either authentication or x-guest-session-id header is required',
       );
     }
 
@@ -137,7 +256,7 @@ export class GuestController {
   @OptionalAuth()
   @ApiOperation({ summary: 'Get reading progress for a specific story' })
   @ApiHeader({
-    name: 'X-Guest-Session-Id',
+    name: 'x-guest-session-id',
     description: 'Guest session ID (required for unauthenticated users)',
     required: false,
   })
@@ -155,7 +274,7 @@ export class GuestController {
 
     if (!userId && !guestSessionId) {
       throw new BadRequestException(
-        'Either authentication or X-Guest-Session-Id header is required',
+        'Either authentication or x-guest-session-id header is required',
       );
     }
 
@@ -205,6 +324,7 @@ export class GuestController {
       };
     }
 
+    // This should never be reached due to the validation above
     return null;
   }
 
@@ -216,7 +336,7 @@ export class GuestController {
   @OptionalAuth()
   @ApiOperation({ summary: 'Get reading history' })
   @ApiHeader({
-    name: 'X-Guest-Session-Id',
+    name: 'x-guest-session-id',
     description: 'Guest session ID (required for unauthenticated users)',
     required: false,
   })
@@ -233,7 +353,7 @@ export class GuestController {
 
     if (!userId && !guestSessionId) {
       throw new BadRequestException(
-        'Either authentication or X-Guest-Session-Id header is required',
+        'Either authentication or x-guest-session-id header is required',
       );
     }
 
@@ -271,20 +391,25 @@ export class GuestController {
         return { stories: [] };
       }
 
-      // Convert Record to array
-      const historyArray = Object.entries(history).map(
-        ([storyId, progress]) => ({
+      // Convert Record to array and sort by lastAccessed descending
+      const historyArray = Object.entries(history)
+        .map(([storyId, progress]) => ({
           storyId,
           progress: progress.progress,
           lastAccessed: progress.lastReadAt,
-        }),
-      );
+        }))
+        .sort((a, b) => {
+          const aTime = new Date(a.lastAccessed).getTime();
+          const bTime = new Date(b.lastAccessed).getTime();
+          return bTime - aTime;
+        });
 
       return {
         stories: historyArray,
       };
     }
 
+    // This should never be reached due to the validation above
     return { stories: [] };
   }
 }
