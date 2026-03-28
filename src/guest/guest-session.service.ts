@@ -129,7 +129,20 @@ export class GuestSessionService {
 
     const key = this.getSessionKey(sessionId);
     this.logger.debug(`Looking for guest session with key: ${key}`);
-    const session = await this.keyv.get<GuestSession>(key);
+    let session = await this.keyv.get<GuestSession>(key);
+
+    // Fallback: check for old key format (before namespace fix)
+    if (!session) {
+      const oldKey = `guest:guest:session:${sessionId}`;
+      this.logger.debug(`Trying old key format: ${oldKey}`);
+      session = await this.keyv.get<GuestSession>(oldKey);
+      if (session) {
+        this.logger.debug(`Found session with old key format, migrating to new key`);
+        // Migrate to new key format
+        await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
+        await this.keyv.delete(oldKey);
+      }
+    }
 
     if (!session) {
       this.logger.warn(`Guest session not found for key: ${key}, sessionId: ${sessionId}`);
