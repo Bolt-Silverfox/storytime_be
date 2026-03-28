@@ -15,7 +15,7 @@ import { StoryAccessGuard } from '@/shared/guards/story-access.guard';
   imports: [
     HttpModule,
     ScheduleModule.forRoot(),
-    AuthModule,
+    forwardRef(() => AuthModule),
     SubscriptionModule,
     UploadModule,
     forwardRef(() => VoiceModule),

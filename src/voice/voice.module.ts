@@ -25,7 +25,7 @@ import { TtsBatchRedisProvider } from './queue/tts-batch-redis.provider';
 
 @Module({
   imports: [
-    AuthModule,
+    forwardRef(() => AuthModule),
     HttpModule,
     SubscriptionModule,
     UploadModule,

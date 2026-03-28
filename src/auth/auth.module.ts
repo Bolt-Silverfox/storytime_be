@@ -27,7 +27,7 @@ import { GuestModule } from '@/guest/guest.module';
     }),
 
     forwardRef(() => NotificationModule),
-    GuestModule,
+    forwardRef(() => GuestModule),
   ],
 
   controllers: [AuthController],
