@@ -101,9 +101,18 @@ export class GuestSessionService {
     };
 
     const key = this.getSessionKey(sessionId);
+    this.logger.debug(`Creating guest session with key: ${key}, sessionId: ${sessionId}`);
     await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
 
-    this.logger.debug(`Created guest session: ${sessionId}`);
+    // Verify the session was stored
+    const stored = await this.keyv.get<GuestSession>(key);
+    if (!stored) {
+      this.logger.error(`Failed to store guest session with key: ${key}`);
+    } else {
+      this.logger.debug(`Successfully stored guest session: ${sessionId}`);
+    }
+
+    this.logger.log(`Created guest session: ${sessionId}`);
     return session;
   }
 
@@ -114,15 +123,20 @@ export class GuestSessionService {
    */
   async getGuestSession(sessionId: string): Promise<GuestSession | null> {
     if (!sessionId) {
+      this.logger.warn('getGuestSession called with empty sessionId');
       return null;
     }
 
     const key = this.getSessionKey(sessionId);
+    this.logger.debug(`Looking for guest session with key: ${key}`);
     const session = await this.keyv.get<GuestSession>(key);
 
     if (!session) {
+      this.logger.warn(`Guest session not found for key: ${key}, sessionId: ${sessionId}`);
       return null;
     }
+
+    this.logger.debug(`Found guest session: ${sessionId}`);
 
     // Convert date strings back to Date objects (cache may serialize as strings)
     session.createdAt = new Date(session.createdAt);
