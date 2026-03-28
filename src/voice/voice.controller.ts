@@ -264,6 +264,7 @@ export class VoiceController {
   // --- List available ElevenLabs voices ---
   @Get('available')
   @UseGuards(AuthSessionGuard)
+  @OptionalAuth()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List all available ElevenLabs voices' })
   async listAvailableVoices(): Promise<VoiceResponseDto[]> {
@@ -414,6 +415,7 @@ export class VoiceController {
 
   @Get('story/audio/batch/status/:batchJobId')
   @UseGuards(AuthSessionGuard)
+  @OptionalAuth()
   @Throttle({ short: { limit: 30, ttl: 60_000 } })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Poll status of background TTS batch generation' })
@@ -426,9 +428,12 @@ export class VoiceController {
     @Param('batchJobId', ParseUUIDPipe) batchJobId: string,
     @Req() req: AuthenticatedRequest,
   ) {
+    const isGuest = !req.authUserData;
+    const userId = isGuest ? 'guest' : req.authUserData?.userId;
+
     const status = await this.ttsBatchQueueService.getBatchStatus(
       batchJobId,
-      req.authUserData.userId,
+      userId,
     );
 
     if (!status) {
