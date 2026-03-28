@@ -7,7 +7,12 @@ import { PrismaModule } from '@/prisma/prisma.module';
 import { UploadModule } from '@/upload/upload.module';
 
 @Module({
-  imports: [forwardRef(() => AuthModule), NotificationModule, PrismaModule, UploadModule],
+  imports: [
+    forwardRef(() => AuthModule),
+    NotificationModule,
+    PrismaModule,
+    UploadModule,
+  ],
   controllers: [UserController],
   providers: [UserService],
   exports: [UserService],

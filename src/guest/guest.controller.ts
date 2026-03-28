@@ -11,7 +11,13 @@ import {
   Req,
   ForbiddenException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiHeader, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiHeader,
+  ApiParam,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import { Public } from '@/shared/decorators/public.decorator';
@@ -126,7 +132,10 @@ export class GuestController {
     }
 
     // Record story access for quota tracking (only if not already read)
-    await this.guestSessionService.recordNewStoryAccess(guestSessionId, storyId);
+    await this.guestSessionService.recordNewStoryAccess(
+      guestSessionId,
+      storyId,
+    );
 
     return story;
   }
