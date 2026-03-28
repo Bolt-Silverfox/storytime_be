@@ -100,6 +100,8 @@ export class GuestController {
     @Param('storyId') storyId: string,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ): Promise<GuestStoryResponseDto> {
+    this.logger.log(`getStoryForGuest called with sessionId: ${guestSessionId}, storyId: ${storyId}`);
+
     if (!guestSessionId) {
       throw new BadRequestException('x-guest-session-id header is required');
     }
@@ -108,6 +110,7 @@ export class GuestController {
     const session =
       await this.guestSessionService.getGuestSession(guestSessionId);
     if (!session) {
+      this.logger.warn(`Guest session not found: ${guestSessionId}`);
       throw new BadRequestException('Invalid or expired guest session');
     }
 
@@ -174,6 +177,8 @@ export class GuestController {
   async getGuestQuotaStatus(
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
+    this.logger.log(`getGuestQuotaStatus called with sessionId: ${guestSessionId}`);
+
     if (!guestSessionId) {
       throw new BadRequestException('x-guest-session-id header is required');
     }
@@ -182,6 +187,7 @@ export class GuestController {
       await this.guestSessionService.getGuestQuotaStatus(guestSessionId);
 
     if (!quotaStatus) {
+      this.logger.warn(`Guest quota status not found for sessionId: ${guestSessionId}`);
       throw new BadRequestException('Invalid or expired guest session');
     }
 
