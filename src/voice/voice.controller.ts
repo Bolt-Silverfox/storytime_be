@@ -291,7 +291,7 @@ export class VoiceController {
 
   @Post('story/audio/batch')
   @OptionalAuth()
-  @Throttle({ short: { limit: 3, ttl: 60_000 } })
+  @Throttle({ short: { limit: 10, ttl: 60_000 } })
   @ApiOperation({ summary: 'Generate audio for all paragraphs of a story' })
   @ApiResponse({
     status: 200,
