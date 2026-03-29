@@ -345,14 +345,20 @@ export class VoiceController {
   ) {
     const isGuest = !req.authUserData;
     const userId = req.authUserData?.userId;
-    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
+    const defaultVoiceId = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE_ID;
+    const resolvedVoice = dto.voiceId ?? defaultVoiceId;
 
-    this.logger.log(`batchTextToSpeech called - isGuest: ${isGuest}, voiceId: ${dto.voiceId}, resolvedVoice: ${resolvedVoice}, DEFAULT_VOICE: ${DEFAULT_VOICE}`);
+    this.logger.log(`batchTextToSpeech called - isGuest: ${isGuest}, voiceId: ${dto.voiceId}, resolvedVoice: ${resolvedVoice}, DEFAULT_VOICE: ${DEFAULT_VOICE} - ${defaultVoiceId}`);
 
     // For guest users, only allow the default voice and skip quota checks
     if (isGuest) {
-      if (dto.voiceId && dto.voiceId !== (DEFAULT_VOICE as string)) {
-        this.logger.warn(`Guest user tried to use voice: ${dto.voiceId}, only ${DEFAULT_VOICE} allowed`);
+      // Resolve the requested voice to canonical ElevenLabs ID for comparison
+      const requestedCanonical = dto.voiceId
+        ? await this.voiceQuotaService.resolveCanonicalVoiceId(dto.voiceId)
+        : defaultVoiceId;
+
+      if (requestedCanonical !== defaultVoiceId) {
+        this.logger.warn(`Guest user tried to use voice: ${dto.voiceId} (canonical: ${requestedCanonical}), only ${DEFAULT_VOICE} (${defaultVoiceId}) allowed`);
         throw new ForbiddenException(
           'Guest users can only use the default voice. Sign in to access all voices.',
         );

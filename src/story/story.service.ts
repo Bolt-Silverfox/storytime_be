@@ -1149,7 +1149,7 @@ export class StoryService {
       this.prisma.userStoryProgress.findMany({
         where: {
           userId,
-          progress: { gt: 0 },
+          progress: { gte: 0 },
           completed: false,
           isDeleted: false,
           story: { isDeleted: false },
@@ -1943,7 +1943,7 @@ export class StoryService {
       this.prisma.storyProgress.findMany({
         where: {
           kidId,
-          progress: { gt: 0 },
+          progress: { gte: 0 },
           completed: false,
           isDeleted: false,
           story: { isDeleted: false },
@@ -1955,7 +1955,7 @@ export class StoryService {
           },
         },
         ...(useCursor ? { take: take + 1 } : {}),
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : }),
       }),
     );
 

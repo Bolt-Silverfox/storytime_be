@@ -415,10 +415,8 @@ export class GuestController {
           id: true,
           title: true,
           description: true,
-          coverImage: true,
-          ageGroup: true,
-          category: true,
-          tags: true,
+          coverImageUrl: true,
+          ageMax: true,
           durationSeconds: true,
           createdAt: true,
           updatedAt: true,
@@ -429,7 +427,7 @@ export class GuestController {
       const storiesWithProgress = stories.map((story) => {
         const progress = history[story.id];
         return {
-          ...story,
+          storyId: story.id,
           progress: progress.progress,
           lastAccessed: progress.lastReadAt,
         };
