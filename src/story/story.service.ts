@@ -1955,7 +1955,7 @@ export class StoryService {
           },
         },
         ...(useCursor ? { take: take + 1 } : {}),
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : }),
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       }),
     );
 

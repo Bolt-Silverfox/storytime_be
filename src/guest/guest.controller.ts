@@ -61,7 +61,9 @@ export class GuestController {
   })
   async createSession(): Promise<CreateGuestSessionResponseDto> {
     const session = await this.guestSessionService.createGuestSession();
-    this.logger.log(`Guest session created: ${session.sessionId}`);
+    this.logger.log(
+      `Guest session created: ${session.sessionId.slice(0, 8)}...`,
+    );
 
     return {
       sessionId: session.sessionId,
@@ -120,6 +122,9 @@ export class GuestController {
     const alreadyRead = !!session.readingHistory[storyId];
 
     // If not already read, check quota
+    // Note: The check-then-consume pattern below has a minor race condition
+    // (quota could be consumed between check and recordNewStoryAccess).
+    // This is acceptable for guest mode — low stakes, non-transactional.
     if (!alreadyRead) {
       const quotaStatus =
         await this.guestSessionService.getGuestQuotaStatus(guestSessionId);
@@ -251,12 +256,15 @@ export class GuestController {
         },
         update: {
           progress: clampedProgress,
+          completed: clampedProgress >= 100,
           lastAccessed: new Date(),
+          isDeleted: false,
         },
         create: {
           userId,
           storyId: dto.storyId,
           progress: clampedProgress,
+          completed: clampedProgress >= 100,
           lastAccessed: new Date(),
         },
       });
