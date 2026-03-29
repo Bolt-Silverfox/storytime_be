@@ -72,7 +72,7 @@ export class GuestSessionService {
 
       this.useRedis = true;
       this.logger.log('GuestSessionService using Redis for persistence');
-    } catch (error) {
+    } catch {
       this.logger.warn('Failed to connect to Redis, using in-memory cache');
       this.keyv = new Keyv({
         store: new CacheableMemory({
@@ -102,7 +102,7 @@ export class GuestSessionService {
 
     const key = this.getSessionKey(sessionId);
     this.logger.debug(
-      `Creating guest session with key: ${key}, sessionId: ${sessionId}`,
+      `Creating guest session with key: ${key}, sessionId: ${this.maskSessionId(sessionId)}`,
     );
     await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
 
@@ -111,10 +111,12 @@ export class GuestSessionService {
     if (!stored) {
       this.logger.error(`Failed to store guest session with key: ${key}`);
     } else {
-      this.logger.debug(`Successfully stored guest session: ${sessionId}`);
+      this.logger.debug(
+        `Successfully stored guest session: ${this.maskSessionId(sessionId)}`,
+      );
     }
 
-    this.logger.log(`Created guest session: ${sessionId}`);
+    this.logger.log(`Created guest session: ${this.maskSessionId(sessionId)}`);
     return session;
   }
 
@@ -150,12 +152,12 @@ export class GuestSessionService {
 
     if (!session) {
       this.logger.warn(
-        `Guest session not found for key: ${key}, sessionId: ${sessionId}`,
+        `Guest session not found for key: ${key}, sessionId: ${this.maskSessionId(sessionId)}`,
       );
       return null;
     }
 
-    this.logger.debug(`Found guest session: ${sessionId}`);
+    this.logger.debug(`Found guest session: ${this.maskSessionId(sessionId)}`);
 
     // Convert date strings back to Date objects (cache may serialize as strings)
     session.createdAt = new Date(session.createdAt);
@@ -185,7 +187,7 @@ export class GuestSessionService {
 
     if (!session) {
       this.logger.warn(
-        `Attempted to update progress for non-existent session: ${sessionId}`,
+        `Attempted to update progress for non-existent session: ${this.maskSessionId(sessionId)}`,
       );
       return null;
     }
@@ -207,7 +209,7 @@ export class GuestSessionService {
     await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
 
     this.logger.debug(
-      `Updated progress for session ${sessionId}, story ${storyId}: ${clampedProgress}%`,
+      `Updated progress for session ${this.maskSessionId(sessionId)}, story ${storyId}: ${clampedProgress}%`,
     );
 
     return session;
@@ -256,7 +258,9 @@ export class GuestSessionService {
   async deleteGuestSession(sessionId: string): Promise<void> {
     const key = this.getSessionKey(sessionId);
     await this.keyv.delete(key);
-    this.logger.debug(`Deleted guest session: ${sessionId}`);
+    this.logger.debug(
+      `Deleted guest session: ${this.maskSessionId(sessionId)}`,
+    );
   }
 
   /**
@@ -273,7 +277,7 @@ export class GuestSessionService {
 
     if (!session) {
       this.logger.warn(
-        `Attempted to record story access for non-existent session: ${sessionId}`,
+        `Attempted to record story access for non-existent session: ${this.maskSessionId(sessionId)}`,
       );
       return false;
     }
@@ -300,7 +304,7 @@ export class GuestSessionService {
     await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
 
     this.logger.debug(
-      `Recorded new story access for session ${sessionId}, story ${storyId}. Total: ${session.uniqueStoriesRead}`,
+      `Recorded new story access for session ${this.maskSessionId(sessionId)}, story ${storyId}. Total: ${session.uniqueStoriesRead}`,
     );
 
     return true;
@@ -335,6 +339,10 @@ export class GuestSessionService {
       totalAllowed: GUEST_STORY_LIMIT,
       remaining: Math.max(0, GUEST_STORY_LIMIT - session.uniqueStoriesRead),
     };
+  }
+
+  private maskSessionId(id: string): string {
+    return id.slice(0, 8) + '...';
   }
 
   private getSessionKey(sessionId: string): string {

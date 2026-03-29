@@ -1091,14 +1091,10 @@ export class TextToSpeechService {
       duplicateIndices?: number[];
     }>;
   }> {
-    // Resolve VoiceType key to ElevenLabs ID for cache lookup
-    const resolvedVoiceId =
-      VOICE_CONFIG[voiceId as VoiceType]?.elevenLabsId ?? voiceId;
-
     const entries = await this.prisma.paragraphAudioCache.findMany({
       where: {
         storyId,
-        voiceId: resolvedVoiceId,
+        voiceId,
         provider,
         textHash: { in: [...hashMap.keys()] },
       },

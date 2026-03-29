@@ -253,14 +253,7 @@ export class VoiceController {
     const userId = req.authUserData?.userId;
     const isGuest = !userId;
 
-    if (storyId) {
-      const story = await this.storyService.getStoryById(storyId);
-      if (!story) {
-        throw new NotFoundException(`Story ${storyId} not found`);
-      }
-    }
-
-    // For guests, return default access info
+    // For guests, return default access info before any DB lookups
     if (isGuest) {
       return {
         isPremium: false,
@@ -272,6 +265,13 @@ export class VoiceController {
         usedVoicesForStory: [],
         maxVoicesPerStory: 1,
       };
+    }
+
+    if (storyId) {
+      const story = await this.storyService.getStoryById(storyId);
+      if (!story) {
+        throw new NotFoundException(`Story ${storyId} not found`);
+      }
     }
 
     return this.voiceQuotaService.getVoiceAccess(userId, storyId);
@@ -412,7 +412,7 @@ export class VoiceController {
         batchJobId = await this.ttsBatchQueueService.queueBatch({
           storyId: dto.storyId,
           voiceId: resolvedVoice,
-          userId: isGuest ? (guestSessionId ?? 'guest') : userId,
+          userId: isGuest ? (guestSessionId ?? `guest-${Date.now()}`) : userId,
           isPremium: isGuest ? false : isPremium,
           provider: batchProvider,
           paragraphs: remainingUncached,
