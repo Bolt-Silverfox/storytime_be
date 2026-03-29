@@ -220,6 +220,8 @@ export class GuestController {
     @Body() dto: UpdateGuestProgressDto,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ): Promise<{ success: boolean }> {
+    this.logger.log(`updateProgress called with sessionId: ${guestSessionId}, storyId: ${dto.storyId}, progress: ${dto.progress}`);
+
     const userId = req.authUserData?.userId;
 
     if (!userId && !guestSessionId) {
@@ -250,14 +252,17 @@ export class GuestController {
       });
     } else if (guestSessionId) {
       // Guest user - update in Redis
+      this.logger.log(`Updating guest progress for session: ${guestSessionId}, story: ${dto.storyId}`);
       const updated = await this.guestSessionService.updateGuestProgress(
         guestSessionId,
         dto.storyId,
         clampedProgress,
       );
       if (!updated) {
+        this.logger.warn(`Failed to update guest progress for session: ${guestSessionId}`);
         throw new NotFoundException('Guest session not found');
       }
+      this.logger.log(`Successfully updated guest progress for session: ${guestSessionId}`);
     }
 
     return { success: true };
@@ -406,21 +411,46 @@ export class GuestController {
         return { stories: [] };
       }
 
-      // Convert Record to array and sort by lastAccessed descending
-      const historyArray = Object.entries(history)
-        .map(([storyId, progress]) => ({
-          storyId,
+      // Get full story details for each story in history
+      const storyIds = Object.keys(history);
+      const stories = await this.prisma.story.findMany({
+        where: {
+          id: { in: storyIds },
+          isDeleted: false,
+        },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          coverImage: true,
+          ageGroup: true,
+          category: true,
+          tags: true,
+          durationSeconds: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      // Map stories with progress
+      const storiesWithProgress = stories.map((story) => {
+        const progress = history[story.id];
+        return {
+          ...story,
           progress: progress.progress,
           lastAccessed: progress.lastReadAt,
-        }))
-        .sort((a, b) => {
-          const aTime = new Date(a.lastAccessed).getTime();
-          const bTime = new Date(b.lastAccessed).getTime();
-          return bTime - aTime;
-        });
+        };
+      });
+
+      // Sort by lastAccessed descending
+      storiesWithProgress.sort((a, b) => {
+        const aTime = new Date(a.lastAccessed).getTime();
+        const bTime = new Date(b.lastAccessed).getTime();
+        return bTime - aTime;
+      });
 
       return {
-        stories: historyArray,
+        stories: storiesWithProgress,
       };
     }
 
