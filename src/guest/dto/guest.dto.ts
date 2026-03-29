@@ -9,7 +9,6 @@ import {
   IsBoolean,
   IsArray,
   IsDate,
-  IsUUID,
 } from 'class-validator';
 
 export class UpdateGuestProgressDto {
