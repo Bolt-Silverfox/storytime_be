@@ -347,9 +347,12 @@ export class VoiceController {
     const userId = req.authUserData?.userId;
     const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
 
+    this.logger.log(`batchTextToSpeech called - isGuest: ${isGuest}, voiceId: ${dto.voiceId}, resolvedVoice: ${resolvedVoice}, DEFAULT_VOICE: ${DEFAULT_VOICE}`);
+
     // For guest users, only allow the default voice and skip quota checks
     if (isGuest) {
       if (dto.voiceId && dto.voiceId !== (DEFAULT_VOICE as string)) {
+        this.logger.warn(`Guest user tried to use voice: ${dto.voiceId}, only ${DEFAULT_VOICE} allowed`);
         throw new ForbiddenException(
           'Guest users can only use the default voice. Sign in to access all voices.',
         );
