@@ -11,7 +11,13 @@ import {
   Req,
   ForbiddenException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiHeader, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiHeader,
+  ApiParam,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import { Public } from '@/shared/decorators/public.decorator';
@@ -94,7 +100,9 @@ export class GuestController {
     @Param('storyId') storyId: string,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ): Promise<GuestStoryResponseDto> {
-    this.logger.log(`getStoryForGuest called with sessionId: ${guestSessionId}, storyId: ${storyId}`);
+    this.logger.log(
+      `getStoryForGuest called with sessionId: ${guestSessionId}, storyId: ${storyId}`,
+    );
 
     if (!guestSessionId) {
       throw new BadRequestException('x-guest-session-id header is required');
@@ -130,7 +138,10 @@ export class GuestController {
 
     // Record story access for quota tracking (only if not already read)
     if (!alreadyRead) {
-      await this.guestSessionService.recordNewStoryAccess(guestSessionId, storyId);
+      await this.guestSessionService.recordNewStoryAccess(
+        guestSessionId,
+        storyId,
+      );
     }
 
     return story;
@@ -170,7 +181,9 @@ export class GuestController {
   async getGuestQuotaStatus(
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
-    this.logger.log(`getGuestQuotaStatus called with sessionId: ${guestSessionId}`);
+    this.logger.log(
+      `getGuestQuotaStatus called with sessionId: ${guestSessionId}`,
+    );
 
     if (!guestSessionId) {
       throw new BadRequestException('x-guest-session-id header is required');
@@ -180,7 +193,9 @@ export class GuestController {
       await this.guestSessionService.getGuestQuotaStatus(guestSessionId);
 
     if (!quotaStatus) {
-      this.logger.warn(`Guest quota status not found for sessionId: ${guestSessionId}`);
+      this.logger.warn(
+        `Guest quota status not found for sessionId: ${guestSessionId}`,
+      );
       throw new BadRequestException('Invalid or expired guest session');
     }
 
@@ -213,7 +228,9 @@ export class GuestController {
     @Body() dto: UpdateGuestProgressDto,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ): Promise<{ success: boolean }> {
-    this.logger.log(`updateProgress called with sessionId: ${guestSessionId}, storyId: ${dto.storyId}, progress: ${dto.progress}`);
+    this.logger.log(
+      `updateProgress called with sessionId: ${guestSessionId}, storyId: ${dto.storyId}, progress: ${dto.progress}`,
+    );
 
     const userId = req.authUserData?.userId;
 
@@ -245,17 +262,23 @@ export class GuestController {
       });
     } else if (guestSessionId) {
       // Guest user - update in Redis
-      this.logger.log(`Updating guest progress for session: ${guestSessionId}, story: ${dto.storyId}`);
+      this.logger.log(
+        `Updating guest progress for session: ${guestSessionId}, story: ${dto.storyId}`,
+      );
       const updated = await this.guestSessionService.updateGuestProgress(
         guestSessionId,
         dto.storyId,
         clampedProgress,
       );
       if (!updated) {
-        this.logger.warn(`Failed to update guest progress for session: ${guestSessionId}`);
+        this.logger.warn(
+          `Failed to update guest progress for session: ${guestSessionId}`,
+        );
         throw new NotFoundException('Guest session not found');
       }
-      this.logger.log(`Successfully updated guest progress for session: ${guestSessionId}`);
+      this.logger.log(
+        `Successfully updated guest progress for session: ${guestSessionId}`,
+      );
     }
 
     return { success: true };

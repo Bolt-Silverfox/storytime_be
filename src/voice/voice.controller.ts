@@ -348,7 +348,9 @@ export class VoiceController {
     const defaultVoiceId = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE_ID;
     const resolvedVoice = dto.voiceId ?? defaultVoiceId;
 
-    this.logger.log(`batchTextToSpeech called - isGuest: ${isGuest}, voiceId: ${dto.voiceId}, resolvedVoice: ${resolvedVoice}, DEFAULT_VOICE: ${DEFAULT_VOICE} - ${defaultVoiceId}`);
+    this.logger.log(
+      `batchTextToSpeech called - isGuest: ${isGuest}, voiceId: ${dto.voiceId}, resolvedVoice: ${resolvedVoice}, DEFAULT_VOICE: ${DEFAULT_VOICE} - ${defaultVoiceId}`,
+    );
 
     // For guest users, only allow the default voice and skip quota checks
     if (isGuest) {
@@ -358,7 +360,9 @@ export class VoiceController {
         : defaultVoiceId;
 
       if (requestedCanonical !== defaultVoiceId) {
-        this.logger.warn(`Guest user tried to use voice: ${dto.voiceId} (canonical: ${requestedCanonical}), only ${DEFAULT_VOICE} (${defaultVoiceId}) allowed`);
+        this.logger.warn(
+          `Guest user tried to use voice: ${dto.voiceId} (canonical: ${requestedCanonical}), only ${DEFAULT_VOICE} (${defaultVoiceId}) allowed`,
+        );
         throw new ForbiddenException(
           'Guest users can only use the default voice. Sign in to access all voices.',
         );

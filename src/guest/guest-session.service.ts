@@ -101,7 +101,9 @@ export class GuestSessionService {
     };
 
     const key = this.getSessionKey(sessionId);
-    this.logger.debug(`Creating guest session with key: ${key}, sessionId: ${sessionId}`);
+    this.logger.debug(
+      `Creating guest session with key: ${key}, sessionId: ${sessionId}`,
+    );
     await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
 
     // Verify the session was stored
@@ -137,7 +139,9 @@ export class GuestSessionService {
       this.logger.debug(`Trying old key format: ${oldKey}`);
       session = await this.keyv.get<GuestSession>(oldKey);
       if (session) {
-        this.logger.debug(`Found session with old key format, migrating to new key`);
+        this.logger.debug(
+          `Found session with old key format, migrating to new key`,
+        );
         // Migrate to new key format
         await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
         await this.keyv.delete(oldKey);
@@ -145,7 +149,9 @@ export class GuestSessionService {
     }
 
     if (!session) {
-      this.logger.warn(`Guest session not found for key: ${key}, sessionId: ${sessionId}`);
+      this.logger.warn(
+        `Guest session not found for key: ${key}, sessionId: ${sessionId}`,
+      );
       return null;
     }
 
