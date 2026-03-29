@@ -149,7 +149,24 @@ export class GuestController {
       );
     }
 
-    return story;
+    return {
+      id: story.id,
+      title: story.title,
+      description: story.description,
+      language: story.language,
+      categories: story.categories ?? [],
+      themes: story.themes ?? [],
+      coverImageUrl: story.coverImageUrl,
+      audioUrl: story.audioUrl,
+      textContent: story.textContent,
+      isInteractive: story.isInteractive,
+      ageMin: story.ageMin,
+      ageMax: story.ageMax,
+      images: story.images ?? [],
+      branches: story.branches ?? [],
+      createdAt: story.createdAt,
+      updatedAt: story.updatedAt,
+    };
   }
 
   /**
