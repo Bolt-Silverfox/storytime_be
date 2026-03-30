@@ -180,7 +180,7 @@ export class GuestStoryResponseDto {
   @IsNumber()
   ageMax?: number;
 
- @ApiProperty({ type: [GuestStoryImageDto], required: false })
+  @ApiProperty({ type: [GuestStoryImageDto], required: false })
   @IsOptional()
   @IsArray()
   images?: GuestStoryImageDto[];
