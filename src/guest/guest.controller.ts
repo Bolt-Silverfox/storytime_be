@@ -25,6 +25,7 @@ import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import {
   GuestSessionService,
   GUEST_SESSION_TTL_SECONDS,
+  GUEST_STORY_LIMIT,
 } from './guest-session.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { StoryService } from '@/story/story.service';
@@ -34,6 +35,7 @@ import {
   GuestProgressResponseDto,
   GuestHistoryResponseDto,
   GuestStoryResponseDto,
+  StoryAccessCheckDto,
 } from './dto/guest.dto';
 
 @ApiTags('Guest')
@@ -495,5 +497,68 @@ export class GuestController {
 
     // This should never be reached due to the validation above
     return { stories: [] };
+  }
+
+  /**
+   * Check if a guest can access a specific story
+   * Returns access status and quota information without consuming quota
+   */
+  @Get('stories/:storyId/access')
+  @Public()
+  @ApiOperation({ summary: 'Check if guest can access a specific story' })
+  @ApiParam({ name: 'storyId', description: 'Story ID' })
+  @ApiHeader({
+    name: 'x-guest-session-id',
+    description: 'Guest session ID (required)',
+    required: true,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Access check completed',
+    type: StoryAccessCheckDto,
+  })
+  async checkStoryAccess(
+    @Param('storyId') storyId: string,
+    @Headers('x-guest-session-id') guestSessionId?: string,
+  ): Promise<StoryAccessCheckDto> {
+    if (!guestSessionId) {
+      return {
+        canAccess: false,
+        reason: 'Missing guest session',
+        storiesRead: 0,
+        remaining: 0,
+        totalAllowed: GUEST_STORY_LIMIT,
+        alreadyRead: false,
+      };
+    }
+
+    const session = await this.guestSessionService.getGuestSession(guestSessionId);
+    if (!session) {
+      return {
+        canAccess: false,
+        reason: 'Invalid or expired guest session',
+        storiesRead: 0,
+        remaining: 0,
+        totalAllowed: GUEST_STORY_LIMIT,
+        alreadyRead: false,
+      };
+    }
+
+    // Check if story was already read
+    const alreadyRead = !!session.readingHistory[storyId];
+    const storiesRead = session.uniqueStoriesRead;
+    const remaining = Math.max(0, GUEST_STORY_LIMIT - storiesRead);
+
+    // Can access if already read or under quota
+    const canAccess = alreadyRead || storiesRead < GUEST_STORY_LIMIT;
+
+    return {
+      canAccess,
+      storiesRead,
+      remaining,
+      totalAllowed: GUEST_STORY_LIMIT,
+      alreadyRead,
+      reason: !canAccess ? 'Guest quota exceeded' : undefined,
+    };
   }
 }
