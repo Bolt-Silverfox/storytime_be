@@ -180,7 +180,7 @@ export class GuestStoryResponseDto {
   @IsNumber()
   ageMax?: number;
 
-  @ApiProperty({ type: [GuestStoryImageDto], required: false })
+ @ApiProperty({ type: [GuestStoryImageDto], required: false })
   @IsOptional()
   @IsArray()
   images?: GuestStoryImageDto[];
@@ -197,4 +197,31 @@ export class GuestStoryResponseDto {
   @ApiProperty()
   @IsDate()
   updatedAt: Date;
+}
+
+export class StoryAccessCheckDto {
+  @ApiProperty({ description: 'Whether the story can be accessed' })
+  @IsBoolean()
+  canAccess: boolean;
+
+  @ApiProperty({ description: 'Reason for denial if access is denied' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @ApiProperty({ description: 'Number of stories read in this session' })
+  @IsNumber()
+  storiesRead: number;
+
+  @ApiProperty({ description: 'Number stories remaining' })
+  @IsNumber()
+  remaining: number;
+
+  @ApiProperty({ description: 'Total stories allowed' })
+  @IsNumber()
+  totalAllowed: number;
+
+  @ApiProperty({ description: 'Whether this story has already been read' })
+  @IsBoolean()
+  alreadyRead: boolean;
 }
