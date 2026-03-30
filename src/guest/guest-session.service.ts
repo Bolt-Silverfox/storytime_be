@@ -43,6 +43,10 @@ const GUEST_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * TTL for guest sessions in seconds (7 days) — used in API responses
  */
 export const GUEST_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+/**
+  * GUEST story limit
+*/ 
+export const GUEST_STORY_LIMIT = 3; // Guests can read 3 unique stories per session
 
 /**
  * Service for managing guest sessions and tracking reading progress.
@@ -328,8 +332,6 @@ export class GuestSessionService {
     if (!session) {
       return null;
     }
-
-    const GUEST_STORY_LIMIT = 3; // Guests can read 3 unique stories per session
 
     return {
       isPremium: false,
