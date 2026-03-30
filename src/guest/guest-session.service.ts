@@ -44,8 +44,8 @@ const GUEST_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  */
 export const GUEST_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 /**
-  * GUEST story limit
-*/ 
+ * GUEST story limit
+ */
 export const GUEST_STORY_LIMIT = 3; // Guests can read 3 unique stories per session
 
 /**
