@@ -532,7 +532,8 @@ export class GuestController {
       };
     }
 
-    const session = await this.guestSessionService.getGuestSession(guestSessionId);
+    const session =
+      await this.guestSessionService.getGuestSession(guestSessionId);
     if (!session) {
       return {
         canAccess: false,
