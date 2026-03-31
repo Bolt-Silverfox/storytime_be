@@ -368,7 +368,7 @@ export class GuestSessionService {
     return id.slice(0, 8) + '...';
   }
 
-  private getSessionKey(sessionId: string): string {
+  getSessionKey(sessionId: string): string {
     return `${GUEST_SESSION_PREFIX}${sessionId}`;
   }
 }
