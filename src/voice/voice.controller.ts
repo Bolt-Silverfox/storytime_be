@@ -59,6 +59,35 @@ import { GuestSessionService } from '@/guest/guest-session.service';
 export class VoiceController {
   private readonly logger = new Logger(VoiceController.name);
 
+  /**
+   * Resolves the user ID from the request, preferring authenticated users
+   * and falling back to guest session ID.
+   * @throws BadRequestException if required credentials are missing
+   */
+  private resolveRequesterUserId(
+    req: AuthenticatedRequest,
+    guestSessionId?: string,
+  ): { userId: string; isGuest: boolean } {
+    const isGuest = !req.authUserData;
+    let userId: string;
+
+    if (isGuest) {
+      if (!guestSessionId) {
+        throw new BadRequestException(
+          'x-guest-session-id header is required for guest requests',
+        );
+      }
+      userId = guestSessionId;
+    } else {
+      if (!req.authUserData?.userId) {
+        throw new BadRequestException('Authenticated user missing userId');
+      }
+      userId = req.authUserData.userId;
+    }
+
+    return { userId, isGuest };
+  }
+
   constructor(
     private readonly voiceService: VoiceService,
     private readonly storyService: StoryService,
@@ -348,22 +377,10 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
-    // Unified identity determination: prefer auth, fall back to guest session
-    const isGuest = !req.authUserData;
-    let userId: string;
-    if (isGuest) {
-      if (!guestSessionId) {
-        throw new BadRequestException(
-          'x-guest-session-id header is required for guest batch requests',
-        );
-      }
-      userId = guestSessionId;
-    } else {
-      if (!req.authUserData?.userId) {
-        throw new BadRequestException('Authenticated user missing userId');
-      }
-      userId = req.authUserData.userId;
-    }
+    const { userId, isGuest } = this.resolveRequesterUserId(
+      req,
+      guestSessionId,
+    );
 
     // Guest access validation: check session, story, and quota
     if (isGuest) {
@@ -384,6 +401,8 @@ export class VoiceController {
             'You have reached your story limit. Sign up to continue reading!',
           );
         }
+        // Record story access to consume quota
+        await this.guestSessionService.recordNewStoryAccess(userId, dto.storyId);
       }
     }
 
@@ -500,22 +519,7 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
-    // Unified identity determination: prefer auth, fall back to guest session
-    const isGuest = !req.authUserData;
-    let userId: string;
-    if (isGuest) {
-      if (!guestSessionId) {
-        throw new BadRequestException(
-          'x-guest-session-id header is required for guest batch status',
-        );
-      }
-      userId = guestSessionId;
-    } else {
-      if (!req.authUserData?.userId) {
-        throw new BadRequestException('Authenticated user missing userId');
-      }
-      userId = req.authUserData.userId;
-    }
+    const { userId } = this.resolveRequesterUserId(req, guestSessionId);
 
     const status = await this.ttsBatchQueueService.getBatchStatus(
       batchJobId,
