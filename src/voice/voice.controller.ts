@@ -475,6 +475,21 @@ export class VoiceController {
     let pendingParagraphs: number | undefined;
 
     if (remainingUncached.length > 0) {
+      // Ensure we have a valid userId for the queue
+      if (isGuest) {
+        if (!guestSessionId) {
+          throw new BadRequestException(
+            'x-guest-session-id header is required for guest batch requests',
+          );
+        }
+      } else {
+        if (!userId) {
+          throw new BadRequestException(
+            'userId is required for authenticated users',
+          );
+        }
+      }
+
       try {
         batchJobId = await this.ttsBatchQueueService.queueBatch({
           storyId: dto.storyId,
