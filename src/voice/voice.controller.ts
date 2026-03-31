@@ -382,33 +382,6 @@ export class VoiceController {
       guestSessionId,
     );
 
-    // Guest access validation: check session, story, and quota
-    if (isGuest) {
-      const session = await this.guestSessionService.getGuestSession(userId);
-      if (!session) {
-        throw new BadRequestException('Invalid or expired guest session');
-      }
-
-      // Check if story was already read (re-reading is always free)
-      const alreadyRead = !!session.readingHistory[dto.storyId];
-
-      // If not already read, check quota
-      if (!alreadyRead) {
-        const quotaStatus =
-          await this.guestSessionService.getGuestQuotaStatus(userId);
-        if (quotaStatus && quotaStatus.remaining <= 0) {
-          throw new ForbiddenException(
-            'You have reached your story limit. Sign up to continue reading!',
-          );
-        }
-        // Record story access to consume quota
-        await this.guestSessionService.recordNewStoryAccess(
-          userId,
-          dto.storyId,
-        );
-      }
-    }
-
     const defaultVoiceId = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE_ID;
     const resolvedVoice = dto.voiceId ?? defaultVoiceId;
 
@@ -449,6 +422,34 @@ export class VoiceController {
       throw new NotFoundException('Story not found or has no content.');
     }
 
+    // Guest access validation: check session, story, and quota
+    // Moved after all validations to only consume quota when request will succeed
+    if (isGuest) {
+      const session = await this.guestSessionService.getGuestSession(userId);
+      if (!session) {
+        throw new BadRequestException('Invalid or expired guest session');
+      }
+
+      // Check if story was already read (re-reading is always free)
+      const alreadyRead = !!session.readingHistory[dto.storyId];
+
+      // If not already read, check quota and consume
+      if (!alreadyRead) {
+        const quotaStatus =
+          await this.guestSessionService.getGuestQuotaStatus(userId);
+        if (quotaStatus && quotaStatus.remaining <= 0) {
+          throw new ForbiddenException(
+            'You have reached your story limit. Sign up to continue reading!',
+          );
+        }
+        // Record story access to consume quota
+        await this.guestSessionService.recordNewStoryAccess(
+          userId,
+          dto.storyId,
+        );
+      }
+    }
+
     const {
       results: paragraphs,
       totalParagraphs,
@@ -476,7 +477,7 @@ export class VoiceController {
         batchJobId = await this.ttsBatchQueueService.queueBatch({
           storyId: dto.storyId,
           voiceId: resolvedVoice,
-          userId: guestSessionId != null ? guestSessionId : userId,
+          userId,
           isPremium: isGuest ? false : isPremium,
           provider: batchProvider,
           paragraphs: remainingUncached,
