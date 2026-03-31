@@ -23,6 +23,7 @@ import { TTS_BATCH_QUEUE_NAME } from './queue/tts-batch-queue.constants';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
 import { TtsBatchProcessor } from './queue/tts-batch.processor';
 import { TtsBatchRedisProvider } from './queue/tts-batch-redis.provider';
+import { GuestSessionService } from '@/guest';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { TtsBatchRedisProvider } from './queue/tts-batch-redis.provider';
     TtsBatchRedisProvider,
     TtsBatchQueueService,
     TtsBatchProcessor,
+    GuestSessionService,
   ],
   exports: [
     VoiceService,
