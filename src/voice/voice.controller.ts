@@ -360,9 +360,7 @@ export class VoiceController {
       userId = guestSessionId;
     } else {
       if (!req.authUserData?.userId) {
-        throw new BadRequestException(
-          'Authenticated user missing userId',
-        );
+        throw new BadRequestException('Authenticated user missing userId');
       }
       userId = req.authUserData.userId;
     }
@@ -371,9 +369,7 @@ export class VoiceController {
     if (isGuest) {
       const session = await this.guestSessionService.getGuestSession(userId);
       if (!session) {
-        throw new BadRequestException(
-          'Invalid or expired guest session',
-        );
+        throw new BadRequestException('Invalid or expired guest session');
       }
 
       // Check if story was already read (re-reading is always free)
@@ -381,7 +377,8 @@ export class VoiceController {
 
       // If not already read, check quota
       if (!alreadyRead) {
-        const quotaStatus = await this.guestSessionService.getGuestQuotaStatus(userId);
+        const quotaStatus =
+          await this.guestSessionService.getGuestQuotaStatus(userId);
         if (quotaStatus && quotaStatus.remaining <= 0) {
           throw new ForbiddenException(
             'You have reached your story limit. Sign up to continue reading!',
@@ -515,9 +512,7 @@ export class VoiceController {
       userId = guestSessionId;
     } else {
       if (!req.authUserData?.userId) {
-        throw new BadRequestException(
-          'Authenticated user missing userId',
-        );
+        throw new BadRequestException('Authenticated user missing userId');
       }
       userId = req.authUserData.userId;
     }
