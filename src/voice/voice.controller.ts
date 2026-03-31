@@ -476,7 +476,7 @@ export class VoiceController {
         batchJobId = await this.ttsBatchQueueService.queueBatch({
           storyId: dto.storyId,
           voiceId: resolvedVoice,
-          userId: isGuest ? guestSessionId : userId,
+          userId: guestSessionId != null ? guestSessionId : userId,
           isPremium: isGuest ? false : isPremium,
           provider: batchProvider,
           paragraphs: remainingUncached,
