@@ -52,6 +52,7 @@ import { VoiceQuotaService } from './voice-quota.service';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
 import { EAGER_PARAGRAPH_COUNT } from './queue/tts-batch-queue.constants';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
+import { GuestSessionService } from '@/guest/guest-session.service';
 
 @ApiTags('Voice')
 @Controller('voice')
@@ -66,6 +67,7 @@ export class VoiceController {
     private readonly speechToTextService: SpeechToTextService,
     private readonly voiceQuotaService: VoiceQuotaService,
     private readonly ttsBatchQueueService: TtsBatchQueueService,
+    private readonly guestSessionService: GuestSessionService,
   ) {}
 
   @Post('upload')
@@ -346,13 +348,47 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
-    // one of userId or guestSessionId must be provided
-    const isGuest = guestSessionId != null;
-    const userId = req.authUserData?.userId;
-    if (!isGuest && !userId)
-      throw new BadRequestException(
-        'Must either have guest session id or be a logged in user',
-      );
+    // Unified identity determination: prefer auth, fall back to guest session
+    const isGuest = !req.authUserData;
+    let userId: string;
+    if (isGuest) {
+      if (!guestSessionId) {
+        throw new BadRequestException(
+          'x-guest-session-id header is required for guest batch requests',
+        );
+      }
+      userId = guestSessionId;
+    } else {
+      if (!req.authUserData?.userId) {
+        throw new BadRequestException(
+          'Authenticated user missing userId',
+        );
+      }
+      userId = req.authUserData.userId;
+    }
+
+    // Guest access validation: check session, story, and quota
+    if (isGuest) {
+      const session = await this.guestSessionService.getGuestSession(userId);
+      if (!session) {
+        throw new BadRequestException(
+          'Invalid or expired guest session',
+        );
+      }
+
+      // Check if story was already read (re-reading is always free)
+      const alreadyRead = !!session.readingHistory[dto.storyId];
+
+      // If not already read, check quota
+      if (!alreadyRead) {
+        const quotaStatus = await this.guestSessionService.getGuestQuotaStatus(userId);
+        if (quotaStatus && quotaStatus.remaining <= 0) {
+          throw new ForbiddenException(
+            'You have reached your story limit. Sign up to continue reading!',
+          );
+        }
+      }
+    }
 
     const defaultVoiceId = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE_ID;
     const resolvedVoice = dto.voiceId ?? defaultVoiceId;
@@ -376,7 +412,7 @@ export class VoiceController {
           'Guest users can only use the default voice. Sign in to access all voices.',
         );
       }
-    } else if (userId) {
+    } else {
       // For authenticated users, perform voice quota checks
       const canUse = await this.voiceQuotaService.canUseVoice(
         userId,
@@ -417,21 +453,6 @@ export class VoiceController {
     let pendingParagraphs: number | undefined;
 
     if (remainingUncached.length > 0) {
-      // Ensure we have a valid userId for the queue
-      if (isGuest) {
-        if (!guestSessionId) {
-          throw new BadRequestException(
-            'x-guest-session-id header is required for guest batch requests',
-          );
-        }
-      } else {
-        if (!userId) {
-          throw new BadRequestException(
-            'userId is required for authenticated users',
-          );
-        }
-      }
-
       try {
         batchJobId = await this.ttsBatchQueueService.queueBatch({
           storyId: dto.storyId,
@@ -482,14 +503,24 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
+    // Unified identity determination: prefer auth, fall back to guest session
     const isGuest = !req.authUserData;
-    if (isGuest && !guestSessionId) {
-      throw new BadRequestException(
-        'x-guest-session-id header is required for guest batch status',
-      );
+    let userId: string;
+    if (isGuest) {
+      if (!guestSessionId) {
+        throw new BadRequestException(
+          'x-guest-session-id header is required for guest batch status',
+        );
+      }
+      userId = guestSessionId;
+    } else {
+      if (!req.authUserData?.userId) {
+        throw new BadRequestException(
+          'Authenticated user missing userId',
+        );
+      }
+      userId = req.authUserData.userId;
     }
-
-    const userId = isGuest ? guestSessionId : req.authUserData?.userId;
 
     const status = await this.ttsBatchQueueService.getBatchStatus(
       batchJobId,
