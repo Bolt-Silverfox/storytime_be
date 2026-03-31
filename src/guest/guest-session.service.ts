@@ -55,8 +55,8 @@ export const GUEST_STORY_LIMIT = 3; // Guests can read 3 unique stories per sess
 @Injectable()
 export class GuestSessionService {
   private readonly logger = new Logger(GuestSessionService.name);
-  private readonly keyv: Keyv;
-  private readonly useRedis: boolean;
+  private keyv: Keyv;
+  private useRedis: boolean;
 
   constructor(private readonly configService: ConfigService) {
     const redisUrl =
@@ -121,7 +121,9 @@ export class GuestSessionService {
     // Verify the session was stored
     const stored = await this.keyv.get<GuestSession>(key);
     if (!stored) {
-      this.logger.error(`Failed to store guest session with sessionId: ${this.maskSessionId(sessionId)}`);
+      this.logger.error(
+        `Failed to store guest session with sessionId: ${this.maskSessionId(sessionId)}`,
+      );
     } else {
       this.logger.debug(
         `Successfully stored guest session: ${this.maskSessionId(sessionId)}`,
@@ -144,13 +146,17 @@ export class GuestSessionService {
     }
 
     const key = this.getSessionKey(sessionId);
-    this.logger.debug(`Looking for guest session with sessionId: ${this.maskSessionId(sessionId)}`);
+    this.logger.debug(
+      `Looking for guest session with sessionId: ${this.maskSessionId(sessionId)}`,
+    );
     let session = await this.keyv.get<GuestSession>(key);
 
     // Fallback: check for old key format (before namespace fix)
     if (!session) {
       const oldKey = `guest:guest:session:${sessionId}`;
-      this.logger.debug(`Trying old key format for sessionId: ${this.maskSessionId(sessionId)}`);
+      this.logger.debug(
+        `Trying old key format for sessionId: ${this.maskSessionId(sessionId)}`,
+      );
       session = await this.keyv.get<GuestSession>(oldKey);
       if (session) {
         this.logger.debug(
@@ -208,12 +214,12 @@ export class GuestSessionService {
     const clampedProgress = Math.max(0, Math.min(100, progress));
 
     // Update reading history only when clampedProgress > 0
-    if (clampedProgress > 0)
+    if (clampedProgress > 0 || session.readingHistory[storyId]) {
       session.readingHistory[storyId] = {
         progress: clampedProgress,
         lastReadAt: new Date(),
       };
-
+    }
     // Update last active timestamp
     session.lastActiveAt = new Date();
 
@@ -352,11 +358,12 @@ export class GuestSessionService {
     };
   }
 
-  private maskSessionId(id: string): string {
+  maskSessionId(id?: string): string {
+    if (!id) return 'no_session_id';
     return id.slice(0, 8) + '...';
   }
 
-  private getSessionKey(sessionId: string): string {
+  getSessionKey(sessionId: string): string {
     return `${GUEST_SESSION_PREFIX}${sessionId}`;
   }
 }
