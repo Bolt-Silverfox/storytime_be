@@ -349,6 +349,11 @@ export class VoiceController {
     // one of userId or guestSessionId must be provided
     const isGuest = guestSessionId != null;
     const userId = req.authUserData?.userId;
+    if (!isGuest && !userId)
+      throw new BadRequestException(
+        'Must either have guest session id or be a logged in user',
+      );
+
     const defaultVoiceId = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE_ID;
     const resolvedVoice = dto.voiceId ?? defaultVoiceId;
 
