@@ -17,6 +17,7 @@ import {
   HttpStatus,
   Logger,
   Headers,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -210,6 +211,7 @@ export class VoiceController {
   // --- Get voice access status ---
   @Get('access')
   @OptionalAuth()
+  @UseGuards(AuthSessionGuard)
   @ApiOperation({
     summary: 'Get voice access status for the user',
     description:
@@ -291,6 +293,7 @@ export class VoiceController {
 
   @Post('story/audio/batch')
   @OptionalAuth()
+  @UseGuards(AuthSessionGuard)
   @Throttle({ short: { limit: 10, ttl: 60_000 } })
   @ApiOperation({ summary: 'Generate audio for all paragraphs of a story' })
   @ApiResponse({
@@ -343,7 +346,8 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
-    const isGuest = !req.authUserData;
+    // one of userId or guestSessionId must be provided
+    const isGuest = guestSessionId != null;
     const userId = req.authUserData?.userId;
     const defaultVoiceId = FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE_ID;
     const resolvedVoice = dto.voiceId ?? defaultVoiceId;
@@ -408,11 +412,26 @@ export class VoiceController {
     let pendingParagraphs: number | undefined;
 
     if (remainingUncached.length > 0) {
+      // Ensure we have a valid userId for the queue
+      if (isGuest) {
+        if (!guestSessionId) {
+          throw new BadRequestException(
+            'x-guest-session-id header is required for guest batch requests',
+          );
+        }
+      } else {
+        if (!userId) {
+          throw new BadRequestException(
+            'userId is required for authenticated users',
+          );
+        }
+      }
+
       try {
         batchJobId = await this.ttsBatchQueueService.queueBatch({
           storyId: dto.storyId,
           voiceId: resolvedVoice,
-          userId: isGuest ? (guestSessionId ?? `guest-${Date.now()}`) : userId,
+          userId: isGuest ? guestSessionId : userId,
           isPremium: isGuest ? false : isPremium,
           provider: batchProvider,
           paragraphs: remainingUncached,
@@ -459,9 +478,13 @@ export class VoiceController {
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
     const isGuest = !req.authUserData;
-    const userId = isGuest
-      ? (guestSessionId ?? 'guest')
-      : req.authUserData?.userId;
+    if (isGuest && !guestSessionId) {
+      throw new BadRequestException(
+        'x-guest-session-id header is required for guest batch status',
+      );
+    }
+
+    const userId = isGuest ? guestSessionId : req.authUserData?.userId;
 
     const status = await this.ttsBatchQueueService.getBatchStatus(
       batchJobId,

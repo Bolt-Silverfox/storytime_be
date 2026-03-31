@@ -65,13 +65,21 @@ export class GuestSessionService {
     // Try to use Redis, fall back to in-memory if connection fails
     try {
       this.keyv = new Keyv({
-        store: new KeyvRedis(redisUrl),
+        store: new KeyvRedis(redisUrl, { throwOnConnectError: true }),
       });
 
       this.keyv.on('error', (err) => {
-        this.logger.warn(
-          `Redis connection error, using in-memory fallback: ${err.message}`,
+        this.logger.error(
+          `Redis connection error, falling back to in-memory store: ${err.message}`,
         );
+        // Switch to in-memory fallback
+        this.keyv = new Keyv({
+          store: new CacheableMemory({
+            ttl: GUEST_SESSION_TTL_MS,
+            lruSize: 1000,
+          }),
+        });
+        this.useRedis = false;
       });
 
       this.useRedis = true;
@@ -106,14 +114,14 @@ export class GuestSessionService {
 
     const key = this.getSessionKey(sessionId);
     this.logger.debug(
-      `Creating guest session with key: ${key}, sessionId: ${this.maskSessionId(sessionId)}`,
+      `Creating guest session with sessionId: ${this.maskSessionId(sessionId)}`,
     );
     await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
 
     // Verify the session was stored
     const stored = await this.keyv.get<GuestSession>(key);
     if (!stored) {
-      this.logger.error(`Failed to store guest session with key: ${key}`);
+      this.logger.error(`Failed to store guest session with sessionId: ${this.maskSessionId(sessionId)}`);
     } else {
       this.logger.debug(
         `Successfully stored guest session: ${this.maskSessionId(sessionId)}`,
@@ -136,13 +144,13 @@ export class GuestSessionService {
     }
 
     const key = this.getSessionKey(sessionId);
-    this.logger.debug(`Looking for guest session with key: ${key}`);
+    this.logger.debug(`Looking for guest session with sessionId: ${this.maskSessionId(sessionId)}`);
     let session = await this.keyv.get<GuestSession>(key);
 
     // Fallback: check for old key format (before namespace fix)
     if (!session) {
       const oldKey = `guest:guest:session:${sessionId}`;
-      this.logger.debug(`Trying old key format: ${oldKey}`);
+      this.logger.debug(`Trying old key format for sessionId: ${this.maskSessionId(sessionId)}`);
       session = await this.keyv.get<GuestSession>(oldKey);
       if (session) {
         this.logger.debug(
@@ -156,7 +164,7 @@ export class GuestSessionService {
 
     if (!session) {
       this.logger.warn(
-        `Guest session not found for key: ${key}, sessionId: ${this.maskSessionId(sessionId)}`,
+        `Guest session not found for sessionId: ${this.maskSessionId(sessionId)}`,
       );
       return null;
     }
@@ -199,11 +207,12 @@ export class GuestSessionService {
     // Validate progress is between 0 and 100
     const clampedProgress = Math.max(0, Math.min(100, progress));
 
-    // Update reading history
-    session.readingHistory[storyId] = {
-      progress: clampedProgress,
-      lastReadAt: new Date(),
-    };
+    // Update reading history only when clampedProgress > 0
+    if (clampedProgress > 0)
+      session.readingHistory[storyId] = {
+        progress: clampedProgress,
+        lastReadAt: new Date(),
+      };
 
     // Update last active timestamp
     session.lastActiveAt = new Date();
