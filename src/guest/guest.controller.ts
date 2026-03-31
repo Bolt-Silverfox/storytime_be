@@ -10,6 +10,7 @@ import {
   Logger,
   Req,
   ForbiddenException,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,7 +22,10 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import { Public } from '@/shared/decorators/public.decorator';
-import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
+import {
+  AuthenticatedRequest,
+  AuthSessionGuard,
+} from '@/shared/guards/auth.guard';
 import {
   GuestSessionService,
   GUEST_SESSION_TTL_SECONDS,
@@ -105,7 +109,7 @@ export class GuestController {
     @Headers('x-guest-session-id') guestSessionId?: string,
   ): Promise<GuestStoryResponseDto> {
     this.logger.log(
-      `getStoryForGuest called with sessionId: ${guestSessionId}, storyId: ${storyId}`,
+      `getStoryForGuest called with sessionId: ${this.guestSessionService.maskSessionId(guestSessionId)}, storyId: ${storyId}`,
     );
 
     if (!guestSessionId) {
@@ -116,7 +120,9 @@ export class GuestController {
     const session =
       await this.guestSessionService.getGuestSession(guestSessionId);
     if (!session) {
-      this.logger.warn(`Guest session not found: ${guestSessionId}`);
+      this.logger.warn(
+        `Guest session not found: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
+      );
       throw new BadRequestException('Invalid or expired guest session');
     }
 
@@ -206,7 +212,7 @@ export class GuestController {
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
     this.logger.log(
-      `getGuestQuotaStatus called with sessionId: ${guestSessionId}`,
+      `getGuestQuotaStatus called with sessionId: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
     );
 
     if (!guestSessionId) {
@@ -218,7 +224,7 @@ export class GuestController {
 
     if (!quotaStatus) {
       this.logger.warn(
-        `Guest quota status not found for sessionId: ${guestSessionId}`,
+        `Guest quota status not found for sessionId: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
       );
       throw new BadRequestException('Invalid or expired guest session');
     }
@@ -232,6 +238,7 @@ export class GuestController {
    */
   @Post('progress')
   @OptionalAuth()
+  @UseGuards(AuthSessionGuard)
   @ApiOperation({ summary: 'Update reading progress for a story' })
   @ApiHeader({
     name: 'x-guest-session-id',
@@ -253,7 +260,7 @@ export class GuestController {
     @Headers('x-guest-session-id') guestSessionId?: string,
   ): Promise<{ success: boolean }> {
     this.logger.log(
-      `updateProgress called with sessionId: ${guestSessionId}, storyId: ${dto.storyId}, progress: ${dto.progress}`,
+      `updateProgress called with sessionId: ${this.guestSessionService.maskSessionId(guestSessionId)}, storyId: ${dto.storyId}, progress: ${dto.progress}`,
     );
 
     const userId = req.authUserData?.userId;
@@ -290,7 +297,7 @@ export class GuestController {
     } else if (guestSessionId) {
       // Guest user - update in Redis
       this.logger.log(
-        `Updating guest progress for session: ${guestSessionId}, story: ${dto.storyId}`,
+        `Updating guest progress for session: ${this.guestSessionService.maskSessionId(guestSessionId)}, story: ${dto.storyId}`,
       );
       const updated = await this.guestSessionService.updateGuestProgress(
         guestSessionId,
@@ -299,12 +306,12 @@ export class GuestController {
       );
       if (!updated) {
         this.logger.warn(
-          `Failed to update guest progress for session: ${guestSessionId}`,
+          `Failed to update guest progress for session: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
         );
         throw new NotFoundException('Guest session not found');
       }
       this.logger.log(
-        `Successfully updated guest progress for session: ${guestSessionId}`,
+        `Successfully updated guest progress for session: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
       );
     }
 
@@ -317,6 +324,7 @@ export class GuestController {
    */
   @Get('progress/:storyId')
   @OptionalAuth()
+  @UseGuards(AuthSessionGuard)
   @ApiOperation({ summary: 'Get reading progress for a specific story' })
   @ApiHeader({
     name: 'x-guest-session-id',
@@ -397,6 +405,7 @@ export class GuestController {
    */
   @Get('history')
   @OptionalAuth()
+  @UseGuards(AuthSessionGuard)
   @ApiOperation({ summary: 'Get reading history' })
   @ApiHeader({
     name: 'x-guest-session-id',
@@ -543,6 +552,11 @@ export class GuestController {
         totalAllowed: GUEST_STORY_LIMIT,
         alreadyRead: false,
       };
+    }
+    // Check that story exists and is not deleted
+    const story = await this.storyService.getStoryById(storyId);
+    if (!story) {
+      throw new NotFoundException('Story not found');
     }
 
     // Check if story was already read

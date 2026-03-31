@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsNotEmpty,
   IsNumber,
@@ -204,7 +204,7 @@ export class StoryAccessCheckDto {
   @IsBoolean()
   canAccess: boolean;
 
-  @ApiProperty({ description: 'Reason for denial if access is denied' })
+  @ApiPropertyOptional({ description: 'Reason for denial if access is denied' })
   @IsOptional()
   @IsString()
   reason?: string;
