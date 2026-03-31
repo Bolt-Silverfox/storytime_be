@@ -402,7 +402,10 @@ export class VoiceController {
           );
         }
         // Record story access to consume quota
-        await this.guestSessionService.recordNewStoryAccess(userId, dto.storyId);
+        await this.guestSessionService.recordNewStoryAccess(
+          userId,
+          dto.storyId,
+        );
       }
     }
 
