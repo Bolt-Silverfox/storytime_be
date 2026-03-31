@@ -115,6 +115,18 @@ export class GuestSessionService {
     );
     await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
 
+    // Verify the session was stored
+    const stored = await this.keyv.get<GuestSession>(key);
+    if (!stored) {
+      this.logger.error(
+        `Failed to store guest session with sessionId: ${this.maskSessionId(sessionId)}`,
+      );
+    } else {
+      this.logger.debug(
+        `Successfully stored guest session: ${this.maskSessionId(sessionId)}`,
+      );
+    }
+
     this.logger.log(`Created guest session: ${this.maskSessionId(sessionId)}`);
     return session;
   }
