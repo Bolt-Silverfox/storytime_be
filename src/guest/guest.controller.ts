@@ -312,7 +312,9 @@ export class GuestController {
         this.logger.warn(
           `Failed to update guest progress for session: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
         );
-        throw new NotFoundException('Guest session not found');
+        throw new BadRequestException(
+          'Your guest session has expired. Please refresh the page to continue.',
+        );
       }
       this.logger.log(
         `Successfully updated guest progress for session: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
@@ -383,7 +385,9 @@ export class GuestController {
         await this.guestSessionService.getGuestSession(guestSessionId);
 
       if (!session) {
-        throw new NotFoundException('Guest session not found');
+        throw new BadRequestException(
+          'Your guest session has expired. Please refresh the page to continue.',
+        );
       }
 
       const storyProgress = session.readingHistory[storyId];
@@ -458,7 +462,9 @@ export class GuestController {
         await this.guestSessionService.getGuestSession(guestSessionId);
 
       if (!session) {
-        throw new NotFoundException('Guest session not found');
+        throw new BadRequestException(
+          'Your guest session has expired. Please refresh the page to continue.',
+        );
       }
 
       const history = session.readingHistory;
@@ -467,34 +473,14 @@ export class GuestController {
         return { stories: [] };
       }
 
-      // Get full story details for each story in history
-      const storyIds = Object.keys(history);
-      const stories = await this.prisma.story.findMany({
-        where: {
-          id: { in: storyIds },
-          isDeleted: false,
-        },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          coverImageUrl: true,
-          ageMax: true,
-          durationSeconds: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-
-      // Map stories with progress
-      const storiesWithProgress = stories.map((story) => {
-        const progress = history[story.id];
-        return {
-          storyId: story.id,
+      // Map reading history to response format
+      const storiesWithProgress = Object.entries(history).map(
+        ([storyId, progress]) => ({
+          storyId,
           progress: progress.progress,
           lastAccessed: progress.lastReadAt,
-        };
-      });
+        }),
+      );
 
       // Sort by lastAccessed descending
       storiesWithProgress.sort((a, b) => {

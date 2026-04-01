@@ -118,18 +118,6 @@ export class GuestSessionService {
     );
     await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
 
-    // Verify the session was stored
-    const stored = await this.keyv.get<GuestSession>(key);
-    if (!stored) {
-      this.logger.error(
-        `Failed to store guest session with sessionId: ${this.maskSessionId(sessionId)}`,
-      );
-    } else {
-      this.logger.debug(
-        `Successfully stored guest session: ${this.maskSessionId(sessionId)}`,
-      );
-    }
-
     this.logger.log(`Created guest session: ${this.maskSessionId(sessionId)}`);
     return session;
   }
@@ -213,12 +201,20 @@ export class GuestSessionService {
     // Validate progress is between 0 and 100
     const clampedProgress = Math.max(0, Math.min(100, progress));
 
+    // Check if this is a new story (not previously in readingHistory)
+    const isNewStory = !session.readingHistory[storyId];
+
     // Update reading history only when clampedProgress > 0
     if (clampedProgress > 0 || session.readingHistory[storyId]) {
       session.readingHistory[storyId] = {
         progress: clampedProgress,
         lastReadAt: new Date(),
       };
+    }
+
+    // If this is a new story, increment uniqueStoriesRead to keep quota in sync
+    if (isNewStory && session.readingHistory[storyId]) {
+      session.uniqueStoriesRead += 1;
     }
     // Update last active timestamp
     session.lastActiveAt = new Date();
