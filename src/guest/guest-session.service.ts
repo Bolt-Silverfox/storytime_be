@@ -56,7 +56,6 @@ export const GUEST_STORY_LIMIT = 3; // Guests can read 3 unique stories per sess
 export class GuestSessionService {
   private readonly logger = new Logger(GuestSessionService.name);
   private keyv: Keyv;
-  private useRedis: boolean;
 
   constructor(private readonly configService: ConfigService) {
     const redisUrl =
@@ -79,10 +78,9 @@ export class GuestSessionService {
             lruSize: 1000,
           }),
         });
-        this.useRedis = false;
+        // now using in-memory fallback
       });
 
-      this.useRedis = true;
       this.logger.log('GuestSessionService using Redis for persistence');
     } catch {
       this.logger.warn('Failed to connect to Redis, using in-memory cache');
@@ -92,7 +90,6 @@ export class GuestSessionService {
           lruSize: 1000,
         }),
       });
-      this.useRedis = false;
     }
   }
 
