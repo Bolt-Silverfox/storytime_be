@@ -401,7 +401,10 @@ export class StoryService {
     if (filter.userId) {
       enrichedStories = await this.enrichWithReadStatus(filter.userId, stories);
     } else if (filter.guestSessionId) {
-      enrichedStories = await this.enrichWithGuestReadStatus(filter.guestSessionId, stories);
+      enrichedStories = await this.enrichWithGuestReadStatus(
+        filter.guestSessionId,
+        stories,
+      );
     } else {
       enrichedStories = stories.map((s) => ({ ...s, readStatus: null }));
     }
@@ -495,7 +498,10 @@ export class StoryService {
     if (filter.userId) {
       enriched = await this.enrichWithReadStatus(filter.userId, data);
     } else if (filter.guestSessionId) {
-      enriched = await this.enrichWithGuestReadStatus(filter.guestSessionId, data);
+      enriched = await this.enrichWithGuestReadStatus(
+        filter.guestSessionId,
+        data,
+      );
     } else {
       enriched = data.map((s) => ({ ...s, readStatus: null }));
     }
@@ -611,7 +617,8 @@ export class StoryService {
         readStatus: null as 'done' | 'reading' | null,
       }));
 
-    const session = await this.guestSessionService.getGuestSession(guestSessionId);
+    const session =
+      await this.guestSessionService.getGuestSession(guestSessionId);
     if (!session) {
       return stories.map((s) => ({
         ...s,
