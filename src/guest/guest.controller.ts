@@ -123,7 +123,9 @@ export class GuestController {
       this.logger.warn(
         `Guest session not found: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
       );
-      throw new BadRequestException('Invalid or expired guest session');
+      throw new BadRequestException(
+        'Your guest session has expired. Please refresh the page to continue.',
+      );
     }
 
     // Check if story was already read (re-reading is always free)
@@ -226,7 +228,9 @@ export class GuestController {
       this.logger.warn(
         `Guest quota status not found for sessionId: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
       );
-      throw new BadRequestException('Invalid or expired guest session');
+      throw new BadRequestException(
+        'Your guest session has expired. Please refresh the page to continue.',
+      );
     }
 
     return quotaStatus;

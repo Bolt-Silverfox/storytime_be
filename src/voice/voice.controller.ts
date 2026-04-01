@@ -427,7 +427,9 @@ export class VoiceController {
     if (isGuest) {
       const session = await this.guestSessionService.getGuestSession(userId);
       if (!session) {
-        throw new BadRequestException('Invalid or expired guest session');
+        throw new BadRequestException(
+          'Your guest session has expired. Please refresh the page to continue.',
+        );
       }
 
       // Check if story was already read (re-reading is always free)
