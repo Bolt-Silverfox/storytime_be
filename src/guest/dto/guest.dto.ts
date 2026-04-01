@@ -39,11 +39,51 @@ export class GuestProgressResponseDto {
   @ApiProperty({ description: 'Story ID' })
   storyId: string;
 
+  @ApiProperty({ description: 'Story title' })
+  title: string;
+
+  @ApiProperty({ description: 'Story description' })
+  description: string;
+
+  @ApiProperty({ description: 'Story cover image URL' })
+  coverImageUrl: string;
+
+  @ApiProperty({ description: 'Story age max' })
+  ageMax: number;
+
+  @ApiProperty({ description: 'Story age min' })
+  ageMin: number;
+
+  @ApiProperty({ description: 'Story duration in seconds' })
+  durationSeconds: number | null;
+
+  @ApiProperty({ description: 'Story created at' })
+  createdAt: Date;
+
+  @ApiProperty({ description: 'Story updated at' })
+  updatedAt: Date;
+
+  @ApiProperty({ description: 'Story categories' })
+  categories: Array<{
+    id: string;
+    name: string;
+    image: string | null;
+    description: string | null;
+    isDeleted: boolean;
+    deletedAt: Date | null;
+  }>;
+
   @ApiProperty({ description: 'Reading progress percentage' })
   progress: number;
 
   @ApiProperty({ description: 'Last accessed timestamp' })
   lastAccessed: Date;
+
+  @ApiProperty({ description: 'Total time spent reading' })
+  totalTimeSpent: number;
+
+  @ApiProperty({ description: 'Read status: done, reading, or null' })
+  readStatus: 'done' | 'reading' | null;
 }
 
 export class GuestHistoryResponseDto {

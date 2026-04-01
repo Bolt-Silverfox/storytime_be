@@ -16,6 +16,7 @@ import {
   UseInterceptors,
   DefaultValuePipe,
   ParseIntPipe,
+  Headers,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -193,6 +194,7 @@ export class StoryController {
   }) // 100 per minute
   async getStories(
     @Req() req: AuthenticatedRequest,
+    @Headers('x-guest-session-id') guestSessionId?: string,
     @Query('theme') theme?: string,
     @Query('category') category?: string,
     @Query('season') season?: string,
@@ -278,6 +280,7 @@ export class StoryController {
     if (useCursorMode) {
       return this.storyService.getStoriesCursor({
         ...baseFilter,
+        guestSessionId: guestSessionId,
         cursor: safeCursor,
         limit: safeLimit,
       });
@@ -288,6 +291,7 @@ export class StoryController {
 
     return this.storyService.getStories({
       ...baseFilter,
+      guestSessionId: guestSessionId,
       recommended: recommended === 'true',
       isMostLiked: isMostLiked === 'true',
       topPicksFromUs: topPicksFromUs === 'true',
