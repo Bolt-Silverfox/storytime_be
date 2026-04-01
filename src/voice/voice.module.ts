@@ -5,6 +5,7 @@ import { AuthModule } from '@/auth/auth.module';
 import { StoryModule } from '../story/story.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { UploadModule } from '../upload/upload.module';
+import { GuestModule } from '@/guest/guest.module';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
@@ -22,7 +23,6 @@ import { TTS_BATCH_QUEUE_NAME } from './queue/tts-batch-queue.constants';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
 import { TtsBatchProcessor } from './queue/tts-batch.processor';
 import { TtsBatchRedisProvider } from './queue/tts-batch-redis.provider';
-import { GuestSessionService } from '@/guest';
 
 @Module({
   imports: [
@@ -31,6 +31,7 @@ import { GuestSessionService } from '@/guest';
     SubscriptionModule,
     UploadModule,
     forwardRef(() => StoryModule),
+    forwardRef(() => GuestModule),
     BullModule.registerQueue({ name: TTS_BATCH_QUEUE_NAME }),
   ],
   controllers: [VoiceController],
@@ -50,7 +51,6 @@ import { GuestSessionService } from '@/guest';
     TtsBatchRedisProvider,
     TtsBatchQueueService,
     TtsBatchProcessor,
-    GuestSessionService,
   ],
   exports: [
     VoiceService,
