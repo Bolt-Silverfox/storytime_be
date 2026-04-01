@@ -473,14 +473,57 @@ export class GuestController {
         return { stories: [] };
       }
 
-      // Map reading history to response format
-      const storiesWithProgress = Object.entries(history).map(
-        ([storyId, progress]) => ({
-          storyId,
+      // Get full story details for each story in history
+      const storyIds = Object.keys(history);
+      const stories = await this.prisma.story.findMany({
+        where: {
+          id: { in: storyIds },
+          isDeleted: false,
+        },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          coverImageUrl: true,
+          ageMax: true,
+          ageMin: true,
+          durationSeconds: true,
+          createdAt: true,
+          updatedAt: true,
+          categories: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+              description: true,
+              isDeleted: true,
+              deletedAt: true,
+            },
+          },
+        },
+      });
+
+      // Map stories with progress and readStatus
+      const storiesWithProgress = stories.map((story) => {
+        const progress = history[story.id];
+        const isDone = progress.progress >= 100;
+        return {
+          storyId: story.id,
+          title: story.title,
+          description: story.description,
+          coverImageUrl: story.coverImageUrl,
+          ageMax: story.ageMax,
+          ageMin: story.ageMin,
+          durationSeconds: story.durationSeconds,
+          createdAt: story.createdAt,
+          updatedAt: story.updatedAt,
+          categories: story.categories,
           progress: progress.progress,
           lastAccessed: progress.lastReadAt,
-        }),
-      );
+          totalTimeSpent: 0, // Not tracked for guests
+          readStatus: isDone ? 'done' : 'reading',
+        };
+      });
 
       // Sort by lastAccessed descending
       storiesWithProgress.sort((a, b) => {

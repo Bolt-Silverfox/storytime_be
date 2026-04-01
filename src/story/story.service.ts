@@ -1,4 +1,5 @@
 import { PrismaService } from '../prisma/prisma.service';
+import { GuestSessionService } from '../guest/guest-session.service';
 
 /** Max session time in seconds (24 h), matching the DTO contract. */
 const MAX_SESSION_TIME = 86_400;
@@ -110,6 +111,7 @@ export class StoryService {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
+    private readonly guestSessionService: GuestSessionService,
   ) {}
 
   /**
@@ -286,6 +288,7 @@ export class StoryService {
 
   async getStories(filter: {
     userId?: string;
+    guestSessionId?: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -392,9 +395,16 @@ export class StoryService {
     }
 
     const totalPages = Math.ceil(totalCount / limit);
-    const enrichedStories = filter.userId
-      ? await this.enrichWithReadStatus(filter.userId, stories)
-      : stories.map((s) => ({ ...s, readStatus: null }));
+
+    // Enrich with read status based on user or guest session
+    let enrichedStories;
+    if (filter.userId) {
+      enrichedStories = await this.enrichWithReadStatus(filter.userId, stories);
+    } else if (filter.guestSessionId) {
+      enrichedStories = await this.enrichWithGuestReadStatus(filter.guestSessionId, stories);
+    } else {
+      enrichedStories = stories.map((s) => ({ ...s, readStatus: null }));
+    }
 
     let sortedStories = this.sortByReadStatus(enrichedStories, {
       shuffleUnseen: shouldShuffle,
@@ -441,6 +451,7 @@ export class StoryService {
 
   async getStoriesCursor(filter: {
     userId?: string;
+    guestSessionId?: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -478,9 +489,16 @@ export class StoryService {
       stories,
       limit,
     );
-    const enriched = filter.userId
-      ? await this.enrichWithReadStatus(filter.userId, data)
-      : data.map((s) => ({ ...s, readStatus: null }));
+
+    // Enrich with read status based on user or guest session
+    let enriched;
+    if (filter.userId) {
+      enriched = await this.enrichWithReadStatus(filter.userId, data);
+    } else if (filter.guestSessionId) {
+      enriched = await this.enrichWithGuestReadStatus(filter.guestSessionId, data);
+    } else {
+      enriched = data.map((s) => ({ ...s, readStatus: null }));
+    }
 
     return { data: this.sortByReadStatus(enriched), pagination };
   }
@@ -575,6 +593,43 @@ export class StoryService {
         ...story,
         readStatus:
           progress === undefined ? null : progress ? 'done' : 'reading',
+      };
+    });
+  }
+
+  /**
+   * Enrich stories with readStatus from guest session
+   */
+  private async enrichWithGuestReadStatus<T extends { id: string }>(
+    guestSessionId: string,
+    stories: T[],
+  ): Promise<(T & { readStatus: 'done' | 'reading' | null })[]> {
+    const storyIds = [...new Set(stories.map((s) => s.id))];
+    if (storyIds.length === 0)
+      return stories.map((s) => ({
+        ...s,
+        readStatus: null as 'done' | 'reading' | null,
+      }));
+
+    const session = await this.guestSessionService.getGuestSession(guestSessionId);
+    if (!session) {
+      return stories.map((s) => ({
+        ...s,
+        readStatus: null as 'done' | 'reading' | null,
+      }));
+    }
+
+    const readingHistory = session.readingHistory;
+    return stories.map((story) => {
+      const progress = readingHistory[story.id];
+      return {
+        ...story,
+        readStatus:
+          progress === undefined
+            ? null
+            : progress.progress >= 100
+              ? 'done'
+              : 'reading',
       };
     });
   }
