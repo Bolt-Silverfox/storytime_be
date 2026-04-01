@@ -496,8 +496,6 @@ export class GuestController {
               name: true,
               image: true,
               description: true,
-              isDeleted: true,
-              deletedAt: true,
             },
           },
         },
