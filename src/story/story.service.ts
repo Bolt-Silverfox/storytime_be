@@ -629,12 +629,13 @@ export class StoryService {
     const readingHistory = session.readingHistory;
     return stories.map((story) => {
       const progress = readingHistory[story.id];
+      const progressValue = progress?.progress;
       return {
         ...story,
         readStatus:
-          progress === undefined
+          progressValue == null
             ? null
-            : progress.progress >= 100
+            : progressValue >= 100
               ? 'done'
               : 'reading',
       };
