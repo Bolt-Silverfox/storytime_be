@@ -1,4 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export type ReadStatus = 'done' | 'reading';
 import {
   IsNotEmpty,
   IsNumber,
@@ -81,7 +83,7 @@ export class GuestProgressResponseDto {
   totalTimeSpent: number;
 
   @ApiProperty({ description: 'Read status: done, reading, or null' })
-  readStatus: 'done' | 'reading' | null;
+  readStatus: ReadStatus | null;
 }
 
 export class GuestHistoryResponseDto {

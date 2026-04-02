@@ -32,6 +32,7 @@ import {
   GUEST_STORY_LIMIT,
 } from './guest-session.service';
 import { PrismaService } from '@/prisma/prisma.service';
+import { ReadStatus } from './dto/guest.dto';
 import { StoryService } from '@/story/story.service';
 import {
   UpdateGuestProgressDto,
@@ -450,7 +451,7 @@ export class GuestController {
       progress: progressData.progress,
       lastAccessed: progressData.lastAccessed,
       totalTimeSpent: 0,
-      readStatus: isDone ? ('done' as const) : ('reading' as const),
+      readStatus: (isDone ? 'done' : 'reading') as ReadStatus,
     };
 
     // This should never be reached due to the validation above
@@ -537,7 +538,7 @@ export class GuestController {
             progress: record.progress,
             lastAccessed: record.lastAccessed,
             totalTimeSpent: 0,
-            readStatus: isDone ? ('done' as const) : ('reading' as const),
+            readStatus: (isDone ? 'done' : 'reading') as ReadStatus,
           };
         }),
       };
@@ -604,7 +605,7 @@ export class GuestController {
           progress: progress.progress,
           lastAccessed: progress.lastReadAt,
           totalTimeSpent: 0, // Not tracked for guests
-          readStatus: isDone ? ('done' as const) : ('reading' as const),
+          readStatus: (isDone ? 'done' : 'reading') as ReadStatus,
         };
       });
 
