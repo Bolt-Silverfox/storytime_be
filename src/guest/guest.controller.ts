@@ -355,29 +355,29 @@ export class GuestController {
       );
     }
 
+    let progressData: { progress: number; lastAccessed: Date } | null = null;
+
     if (userId) {
       // Authenticated user - get from database
-      const progress = await this.prisma.userStoryProgress.findFirst({
+      const record = await this.prisma.userStoryProgress.findFirst({
         where: {
           userId,
           storyId,
           isDeleted: false,
         },
         select: {
-          storyId: true,
           progress: true,
           lastAccessed: true,
         },
       });
 
-      if (!progress) {
+      if (!record) {
         return null;
       }
 
-      return {
-        storyId: progress.storyId,
-        progress: progress.progress,
-        lastAccessed: progress.lastAccessed,
+      progressData = {
+        progress: record.progress,
+        lastAccessed: record.lastAccessed,
       };
     } else if (guestSessionId) {
       // Guest user - get from Redis
@@ -396,12 +396,62 @@ export class GuestController {
         return null;
       }
 
-      return {
-        storyId,
+      progressData = {
         progress: storyProgress.progress,
         lastAccessed: storyProgress.lastReadAt,
       };
     }
+
+    if (!progressData) {
+      return null;
+    }
+
+    // Fetch story details to enrich the response
+    const story = await this.prisma.story.findFirst({
+      where: { id: storyId, isDeleted: false },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        coverImageUrl: true,
+        ageMax: true,
+        ageMin: true,
+        durationSeconds: true,
+        createdAt: true,
+        updatedAt: true,
+        categories: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+            description: true,
+          },
+        },
+      },
+    });
+
+    if (!story) {
+      return null;
+    }
+
+    const isDone = progressData.progress >= 100;
+
+    return {
+      storyId,
+      title: story.title,
+      description: story.description,
+      coverImageUrl: story.coverImageUrl,
+      ageMax: story.ageMax,
+      ageMin: story.ageMin,
+      durationSeconds: story.durationSeconds,
+      createdAt: story.createdAt,
+      updatedAt: story.updatedAt,
+      categories: story.categories,
+      progress: progressData.progress,
+      lastAccessed: progressData.lastAccessed,
+      totalTimeSpent: 0,
+      readStatus: isDone ? 'done' : 'reading',
+    };
 
     // This should never be reached due to the validation above
     return null;
@@ -445,16 +495,51 @@ export class GuestController {
           storyId: true,
           progress: true,
           lastAccessed: true,
+          story: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              coverImageUrl: true,
+              ageMax: true,
+              ageMin: true,
+              durationSeconds: true,
+              createdAt: true,
+              updatedAt: true,
+              categories: {
+                select: {
+                  id: true,
+                  name: true,
+                  image: true,
+                  description: true,
+                },
+              },
+            },
+          },
         },
         orderBy: { lastAccessed: 'desc' },
       });
 
       return {
-        stories: progressRecords.map((record) => ({
-          storyId: record.storyId,
-          progress: record.progress,
-          lastAccessed: record.lastAccessed,
-        })),
+        stories: progressRecords.map((record) => {
+          const isDone = record.progress >= 100;
+          return {
+            storyId: record.storyId,
+            title: record.story.title,
+            description: record.story.description,
+            coverImageUrl: record.story.coverImageUrl,
+            ageMax: record.story.ageMax,
+            ageMin: record.story.ageMin,
+            durationSeconds: record.story.durationSeconds,
+            createdAt: record.story.createdAt,
+            updatedAt: record.story.updatedAt,
+            categories: record.story.categories,
+            progress: record.progress,
+            lastAccessed: record.lastAccessed,
+            totalTimeSpent: 0,
+            readStatus: isDone ? 'done' : 'reading',
+          };
+        }),
       };
     } else if (guestSessionId) {
       // Guest user - get from Redis
@@ -519,7 +604,7 @@ export class GuestController {
           progress: progress.progress,
           lastAccessed: progress.lastReadAt,
           totalTimeSpent: 0, // Not tracked for guests
-          readStatus: isDone ? 'done' : 'reading',
+          readStatus: (isDone ? 'done' : 'reading') as 'done' | 'reading',
         };
       });
 

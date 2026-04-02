@@ -69,8 +69,6 @@ export class GuestProgressResponseDto {
     name: string;
     image: string | null;
     description: string | null;
-    isDeleted: boolean;
-    deletedAt: Date | null;
   }>;
 
   @ApiProperty({ description: 'Reading progress percentage' })
