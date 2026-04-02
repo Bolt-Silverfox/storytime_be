@@ -1,4 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import Keyv from 'keyv';
@@ -121,11 +125,14 @@ export class GuestSessionService {
       this.logger.error(
         `Failed to store guest session with sessionId: ${this.maskSessionId(sessionId)}`,
       );
-    } else {
-      this.logger.debug(
-        `Successfully stored guest session: ${this.maskSessionId(sessionId)}`,
+      throw new InternalServerErrorException(
+        'Failed to create guest session. Please try again.',
       );
     }
+
+    this.logger.debug(
+      `Successfully stored guest session: ${this.maskSessionId(sessionId)}`,
+    );
 
     this.logger.log(`Created guest session: ${this.maskSessionId(sessionId)}`);
     return session;
