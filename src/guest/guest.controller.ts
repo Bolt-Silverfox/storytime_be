@@ -10,6 +10,7 @@ import {
   Logger,
   Req,
   ForbiddenException,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -23,7 +24,7 @@ import { Throttle } from '@nestjs/throttler';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import { Public } from '@/shared/decorators/public.decorator';
 import {
-  AuthenticatedRequest,
+  OptionalAuthRequest,
   AuthSessionGuard,
 } from '@/shared/guards/auth.guard';
 import {
@@ -48,11 +49,20 @@ import {
 export class GuestController {
   private readonly logger = new Logger(GuestController.name);
 
+  private static readonly UUID_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
   constructor(
     private readonly guestSessionService: GuestSessionService,
     private readonly prisma: PrismaService,
     private readonly storyService: StoryService,
   ) {}
+
+  private validateSessionId(guestSessionId: string): void {
+    if (!GuestController.UUID_REGEX.test(guestSessionId)) {
+      throw new BadRequestException('Invalid session ID format');
+    }
+  }
 
   /**
    * Create a new guest session
@@ -98,6 +108,11 @@ export class GuestController {
     type: GuestStoryResponseDto,
   })
   @ApiResponse({
+    status: 400,
+    description:
+      'Bad Request - missing or invalid x-guest-session-id header',
+  })
+  @ApiResponse({
     status: 401,
     description: 'Unauthorized - invalid or expired guest session',
   })
@@ -117,6 +132,8 @@ export class GuestController {
       throw new BadRequestException('x-guest-session-id header is required');
     }
 
+    this.validateSessionId(guestSessionId);
+
     // Validate guest session
     const session =
       await this.guestSessionService.getGuestSession(guestSessionId);
@@ -124,7 +141,7 @@ export class GuestController {
       this.logger.warn(
         `Guest session not found: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
       );
-      throw new BadRequestException(
+      throw new UnauthorizedException(
         'Your guest session has expired. Please refresh the page to continue.',
       );
     }
@@ -208,6 +225,11 @@ export class GuestController {
     },
   })
   @ApiResponse({
+    status: 400,
+    description:
+      'Bad Request - missing or invalid x-guest-session-id header',
+  })
+  @ApiResponse({
     status: 401,
     description: 'Unauthorized - invalid or expired guest session',
   })
@@ -222,6 +244,8 @@ export class GuestController {
       throw new BadRequestException('x-guest-session-id header is required');
     }
 
+    this.validateSessionId(guestSessionId);
+
     const quotaStatus =
       await this.guestSessionService.getGuestQuotaStatus(guestSessionId);
 
@@ -229,7 +253,7 @@ export class GuestController {
       this.logger.warn(
         `Guest quota status not found for sessionId: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
       );
-      throw new BadRequestException(
+      throw new UnauthorizedException(
         'Your guest session has expired. Please refresh the page to continue.',
       );
     }
@@ -259,8 +283,12 @@ export class GuestController {
     description:
       'Bad Request - missing guest session ID for unauthenticated users',
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or expired guest session',
+  })
   async updateProgress(
-    @Req() req: AuthenticatedRequest,
+    @Req() req: OptionalAuthRequest,
     @Body() dto: UpdateGuestProgressDto,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ): Promise<{ success: boolean }> {
@@ -276,7 +304,10 @@ export class GuestController {
       );
     }
 
-    // Clamp progress between 0 and 100
+    if (!userId && guestSessionId) {
+      this.validateSessionId(guestSessionId);
+    }
+
     const clampedProgress = Math.max(0, Math.min(100, dto.progress));
 
     if (userId) {
@@ -313,7 +344,7 @@ export class GuestController {
         this.logger.warn(
           `Failed to update guest progress for session: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
         );
-        throw new BadRequestException(
+        throw new UnauthorizedException(
           'Your guest session has expired. Please refresh the page to continue.',
         );
       }
@@ -343,8 +374,17 @@ export class GuestController {
     description: 'Progress retrieved successfully',
     type: GuestProgressResponseDto,
   })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Bad Request - missing guest session ID for unauthenticated users',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or expired guest session',
+  })
   async getProgress(
-    @Req() req: AuthenticatedRequest,
+    @Req() req: OptionalAuthRequest,
     @Param('storyId') storyId: string,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ): Promise<GuestProgressResponseDto | null> {
@@ -354,6 +394,10 @@ export class GuestController {
       throw new BadRequestException(
         'Either authentication or x-guest-session-id header is required',
       );
+    }
+
+    if (!userId && guestSessionId) {
+      this.validateSessionId(guestSessionId);
     }
 
     let progressData: { progress: number; lastAccessed: Date } | null = null;
@@ -386,7 +430,7 @@ export class GuestController {
         await this.guestSessionService.getGuestSession(guestSessionId);
 
       if (!session) {
-        throw new BadRequestException(
+        throw new UnauthorizedException(
           'Your guest session has expired. Please refresh the page to continue.',
         );
       }
@@ -436,6 +480,7 @@ export class GuestController {
     }
 
     const isDone = progressData.progress >= 100;
+    const readStatus: ReadStatus = isDone ? 'done' : 'reading';
 
     return {
       storyId,
@@ -451,11 +496,8 @@ export class GuestController {
       progress: progressData.progress,
       lastAccessed: progressData.lastAccessed,
       totalTimeSpent: 0,
-      readStatus: (isDone ? 'done' : 'reading') as ReadStatus,
+      readStatus,
     };
-
-    // This should never be reached due to the validation above
-    return null;
   }
 
   /**
@@ -476,8 +518,17 @@ export class GuestController {
     description: 'History retrieved successfully',
     type: GuestHistoryResponseDto,
   })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Bad Request - missing guest session ID for unauthenticated users',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or expired guest session',
+  })
   async getHistory(
-    @Req() req: AuthenticatedRequest,
+    @Req() req: OptionalAuthRequest,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ): Promise<GuestHistoryResponseDto> {
     const userId = req.authUserData?.userId;
@@ -486,6 +537,10 @@ export class GuestController {
       throw new BadRequestException(
         'Either authentication or x-guest-session-id header is required',
       );
+    }
+
+    if (!userId && guestSessionId) {
+      this.validateSessionId(guestSessionId);
     }
 
     if (userId) {
@@ -524,6 +579,7 @@ export class GuestController {
       return {
         stories: progressRecords.map((record) => {
           const isDone = record.progress >= 100;
+          const readStatus: ReadStatus = isDone ? 'done' : 'reading';
           return {
             storyId: record.storyId,
             title: record.story.title,
@@ -538,7 +594,7 @@ export class GuestController {
             progress: record.progress,
             lastAccessed: record.lastAccessed,
             totalTimeSpent: 0,
-            readStatus: (isDone ? 'done' : 'reading') as ReadStatus,
+            readStatus,
           };
         }),
       };
@@ -548,7 +604,7 @@ export class GuestController {
         await this.guestSessionService.getGuestSession(guestSessionId);
 
       if (!session) {
-        throw new BadRequestException(
+        throw new UnauthorizedException(
           'Your guest session has expired. Please refresh the page to continue.',
         );
       }
@@ -591,6 +647,7 @@ export class GuestController {
       const storiesWithProgress = stories.map((story) => {
         const progress = history[story.id];
         const isDone = progress.progress >= 100;
+        const readStatus: ReadStatus = isDone ? 'done' : 'reading';
         return {
           storyId: story.id,
           title: story.title,
@@ -605,7 +662,7 @@ export class GuestController {
           progress: progress.progress,
           lastAccessed: progress.lastReadAt,
           totalTimeSpent: 0, // Not tracked for guests
-          readStatus: (isDone ? 'done' : 'reading') as ReadStatus,
+          readStatus,
         };
       });
 
@@ -643,6 +700,11 @@ export class GuestController {
     description: 'Access check completed',
     type: StoryAccessCheckDto,
   })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Bad Request - invalid x-guest-session-id header format',
+  })
   async checkStoryAccess(
     @Param('storyId') storyId: string,
     @Headers('x-guest-session-id') guestSessionId?: string,
@@ -657,6 +719,8 @@ export class GuestController {
         alreadyRead: false,
       };
     }
+
+    this.validateSessionId(guestSessionId);
 
     const session =
       await this.guestSessionService.getGuestSession(guestSessionId);

@@ -25,6 +25,10 @@ export interface AuthenticatedRequest extends Request {
   authUserData: JwtPayload;
 }
 
+export interface OptionalAuthRequest extends Request {
+  authUserData?: JwtPayload;
+}
+
 @Injectable()
 export class AuthSessionGuard implements CanActivate {
   private readonly logger = new Logger(AuthSessionGuard.name);
