@@ -450,7 +450,7 @@ export class GuestController {
       progress: progressData.progress,
       lastAccessed: progressData.lastAccessed,
       totalTimeSpent: 0,
-      readStatus: isDone ? 'done' : 'reading',
+      readStatus: isDone ? 'done' as const : 'reading' as const,
     };
 
     // This should never be reached due to the validation above
@@ -537,7 +537,7 @@ export class GuestController {
             progress: record.progress,
             lastAccessed: record.lastAccessed,
             totalTimeSpent: 0,
-            readStatus: isDone ? 'done' : 'reading',
+            readStatus: isDone ? 'done' as const : 'reading' as const,
           };
         }),
       };
@@ -604,7 +604,7 @@ export class GuestController {
           progress: progress.progress,
           lastAccessed: progress.lastReadAt,
           totalTimeSpent: 0, // Not tracked for guests
-          readStatus: isDone ? 'done' : 'reading',
+          readStatus: isDone ? 'done' as const : 'reading' as const,
         };
       });
 
