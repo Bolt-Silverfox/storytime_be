@@ -217,9 +217,6 @@ export class GuestSessionService {
     // Validate progress is between 0 and 100
     const clampedProgress = Math.max(0, Math.min(100, progress));
 
-    // Check if this is a new story (not previously in readingHistory)
-    const isNewStory = !session.readingHistory[storyId];
-
     // Update reading history only when clampedProgress > 0
     if (clampedProgress > 0 || session.readingHistory[storyId]) {
       session.readingHistory[storyId] = {
@@ -228,10 +225,6 @@ export class GuestSessionService {
       };
     }
 
-    // If this is a new story, increment uniqueStoriesRead to keep quota in sync
-    if (isNewStory && session.readingHistory[storyId]) {
-      session.uniqueStoriesRead += 1;
-    }
     // Update last active timestamp
     session.lastActiveAt = new Date();
 

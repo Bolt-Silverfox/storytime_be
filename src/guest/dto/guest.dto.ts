@@ -1,17 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-export type ReadStatus = 'done' | 'reading';
 import {
   IsNotEmpty,
   IsNumber,
   IsString,
   Max,
   Min,
-  IsOptional,
-  IsBoolean,
-  IsArray,
-  IsDate,
 } from 'class-validator';
+
+export type ReadStatus = 'done' | 'reading';
 
 export class UpdateGuestProgressDto {
   @ApiProperty({ description: 'Story ID' })
@@ -37,6 +33,20 @@ export class CreateGuestSessionResponseDto {
   expiresIn: number;
 }
 
+export class GuestStoryCategoryDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  description?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  image?: string | null;
+}
+
 export class GuestProgressResponseDto {
   @ApiProperty({ description: 'Story ID' })
   storyId: string;
@@ -56,7 +66,7 @@ export class GuestProgressResponseDto {
   @ApiProperty({ description: 'Story age min' })
   ageMin: number;
 
-  @ApiProperty({ description: 'Story duration in seconds' })
+  @ApiProperty({ description: 'Story duration in seconds', nullable: true })
   durationSeconds: number | null;
 
   @ApiProperty({ description: 'Story created at' })
@@ -65,13 +75,8 @@ export class GuestProgressResponseDto {
   @ApiProperty({ description: 'Story updated at' })
   updatedAt: Date;
 
-  @ApiProperty({ description: 'Story categories' })
-  categories: Array<{
-    id: string;
-    name: string;
-    image: string | null;
-    description: string | null;
-  }>;
+  @ApiProperty({ description: 'Story categories', type: [GuestStoryCategoryDto] })
+  categories: GuestStoryCategoryDto[];
 
   @ApiProperty({ description: 'Reading progress percentage' })
   progress: number;
@@ -82,7 +87,7 @@ export class GuestProgressResponseDto {
   @ApiProperty({ description: 'Total time spent reading' })
   totalTimeSpent: number;
 
-  @ApiProperty({ description: 'Read status: done, reading, or null' })
+  @ApiProperty({ description: 'Read status: done, reading, or null', nullable: true, enum: ['done', 'reading'] })
   readStatus: ReadStatus | null;
 }
 
@@ -96,172 +101,112 @@ export class GuestHistoryResponseDto {
 
 export class GuestStoryImageDto {
   @ApiProperty()
-  @IsString()
   url: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty({ required: false, nullable: true })
   caption?: string | null;
 }
 
 export class GuestStoryBranchDto {
   @ApiProperty()
-  @IsString()
   prompt: string;
 
   @ApiProperty()
-  @IsString()
   optionA: string;
 
   @ApiProperty()
-  @IsString()
   optionB: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty({ required: false, nullable: true })
   nextA?: string | null;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty({ required: false, nullable: true })
   nextB?: string | null;
-}
-
-export class GuestStoryCategoryDto {
-  @ApiProperty()
-  @IsString()
-  id: string;
-
-  @ApiProperty()
-  @IsString()
-  name: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  description?: string | null;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  image?: string | null;
 }
 
 export class GuestStoryThemeDto {
   @ApiProperty()
-  @IsString()
   id: string;
 
   @ApiProperty()
-  @IsString()
   name: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty({ required: false, nullable: true })
   description?: string | null;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty({ required: false, nullable: true })
   image?: string | null;
 }
 
 export class GuestStoryResponseDto {
   @ApiProperty()
-  @IsString()
   id: string;
 
   @ApiProperty()
-  @IsString()
   title: string;
 
   @ApiProperty()
-  @IsString()
   description: string;
 
   @ApiProperty()
-  @IsString()
   language: string;
 
   @ApiProperty({ type: [GuestStoryCategoryDto] })
-  @IsArray()
   categories: GuestStoryCategoryDto[];
 
   @ApiProperty({ type: [GuestStoryThemeDto] })
-  @IsArray()
   themes: GuestStoryThemeDto[];
 
   @ApiProperty({ type: [String], required: false })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
   seasonIds?: string[];
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty({ required: false, nullable: true })
   coverImageUrl?: string | null;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty({ required: false, nullable: true })
   audioUrl?: string | null;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty({ required: false, nullable: true })
   textContent?: string | null;
 
   @ApiProperty({ required: false })
-  @IsOptional()
-  @IsBoolean()
   isInteractive?: boolean;
 
   @ApiProperty({ required: false })
-  @IsOptional()
-  @IsNumber()
   ageMin?: number;
 
   @ApiProperty({ required: false })
-  @IsOptional()
-  @IsNumber()
   ageMax?: number;
 
   @ApiProperty({ type: [GuestStoryImageDto], required: false })
-  @IsOptional()
-  @IsArray()
   images?: GuestStoryImageDto[];
 
   @ApiProperty({ type: [GuestStoryBranchDto], required: false })
-  @IsOptional()
-  @IsArray()
   branches?: GuestStoryBranchDto[];
 
   @ApiProperty()
-  @IsDate()
   createdAt: Date;
 
   @ApiProperty()
-  @IsDate()
   updatedAt: Date;
 }
 
 export class StoryAccessCheckDto {
   @ApiProperty({ description: 'Whether the story can be accessed' })
-  @IsBoolean()
   canAccess: boolean;
 
   @ApiPropertyOptional({ description: 'Reason for denial if access is denied' })
-  @IsOptional()
-  @IsString()
   reason?: string;
 
   @ApiProperty({ description: 'Number of stories read in this session' })
-  @IsNumber()
   storiesRead: number;
 
   @ApiProperty({ description: 'Number stories remaining' })
-  @IsNumber()
   remaining: number;
 
   @ApiProperty({ description: 'Total stories allowed' })
-  @IsNumber()
   totalAllowed: number;
 
   @ApiProperty({ description: 'Whether this story has already been read' })
-  @IsBoolean()
   alreadyRead: boolean;
 }
