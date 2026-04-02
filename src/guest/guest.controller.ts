@@ -604,7 +604,7 @@ export class GuestController {
           progress: progress.progress,
           lastAccessed: progress.lastReadAt,
           totalTimeSpent: 0, // Not tracked for guests
-          readStatus: (isDone ? 'done' : 'reading') as 'done' | 'reading',
+          readStatus: isDone ? 'done' : 'reading',
         };
       });
 
