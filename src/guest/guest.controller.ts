@@ -109,8 +109,7 @@ export class GuestController {
   })
   @ApiResponse({
     status: 400,
-    description:
-      'Bad Request - missing or invalid x-guest-session-id header',
+    description: 'Bad Request - missing or invalid x-guest-session-id header',
   })
   @ApiResponse({
     status: 401,
@@ -226,8 +225,7 @@ export class GuestController {
   })
   @ApiResponse({
     status: 400,
-    description:
-      'Bad Request - missing or invalid x-guest-session-id header',
+    description: 'Bad Request - missing or invalid x-guest-session-id header',
   })
   @ApiResponse({
     status: 401,
@@ -702,8 +700,7 @@ export class GuestController {
   })
   @ApiResponse({
     status: 400,
-    description:
-      'Bad Request - invalid x-guest-session-id header format',
+    description: 'Bad Request - invalid x-guest-session-id header format',
   })
   async checkStoryAccess(
     @Param('storyId') storyId: string,
