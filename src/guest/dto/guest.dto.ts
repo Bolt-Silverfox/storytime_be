@@ -1,11 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsNotEmpty,
-  IsNumber,
-  IsString,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, Max, Min } from 'class-validator';
 
 export type ReadStatus = 'done' | 'reading';
 
@@ -75,7 +69,10 @@ export class GuestProgressResponseDto {
   @ApiProperty({ description: 'Story updated at' })
   updatedAt: Date;
 
-  @ApiProperty({ description: 'Story categories', type: [GuestStoryCategoryDto] })
+  @ApiProperty({
+    description: 'Story categories',
+    type: [GuestStoryCategoryDto],
+  })
   categories: GuestStoryCategoryDto[];
 
   @ApiProperty({ description: 'Reading progress percentage' })
@@ -87,7 +84,11 @@ export class GuestProgressResponseDto {
   @ApiProperty({ description: 'Total time spent reading' })
   totalTimeSpent: number;
 
-  @ApiProperty({ description: 'Read status: done, reading, or null', nullable: true, enum: ['done', 'reading'] })
+  @ApiProperty({
+    description: 'Read status: done, reading, or null',
+    nullable: true,
+    enum: ['done', 'reading'],
+  })
   readStatus: ReadStatus | null;
 }
 
