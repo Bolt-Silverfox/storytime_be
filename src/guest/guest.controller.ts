@@ -35,6 +35,12 @@ import {
 import { PrismaService } from '@/prisma/prisma.service';
 import { ReadStatus } from './dto/guest.dto';
 import { StoryService } from '@/story/story.service';
+import { AnalyticsService } from '@/analytics/analytics.service';
+import {
+  GUEST_SESSION_CREATED,
+  GUEST_STORY_ACCESSED,
+  GUEST_QUOTA_EXHAUSTED,
+} from './guest-activity.constants';
 import {
   UpdateGuestProgressDto,
   CreateGuestSessionResponseDto,
@@ -56,6 +62,7 @@ export class GuestController {
     private readonly guestSessionService: GuestSessionService,
     private readonly prisma: PrismaService,
     private readonly storyService: StoryService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   private validateSessionId(guestSessionId: string): void {
@@ -81,6 +88,12 @@ export class GuestController {
     this.logger.log(
       `Guest session created: ${session.sessionId.slice(0, 8)}...`,
     );
+
+    void this.analyticsService.logActivity({
+      action: GUEST_SESSION_CREATED,
+      status: 'SUCCESS',
+      details: JSON.stringify({ guestSessionId: session.sessionId }),
+    });
 
     return {
       sessionId: session.sessionId,
@@ -156,6 +169,12 @@ export class GuestController {
       const quotaStatus =
         await this.guestSessionService.getGuestQuotaStatus(guestSessionId);
       if (quotaStatus && quotaStatus.remaining <= 0) {
+        void this.analyticsService.logActivity({
+          action: GUEST_QUOTA_EXHAUSTED,
+          status: 'SUCCESS',
+          details: JSON.stringify({ guestSessionId }),
+        });
+
         throw new ForbiddenException(
           'You have reached your story limit. Sign up to continue reading!',
         );
@@ -174,6 +193,12 @@ export class GuestController {
         guestSessionId,
         storyId,
       );
+
+      void this.analyticsService.logActivity({
+        action: GUEST_STORY_ACCESSED,
+        status: 'SUCCESS',
+        details: JSON.stringify({ guestSessionId, storyId }),
+      });
     }
 
     return {
