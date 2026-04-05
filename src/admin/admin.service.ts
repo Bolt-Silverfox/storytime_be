@@ -2997,21 +2997,13 @@ export class AdminService {
       ]);
 
     // Unique stories accessed
-    const storyLogs = await this.prisma.activityLog.findMany({
-      where: { action: 'GUEST_STORY_ACCESSED', isDeleted: false },
-      select: { details: true },
-    });
-    const uniqueStoryIds = new Set<string>();
-    for (const log of storyLogs) {
-      try {
-        const parsed = JSON.parse(log.details ?? '{}');
-        if (parsed.storyId) uniqueStoryIds.add(parsed.storyId);
-      } catch (error) {
-        this.logger.debug(
-          `Skipping malformed GUEST_STORY_ACCESSED details: ${(error as Error).message}`,
-        );
-      }
-    }
+    const uniqueStoriesResult = await this.prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(DISTINCT details::jsonb->>'storyId') as count
+      FROM "ActivityLog"
+      WHERE action = 'GUEST_STORY_ACCESSED' AND "isDeleted" = false
+      AND details IS NOT NULL
+    `;
+    const uniqueStoriesAccessed = Number(uniqueStoriesResult[0]?.count ?? 0);
 
     const calculateTrend = (
       current: number,
@@ -3038,7 +3030,7 @@ export class AdminService {
       storiesReadThisMonth: calculateTrend(storiesThisMonth, storiesLastMonth),
       quotaExhausted,
       quotaExhaustedThisMonth: calculateTrend(quotaThisMonth, quotaLastMonth),
-      uniqueStoriesAccessed: uniqueStoryIds.size,
+      uniqueStoriesAccessed,
     };
 
     await this.cacheManager.set(CACHE_KEYS.GUEST_STATS, result, 5 * 60 * 1000);
@@ -3062,9 +3054,13 @@ export class AdminService {
       where.createdAt = {};
       if (filters.startDate) where.createdAt.gte = new Date(filters.startDate);
       if (filters.endDate) {
-        const endDate = new Date(filters.endDate);
-        endDate.setHours(23, 59, 59, 999);
-        where.createdAt.lte = endDate;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(filters.endDate)) {
+          const endDate = new Date(`${filters.endDate}T00:00:00.000Z`);
+          endDate.setUTCDate(endDate.getUTCDate() + 1);
+          where.createdAt.lt = endDate;
+        } else {
+          where.createdAt.lte = new Date(filters.endDate);
+        }
       }
     }
 
