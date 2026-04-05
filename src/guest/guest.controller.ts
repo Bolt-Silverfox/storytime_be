@@ -722,14 +722,9 @@ export class GuestController {
     const session =
       await this.guestSessionService.getGuestSession(guestSessionId);
     if (!session) {
-      return {
-        canAccess: false,
-        reason: 'Invalid or expired guest session',
-        storiesRead: 0,
-        remaining: 0,
-        totalAllowed: GUEST_STORY_LIMIT,
-        alreadyRead: false,
-      };
+      throw new UnauthorizedException(
+        'Your guest session has expired. Please refresh the page to continue.',
+      );
     }
     // Check that story exists and is not deleted
     const story = await this.storyService.getStoryById(storyId);
