@@ -94,7 +94,9 @@ export class GuestController {
         action: GUEST_SESSION_CREATED,
         status: 'SUCCESS',
         details: JSON.stringify({
-          guestSessionId: this.guestSessionService.maskSessionId(session.sessionId),
+          guestSessionId: this.guestSessionService.maskSessionId(
+            session.sessionId,
+          ),
         }),
       })
       .catch((error) =>
@@ -182,7 +184,8 @@ export class GuestController {
             action: GUEST_QUOTA_EXHAUSTED,
             status: 'SUCCESS',
             details: JSON.stringify({
-              guestSessionId: this.guestSessionService.maskSessionId(guestSessionId),
+              guestSessionId:
+                this.guestSessionService.maskSessionId(guestSessionId),
             }),
           })
           .catch((error) =>
@@ -215,7 +218,8 @@ export class GuestController {
           action: GUEST_STORY_ACCESSED,
           status: 'SUCCESS',
           details: JSON.stringify({
-            guestSessionId: this.guestSessionService.maskSessionId(guestSessionId),
+            guestSessionId:
+              this.guestSessionService.maskSessionId(guestSessionId),
             storyId,
           }),
         })
