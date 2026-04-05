@@ -58,10 +58,7 @@ import { DashboardUtil } from './utils/dashboard.util';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { ResetQuotaDto } from './dto/reset-quota.dto';
-import {
-  GuestStatsDto,
-  GuestActivityFilterDto,
-} from './dto/guest-stats.dto';
+import { GuestStatsDto, GuestActivityFilterDto } from './dto/guest-stats.dto';
 import { CouponService } from '../coupon/coupon.service';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
 import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
@@ -2943,11 +2940,7 @@ export class AdminService {
 
     const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthStart = new Date(
-      now.getFullYear(),
-      now.getMonth() - 1,
-      1,
-    );
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd = new Date(
       now.getFullYear(),
       now.getMonth(),
@@ -2958,8 +2951,8 @@ export class AdminService {
     );
 
     // Total counts
-    const [totalSessions, totalStoriesRead, quotaExhausted] =
-      await Promise.all([
+    const [totalSessions, totalStoriesRead, quotaExhausted] = await Promise.all(
+      [
         this.prisma.activityLog.count({
           where: { action: 'GUEST_SESSION_CREATED', isDeleted: false },
         }),
@@ -2969,7 +2962,8 @@ export class AdminService {
         this.prisma.activityLog.count({
           where: { action: 'GUEST_QUOTA_EXHAUSTED', isDeleted: false },
         }),
-      ]);
+      ],
+    );
 
     // This month counts
     const thisMonthWhere = {
@@ -3025,16 +3019,13 @@ export class AdminService {
         return {
           value: current,
           trend: current > 0 ? 100 : 0,
-          direction: (current > 0 ? 'up' : 'neutral') as 'up' | 'neutral',
+          direction: current > 0 ? 'up' : 'neutral',
         };
       const trend = Math.round(((current - previous) / previous) * 100);
       return {
         value: current,
         trend: Math.abs(trend),
-        direction: (trend > 0 ? 'up' : trend < 0 ? 'down' : 'neutral') as
-          | 'up'
-          | 'down'
-          | 'neutral',
+        direction: trend > 0 ? 'up' : trend < 0 ? 'down' : 'neutral',
       };
     };
 
@@ -3048,11 +3039,7 @@ export class AdminService {
       uniqueStoriesAccessed: uniqueStoryIds.size,
     };
 
-    await this.cacheManager.set(
-      CACHE_KEYS.GUEST_STATS,
-      result,
-      5 * 60 * 1000,
-    );
+    await this.cacheManager.set(CACHE_KEYS.GUEST_STATS, result, 5 * 60 * 1000);
     return result;
   }
 
@@ -3066,8 +3053,7 @@ export class AdminService {
     if (filters.action) where.action = filters.action;
     if (filters.startDate || filters.endDate) {
       where.createdAt = {};
-      if (filters.startDate)
-        where.createdAt.gte = new Date(filters.startDate);
+      if (filters.startDate) where.createdAt.gte = new Date(filters.startDate);
       if (filters.endDate) where.createdAt.lte = new Date(filters.endDate);
     }
 
