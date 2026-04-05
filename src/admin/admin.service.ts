@@ -58,7 +58,11 @@ import { DashboardUtil } from './utils/dashboard.util';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { ResetQuotaDto } from './dto/reset-quota.dto';
-import { GuestStatsDto, GuestActivityFilterDto, TrendValueDto } from './dto/guest-stats.dto';
+import {
+  GuestStatsDto,
+  GuestActivityFilterDto,
+  TrendValueDto,
+} from './dto/guest-stats.dto';
 import { CouponService } from '../coupon/coupon.service';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
 import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
@@ -2940,11 +2944,7 @@ export class AdminService {
 
     const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthStart = new Date(
-      now.getFullYear(),
-      now.getMonth() - 1,
-      1,
-    );
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     // Total counts
     const [totalSessions, totalStoriesRead, quotaExhausted] = await Promise.all(
       [
