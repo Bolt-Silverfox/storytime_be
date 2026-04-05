@@ -58,7 +58,7 @@ import { DashboardUtil } from './utils/dashboard.util';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { ResetQuotaDto } from './dto/reset-quota.dto';
-import { GuestStatsDto, GuestActivityFilterDto } from './dto/guest-stats.dto';
+import { GuestStatsDto, GuestActivityFilterDto, TrendValueDto } from './dto/guest-stats.dto';
 import { CouponService } from '../coupon/coupon.service';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
 import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
@@ -2940,16 +2940,11 @@ export class AdminService {
 
     const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(
+    const lastMonthStart = new Date(
       now.getFullYear(),
-      now.getMonth(),
-      0,
-      23,
-      59,
-      59,
+      now.getMonth() - 1,
+      1,
     );
-
     // Total counts
     const [totalSessions, totalStoriesRead, quotaExhausted] = await Promise.all(
       [
@@ -2985,7 +2980,7 @@ export class AdminService {
 
     // Last month counts for trend
     const lastMonthWhere = {
-      createdAt: { gte: lastMonthStart, lte: lastMonthEnd },
+      createdAt: { gte: lastMonthStart, lt: thisMonthStart },
       isDeleted: false,
     };
     const [sessionsLastMonth, storiesLastMonth, quotaLastMonth] =
@@ -3011,10 +3006,17 @@ export class AdminService {
       try {
         const parsed = JSON.parse(log.details ?? '{}');
         if (parsed.storyId) uniqueStoryIds.add(parsed.storyId);
-      } catch {}
+      } catch (error) {
+        this.logger.debug(
+          `Skipping malformed GUEST_STORY_ACCESSED details: ${(error as Error).message}`,
+        );
+      }
     }
 
-    const calculateTrend = (current: number, previous: number) => {
+    const calculateTrend = (
+      current: number,
+      previous: number,
+    ): TrendValueDto => {
       if (previous === 0)
         return {
           value: current,
@@ -3044,13 +3046,18 @@ export class AdminService {
   }
 
   async getGuestActivity(filters: GuestActivityFilterDto) {
-    const page = filters.page ?? 1;
-    const limit = filters.limit ?? 10;
+    const page = Math.max(1, filters.page ?? 1);
+    const limit = Math.min(100, Math.max(1, filters.limit ?? 10));
     const where: any = {
       action: { startsWith: 'GUEST_' },
       isDeleted: false,
     };
-    if (filters.action) where.action = filters.action;
+    if (filters.action) {
+      if (!filters.action.startsWith('GUEST_')) {
+        throw new BadRequestException('Invalid guest action filter');
+      }
+      where.action = filters.action;
+    }
     if (filters.startDate || filters.endDate) {
       where.createdAt = {};
       if (filters.startDate) where.createdAt.gte = new Date(filters.startDate);

@@ -89,11 +89,19 @@ export class GuestController {
       `Guest session created: ${session.sessionId.slice(0, 8)}...`,
     );
 
-    void this.analyticsService.logActivity({
-      action: GUEST_SESSION_CREATED,
-      status: 'SUCCESS',
-      details: JSON.stringify({ guestSessionId: session.sessionId }),
-    });
+    void this.analyticsService
+      .logActivity({
+        action: GUEST_SESSION_CREATED,
+        status: 'SUCCESS',
+        details: JSON.stringify({
+          guestSessionId: this.guestSessionService.maskSessionId(session.sessionId),
+        }),
+      })
+      .catch((error) =>
+        this.logger.warn(
+          `Failed to record guest analytics (${GUEST_SESSION_CREATED}): ${error instanceof Error ? error.message : 'unknown error'}`,
+        ),
+      );
 
     return {
       sessionId: session.sessionId,
@@ -169,11 +177,19 @@ export class GuestController {
       const quotaStatus =
         await this.guestSessionService.getGuestQuotaStatus(guestSessionId);
       if (quotaStatus && quotaStatus.remaining <= 0) {
-        void this.analyticsService.logActivity({
-          action: GUEST_QUOTA_EXHAUSTED,
-          status: 'SUCCESS',
-          details: JSON.stringify({ guestSessionId }),
-        });
+        void this.analyticsService
+          .logActivity({
+            action: GUEST_QUOTA_EXHAUSTED,
+            status: 'SUCCESS',
+            details: JSON.stringify({
+              guestSessionId: this.guestSessionService.maskSessionId(guestSessionId),
+            }),
+          })
+          .catch((error) =>
+            this.logger.warn(
+              `Failed to record guest analytics (${GUEST_QUOTA_EXHAUSTED}): ${error instanceof Error ? error.message : 'unknown error'}`,
+            ),
+          );
 
         throw new ForbiddenException(
           'You have reached your story limit. Sign up to continue reading!',
@@ -194,11 +210,20 @@ export class GuestController {
         storyId,
       );
 
-      void this.analyticsService.logActivity({
-        action: GUEST_STORY_ACCESSED,
-        status: 'SUCCESS',
-        details: JSON.stringify({ guestSessionId, storyId }),
-      });
+      void this.analyticsService
+        .logActivity({
+          action: GUEST_STORY_ACCESSED,
+          status: 'SUCCESS',
+          details: JSON.stringify({
+            guestSessionId: this.guestSessionService.maskSessionId(guestSessionId),
+            storyId,
+          }),
+        })
+        .catch((error) =>
+          this.logger.warn(
+            `Failed to record guest analytics (${GUEST_STORY_ACCESSED}): ${error instanceof Error ? error.message : 'unknown error'}`,
+          ),
+        );
     }
 
     return {
@@ -726,6 +751,10 @@ export class GuestController {
   @ApiResponse({
     status: 400,
     description: 'Bad Request - invalid x-guest-session-id header format',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - invalid or expired guest session',
   })
   async checkStoryAccess(
     @Param('storyId') storyId: string,
