@@ -2997,7 +2997,9 @@ export class AdminService {
       ]);
 
     // Unique stories accessed
-    const uniqueStoriesResult = await this.prisma.$queryRaw<[{ count: bigint }]>`
+    const uniqueStoriesResult = await this.prisma.$queryRaw<
+      [{ count: bigint }]
+    >`
       SELECT COUNT(DISTINCT details::jsonb->>'storyId') as count
       FROM "ActivityLog"
       WHERE action = 'GUEST_STORY_ACCESSED' AND "isDeleted" = false
