@@ -6,6 +6,7 @@ export const CACHE_KEYS = {
   DASHBOARD_STATS: 'admin:dashboard:stats',
   STORY_STATS: 'admin:story:stats',
   CONTENT_BREAKDOWN: 'admin:content:breakdown',
+  GUEST_STATS: 'admin:guest-stats',
 
   // Content caches
   CATEGORIES_ALL: 'categories:all',
