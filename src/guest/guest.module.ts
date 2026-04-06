@@ -6,7 +6,7 @@ import { StoryModule } from '@/story/story.module';
 import { AnalyticsModule } from '@/analytics/analytics.module';
 
 @Module({
-  imports: [PrismaModule, forwardRef(() => StoryModule), AnalyticsModule],
+  imports: [PrismaModule, forwardRef(() => StoryModule), forwardRef(() => AnalyticsModule)],
   controllers: [GuestController],
   providers: [GuestSessionService],
   exports: [GuestSessionService],
