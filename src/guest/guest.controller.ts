@@ -94,7 +94,11 @@ export class GuestController {
       'guest.activity',
       new GuestActivityEvent(
         GUEST_SESSION_CREATED,
-        JSON.stringify({ guestSessionId: this.guestSessionService.maskSessionId(session.sessionId) }),
+        JSON.stringify({
+          guestSessionId: this.guestSessionService.maskSessionId(
+            session.sessionId,
+          ),
+        }),
       ),
     );
 
@@ -176,7 +180,10 @@ export class GuestController {
           'guest.activity',
           new GuestActivityEvent(
             GUEST_QUOTA_EXHAUSTED,
-            JSON.stringify({ guestSessionId: this.guestSessionService.maskSessionId(guestSessionId) }),
+            JSON.stringify({
+              guestSessionId:
+                this.guestSessionService.maskSessionId(guestSessionId),
+            }),
           ),
         );
 
@@ -203,7 +210,11 @@ export class GuestController {
         'guest.activity',
         new GuestActivityEvent(
           GUEST_STORY_ACCESSED,
-          JSON.stringify({ guestSessionId: this.guestSessionService.maskSessionId(guestSessionId), storyId }),
+          JSON.stringify({
+            guestSessionId:
+              this.guestSessionService.maskSessionId(guestSessionId),
+            storyId,
+          }),
         ),
       );
     }
