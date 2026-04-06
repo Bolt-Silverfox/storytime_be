@@ -160,29 +160,29 @@ export class GuestController {
 
     this.validateSessionId(guestSessionId);
 
-    // Validate guest session
-    const session =
-      await this.guestSessionService.getGuestSession(guestSessionId);
-    if (!session) {
-      this.logger.warn(
-        `Guest session not found: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
-      );
-      throw new UnauthorizedException(
-        'Your guest session has expired. Please refresh the page to continue.',
-      );
+    // Fetch story first — validate it exists before touching quota
+    const story = await this.storyService.getStoryById(storyId);
+    if (!story) {
+      throw new NotFoundException('Story not found');
     }
 
-    // Check if story was already read (re-reading is always free)
-    const alreadyRead = !!session.readingHistory[storyId];
+    // Record story access (handles session check, already-read check, and quota atomically)
+    const accessResult = await this.guestSessionService.recordNewStoryAccess(
+      guestSessionId,
+      storyId,
+    );
 
-    // If not already read, check quota
-    // Note: The check-then-consume pattern below has a minor race condition
-    // (quota could be consumed between check and recordNewStoryAccess).
-    // This is acceptable for guest mode — low stakes, non-transactional.
-    if (!alreadyRead) {
-      const quotaStatus =
-        await this.guestSessionService.getGuestQuotaStatus(guestSessionId);
-      if (quotaStatus && quotaStatus.remaining <= 0) {
+    if (!accessResult.recorded) {
+      if (accessResult.reason === 'session_not_found') {
+        this.logger.warn(
+          `Guest session not found: ${this.guestSessionService.maskSessionId(guestSessionId)}`,
+        );
+        throw new UnauthorizedException(
+          'Your guest session has expired. Please refresh the page to continue.',
+        );
+      }
+
+      if (accessResult.reason === 'quota_exceeded') {
         this.emitGuestActivity(GUEST_QUOTA_EXHAUSTED, {
           guestSessionId:
             this.guestSessionService.maskSessionId(guestSessionId),
@@ -192,21 +192,11 @@ export class GuestController {
           'You have reached your story limit. Sign up to continue reading!',
         );
       }
+
+      // 'already_read' → proceed (re-reading is free)
     }
 
-    // Get story data
-    const story = await this.storyService.getStoryById(storyId);
-    if (!story) {
-      throw new NotFoundException('Story not found');
-    }
-
-    // Record story access for quota tracking (only if not already read)
-    if (!alreadyRead) {
-      await this.guestSessionService.recordNewStoryAccess(
-        guestSessionId,
-        storyId,
-      );
-
+    if (accessResult.recorded) {
       this.emitGuestActivity(GUEST_STORY_ACCESSED, {
         guestSessionId: this.guestSessionService.maskSessionId(guestSessionId),
         storyId,
