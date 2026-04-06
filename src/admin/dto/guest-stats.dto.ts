@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsDateString, Min, Max } from 'class-validator';
+import { IsOptional, IsDateString, IsIn, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { MetricWithTrendDto } from './admin-responses.dto';
+import { GUEST_ACTIVITY_ACTIONS } from '@/guest/guest-activity.constants';
 
 export class GuestStatsDto {
   @ApiProperty() totalSessions: number;
@@ -28,7 +29,10 @@ export class GuestActivityFilterDto {
   @Min(1)
   @Max(100)
   limit?: number = 10;
-  @ApiPropertyOptional() @IsOptional() @IsString() action?: string;
+  @ApiPropertyOptional({ enum: GUEST_ACTIVITY_ACTIONS })
+  @IsOptional()
+  @IsIn(GUEST_ACTIVITY_ACTIONS)
+  action?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() startDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() endDate?: string;
 }
