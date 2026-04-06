@@ -72,6 +72,21 @@ export class GuestController {
     }
   }
 
+  private emitGuestActivity(
+    action: string,
+    details: Record<string, unknown>,
+  ): void {
+    const handled = this.eventEmitter.emit(
+      'guest.activity',
+      new GuestActivityEvent(action, JSON.stringify(details)),
+    );
+    if (!handled) {
+      this.logger.warn(
+        `No listener handled guest.activity for action=${action}`,
+      );
+    }
+  }
+
   /**
    * Create a new guest session
    */
@@ -90,17 +105,9 @@ export class GuestController {
       `Guest session created: ${session.sessionId.slice(0, 8)}...`,
     );
 
-    this.eventEmitter.emit(
-      'guest.activity',
-      new GuestActivityEvent(
-        GUEST_SESSION_CREATED,
-        JSON.stringify({
-          guestSessionId: this.guestSessionService.maskSessionId(
-            session.sessionId,
-          ),
-        }),
-      ),
-    );
+    this.emitGuestActivity(GUEST_SESSION_CREATED, {
+      guestSessionId: this.guestSessionService.maskSessionId(session.sessionId),
+    });
 
     return {
       sessionId: session.sessionId,
@@ -176,16 +183,10 @@ export class GuestController {
       const quotaStatus =
         await this.guestSessionService.getGuestQuotaStatus(guestSessionId);
       if (quotaStatus && quotaStatus.remaining <= 0) {
-        this.eventEmitter.emit(
-          'guest.activity',
-          new GuestActivityEvent(
-            GUEST_QUOTA_EXHAUSTED,
-            JSON.stringify({
-              guestSessionId:
-                this.guestSessionService.maskSessionId(guestSessionId),
-            }),
-          ),
-        );
+        this.emitGuestActivity(GUEST_QUOTA_EXHAUSTED, {
+          guestSessionId:
+            this.guestSessionService.maskSessionId(guestSessionId),
+        });
 
         throw new ForbiddenException(
           'You have reached your story limit. Sign up to continue reading!',
@@ -206,17 +207,10 @@ export class GuestController {
         storyId,
       );
 
-      this.eventEmitter.emit(
-        'guest.activity',
-        new GuestActivityEvent(
-          GUEST_STORY_ACCESSED,
-          JSON.stringify({
-            guestSessionId:
-              this.guestSessionService.maskSessionId(guestSessionId),
-            storyId,
-          }),
-        ),
-      );
+      this.emitGuestActivity(GUEST_STORY_ACCESSED, {
+        guestSessionId: this.guestSessionService.maskSessionId(guestSessionId),
+        storyId,
+      });
     }
 
     return {
