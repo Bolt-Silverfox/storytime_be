@@ -7,7 +7,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { AvatarModule } from './avatar/avatar.module';
 import { SharedModule } from './shared/shared.module';
-import { validateEnv, EnvConfig } from './shared/config/env.validation';
+import { validateEnv } from './shared/config/env.validation';
 import { HelpSupportModule } from './help-support/help-support.module';
 import { KidModule } from './kid/kid.module';
 import { NotificationModule } from './notification/notification.module';
@@ -41,6 +41,9 @@ import { CouponModule } from './coupon/coupon.module';
 import { HealthModule } from './health/health.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { GuestModule } from './guest/guest.module';
+import { RedisModule } from './redis/redis.module';
+import { REDIS_CLIENT, KEYV_STORE } from './redis/redis.constants';
+import type { Redis } from 'ioredis';
 
 @Module({
   imports: [
@@ -49,9 +52,12 @@ import { GuestModule } from './guest/guest.module';
       envFilePath: '.env',
       validate: validateEnv,
     }),
+    // Global Redis module for shared connection
+    RedisModule,
     CacheModule.registerAsync({
       isGlobal: true,
-      useFactory: async () => ({
+      inject: [KEYV_STORE],
+      useFactory: async (keyvRedisStore: KeyvRedis<string>) => ({
         ttl: 4 * 60 * 60 * 1000, // 4 hours in milliseconds (for categories)
         stores: [
           // Primary: In-memory cache (fastest)
@@ -61,11 +67,9 @@ import { GuestModule } from './guest/guest.module';
               lruSize: 5000,
             }),
           }),
-          // Secondary: Redis cache (persistent)
+          // Secondary: Redis cache (persistent) - using shared Redis connection
           new Keyv({
-            store: new KeyvRedis(
-              process.env.REDIS_URL || 'redis://localhost:6379',
-            ),
+            store: keyvRedisStore,
           }),
         ],
       }),
@@ -94,13 +98,10 @@ import { GuestModule } from './guest/guest.module';
     }),
     // BullMQ for background job processing (email queue, etc.)
     BullModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService<EnvConfig, true>) => ({
-        connection: {
-          url: config.get('REDIS_URL'),
-          maxRetriesPerRequest: null,
-        },
+      imports: [RedisModule],
+      inject: [REDIS_CLIENT],
+      useFactory: (redisClient: Redis) => ({
+        connection: redisClient.options,
         defaultJobOptions: {
           removeOnComplete: { age: 24 * 3600, count: 1000 },
           removeOnFail: { age: 7 * 24 * 3600 },

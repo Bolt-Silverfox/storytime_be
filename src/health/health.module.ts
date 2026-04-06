@@ -10,12 +10,14 @@ import {
   TTSCircuitBreakerHealthIndicator,
 } from './indicators';
 import { PrismaModule } from '@/prisma/prisma.module';
+import { RedisModule } from '@/redis/redis.module';
 import { EMAIL_QUEUE_NAME } from '@/notification/queue/email-queue.constants';
 
 @Module({
   imports: [
     TerminusModule,
     PrismaModule,
+    RedisModule, // Import RedisModule for shared Redis client access
     // Register the email queue for the queue health indicator
     BullModule.registerQueue({
       name: EMAIL_QUEUE_NAME,
