@@ -4,6 +4,8 @@ import { Type } from 'class-transformer';
 import { MetricWithTrendDto } from './admin-responses.dto';
 import { GUEST_ACTIVITY_ACTIONS } from '@/guest/guest-activity.constants';
 
+type GuestActivityAction = (typeof GUEST_ACTIVITY_ACTIONS)[number];
+
 export class GuestStatsDto {
   @ApiProperty() totalSessions: number;
   @ApiProperty({ type: MetricWithTrendDto })
@@ -32,7 +34,7 @@ export class GuestActivityFilterDto {
   @ApiPropertyOptional({ enum: GUEST_ACTIVITY_ACTIONS })
   @IsOptional()
   @IsIn(GUEST_ACTIVITY_ACTIONS)
-  action?: string;
+  action?: GuestActivityAction;
   @ApiPropertyOptional() @IsOptional() @IsDateString() startDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() endDate?: string;
 }
