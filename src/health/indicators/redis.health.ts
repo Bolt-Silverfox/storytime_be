@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import {
   HealthIndicator,
   HealthIndicatorResult,
@@ -6,33 +6,29 @@ import {
 } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
-import { createClient, RedisClientType } from 'redis';
+import { Redis } from 'ioredis';
+import { REDIS_CLIENT } from '@/redis/redis.constants';
 
 @Injectable()
 export class RedisHealthIndicator extends HealthIndicator {
-  constructor(private readonly configService: ConfigService<EnvConfig, true>) {
+  constructor(
+    private readonly configService: ConfigService<EnvConfig, true>,
+    @Inject(REDIS_CLIENT) private readonly redisClient: Redis,
+  ) {
     super();
   }
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     const startTime = Date.now();
-    let client: RedisClientType | null = null;
 
     try {
-      const redisUrl = this.configService.get('REDIS_URL');
-
-      client = createClient({ url: redisUrl });
-      await client.connect();
-
-      // Test connection with PING
-      const pong = await client.ping();
+      // Test connection with PING using the shared Redis client
+      const pong = await this.redisClient.ping();
 
       // Get some Redis info
-      const info = await client.info('memory');
+      const info = await this.redisClient.info('memory');
       const usedMemoryMatch = info.match(/used_memory_human:(\S+)/);
       const usedMemory = usedMemoryMatch ? usedMemoryMatch[1] : 'unknown';
-
-      await client.disconnect();
 
       const duration = Date.now() - startTime;
 
@@ -40,25 +36,19 @@ export class RedisHealthIndicator extends HealthIndicator {
         duration: `${duration}ms`,
         response: pong,
         usedMemory,
+        status: this.redisClient.status,
       });
     } catch (error) {
       const duration = Date.now() - startTime;
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
 
-      if (client) {
-        try {
-          await client.disconnect();
-        } catch {
-          // Ignore disconnect errors
-        }
-      }
-
       throw new HealthCheckError(
         'Redis health check failed',
         this.getStatus(key, false, {
           duration: `${duration}ms`,
           error: errorMessage,
+          status: this.redisClient.status,
         }),
       );
     }
