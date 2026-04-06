@@ -35,7 +35,8 @@ import {
 import { PrismaService } from '@/prisma/prisma.service';
 import { ReadStatus } from './dto/guest.dto';
 import { StoryService } from '@/story/story.service';
-import { AnalyticsService } from '@/analytics/analytics.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { GuestActivityEvent } from './events/guest-activity.event';
 import {
   GUEST_SESSION_CREATED,
   GUEST_STORY_ACCESSED,
@@ -62,7 +63,7 @@ export class GuestController {
     private readonly guestSessionService: GuestSessionService,
     private readonly prisma: PrismaService,
     private readonly storyService: StoryService,
-    private readonly analyticsService: AnalyticsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private validateSessionId(guestSessionId: string): void {
@@ -89,21 +90,13 @@ export class GuestController {
       `Guest session created: ${session.sessionId.slice(0, 8)}...`,
     );
 
-    void this.analyticsService
-      .logActivity({
-        action: GUEST_SESSION_CREATED,
-        status: 'SUCCESS',
-        details: JSON.stringify({
-          guestSessionId: this.guestSessionService.maskSessionId(
-            session.sessionId,
-          ),
-        }),
-      })
-      .catch((error) =>
-        this.logger.warn(
-          `Failed to record guest analytics (${GUEST_SESSION_CREATED}): ${error instanceof Error ? error.message : 'unknown error'}`,
-        ),
-      );
+    this.eventEmitter.emit(
+      'guest.activity',
+      new GuestActivityEvent(
+        GUEST_SESSION_CREATED,
+        JSON.stringify({ guestSessionId: this.guestSessionService.maskSessionId(session.sessionId) }),
+      ),
+    );
 
     return {
       sessionId: session.sessionId,
@@ -179,20 +172,13 @@ export class GuestController {
       const quotaStatus =
         await this.guestSessionService.getGuestQuotaStatus(guestSessionId);
       if (quotaStatus && quotaStatus.remaining <= 0) {
-        void this.analyticsService
-          .logActivity({
-            action: GUEST_QUOTA_EXHAUSTED,
-            status: 'SUCCESS',
-            details: JSON.stringify({
-              guestSessionId:
-                this.guestSessionService.maskSessionId(guestSessionId),
-            }),
-          })
-          .catch((error) =>
-            this.logger.warn(
-              `Failed to record guest analytics (${GUEST_QUOTA_EXHAUSTED}): ${error instanceof Error ? error.message : 'unknown error'}`,
-            ),
-          );
+        this.eventEmitter.emit(
+          'guest.activity',
+          new GuestActivityEvent(
+            GUEST_QUOTA_EXHAUSTED,
+            JSON.stringify({ guestSessionId: this.guestSessionService.maskSessionId(guestSessionId) }),
+          ),
+        );
 
         throw new ForbiddenException(
           'You have reached your story limit. Sign up to continue reading!',
@@ -213,21 +199,13 @@ export class GuestController {
         storyId,
       );
 
-      void this.analyticsService
-        .logActivity({
-          action: GUEST_STORY_ACCESSED,
-          status: 'SUCCESS',
-          details: JSON.stringify({
-            guestSessionId:
-              this.guestSessionService.maskSessionId(guestSessionId),
-            storyId,
-          }),
-        })
-        .catch((error) =>
-          this.logger.warn(
-            `Failed to record guest analytics (${GUEST_STORY_ACCESSED}): ${error instanceof Error ? error.message : 'unknown error'}`,
-          ),
-        );
+      this.eventEmitter.emit(
+        'guest.activity',
+        new GuestActivityEvent(
+          GUEST_STORY_ACCESSED,
+          JSON.stringify({ guestSessionId: this.guestSessionService.maskSessionId(guestSessionId), storyId }),
+        ),
+      );
     }
 
     return {
