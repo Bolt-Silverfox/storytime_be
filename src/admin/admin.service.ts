@@ -58,17 +58,18 @@ import { DashboardUtil } from './utils/dashboard.util';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { ResetQuotaDto } from './dto/reset-quota.dto';
-import {
-  GuestStatsDto,
-  GuestActivityFilterDto,
-  TrendValueDto,
-} from './dto/guest-stats.dto';
+import { GuestStatsDto, GuestActivityFilterDto } from './dto/guest-stats.dto';
 import { CouponService } from '../coupon/coupon.service';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
 import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
 import { GoogleVerificationService } from '../payment/google-verification.service';
 import { AppleVerificationService } from '../payment/apple-verification.service';
 import { PRODUCT_ID_TO_PLAN } from '../subscription/subscription.constants';
+import {
+  GUEST_SESSION_CREATED,
+  GUEST_STORY_ACCESSED,
+  GUEST_QUOTA_EXHAUSTED,
+} from '@/guest/guest-activity.constants';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
 
@@ -2943,56 +2944,56 @@ export class AdminService {
     if (cached) return cached;
 
     const now = new Date();
-    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const rangeThisMonth = DateUtil.getRange(Timeframe.THIS_MONTH, now);
+    const rangeLastMonth = DateUtil.getRange(Timeframe.LAST_MONTH, now);
     // Total counts
     const [totalSessions, totalStoriesRead, quotaExhausted] = await Promise.all(
       [
         this.prisma.activityLog.count({
-          where: { action: 'GUEST_SESSION_CREATED', isDeleted: false },
+          where: { action: GUEST_SESSION_CREATED, isDeleted: false },
         }),
         this.prisma.activityLog.count({
-          where: { action: 'GUEST_STORY_ACCESSED', isDeleted: false },
+          where: { action: GUEST_STORY_ACCESSED, isDeleted: false },
         }),
         this.prisma.activityLog.count({
-          where: { action: 'GUEST_QUOTA_EXHAUSTED', isDeleted: false },
+          where: { action: GUEST_QUOTA_EXHAUSTED, isDeleted: false },
         }),
       ],
     );
 
     // This month counts
     const thisMonthWhere = {
-      createdAt: { gte: thisMonthStart },
+      createdAt: { gte: rangeThisMonth.start },
       isDeleted: false,
     };
     const [sessionsThisMonth, storiesThisMonth, quotaThisMonth] =
       await Promise.all([
         this.prisma.activityLog.count({
-          where: { ...thisMonthWhere, action: 'GUEST_SESSION_CREATED' },
+          where: { ...thisMonthWhere, action: GUEST_SESSION_CREATED },
         }),
         this.prisma.activityLog.count({
-          where: { ...thisMonthWhere, action: 'GUEST_STORY_ACCESSED' },
+          where: { ...thisMonthWhere, action: GUEST_STORY_ACCESSED },
         }),
         this.prisma.activityLog.count({
-          where: { ...thisMonthWhere, action: 'GUEST_QUOTA_EXHAUSTED' },
+          where: { ...thisMonthWhere, action: GUEST_QUOTA_EXHAUSTED },
         }),
       ]);
 
     // Last month counts for trend
     const lastMonthWhere = {
-      createdAt: { gte: lastMonthStart, lt: thisMonthStart },
+      createdAt: { gte: rangeLastMonth.start, lt: rangeThisMonth.start },
       isDeleted: false,
     };
     const [sessionsLastMonth, storiesLastMonth, quotaLastMonth] =
       await Promise.all([
         this.prisma.activityLog.count({
-          where: { ...lastMonthWhere, action: 'GUEST_SESSION_CREATED' },
+          where: { ...lastMonthWhere, action: GUEST_SESSION_CREATED },
         }),
         this.prisma.activityLog.count({
-          where: { ...lastMonthWhere, action: 'GUEST_STORY_ACCESSED' },
+          where: { ...lastMonthWhere, action: GUEST_STORY_ACCESSED },
         }),
         this.prisma.activityLog.count({
-          where: { ...lastMonthWhere, action: 'GUEST_QUOTA_EXHAUSTED' },
+          where: { ...lastMonthWhere, action: GUEST_QUOTA_EXHAUSTED },
         }),
       ]);
 
@@ -3001,48 +3002,47 @@ export class AdminService {
       [{ count: bigint }]
     >`
       SELECT COUNT(DISTINCT details::jsonb->>'storyId') as count
-      FROM "ActivityLog"
-      WHERE action = 'GUEST_STORY_ACCESSED' AND "isDeleted" = false
-      AND details IS NOT NULL
+      FROM "activity_logs"
+      WHERE action = ${GUEST_STORY_ACCESSED} AND "isDeleted" = false
+      AND details IS NOT NULL AND details LIKE '{%'
     `;
     const uniqueStoriesAccessed = Number(uniqueStoriesResult[0]?.count ?? 0);
 
-    const calculateTrend = (
-      current: number,
-      previous: number,
-    ): TrendValueDto => {
-      if (previous === 0)
-        return {
-          value: current,
-          trend: current > 0 ? 100 : 0,
-          direction: current > 0 ? 'up' : 'neutral',
-        };
-      const trend = Math.round(((current - previous) / previous) * 100);
-      return {
-        value: current,
-        trend: Math.abs(trend),
-        direction: trend > 0 ? 'up' : trend < 0 ? 'down' : 'neutral',
-      };
-    };
-
+    const timeframe = TrendLabel.VS_LAST_MONTH;
     const result: GuestStatsDto = {
       totalSessions,
-      sessionsThisMonth: calculateTrend(sessionsThisMonth, sessionsLastMonth),
+      sessionsThisMonth: DashboardUtil.calculateTrend(
+        sessionsThisMonth,
+        sessionsLastMonth,
+        timeframe,
+      ),
       totalStoriesRead,
-      storiesReadThisMonth: calculateTrend(storiesThisMonth, storiesLastMonth),
+      storiesReadThisMonth: DashboardUtil.calculateTrend(
+        storiesThisMonth,
+        storiesLastMonth,
+        timeframe,
+      ),
       quotaExhausted,
-      quotaExhaustedThisMonth: calculateTrend(quotaThisMonth, quotaLastMonth),
+      quotaExhaustedThisMonth: DashboardUtil.calculateTrend(
+        quotaThisMonth,
+        quotaLastMonth,
+        timeframe,
+      ),
       uniqueStoriesAccessed,
     };
 
-    await this.cacheManager.set(CACHE_KEYS.GUEST_STATS, result, 5 * 60 * 1000);
+    await this.cacheManager.set(
+      CACHE_KEYS.GUEST_STATS,
+      result,
+      CACHE_TTL_MS.DASHBOARD,
+    );
     return result;
   }
 
   async getGuestActivity(filters: GuestActivityFilterDto) {
     const page = Math.max(1, filters.page ?? 1);
     const limit = Math.min(100, Math.max(1, filters.limit ?? 10));
-    const where: any = {
+    const where: Prisma.ActivityLogWhereInput = {
       action: { startsWith: 'GUEST_' },
       isDeleted: false,
     };
@@ -3087,8 +3087,6 @@ export class AdminService {
     ]);
 
     return {
-      statusCode: 200,
-      message: 'Guest activity retrieved successfully',
       data,
       meta: {
         total,

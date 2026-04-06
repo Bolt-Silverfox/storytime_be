@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsDateString } from 'class-validator';
+import { IsOptional, IsString, IsDateString, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class TrendValueDto {
@@ -19,8 +19,17 @@ export class GuestStatsDto {
 }
 
 export class GuestActivityFilterDto {
-  @ApiPropertyOptional() @IsOptional() @Type(() => Number) page?: number = 1;
-  @ApiPropertyOptional() @IsOptional() @Type(() => Number) limit?: number = 10;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  page?: number = 1;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number = 10;
   @ApiPropertyOptional() @IsOptional() @IsString() action?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() startDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() endDate?: string;
