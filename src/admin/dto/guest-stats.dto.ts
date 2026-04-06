@@ -1,20 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsDateString, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
-
-export class TrendValueDto {
-  @ApiProperty() value: number;
-  @ApiProperty() trend: number;
-  @ApiProperty() direction: 'up' | 'down' | 'neutral';
-}
+import { MetricWithTrendDto } from './admin-responses.dto';
 
 export class GuestStatsDto {
   @ApiProperty() totalSessions: number;
-  @ApiProperty({ type: TrendValueDto }) sessionsThisMonth: TrendValueDto;
+  @ApiProperty({ type: MetricWithTrendDto })
+  sessionsThisMonth: MetricWithTrendDto;
   @ApiProperty() totalStoriesRead: number;
-  @ApiProperty({ type: TrendValueDto }) storiesReadThisMonth: TrendValueDto;
+  @ApiProperty({ type: MetricWithTrendDto })
+  storiesReadThisMonth: MetricWithTrendDto;
   @ApiProperty() quotaExhausted: number;
-  @ApiProperty({ type: TrendValueDto }) quotaExhaustedThisMonth: TrendValueDto;
+  @ApiProperty({ type: MetricWithTrendDto })
+  quotaExhaustedThisMonth: MetricWithTrendDto;
   @ApiProperty() uniqueStoriesAccessed: number;
 }
 
