@@ -556,6 +556,7 @@ export class AdminController {
   // =====================
 
   @Get('dashboard/guest-stats')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get guest analytics stats' })
   @ApiResponse({
     status: 200,
@@ -571,13 +572,19 @@ export class AdminController {
   }
 
   @Get('guests/activity')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get guest activity log' })
   @ApiResponse({
     status: 200,
     description: 'Guest activity retrieved successfully',
   })
   async getGuestActivity(@Query() filters: GuestActivityFilterDto) {
-    return this.adminService.getGuestActivity(filters);
+    const result = await this.adminService.getGuestActivity(filters);
+    return {
+      statusCode: 200,
+      message: 'Guest activity retrieved successfully',
+      ...result,
+    };
   }
 
   // =====================
