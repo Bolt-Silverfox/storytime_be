@@ -10,6 +10,16 @@ import KeyvRedis from '@keyv/redis';
 import { CacheableMemory } from 'cacheable';
 
 /**
+ * Discriminated result type for guest story access recording
+ */
+export type GuestStoryAccessResult =
+  | { recorded: true }
+  | {
+      recorded: false;
+      reason: 'already_read' | 'quota_exceeded' | 'session_not_found';
+    };
+
+/**
  * Reading progress entry for a story
  */
 export interface StoryProgress {
@@ -288,27 +298,35 @@ export class GuestSessionService {
   }
 
   /**
-   * Records that a guest accessed a new unique story
+   * Records that a guest accessed a new unique story.
+   * Performs quota check and consumption in a single read-modify-write cycle.
+   * Note: Not truly transactional under Redis — Keyv does GET then SET without WATCH/MULTI.
+   * The narrowed window is acceptable for guest sessions (single user per session, low stakes).
    * @param sessionId - The session ID
    * @param storyId - The story ID
-   * @returns true if this was a new story (quota consumed), false if already read
+   * @returns A discriminated result indicating success or the specific failure reason
    */
   async recordNewStoryAccess(
     sessionId: string,
     storyId: string,
-  ): Promise<boolean> {
+  ): Promise<GuestStoryAccessResult> {
     const session = await this.getGuestSession(sessionId);
 
     if (!session) {
       this.logger.warn(
         `Attempted to record story access for non-existent session: ${this.maskSessionId(sessionId)}`,
       );
-      return false;
+      return { recorded: false, reason: 'session_not_found' };
     }
 
-    // Check if story was already read
+    // Check if story was already read (re-reading is always free)
     if (session.readingHistory[storyId]) {
-      return false; // Already read, no quota consumed
+      return { recorded: false, reason: 'already_read' };
+    }
+
+    // Check quota before consuming
+    if (session.uniqueStoriesRead >= GUEST_STORY_LIMIT) {
+      return { recorded: false, reason: 'quota_exceeded' };
     }
 
     // This is a new story - increment counter
@@ -331,7 +349,7 @@ export class GuestSessionService {
       `Recorded new story access for session ${this.maskSessionId(sessionId)}, story ${storyId}. Total: ${session.uniqueStoriesRead}`,
     );
 
-    return true;
+    return { recorded: true };
   }
 
   /**

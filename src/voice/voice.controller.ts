@@ -18,6 +18,7 @@ import {
   Logger,
   Headers,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -36,6 +37,7 @@ import {
 } from '@/shared/guards/auth.guard';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import { StoryService } from '../story/story.service';
+import { StoryQuotaService } from '@/story/story-quota.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { DEFAULT_VOICE } from './voice.constants';
@@ -91,6 +93,7 @@ export class VoiceController {
   constructor(
     private readonly voiceService: VoiceService,
     private readonly storyService: StoryService,
+    private readonly storyQuotaService: StoryQuotaService,
     private readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly speechToTextService: SpeechToTextService,
@@ -422,33 +425,42 @@ export class VoiceController {
       throw new NotFoundException('Story not found or has no content.');
     }
 
-    // Guest access validation: check session, story, and quota
-    // Moved after all validations to only consume quota when request will succeed
-    if (isGuest) {
-      const session = await this.guestSessionService.getGuestSession(userId);
-      if (!session) {
-        throw new BadRequestException(
-          'Your guest session has expired. Please refresh the page to continue.',
+    // Story quota check for authenticated users
+    if (!isGuest) {
+      const storyAccess = await this.storyQuotaService.checkStoryAccess(
+        userId,
+        dto.storyId,
+      );
+      if (!storyAccess.canAccess) {
+        throw new ForbiddenException(
+          'You have reached your story limit. Upgrade to premium for unlimited stories!',
         );
       }
+      if (
+        storyAccess.reason !== 'already_read' &&
+        storyAccess.reason !== 'premium' &&
+        storyAccess.reason !== 'kid_created'
+      ) {
+        await this.storyQuotaService.recordNewStoryAccess(userId, dto.storyId);
+      }
+    }
 
-      // Check if story was already read (re-reading is always free)
-      const alreadyRead = !!session.readingHistory[dto.storyId];
-
-      // If not already read, check quota and consume
-      if (!alreadyRead) {
-        const quotaStatus =
-          await this.guestSessionService.getGuestQuotaStatus(userId);
-        if (quotaStatus && quotaStatus.remaining <= 0) {
+    // Guest access validation: check session, story, and quota atomically
+    if (isGuest) {
+      const accessResult = await this.guestSessionService.recordNewStoryAccess(
+        userId,
+        dto.storyId,
+      );
+      if (!accessResult.recorded) {
+        if (accessResult.reason === 'session_not_found') {
+          throw new UnauthorizedException('Invalid or expired guest session');
+        }
+        if (accessResult.reason === 'quota_exceeded') {
           throw new ForbiddenException(
             'You have reached your story limit. Sign up to continue reading!',
           );
         }
-        // Record story access to consume quota
-        await this.guestSessionService.recordNewStoryAccess(
-          userId,
-          dto.storyId,
-        );
+        // 'already_read' → proceed
       }
     }
 
