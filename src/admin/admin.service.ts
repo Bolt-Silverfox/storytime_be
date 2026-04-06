@@ -3054,7 +3054,11 @@ export class AdminService {
     }
     if (filters.startDate || filters.endDate) {
       where.createdAt = {};
-      if (filters.startDate) where.createdAt.gte = new Date(filters.startDate);
+      if (filters.startDate) {
+        where.createdAt.gte = /^\d{4}-\d{2}-\d{2}$/.test(filters.startDate)
+          ? new Date(`${filters.startDate}T00:00:00.000Z`)
+          : new Date(filters.startDate);
+      }
       if (filters.endDate) {
         if (/^\d{4}-\d{2}-\d{2}$/.test(filters.endDate)) {
           const endDate = new Date(`${filters.endDate}T00:00:00.000Z`);
