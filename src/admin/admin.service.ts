@@ -3065,7 +3065,9 @@ export class AdminService {
           endDate.setUTCDate(endDate.getUTCDate() + 1);
           where.createdAt.lt = endDate;
         } else {
-          where.createdAt.lte = new Date(filters.endDate);
+          where.createdAt.lt = new Date(
+            new Date(filters.endDate).getTime() + 1,
+          );
         }
       }
     }

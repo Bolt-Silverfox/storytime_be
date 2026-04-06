@@ -578,6 +578,10 @@ export class AdminController {
     status: 200,
     description: 'Guest activity retrieved successfully',
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
   async getGuestActivity(@Query() filters: GuestActivityFilterDto) {
     const result = await this.adminService.getGuestActivity(filters);
     return {
