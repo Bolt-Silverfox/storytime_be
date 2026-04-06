@@ -4,7 +4,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import Keyv from 'keyv';
 import KeyvRedis from '@keyv/redis';
 import { CacheableMemory } from 'cacheable';
@@ -112,7 +112,7 @@ export class GuestSessionService {
    * @returns The newly created guest session
    */
   async createGuestSession(): Promise<GuestSession> {
-    const sessionId = uuidv4();
+    const sessionId = randomUUID();
     const now = new Date();
 
     const session: GuestSession = {

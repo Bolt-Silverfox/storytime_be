@@ -420,6 +420,14 @@ export class VoiceController {
       }
     }
 
+    // Validate guest session existence before loading the story
+    if (isGuest) {
+      const session = await this.guestSessionService.getGuestSession(userId);
+      if (!session) {
+        throw new UnauthorizedException('Invalid or expired guest session');
+      }
+    }
+
     const story = await this.storyService.getStoryById(dto.storyId);
     if (!story || !story.textContent) {
       throw new NotFoundException('Story not found or has no content.');
