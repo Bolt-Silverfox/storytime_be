@@ -595,10 +595,15 @@ export class StoryService {
 
     return stories.map((story) => {
       const progress = progressMap.get(story.id);
+      const progressValue = progress?.progress;
       return {
         ...story,
         readStatus:
-          progress === undefined ? null : progress ? 'done' : 'reading',
+          progressValue == null
+            ? null
+            : progressValue >= 100
+              ? 'done'
+              : 'reading',
       };
     });
   }
