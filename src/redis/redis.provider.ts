@@ -1,7 +1,6 @@
 import { Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
-import KeyvRedis from '@keyv/redis';
 import { EnvConfig } from '@/shared/config/env.validation';
 import {
   REDIS_CLIENT,
@@ -16,6 +15,49 @@ import { Logger } from '@nestjs/common';
 const logger = new Logger('RedisProvider');
 
 /**
+ * Custom Keyv store adapter for ioredis
+ * This allows us to reuse the shared Redis connection for caching
+ */
+class IoredisStore {
+  constructor(private readonly redis: Redis) {}
+
+  async get<T>(key: string): Promise<T | undefined> {
+    const value = await this.redis.get(key);
+    if (value === null) {
+      return undefined;
+    }
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return value as unknown as T;
+    }
+  }
+
+  async set<T>(key: string, value: T, ttl?: number): Promise<void> {
+    const stringValue = JSON.stringify(value);
+    if (ttl) {
+      await this.redis.setex(key, Math.ceil(ttl / 1000), stringValue);
+    } else {
+      await this.redis.set(key, stringValue);
+    }
+  }
+
+  async delete(key: string): Promise<boolean> {
+    const result = await this.redis.del(key);
+    return result > 0;
+  }
+
+  async clear(): Promise<void> {
+    await this.redis.flushdb();
+  }
+
+  async has(key: string): Promise<boolean> {
+    const result = await this.redis.exists(key);
+    return result === 1;
+  }
+}
+
+/**
  * Shared Redis client provider using ioredis with reconnection logic
  */
 export const RedisClientProvider: Provider = {
@@ -24,7 +66,20 @@ export const RedisClientProvider: Provider = {
     const redisUrl = configService.get('REDIS_URL');
 
     // Parse Redis URL to extract connection details
-    const url = new URL(redisUrl);
+    let url: URL;
+    try {
+      url = new URL(redisUrl);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      logger.error(
+        `Failed to parse REDIS_URL: ${errorMessage}. URL: ${redisUrl}`,
+      );
+      throw new Error(
+        `Invalid REDIS_URL format: ${errorMessage}. Please check your configuration.`,
+      );
+    }
+
     const password = url.password || undefined;
     const host = url.hostname || 'localhost';
     const port = parseInt(url.port || '6379', 10);
@@ -101,22 +156,15 @@ export const RedisClientProvider: Provider = {
 };
 
 /**
- * Shared KeyvRedis store provider for cache modules
- * Uses the shared Redis client to avoid multiple connections
+ * Shared Keyv store provider using the ioredis client
+ * This enables caching to use the same Redis connection as BullMQ and health checks
  */
 export const KeyvStoreProvider: Provider = {
   provide: KEYV_STORE,
   useFactory: async (redisClient: Redis) => {
-    logger.log('Creating KeyvRedis store using shared Redis client');
-
-    // KeyvRedis expects a node-redis client, but we can pass connection string
-    // However, to reuse the connection, we need to use the same client
-    // For now, we'll create a KeyvRedis with the URL and let it manage its own connection
-    // In a future iteration, we could create a custom adapter
-    const configService = new ConfigService<EnvConfig>();
-    const redisUrl = configService.get('REDIS_URL');
-
-    return new KeyvRedis(redisUrl);
+    logger.log('Creating Keyv store using shared ioredis client');
+    // Return our custom ioredis store adapter instead of KeyvRedis
+    return new IoredisStore(redisClient) as unknown as Map<string, unknown>;
   },
   inject: [REDIS_CLIENT],
 };

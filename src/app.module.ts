@@ -16,7 +16,6 @@ import { ReportsModule } from './reports/reports.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import Keyv from 'keyv';
 import { CacheableMemory } from 'cacheable';
-import KeyvRedis from '@keyv/redis';
 
 import { RewardModule } from './reward/reward.module';
 import { SettingsModule } from './settings/settings.module';
@@ -57,7 +56,7 @@ import type { Redis } from 'ioredis';
     CacheModule.registerAsync({
       isGlobal: true,
       inject: [KEYV_STORE],
-      useFactory: async (keyvRedisStore: KeyvRedis<string>) => ({
+      useFactory: async (keyvStore: Map<string, unknown>) => ({
         ttl: 4 * 60 * 60 * 1000, // 4 hours in milliseconds (for categories)
         stores: [
           // Primary: In-memory cache (fastest)
@@ -69,7 +68,7 @@ import type { Redis } from 'ioredis';
           }),
           // Secondary: Redis cache (persistent) - using shared Redis connection
           new Keyv({
-            store: keyvRedisStore,
+            store: keyvStore,
           }),
         ],
       }),
@@ -101,7 +100,10 @@ import type { Redis } from 'ioredis';
       imports: [RedisModule],
       inject: [REDIS_CLIENT],
       useFactory: (redisClient: Redis) => ({
-        connection: redisClient.options,
+        connection: {
+          ...redisClient.options,
+          maxRetriesPerRequest: null, // Required for BullMQ
+        },
         defaultJobOptions: {
           removeOnComplete: { age: 24 * 3600, count: 1000 },
           removeOnFail: { age: 7 * 24 * 3600 },

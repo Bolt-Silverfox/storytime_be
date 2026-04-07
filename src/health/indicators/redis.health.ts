@@ -1,19 +1,14 @@
 import { Injectable, Inject } from '@nestjs/common';
 import {
-  HttpHealthIndicator,
   HealthIndicatorResult,
   HealthIndicatorService,
-  HealthCheck,
 } from '@nestjs/terminus';
-import { ConfigService } from '@nestjs/config';
-import { EnvConfig } from '@/shared/config/env.validation';
 import { Redis } from 'ioredis';
 import { REDIS_CLIENT } from '@/redis/redis.constants';
 
 @Injectable()
 export class RedisHealthIndicator {
   constructor(
-    private readonly configService: ConfigService<EnvConfig, true>,
     @Inject(REDIS_CLIENT) private readonly redisClient: Redis,
     private readonly healthIndicatorService: HealthIndicatorService,
   ) {}
