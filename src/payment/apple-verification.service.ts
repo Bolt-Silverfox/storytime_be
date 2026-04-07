@@ -396,7 +396,7 @@ export class AppleVerificationService {
                 reject(new Error('Failed to parse Apple response'));
               }
             } else if (res.statusCode === 404) {
-              reject(new Error(`Apple API returned 404 from ${hostname}`));
+              resolve(null);
             } else {
               reject(
                 new Error(
@@ -431,16 +431,30 @@ export class AppleVerificationService {
       this.environment === 'production' ? SANDBOX_HOST : PRODUCTION_HOST;
 
     try {
-      return await this.fetchTransactionFromHost(
+      const primaryResult = await this.fetchTransactionFromHost(
         primaryHost,
+        transactionId,
+        token,
+      );
+
+      if (primaryResult) {
+        return primaryResult;
+      }
+
+      // Primary host returned 404 -> try other environment (TestFlight/sandbox crossover)
+      this.logger.log(
+        `Transaction not found on ${primaryHost}, trying ${fallbackHost}`,
+      );
+      return await this.fetchTransactionFromHost(
+        fallbackHost,
         transactionId,
         token,
       );
     } catch (error) {
       const msg = this.errorMessage(error);
 
-      // On 401 or 404, try the other environment (TestFlight uses sandbox)
-      if (msg.includes('401') || msg.includes('404')) {
+      // On 401, try the other environment
+      if (msg.includes('401')) {
         this.logger.log(
           `Transaction not found on ${primaryHost}, trying ${fallbackHost}`,
         );
@@ -452,13 +466,6 @@ export class AppleVerificationService {
           );
         } catch (fallbackError) {
           const fallbackMsg = this.errorMessage(fallbackError);
-          // If both hosts return 404, the transaction doesn't exist anywhere
-          if (fallbackMsg.includes('404')) {
-            this.logger.warn(
-              `Transaction not found on either ${primaryHost} or ${fallbackHost}`,
-            );
-            return null;
-          }
           this.logger.error(`Apple API fallback also failed: ${fallbackMsg}`);
           throw fallbackError;
         }
