@@ -12,7 +12,7 @@ import {
 } from './redis.constants';
 import { Logger } from '@nestjs/common';
 import { EventEmitter } from 'events';
-import type { KeyvStoreAdapter, KeyvStorageGetResult } from 'keyv';
+import type { KeyvStoreAdapter, StoredData } from 'keyv';
 
 const logger = new Logger('RedisProvider');
 
@@ -21,6 +21,7 @@ const logger = new Logger('RedisProvider');
  * This allows us to reuse the shared Redis connection for caching
  */
 class IoredisStore extends EventEmitter implements KeyvStoreAdapter {
+  public opts: any = {};
   public namespace = 'cache';
   private readonly cachePrefix = 'cache:';
 
@@ -28,7 +29,7 @@ class IoredisStore extends EventEmitter implements KeyvStoreAdapter {
     super();
   }
 
-  async get<T>(key: string): Promise<KeyvStorageGetResult<T> | undefined> {
+  async get<Value>(key: string): Promise<StoredData<Value>> {
     const fullKey = this.cachePrefix + key;
     const value = await this.redis.get(fullKey);
 
@@ -36,10 +37,10 @@ class IoredisStore extends EventEmitter implements KeyvStoreAdapter {
       return undefined;
     }
 
-    return JSON.parse(value) as KeyvStorageGetResult<T>;
+    return JSON.parse(value) as StoredData<Value>;
   }
 
-  async set<T>(key: string, value: T, ttl?: number): Promise<boolean> {
+  async set<Value>(key: string, value: Value, ttl?: number): Promise<boolean> {
     const fullKey = this.cachePrefix + key;
     const payload = JSON.stringify({
       value,
