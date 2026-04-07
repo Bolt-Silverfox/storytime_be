@@ -101,8 +101,10 @@ import type { Redis } from 'ioredis';
       inject: [REDIS_CLIENT],
       useFactory: (redisClient: Redis) => ({
         connection: {
-          ...redisClient.options,
-          maxRetriesPerRequest: null, // Required for BullMQ
+          host: redisClient.options.host,
+          port: redisClient.options.port,
+          password: redisClient.options.password,
+          maxRetriesPerRequest: null, // BullMQ manages its own retries
         },
         defaultJobOptions: {
           removeOnComplete: { age: 24 * 3600, count: 1000 },
