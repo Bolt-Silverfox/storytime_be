@@ -1,8 +1,9 @@
 import { Injectable, Inject } from '@nestjs/common';
 import {
-  HealthIndicator,
+  HttpHealthIndicator,
   HealthIndicatorResult,
-  HealthCheckError,
+  HealthIndicatorService,
+  HealthCheck,
 } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
@@ -10,16 +11,16 @@ import { Redis } from 'ioredis';
 import { REDIS_CLIENT } from '@/redis/redis.constants';
 
 @Injectable()
-export class RedisHealthIndicator extends HealthIndicator {
+export class RedisHealthIndicator {
   constructor(
     private readonly configService: ConfigService<EnvConfig, true>,
     @Inject(REDIS_CLIENT) private readonly redisClient: Redis,
-  ) {
-    super();
-  }
+    private readonly healthIndicatorService: HealthIndicatorService,
+  ) {}
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     const startTime = Date.now();
+    const indicator = this.healthIndicatorService.check(key);
 
     try {
       // Test connection with PING using the shared Redis client
@@ -32,7 +33,7 @@ export class RedisHealthIndicator extends HealthIndicator {
 
       const duration = Date.now() - startTime;
 
-      return this.getStatus(key, true, {
+      return indicator.up({
         duration: `${duration}ms`,
         response: pong,
         usedMemory,
@@ -43,14 +44,11 @@ export class RedisHealthIndicator extends HealthIndicator {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
 
-      throw new HealthCheckError(
-        'Redis health check failed',
-        this.getStatus(key, false, {
-          duration: `${duration}ms`,
-          error: errorMessage,
-          status: this.redisClient.status,
-        }),
-      );
+      return indicator.down({
+        duration: `${duration}ms`,
+        error: errorMessage,
+        status: this.redisClient.status,
+      });
     }
   }
 }
