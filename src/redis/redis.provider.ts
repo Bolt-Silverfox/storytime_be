@@ -113,16 +113,39 @@ export const RedisClientProvider: Provider = {
       );
     }
 
+    // Validate protocol
+    if (url.protocol !== 'redis:' && url.protocol !== 'rediss:') {
+      const redactedUrl = redisUrl.replace(/:[^:@]+@/, ':***@');
+      logger.error(
+        `Invalid Redis protocol: ${url.protocol}. Must be "redis:" or "rediss:". URL: ${redactedUrl}`,
+      );
+      throw new Error(
+        `Invalid REDIS_URL protocol. Must be "redis:" or "rediss:" (for TLS).`,
+      );
+    }
+
+    // Validate and parse database number
+    let db: number;
+    if (url.pathname && url.pathname !== '/') {
+      const dbNum = Number.parseInt(url.pathname.slice(1), 10);
+      if (!Number.isInteger(dbNum) || dbNum < 0) {
+        const redactedUrl = redisUrl.replace(/:[^:@]+@/, ':***@');
+        logger.error(
+          `Invalid Redis database number: ${url.pathname}. Must be a non-negative integer. URL: ${redactedUrl}`,
+        );
+        throw new Error(
+          `Invalid REDIS_URL database number. Must be a non-negative integer.`,
+        );
+      }
+      db = dbNum;
+    } else {
+      db = 0;
+    }
+
     const username = url.username || undefined;
     const password = url.password || undefined;
     const host = url.hostname || 'localhost';
     const port = parseInt(url.port || '6379', 10);
-
-    // Extract database number from pathname (e.g., "/0")
-    const db =
-      url.pathname && url.pathname !== '/'
-        ? Number.parseInt(url.pathname.slice(1), 10)
-        : 0;
 
     // Check for TLS (rediss:// protocol)
     const tls = url.protocol === 'rediss:' ? {} : undefined;
@@ -207,7 +230,7 @@ export const RedisClientProvider: Provider = {
  */
 export const KeyvStoreProvider: Provider = {
   provide: KEYV_STORE,
-  useFactory: async (redisClient: Redis) => {
+  useFactory: (redisClient: Redis) => {
     logger.log('Creating Keyv store using shared ioredis client');
     // Return our custom ioredis store adapter instead of KeyvRedis
     return new IoredisStore(redisClient) as unknown as Map<string, unknown>;
