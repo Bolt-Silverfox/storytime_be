@@ -587,10 +587,10 @@ export class StoryService {
 
     const readProgress = await this.prisma.userStoryProgress.findMany({
       where: { userId, storyId: { in: storyIds }, isDeleted: false },
-      select: { storyId: true, completed: true },
+      select: { storyId: true, progress: true },
     });
     const progressMap = new Map(
-      readProgress.map((p) => [p.storyId, p.completed]),
+      readProgress.map((p) => [p.storyId, { progress: p.progress }]),
     );
 
     return stories.map((story) => {
