@@ -37,7 +37,16 @@ class IoredisStore extends EventEmitter implements KeyvStoreAdapter {
       return undefined;
     }
 
-    return JSON.parse(value) as StoredData<Value>;
+    try {
+      return JSON.parse(value) as StoredData<Value>;
+    } catch (error) {
+      // Handle malformed JSON - delete corrupted key and return cache miss
+      logger.error(
+        `Failed to parse cached value for key ${fullKey}: ${error instanceof Error ? error.message : 'Unknown error'}. Deleting corrupted key.`,
+      );
+      await this.redis.del(fullKey);
+      return undefined;
+    }
   }
 
   async set<Value>(key: string, value: Value, ttl?: number): Promise<boolean> {
@@ -127,8 +136,10 @@ export const RedisClientProvider: Provider = {
     // Validate and parse database number
     let db: number;
     if (url.pathname && url.pathname !== '/') {
-      const dbNum = Number.parseInt(url.pathname.slice(1), 10);
-      if (!Number.isInteger(dbNum) || dbNum < 0) {
+      const dbPath = url.pathname.slice(1);
+
+      // Validate path is strictly digits (e.g., "0", "15", not "1/foo" or "abc")
+      if (!/^\d+$/.test(dbPath)) {
         const redactedUrl = redisUrl.replace(/:[^:@]+@/, ':***@');
         logger.error(
           `Invalid Redis database number: ${url.pathname}. Must be a non-negative integer. URL: ${redactedUrl}`,
@@ -137,6 +148,8 @@ export const RedisClientProvider: Provider = {
           `Invalid REDIS_URL database number. Must be a non-negative integer.`,
         );
       }
+
+      const dbNum = Number.parseInt(dbPath, 10);
       db = dbNum;
     } else {
       db = 0;
@@ -215,6 +228,8 @@ export const RedisClientProvider: Provider = {
       await client.ping();
       logger.log('Redis connection test successful');
     } catch (error) {
+      // Disconnect client to stop retry/reconnection attempts before propagating error
+      client.disconnect();
       logger.error('Redis connection test failed:', error);
       throw error;
     }
