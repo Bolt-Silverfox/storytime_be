@@ -19,10 +19,12 @@ const logger = new Logger('RedisProvider');
  * This allows us to reuse the shared Redis connection for caching
  */
 class IoredisStore {
+  private readonly cachePrefix = 'cache:';
+
   constructor(private readonly redis: Redis) {}
 
   async get<T>(key: string): Promise<T | undefined> {
-    const value = await this.redis.get(key);
+    const value = await this.redis.get(this.cachePrefix + key);
     if (value === null) {
       return undefined;
     }
@@ -34,25 +36,43 @@ class IoredisStore {
   }
 
   async set<T>(key: string, value: T, ttl?: number): Promise<void> {
+    const fullKey = this.cachePrefix + key;
     const stringValue = JSON.stringify(value);
     if (ttl) {
-      await this.redis.setex(key, Math.ceil(ttl / 1000), stringValue);
+      await this.redis.setex(fullKey, Math.ceil(ttl / 1000), stringValue);
     } else {
-      await this.redis.set(key, stringValue);
+      await this.redis.set(fullKey, stringValue);
     }
   }
 
   async delete(key: string): Promise<boolean> {
-    const result = await this.redis.del(key);
+    const result = await this.redis.del(this.cachePrefix + key);
     return result > 0;
   }
 
   async clear(): Promise<void> {
-    await this.redis.flushdb();
+    // Delete only cache keys, not all Redis data
+    // Use SCAN to find keys matching the cache prefix and delete in batches
+    let cursor = '0';
+    do {
+      const [nextCursor, keys] = await this.redis.scan(
+        cursor,
+        'MATCH',
+        `${this.cachePrefix}*`,
+        'COUNT',
+        100,
+      );
+      cursor = nextCursor;
+
+      if (keys.length > 0) {
+        // Use UNLINK for non-blocking deletion
+        await this.redis.unlink(...keys);
+      }
+    } while (cursor !== '0');
   }
 
   async has(key: string): Promise<boolean> {
-    const result = await this.redis.exists(key);
+    const result = await this.redis.exists(this.cachePrefix + key);
     return result === 1;
   }
 }
@@ -72,8 +92,10 @@ export const RedisClientProvider: Provider = {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
+      // Log redacted URL (remove credentials) to avoid exposing secrets
+      const redactedUrl = redisUrl.replace(/:[^:@]+@/, ':***@');
       logger.error(
-        `Failed to parse REDIS_URL: ${errorMessage}. URL: ${redisUrl}`,
+        `Failed to parse REDIS_URL: ${errorMessage}. URL: ${redactedUrl}`,
       );
       throw new Error(
         `Invalid REDIS_URL format: ${errorMessage}. Please check your configuration.`,

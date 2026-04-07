@@ -396,7 +396,7 @@ export class AppleVerificationService {
                 reject(new Error('Failed to parse Apple response'));
               }
             } else if (res.statusCode === 404) {
-              resolve(null);
+              reject(new Error(`Apple API returned 404 from ${hostname}`));
             } else {
               reject(
                 new Error(
