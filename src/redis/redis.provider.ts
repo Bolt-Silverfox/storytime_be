@@ -11,6 +11,8 @@ import {
   REDIS_MAX_RECONNECT_ATTEMPTS,
 } from './redis.constants';
 import { Logger } from '@nestjs/common';
+import { EventEmitter } from 'events';
+import type { KeyvStoreAdapter, KeyvStorageGetResult } from 'keyv';
 
 const logger = new Logger('RedisProvider');
 
@@ -18,31 +20,39 @@ const logger = new Logger('RedisProvider');
  * Custom Keyv store adapter for ioredis
  * This allows us to reuse the shared Redis connection for caching
  */
-class IoredisStore {
+class IoredisStore extends EventEmitter implements KeyvStoreAdapter {
+  public namespace = 'cache';
   private readonly cachePrefix = 'cache:';
 
-  constructor(private readonly redis: Redis) {}
+  constructor(private readonly redis: Redis) {
+    super();
+  }
 
-  async get<T>(key: string): Promise<T | undefined> {
-    const value = await this.redis.get(this.cachePrefix + key);
+  async get<T>(key: string): Promise<KeyvStorageGetResult<T> | undefined> {
+    const fullKey = this.cachePrefix + key;
+    const value = await this.redis.get(fullKey);
+
     if (value === null) {
       return undefined;
     }
-    try {
-      return JSON.parse(value) as T;
-    } catch {
-      return value as unknown as T;
-    }
+
+    return JSON.parse(value) as KeyvStorageGetResult<T>;
   }
 
-  async set<T>(key: string, value: T, ttl?: number): Promise<void> {
+  async set<T>(key: string, value: T, ttl?: number): Promise<boolean> {
     const fullKey = this.cachePrefix + key;
-    const stringValue = JSON.stringify(value);
-    if (ttl) {
-      await this.redis.setex(fullKey, Math.ceil(ttl / 1000), stringValue);
+    const payload = JSON.stringify({
+      value,
+      expires: ttl === undefined ? undefined : Date.now() + ttl,
+    });
+
+    if (ttl !== undefined) {
+      await this.redis.set(fullKey, payload, 'PX', ttl);
     } else {
-      await this.redis.set(fullKey, stringValue);
+      await this.redis.set(fullKey, payload);
     }
+
+    return true;
   }
 
   async delete(key: string): Promise<boolean> {
@@ -102,16 +112,29 @@ export const RedisClientProvider: Provider = {
       );
     }
 
+    const username = url.username || undefined;
     const password = url.password || undefined;
     const host = url.hostname || 'localhost';
     const port = parseInt(url.port || '6379', 10);
+
+    // Extract database number from pathname (e.g., "/0")
+    const db =
+      url.pathname && url.pathname !== '/'
+        ? Number.parseInt(url.pathname.slice(1), 10)
+        : 0;
+
+    // Check for TLS (rediss:// protocol)
+    const tls = url.protocol === 'rediss:' ? {} : undefined;
 
     logger.log(`Connecting to Redis at ${host}:${port}`);
 
     const client = new Redis({
       host,
       port,
+      username,
       password,
+      db,
+      tls,
       retryStrategy: (times: number) => {
         const delay = Math.min(
           REDIS_RECONNECT_DELAY * Math.pow(2, times),

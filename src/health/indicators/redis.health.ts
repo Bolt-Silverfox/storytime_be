@@ -39,7 +39,7 @@ export class RedisHealthIndicator {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
 
-      throw indicator.down({
+      return indicator.down({
         duration: `${duration}ms`,
         error: errorMessage,
         status: this.redisClient.status,
