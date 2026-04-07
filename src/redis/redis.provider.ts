@@ -23,7 +23,9 @@ const logger = new Logger('RedisProvider');
 class IoredisStore extends EventEmitter implements KeyvStoreAdapter {
   public opts: any = {};
   public namespace = 'cache';
-  private readonly cachePrefix = 'cache:';
+  // Bumped from 'cache:' to invalidate legacy double-wrapped entries
+  // written by the previous IoredisStore implementation.
+  private readonly cachePrefix = 'cache:v2:';
 
   constructor(private readonly redis: Redis) {
     super();
@@ -37,37 +39,18 @@ class IoredisStore extends EventEmitter implements KeyvStoreAdapter {
       return undefined;
     }
 
-    try {
-      return JSON.parse(value) as StoredData<Value>;
-    } catch (error) {
-      // Handle malformed JSON - redact key in logs and attempt non-fatal deletion
-      const keyHash = fullKey.split('').reduce((a, b) => {
-        a = ((a << 5) - a + b.charCodeAt(0)) | 0;
-        return a;
-      }, 0);
-      logger.error(
-        `Failed to parse cached value (key hash: ${keyHash}): ${error instanceof Error ? error.message : 'Unknown error'}. Attempting to remove corrupted entry.`,
-      );
-
-      // Try to delete corrupted key using non-blocking UNLINK, but don't throw on failure
-      try {
-        await this.redis.unlink(fullKey);
-      } catch (delError) {
-        logger.warn(
-          `Failed to remove corrupted cache entry (key hash: ${keyHash})`,
-        );
-      }
-
-      return undefined;
-    }
+    // Keyv handles serialization/deserialization itself, wrapping values in
+    // a {value, expires} envelope. Return the raw stored string and let Keyv
+    // deserialize. Wrapping/unwrapping here would double-serialize the data.
+    // Note: at runtime this is a JSON string; Keyv accepts string | object.
+    return value as unknown as StoredData<Value>;
   }
 
   async set<Value>(key: string, value: Value, ttl?: number): Promise<boolean> {
     const fullKey = this.cachePrefix + key;
-    const payload = JSON.stringify({
-      value,
-      expires: ttl === undefined ? undefined : Date.now() + ttl,
-    });
+    // Keyv has already serialized `value` into a JSON string of the form
+    // {value, expires}. Persist it as-is to avoid double-wrapping.
+    const payload = value as unknown as string;
 
     if (ttl !== undefined) {
       await this.redis.set(fullKey, payload, 'PX', ttl);
