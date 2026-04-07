@@ -40,11 +40,24 @@ class IoredisStore extends EventEmitter implements KeyvStoreAdapter {
     try {
       return JSON.parse(value) as StoredData<Value>;
     } catch (error) {
-      // Handle malformed JSON - delete corrupted key and return cache miss
+      // Handle malformed JSON - redact key in logs and attempt non-fatal deletion
+      const keyHash = fullKey.split('').reduce((a, b) => {
+        a = ((a << 5) - a + b.charCodeAt(0)) | 0;
+        return a;
+      }, 0);
       logger.error(
-        `Failed to parse cached value for key ${fullKey}: ${error instanceof Error ? error.message : 'Unknown error'}. Deleting corrupted key.`,
+        `Failed to parse cached value (key hash: ${keyHash}): ${error instanceof Error ? error.message : 'Unknown error'}. Attempting to remove corrupted entry.`,
       );
-      await this.redis.del(fullKey);
+
+      // Try to delete corrupted key using non-blocking UNLINK, but don't throw on failure
+      try {
+        await this.redis.unlink(fullKey);
+      } catch (delError) {
+        logger.warn(
+          `Failed to remove corrupted cache entry (key hash: ${keyHash})`,
+        );
+      }
+
       return undefined;
     }
   }
