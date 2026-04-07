@@ -229,7 +229,11 @@ export const RedisClientProvider: Provider = {
       logger.log('Redis connection test successful');
     } catch (error) {
       // Disconnect client to stop retry/reconnection attempts before propagating error
-      client.disconnect();
+      try {
+        client.disconnect();
+      } catch (disconnectError) {
+        logger.error('Error during Redis client shutdown:', disconnectError);
+      }
       logger.error('Redis connection test failed:', error);
       throw error;
     }
@@ -247,7 +251,9 @@ export const KeyvStoreProvider: Provider = {
   provide: KEYV_STORE,
   useFactory: (redisClient: Redis) => {
     logger.log('Creating Keyv store using shared ioredis client');
-    // Return our custom ioredis store adapter instead of KeyvRedis
+    // Cast is safe: IoredisStore implements KeyvStoreAdapter interface
+    // which Keyv uses for tiered caching. Exposing as Map<string, unknown>
+    // for KEYV_STORE token allows Keyv to use our custom adapter.
     return new IoredisStore(redisClient) as unknown as Map<string, unknown>;
   },
   inject: [REDIS_CLIENT],
