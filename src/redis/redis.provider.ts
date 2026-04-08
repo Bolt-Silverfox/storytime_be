@@ -11,7 +11,6 @@ import {
   REDIS_MAX_RECONNECT_ATTEMPTS,
 } from './redis.constants';
 import { Logger } from '@nestjs/common';
-import { EventEmitter } from 'events';
 import type { KeyvStoreAdapter, StoredData } from 'keyv';
 
 const logger = new Logger('RedisProvider');
@@ -20,10 +19,8 @@ const logger = new Logger('RedisProvider');
  * Custom Keyv store adapter for ioredis
  * This allows us to reuse the shared Redis connection for caching
  */
-class IoredisStore extends EventEmitter implements KeyvStoreAdapter {
-  public opts: any = {};
-  public namespace = 'cache';
-  // Bumped from 'cache:' to invalidate legacy double-wrapped entries
+class IoredisStore implements KeyvStoreAdapter {
+    // Bumped from 'cache:' to invalidate legacy double-wrapped entries
   // written by the previous IoredisStore implementation.
   private readonly cachePrefix = 'cache:v2:';
 
@@ -185,7 +182,7 @@ export const RedisClientProvider: Provider = {
         );
         return delay;
       },
-      connectionName: 'storytime-shared',
+      connectionName: `storytime-${process.env.NODE_ENV || 'development'}`,
       connectTimeout: REDIS_CONNECTION_TIMEOUT,
       enableReadyCheck: true,
       maxRetriesPerRequest: 3,
@@ -205,9 +202,23 @@ export const RedisClientProvider: Provider = {
       logger.log('Redis client connected and ready');
     });
 
-    client.on('error', (error) => {
-      logger.error('Redis client error:', error.message);
-    });
+client.on('error', (error) => {
+ // Categorize errors to prevent uncaught exceptions
+ // Connection errors are handled by retryStrategy, so just warn
+ if (
+ error.name === 'SocketClosedUnexpectedlyError' ||
+ error.message.includes('ECONNREFUSED') ||
+ error.message.includes('ETIMEOUT') ||
+ error.message.includes('ENOTFOUND') ||
+ error.message.includes('EAI_AGAIN')
+ ) {
+ logger.warn('Redis connection error (will retry):', error.message);
+ return;
+ }
+
+ // Log critical errors that need investigation
+ logger.error('Redis client error:', error.message);
+ });
 
     client.on('close', () => {
       logger.warn('Redis connection closed');
