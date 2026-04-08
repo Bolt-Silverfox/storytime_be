@@ -21,8 +21,8 @@ const logger = new Logger('RedisProvider');
  * This allows us to reuse the shared Redis connection for caching
  */
 class IoredisStore extends EventEmitter implements KeyvStoreAdapter {
+  // Required by KeyvStoreAdapter interface
   public opts: any = {};
-  public namespace = 'cache';
   // Bumped from 'cache:' to invalidate legacy double-wrapped entries
   // written by the previous IoredisStore implementation.
   private readonly cachePrefix = 'cache:v2:';
@@ -185,10 +185,14 @@ export const RedisClientProvider: Provider = {
         );
         return delay;
       },
-      connectionName: 'storytime-shared',
+      connectionName: `storytime-${process.env.NODE_ENV || 'development'}`,
       connectTimeout: REDIS_CONNECTION_TIMEOUT,
       enableReadyCheck: true,
-      maxRetriesPerRequest: 3,
+      maxRetriesPerRequest: null,
+      // Enable offline queue to buffer commands when connection is lost
+      enableOfflineQueue: true,
+      // Ensure connection on startup
+      lazyConnect: false,
       // Keep the connection alive
       keepAlive: 10000,
       noDelay: true,
@@ -204,6 +208,20 @@ export const RedisClientProvider: Provider = {
     });
 
     client.on('error', (error) => {
+      // Categorize errors to prevent uncaught exceptions
+      // Connection errors are handled by retryStrategy, so just warn
+      if (
+        error.name === 'SocketClosedUnexpectedlyError' ||
+        error.message.includes('ECONNREFUSED') ||
+        error.message.includes('ETIMEOUT') ||
+        error.message.includes('ENOTFOUND') ||
+        error.message.includes('EAI_AGAIN')
+      ) {
+        logger.warn('Redis connection error (will retry):', error.message);
+        return;
+      }
+
+      // Log critical errors that need investigation
       logger.error('Redis client error:', error.message);
     });
 

@@ -1,15 +1,14 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   HealthIndicatorResult,
   HealthIndicatorService,
 } from '@nestjs/terminus';
-import { Redis } from 'ioredis';
-import { REDIS_CLIENT } from '@/redis/redis.constants';
+import { RedisService } from '@/redis/redis.service';
 
 @Injectable()
 export class RedisHealthIndicator {
   constructor(
-    @Inject(REDIS_CLIENT) private readonly redisClient: Redis,
+    private readonly redisService: RedisService,
     private readonly healthIndicatorService: HealthIndicatorService,
   ) {}
 
@@ -18,11 +17,20 @@ export class RedisHealthIndicator {
     const indicator = this.healthIndicatorService.check(key);
 
     try {
-      // Test connection with PING using the shared Redis client
-      const pong = await this.redisClient.ping();
+      // Use RedisService.isReady() for standardized PING check
+      const isReady = await this.redisService.isReady();
+
+      if (!isReady) {
+        const duration = Date.now() - startTime;
+        return indicator.down({
+          duration: `${duration}ms`,
+          error: 'PING check failed',
+          status: this.redisService.client.status,
+        });
+      }
 
       // Get some Redis info
-      const info = await this.redisClient.info('memory');
+      const info = await this.redisService.client.info('memory');
       const usedMemoryMatch = info.match(/used_memory_human:(\S+)/);
       const usedMemory = usedMemoryMatch ? usedMemoryMatch[1] : 'unknown';
 
@@ -30,9 +38,9 @@ export class RedisHealthIndicator {
 
       return indicator.up({
         duration: `${duration}ms`,
-        response: pong,
+        response: 'PONG',
         usedMemory,
-        status: this.redisClient.status,
+        status: this.redisService.client.status,
       });
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -42,7 +50,7 @@ export class RedisHealthIndicator {
       return indicator.down({
         duration: `${duration}ms`,
         error: errorMessage,
-        status: this.redisClient.status,
+        status: this.redisService.client.status,
       });
     }
   }
