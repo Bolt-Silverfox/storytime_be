@@ -189,6 +189,8 @@ export const RedisClientProvider: Provider = {
       connectTimeout: REDIS_CONNECTION_TIMEOUT,
       enableReadyCheck: true,
       maxRetriesPerRequest: 3,
+ // Enable offline queue to buffer commands when connection is lost
+ enableOfflineQueue: true,
       // Keep the connection alive
       keepAlive: 10000,
       noDelay: true,
