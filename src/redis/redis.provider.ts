@@ -11,6 +11,7 @@ import {
   REDIS_MAX_RECONNECT_ATTEMPTS,
 } from './redis.constants';
 import { Logger } from '@nestjs/common';
+import { EventEmitter } from 'events';
 import type { KeyvStoreAdapter, StoredData } from 'keyv';
 
 const logger = new Logger('RedisProvider');
@@ -19,7 +20,9 @@ const logger = new Logger('RedisProvider');
  * Custom Keyv store adapter for ioredis
  * This allows us to reuse the shared Redis connection for caching
  */
-class IoredisStore implements KeyvStoreAdapter {
+class IoredisStore extends EventEmitter implements KeyvStoreAdapter {
+  // Required by KeyvStoreAdapter interface
+  public opts: any = {};
   // Bumped from 'cache:' to invalidate legacy double-wrapped entries
   // written by the previous IoredisStore implementation.
   private readonly cachePrefix = 'cache:v2:';
@@ -185,9 +188,11 @@ export const RedisClientProvider: Provider = {
       connectionName: `storytime-${process.env.NODE_ENV || 'development'}`,
       connectTimeout: REDIS_CONNECTION_TIMEOUT,
       enableReadyCheck: true,
-      maxRetriesPerRequest: 3,
+      maxRetriesPerRequest: null,
       // Enable offline queue to buffer commands when connection is lost
       enableOfflineQueue: true,
+      // Ensure connection on startup
+      lazyConnect: false,
       // Keep the connection alive
       keepAlive: 10000,
       noDelay: true,
