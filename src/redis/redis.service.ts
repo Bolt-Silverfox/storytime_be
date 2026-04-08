@@ -9,6 +9,23 @@ export class RedisService implements OnModuleDestroy {
 
   constructor(@Inject(REDIS_CLIENT) public readonly client: Redis) {}
 
+  /**
+   * Check if Redis connection is ready
+   * Used by health checks and monitoring
+   */
+  async isReady(): Promise<boolean> {
+    try {
+      const pong = await this.client.ping();
+      return pong === 'PONG';
+    } catch (error) {
+      this.logger.error(
+        'Redis health check failed:',
+        error instanceof Error ? error.message : 'Unknown error',
+      );
+      return false;
+    }
+  }
+
   async onModuleDestroy(): Promise<void> {
     this.logger.log('Shutting down Redis connection...');
 
