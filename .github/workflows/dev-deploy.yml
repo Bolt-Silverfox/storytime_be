@@ -275,7 +275,7 @@ jobs:
       name: development
       url: ${{ vars.DEV_APP_URL }}
     env:
-      DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
     steps:
       - name: Checkout
@@ -316,12 +316,12 @@ jobs:
 
       - name: Run database migrations
         env:
-          DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: pnpm db:migrate:deploy
 
       - name: Seed database
         env:
-          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: pnpm db:seed
 
       - name: Prepare deployment directory
