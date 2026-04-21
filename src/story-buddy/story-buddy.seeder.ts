@@ -12,9 +12,7 @@ export class StoryBuddySeederService implements OnModuleInit {
 
     const url = process.env.DATABASE_URL;
     if (!url) {
-      this.logger.warn(
-        'DATABASE_URL not set — skipping story buddy seeding',
-      );
+      this.logger.warn('DATABASE_URL not set — skipping story buddy seeding');
       return null;
     }
 
