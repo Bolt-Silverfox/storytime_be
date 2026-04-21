@@ -9,14 +9,14 @@
  *   npx ts-node prisma/seeds/migrate-pollinations-to-cloudinary.ts
  *
  * Requires these env vars (from .env):
- *   DIRECT_DATABASE_URL, HF_TOKEN, CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+ *   DATABASE_URL, HF_TOKEN, CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { v2 as cloudinary } from 'cloudinary';
 
 const requiredEnvVars = [
-  'DIRECT_DATABASE_URL',
+  'DATABASE_URL',
   'HF_TOKEN',
   'CLOUDINARY_CLOUD_NAME',
   'CLOUDINARY_API_KEY',
@@ -38,7 +38,7 @@ cloudinary.config({
 });
 
 const prisma = new PrismaClient({
-  datasourceUrl: process.env.DIRECT_DATABASE_URL,
+  datasourceUrl: process.env.DATABASE_URL,
 });
 
 const HF_API_URL =

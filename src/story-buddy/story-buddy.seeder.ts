@@ -10,11 +10,9 @@ export class StoryBuddySeederService implements OnModuleInit {
   private getPrisma(): PrismaClient | null {
     if (this.prisma) return this.prisma;
 
-    const url = process.env.DIRECT_DATABASE_URL;
+    const url = process.env.DATABASE_URL;
     if (!url) {
-      this.logger.warn(
-        'DIRECT_DATABASE_URL not set — skipping story buddy seeding',
-      );
+      this.logger.warn('DATABASE_URL not set — skipping story buddy seeding');
       return null;
     }
 
