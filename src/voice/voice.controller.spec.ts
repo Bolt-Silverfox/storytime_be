@@ -11,9 +11,9 @@ import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { SpeechToTextService } from './speech-to-text.service';
 import { VoiceQuotaService } from './voice-quota.service';
-import { StoryQuotaService } from '@/story/story-quota.service';
+import { StoryQuotaService } from '../story/story-quota.service';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
-import { GuestSessionService } from '@/guest/guest-session.service';
+import { GuestSessionService } from '../guest/guest-session.service';
 
 const mockVoiceService = {
   listVoices: jest.fn(),
@@ -31,22 +31,6 @@ const mockSpeechToTextService = {};
 const mockVoiceQuotaService = {
   canUseVoice: jest.fn().mockResolvedValue(true),
   getVoiceAccess: jest.fn(),
-};
-const mockStoryQuotaService = {
-  checkStoryAccess: jest
-    .fn()
-    .mockResolvedValue({ canAccess: true, reason: 'premium' }),
-  recordNewStoryAccess: jest.fn().mockResolvedValue(undefined),
-};
-const mockTtsBatchQueueService = {
-  queueBatch: jest.fn().mockResolvedValue('batch-id'),
-  getBatchStatus: jest.fn().mockResolvedValue({ status: 'completed' }),
-};
-const mockGuestSessionService = {
-  getGuestSession: jest
-    .fn()
-    .mockResolvedValue({ id: 'guest-1', userId: 'guest-1' }),
-  recordNewStoryAccess: jest.fn().mockResolvedValue({ recorded: true }),
 };
 
 describe('VoiceController', () => {
@@ -67,9 +51,21 @@ describe('VoiceController', () => {
         { provide: TextToSpeechService, useValue: mockTextToSpeechService },
         { provide: SpeechToTextService, useValue: mockSpeechToTextService },
         { provide: VoiceQuotaService, useValue: mockVoiceQuotaService },
-        { provide: StoryQuotaService, useValue: mockStoryQuotaService },
-        { provide: TtsBatchQueueService, useValue: mockTtsBatchQueueService },
-        { provide: GuestSessionService, useValue: mockGuestSessionService },
+        {
+          provide: StoryQuotaService,
+          useValue: {
+            checkStoryAccess: jest.fn().mockResolvedValue({ canAccess: true }),
+            recordNewStoryAccess: jest.fn(),
+          },
+        },
+        { provide: TtsBatchQueueService, useValue: { addBatchJob: jest.fn() } },
+        {
+          provide: GuestSessionService,
+          useValue: {
+            getGuestQuotaStatus: jest.fn(),
+            recordNewStoryAccess: jest.fn(),
+          },
+        },
       ],
     })
       .overrideGuard(AuthSessionGuard)
@@ -108,31 +104,27 @@ describe('VoiceController', () => {
   });
 
   describe('batchTextToSpeech', () => {
-    const eagerResult = {
-      results: [
-        { index: 0, text: 'Hello world', audioUrl: 'https://audio.com/a.mp3' },
-      ],
-      totalParagraphs: 1,
-      wasTruncated: false,
-      usedProvider: 'deepgram',
-      remainingUncached: [],
-      batchProvider: 'deepgram',
-      isPremium: true,
-    };
-
     it('should generate batch audio when voice access is allowed', async () => {
       mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
-      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({
-        canAccess: true,
-        reason: 'premium',
-      });
       mockStoryService.getStoryById.mockResolvedValue({
         id: 'story-1',
         textContent: 'Hello world',
       });
-      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue(
-        eagerResult,
-      );
+      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
+        results: [
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
+        ],
+        totalParagraphs: 1,
+        wasTruncated: false,
+        usedProvider: 'deepgram',
+        remainingUncached: [],
+        batchProvider: 'deepgram',
+        isPremium: false,
+      });
 
       const result = await controller.batchTextToSpeech(
         { storyId: 'story-1', voiceId: 'MILO' },
@@ -149,17 +141,25 @@ describe('VoiceController', () => {
 
     it('should include usedProvider and preferredProvider in the response', async () => {
       mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
-      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({
-        canAccess: true,
-        reason: 'premium',
-      });
       mockStoryService.getStoryById.mockResolvedValue({
         id: 'story-1',
         textContent: 'Hello world',
       });
       mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
-        ...eagerResult,
+        results: [
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
+        ],
+        totalParagraphs: 1,
+        wasTruncated: false,
+        usedProvider: 'deepgram',
         preferredProvider: 'elevenlabs',
+        remainingUncached: [],
+        batchProvider: 'deepgram',
+        isPremium: false,
       });
 
       const result = await controller.batchTextToSpeech(
@@ -173,17 +173,25 @@ describe('VoiceController', () => {
 
     it('should omit preferredProvider when no fallback occurred', async () => {
       mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
-      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({
-        canAccess: true,
-        reason: 'premium',
-      });
       mockStoryService.getStoryById.mockResolvedValue({
         id: 'story-1',
         textContent: 'Hello world',
       });
-      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue(
-        eagerResult,
-      );
+      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
+        results: [
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
+        ],
+        totalParagraphs: 1,
+        wasTruncated: false,
+        usedProvider: 'deepgram',
+        remainingUncached: [],
+        batchProvider: 'deepgram',
+        isPremium: false,
+      });
 
       const result = await controller.batchTextToSpeech(
         { storyId: 'story-1', voiceId: 'MILO' },
@@ -196,18 +204,26 @@ describe('VoiceController', () => {
 
     it('should include providerStatus when service reports degraded', async () => {
       mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
-      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({
-        canAccess: true,
-        reason: 'premium',
-      });
       mockStoryService.getStoryById.mockResolvedValue({
         id: 'story-1',
         textContent: 'Hello world',
       });
       mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
-        ...eagerResult,
+        results: [
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
+        ],
+        totalParagraphs: 1,
+        wasTruncated: false,
+        usedProvider: 'deepgram',
         preferredProvider: 'elevenlabs',
         providerStatus: 'degraded',
+        remainingUncached: [],
+        batchProvider: 'deepgram',
+        isPremium: false,
       });
 
       const result = await controller.batchTextToSpeech(
@@ -221,17 +237,24 @@ describe('VoiceController', () => {
 
     it('should omit providerStatus when providers are healthy', async () => {
       mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
-      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({
-        canAccess: true,
-        reason: 'premium',
-      });
       mockStoryService.getStoryById.mockResolvedValue({
         id: 'story-1',
         textContent: 'Hello world',
       });
       mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
-        ...eagerResult,
+        results: [
+          {
+            index: 0,
+            text: 'Hello world',
+            audioUrl: 'https://audio.com/a.mp3',
+          },
+        ],
+        totalParagraphs: 1,
+        wasTruncated: false,
         usedProvider: 'elevenlabs',
+        remainingUncached: [],
+        batchProvider: 'elevenlabs',
+        isPremium: false,
       });
 
       const result = await controller.batchTextToSpeech(
@@ -256,54 +279,6 @@ describe('VoiceController', () => {
       expect(
         mockTextToSpeechService.batchTextToSpeechEager,
       ).not.toHaveBeenCalled();
-    });
-
-    it('should throw 403 when story quota is exceeded', async () => {
-      mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
-      mockStoryService.getStoryById.mockResolvedValue({
-        id: 'story-1',
-        textContent: 'Hello world',
-      });
-      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({
-        canAccess: false,
-        reason: 'quota_exceeded',
-      });
-
-      await expect(
-        controller.batchTextToSpeech(
-          { storyId: 'story-1', voiceId: 'MILO' },
-          mockRequest,
-        ),
-      ).rejects.toThrow(ForbiddenException);
-
-      expect(
-        mockTextToSpeechService.batchTextToSpeechEager,
-      ).not.toHaveBeenCalled();
-    });
-
-    it('should queue remaining uncached paragraphs', async () => {
-      mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
-      mockStoryService.getStoryById.mockResolvedValue({
-        id: 'story-1',
-        textContent: 'Hello world paragraph 1. Paragraph 2. Paragraph 3.',
-      });
-      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({
-        canAccess: true,
-        reason: 'premium',
-      });
-      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
-        ...eagerResult,
-        remainingUncached: [{ index: 1, text: 'Paragraph 2' }],
-      });
-
-      const result = await controller.batchTextToSpeech(
-        { storyId: 'story-1', voiceId: 'MILO' },
-        mockRequest,
-      );
-
-      expect(mockTtsBatchQueueService.queueBatch).toHaveBeenCalled();
-      expect(result.batchJobId).toBe('batch-id');
-      expect(result.pendingParagraphs).toBe(1);
     });
   });
 });

@@ -104,7 +104,7 @@ export const RedisClientProvider: Provider = {
     // Parse Redis URL to extract connection details
     let url: URL;
     try {
-      url = new URL(redisUrl);
+      url = new URL(redisUrl as string);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';

@@ -46,7 +46,7 @@ import {
   DailyChallenge,
   ParentRecommendation,
 } from '@prisma/client';
-import { Prisma } from '@prisma/client';
+import { Prisma, Season } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TextToSpeechService } from './text-to-speech.service';
 import {
@@ -650,7 +650,9 @@ export class StoryService {
   // Threshold in days to consider a past season as "recent" for backfill
   private readonly RECENT_SEASON_THRESHOLD_DAYS = 45;
 
-  private async sortStoriesBySeasonRecency(stories: any[]) {
+  private async sortStoriesBySeasonRecency(
+    stories: Array<{ seasons?: Array<{ id: string }>; [key: string]: unknown }>,
+  ) {
     const allSeasons = await this.prisma.season.findMany({
       where: { isDeleted: false },
     });
@@ -662,7 +664,7 @@ export class StoryService {
       .toString()
       .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
 
-    const getScore = (s: any) => {
+    const getScore = (s: Season) => {
       if (!s.startDate || !s.endDate) return Infinity;
       let isActive = false;
       if (s.startDate > s.endDate) {
@@ -695,10 +697,10 @@ export class StoryService {
 
     stories.sort((a, b) => {
       const rankA = a.seasons?.length
-        ? Math.min(...a.seasons.map((s: any) => rankMap.get(s.id) ?? Infinity))
+        ? Math.min(...a.seasons.map((s) => rankMap.get(s.id) ?? Infinity))
         : Infinity;
       const rankB = b.seasons?.length
-        ? Math.min(...b.seasons.map((s: any) => rankMap.get(s.id) ?? Infinity))
+        ? Math.min(...b.seasons.map((s) => rankMap.get(s.id) ?? Infinity))
         : Infinity;
       return rankA - rankB;
     });
