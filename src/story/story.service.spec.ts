@@ -7,7 +7,7 @@ import { GeminiService } from './gemini.service';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from './text-to-speech.service';
-import { GuestSessionService } from '@/guest/guest-session.service';
+import { GuestSessionService } from '../guest/guest-session.service';
 
 // Mock dependencies
 const mockPrismaService = {
@@ -74,7 +74,7 @@ describe('StoryService - Library & Generation', () => {
         {
           provide: GuestSessionService,
           useValue: {
-            getGuestSession: jest.fn().mockResolvedValue({ id: 'guest-1' }),
+            getGuestSession: jest.fn(),
           },
         },
       ],
