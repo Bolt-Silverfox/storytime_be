@@ -74,8 +74,7 @@ describe('StoryService - Library & Generation', () => {
         {
           provide: GuestSessionService,
           useValue: {
-            getGuestQuotaStatus: jest.fn(),
-            recordNewStoryAccess: jest.fn(),
+            getGuestSession: jest.fn(),
           },
         },
       ],

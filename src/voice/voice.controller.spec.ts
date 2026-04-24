@@ -58,11 +58,11 @@ describe('VoiceController', () => {
             recordNewStoryAccess: jest.fn(),
           },
         },
-        { provide: TtsBatchQueueService, useValue: { addBatchJob: jest.fn() } },
+        { provide: TtsBatchQueueService, useValue: { queueBatch: jest.fn() } },
         {
           provide: GuestSessionService,
           useValue: {
-            getGuestQuotaStatus: jest.fn(),
+            getGuestSession: jest.fn(),
             recordNewStoryAccess: jest.fn(),
           },
         },
