@@ -71,7 +71,12 @@ describe('StoryService - Library & Generation', () => {
           provide: 'CACHE_MANAGER',
           useValue: { del: jest.fn(), get: jest.fn(), set: jest.fn() },
         },
-        { provide: GuestSessionService, useValue: { getGuestSession: jest.fn().mockResolvedValue({ id: 'guest-1' }) } },
+        {
+          provide: GuestSessionService,
+          useValue: {
+            getGuestSession: jest.fn().mockResolvedValue({ id: 'guest-1' }),
+          },
+        },
       ],
     }).compile();
 

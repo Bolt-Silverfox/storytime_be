@@ -33,7 +33,9 @@ const mockVoiceQuotaService = {
   getVoiceAccess: jest.fn(),
 };
 const mockStoryQuotaService = {
-  checkStoryAccess: jest.fn().mockResolvedValue({ canAccess: true, reason: 'premium' }),
+  checkStoryAccess: jest
+    .fn()
+    .mockResolvedValue({ canAccess: true, reason: 'premium' }),
   recordNewStoryAccess: jest.fn().mockResolvedValue(undefined),
 };
 const mockTtsBatchQueueService = {
@@ -41,7 +43,9 @@ const mockTtsBatchQueueService = {
   getBatchStatus: jest.fn().mockResolvedValue({ status: 'completed' }),
 };
 const mockGuestSessionService = {
-  getGuestSession: jest.fn().mockResolvedValue({ id: 'guest-1', userId: 'guest-1' }),
+  getGuestSession: jest
+    .fn()
+    .mockResolvedValue({ id: 'guest-1', userId: 'guest-1' }),
   recordNewStoryAccess: jest.fn().mockResolvedValue({ recorded: true }),
 };
 
@@ -105,7 +109,9 @@ describe('VoiceController', () => {
 
   describe('batchTextToSpeech', () => {
     const eagerResult = {
-      results: [{ index: 0, text: 'Hello world', audioUrl: 'https://audio.com/a.mp3' }],
+      results: [
+        { index: 0, text: 'Hello world', audioUrl: 'https://audio.com/a.mp3' },
+      ],
       totalParagraphs: 1,
       wasTruncated: false,
       usedProvider: 'deepgram',
@@ -120,7 +126,9 @@ describe('VoiceController', () => {
         id: 'story-1',
         textContent: 'Hello world',
       });
-      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue(eagerResult);
+      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue(
+        eagerResult,
+      );
 
       const result = await controller.batchTextToSpeech(
         { storyId: 'story-1', voiceId: 'MILO' },
@@ -161,7 +169,9 @@ describe('VoiceController', () => {
         id: 'story-1',
         textContent: 'Hello world',
       });
-      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue(eagerResult);
+      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue(
+        eagerResult,
+      );
 
       const result = await controller.batchTextToSpeech(
         { storyId: 'story-1', voiceId: 'MILO' },
