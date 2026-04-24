@@ -122,6 +122,7 @@ describe('VoiceController', () => {
 
     it('should generate batch audio when voice access is allowed', async () => {
       mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
+      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({ canAccess: true, reason: 'premium' });
       mockStoryService.getStoryById.mockResolvedValue({
         id: 'story-1',
         textContent: 'Hello world',
@@ -145,6 +146,7 @@ describe('VoiceController', () => {
 
     it('should include usedProvider and preferredProvider in the response', async () => {
       mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
+      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({ canAccess: true, reason: 'premium' });
       mockStoryService.getStoryById.mockResolvedValue({
         id: 'story-1',
         textContent: 'Hello world',
@@ -165,6 +167,7 @@ describe('VoiceController', () => {
 
     it('should omit preferredProvider when no fallback occurred', async () => {
       mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
+      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({ canAccess: true, reason: 'premium' });
       mockStoryService.getStoryById.mockResolvedValue({
         id: 'story-1',
         textContent: 'Hello world',
@@ -184,6 +187,7 @@ describe('VoiceController', () => {
 
     it('should include providerStatus when service reports degraded', async () => {
       mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
+      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({ canAccess: true, reason: 'premium' });
       mockStoryService.getStoryById.mockResolvedValue({
         id: 'story-1',
         textContent: 'Hello world',
@@ -205,6 +209,7 @@ describe('VoiceController', () => {
 
     it('should omit providerStatus when providers are healthy', async () => {
       mockVoiceQuotaService.canUseVoice.mockResolvedValue(true);
+      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({ canAccess: true, reason: 'premium' });
       mockStoryService.getStoryById.mockResolvedValue({
         id: 'story-1',
         textContent: 'Hello world',
@@ -267,6 +272,7 @@ describe('VoiceController', () => {
         id: 'story-1',
         textContent: 'Hello world paragraph 1. Paragraph 2. Paragraph 3.',
       });
+      mockStoryQuotaService.checkStoryAccess.mockResolvedValue({ canAccess: true, reason: 'premium' });
       mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
         ...eagerResult,
         remainingUncached: [{ index: 1, text: 'Paragraph 2' }],

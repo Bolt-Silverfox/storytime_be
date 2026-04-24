@@ -198,8 +198,8 @@ describe('StoryService - Library & Generation', () => {
         prisma.story.count.mockResolvedValue(3);
         prisma.story.findMany.mockResolvedValue(stories);
         prisma.userStoryProgress.findMany.mockResolvedValue([
-          { storyId: 'story-1', completed: true },
-          { storyId: 'story-2', completed: false },
+          { storyId: 'story-1', progress: 100 },
+          { storyId: 'story-2', progress: 50 },
         ]);
 
         const result = await service.getStories({ userId: 'user-1' });
@@ -221,7 +221,7 @@ describe('StoryService - Library & Generation', () => {
             storyId: { in: ['story-1', 'story-2', 'story-3'] },
             isDeleted: false,
           },
-          select: { storyId: true, completed: true },
+          select: { storyId: true, progress: true },
         });
       });
     });
@@ -322,8 +322,8 @@ describe('StoryService - Library & Generation', () => {
       prisma.season.findMany.mockResolvedValue([]);
 
       prisma.userStoryProgress.findMany.mockResolvedValue([
-        { storyId: 'story-1', completed: true },
-        { storyId: 'story-2', completed: false },
+        { storyId: 'story-1', progress: 100 },
+        { storyId: 'story-2', progress: 50 },
         // story-3 has no progress (unread)
       ]);
 
