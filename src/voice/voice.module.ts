@@ -1,9 +1,11 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
+import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '@/auth/auth.module';
 import { StoryModule } from '../story/story.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { UploadModule } from '../upload/upload.module';
+import { GuestModule } from '@/guest/guest.module';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
@@ -17,14 +19,20 @@ import { SSMLFormatter } from './utils/ssml-formatter';
 import { TextChunker } from './utils/text-chunker';
 import { StreamConverter } from './utils/stream-converter';
 import { VoiceQuotaService } from './voice-quota.service';
+import { TTS_BATCH_QUEUE_NAME } from './queue/tts-batch-queue.constants';
+import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
+import { TtsBatchProcessor } from './queue/tts-batch.processor';
+import { TtsBatchRedisProvider } from './queue/tts-batch-redis.provider';
 
 @Module({
   imports: [
-    AuthModule,
+    forwardRef(() => AuthModule),
     HttpModule,
     SubscriptionModule,
     UploadModule,
     forwardRef(() => StoryModule),
+    forwardRef(() => GuestModule),
+    BullModule.registerQueue({ name: TTS_BATCH_QUEUE_NAME }),
   ],
   controllers: [VoiceController],
   providers: [
@@ -40,6 +48,9 @@ import { VoiceQuotaService } from './voice-quota.service';
     TextChunker,
     StreamConverter,
     VoiceQuotaService,
+    TtsBatchRedisProvider,
+    TtsBatchQueueService,
+    TtsBatchProcessor,
   ],
   exports: [
     VoiceService,

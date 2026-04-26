@@ -13,6 +13,7 @@ import {
   Req,
   Res,
   BadRequestException,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AdminService } from './admin.service';
@@ -29,6 +30,18 @@ import {
   UpdateUserRoleDto,
   BulkActionDto,
 } from './dto/user-management.dto';
+import { ResetQuotaDto } from './dto/reset-quota.dto';
+import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
+import {
+  CreateCouponDto,
+  UpdateCouponDto,
+  ValidateCouponDto,
+  RedeemCouponDto,
+} from './dto/coupon.dto';
+import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
+import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
+import { GuestActivityFilterDto } from './dto/guest-stats.dto';
+import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
 import { ExportAnalyticsDto } from './dto/admin-export.dto';
 import { PaginationUtil } from '../shared/utils/pagination.util';
 import {
@@ -539,6 +552,46 @@ export class AdminController {
   }
 
   // =====================
+  // GUEST ANALYTICS
+  // =====================
+
+  @Get('dashboard/guest-stats')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get guest analytics stats' })
+  @ApiResponse({
+    status: 200,
+    description: 'Guest stats retrieved successfully',
+  })
+  async getGuestStats() {
+    const data = await this.adminService.getGuestStats();
+    return {
+      statusCode: 200,
+      message: 'Guest stats retrieved successfully',
+      data,
+    };
+  }
+
+  @Get('guests/activity')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get guest activity log' })
+  @ApiResponse({
+    status: 200,
+    description: 'Guest activity retrieved successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  async getGuestActivity(@Query() filters: GuestActivityFilterDto) {
+    const result = await this.adminService.getGuestActivity(filters);
+    return {
+      statusCode: 200,
+      message: 'Guest activity retrieved successfully',
+      ...result,
+    };
+  }
+
+  // =====================
   // EXPORT ENDPOINTS
   // =====================
 
@@ -1021,7 +1074,8 @@ export class AdminController {
           createdAt: '2023-10-01T12:00:00Z',
           updatedAt: '2023-10-15T10:30:00Z',
           isPaidUser: true,
-          totalSpent: 125.5,
+          amountSpent: 125.5,
+          currency: 'USD',
           profile: {
             id: 'profile-123',
             explicitContent: false,
@@ -1430,6 +1484,51 @@ export class AdminController {
     return {
       statusCode: 200,
       message: 'User unsuspended successfully',
+      data,
+    };
+  }
+
+  @Post('users/:userId/reset-quota')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Reset user usage quotas',
+    description:
+      'Selectively resets usage quotas for a user based on the flags provided.',
+  })
+  @ApiParam({
+    name: 'userId',
+    type: String,
+    description: 'User ID',
+    example: 'user-123-uuid',
+  })
+  @ApiBody({ type: ResetQuotaDto })
+  @ApiOkResponse({
+    description: 'Quotas reset successfully',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'User quotas reset successfully',
+        data: {
+          id: 'usage-123',
+          userId: 'user-123',
+          uniqueStoriesRead: 0,
+          bonusStories: 0,
+          elevenLabsCount: 0,
+          geminiStoryCount: 0,
+          geminiImageCount: 0,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'User usage record not found' })
+  async resetUserQuota(
+    @Param('userId') userId: string,
+    @Body() body: ResetQuotaDto,
+  ) {
+    const data = await this.adminService.resetUserQuota(userId, body);
+    return {
+      statusCode: 200,
+      message: 'User quotas reset successfully',
       data,
     };
   }
@@ -2234,6 +2333,231 @@ export class AdminController {
       statusCode: 200,
       message: 'Support ticket updated',
       data: result,
+    };
+  }
+
+  @Post('support/tickets')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Create a support ticket',
+    description:
+      'Creates a ticket on behalf of a user (if userId provided) or as the admin.',
+  })
+  @ApiBody({ type: CreateAdminTicketDto })
+  @ApiCreatedResponse({
+    description: 'Support ticket created',
+    schema: {
+      example: {
+        statusCode: 201,
+        message: 'Support ticket created',
+        data: {
+          id: 'ticket-123',
+          userId: 'user-123',
+          subject: 'Account issue',
+          message: 'Details here',
+          status: 'open',
+          createdAt: '2024-01-01T00:00:00Z',
+        },
+      },
+    },
+  })
+  @HttpCode(HttpStatus.CREATED)
+  async createSupportTicket(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: CreateAdminTicketDto,
+  ) {
+    const creatorId = body.userId ?? req.authUserData.userId;
+    const data = await this.adminService.createSupportTicket(creatorId, body);
+    return {
+      statusCode: 201,
+      message: 'Support ticket created',
+      data,
+    };
+  }
+
+  // =====================
+  // COUPONS
+  // =====================
+
+  @Post('coupons')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a coupon' })
+  @ApiBody({ type: CreateCouponDto })
+  @ApiCreatedResponse({ description: 'Coupon created' })
+  @HttpCode(HttpStatus.CREATED)
+  async createCoupon(@Body() body: CreateCouponDto) {
+    const data = await this.adminService.createCoupon(body);
+    return { statusCode: 201, message: 'Coupon created', data };
+  }
+
+  @Get('coupons')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List coupons (paginated)' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'isActive', required: false, type: Boolean })
+  @ApiOkResponse({ description: 'Paginated list of coupons' })
+  async listCoupons(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('isActive') isActive?: string,
+  ) {
+    const data = await this.adminService.listCoupons(
+      Math.max(1, parseInt(page ?? '1') || 1),
+      Math.min(100, Math.max(1, parseInt(limit ?? '20') || 20)),
+      isActive === undefined ? undefined : isActive === 'true',
+    );
+    return { statusCode: 200, ...data };
+  }
+
+  @Get('coupons/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get coupon details with redemptions' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ description: 'Coupon details' })
+  async getCoupon(@Param('id') id: string) {
+    const data = await this.adminService.getCouponById(id);
+    return { statusCode: 200, data };
+  }
+
+  @Patch('coupons/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a coupon' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiBody({ type: UpdateCouponDto })
+  @ApiOkResponse({ description: 'Coupon updated' })
+  async updateCoupon(@Param('id') id: string, @Body() body: UpdateCouponDto) {
+    const data = await this.adminService.updateCoupon(id, body);
+    return { statusCode: 200, message: 'Coupon updated', data };
+  }
+
+  @Delete('coupons/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Soft-delete a coupon (deactivate)' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiNoContentResponse({ description: 'Coupon deactivated' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteCoupon(@Param('id') id: string) {
+    await this.adminService.deleteCoupon(id);
+  }
+
+  @Post('coupons/:code/validate')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Validate a coupon code' })
+  @ApiParam({ name: 'code', type: String })
+  @ApiBody({ type: ValidateCouponDto })
+  @ApiOkResponse({ description: 'Coupon validation result' })
+  async validateCoupon(
+    @Param('code') code: string,
+    @Body() body: ValidateCouponDto,
+  ) {
+    const data = await this.adminService.validateCoupon(code, body.plan);
+    return { statusCode: 200, data };
+  }
+
+  @Post('coupons/:code/redeem')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Redeem a coupon for a user' })
+  @ApiParam({ name: 'code', type: String })
+  @ApiBody({ type: RedeemCouponDto })
+  @ApiCreatedResponse({ description: 'Coupon redeemed' })
+  @HttpCode(HttpStatus.CREATED)
+  async redeemCoupon(
+    @Param('code') code: string,
+    @Body() body: RedeemCouponDto,
+  ) {
+    const data = await this.adminService.redeemCoupon(code, body.userId);
+    return { statusCode: 201, message: 'Coupon redeemed', data };
+  }
+
+  // =====================
+  // BROADCAST NOTIFICATIONS
+  // =====================
+
+  @Post('notifications/broadcast')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Broadcast push notification to all users' })
+  @ApiBody({ type: BroadcastNotificationDto })
+  @ApiCreatedResponse({ description: 'Notification queued for broadcast' })
+  @HttpCode(HttpStatus.CREATED)
+  async broadcastNotification(@Body() dto: BroadcastNotificationDto) {
+    const data = await this.adminService.broadcastNotification(dto);
+    return {
+      statusCode: 201,
+      message: 'Broadcast notification queued',
+      data,
+    };
+  }
+
+  // =====================
+  // SUBSCRIPTION ACTIVATION
+  // =====================
+
+  @Post('users/:userId/activate-subscription')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Manually activate subscription for a user' })
+  @ApiParam({ name: 'userId', type: String })
+  @ApiBody({ type: ActivateSubscriptionDto })
+  @ApiCreatedResponse({ description: 'Subscription activated successfully' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @HttpCode(HttpStatus.CREATED)
+  async activateSubscription(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: ActivateSubscriptionDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const subscription = await this.adminService.activateSubscription(
+      userId,
+      dto,
+      req.authUserData.userId,
+    );
+    return {
+      statusCode: 201,
+      message: 'Subscription activated successfully',
+      data: subscription,
+    };
+  }
+
+  // =====================
+  // PURCHASE VERIFICATION
+  // =====================
+
+  @Post('users/:userId/verify-purchase')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Verify a purchase receipt on behalf of a user' })
+  @ApiParam({ name: 'userId', type: String })
+  @ApiBody({ type: VerifyPurchaseDto })
+  @ApiOkResponse({ description: 'Purchase verification result' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @HttpCode(HttpStatus.OK)
+  async verifyPurchase(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: VerifyPurchaseDto,
+  ) {
+    const result = await this.adminService.verifyUserPurchase(userId, dto);
+    return {
+      statusCode: 200,
+      message: result.success
+        ? 'Purchase verified successfully'
+        : 'Purchase verification failed',
+      data: result,
+    };
+  }
+
+  @Post('notifications/seed-topic')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Subscribe all existing devices to a topic (one-time seed)',
+  })
+  @ApiQuery({ name: 'topic', required: false, example: 'all_users' })
+  @ApiCreatedResponse({ description: 'Topic seed initiated' })
+  @HttpCode(HttpStatus.CREATED)
+  async seedTopicSubscriptions(@Query('topic') topic?: string) {
+    const data = await this.adminService.seedTopicSubscriptions(topic);
+    return {
+      statusCode: 201,
+      message: 'Topic subscription seed initiated',
+      data,
     };
   }
 }

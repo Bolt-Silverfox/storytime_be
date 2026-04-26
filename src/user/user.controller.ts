@@ -14,6 +14,9 @@ import {
   Query,
   HttpException,
   HttpStatus,
+  Logger,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,8 +26,11 @@ import {
   ApiBody,
   ApiBearerAuth,
   ApiQuery,
+  ApiConsumes,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UserService } from './user.service';
+import { UploadService } from '@/upload/upload.service';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -59,7 +65,12 @@ class UpdateUserRoleDto {
 @ApiTags('user')
 @Controller('user')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  private readonly logger = new Logger(UserController.name);
+
+  constructor(
+    private readonly userService: UserService,
+    private readonly uploadService: UploadService,
+  ) {}
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
   // ============================================================
@@ -142,6 +153,58 @@ export class UserController {
       req.authUserData.userId,
       body,
     );
+  }
+
+  @Post('me/upload-avatar')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({ summary: 'Upload and assign a new avatar image' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype.startsWith('image/')) {
+          return cb(
+            new BadRequestException('Only image files are allowed'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async uploadAndAssignAvatar(
+    @Req() req: AuthenticatedRequest,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+    const uploadResult = await this.uploadService.uploadImage(file, 'avatars');
+    try {
+      return await this.userService.createAndAssignAvatar(
+        req.authUserData.userId,
+        uploadResult.secure_url,
+        uploadResult.public_id,
+      );
+    } catch (err) {
+      // Compensating action: clean up the Cloudinary asset if the DB transaction fails
+      await this.uploadService
+        .deleteImage(uploadResult.public_id)
+        .catch((cleanupErr: Error) => {
+          this.logger.warn(
+            `Failed to clean up Cloudinary asset "${uploadResult.public_id}" after DB failure: ${cleanupErr.message}`,
+          );
+        });
+      throw err;
+    }
   }
 
   @Post('me/pin')

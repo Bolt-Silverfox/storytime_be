@@ -9,7 +9,15 @@
  */
 import { PrismaClient, NotificationCategory } from '@prisma/client';
 
-const prisma = new PrismaClient();
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    'DATABASE_URL environment variable is required for seeding',
+  );
+}
+
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DATABASE_URL,
+});
 
 const testNotifications = [
   {

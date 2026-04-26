@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import {
   Prisma,
   User,
@@ -531,6 +532,45 @@ export class UserService {
       },
       data: { avatarId: body.avatarId },
       include: { avatar: true },
+    });
+  }
+
+  async createAndAssignAvatar(userId: string, url: string, publicId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      // Fetch current avatar so we can retire it after assigning the new one
+      const user = await tx.user.findUnique({
+        where: { id: userId, isDeleted: false },
+        select: { avatarId: true },
+      });
+
+      if (!user) {
+        throw new NotFoundException(`User ${userId} not found or deleted`);
+      }
+
+      const avatar = await tx.avatar.create({
+        data: {
+          url,
+          publicId,
+          name: `user_avatar_${userId}_${randomUUID()}`,
+          isSystemAvatar: false,
+        },
+      });
+
+      const updated = await tx.user.update({
+        where: { id: userId, isDeleted: false },
+        data: { avatarId: avatar.id },
+        include: { avatar: true },
+      });
+
+      // Delete the previous custom avatar if it exists and wasn't a system avatar.
+      // deleteMany is idempotent — safe if the record was already deleted concurrently.
+      if (user?.avatarId) {
+        await tx.avatar.deleteMany({
+          where: { id: user.avatarId, isSystemAvatar: false },
+        });
+      }
+
+      return updated;
     });
   }
 
