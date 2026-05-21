@@ -108,6 +108,12 @@ jobs:
           cat > .env << 'EOF'
           ${{ secrets.ENV_FILE }}
           EOF
+          grep -vE '^(DATABASE_URL|REDIS_URL)=' .env > .env.ci
+          mv .env.ci .env
+          {
+            echo "DATABASE_URL=${DATABASE_URL}"
+            echo "REDIS_URL=redis://localhost:6379"
+          } >> .env
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -200,6 +206,12 @@ jobs:
           cat > .env << 'EOF'
           ${{ secrets.ENV_FILE }}
           EOF
+          grep -vE '^(DATABASE_URL|REDIS_URL)=' .env > .env.ci
+          mv .env.ci .env
+          {
+            echo "DATABASE_URL=${DATABASE_URL}"
+            echo "REDIS_URL=${REDIS_URL}"
+          } >> .env
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
