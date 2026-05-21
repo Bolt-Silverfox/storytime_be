@@ -599,7 +599,7 @@ export class StoryService {
       return {
         ...story,
         readStatus:
-          progressValue == null
+          progressValue == null || progressValue <= 0
             ? null
             : progressValue >= 100
               ? 'done'
@@ -638,7 +638,7 @@ export class StoryService {
       return {
         ...story,
         readStatus:
-          progressValue == null
+          progressValue == null || progressValue <= 0
             ? null
             : progressValue >= 100
               ? 'done'

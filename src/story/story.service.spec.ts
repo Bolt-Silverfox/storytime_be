@@ -40,6 +40,10 @@ const mockGeminiService = {
   generateStoryImage: jest.fn(),
 };
 
+const mockGuestSessionService = {
+  getGuestSession: jest.fn().mockResolvedValue({ id: 'guest-1' }),
+};
+
 describe('StoryService - Library & Generation', () => {
   let service: StoryService;
   let prisma: typeof mockPrismaService;
@@ -73,9 +77,7 @@ describe('StoryService - Library & Generation', () => {
         },
         {
           provide: GuestSessionService,
-          useValue: {
-            getGuestSession: jest.fn().mockResolvedValue({ id: 'guest-1' }),
-          },
+          useValue: mockGuestSessionService,
         },
       ],
     }).compile();
@@ -84,6 +86,9 @@ describe('StoryService - Library & Generation', () => {
     prisma = module.get(PrismaService);
     gemini = module.get(GeminiService);
     jest.clearAllMocks();
+    mockGuestSessionService.getGuestSession.mockResolvedValue({
+      id: 'guest-1',
+    });
   });
 
   // --- 1. GENERATION TEST (The Fix) ---
@@ -223,6 +228,40 @@ describe('StoryService - Library & Generation', () => {
           },
           select: { storyId: true, progress: true },
         });
+      });
+
+      it('should treat guest progress 0 as unread', async () => {
+        const stories = [
+          { id: 'story-1', title: 'Reserved Story' },
+          { id: 'story-2', title: 'In Progress Story' },
+          { id: 'story-3', title: 'Unread Story' },
+        ];
+        prisma.story.count.mockResolvedValue(3);
+        prisma.story.findMany.mockResolvedValue(stories);
+        mockGuestSessionService.getGuestSession.mockResolvedValue({
+          readingHistory: {
+            'story-1': {
+              progress: 0,
+              lastReadAt: new Date('2026-01-01T00:00:00.000Z'),
+            },
+            'story-2': {
+              progress: 50,
+              lastReadAt: new Date('2026-01-02T00:00:00.000Z'),
+            },
+          },
+        });
+
+        const result = await service.getStories({
+          guestSessionId: 'guest-1',
+        });
+
+        expect(result.data).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: 'story-1', readStatus: null }),
+            expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+            expect.objectContaining({ id: 'story-3', readStatus: null }),
+          ]),
+        );
       });
     });
 
