@@ -504,8 +504,12 @@ export class GuestController {
       return null;
     }
 
-    const isDone = progressData.progress >= 100;
-    const readStatus: ReadStatus = isDone ? 'done' : 'reading';
+    const readStatus: ReadStatus | null =
+      progressData.progress <= 0
+        ? null
+        : progressData.progress >= 100
+          ? 'done'
+          : 'reading';
 
     return {
       storyId,
@@ -603,8 +607,12 @@ export class GuestController {
 
       return {
         stories: progressRecords.map((record) => {
-          const isDone = record.progress >= 100;
-          const readStatus: ReadStatus = isDone ? 'done' : 'reading';
+          const readStatus: ReadStatus | null =
+            record.progress <= 0
+              ? null
+              : record.progress >= 100
+                ? 'done'
+                : 'reading';
           return {
             storyId: record.storyId,
             title: record.story.title,
@@ -671,8 +679,12 @@ export class GuestController {
       // Map stories with progress and readStatus
       const storiesWithProgress = stories.map((story) => {
         const progress = history[story.id];
-        const isDone = progress.progress >= 100;
-        const readStatus: ReadStatus = isDone ? 'done' : 'reading';
+        const readStatus: ReadStatus | null =
+          progress.progress <= 0
+            ? null
+            : progress.progress >= 100
+              ? 'done'
+              : 'reading';
         return {
           storyId: story.id,
           title: story.title,
