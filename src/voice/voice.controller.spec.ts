@@ -11,9 +11,9 @@ import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { SpeechToTextService } from './speech-to-text.service';
 import { VoiceQuotaService } from './voice-quota.service';
-import { StoryQuotaService } from '@/story/story-quota.service';
+import { StoryQuotaService } from '../story/story-quota.service';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
-import { GuestSessionService } from '@/guest/guest-session.service';
+import { GuestSessionService } from '../guest/guest-session.service';
 
 const mockVoiceService = {
   listVoices: jest.fn(),
@@ -117,7 +117,7 @@ describe('VoiceController', () => {
       usedProvider: 'deepgram',
       remainingUncached: [],
       batchProvider: 'deepgram',
-      isPremium: true,
+      isPremium: false,
     };
 
     it('should generate batch audio when voice access is allowed', async () => {
@@ -160,6 +160,9 @@ describe('VoiceController', () => {
       mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
         ...eagerResult,
         preferredProvider: 'elevenlabs',
+        remainingUncached: [],
+        batchProvider: 'deepgram',
+        isPremium: false,
       });
 
       const result = await controller.batchTextToSpeech(
@@ -208,6 +211,9 @@ describe('VoiceController', () => {
         ...eagerResult,
         preferredProvider: 'elevenlabs',
         providerStatus: 'degraded',
+        remainingUncached: [],
+        batchProvider: 'deepgram',
+        isPremium: false,
       });
 
       const result = await controller.batchTextToSpeech(
@@ -232,6 +238,9 @@ describe('VoiceController', () => {
       mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
         ...eagerResult,
         usedProvider: 'elevenlabs',
+        remainingUncached: [],
+        batchProvider: 'elevenlabs',
+        isPremium: false,
       });
 
       const result = await controller.batchTextToSpeech(
