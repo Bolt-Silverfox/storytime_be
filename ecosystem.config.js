@@ -1,9 +1,10 @@
 const os = require('os');
 
 const cpus = os.cpus().length;
-const devInstances = Number(process.env.PM2_DEV_INSTANCES || 1);
-const stagingInstances = Number(process.env.PM2_STAGING_INSTANCES || 1);
-const prodInstances = Number(process.env.PM2_PROD_INSTANCES || Math.max(2, cpus - 1));
+const devInstances = Number(process.env.PM2_DEV_INSTANCES) || 1;
+const stagingInstances = Number(process.env.PM2_STAGING_INSTANCES) || 1;
+const prodInstances =
+  Number(process.env.PM2_PROD_INSTANCES) || Math.max(2, cpus - 1);
 
 const baseConfig = {
   script: 'dist/src/main.js',
