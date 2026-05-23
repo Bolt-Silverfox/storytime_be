@@ -7,6 +7,38 @@ import {
 import { PrismaClient } from '@prisma/client';
 import IHealth, { HealthResponse } from '@/health/Ihealth.interfaces';
 
+const DEFAULT_DATABASE_CONNECTION_LIMIT = 3;
+
+const parseConnectionLimit = (value: string | undefined): number => {
+  if (value === undefined || value.trim() === '') {
+    return DEFAULT_DATABASE_CONNECTION_LIMIT;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_DATABASE_CONNECTION_LIMIT;
+};
+
+export const resolvePrismaDatasourceUrl = (
+  databaseUrl: string | undefined,
+  connectionLimit = parseConnectionLimit(process.env.DATABASE_CONNECTION_LIMIT),
+): string | undefined => {
+  if (!databaseUrl || databaseUrl.startsWith('prisma://')) {
+    return databaseUrl;
+  }
+
+  try {
+    const url = new URL(databaseUrl);
+    if (!url.searchParams.has('connection_limit')) {
+      url.searchParams.set('connection_limit', String(connectionLimit));
+    }
+    return url.toString();
+  } catch {
+    return databaseUrl;
+  }
+};
+
 @Injectable()
 export class PrismaService
   extends PrismaClient
@@ -20,7 +52,7 @@ export class PrismaService
     super({
       datasources: {
         db: {
-          url: process.env.DATABASE_URL,
+          url: resolvePrismaDatasourceUrl(process.env.DATABASE_URL),
         },
       },
       log:
