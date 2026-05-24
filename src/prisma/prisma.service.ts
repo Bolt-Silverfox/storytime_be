@@ -34,7 +34,10 @@ export const resolvePrismaDatasourceUrl = (
 
   try {
     const url = new URL(databaseUrl);
-    if (!url.searchParams.has('connection_limit')) {
+    const isPostgresUrl =
+      url.protocol === 'postgres:' || url.protocol === 'postgresql:';
+
+    if (isPostgresUrl && !url.searchParams.has('connection_limit')) {
       url.searchParams.set('connection_limit', String(connectionLimit));
     }
     return url.toString();

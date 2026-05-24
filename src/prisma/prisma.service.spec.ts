@@ -43,11 +43,25 @@ describe('resolvePrismaDatasourceUrl', () => {
   it('returns the original URL when parsing fails', () => {
     expect(resolvePrismaDatasourceUrl('not-a-url', 3)).toBe('not-a-url');
   });
+
+  it('does not add a connection limit to non-postgres URLs', () => {
+    expect(resolvePrismaDatasourceUrl('mysql://localhost/storytime', 3)).toBe(
+      'mysql://localhost/storytime',
+    );
+  });
 });
 
 describe('parseConnectionLimit', () => {
+  it('returns the fallback when parseConnectionLimit receives undefined', () => {
+    expect(parseConnectionLimit(undefined)).toBe(3);
+  });
+
   it('returns the fallback when parseConnectionLimit receives an empty string', () => {
     expect(parseConnectionLimit('')).toBe(3);
+  });
+
+  it('returns the fallback when parseConnectionLimit receives whitespace only', () => {
+    expect(parseConnectionLimit('   ')).toBe(3);
   });
 
   it('returns the fallback when parseConnectionLimit receives a non-numeric string', () => {
