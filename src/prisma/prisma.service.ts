@@ -7,6 +7,45 @@ import {
 import { PrismaClient } from '@prisma/client';
 import IHealth, { HealthResponse } from '@/health/Ihealth.interfaces';
 
+const FALLBACK_DATABASE_CONNECTION_LIMIT = 3;
+
+export const parseConnectionLimit = (value: string | undefined): number => {
+  if (value === undefined || value.trim() === '') {
+    return FALLBACK_DATABASE_CONNECTION_LIMIT;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : FALLBACK_DATABASE_CONNECTION_LIMIT;
+};
+
+const DEFAULT_DATABASE_CONNECTION_LIMIT = parseConnectionLimit(
+  process.env.DATABASE_CONNECTION_LIMIT,
+);
+
+export const resolvePrismaDatasourceUrl = (
+  databaseUrl: string | undefined,
+  connectionLimit = DEFAULT_DATABASE_CONNECTION_LIMIT,
+): string | undefined => {
+  if (!databaseUrl || databaseUrl.startsWith('prisma://')) {
+    return databaseUrl;
+  }
+
+  try {
+    const url = new URL(databaseUrl);
+    const isPostgresUrl =
+      url.protocol === 'postgres:' || url.protocol === 'postgresql:';
+
+    if (isPostgresUrl && !url.searchParams.has('connection_limit')) {
+      url.searchParams.set('connection_limit', String(connectionLimit));
+    }
+    return url.toString();
+  } catch {
+    return databaseUrl;
+  }
+};
+
 @Injectable()
 export class PrismaService
   extends PrismaClient
@@ -15,12 +54,13 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    // Use Prisma Accelerate for connection pooling
-    // The DATABASE_URL should be a prisma:// URL for Accelerate
+    // Supports Prisma Accelerate URLs (prisma://) or direct database URLs
+    // (for example, postgresql://). Accelerate is used when provided;
+    // otherwise direct URLs get a bounded connection pool by default.
     super({
       datasources: {
         db: {
-          url: process.env.DATABASE_URL,
+          url: resolvePrismaDatasourceUrl(process.env.DATABASE_URL),
         },
       },
       log:
