@@ -19,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { QuotaExhaustedError } from '../voice/errors/quota-exhausted.error';
 import {
   CircuitBreakerService,
   CircuitBreaker,
@@ -379,9 +380,7 @@ export class TextToSpeechService {
     // Honour the quota decision: if ElevenLabs was denied, don't bypass via override.
     if (override) {
       if (override === 'elevenlabs' && !useElevenLabs) {
-        throw new InternalServerErrorException(
-          'ElevenLabs quota exhausted for this request',
-        );
+        throw new QuotaExhaustedError('ElevenLabs');
       }
       return this.attemptSingleProvider(
         override,
