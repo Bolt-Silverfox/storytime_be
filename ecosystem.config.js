@@ -22,8 +22,6 @@ const prodInstances = parseInstanceCount(
 
 const baseConfig = {
   script: 'dist/src/main.js',
-  instances: 1,
-  exec_mode: 'cluster',
   autorestart: true,
   watch: false,
   max_memory_restart: '1G',
@@ -35,6 +33,7 @@ module.exports = {
       ...baseConfig,
       name: 'storytime-api-development',
       instances: devInstances,
+      exec_mode: devInstances > 1 ? 'cluster' : 'fork',
       env: {
         NODE_ENV: 'development',
       },
@@ -43,6 +42,7 @@ module.exports = {
       ...baseConfig,
       name: 'storytime-api-staging',
       instances: stagingInstances,
+      exec_mode: 'cluster',
       env: {
         NODE_ENV: 'staging',
       },
@@ -51,6 +51,7 @@ module.exports = {
       ...baseConfig,
       name: 'storytime-api-production',
       instances: prodInstances,
+      exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
       },
