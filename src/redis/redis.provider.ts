@@ -272,6 +272,12 @@ export const RedisClientProvider: Provider = {
       await client.ping();
       logger.log('Redis connection test successful');
     } catch (error) {
+      // Stop the keepalive timer before disconnecting. We can't rely on the
+      // 'end' event from disconnect() to clean up the timer — it fires
+      // asynchronously and we want to drop the setInterval synchronously so the
+      // failed provider factory doesn't leave a timer scheduled against a
+      // disposed client.
+      stopKeepAlive();
       // Disconnect client to stop retry/reconnection attempts before propagating error
       try {
         client.disconnect();
