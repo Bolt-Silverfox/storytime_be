@@ -235,13 +235,49 @@ export const RedisClientProvider: Provider = {
 
     client.on('end', () => {
       logger.warn('Redis connection ended');
+      stopKeepAlive();
     });
+
+    // Local Redis uses the default `timeout 300` (5 min); TCP-level
+    // keepAlive alone doesn't reset the idle timer on most servers. Send
+    // a Redis-protocol PING every 30 s so the server counts it as activity.
+    // ioredis 5.10 doesn't expose a `pingInterval` option, so we run a
+    // guard-checked setInterval on the client ourselves.
+    const pingIntervalMs = 30000;
+    let pingTimer: NodeJS.Timeout | null = null;
+    const stopKeepAlive = (): void => {
+      if (pingTimer) {
+        clearInterval(pingTimer);
+        pingTimer = null;
+      }
+    };
+    const startKeepAlive = (): void => {
+      stopKeepAlive();
+      pingTimer = setInterval(() => {
+        // Only ping when the client is in a usable state. Failures are
+        // tolerated — the existing error/reconnecting handlers cover
+        // reconnect cycles and the next tick will retry.
+        if (client.status === 'ready') {
+          client.ping().catch(() => undefined);
+        }
+      }, pingIntervalMs);
+      // Don't keep the event loop alive just for this ping.
+      pingTimer.unref?.();
+    };
+    startKeepAlive();
+    client.on('ready', startKeepAlive);
 
     // Test the connection
     try {
       await client.ping();
       logger.log('Redis connection test successful');
     } catch (error) {
+      // Stop the keepalive timer before disconnecting. We can't rely on the
+      // 'end' event from disconnect() to clean up the timer — it fires
+      // asynchronously and we want to drop the setInterval synchronously so the
+      // failed provider factory doesn't leave a timer scheduled against a
+      // disposed client.
+      stopKeepAlive();
       // Disconnect client to stop retry/reconnection attempts before propagating error
       try {
         client.disconnect();
