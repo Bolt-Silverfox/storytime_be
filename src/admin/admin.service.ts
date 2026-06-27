@@ -39,12 +39,14 @@ import {
   UpdateUserDto,
   BulkActionDto,
 } from './dto/user-management.dto';
+import { CreateCouponDto, UpdateCouponDto } from './dto/coupon.dto';
 import {
   categories,
   themes,
   defaultAgeGroups,
   systemAvatars,
 } from '../../prisma/data';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DateUtil } from '@/shared/utils/date.util';
 import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';
 import {
@@ -53,6 +55,21 @@ import {
   STORY_INVALIDATION_KEYS,
 } from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
+import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
+import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
+import { ResetQuotaDto } from './dto/reset-quota.dto';
+import { GuestStatsDto, GuestActivityFilterDto } from './dto/guest-stats.dto';
+import { CouponService } from '../coupon/coupon.service';
+import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
+import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
+import { GoogleVerificationService } from '../payment/google-verification.service';
+import { AppleVerificationService } from '../payment/apple-verification.service';
+import { PRODUCT_ID_TO_PLAN } from '../subscription/subscription.constants';
+import {
+  GUEST_SESSION_CREATED,
+  GUEST_STORY_ACCESSED,
+  GUEST_QUOTA_EXHAUSTED,
+} from '@/guest/guest-activity.constants';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
 
@@ -64,6 +81,10 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly couponService: CouponService,
+    private readonly googleVerificationService: GoogleVerificationService,
+    private readonly appleVerificationService: AppleVerificationService,
   ) {}
 
   // =====================
@@ -165,7 +186,7 @@ export class AdminService {
 
       // Revenue
       this.prisma.paymentTransaction.aggregate({
-        where: { status: 'success' },
+        where: { status: 'success', deletedAt: null },
         _sum: { amount: true },
       }),
     ]);
@@ -240,7 +261,11 @@ export class AdminService {
       }),
 
       this.prisma.paymentTransaction.aggregate({
-        where: { status: 'success', createdAt: { lte: lastMonthEnd } },
+        where: {
+          status: 'success',
+          deletedAt: null,
+          createdAt: { lte: lastMonthEnd },
+        },
         _sum: { amount: true },
       }),
     ]);
@@ -815,8 +840,8 @@ export class AdminService {
             },
           },
           paymentTransactions: {
-            where: { status: 'success' },
-            select: { amount: true },
+            where: { status: 'success', deletedAt: null },
+            select: { amount: true, currency: true },
           },
           _count: {
             select: {
@@ -855,10 +880,22 @@ export class AdminService {
             ),
           0,
         );
-        const amountSpent = user.paymentTransactions.reduce(
-          (sum, txn) => sum + txn.amount,
-          0,
-        );
+        // Group spending by currency (most users have one currency)
+        const spendingByCurrency = new Map<string, number>();
+        for (const txn of user.paymentTransactions) {
+          if (!txn.currency) continue;
+          const curr = txn.currency;
+          spendingByCurrency.set(
+            curr,
+            (spendingByCurrency.get(curr) ?? 0) + txn.amount,
+          );
+        }
+        // Primary currency = the one with the most spending
+        const primaryCurrency = [...spendingByCurrency.entries()].sort(
+          (a, b) => b[1] - a[1],
+        )[0];
+        const amountSpent = primaryCurrency?.[1] ?? 0;
+        const currency = primaryCurrency?.[0] ?? null;
 
         // Check if user has active subscription (same logic as getUserById)
         const now = new Date();
@@ -872,6 +909,7 @@ export class AdminService {
           activityLength,
           creditUsed,
           amountSpent,
+          currency,
           isPaidUser: hasActiveSubscription,
           activeSubscription: hasActiveSubscription ? user.subscription : null,
           kidsCount: user._count.kids,
@@ -906,6 +944,7 @@ export class AdminService {
         },
         avatar: true,
         subscription: true,
+        usage: true,
         paymentTransactions: {
           orderBy: { createdAt: 'desc' },
           take: 10,
@@ -932,15 +971,22 @@ export class AdminService {
       user.subscription?.status === 'active' &&
       (!user.subscription.endsAt || user.subscription.endsAt > now);
 
-    const totalSpentResult = await this.prisma.paymentTransaction.aggregate({
-      where: {
-        userId: userId,
-        status: 'success',
-      },
-      _sum: {
-        amount: true,
-      },
+    const userTransactions = await this.prisma.paymentTransaction.findMany({
+      where: { userId, status: 'success', deletedAt: null },
+      select: { amount: true, currency: true },
     });
+    const spendingByCurrency = new Map<string, number>();
+    for (const txn of userTransactions) {
+      if (!txn.currency) continue;
+      const curr = txn.currency;
+      spendingByCurrency.set(
+        curr,
+        (spendingByCurrency.get(curr) ?? 0) + txn.amount,
+      );
+    }
+    const primarySpend = [...spendingByCurrency.entries()].sort(
+      (a, b) => b[1] - a[1],
+    )[0];
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, pinHash, ...safeUser } = user;
@@ -948,7 +994,8 @@ export class AdminService {
     return {
       ...safeUser,
       isPaidUser: hasActiveSubscription,
-      totalSpent: totalSpentResult._sum.amount || 0,
+      amountSpent: primarySpend?.[1] ?? 0,
+      currency: primarySpend?.[0] ?? null,
       stats: {
         sessionsCount: user._count.auth,
         favoritesCount: user._count.parentFavorites,
@@ -1399,6 +1446,7 @@ export class AdminService {
             lte: endDate,
           },
           status: 'success',
+          deletedAt: null,
         },
         _sum: {
           amount: true,
@@ -1489,6 +1537,7 @@ export class AdminService {
             lte: endDate,
           },
           status: 'success',
+          deletedAt: null,
         },
         _sum: {
           amount: true,
@@ -1506,6 +1555,7 @@ export class AdminService {
             lte: endDate,
           },
           status: 'success',
+          deletedAt: null,
         },
         select: {
           amount: true,
@@ -1561,6 +1611,7 @@ export class AdminService {
               paymentTransactions: {
                 where: {
                   status: 'success',
+                  deletedAt: null,
                 },
                 select: {
                   amount: true,
@@ -2193,6 +2244,29 @@ export class AdminService {
     });
   }
 
+  async createSupportTicket(userId: string, dto: CreateAdminTicketDto) {
+    // Verify user exists if creating on behalf of someone
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    return this.prisma.supportTicket.create({
+      data: {
+        userId,
+        subject: dto.subject,
+        message: dto.message,
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+  }
+
   // =====================
   // EXPORT ENDPOINTS
   // =====================
@@ -2209,14 +2283,14 @@ export class AdminService {
     // Paginate through all matching users
     const pageSize = 1000;
     let page = 1;
-    const allUsers: any[] = [];
+    const allUsers: Record<string, unknown>[] = [];
     while (true) {
       const result = await this.getAllUsers({
         ...filters,
         page,
         limit: pageSize,
       });
-      allUsers.push(...result.data);
+      allUsers.push(...(result.data as Record<string, unknown>[]));
       if (result.data.length < pageSize) break;
       page++;
     }
@@ -2234,25 +2308,24 @@ export class AdminService {
       'Is Suspended',
     ];
 
-    const rows = allUsers.map((user: any) => [
+    const rows = allUsers.map((user) => [
       user.id,
-      `"${this.sanitizeCsv(user.email)}"`,
-      `"${this.sanitizeCsv(user.name)}"`,
+      `"${this.sanitizeCsv(user.email as string | null | undefined)}"`,
+      `"${this.sanitizeCsv(user.name as string | null | undefined)}"`,
       user.role,
       user.isEmailVerified,
       user.isPaidUser,
-      user.activeSubscription?.plan || '',
+      (user.activeSubscription as Record<string, unknown> | null)?.plan || '',
       user.registrationDate
-        ? new Date(user.registrationDate).toISOString()
+        ? new Date(
+            user.registrationDate as string | number | Date,
+          ).toISOString()
         : '',
       user.isDeleted,
       user.isSuspended || false,
     ]);
 
-    const csv = [
-      headers.join(','),
-      ...rows.map((r: any[]) => r.join(',')),
-    ].join('\n');
+    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     return csv;
   }
 
@@ -2405,6 +2478,37 @@ export class AdminService {
     });
   }
 
+  async resetUserQuota(userId: string, body: ResetQuotaDto) {
+    const usage = await this.prisma.userUsage.findUnique({
+      where: { userId },
+    });
+
+    if (!usage) {
+      throw new NotFoundException('User usage record not found');
+    }
+
+    const updateData: Prisma.UserUsageUpdateInput = {};
+
+    if (body.resetStoryQuota) updateData.uniqueStoriesRead = 0;
+    if (body.resetBonusStories) updateData.bonusStories = 0;
+    if (body.resetElevenLabsCount) updateData.elevenLabsCount = 0;
+    if (body.resetGeminiStory) updateData.geminiStoryCount = 0;
+    if (body.resetGeminiImage) updateData.geminiImageCount = 0;
+    if (body.resetVoiceLock) {
+      updateData.selectedSecondVoice = { disconnect: true };
+      updateData.elevenLabsTrialStory = { disconnect: true };
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      throw new BadRequestException('No quota fields selected for reset');
+    }
+
+    return this.prisma.userUsage.update({
+      where: { userId },
+      data: updateData,
+    });
+  }
+
   async getDeletionRequests(page: number = 1, limit: number = 10) {
     const skip = (page - 1) * limit;
 
@@ -2464,6 +2568,530 @@ export class AdminService {
 
     return {
       data: parsedTickets,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  // =====================
+  // COUPONS
+  // =====================
+
+  async createCoupon(dto: CreateCouponDto) {
+    const normalizedCode = dto.code.toUpperCase();
+    const existing = await this.prisma.coupon.findUnique({
+      where: { code: normalizedCode },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `Coupon code "${normalizedCode}" already exists`,
+      );
+    }
+
+    return this.prisma.coupon.create({
+      data: {
+        code: normalizedCode,
+        type: dto.type,
+        value: dto.value,
+        maxUses: dto.maxUses ?? null,
+        validFrom: new Date(dto.validFrom),
+        validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
+        plan: dto.plan ?? null,
+      },
+    });
+  }
+
+  async listCoupons(page: number, limit: number, isActive?: boolean) {
+    const skip = (page - 1) * limit;
+    const where: Prisma.CouponWhereInput = {};
+    if (isActive !== undefined) {
+      where.isActive = isActive;
+    }
+
+    const [coupons, total] = await Promise.all([
+      this.prisma.coupon.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: { select: { redemptions: true } },
+        },
+      }),
+      this.prisma.coupon.count({ where }),
+    ]);
+
+    return {
+      data: coupons,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getCouponById(id: string) {
+    const coupon = await this.prisma.coupon.findUnique({
+      where: { id },
+      include: {
+        redemptions: {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    if (!coupon) {
+      throw new NotFoundException('Coupon not found');
+    }
+    return coupon;
+  }
+
+  async updateCoupon(id: string, dto: UpdateCouponDto) {
+    const coupon = await this.prisma.coupon.findUnique({ where: { id } });
+    if (!coupon) {
+      throw new NotFoundException('Coupon not found');
+    }
+
+    const data: Prisma.CouponUpdateInput = {};
+    if (dto.maxUses !== undefined) data.maxUses = dto.maxUses;
+    if (dto.validUntil !== undefined)
+      data.validUntil = dto.validUntil ? new Date(dto.validUntil) : null;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.plan !== undefined) data.plan = dto.plan;
+    if (dto.value !== undefined) data.value = dto.value;
+
+    return this.prisma.coupon.update({ where: { id }, data });
+  }
+
+  async deleteCoupon(id: string) {
+    const coupon = await this.prisma.coupon.findUnique({ where: { id } });
+    if (!coupon) {
+      throw new NotFoundException('Coupon not found');
+    }
+    return this.prisma.coupon.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  async validateCoupon(code: string, plan?: string) {
+    const coupon = await this.prisma.coupon.findUnique({
+      where: { code: code.toUpperCase() },
+    });
+
+    if (!coupon) {
+      return { valid: false, reason: 'Coupon not found' };
+    }
+    if (!coupon.isActive) {
+      return { valid: false, reason: 'Coupon is inactive' };
+    }
+
+    const now = new Date();
+    if (now < coupon.validFrom) {
+      return { valid: false, reason: 'Coupon is not yet valid' };
+    }
+    if (coupon.validUntil && now > coupon.validUntil) {
+      return { valid: false, reason: 'Coupon has expired' };
+    }
+    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
+      return { valid: false, reason: 'Coupon usage limit reached' };
+    }
+    if (coupon.plan && plan && coupon.plan !== plan) {
+      return {
+        valid: false,
+        reason: `Coupon is only valid for the ${coupon.plan} plan`,
+      };
+    }
+
+    return {
+      valid: true,
+      coupon: {
+        code: coupon.code,
+        type: coupon.type,
+        value: coupon.value,
+        plan: coupon.plan,
+      },
+    };
+  }
+
+  async redeemCoupon(code: string, userId: string) {
+    // Delegate to CouponService so premiumAccessUntil is set atomically,
+    // race-safe usedCount increment is applied, and all validation is shared.
+    return this.couponService.redeemCoupon(userId, code);
+  }
+
+  // =====================
+  // BROADCAST NOTIFICATIONS
+  // =====================
+
+  /**
+   * Broadcast a push notification to all users via FCM topic.
+   * Emits a 'notification.broadcast' event handled by the notification module.
+   */
+  async broadcastNotification(
+    dto: BroadcastNotificationDto,
+  ): Promise<{ sent: boolean; topic: string }> {
+    const topic = dto.topic ?? 'all_users';
+
+    await this.eventEmitter.emitAsync('notification.broadcast', {
+      topic,
+      title: dto.title,
+      body: dto.body,
+      data: dto.data,
+    });
+    this.logger.log(
+      `Broadcast notification emitted to topic "${topic}": "${dto.title}"`,
+    );
+    return { sent: true, topic };
+  }
+
+  /**
+   * Seed all existing device tokens to a topic.
+   * Emits a 'notification.seed-topic' event.
+   */
+  async seedTopicSubscriptions(
+    topic: string = 'all_users',
+  ): Promise<{ emitted: boolean }> {
+    if (!/^[a-zA-Z0-9\-_.~%]+$/.test(topic)) {
+      throw new BadRequestException(
+        'Invalid topic name: must contain only valid FCM topic characters',
+      );
+    }
+    try {
+      await this.eventEmitter.emitAsync('notification.seed-topic', { topic });
+      this.logger.log(`Topic seed event emitted for topic: ${topic}`);
+      return { emitted: true };
+    } catch (err) {
+      this.logger.error(
+        `Seed-topic subscription failed for "${topic}": ${(err as Error).message}`,
+      );
+      throw err;
+    }
+  }
+
+  // =====================
+  // SUBSCRIPTION ACTIVATION
+  // =====================
+
+  /**
+   * Manually activate or update a subscription for a user.
+   * Used when Google Play/Apple subscriptions weren't detected automatically.
+   */
+  async activateSubscription(
+    userId: string,
+    dto: ActivateSubscriptionDto,
+    adminUserId: string,
+  ) {
+    const now = new Date();
+    const endsAt = new Date(dto.endsAt);
+
+    if (endsAt <= now) {
+      throw new BadRequestException('endsAt must be a future date');
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, isDeleted: false },
+    });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    const existingSub = await this.prisma.subscription.findUnique({
+      where: { userId },
+    });
+
+    const subscription = await this.prisma.subscription.upsert({
+      where: { userId },
+      create: {
+        userId,
+        plan: dto.plan,
+        status: 'active',
+        platform: dto.platform,
+        productId: dto.productId ?? null,
+        startedAt: now,
+        endsAt,
+        purchaseToken: `admin-activated-${Date.now()}`,
+      },
+      update: {
+        plan: dto.plan,
+        status: 'active',
+        platform: dto.platform,
+        productId: dto.productId ?? null,
+        startedAt: now,
+        endsAt,
+        purchaseToken: `admin-activated-${Date.now()}`,
+        isDeleted: false,
+        deletedAt: null,
+      },
+      include: {
+        user: { select: { id: true, email: true, name: true } },
+      },
+    });
+
+    this.logger.log(
+      `Admin ${adminUserId} activated subscription for user ${userId}: ` +
+        `plan=${dto.plan}, platform=${dto.platform}, endsAt=${dto.endsAt}, reason="${dto.reason}"`,
+    );
+
+    await this.prisma.activityLog.create({
+      data: {
+        userId,
+        action: 'ADMIN_ACTIVATE_SUBSCRIPTION',
+        status: 'SUCCESS',
+        details: JSON.stringify({
+          plan: dto.plan,
+          platform: dto.platform,
+          endsAt: dto.endsAt,
+          reason: dto.reason,
+          adminUserId,
+          isRenewal: !!existingSub,
+        }),
+      },
+    });
+
+    this.eventEmitter.emit('admin.sse.activity', {
+      type: 'SUBSCRIPTION',
+      userId,
+      timestamp: now.toISOString(),
+    });
+    this.eventEmitter.emit('admin.sse.stats', {
+      trigger: existingSub ? 'subscription_renewed' : 'subscription_created',
+    });
+
+    return subscription;
+  }
+
+  // =====================
+  // PURCHASE VERIFICATION
+  // =====================
+
+  /**
+   * Verify a purchase receipt on behalf of a user without creating a subscription.
+   * Returns the verification result for admin inspection.
+   */
+  async verifyUserPurchase(userId: string, dto: VerifyPurchaseDto) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, isDeleted: false },
+    });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    try {
+      let result;
+      if (dto.platform === 'google') {
+        result = await this.googleVerificationService.verify({
+          purchaseToken: dto.purchaseToken,
+          productId: dto.productId,
+          packageName: dto.packageName,
+        });
+      } else {
+        result = await this.appleVerificationService.verify({
+          transactionId: dto.purchaseToken,
+          productId: dto.productId,
+        });
+      }
+
+      const plan = PRODUCT_ID_TO_PLAN[dto.productId] ?? null;
+
+      this.logger.log(
+        `Admin verified purchase for user ${userId}: ` +
+          `platform=${dto.platform}, productId=${dto.productId}, success=${result.success}`,
+      );
+
+      return {
+        success: result.success,
+        productId: dto.productId,
+        plan,
+        expirationTime: result.expirationTime ?? null,
+        platform: dto.platform,
+        metadata: result.metadata ?? {},
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Admin purchase verification failed for user ${userId}: ${error.message}`,
+      );
+
+      return {
+        success: false,
+        productId: dto.productId,
+        plan: PRODUCT_ID_TO_PLAN[dto.productId] ?? null,
+        expirationTime: null,
+        platform: dto.platform,
+        error: error.message ?? 'Verification failed',
+      };
+    }
+  }
+
+  // =====================
+  // GUEST ANALYTICS
+  // =====================
+
+  async getGuestStats(): Promise<GuestStatsDto> {
+    const cached = await this.cacheManager.get<GuestStatsDto>(
+      CACHE_KEYS.GUEST_STATS,
+    );
+    if (cached) return cached;
+
+    const now = new Date();
+    const rangeThisMonth = DateUtil.getRange(Timeframe.THIS_MONTH, now);
+    const rangeLastMonth = DateUtil.getRange(Timeframe.LAST_MONTH, now);
+    // Total counts
+    const [totalSessions, totalStoriesRead, quotaExhausted] = await Promise.all(
+      [
+        this.prisma.activityLog.count({
+          where: { action: GUEST_SESSION_CREATED, isDeleted: false },
+        }),
+        this.prisma.activityLog.count({
+          where: { action: GUEST_STORY_ACCESSED, isDeleted: false },
+        }),
+        this.prisma.activityLog.count({
+          where: { action: GUEST_QUOTA_EXHAUSTED, isDeleted: false },
+        }),
+      ],
+    );
+
+    // This month counts
+    const thisMonthWhere = {
+      createdAt: { gte: rangeThisMonth.start },
+      isDeleted: false,
+    };
+    const [sessionsThisMonth, storiesThisMonth, quotaThisMonth] =
+      await Promise.all([
+        this.prisma.activityLog.count({
+          where: { ...thisMonthWhere, action: GUEST_SESSION_CREATED },
+        }),
+        this.prisma.activityLog.count({
+          where: { ...thisMonthWhere, action: GUEST_STORY_ACCESSED },
+        }),
+        this.prisma.activityLog.count({
+          where: { ...thisMonthWhere, action: GUEST_QUOTA_EXHAUSTED },
+        }),
+      ]);
+
+    // Last month counts for trend
+    const lastMonthWhere = {
+      createdAt: { gte: rangeLastMonth.start, lt: rangeThisMonth.start },
+      isDeleted: false,
+    };
+    const [sessionsLastMonth, storiesLastMonth, quotaLastMonth] =
+      await Promise.all([
+        this.prisma.activityLog.count({
+          where: { ...lastMonthWhere, action: GUEST_SESSION_CREATED },
+        }),
+        this.prisma.activityLog.count({
+          where: { ...lastMonthWhere, action: GUEST_STORY_ACCESSED },
+        }),
+        this.prisma.activityLog.count({
+          where: { ...lastMonthWhere, action: GUEST_QUOTA_EXHAUSTED },
+        }),
+      ]);
+
+    // Unique stories accessed
+    const uniqueStoriesResult = await this.prisma.$queryRaw<
+      [{ count: bigint }]
+    >`
+      SELECT COUNT(DISTINCT details::jsonb->>'storyId') as count
+      FROM "activity_logs"
+      WHERE action = ${GUEST_STORY_ACCESSED} AND "isDeleted" = false
+      AND details IS NOT NULL AND details LIKE '{%'
+    `;
+    const uniqueStoriesAccessed = Number(uniqueStoriesResult[0]?.count ?? 0);
+
+    const timeframe = TrendLabel.VS_LAST_MONTH;
+    const result: GuestStatsDto = {
+      totalSessions,
+      sessionsThisMonth: DashboardUtil.calculateTrend(
+        sessionsThisMonth,
+        sessionsLastMonth,
+        timeframe,
+      ),
+      totalStoriesRead,
+      storiesReadThisMonth: DashboardUtil.calculateTrend(
+        storiesThisMonth,
+        storiesLastMonth,
+        timeframe,
+      ),
+      quotaExhausted,
+      quotaExhaustedThisMonth: DashboardUtil.calculateTrend(
+        quotaThisMonth,
+        quotaLastMonth,
+        timeframe,
+      ),
+      uniqueStoriesAccessed,
+    };
+
+    await this.cacheManager.set(
+      CACHE_KEYS.GUEST_STATS,
+      result,
+      CACHE_TTL_MS.DASHBOARD,
+    );
+    return result;
+  }
+
+  async getGuestActivity(filters: GuestActivityFilterDto) {
+    const page = Math.max(1, filters.page ?? 1);
+    const limit = Math.min(100, Math.max(1, filters.limit ?? 10));
+    const where: Prisma.ActivityLogWhereInput = {
+      action: { startsWith: 'GUEST_' },
+      isDeleted: false,
+    };
+    if (filters.action) {
+      if (!filters.action.startsWith('GUEST_')) {
+        throw new BadRequestException('Invalid guest action filter');
+      }
+      where.action = filters.action;
+    }
+    if (filters.startDate || filters.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) {
+        where.createdAt.gte = /^\d{4}-\d{2}-\d{2}$/.test(filters.startDate)
+          ? new Date(`${filters.startDate}T00:00:00.000Z`)
+          : new Date(filters.startDate);
+      }
+      if (filters.endDate) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(filters.endDate)) {
+          const endDate = new Date(`${filters.endDate}T00:00:00.000Z`);
+          endDate.setUTCDate(endDate.getUTCDate() + 1);
+          where.createdAt.lt = endDate;
+        } else {
+          where.createdAt.lte = new Date(filters.endDate);
+        }
+      }
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.activityLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+        select: {
+          id: true,
+          action: true,
+          status: true,
+          details: true,
+          ipAddress: true,
+          deviceName: true,
+          os: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.activityLog.count({ where }),
+    ]);
+
+    return {
+      data,
       meta: {
         total,
         page,

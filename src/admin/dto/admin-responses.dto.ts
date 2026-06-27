@@ -558,8 +558,18 @@ export class UserDetailDto {
   @ApiProperty({ description: 'Paid user status', example: true })
   isPaidUser: boolean;
 
-  @ApiProperty({ description: 'Total amount spent', example: 125.5 })
-  totalSpent: number;
+  @ApiProperty({
+    description: 'Amount spent in the primary currency',
+    example: 125.5,
+  })
+  amountSpent: number;
+
+  @ApiProperty({
+    description: 'Currency of amount spent',
+    example: 'USD',
+    nullable: true,
+  })
+  currency: string | null;
 
   @ApiProperty({
     description: 'User profile',

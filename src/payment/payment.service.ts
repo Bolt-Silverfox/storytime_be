@@ -15,6 +15,7 @@ import {
   PLANS,
   PRODUCT_ID_TO_PLAN,
 } from '@/subscription/subscription.constants';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 /** Transaction result from payment processing */
 export interface TransactionRecord {
@@ -35,6 +36,7 @@ export class PaymentService {
     private readonly configService: ConfigService,
     private readonly googleVerificationService: GoogleVerificationService,
     private readonly appleVerificationService: AppleVerificationService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -295,6 +297,15 @@ export class PaymentService {
             ...data,
           },
         });
+
+    this.eventEmitter.emit('admin.sse.activity', {
+      type: 'SUBSCRIPTION',
+      userId,
+      timestamp: new Date().toISOString(),
+    });
+    this.eventEmitter.emit('admin.sse.stats', {
+      trigger: existingSub ? 'subscription_renewed' : 'subscription_created',
+    });
 
     return {
       success: true,

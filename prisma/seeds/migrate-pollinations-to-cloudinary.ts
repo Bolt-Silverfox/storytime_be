@@ -9,13 +9,14 @@
  *   npx ts-node prisma/seeds/migrate-pollinations-to-cloudinary.ts
  *
  * Requires these env vars (from .env):
- *   HF_TOKEN, CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+ *   DATABASE_URL, HF_TOKEN, CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { v2 as cloudinary } from 'cloudinary';
 
 const requiredEnvVars = [
+  'DATABASE_URL',
   'HF_TOKEN',
   'CLOUDINARY_CLOUD_NAME',
   'CLOUDINARY_API_KEY',
@@ -36,7 +37,9 @@ cloudinary.config({
   secure: true,
 });
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DATABASE_URL,
+});
 
 const HF_API_URL =
   'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell';

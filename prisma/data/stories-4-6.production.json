@@ -9557,7 +9557,12 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Summer",
+      "Winter",
+      "Spring"
+    ]
   },
   {
     "title": "The Rain Dance",
@@ -9620,7 +9625,12 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter",
+      "Spring",
+      "Autumn"
+    ]
   },
   {
     "title": "The Longest Day",
@@ -9684,7 +9694,12 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Christmas",
+      "Summer",
+      "Winter"
+    ]
   },
   {
     "title": "The Firefly Festival",
@@ -9747,7 +9762,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Summer"
+    ]
   },
   {
     "title": "The Harvest Moon",
@@ -9811,7 +9829,14 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Easter",
+      "Summer",
+      "Winter",
+      "Spring",
+      "Autumn"
+    ]
   },
   {
     "title": "The Migration Map",
@@ -9874,7 +9899,12 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Summer",
+      "Winter",
+      "Spring"
+    ]
   },
   {
     "title": "The Solstice Promise",
@@ -9937,7 +9967,12 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Christmas",
+      "Winter",
+      "Spring"
+    ]
   },
   {
     "title": "The Snowflake Study",
@@ -10000,7 +10035,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter"
+    ]
   },
   {
     "title": "The Gratitude Jar",
@@ -10064,7 +10102,11 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter",
+      "Autumn"
+    ]
   },
   {
     "title": "The New Year's Time Capsule",
@@ -10128,7 +10170,10 @@
     "isInteractive": true,
     "recommended": false,
     "aiGenerated": false,
-    "difficultyLevel": 1
+    "difficultyLevel": 1,
+    "seasons": [
+      "Winter"
+    ]
   },
   {
     "title": "The Hero Who Said No",

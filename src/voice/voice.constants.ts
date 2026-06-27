@@ -12,9 +12,9 @@ export const VOICE_AVATARS: Record<VoiceType, string> = {
   [VoiceType.NIMBUS]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772690/storytime/voice_avatars/nimbus.png',
   [VoiceType.FANICE]:
-    'https://res.cloudinary.com/billmal/image/upload/v1771776487/storytime/voice_avatars/fanice.png',
-  [VoiceType.CHIP]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772693/storytime/voice_avatars/chip.png',
+  [VoiceType.CHIP]:
+    'https://res.cloudinary.com/billmal/image/upload/v1771776487/storytime/voice_avatars/fanice.png',
   [VoiceType.ROSIE]:
     'https://res.cloudinary.com/billmal/image/upload/v1771776416/storytime/voice_avatars/rosie.png',
   [VoiceType.PIXIE]:

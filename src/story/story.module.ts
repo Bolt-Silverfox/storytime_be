@@ -10,15 +10,17 @@ import { StoryService } from './story.service';
 import { StoryQuotaService } from './story-quota.service';
 import { VoiceModule } from '../voice/voice.module';
 import { StoryAccessGuard } from '@/shared/guards/story-access.guard';
+import { GuestModule } from '../guest/guest.module';
 
 @Module({
   imports: [
     HttpModule,
     ScheduleModule.forRoot(),
-    AuthModule,
+    forwardRef(() => AuthModule),
     SubscriptionModule,
     UploadModule,
     forwardRef(() => VoiceModule),
+    forwardRef(() => GuestModule),
   ],
   controllers: [StoryController],
   providers: [StoryService, GeminiService, StoryQuotaService, StoryAccessGuard],

@@ -3,6 +3,10 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { AdminService } from '../admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ElevenLabsTTSProvider } from '../../voice/providers/eleven-labs-tts.provider';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CouponService } from '../../coupon/coupon.service';
+import { GoogleVerificationService } from '../../payment/google-verification.service';
+import { AppleVerificationService } from '../../payment/apple-verification.service';
 
 // Mock Cache Manager
 const mockCacheManager = {
@@ -15,6 +19,27 @@ const mockCacheManager = {
 // Mock ElevenLabs TTS Provider
 const mockElevenLabsProvider = {
   getUsageStats: jest.fn(),
+};
+
+// Mock EventEmitter2
+const mockEventEmitter = {
+  emit: jest.fn(),
+};
+
+// Mock CouponService
+const mockCouponService = {
+  validateCoupon: jest.fn(),
+  redeemCoupon: jest.fn(),
+};
+
+// Mock Google Verification Service
+const mockGoogleVerificationService = {
+  verify: jest.fn(),
+};
+
+// Mock Apple Verification Service
+const mockAppleVerificationService = {
+  verify: jest.fn(),
 };
 
 // Mock Prisma Service
@@ -59,6 +84,7 @@ const mockPrismaService = {
   },
   paymentTransaction: {
     aggregate: jest.fn(),
+    findMany: jest.fn(),
   },
   screenTimeSession: {
     findMany: jest.fn(),
@@ -85,6 +111,22 @@ describe('AdminService', () => {
         {
           provide: CACHE_MANAGER,
           useValue: mockCacheManager,
+        },
+        {
+          provide: EventEmitter2,
+          useValue: mockEventEmitter,
+        },
+        {
+          provide: CouponService,
+          useValue: mockCouponService,
+        },
+        {
+          provide: GoogleVerificationService,
+          useValue: mockGoogleVerificationService,
+        },
+        {
+          provide: AppleVerificationService,
+          useValue: mockAppleVerificationService,
         },
       ],
     }).compile();
@@ -245,15 +287,15 @@ describe('AdminService', () => {
       };
 
       prisma.user.findUnique.mockResolvedValue(mockUser);
-      prisma.paymentTransaction.aggregate.mockResolvedValue({
-        _sum: { amount: 100 },
-      });
+      prisma.paymentTransaction.findMany.mockResolvedValue([
+        { amount: 100, currency: 'USD' },
+      ]);
 
       const result = await service.getUserById(userId);
 
       expect(result.id).toBe(userId);
       expect(result.isPaidUser).toBe(true);
-      expect(result.totalSpent).toBe(100);
+      expect(result.amountSpent).toBe(100);
       expect(result.stats.sessionsCount).toBe(10);
     });
 

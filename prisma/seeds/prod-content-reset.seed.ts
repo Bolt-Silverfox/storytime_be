@@ -112,7 +112,13 @@ export async function prodContentReset(prisma: PrismaClient) {
 
 // Allow running directly if main module
 if (require.main === module) {
-  const prisma = new PrismaClient();
+  if (!process.env.DATABASE_URL) {
+    console.error('DATABASE_URL environment variable is required');
+    process.exit(1);
+  }
+  const prisma = new PrismaClient({
+    datasourceUrl: process.env.DATABASE_URL,
+  });
   prodContentReset(prisma)
     .catch((e) => {
       console.error(e);

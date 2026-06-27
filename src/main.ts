@@ -11,6 +11,18 @@ import { requestLogger } from './shared/middleware/request-logger.middleware';
 
 async function bootstrap() {
   const logger = new Logger('Main');
+
+  process.on('unhandledRejection', (reason) => {
+    logger.error('Unhandled Rejection', reason);
+    // Exit to avoid running in a potentially corrupt state
+    setTimeout(() => process.exit(1), 1000);
+  });
+
+  process.on('uncaughtException', (error) => {
+    logger.error('Uncaught Exception', error);
+    process.exit(1);
+  });
+
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
@@ -52,6 +64,7 @@ async function bootstrap() {
       'Accept',
       'X-Requested-With',
       'X-API-Key',
+      'X-Guest-Session-Id',
     ],
     credentials: true,
     preflightContinue: false,
@@ -98,6 +111,9 @@ async function bootstrap() {
       persistAuthorization: true,
     },
   });
+
+  // Graceful shutdown
+  app.enableShutdownHooks();
 
   // ==========================================================
   // 6. START APPLICATION
