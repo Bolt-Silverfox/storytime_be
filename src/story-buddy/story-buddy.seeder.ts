@@ -1,12 +1,13 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '@/prisma/prisma.service';
 import { storyBuddiesData } from '../../prisma/data';
-
-const prisma = new PrismaClient();
 
 @Injectable()
 export class StoryBuddySeederService implements OnModuleInit {
   private readonly logger = new Logger(StoryBuddySeederService.name);
+
+  constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
     this.logger.log('Checking for story buddies seeding...');
@@ -24,7 +25,7 @@ export class StoryBuddySeederService implements OnModuleInit {
 
     try {
       // Get existing buddies to avoid duplicates
-      const existingBuddies = await prisma.storyBuddy.findMany({
+      const existingBuddies = await this.prisma.storyBuddy.findMany({
         select: { name: true },
       });
 
@@ -49,7 +50,7 @@ export class StoryBuddySeederService implements OnModuleInit {
 
       for (const buddyData of buddiesToCreate) {
         try {
-          const buddy = await prisma.storyBuddy.create({
+          const buddy = await this.prisma.storyBuddy.create({
             data: buddyData,
           });
           this.logger.log(`✅ Created buddy: ${buddy.displayName}`);
@@ -73,11 +74,11 @@ export class StoryBuddySeederService implements OnModuleInit {
 
 // Standalone function for manual seeding (optional)
 export async function seedStoryBuddies() {
+  const prisma = new PrismaClient();
   const logger = new Logger('StoryBuddySeeder');
   logger.log('🌟 Seeding story buddies...');
 
   try {
-    // Get existing buddies to avoid duplicates
     const existingBuddies = await prisma.storyBuddy.findMany({
       select: { name: true },
     });
@@ -114,19 +115,15 @@ export async function seedStoryBuddies() {
   } catch (error) {
     logger.error('❌ Error during story buddies seeding:', error);
     throw error;
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 // Run seeder if executed directly
 if (require.main === module) {
-  seedStoryBuddies()
-    .catch((error) => {
-      console.error('Error seeding story buddies:', error);
-      process.exit(1);
-    })
-    .finally(async () => {
-      await prisma.$disconnect();
-    });
+  seedStoryBuddies().catch((error) => {
+    console.error('Error seeding story buddies:', error);
+    process.exit(1);
+  });
 }
-
-export default seedStoryBuddies;

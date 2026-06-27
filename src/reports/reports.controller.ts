@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -14,7 +22,11 @@ import {
   EndScreenTimeSessionDto,
   DailyLimitDto,
 } from './dto/reports.dto';
-import { QuestionAnswerDto } from '../story/dto/story.dto';
+import { SubmitQuestionAnswerDto } from '../story/dto/story.dto';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '../shared/guards/auth.guard';
 
 @ApiTags('reports')
 @Controller('reports')
@@ -66,10 +78,14 @@ export class ReportsController {
 
   // ============== QUIZ TRACKING ==============
   @Post('answer')
+  @UseGuards(AuthSessionGuard)
   @ApiOperation({ summary: 'Record a question answer' })
-  @ApiBody({ type: QuestionAnswerDto })
+  @ApiBody({ type: SubmitQuestionAnswerDto })
   @ApiResponse({ status: 201, description: 'Returns if answer is correct' })
-  async recordAnswer(@Body() dto: QuestionAnswerDto) {
-    return this.reportsService.recordAnswer(dto);
+  async recordAnswer(
+    @Body() dto: SubmitQuestionAnswerDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.reportsService.recordAnswer(dto, req.authUserData.userId);
   }
 }

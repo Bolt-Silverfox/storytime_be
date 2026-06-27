@@ -16,6 +16,7 @@ import {
   UseInterceptors,
   DefaultValuePipe,
   ParseIntPipe,
+  Headers,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -81,6 +82,8 @@ import {
 } from '@/shared/constants/cache-keys.constants';
 import { StoryQuotaService } from './story-quota.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
+import { Public } from '@/shared/decorators/public.decorator';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -159,6 +162,12 @@ export class StoryController {
     type: Number,
     description: 'Maximum number of items to return for pagination',
   })
+  @ApiQuery({
+    name: 'shuffle',
+    required: false,
+    type: String,
+    description: 'Shuffle unseen stories for variety on home screen sections',
+  })
   @ApiOkResponse({
     description: 'List of stories',
     type: CreateStoryDto,
@@ -179,11 +188,13 @@ export class StoryController {
     description: 'Not Found',
     type: ErrorResponseDto,
   })
+  @OptionalAuth()
   @Throttle({
     long: { limit: THROTTLE_LIMITS.LONG.LIMIT, ttl: THROTTLE_LIMITS.LONG.TTL },
   }) // 100 per minute
   async getStories(
     @Req() req: AuthenticatedRequest,
+    @Headers('x-guest-session-id') guestSessionId?: string,
     @Query('theme') theme?: string,
     @Query('category') category?: string,
     @Query('season') season?: string,
@@ -198,6 +209,7 @@ export class StoryController {
     @Query('cursor') cursor?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
     @Query('limit') limitParam?: string,
+    @Query('shuffle') shuffle?: string,
   ): Promise<PaginatedStoriesDto | CursorPaginatedStoriesDto> {
     // Base filter shared by both pagination modes.
     // recommended and isMostLiked are intentionally excluded here
@@ -225,17 +237,20 @@ export class StoryController {
       throw new BadRequestException('maxAge must be a non-negative number');
     }
 
-    if (kidId) {
-      await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    const authenticatedUserId = req.authUserData?.userId;
+    const resolvedKidId = kidId && authenticatedUserId ? kidId : undefined;
+
+    if (resolvedKidId && authenticatedUserId) {
+      await this.verifyKidOwnership(resolvedKidId, authenticatedUserId);
     }
 
     const baseFilter = {
-      userId: req.authUserData.userId,
+      userId: authenticatedUserId,
       theme,
       category,
       season,
       isSeasonal: isSeasonal === 'true',
-      kidId,
+      kidId: resolvedKidId,
       age: parsedAge,
       minAge: parsedMinAge,
       maxAge: parsedMaxAge,
@@ -253,17 +268,19 @@ export class StoryController {
       cursor !== undefined &&
       topPicksFromUs !== 'true' &&
       isMostLiked !== 'true' &&
-      recommended !== 'true';
+      recommended !== 'true' &&
+      shuffle !== 'true';
 
     if (cursor !== undefined && !useCursorMode) {
       this.logger.warn(
-        `Cursor pagination ignored: cursor="${cursor}" bypassed because topPicksFromUs=${topPicksFromUs}, isMostLiked=${isMostLiked}, recommended=${recommended}. Falling back to offset pagination.`,
+        `Cursor pagination ignored: cursor="${cursor}" bypassed because topPicksFromUs=${topPicksFromUs}, isMostLiked=${isMostLiked}, recommended=${recommended}, shuffle=${shuffle}. Falling back to offset pagination.`,
       );
     }
 
     if (useCursorMode) {
       return this.storyService.getStoriesCursor({
         ...baseFilter,
+        guestSessionId: guestSessionId,
         cursor: safeCursor,
         limit: safeLimit,
       });
@@ -274,15 +291,18 @@ export class StoryController {
 
     return this.storyService.getStories({
       ...baseFilter,
+      guestSessionId: guestSessionId,
       recommended: recommended === 'true',
       isMostLiked: isMostLiked === 'true',
       topPicksFromUs: topPicksFromUs === 'true',
       page: safePage,
       limit,
+      shuffle: shuffle === 'true',
     });
   }
 
   @Get('homepage/parent')
+  @OptionalAuth()
   @ApiOperation({
     summary: 'Get parent homepage stories (Recommended, Seasonal, Top Liked)',
   })
@@ -306,7 +326,7 @@ export class StoryController {
     const safeLimitSeasonal = Math.max(1, Math.min(limitSeasonal, 50));
     const safeLimitTopLiked = Math.max(1, Math.min(limitTopLiked, 50));
     return this.storyService.getHomePageStories(
-      req.authUserData.userId,
+      req.authUserData?.userId,
       safeLimitRecommended,
       safeLimitSeasonal,
       safeLimitTopLiked,
@@ -314,6 +334,7 @@ export class StoryController {
   }
 
   @Get('categories')
+  @Public()
   @UseInterceptors(CacheInterceptor)
   @CacheKey('categories:all')
   @CacheTTL(4 * 60 * 60 * 1000)
@@ -343,6 +364,7 @@ export class StoryController {
   }
 
   @Get('themes')
+  @Public()
   @ApiOperation({ summary: 'Get all themes' })
   @ApiOkResponse({
     description: 'List of themes',
@@ -369,6 +391,7 @@ export class StoryController {
   }
 
   @Get('seasons')
+  @Public()
   @ApiOperation({ summary: 'Get all seasons' })
   @ApiOkResponse({
     description: 'List of seasons',
@@ -1215,6 +1238,7 @@ export class StoryController {
   }
 
   @Get(':id')
+  @OptionalAuth()
   @UseGuards(StoryAccessGuard)
   @CheckStoryQuota()
   @ApiOperation({ summary: 'Get a story by id' })

@@ -96,7 +96,7 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
       let fileSkipped = 0;
 
       // Batch stories into chunks to avoid transaction timeouts on large files
-      const BATCH_SIZE = 50;
+      const BATCH_SIZE = 10;
       for (let i = 0; i < stories.length; i += BATCH_SIZE) {
         const batch = stories.slice(i, i + BATCH_SIZE);
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
@@ -206,7 +206,7 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
               batchCount++;
             }
           },
-          { timeout: 60_000 },
+          { timeout: 120_000 },
         );
 
         // Batch succeeded — update global tracking

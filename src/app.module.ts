@@ -7,7 +7,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { AvatarModule } from './avatar/avatar.module';
 import { SharedModule } from './shared/shared.module';
-import { validateEnv, EnvConfig } from './shared/config/env.validation';
+import { validateEnv } from './shared/config/env.validation';
 import { HelpSupportModule } from './help-support/help-support.module';
 import { KidModule } from './kid/kid.module';
 import { NotificationModule } from './notification/notification.module';
@@ -16,7 +16,6 @@ import { ReportsModule } from './reports/reports.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import Keyv from 'keyv';
 import { CacheableMemory } from 'cacheable';
-import KeyvRedis from '@keyv/redis';
 
 import { RewardModule } from './reward/reward.module';
 import { SettingsModule } from './settings/settings.module';
@@ -37,7 +36,13 @@ import {
   ThrottlerConfig,
 } from './shared/config/throttle.config';
 import { AdminModule } from './admin/admin.module';
+import { CouponModule } from './coupon/coupon.module';
 import { HealthModule } from './health/health.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { GuestModule } from './guest/guest.module';
+import { RedisModule } from './redis/redis.module';
+import { REDIS_CLIENT, KEYV_STORE } from './redis/redis.constants';
+import type { Redis } from 'ioredis';
 
 @Module({
   imports: [
@@ -46,9 +51,12 @@ import { HealthModule } from './health/health.module';
       envFilePath: '.env',
       validate: validateEnv,
     }),
+    // Global Redis module for shared connection
+    RedisModule,
     CacheModule.registerAsync({
       isGlobal: true,
-      useFactory: async () => ({
+      inject: [KEYV_STORE],
+      useFactory: async (keyvStore: Map<string, unknown>) => ({
         ttl: 4 * 60 * 60 * 1000, // 4 hours in milliseconds (for categories)
         stores: [
           // Primary: In-memory cache (fastest)
@@ -58,11 +66,9 @@ import { HealthModule } from './health/health.module';
               lruSize: 5000,
             }),
           }),
-          // Secondary: Redis cache (persistent)
+          // Secondary: Redis cache (persistent) - using shared Redis connection
           new Keyv({
-            store: new KeyvRedis(
-              process.env.REDIS_URL || 'redis://localhost:6379',
-            ),
+            store: keyvStore,
           }),
         ],
       }),
@@ -91,11 +97,14 @@ import { HealthModule } from './health/health.module';
     }),
     // BullMQ for background job processing (email queue, etc.)
     BullModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService<EnvConfig, true>) => ({
+      imports: [RedisModule],
+      inject: [REDIS_CLIENT],
+      useFactory: (redisClient: Redis) => ({
         connection: {
-          url: config.get('REDIS_URL'),
+          host: redisClient.options.host,
+          port: redisClient.options.port,
+          password: redisClient.options.password,
+          maxRetriesPerRequest: null, // BullMQ manages its own retries
         },
         defaultJobOptions: {
           removeOnComplete: { age: 24 * 3600, count: 1000 },
@@ -103,6 +112,7 @@ import { HealthModule } from './health/health.module';
         },
       }),
     }),
+    EventEmitterModule.forRoot(),
     SharedModule,
     AuthModule,
     UserModule,
@@ -126,7 +136,9 @@ import { HealthModule } from './health/health.module';
     AchievementProgressModule,
     ParentFavoriteModule,
     AdminModule,
+    CouponModule,
     HealthModule,
+    GuestModule,
   ],
   providers: [
     {

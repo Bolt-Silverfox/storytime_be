@@ -7,6 +7,7 @@ import { GeminiService } from './gemini.service';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from './text-to-speech.service';
+import { GuestSessionService } from '../guest/guest-session.service';
 
 // Mock dependencies
 const mockPrismaService = {
@@ -37,6 +38,10 @@ const mockPrismaService = {
 const mockGeminiService = {
   generateStory: jest.fn(),
   generateStoryImage: jest.fn(),
+};
+
+const mockGuestSessionService = {
+  getGuestSession: jest.fn().mockResolvedValue({ id: 'guest-1' }),
 };
 
 describe('StoryService - Library & Generation', () => {
@@ -70,6 +75,7 @@ describe('StoryService - Library & Generation', () => {
           provide: 'CACHE_MANAGER',
           useValue: { del: jest.fn(), get: jest.fn(), set: jest.fn() },
         },
+        { provide: GuestSessionService, useValue: mockGuestSessionService },
       ],
     }).compile();
 
@@ -77,6 +83,9 @@ describe('StoryService - Library & Generation', () => {
     prisma = module.get(PrismaService);
     gemini = module.get(GeminiService);
     jest.clearAllMocks();
+    mockGuestSessionService.getGuestSession.mockResolvedValue({
+      id: 'guest-1',
+    });
   });
 
   // --- 1. GENERATION TEST (The Fix) ---
@@ -191,8 +200,8 @@ describe('StoryService - Library & Generation', () => {
         prisma.story.count.mockResolvedValue(3);
         prisma.story.findMany.mockResolvedValue(stories);
         prisma.userStoryProgress.findMany.mockResolvedValue([
-          { storyId: 'story-1', completed: true },
-          { storyId: 'story-2', completed: false },
+          { storyId: 'story-1', progress: 100 },
+          { storyId: 'story-2', progress: 50 },
         ]);
 
         const result = await service.getStories({ userId: 'user-1' });
@@ -214,8 +223,42 @@ describe('StoryService - Library & Generation', () => {
             storyId: { in: ['story-1', 'story-2', 'story-3'] },
             isDeleted: false,
           },
-          select: { storyId: true, completed: true },
+          select: { storyId: true, progress: true },
         });
+      });
+
+      it('should treat guest progress 0 as unread', async () => {
+        const stories = [
+          { id: 'story-1', title: 'Reserved Story' },
+          { id: 'story-2', title: 'In Progress Story' },
+          { id: 'story-3', title: 'Unread Story' },
+        ];
+        prisma.story.count.mockResolvedValue(3);
+        prisma.story.findMany.mockResolvedValue(stories);
+        mockGuestSessionService.getGuestSession.mockResolvedValue({
+          readingHistory: {
+            'story-1': {
+              progress: 0,
+              lastReadAt: new Date('2026-01-01T00:00:00.000Z'),
+            },
+            'story-2': {
+              progress: 50,
+              lastReadAt: new Date('2026-01-02T00:00:00.000Z'),
+            },
+          },
+        });
+
+        const result = await service.getStories({
+          guestSessionId: 'guest-1',
+        });
+
+        expect(result.data).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: 'story-1', readStatus: null }),
+            expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+            expect.objectContaining({ id: 'story-3', readStatus: null }),
+          ]),
+        );
       });
     });
 
@@ -315,8 +358,8 @@ describe('StoryService - Library & Generation', () => {
       prisma.season.findMany.mockResolvedValue([]);
 
       prisma.userStoryProgress.findMany.mockResolvedValue([
-        { storyId: 'story-1', completed: true },
-        { storyId: 'story-2', completed: false },
+        { storyId: 'story-1', progress: 100 },
+        { storyId: 'story-2', progress: 50 },
         // story-3 has no progress (unread)
       ]);
 

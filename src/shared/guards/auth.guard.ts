@@ -9,6 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { IS_OPTIONAL_AUTH_KEY } from '../decorators/optional-auth.decorator';
 import { PrismaService } from '@/prisma/prisma.service';
 
 export interface JwtPayload {
@@ -22,6 +23,10 @@ export interface JwtPayload {
 
 export interface AuthenticatedRequest extends Request {
   authUserData: JwtPayload;
+}
+
+export interface OptionalAuthRequest extends Request {
+  authUserData?: JwtPayload;
 }
 
 @Injectable()
@@ -43,7 +48,22 @@ export class AuthSessionGuard implements CanActivate {
       return true;
     }
 
+    const isOptionalAuth = this.reflector.getAllAndOverride<boolean>(
+      IS_OPTIONAL_AUTH_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
     const request = context.switchToHttp().getRequest<Request>();
+
+    if (isOptionalAuth) {
+      try {
+        await this.validateRequest(request);
+      } catch {
+        // Optional auth: allow through without user data
+      }
+      return true;
+    }
+
     return this.validateRequest(request);
   }
 

@@ -73,6 +73,7 @@ model User {
   id                      String                   @id @default(uuid())
   email                   String                   @unique
   passwordHash            String
+  hasLocalPassword        Boolean                  @default(false)
   name                    String?
   avatarId                String?
   avatar                  Avatar?                  @relation(fields: [avatarId], references: [id])
@@ -123,6 +124,10 @@ model User {
   restrictedStories     RestrictedStory[]
   // NEW: Learning expectations (marketing data)
   learningExpectations  UserLearningExpectation[]
+  couponRedemptions     CouponRedemption[]
+  // Coupon-granted premium access expiry date
+  premiumAccessUntil    DateTime?
+  questionAnswers       QuestionAnswer[]
 
   @@index([isDeleted])
   @@index([email, isDeleted])
@@ -491,6 +496,7 @@ model Subscription {
 
   @@index([userId, status])
   @@index([status, isDeleted])
+  @@index([purchaseToken])
   @@index([isDeleted])
   @@map("subscriptions")
 }
@@ -730,6 +736,7 @@ model ActivityLog {
   @@index([isDeleted])
   @@index([kidId, createdAt])
   @@index([action, createdAt])
+  @@index([action, isDeleted, createdAt(sort: Desc)])
   @@map("activity_logs")
 }
 
@@ -854,8 +861,10 @@ model ScreenTimeSession {
 
 model QuestionAnswer {
   id             String        @id @default(uuid())
-  kidId          String
-  kid            Kid           @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  kidId          String?
+  kid            Kid?          @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   questionId     String
   question       StoryQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
   storyId        String
@@ -867,8 +876,10 @@ model QuestionAnswer {
   deletedAt      DateTime?
 
   @@index([kidId])
+  @@index([userId])
   @@index([questionId])
   @@index([storyId])
+  @@unique([userId, questionId], name: "userId_questionId_unique")
   @@index([kidId, answeredAt])
   @@index([isDeleted])
   @@map("question_answers")
@@ -1131,4 +1142,67 @@ model ParagraphAudioCache {
   @@unique([storyId, textHash, voiceId, provider])
   @@index([storyId])
   @@map("paragraph_audio_cache")
+}
+
+// -------------------------
+// COUPON SYSTEM
+// -------------------------
+enum CouponType {
+  PERCENTAGE
+  FLAT
+  FREE_TRIAL_DAYS
+}
+
+model Coupon {
+  id          String            @id @default(uuid())
+  code        String            @unique
+  type        CouponType
+  value       Float             // percentage (0-100), flat amount, or trial days
+  maxUses     Int?              // null = unlimited
+  usedCount   Int               @default(0)
+  validFrom   DateTime
+  validUntil  DateTime?         // null = no expiry
+  plan        String?           // null = any plan, "Monthly" or "Yearly"
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  redemptions CouponRedemption[]
+
+  @@index([isActive])
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id        String   @id @default(uuid())
+  couponId  String
+  userId    String
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([couponId, userId])
+  @@index([couponId])
+  @@index([userId])
+  @@map("coupon_redemptions")
+}
+
+// -------------------------
+// WEBHOOK EVENTS
+// -------------------------
+model WebhookEvent {
+  id              String    @id @default(uuid())
+  platform        String // "apple" | "google"
+  eventType       String // e.g. "DID_RENEW", "SUBSCRIPTION_RENEWED"
+  externalEventId String // Apple: notificationUUID, Google: messageId
+  payload         Json // Full decoded payload for debugging
+  status          String    @default("received") // received | processed | skipped | failed
+  errorMessage    String?
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@unique([platform, externalEventId])
+  @@index([platform, eventType])
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@map("webhook_events")
 }

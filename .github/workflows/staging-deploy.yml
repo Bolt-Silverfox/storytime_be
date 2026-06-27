@@ -2,7 +2,7 @@ name: Staging CI/CD Pipeline
 
 on:
   pull_request:
-    branches: ['release-v*.*.*']
+    branches: ['release-v*']
     types: [opened, synchronize, closed]
 
 concurrency:
@@ -20,15 +20,17 @@ jobs:
     name: Code Quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
@@ -54,6 +56,8 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     environment: staging
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storytime_build
@@ -75,13 +79,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
@@ -91,7 +95,7 @@ jobs:
         run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -124,6 +128,8 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     environment: staging
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storytime_test
@@ -156,13 +162,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
@@ -172,7 +178,7 @@ jobs:
         run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -214,16 +220,16 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
@@ -239,7 +245,7 @@ jobs:
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "style: auto-fix formatting and linting issues"
+          commit_message: 'style: auto-fix formatting and linting issues'
           branch: ${{ github.head_ref }}
 
   # ===================
@@ -262,13 +268,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
@@ -278,7 +284,7 @@ jobs:
         run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -301,7 +307,7 @@ jobs:
         run: pnpm db:migrate:deploy
 
       - name: Seed database
-        run: pnpm db:seed
+        run: DATABASE_URL="${{ secrets.DATABASE_URL }}" pnpm db:seed
 
       - name: Prepare deployment directory
         uses: appleboy/ssh-action@v1.0.3
@@ -351,6 +357,9 @@ jobs:
             # Install Node dependencies
             pnpm install --frozen-lockfile
 
+            # Ensure python3-venv is available (required for venv creation)
+            sudo apt-get update -qq && sudo apt-get install -y -qq python3-venv > /dev/null 2>&1 || true
+
             # Setup Python virtual environment for scripts
             cd scripts
             python3 -m venv .venv
@@ -378,7 +387,7 @@ jobs:
       - name: Comment deployment status
         if: success()
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             await github.rest.issues.createComment({
@@ -391,7 +400,7 @@ jobs:
       - name: Comment deployment failure
         if: failure()
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             await github.rest.issues.createComment({

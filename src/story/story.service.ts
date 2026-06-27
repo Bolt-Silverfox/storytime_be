@@ -1,4 +1,5 @@
 import { PrismaService } from '../prisma/prisma.service';
+import { GuestSessionService } from '../guest/guest-session.service';
 
 /** Max session time in seconds (24 h), matching the DTO contract. */
 const MAX_SESSION_TIME = 86_400;
@@ -45,7 +46,7 @@ import {
   DailyChallenge,
   ParentRecommendation,
 } from '@prisma/client';
-import { Prisma } from '@prisma/client';
+import { Prisma, Season } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TextToSpeechService } from './text-to-speech.service';
 import {
@@ -75,6 +76,7 @@ export class StoryService {
   private readonly logger = new Logger(StoryService.name);
   // Average reading speed for children: ~150 words per minute
   private readonly WORDS_PER_MINUTE = 150;
+  private readonly CATEGORY_HOLIDAY_SEASONAL = 'Holiday/Seasonal';
 
   /** Wraps a Prisma query to handle invalid cursor IDs gracefully */
   private async withCursorErrorHandling<T>(fn: () => Promise<T>): Promise<T> {
@@ -109,6 +111,7 @@ export class StoryService {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
+    private readonly guestSessionService: GuestSessionService,
   ) {}
 
   /**
@@ -148,6 +151,9 @@ export class StoryService {
     if (filter.theme) where.themes = { some: { id: filter.theme } };
     if (filter.category) {
       where.categories = { some: { id: filter.category } };
+    }
+    if (filter.season) {
+      where.seasons = { some: { id: filter.season } };
     }
     // Seasonal Filter (Dynamic based on date)
     if (filter.isSeasonal) {
@@ -281,7 +287,8 @@ export class StoryService {
   }
 
   async getStories(filter: {
-    userId: string;
+    userId?: string;
+    guestSessionId?: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -295,6 +302,7 @@ export class StoryService {
     kidId?: string;
     page?: number;
     limit?: number;
+    shuffle?: boolean;
   }): Promise<PaginatedStoriesDto> {
     const page = filter.page || 1;
     const limit = filter.limit || 12;
@@ -302,9 +310,27 @@ export class StoryService {
 
     const { where } = await this.buildStoryWhereClause(filter);
 
+    let shouldSortBySeason = !!filter.isSeasonal;
+    if (filter.category && !shouldSortBySeason) {
+      const category = await this.prisma.category.findUnique({
+        where: { id: filter.category },
+        select: { name: true },
+      });
+      if (category?.name === this.CATEGORY_HOLIDAY_SEASONAL) {
+        shouldSortBySeason = true;
+      }
+    }
+
+    // Shuffle only applies on page 1 (home screen carousels).
+    // Beyond page 1 (paginated "See All"), disable shuffle to avoid overlapping pages.
+    const shouldShuffle = filter.shuffle === true && page === 1;
+
     // Handle topPicksFromUs filter - get random stories using shared helper
     if (filter.topPicksFromUs) {
-      const randomStoryIds = await this.getRandomStoryIds(limit, skip);
+      const overFetchLimit = shouldShuffle ? Math.min(limit * 3, 150) : limit;
+      const randomStoryIds = shouldShuffle
+        ? await this.getRandomStoryIds(overFetchLimit)
+        : await this.getDeterministicStoryIds(limit, skip);
 
       if (randomStoryIds.length === 0) {
         return {
@@ -332,13 +358,21 @@ export class StoryService {
 
     // Run count and findMany in parallel to reduce latency by ~50%
     // For topPicksFromUs, pagination is handled in the raw SQL query
-    const [totalCount, stories] = await Promise.all([
+    const [totalCount, queriedStories] = await Promise.all([
       filter.topPicksFromUs
         ? this.prisma.story.count({ where: { isDeleted: false } })
         : this.prisma.story.count({ where }),
       this.prisma.story.findMany({
         where,
-        ...(filter.topPicksFromUs ? {} : { skip, take: limit }),
+        ...(filter.topPicksFromUs || shouldSortBySeason
+          ? {}
+          : {
+              skip,
+              take:
+                filter.isMostLiked && shouldShuffle
+                  ? Math.min(limit * 2, 100)
+                  : limit,
+            }),
         orderBy,
         include: {
           images: true,
@@ -347,18 +381,68 @@ export class StoryService {
           themes: true,
           seasons: true,
           questions: true,
+          ...(filter.isMostLiked && shouldShuffle
+            ? { _count: { select: { parentFavorites: true } } }
+            : {}),
         },
       }),
     ]);
 
+    let stories = queriedStories;
+    if (shouldSortBySeason) {
+      await this.sortStoriesBySeasonRecency(stories);
+      stories = stories.slice(skip, skip + limit);
+    }
+
     const totalPages = Math.ceil(totalCount / limit);
-    const enrichedStories = await this.enrichWithReadStatus(
-      filter.userId,
-      stories,
-    );
+
+    // Enrich with read status based on user or guest session
+    let enrichedStories;
+    if (filter.userId) {
+      enrichedStories = await this.enrichWithReadStatus(filter.userId, stories);
+    } else if (filter.guestSessionId) {
+      enrichedStories = await this.enrichWithGuestReadStatus(
+        filter.guestSessionId,
+        stories,
+      );
+    } else {
+      enrichedStories = stories.map((s) => ({ ...s, readStatus: null }));
+    }
+
+    let sortedStories = this.sortByReadStatus(enrichedStories, {
+      shuffleUnseen: shouldShuffle,
+    });
+
+    // For mostLiked with shuffle, randomize tiebreakers within same like count
+    // and readStatus so that unread-first ordering from sortByReadStatus is preserved.
+    if (filter.isMostLiked && shouldShuffle) {
+      sortedStories = this.shuffleTiedStories(sortedStories, (s) => {
+        const favCount =
+          (s as unknown as { _count?: { parentFavorites?: number } })._count
+            ?.parentFavorites ?? 0;
+        const readStatus =
+          (s as unknown as { readStatus?: string }).readStatus ?? 'unseen';
+        return `${readStatus}:${favCount}`;
+      });
+    }
+
+    // Slice over-fetched results back to requested limit
+    if (filter.topPicksFromUs || (filter.isMostLiked && shouldShuffle)) {
+      sortedStories = sortedStories.slice(0, limit);
+    }
+
+    // Strip _count from response to avoid leaking internal fields
+    const cleanedStories =
+      shouldShuffle && filter.isMostLiked
+        ? (sortedStories.map((s) => {
+            const { _count, ...rest } = s as Record<string, unknown>;
+            void _count;
+            return rest;
+          }) as typeof sortedStories)
+        : sortedStories;
 
     return {
-      data: this.sortByReadStatus(enrichedStories),
+      data: cleanedStories,
       pagination: {
         currentPage: page,
         totalPages,
@@ -369,7 +453,8 @@ export class StoryService {
   }
 
   async getStoriesCursor(filter: {
-    userId: string;
+    userId?: string;
+    guestSessionId?: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -407,7 +492,19 @@ export class StoryService {
       stories,
       limit,
     );
-    const enriched = await this.enrichWithReadStatus(filter.userId, data);
+
+    // Enrich with read status based on user or guest session
+    let enriched;
+    if (filter.userId) {
+      enriched = await this.enrichWithReadStatus(filter.userId, data);
+    } else if (filter.guestSessionId) {
+      enriched = await this.enrichWithGuestReadStatus(
+        filter.guestSessionId,
+        data,
+      );
+    } else {
+      enriched = data.map((s) => ({ ...s, readStatus: null }));
+    }
 
     return { data: this.sortByReadStatus(enriched), pagination };
   }
@@ -430,16 +527,51 @@ export class StoryService {
 
   // Sort stories so unread appear first, then reading, then done.
   // Preserves original order within each group (stable sort).
-  // Applied post-fetch: pagination cursors use DB order (createdAt/id),
-  // so items may shift within a page if readStatus changes between requests.
+  // When shuffleUnseen is true, Fisher-Yates shuffle the unseen bucket
+  // so home screen sections show varied stories on each request.
   private sortByReadStatus<T extends { readStatus: 'done' | 'reading' | null }>(
     stories: T[],
+    options?: { shuffleUnseen?: boolean },
   ): T[] {
-    const order: Record<string, number> = { done: 2, reading: 1 };
-    return [...stories].sort(
-      (a, b) =>
-        (order[a.readStatus ?? ''] ?? 0) - (order[b.readStatus ?? ''] ?? 0),
-    );
+    const unseen = stories.filter((s) => s.readStatus === null);
+    const reading = stories.filter((s) => s.readStatus === 'reading');
+    const done = stories.filter((s) => s.readStatus === 'done');
+
+    if (options?.shuffleUnseen) {
+      this.fisherYatesShuffle(unseen);
+    }
+
+    return [...unseen, ...reading, ...done];
+  }
+
+  /** In-place Fisher-Yates shuffle. */
+  private fisherYatesShuffle<T>(arr: T[]): void {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+
+  /**
+   * Shuffle stories that share the same grouping key (e.g. equal like counts
+   * and readStatus) while preserving the relative order between different groups.
+   * The key function should return a string that encodes all ordering-relevant
+   * dimensions so that, e.g., unseen and done stories with the same favourite
+   * count are never mixed.
+   */
+  private shuffleTiedStories<T>(stories: T[], getKey: (s: T) => string): T[] {
+    const groups = new Map<string, T[]>();
+    for (const s of stories) {
+      const key = getKey(s);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(s);
+    }
+    for (const group of groups.values()) {
+      this.fisherYatesShuffle(group);
+    }
+    // Preserve insertion order — callers feed already-sorted input so the
+    // first occurrence of each key reflects the correct group ordering.
+    return [...groups.values()].flatMap((g) => g);
   }
 
   private async enrichWithReadStatus<T extends { id: string }>(
@@ -455,24 +587,124 @@ export class StoryService {
 
     const readProgress = await this.prisma.userStoryProgress.findMany({
       where: { userId, storyId: { in: storyIds }, isDeleted: false },
-      select: { storyId: true, completed: true },
+      select: { storyId: true, progress: true },
     });
     const progressMap = new Map(
-      readProgress.map((p) => [p.storyId, p.completed]),
+      readProgress.map((p) => [p.storyId, { progress: p.progress }]),
     );
 
     return stories.map((story) => {
       const progress = progressMap.get(story.id);
+      const progressValue = progress?.progress;
       return {
         ...story,
         readStatus:
-          progress === undefined ? null : progress ? 'done' : 'reading',
+          progressValue == null || progressValue <= 0
+            ? null
+            : progressValue >= 100
+              ? 'done'
+              : 'reading',
+      };
+    });
+  }
+
+  /**
+   * Enrich stories with readStatus from guest session
+   */
+  private async enrichWithGuestReadStatus<T extends { id: string }>(
+    guestSessionId: string,
+    stories: T[],
+  ): Promise<(T & { readStatus: 'done' | 'reading' | null })[]> {
+    const storyIds = [...new Set(stories.map((s) => s.id))];
+    if (storyIds.length === 0)
+      return stories.map((s) => ({
+        ...s,
+        readStatus: null as 'done' | 'reading' | null,
+      }));
+
+    const session =
+      await this.guestSessionService.getGuestSession(guestSessionId);
+    if (!session) {
+      return stories.map((s) => ({
+        ...s,
+        readStatus: null as 'done' | 'reading' | null,
+      }));
+    }
+
+    const readingHistory = session.readingHistory;
+    return stories.map((story) => {
+      const progress = readingHistory[story.id];
+      const progressValue = progress?.progress;
+      return {
+        ...story,
+        readStatus:
+          progressValue == null || progressValue <= 0
+            ? null
+            : progressValue >= 100
+              ? 'done'
+              : 'reading',
       };
     });
   }
 
   // Threshold in days to consider a past season as "recent" for backfill
   private readonly RECENT_SEASON_THRESHOLD_DAYS = 45;
+
+  private async sortStoriesBySeasonRecency(
+    stories: Array<{ seasons?: Array<{ id: string }>; [key: string]: unknown }>,
+  ) {
+    const allSeasons = await this.prisma.season.findMany({
+      where: { isDeleted: false },
+    });
+
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    const currentDay = today.getDate(); // 1-31
+    const currentDateStr = `${currentMonth
+      .toString()
+      .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
+
+    const getScore = (s: Season) => {
+      if (!s.startDate || !s.endDate) return Infinity;
+      let isActive = false;
+      if (s.startDate > s.endDate) {
+        isActive = currentDateStr >= s.startDate || currentDateStr <= s.endDate;
+      } else {
+        isActive = currentDateStr >= s.startDate && currentDateStr <= s.endDate;
+      }
+      if (isActive) return -1;
+
+      const [endMonth, endDay] = s.endDate.split('-').map(Number);
+      const thisYearEnd = new Date(today.getFullYear(), endMonth - 1, endDay);
+      const diffTime = today.getTime() - thisYearEnd.getTime();
+      let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays < 0) {
+        const lastYearEnd = new Date(
+          today.getFullYear() - 1,
+          endMonth - 1,
+          endDay,
+        );
+        diffDays = Math.ceil(
+          (today.getTime() - lastYearEnd.getTime()) / (1000 * 60 * 60 * 24),
+        );
+      }
+      return diffDays;
+    };
+
+    allSeasons.sort((a, b) => getScore(a) - getScore(b));
+    const rankMap = new Map(allSeasons.map((s, idx) => [s.id, idx]));
+
+    stories.sort((a, b) => {
+      const rankA = a.seasons?.length
+        ? Math.min(...a.seasons.map((s) => rankMap.get(s.id) ?? Infinity))
+        : Infinity;
+      const rankB = b.seasons?.length
+        ? Math.min(...b.seasons.map((s) => rankMap.get(s.id) ?? Infinity))
+        : Infinity;
+      return rankA - rankB;
+    });
+  }
 
   private async getRelevantSeasons() {
     const today = new Date();
@@ -535,30 +767,33 @@ export class StoryService {
   }
 
   async getHomePageStories(
-    userId: string,
+    userId: string | undefined,
     limitRecommended: number = 5,
     limitSeasonal: number = 5,
     limitTopLiked: number = 5,
   ) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-      include: { preferredCategories: true },
-    });
+    const user = userId
+      ? await this.prisma.user.findUnique({
+          where: { id: userId, isDeleted: false },
+          include: { preferredCategories: true },
+        })
+      : null;
 
-    if (!user) {
+    if (userId && !user) {
       throw new NotFoundException('User not found');
     }
 
     // 1. Recommended Stories (based on preferred categories)
     let recommended: Awaited<ReturnType<typeof this.prisma.story.findMany>> =
       [];
-    if (user.preferredCategories.length > 0) {
+    const preferredCategories = user?.preferredCategories ?? [];
+    if (preferredCategories.length > 0) {
       recommended = await this.prisma.story.findMany({
         where: {
           isDeleted: false,
           categories: {
             some: {
-              id: { in: user.preferredCategories.map((c: Category) => c.id) },
+              id: { in: preferredCategories.map((c: Category) => c.id) },
             },
           },
         },
@@ -635,7 +870,9 @@ export class StoryService {
 
     // Enrich all stories with readStatus in a single DB query
     const allStories = [...recommended, ...seasonal, ...topLiked];
-    const enriched = await this.enrichWithReadStatus(userId, allStories);
+    const enriched = userId
+      ? await this.enrichWithReadStatus(userId, allStories)
+      : allStories.map((s) => ({ ...s, readStatus: null }));
 
     const recLen = recommended.length;
     const seaLen = seasonal.length;
@@ -982,7 +1219,7 @@ export class StoryService {
       this.prisma.userStoryProgress.findMany({
         where: {
           userId,
-          progress: { gt: 0 },
+          progress: { gte: 0 },
           completed: false,
           isDeleted: false,
           story: { isDeleted: false },
@@ -1776,7 +2013,7 @@ export class StoryService {
       this.prisma.storyProgress.findMany({
         where: {
           kidId,
-          progress: { gt: 0 },
+          progress: { gte: 0 },
           completed: false,
           isDeleted: false,
           story: { isDeleted: false },
@@ -2103,23 +2340,42 @@ export class StoryService {
 
   /**
    * Get random story IDs using raw SQL for efficiency.
+   * Only suitable for single-page results (page 1) because ORDER BY RANDOM()
+   * produces a different ordering on each call, causing overlapping pages.
    * @param limit - Maximum number of IDs to return
-   * @param offset - Number of results to skip (for pagination)
    * @returns Array of random story IDs
    */
-  private async getRandomStoryIds(
-    limit: number,
-    offset: number = 0,
-  ): Promise<string[]> {
+  private async getRandomStoryIds(limit: number): Promise<string[]> {
     const randomIds = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT id FROM "stories"
       WHERE "isDeleted" = false
       ORDER BY RANDOM()
       LIMIT ${limit}
-      OFFSET ${offset}
     `;
 
     return randomIds.map((r) => r.id);
+  }
+
+  /**
+   * Get story IDs using a deterministic (createdAt DESC) ordering.
+   * Safe for paginated requests beyond page 1 where stable ordering is required.
+   * @param limit - Maximum number of IDs to return
+   * @param offset - Number of results to skip (for pagination)
+   * @returns Array of story IDs in stable order
+   */
+  private async getDeterministicStoryIds(
+    limit: number,
+    offset: number = 0,
+  ): Promise<string[]> {
+    const ids = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "stories"
+      WHERE "isDeleted" = false
+      ORDER BY "createdAt" DESC, id ASC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
+
+    return ids.map((r) => r.id);
   }
 
   /**

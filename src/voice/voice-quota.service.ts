@@ -7,6 +7,14 @@ import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { VOICE_CONFIG } from './voice.constants';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from './dto/voice.dto';
 
+/** Reverse lookup: elevenLabsId → VoiceType key (built once at module load). */
+const ELEVEN_LABS_TO_VOICE_TYPE = new Map(
+  Object.entries(VOICE_CONFIG).map(([key, config]) => [
+    config.elevenLabsId,
+    key,
+  ]),
+);
+
 @Injectable()
 export class VoiceQuotaService {
   private readonly logger = new Logger(VoiceQuotaService.name);
@@ -51,9 +59,10 @@ export class VoiceQuotaService {
     if (voice) return voice.id;
 
     // Auto-seed from VOICE_CONFIG if this is a known system voice
-    const configEntry = Object.entries(VOICE_CONFIG).find(
-      ([, config]) => config.elevenLabsId === elevenLabsVoiceId,
-    );
+    const voiceTypeKey = ELEVEN_LABS_TO_VOICE_TYPE.get(elevenLabsVoiceId);
+    const configEntry = voiceTypeKey
+      ? ([voiceTypeKey, VOICE_CONFIG[voiceTypeKey as VoiceType]] as const)
+      : undefined;
     if (!configEntry) return null;
 
     const [key, config] = configEntry;
@@ -194,6 +203,59 @@ export class VoiceQuotaService {
   }
 
   /**
+   * Get the distinct VoiceType keys already used on a story.
+   * Normalizes stored voiceIds (UUIDs, elevenLabsIds, enum names)
+   * to VoiceType keys for consistent comparison on the client.
+   */
+  async getUsedVoicesForStory(storyId: string): Promise<string[]> {
+    const distinctVoices: Array<{ voiceId: string }> = await this.prisma
+      .$queryRaw`SELECT DISTINCT "voiceId" FROM "paragraph_audio_cache" WHERE "storyId" = ${storyId}`;
+
+    if (distinctVoices.length === 0) return [];
+
+    // Batch UUID lookups to avoid N+1 queries
+    const uuidCandidates = distinctVoices
+      .map((v) => v.voiceId)
+      .filter(
+        (id) =>
+          !Object.values(VoiceType).includes(id as VoiceType) &&
+          !(id in VOICE_TYPE_MIGRATION_MAP),
+      );
+
+    // Include deleted voices — we still need the UUID → elevenLabsId mapping
+    const voiceRecords =
+      uuidCandidates.length > 0
+        ? await this.prisma.voice.findMany({
+            where: { id: { in: uuidCandidates } },
+            select: { id: true, elevenLabsVoiceId: true },
+          })
+        : [];
+    const uuidToElevenLabs = new Map(
+      voiceRecords
+        .filter((v) => v.elevenLabsVoiceId)
+        .map((v) => [v.id, v.elevenLabsVoiceId!]),
+    );
+
+    // Resolve each cached voiceId to its VoiceType key
+    const voiceTypeKeys = distinctVoices.map((v) => {
+      // Already a VoiceType key
+      if (Object.values(VoiceType).includes(v.voiceId as VoiceType)) {
+        return v.voiceId;
+      }
+      // Migrated name → new VoiceType key
+      const migrated = VOICE_TYPE_MIGRATION_MAP[v.voiceId];
+      if (migrated) return migrated;
+
+      // UUID → elevenLabsId via DB lookup, or assume it's already an elevenLabsId
+      const elevenLabsId = uuidToElevenLabs.get(v.voiceId) ?? v.voiceId;
+      // elevenLabsId → VoiceType key via module-level reverse map
+      return ELEVEN_LABS_TO_VOICE_TYPE.get(elevenLabsId) ?? elevenLabsId;
+    });
+
+    return [...new Set(voiceTypeKeys)];
+  }
+
+  /**
    * Check if a premium user can use a specific voice for a story.
    * Premium users are limited to MAX_PREMIUM_VOICES_PER_STORY distinct
    * premium voices per story. If the voice is already cached for this
@@ -205,58 +267,28 @@ export class VoiceQuotaService {
     voiceId: string,
   ): Promise<boolean> {
     const limit = VOICE_CONFIG_SETTINGS.QUOTAS.MAX_PREMIUM_VOICES_PER_STORY;
+    const usedVoices = await this.getUsedVoicesForStory(storyId);
 
-    const distinctVoices: Array<{ voiceId: string }> = await this.prisma
-      .$queryRaw`SELECT DISTINCT "voiceId" FROM "paragraph_audio_cache" WHERE "storyId" = ${storyId}`;
-
-    // Normalize cached voiceIds to canonical elevenLabsId form so that
-    // VoiceType enum names, UUIDs, and elevenLabsIds all compare correctly.
-    // Batch UUID lookups to avoid N+1 queries.
-    const uuidCandidates = distinctVoices
-      .map((v) => v.voiceId)
-      .filter(
-        (id) =>
-          !Object.values(VoiceType).includes(id as VoiceType) &&
-          !(id in VOICE_TYPE_MIGRATION_MAP),
-      );
-
-    const voiceRecords =
-      uuidCandidates.length > 0
-        ? await this.prisma.voice.findMany({
-            where: { id: { in: uuidCandidates }, isDeleted: false },
-            select: { id: true, elevenLabsVoiceId: true },
-          })
-        : [];
-    const uuidToElevenLabs = new Map(
-      voiceRecords
-        .filter((v) => v.elevenLabsVoiceId)
-        .map((v) => [v.id, v.elevenLabsVoiceId!]),
-    );
-
-    const canonicalCachedIds = distinctVoices.map((v) => {
-      if (Object.values(VoiceType).includes(v.voiceId as VoiceType)) {
-        return VOICE_CONFIG[v.voiceId as VoiceType].elevenLabsId;
-      }
-      const migrated = VOICE_TYPE_MIGRATION_MAP[v.voiceId];
-      if (migrated) {
-        return VOICE_CONFIG[migrated].elevenLabsId;
-      }
-      return uuidToElevenLabs.get(v.voiceId) ?? v.voiceId;
-    });
-    const uniqueCachedIds = [...new Set(canonicalCachedIds)];
-
-    // Normalize the incoming voiceId the same way cached IDs are resolved
+    // Normalize the incoming voiceId to canonical form for comparison
     const canonicalVoiceId = await this.resolveCanonicalVoiceId(voiceId);
 
+    // Resolve used voices to canonical elevenLabsIds for comparison
+    const canonicalUsedIds = usedVoices.map((key) => {
+      if (Object.values(VoiceType).includes(key as VoiceType)) {
+        return VOICE_CONFIG[key as VoiceType].elevenLabsId;
+      }
+      return key;
+    });
+
     // Already cached for this story — always allowed (zero cost)
-    if (uniqueCachedIds.includes(canonicalVoiceId)) {
+    if (canonicalUsedIds.includes(canonicalVoiceId)) {
       return true;
     }
 
     // New voice — only allow if under the limit
-    if (uniqueCachedIds.length >= limit) {
+    if (canonicalUsedIds.length >= limit) {
       this.logger.log(
-        `Story ${storyId} already has ${uniqueCachedIds.length} distinct voices (limit ${limit}). Denying voice ${voiceId}.`,
+        `Story ${storyId} already has ${canonicalUsedIds.length} distinct voices (limit ${limit}). Denying voice ${voiceId}.`,
       );
       return false;
     }
@@ -462,17 +494,28 @@ export class VoiceQuotaService {
   }
 
   // Get voice access info for a user
-  async getVoiceAccess(userId: string): Promise<{
+  async getVoiceAccess(
+    userId: string,
+    storyId?: string,
+  ): Promise<{
     isPremium: boolean;
     unlimited: boolean;
     defaultVoice: string;
     maxVoices: number;
     lockedVoiceId: string | null;
     elevenLabsTrialStoryId: string | null;
+    usedVoicesForStory: string[];
+    maxVoicesPerStory: number;
   }> {
     const isPremium = await this.subscriptionService.isPremiumUser(userId);
+    const maxVoicesPerStory =
+      VOICE_CONFIG_SETTINGS.QUOTAS.MAX_PREMIUM_VOICES_PER_STORY;
 
     if (isPremium) {
+      const usedVoicesForStory = storyId
+        ? await this.getUsedVoicesForStory(storyId)
+        : [];
+
       return {
         isPremium: true,
         unlimited: true,
@@ -480,6 +523,8 @@ export class VoiceQuotaService {
         maxVoices: -1, // unlimited
         lockedVoiceId: null,
         elevenLabsTrialStoryId: null,
+        usedVoicesForStory,
+        maxVoicesPerStory,
       };
     }
 
@@ -515,9 +560,7 @@ export class VoiceQuotaService {
       const elevenLabsId = lockedVoice?.elevenLabsVoiceId;
       // Find the VoiceType key whose config matches this elevenLabsId
       const voiceTypeKey = elevenLabsId
-        ? (Object.entries(VOICE_CONFIG).find(
-            ([, config]) => config.elevenLabsId === elevenLabsId,
-          )?.[0] ?? null)
+        ? (ELEVEN_LABS_TO_VOICE_TYPE.get(elevenLabsId) ?? null)
         : null;
 
       // Report the locked voice — free users get ONE voice total
@@ -536,6 +579,8 @@ export class VoiceQuotaService {
       maxVoices: 1, // free users get ONE voice total
       lockedVoiceId,
       elevenLabsTrialStoryId: usage?.elevenLabsTrialStoryId ?? null,
+      usedVoicesForStory: [], // free users only have 1 voice
+      maxVoicesPerStory,
     };
   }
 }

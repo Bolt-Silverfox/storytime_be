@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
 import * as nodemailer from 'nodemailer';
@@ -32,11 +33,22 @@ import {
   EmailQueueService,
   QueuedEmailResult,
 } from './queue/email-queue.service';
+import { PushQueueService } from './queue/push-queue.service';
 import {
   DeviceTokenResponseDto,
   DeviceTokenListResponseDto,
   DevicePlatform,
 } from './dto/device-token.dto';
+
+/** User-facing notification categories that can be toggled in settings. */
+const USER_CONFIGURABLE_CATEGORIES: PrismaCategory[] = [
+  PrismaCategory.SUBSCRIPTION_REMINDER,
+  PrismaCategory.SUBSCRIPTION_ALERT,
+  PrismaCategory.NEW_STORY,
+  PrismaCategory.STORY_FINISHED,
+  PrismaCategory.INCOMPLETE_STORY_REMINDER,
+  PrismaCategory.DAILY_LISTENING_REMINDER,
+];
 
 @Injectable()
 export class NotificationService {
@@ -51,6 +63,7 @@ export class NotificationService {
     private readonly emailProvider: EmailProvider,
     private readonly emailQueueService: EmailQueueService,
     private readonly pushProvider: PushProvider,
+    private readonly pushQueueService: PushQueueService,
   ) {
     // Initialize legacy email transporter (for backward compatibility / sync sends)
     this.transporter = nodemailer.createTransport({
@@ -510,6 +523,12 @@ export class NotificationService {
     category: PrismaCategory,
     enabled: boolean,
   ): Promise<NotificationPreferenceDto[]> {
+    if (!USER_CONFIGURABLE_CATEGORIES.includes(category)) {
+      throw new BadRequestException(
+        `Unknown or non-configurable notification category: "${category}"`,
+      );
+    }
+
     const channels: PrismaNotificationType[] = [
       PrismaNotificationType.in_app,
       PrismaNotificationType.push,
@@ -587,39 +606,36 @@ export class NotificationService {
     userId: string,
     preferences: Record<string, boolean>,
   ): Promise<Record<string, { push: boolean; in_app: boolean }>> {
+    // Only user-facing categories can be toggled; auth/system categories are excluded
+    const allowedCategories = new Set<PrismaCategory>(
+      USER_CONFIGURABLE_CATEGORIES,
+    );
+    for (const key of Object.keys(preferences)) {
+      if (!allowedCategories.has(key as PrismaCategory)) {
+        throw new BadRequestException(
+          `Unknown or non-configurable notification category: "${key}"`,
+        );
+      }
+    }
+
     const categories = Object.keys(preferences) as PrismaCategory[];
     const channels: PrismaNotificationType[] = [
       PrismaNotificationType.in_app,
       PrismaNotificationType.push,
     ];
 
-    // Upsert preferences for each category + channel combination
-    for (const category of categories) {
+    // Upsert preferences for each category + channel combination in a single transaction
+    const upserts = categories.flatMap((category) => {
       const enabled = preferences[category];
-
-      for (const type of channels) {
-        await this.prisma.notificationPreference.upsert({
-          where: {
-            userId_category_type: {
-              userId,
-              category,
-              type,
-            },
-          },
-          create: {
-            userId,
-            category,
-            type,
-            enabled,
-          },
-          update: {
-            enabled,
-            isDeleted: false,
-            deletedAt: null,
-          },
-        });
-      }
-    }
+      return channels.map((type) =>
+        this.prisma.notificationPreference.upsert({
+          where: { userId_category_type: { userId, category, type } },
+          create: { userId, category, type, enabled },
+          update: { enabled, isDeleted: false, deletedAt: null },
+        }),
+      );
+    });
+    await this.prisma.$transaction(upserts);
 
     return this.getUserPreferencesGrouped(userId);
   }
@@ -630,18 +646,7 @@ export class NotificationService {
    * Called during user registration.
    */
   async seedDefaultPreferences(userId: string): Promise<void> {
-    // User-facing categories that should have preferences (excludes auth/system categories)
-    const userFacingCategories: PrismaCategory[] = [
-      // Subscription & Billing
-      PrismaCategory.SUBSCRIPTION_REMINDER,
-      PrismaCategory.SUBSCRIPTION_ALERT,
-      // Engagement / Discovery
-      PrismaCategory.NEW_STORY,
-      PrismaCategory.STORY_FINISHED,
-      // Reminders
-      PrismaCategory.INCOMPLETE_STORY_REMINDER,
-      PrismaCategory.DAILY_LISTENING_REMINDER,
-    ];
+    const userFacingCategories = USER_CONFIGURABLE_CATEGORIES;
 
     const channels: PrismaNotificationType[] = [
       PrismaNotificationType.in_app,
@@ -827,6 +832,14 @@ export class NotificationService {
           },
         });
         this.logger.log(`Updated device token for user ${userId}`);
+        // Re-subscribe to all_users topic (best-effort; don't fail token save on FCM side effects)
+        this.pushProvider
+          .subscribeToTopic([token], 'all_users')
+          .catch((err) =>
+            this.logger.warn(
+              `Failed to subscribe updated token to all_users: ${(err as Error).message}`,
+            ),
+          );
         return this.toDeviceTokenResponse(updated);
       }
 
@@ -845,7 +858,31 @@ export class NotificationService {
       this.logger.log(
         `Reassigned device token from user ${existingToken.userId} to ${userId}`,
       );
+      // Subscribe reassigned token to all_users topic (best-effort)
+      this.pushProvider
+        .subscribeToTopic([token], 'all_users')
+        .catch((err) =>
+          this.logger.warn(
+            `Failed to subscribe reassigned token to all_users: ${(err as Error).message}`,
+          ),
+        );
       return this.toDeviceTokenResponse(updated);
+    }
+
+    // Collect old tokens before deactivating (for FCM topic unsubscribe)
+    let oldTokenStrings: string[] = [];
+    if (deviceName) {
+      const oldTokens = await this.prisma.deviceToken.findMany({
+        where: {
+          userId,
+          platform,
+          deviceName,
+          isDeleted: false,
+          token: { not: token },
+        },
+        select: { token: true },
+      });
+      oldTokenStrings = oldTokens.map((t) => t.token);
     }
 
     // Deactivate old tokens and create new one atomically
@@ -872,6 +909,27 @@ export class NotificationService {
       });
     });
     this.logger.log(`Registered new device token for user ${userId}`);
+
+    // Best-effort unsubscribe old tokens from broadcast topic
+    if (oldTokenStrings.length > 0) {
+      this.pushProvider
+        .unsubscribeFromTopic(oldTokenStrings, 'all_users')
+        .catch((err) =>
+          this.logger.warn(
+            `Failed to unsubscribe old tokens from all_users: ${(err as Error).message}`,
+          ),
+        );
+    }
+
+    // Subscribe the new token to the all_users topic (best-effort; don't fail registration on FCM side effects)
+    this.pushProvider
+      .subscribeToTopic([token], 'all_users')
+      .catch((err) =>
+        this.logger.warn(
+          `Failed to subscribe new token to all_users: ${(err as Error).message}`,
+        ),
+      );
+
     return this.toDeviceTokenResponse(newToken);
   }
 
@@ -918,6 +976,15 @@ export class NotificationService {
         deletedAt: new Date(),
       },
     });
+
+    // Best-effort unsubscribe from broadcast topic
+    this.pushProvider
+      .unsubscribeFromTopic([token], 'all_users')
+      .catch((err) =>
+        this.logger.warn(
+          `Failed to unsubscribe token from all_users: ${(err as Error).message}`,
+        ),
+      );
 
     this.logger.log(`Unregistered device token for user ${userId}`);
   }
@@ -982,6 +1049,104 @@ export class NotificationService {
       `sendTestPush result: success=${result.success}, error=${result.error ?? 'none'}, messageId=${result.messageId ?? 'none'}`,
     );
     return result;
+  }
+
+  /**
+   * Subscribe all existing active device tokens to the all_users topic.
+   * Run once to seed existing devices. Processes in batches of 1000 (Firebase limit).
+   */
+  async subscribeAllExistingDevicesToTopic(
+    topic: string = 'all_users',
+  ): Promise<{ total: number; batches: number }> {
+    const BATCH_SIZE = 1000;
+    let cursor: string | undefined;
+    let total = 0;
+    let batches = 0;
+
+    while (true) {
+      const devices = await this.prisma.deviceToken.findMany({
+        where: { isActive: true, isDeleted: false },
+        select: { id: true, token: true },
+        take: BATCH_SIZE,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        orderBy: { id: 'asc' },
+      });
+
+      if (devices.length === 0) break;
+
+      const tokens = devices.map((d) => d.token);
+      await this.pushProvider.subscribeToTopic(tokens, topic);
+      batches++;
+      total += tokens.length;
+      cursor = devices[devices.length - 1].id;
+
+      this.logger.log(
+        `Subscribed batch ${batches} (${tokens.length} tokens) to topic: ${topic}`,
+      );
+
+      if (devices.length < BATCH_SIZE) break;
+    }
+
+    if (total === 0) {
+      this.logger.log('No active device tokens to subscribe');
+    } else {
+      this.logger.log(
+        `Finished subscribing ${total} tokens in ${batches} batches to topic: ${topic}`,
+      );
+    }
+
+    return { total, batches };
+  }
+
+  // ============================================
+  // Event Listeners (cross-module communication)
+  // ============================================
+
+  @OnEvent('notification.broadcast')
+  async handleBroadcastNotification(payload: {
+    topic: string;
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+  }): Promise<void> {
+    this.logger.log(
+      `Handling broadcast event for topic "${payload.topic}": "${payload.title}"`,
+    );
+    try {
+      const result = await this.pushQueueService.queueTopicPush(
+        payload.topic,
+        payload.title,
+        payload.body,
+        payload.data,
+      );
+      if (!result.queued) {
+        throw new Error(
+          `Broadcast enqueue returned queued=false (jobId=${result.jobId}): ${result.error ?? 'unknown error'}`,
+        );
+      }
+      this.logger.log(`Broadcast queued: jobId=${result.jobId}`);
+    } catch (err) {
+      this.logger.error(
+        `Failed to queue broadcast for topic "${payload.topic}": ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      // Re-throw so emitAsync in broadcastNotification can detect failure
+      throw err;
+    }
+  }
+
+  @OnEvent('notification.seed-topic')
+  async handleSeedTopic(payload: { topic: string }): Promise<void> {
+    this.logger.log(`Handling seed-topic event for topic "${payload.topic}"`);
+    try {
+      await this.subscribeAllExistingDevicesToTopic(payload.topic);
+    } catch (err) {
+      this.logger.error(
+        `Failed to seed topic "${payload.topic}": ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      throw err;
+    }
   }
 
   /**
