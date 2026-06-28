@@ -392,11 +392,17 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Wait for app to start
-            sleep 10
-
-            # Health check
-            curl -sf http://localhost:3500/api/v1/health || exit 1
+            # Wait for the app to start AND stay healthy for ~60s.
+            # A single instant check passes a crash-loop that dies seconds later,
+            # so re-check every 5s and require it to still be healthy at the end.
+            ok=0
+            for i in $(seq 1 12); do
+              sleep 5
+              if curl -sf http://localhost:3500/api/v1/health > /dev/null 2>&1; then ok=1; else ok=0; fi
+            done
+            if [ "$ok" != "1" ]; then
+              echo "App not healthy after 60s (possible crash-loop)"; exit 1
+            fi
 
             echo "Deployment verified successfully"
 
