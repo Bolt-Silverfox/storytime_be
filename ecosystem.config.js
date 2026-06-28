@@ -25,6 +25,12 @@ const baseConfig = {
   autorestart: true,
   watch: false,
   max_memory_restart: '1G',
+  // Stop infinite crash-loops: the app must stay up `min_uptime` to count as a
+  // successful boot; after `max_restarts` rapid failures pm2 marks the process
+  // `errored` and stops restarting it (instead of thrashing the CPU forever).
+  min_uptime: '15s',
+  max_restarts: 10,
+  restart_delay: 4000,
 };
 
 module.exports = {
