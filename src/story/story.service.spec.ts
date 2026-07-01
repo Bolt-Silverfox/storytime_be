@@ -145,14 +145,25 @@ describe('StoryService - Library & Generation', () => {
 
         await service.getStories({ userId: 'user-1', minAge: 3, maxAge: 5 });
 
+        // Authenticated users fetch FRESH stories only: the catalog where is
+        // wrapped at the top level with the read anti-join.
         expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
-            where: expect.objectContaining({
-              isDeleted: false,
-              // Check overlap logic: story.ageMin <= 5 AND story.ageMax >= 3
-              ageMin: { lte: 5 },
-              ageMax: { gte: 3 },
-            }),
+            where: {
+              AND: [
+                expect.objectContaining({
+                  isDeleted: false,
+                  // Overlap logic: story.ageMin <= 5 AND story.ageMax >= 3
+                  ageMin: { lte: 5 },
+                  ageMax: { gte: 3 },
+                }),
+                {
+                  userProgress: {
+                    none: { userId: 'user-1', isDeleted: false },
+                  },
+                },
+              ],
+            },
           }),
         );
       });
@@ -166,10 +177,19 @@ describe('StoryService - Library & Generation', () => {
 
         expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
-            where: expect.objectContaining({
-              isDeleted: false,
-              ageMax: { gte: 4 },
-            }),
+            where: {
+              AND: [
+                expect.objectContaining({
+                  isDeleted: false,
+                  ageMax: { gte: 4 },
+                }),
+                {
+                  userProgress: {
+                    none: { userId: 'user-1', isDeleted: false },
+                  },
+                },
+              ],
+            },
           }),
         );
       });
@@ -183,10 +203,19 @@ describe('StoryService - Library & Generation', () => {
 
         expect(prisma.story.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
-            where: expect.objectContaining({
-              isDeleted: false,
-              ageMin: { lte: 8 },
-            }),
+            where: {
+              AND: [
+                expect.objectContaining({
+                  isDeleted: false,
+                  ageMin: { lte: 8 },
+                }),
+                {
+                  userProgress: {
+                    none: { userId: 'user-1', isDeleted: false },
+                  },
+                },
+              ],
+            },
           }),
         );
       });
@@ -199,10 +228,17 @@ describe('StoryService - Library & Generation', () => {
         ];
         prisma.story.count.mockResolvedValue(3);
         prisma.story.findMany.mockResolvedValue(stories);
-        prisma.userStoryProgress.findMany.mockResolvedValue([
-          { storyId: 'story-1', progress: 100 },
-          { storyId: 'story-2', progress: 50 },
-        ]);
+        // The read-status enrich query uses `select`; the fresh-first backfill
+        // query uses `include`. Return progress for the former, nothing for the
+        // latter (the page is filled by the 3 fresh stories).
+        prisma.userStoryProgress.findMany.mockImplementation((args) =>
+          args?.select
+            ? Promise.resolve([
+                { storyId: 'story-1', progress: 100, completed: true },
+                { storyId: 'story-2', progress: 50, completed: false },
+              ])
+            : Promise.resolve([]),
+        );
 
         const result = await service.getStories({ userId: 'user-1' });
 
@@ -216,14 +252,18 @@ describe('StoryService - Library & Generation', () => {
         expect(result.data[2]).toEqual(
           expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
         );
-        expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
+        // Exactly one read-status enrich query (selects progress + completed).
+        const selectCalls = prisma.userStoryProgress.findMany.mock.calls.filter(
+          (c) => c[0]?.select,
+        );
+        expect(selectCalls).toHaveLength(1);
         expect(prisma.userStoryProgress.findMany).toHaveBeenCalledWith({
           where: {
             userId: 'user-1',
             storyId: { in: ['story-1', 'story-2', 'story-3'] },
             isDeleted: false,
           },
-          select: { storyId: true, progress: true },
+          select: { storyId: true, progress: true, completed: true },
         });
       });
 
@@ -349,19 +389,29 @@ describe('StoryService - Library & Generation', () => {
         { id: 'story-3', title: 'Top Liked Unread' },
       ];
 
-      // story.findMany: 1st call = recommended, 2nd call = topLiked
-      // (no seasonal call since season.findMany returns [])
+      // story.findMany: 1st = recommended (fresh), 2nd = topLiked (fresh),
+      // 3rd = topLiked read-backfill (ranked by likes; returns [] here since the
+      // fresh stories already fill the section). No seasonal call since
+      // season.findMany returns [].
       prisma.story.findMany
         .mockResolvedValueOnce(recommended)
-        .mockResolvedValueOnce(topLiked);
+        .mockResolvedValueOnce(topLiked)
+        .mockResolvedValueOnce([]);
 
       prisma.season.findMany.mockResolvedValue([]);
 
-      prisma.userStoryProgress.findMany.mockResolvedValue([
-        { storyId: 'story-1', progress: 100 },
-        { storyId: 'story-2', progress: 50 },
-        // story-3 has no progress (unread)
-      ]);
+      // Read-status enrich uses `select`; per-section fresh-first top-up uses
+      // `include`. Return progress for enrich, nothing for the top-ups (the
+      // sections are already filled by the fresh stories above).
+      prisma.userStoryProgress.findMany.mockImplementation((args) =>
+        args?.select
+          ? Promise.resolve([
+              { storyId: 'story-1', progress: 100, completed: true },
+              { storyId: 'story-2', progress: 50, completed: false },
+              // story-3 has no progress (unread)
+            ])
+          : Promise.resolve([]),
+      );
 
       const result = await service.getHomePageStories(userId);
 
@@ -377,8 +427,12 @@ describe('StoryService - Library & Generation', () => {
         expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
       );
 
-      // Verify only 1 DB call for progress (not 1 per section)
-      expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
+      // Verify only 1 read-status enrich query for all sections (not 1 per
+      // section); the fresh-first top-ups use separate `include` queries.
+      const selectCalls = prisma.userStoryProgress.findMany.mock.calls.filter(
+        (c) => c[0]?.select,
+      );
+      expect(selectCalls).toHaveLength(1);
     });
   });
 
