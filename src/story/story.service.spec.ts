@@ -157,7 +157,11 @@ describe('StoryService - Library & Generation', () => {
                   ageMin: { lte: 5 },
                   ageMax: { gte: 3 },
                 }),
-                { userProgress: { none: { userId: 'user-1', isDeleted: false } } },
+                {
+                  userProgress: {
+                    none: { userId: 'user-1', isDeleted: false },
+                  },
+                },
               ],
             },
           }),
@@ -179,7 +183,11 @@ describe('StoryService - Library & Generation', () => {
                   isDeleted: false,
                   ageMax: { gte: 4 },
                 }),
-                { userProgress: { none: { userId: 'user-1', isDeleted: false } } },
+                {
+                  userProgress: {
+                    none: { userId: 'user-1', isDeleted: false },
+                  },
+                },
               ],
             },
           }),
@@ -201,7 +209,11 @@ describe('StoryService - Library & Generation', () => {
                   isDeleted: false,
                   ageMin: { lte: 8 },
                 }),
-                { userProgress: { none: { userId: 'user-1', isDeleted: false } } },
+                {
+                  userProgress: {
+                    none: { userId: 'user-1', isDeleted: false },
+                  },
+                },
               ],
             },
           }),
