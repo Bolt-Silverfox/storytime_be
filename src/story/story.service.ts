@@ -640,7 +640,9 @@ export class StoryService {
         ...(readEnriched as unknown as Record<string, unknown>[]),
       ],
       pagination: {
-        nextCursor: readHasNext ? `r:${readPage[readPage.length - 1].id}` : null,
+        nextCursor: readHasNext
+          ? `r:${readPage[readPage.length - 1].id}`
+          : null,
         hasNextPage: readHasNext,
       },
     };
@@ -779,13 +781,12 @@ export class StoryService {
       // partially read, and unseen only when there is no meaningful progress.
       return {
         ...story,
-        readStatus: (
+        readStatus:
           completed || progressValue >= 100
             ? 'done'
             : progressValue <= 0
               ? null
-              : 'reading'
-        ) as 'done' | 'reading' | null,
+              : 'reading',
       };
     });
   }
@@ -1067,7 +1068,9 @@ export class StoryService {
         ? {
             isDeleted: false,
             categories: {
-              some: { id: { in: preferredCategories.map((c: Category) => c.id) } },
+              some: {
+                id: { in: preferredCategories.map((c: Category) => c.id) },
+              },
             },
           }
         : { isDeleted: false };
