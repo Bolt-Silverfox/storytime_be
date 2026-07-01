@@ -77,6 +77,15 @@ export class StoryService {
   // Average reading speed for children: ~150 words per minute
   private readonly WORDS_PER_MINUTE = 150;
   private readonly CATEGORY_HOLIDAY_SEASONAL = 'Holiday/Seasonal';
+  /** Standard relations returned by story list endpoints (used for fresh-first read backfill). */
+  private readonly storyListInclude: Prisma.StoryInclude = {
+    images: true,
+    branches: true,
+    categories: true,
+    themes: true,
+    seasons: true,
+    questions: true,
+  };
 
   /** Wraps a Prisma query to handle invalid cursor IDs gracefully */
   private async withCursorErrorHandling<T>(fn: () => Promise<T>): Promise<T> {
@@ -130,6 +139,7 @@ export class StoryService {
   }
 
   private async buildStoryWhereClause(filter: {
+    userId?: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -356,6 +366,13 @@ export class StoryService {
         ]
       : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
+    // Fresh-first: authenticated users fetch FRESH stories only here (no
+    // non-deleted progress row). Read stories are added afterwards as backfill.
+    // Guests get `where` unchanged (byte-for-byte identical responses).
+    // totalCount is still counted on the unfiltered `where` so it reflects the
+    // full result set (fresh + read) and pagination metadata stays correct.
+    const freshWhere = this.withUserReadFilter(where, filter.userId, 'fresh');
+
     // Run count and findMany in parallel to reduce latency by ~50%
     // For topPicksFromUs, pagination is handled in the raw SQL query
     const [totalCount, queriedStories] = await Promise.all([
@@ -363,7 +380,7 @@ export class StoryService {
         ? this.prisma.story.count({ where: { isDeleted: false } })
         : this.prisma.story.count({ where }),
       this.prisma.story.findMany({
-        where,
+        where: freshWhere,
         ...(filter.topPicksFromUs || shouldSortBySeason
           ? {}
           : {
@@ -441,8 +458,49 @@ export class StoryService {
           }) as typeof sortedStories)
         : sortedStories;
 
+    // Fresh-first backfill (authenticated users only): the page above is drawn
+    // from FRESH stories only. If the fresh pool cannot fill the requested
+    // limit, top up with already-read stories ranked last (most recently
+    // accessed first). For page 1 (and the page-1 carousels) readSkip is 0; for
+    // deeper offset pages we compute how many read rows earlier pages already
+    // consumed via `skip - freshCount` so there is no overlap or gap.
+    let pageData = cleanedStories as unknown as Record<string, unknown>[];
+    if (filter.userId) {
+      const deficit = limit - pageData.length;
+      if (deficit > 0) {
+        // For topPicksFromUs the page is already scoped by a per-page id window
+        // (where.id in randomStoryIds), so applying the global read offset would
+        // skip inside that small window and leave the page short — backfill from
+        // the start of the window instead.
+        const freshCount =
+          !filter.topPicksFromUs && skip > 0
+            ? await this.prisma.story.count({ where: freshWhere })
+            : 0;
+        const readSkip = filter.topPicksFromUs
+          ? 0
+          : Math.max(0, skip - freshCount);
+        const backfill = await this.fetchReadBackfill(
+          where,
+          filter.userId,
+          readSkip,
+          deficit,
+          this.storyListInclude,
+        );
+        if (backfill.length > 0) {
+          const enrichedBackfill = await this.enrichWithReadStatus(
+            filter.userId,
+            backfill,
+          );
+          pageData = [
+            ...pageData,
+            ...(enrichedBackfill as unknown as Record<string, unknown>[]),
+          ];
+        }
+      }
+    }
+
     return {
-      data: cleanedStories,
+      data: pageData,
       pagination: {
         currentPage: page,
         totalPages,
@@ -471,42 +529,158 @@ export class StoryService {
 
     const orderBy = [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
-    const stories = await this.withCursorErrorHandling(() =>
+    // GUEST / PUBLIC PATH — unchanged behaviour (byte-for-byte identical).
+    if (!filter.userId) {
+      const stories = await this.withCursorErrorHandling(() =>
+        this.prisma.story.findMany({
+          where,
+          take: limit + 1,
+          ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
+          orderBy,
+          include: this.storyListInclude,
+        }),
+      );
+
+      const { data, pagination } = PaginationUtil.buildCursorResponse(
+        stories,
+        limit,
+      );
+
+      const enriched = filter.guestSessionId
+        ? await this.enrichWithGuestReadStatus(filter.guestSessionId, data)
+        : data.map((s) => ({ ...s, readStatus: null }));
+
+      return { data: this.sortByReadStatus(enriched), pagination };
+    }
+
+    // AUTHENTICATED PATH — fresh-first with read backfill across a composite
+    // cursor. Format: `r:<progressId>` continues the READ stream; anything else
+    // (a bare story id or `f:<storyId>`, incl. legacy raw cursors) continues the
+    // FRESH stream. Fresh stories are served first; once the fresh pool is
+    // exhausted we backfill with read stories ordered by lastAccessed desc.
+    // NOTE: the cursor stays a single opaque string for the client.
+    const userId = filter.userId;
+    const rawCursor = filter.cursor;
+
+    // READ stream continuation.
+    if (rawCursor?.startsWith('r:')) {
+      const progressCursor = rawCursor.slice(2) || undefined;
+      return this.fetchReadStreamPage(userId, where, progressCursor, limit);
+    }
+
+    // FRESH stream (default / start). Tolerate legacy bare story-id cursors.
+    const freshCursor = rawCursor?.startsWith('f:')
+      ? rawCursor.slice(2) || undefined
+      : rawCursor;
+    const freshWhere = this.withUserReadFilter(where, userId, 'fresh');
+
+    const freshRows = await this.withCursorErrorHandling(() =>
       this.prisma.story.findMany({
-        where,
+        where: freshWhere,
         take: limit + 1,
-        ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
+        ...(freshCursor ? { cursor: { id: freshCursor }, skip: 1 } : {}),
         orderBy,
-        include: {
-          images: true,
-          branches: true,
-          categories: true,
-          themes: true,
-          seasons: true,
-          questions: true,
-        },
+        include: this.storyListInclude,
       }),
     );
 
-    const { data, pagination } = PaginationUtil.buildCursorResponse(
-      stories,
-      limit,
-    );
+    const freshHasNext = freshRows.length > limit;
+    const freshPage = freshHasNext ? freshRows.slice(0, limit) : freshRows;
+    const freshEnriched = freshPage.map((s) => ({
+      ...s,
+      readStatus: null as 'done' | 'reading' | null,
+    }));
 
-    // Enrich with read status based on user or guest session
-    let enriched;
-    if (filter.userId) {
-      enriched = await this.enrichWithReadStatus(filter.userId, data);
-    } else if (filter.guestSessionId) {
-      enriched = await this.enrichWithGuestReadStatus(
-        filter.guestSessionId,
-        data,
-      );
-    } else {
-      enriched = data.map((s) => ({ ...s, readStatus: null }));
+    // Fresh stories still remain — keep serving fresh first.
+    if (freshHasNext) {
+      return {
+        data: freshEnriched,
+        pagination: {
+          nextCursor: `f:${freshPage[freshPage.length - 1].id}`,
+          hasNextPage: true,
+        },
+      };
     }
 
-    return { data: this.sortByReadStatus(enriched), pagination };
+    // Fresh pool exhausted on this page. Backfill the remainder of the page from
+    // the start of the READ stream; if the page is already full, signal that the
+    // read stream begins on the next request via the `r:` sentinel cursor.
+    const deficit = limit - freshPage.length;
+    if (deficit <= 0) {
+      const readProbe = await this.prisma.userStoryProgress.findFirst({
+        where: { userId, isDeleted: false, story: { ...where } },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        select: { id: true },
+      });
+      return {
+        data: freshEnriched,
+        pagination: {
+          nextCursor: readProbe ? 'r:' : null,
+          hasNextPage: !!readProbe,
+        },
+      };
+    }
+
+    const readRows = await this.prisma.userStoryProgress.findMany({
+      where: { userId, isDeleted: false, story: { ...where } },
+      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+      take: deficit + 1,
+      include: { story: { include: this.storyListInclude } },
+    });
+    const readHasNext = readRows.length > deficit;
+    const readPage = readHasNext ? readRows.slice(0, deficit) : readRows;
+    const readEnriched = await this.enrichWithReadStatus(
+      userId,
+      readPage.map((r) => r.story as unknown as { id: string }),
+    );
+
+    return {
+      data: [
+        ...(freshEnriched as unknown as Record<string, unknown>[]),
+        ...(readEnriched as unknown as Record<string, unknown>[]),
+      ],
+      pagination: {
+        nextCursor: readHasNext ? `r:${readPage[readPage.length - 1].id}` : null,
+        hasNextPage: readHasNext,
+      },
+    };
+  }
+
+  /**
+   * Serves a page of the READ stream for the fresh-first cursor pagination.
+   * Records come from the progress join table ordered by lastAccessed desc, so
+   * the cursor is the UserStoryProgress id (prefixed `r:` by the caller).
+   */
+  private async fetchReadStreamPage(
+    userId: string,
+    baseWhere: Prisma.StoryWhereInput,
+    progressCursor: string | undefined,
+    limit: number,
+  ): Promise<CursorPaginatedStoriesDto> {
+    const rows = await this.withCursorErrorHandling(() =>
+      this.prisma.userStoryProgress.findMany({
+        where: { userId, isDeleted: false, story: { ...baseWhere } },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        take: limit + 1,
+        ...(progressCursor ? { cursor: { id: progressCursor }, skip: 1 } : {}),
+        include: { story: { include: this.storyListInclude } },
+      }),
+    );
+
+    const hasNextPage = rows.length > limit;
+    const page = hasNextPage ? rows.slice(0, limit) : rows;
+    const enriched = await this.enrichWithReadStatus(
+      userId,
+      page.map((r) => r.story as unknown as { id: string }),
+    );
+
+    return {
+      data: enriched as unknown as Record<string, unknown>[],
+      pagination: {
+        nextCursor: hasNextPage ? `r:${page[page.length - 1].id}` : null,
+        hasNextPage,
+      },
+    };
   }
 
   private mapProgressRecord(record: {
@@ -587,23 +761,31 @@ export class StoryService {
 
     const readProgress = await this.prisma.userStoryProgress.findMany({
       where: { userId, storyId: { in: storyIds }, isDeleted: false },
-      select: { storyId: true, progress: true },
+      select: { storyId: true, progress: true, completed: true },
     });
     const progressMap = new Map(
-      readProgress.map((p) => [p.storyId, { progress: p.progress }]),
+      readProgress.map((p) => [
+        p.storyId,
+        { progress: p.progress, completed: p.completed },
+      ]),
     );
 
     return stories.map((story) => {
       const progress = progressMap.get(story.id);
-      const progressValue = progress?.progress;
+      const progressValue = progress?.progress ?? 0;
+      const completed = progress?.completed === true;
+      // Align home read-status with the library's `completed` boolean: a story
+      // is "done" when explicitly completed OR at 100% progress, "reading" when
+      // partially read, and unseen only when there is no meaningful progress.
       return {
         ...story,
-        readStatus:
-          progressValue == null || progressValue <= 0
-            ? null
-            : progressValue >= 100
-              ? 'done'
-              : 'reading',
+        readStatus: (
+          completed || progressValue >= 100
+            ? 'done'
+            : progressValue <= 0
+              ? null
+              : 'reading'
+        ) as 'done' | 'reading' | null,
       };
     });
   }
@@ -645,6 +827,98 @@ export class StoryService {
               : 'reading',
       };
     });
+  }
+
+  /**
+   * Wraps a story `where` clause with a user read/fresh filter at the TOP LEVEL
+   * (AND), so it is never bypassed by the recommended-OR rewrite or the
+   * topPicks `id.in` / restricted `id.notIn` rewrites inside
+   * buildStoryWhereClause. A story counts as "read" when the user has any
+   * non-deleted UserStoryProgress row for it (in-progress OR done); "fresh"
+   * means no such row.
+   *
+   * - mode 'fresh' -> stories the user has NOT read (userProgress none)
+   * - mode 'read'  -> stories the user HAS read (userProgress some)
+   *
+   * Guests / unauthenticated callers (no userId) get the clause back unchanged,
+   * so their responses stay byte-for-byte identical.
+   */
+  private withUserReadFilter(
+    where: Prisma.StoryWhereInput,
+    userId: string | undefined,
+    mode: 'fresh' | 'read',
+  ): Prisma.StoryWhereInput {
+    if (!userId) return where;
+    const relation: Prisma.StoryWhereInput =
+      mode === 'fresh'
+        ? { userProgress: { none: { userId, isDeleted: false } } }
+        : { userProgress: { some: { userId, isDeleted: false } } };
+    return { AND: [where, relation] };
+  }
+
+  /**
+   * Fetches already-read stories for the fresh-first backfill, ranked
+   * most-recently-accessed first. Reads the progress join table so we can order
+   * by `lastAccessed` (not orderable as a Story to-many relation) and returns
+   * the underlying Story rows. `baseWhere` is the catalog filter WITHOUT any
+   * user read filter applied.
+   */
+  private async fetchReadBackfill(
+    baseWhere: Prisma.StoryWhereInput,
+    userId: string,
+    skip: number,
+    take: number,
+    include: Prisma.StoryInclude,
+  ): Promise<Array<{ id: string }>> {
+    if (take <= 0) return [];
+    const rows = await this.prisma.userStoryProgress.findMany({
+      where: { userId, isDeleted: false, story: { ...baseWhere } },
+      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+      ...(skip > 0 ? { skip } : {}),
+      take,
+      include: { story: { include } },
+    });
+    return rows.map((r) => r.story as unknown as { id: string });
+  }
+
+  /**
+   * Tops a fresh section list up to `take` items with already-read stories
+   * (recent first) when there aren't enough fresh ones. Used by the home-page
+   * carousels. Guests (no userId) get the fresh list back unchanged.
+   */
+  private async topUpWithRead<T extends { id: string }>(
+    fresh: T[],
+    baseWhere: Prisma.StoryWhereInput,
+    userId: string | undefined,
+    take: number,
+    include: Prisma.StoryInclude,
+    storyOrderBy?:
+      | Prisma.StoryOrderByWithRelationInput
+      | Prisma.StoryOrderByWithRelationInput[],
+  ): Promise<T[]> {
+    if (!userId) return fresh;
+    const deficit = take - fresh.length;
+    if (deficit <= 0) return fresh;
+    // When the section has a story-level ranking (e.g. most-liked), backfill by
+    // querying read stories with that same ordering so the section's ranking
+    // contract is preserved. Otherwise backfill most-recently-read (ordered via
+    // the progress row, which is where lastAccessed lives).
+    if (storyOrderBy) {
+      const stories = await this.prisma.story.findMany({
+        where: this.withUserReadFilter(baseWhere, userId, 'read'),
+        orderBy: storyOrderBy,
+        take: deficit,
+        include,
+      });
+      return [...fresh, ...(stories as unknown as T[])];
+    }
+    const rows = await this.prisma.userStoryProgress.findMany({
+      where: { userId, isDeleted: false, story: { ...baseWhere } },
+      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+      take: deficit,
+      include: { story: { include } },
+    });
+    return [...fresh, ...rows.map((r) => r.story as unknown as T)];
   }
 
   // Threshold in days to consider a past season as "recent" for backfill
@@ -787,86 +1061,132 @@ export class StoryService {
     let recommended: Awaited<ReturnType<typeof this.prisma.story.findMany>> =
       [];
     const preferredCategories = user?.preferredCategories ?? [];
-    if (preferredCategories.length > 0) {
-      recommended = await this.prisma.story.findMany({
-        where: {
-          isDeleted: false,
-          categories: {
-            some: {
-              id: { in: preferredCategories.map((c: Category) => c.id) },
+    const recInclude: Prisma.StoryInclude = { images: true, categories: true };
+    const recBaseWhere: Prisma.StoryWhereInput =
+      preferredCategories.length > 0
+        ? {
+            isDeleted: false,
+            categories: {
+              some: { id: { in: preferredCategories.map((c: Category) => c.id) } },
             },
-          },
-        },
-        take: limitRecommended,
-        include: { images: true, categories: true },
-        orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
-      });
-    } else {
-      // Fallback if no preferences: just fresh stories
-      recommended = await this.prisma.story.findMany({
-        where: { isDeleted: false },
-        orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
-        take: limitRecommended,
-        include: { images: true, categories: true },
-      });
-    }
+          }
+        : { isDeleted: false };
+    // Fresh-first: fetch unread recommendations, then top up with read ones.
+    recommended = await this.prisma.story.findMany({
+      where: this.withUserReadFilter(recBaseWhere, userId, 'fresh'),
+      take: limitRecommended,
+      include: recInclude,
+      orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
+    });
+    recommended = await this.topUpWithRead(
+      recommended,
+      recBaseWhere,
+      userId,
+      limitRecommended,
+      recInclude,
+    );
 
     // 2. Seasonal Stories (Logic: find active season based on today's date)
     const { activeSeasons, backfillSeasons } = await this.getRelevantSeasons();
 
     let seasonal: Awaited<ReturnType<typeof this.prisma.story.findMany>> = [];
     let seasonalCount = 0;
+    const seasonalInclude: Prisma.StoryInclude = {
+      images: true,
+      themes: true,
+      seasons: true,
+    };
 
     if (activeSeasons.length > 0) {
+      // Fresh-first: only unread seasonal stories in the primary fetch.
       seasonal = await this.prisma.story.findMany({
-        where: {
-          isDeleted: false,
-          seasons: {
-            some: {
-              id: { in: activeSeasons.map((s) => s.id) },
+        where: this.withUserReadFilter(
+          {
+            isDeleted: false,
+            seasons: {
+              some: {
+                id: { in: activeSeasons.map((s) => s.id) },
+              },
             },
           },
-        },
+          userId,
+          'fresh',
+        ),
         take: limitSeasonal,
-        include: { images: true, themes: true, seasons: true },
+        include: seasonalInclude,
       });
       seasonalCount = seasonal.length;
     }
 
-    // Backfill if needed
+    // Backfill with other (recent) seasons' fresh stories if needed
     if (seasonalCount < limitSeasonal && backfillSeasons.length > 0) {
       const needed = limitSeasonal - seasonalCount;
       const existingIds = new Set(seasonal.map((s) => s.id));
 
       const backfillStories = await this.prisma.story.findMany({
-        where: {
-          isDeleted: false,
-          seasons: {
-            some: {
-              id: { in: backfillSeasons.map((s) => s.id) },
+        where: this.withUserReadFilter(
+          {
+            isDeleted: false,
+            seasons: {
+              some: {
+                id: { in: backfillSeasons.map((s) => s.id) },
+              },
             },
+            id: { notIn: Array.from(existingIds) },
           },
-          id: { notIn: Array.from(existingIds) },
-        },
+          userId,
+          'fresh',
+        ),
         take: needed,
-        include: { images: true, themes: true, seasons: true },
+        include: seasonalInclude,
         orderBy: { createdAt: 'desc' },
       });
 
       seasonal = [...seasonal, ...backfillStories];
     }
 
-    // 3. Top Liked by Parents
-    const topLiked = await this.prisma.story.findMany({
-      where: { isDeleted: false },
+    // Final fresh-first top-up: if still short on fresh seasonal stories, fill
+    // with already-read seasonal stories (active or recent seasons).
+    seasonal = await this.topUpWithRead(
+      seasonal,
+      {
+        isDeleted: false,
+        seasons: {
+          some: {
+            id: {
+              in: [
+                ...activeSeasons.map((s) => s.id),
+                ...backfillSeasons.map((s) => s.id),
+              ],
+            },
+          },
+        },
+      },
+      userId,
+      limitSeasonal,
+      seasonalInclude,
+    );
+
+    // 3. Top Liked by Parents (fresh-first, then top up with read)
+    const topLikedInclude: Prisma.StoryInclude = { images: true };
+    let topLiked = await this.prisma.story.findMany({
+      where: this.withUserReadFilter({ isDeleted: false }, userId, 'fresh'),
       orderBy: {
         parentFavorites: {
           _count: 'desc',
         },
       },
       take: limitTopLiked,
-      include: { images: true },
+      include: topLikedInclude,
     });
+    topLiked = await this.topUpWithRead(
+      topLiked,
+      { isDeleted: false },
+      userId,
+      limitTopLiked,
+      topLikedInclude,
+      { parentFavorites: { _count: 'desc' } },
+    );
 
     // Enrich all stories with readStatus in a single DB query
     const allStories = [...recommended, ...seasonal, ...topLiked];
@@ -1072,29 +1392,55 @@ export class StoryService {
     if (!story) throw new NotFoundException('Story not found');
 
     const sessionTime = normalizeSessionTime(dto.sessionTime);
+    const clampedProgress = Math.max(0, Math.min(100, dto.progress));
 
     const existing = await this.prisma.storyProgress.findUnique({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
     });
 
-    const result = await this.prisma.storyProgress.upsert({
+    // Completion is monotonic: once a story is completed it stays completed
+    // until the dedicated remove/reset endpoint clears it (which hard-deletes
+    // the row for kids). Completion is also auto-derived when progress reaches
+    // 100, so a read-to-end finish is recorded even if the client never sends
+    // an explicit `completed` flag, and a later partial-progress ping can no
+    // longer silently un-complete the story.
+    const shouldComplete =
+      existing?.completed === true ||
+      dto.completed === true ||
+      clampedProgress >= 100;
+
+    // Upsert progress/time only. Completion is applied via an atomic flip below
+    // (updateMany gated on completed:false) so that two concurrent 100%
+    // completions can't both observe a pre-completion state and each call
+    // adjustReadingLevel — only the request that actually flips false->true
+    // performs the (non-idempotent) reading-level adjustment.
+    let result = await this.prisma.storyProgress.upsert({
       where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
       update: {
-        progress: dto.progress,
-        completed: dto.completed ?? false,
+        progress: clampedProgress,
         lastAccessed: new Date(),
         totalTimeSpent: { increment: sessionTime },
       },
       create: {
         kidId: dto.kidId,
         storyId: dto.storyId,
-        progress: dto.progress,
-        completed: dto.completed ?? false,
+        progress: clampedProgress,
+        completed: false,
         totalTimeSpent: sessionTime,
       },
     });
 
-    if (dto.completed && (!existing || !existing.completed)) {
+    let newlyCompleted = false;
+    if (shouldComplete && !result.completed) {
+      const flipped = await this.prisma.storyProgress.updateMany({
+        where: { kidId: dto.kidId, storyId: dto.storyId, completed: false },
+        data: { completed: true },
+      });
+      newlyCompleted = flipped.count === 1;
+      if (newlyCompleted) result = { ...result, completed: true };
+    }
+
+    if (newlyCompleted) {
       this.adjustReadingLevel(
         dto.kidId,
         dto.storyId,
@@ -1141,6 +1487,7 @@ export class StoryService {
     });
 
     const sessionTime = normalizeSessionTime(dto.sessionTime);
+    const clampedProgress = Math.max(0, Math.min(100, dto.progress));
 
     // If restoring a soft-deleted record, reset totalTimeSpent instead of
     // accumulating stale time from before the removal.
@@ -1148,11 +1495,21 @@ export class StoryService {
       ? sessionTime
       : { increment: sessionTime };
 
+    const shouldComplete =
+      existing?.completed === true ||
+      dto.completed === true ||
+      clampedProgress >= 100;
+
+    // Completion is monotonic under concurrency: the update path never writes
+    // `completed`, so a stale partial-progress request (which read the row
+    // before another request completed it) can't overwrite completed:true with
+    // false. Completion is only ever flipped to true via the atomic updateMany
+    // below (gated on completed:false). The remove/reset endpoint remains the
+    // only way to clear it.
     const result = await this.prisma.userStoryProgress.upsert({
       where: { userId_storyId: { userId, storyId: dto.storyId } },
       update: {
-        progress: dto.progress,
-        completed: dto.completed ?? false,
+        progress: clampedProgress,
         lastAccessed: new Date(),
         totalTimeSpent: totalTimeSpentUpdate,
         // Restore soft-deleted records when user re-reads a removed story
@@ -1162,17 +1519,26 @@ export class StoryService {
       create: {
         userId,
         storyId: dto.storyId,
-        progress: dto.progress,
-        completed: dto.completed ?? false,
+        progress: clampedProgress,
+        completed: false,
         totalTimeSpent: sessionTime,
       },
     });
+
+    let completed = result.completed;
+    if (shouldComplete && !completed) {
+      await this.prisma.userStoryProgress.updateMany({
+        where: { userId, storyId: dto.storyId, completed: false },
+        data: { completed: true },
+      });
+      completed = true;
+    }
 
     return {
       id: result.id,
       storyId: result.storyId,
       progress: result.progress,
-      completed: result.completed,
+      completed,
       lastAccessed: result.lastAccessed,
       totalTimeSpent: result.totalTimeSpent,
     };
