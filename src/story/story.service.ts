@@ -818,13 +818,14 @@ export class StoryService {
     return stories.map((story) => {
       const progress = readingHistory[story.id];
       const progressValue = progress?.progress;
+      const isCompleted = progress?.completed === true;
       return {
         ...story,
         readStatus:
-          progressValue == null || progressValue <= 0
-            ? null
-            : progressValue >= 100
-              ? 'done'
+          isCompleted || (progressValue != null && progressValue >= 100)
+            ? 'done'
+            : progressValue == null || progressValue <= 0
+              ? null
               : 'reading',
       };
     });
