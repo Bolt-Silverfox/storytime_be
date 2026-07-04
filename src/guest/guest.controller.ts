@@ -343,7 +343,7 @@ export class GuestController {
         },
         update: {
           progress: clampedProgress,
-          completed: clampedProgress >= 100,
+          completed: dto.completed === true || clampedProgress >= 100,
           lastAccessed: new Date(),
           isDeleted: false,
         },
@@ -351,7 +351,7 @@ export class GuestController {
           userId,
           storyId: dto.storyId,
           progress: clampedProgress,
-          completed: clampedProgress >= 100,
+          completed: dto.completed === true || clampedProgress >= 100,
           lastAccessed: new Date(),
         },
       });
@@ -364,6 +364,7 @@ export class GuestController {
         guestSessionId,
         dto.storyId,
         clampedProgress,
+        dto.completed,
       );
       if (!updated) {
         this.logger.warn(
@@ -425,7 +426,11 @@ export class GuestController {
       this.validateSessionId(guestSessionId);
     }
 
-    let progressData: { progress: number; lastAccessed: Date } | null = null;
+    let progressData: {
+      progress: number;
+      lastAccessed: Date;
+      completed: boolean;
+    } | null = null;
 
     if (userId) {
       // Authenticated user - get from database
@@ -438,6 +443,7 @@ export class GuestController {
         select: {
           progress: true,
           lastAccessed: true,
+          completed: true,
         },
       });
 
@@ -448,6 +454,7 @@ export class GuestController {
       progressData = {
         progress: record.progress,
         lastAccessed: record.lastAccessed,
+        completed: record.completed === true,
       };
     } else if (guestSessionId) {
       // Guest user - get from Redis
@@ -469,6 +476,7 @@ export class GuestController {
       progressData = {
         progress: storyProgress.progress,
         lastAccessed: storyProgress.lastReadAt,
+        completed: storyProgress.completed === true,
       };
     }
 
@@ -505,10 +513,10 @@ export class GuestController {
     }
 
     const readStatus: ReadStatus | null =
-      progressData.progress <= 0
-        ? null
-        : progressData.progress >= 100
-          ? 'done'
+      progressData.completed || progressData.progress >= 100
+        ? 'done'
+        : progressData.progress <= 0
+          ? null
           : 'reading';
 
     return {
@@ -579,6 +587,7 @@ export class GuestController {
         select: {
           storyId: true,
           progress: true,
+          completed: true,
           lastAccessed: true,
           story: {
             select: {
@@ -608,10 +617,10 @@ export class GuestController {
       return {
         stories: progressRecords.map((record) => {
           const readStatus: ReadStatus | null =
-            record.progress <= 0
-              ? null
-              : record.progress >= 100
-                ? 'done'
+            record.completed || record.progress >= 100
+              ? 'done'
+              : record.progress <= 0
+                ? null
                 : 'reading';
           return {
             storyId: record.storyId,
@@ -680,10 +689,10 @@ export class GuestController {
       const storiesWithProgress = stories.map((story) => {
         const progress = history[story.id];
         const readStatus: ReadStatus | null =
-          progress.progress <= 0
-            ? null
-            : progress.progress >= 100
-              ? 'done'
+          progress.completed === true || progress.progress >= 100
+            ? 'done'
+            : progress.progress <= 0
+              ? null
               : 'reading';
         return {
           storyId: story.id,
