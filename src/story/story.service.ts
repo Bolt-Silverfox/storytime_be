@@ -66,6 +66,7 @@ import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
+import { deriveReadStatus } from '@/shared/utils/read-status.util';
 import {
   DEFAULT_CURSOR_LIMIT,
   PaginationUtil,
@@ -774,19 +775,12 @@ export class StoryService {
 
     return stories.map((story) => {
       const progress = progressMap.get(story.id);
-      const progressValue = progress?.progress ?? 0;
-      const completed = progress?.completed === true;
       // Align home read-status with the library's `completed` boolean: a story
       // is "done" when explicitly completed OR at 100% progress, "reading" when
       // partially read, and unseen only when there is no meaningful progress.
       return {
         ...story,
-        readStatus:
-          completed || progressValue >= 100
-            ? 'done'
-            : progressValue <= 0
-              ? null
-              : 'reading',
+        readStatus: deriveReadStatus(progress?.progress, progress?.completed),
       };
     });
   }
@@ -817,15 +811,9 @@ export class StoryService {
     const readingHistory = session.readingHistory;
     return stories.map((story) => {
       const progress = readingHistory[story.id];
-      const progressValue = progress?.progress;
       return {
         ...story,
-        readStatus:
-          progressValue == null || progressValue <= 0
-            ? null
-            : progressValue >= 100
-              ? 'done'
-              : 'reading',
+        readStatus: deriveReadStatus(progress?.progress, progress?.completed),
       };
     });
   }
