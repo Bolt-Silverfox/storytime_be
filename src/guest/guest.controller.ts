@@ -34,6 +34,7 @@ import {
 } from './guest-session.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ReadStatus } from './dto/guest.dto';
+import { deriveReadStatus } from '@/shared/utils/read-status.util';
 import { StoryService } from '@/story/story.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GuestActivityEvent } from './events/guest-activity.event';
@@ -336,14 +337,17 @@ export class GuestController {
     const clampedProgress = Math.max(0, Math.min(100, dto.progress));
 
     if (userId) {
-      // Authenticated user - update in database
+      // Authenticated user - update in database.
+      // Completion is monotonic: only ever set `completed` to true, never
+      // downgrade a finished story on a later partial-progress update.
+      const markCompleted = dto.completed === true || clampedProgress >= 100;
       await this.prisma.userStoryProgress.upsert({
         where: {
           userId_storyId: { userId, storyId: dto.storyId },
         },
         update: {
           progress: clampedProgress,
-          completed: clampedProgress >= 100,
+          ...(markCompleted ? { completed: true } : {}),
           lastAccessed: new Date(),
           isDeleted: false,
         },
@@ -351,7 +355,7 @@ export class GuestController {
           userId,
           storyId: dto.storyId,
           progress: clampedProgress,
-          completed: clampedProgress >= 100,
+          completed: markCompleted,
           lastAccessed: new Date(),
         },
       });
@@ -364,6 +368,7 @@ export class GuestController {
         guestSessionId,
         dto.storyId,
         clampedProgress,
+        dto.completed,
       );
       if (!updated) {
         this.logger.warn(
@@ -425,7 +430,11 @@ export class GuestController {
       this.validateSessionId(guestSessionId);
     }
 
-    let progressData: { progress: number; lastAccessed: Date } | null = null;
+    let progressData: {
+      progress: number;
+      lastAccessed: Date;
+      completed: boolean;
+    } | null = null;
 
     if (userId) {
       // Authenticated user - get from database
@@ -438,6 +447,7 @@ export class GuestController {
         select: {
           progress: true,
           lastAccessed: true,
+          completed: true,
         },
       });
 
@@ -448,6 +458,7 @@ export class GuestController {
       progressData = {
         progress: record.progress,
         lastAccessed: record.lastAccessed,
+        completed: record.completed === true,
       };
     } else if (guestSessionId) {
       // Guest user - get from Redis
@@ -469,6 +480,7 @@ export class GuestController {
       progressData = {
         progress: storyProgress.progress,
         lastAccessed: storyProgress.lastReadAt,
+        completed: storyProgress.completed === true,
       };
     }
 
@@ -504,12 +516,10 @@ export class GuestController {
       return null;
     }
 
-    const readStatus: ReadStatus | null =
-      progressData.progress <= 0
-        ? null
-        : progressData.progress >= 100
-          ? 'done'
-          : 'reading';
+    const readStatus: ReadStatus | null = deriveReadStatus(
+      progressData.progress,
+      progressData.completed,
+    );
 
     return {
       storyId,
@@ -579,6 +589,7 @@ export class GuestController {
         select: {
           storyId: true,
           progress: true,
+          completed: true,
           lastAccessed: true,
           story: {
             select: {
@@ -607,12 +618,10 @@ export class GuestController {
 
       return {
         stories: progressRecords.map((record) => {
-          const readStatus: ReadStatus | null =
-            record.progress <= 0
-              ? null
-              : record.progress >= 100
-                ? 'done'
-                : 'reading';
+          const readStatus: ReadStatus | null = deriveReadStatus(
+            record.progress,
+            record.completed,
+          );
           return {
             storyId: record.storyId,
             title: record.story.title,
@@ -679,12 +688,10 @@ export class GuestController {
       // Map stories with progress and readStatus
       const storiesWithProgress = stories.map((story) => {
         const progress = history[story.id];
-        const readStatus: ReadStatus | null =
-          progress.progress <= 0
-            ? null
-            : progress.progress >= 100
-              ? 'done'
-              : 'reading';
+        const readStatus: ReadStatus | null = deriveReadStatus(
+          progress.progress,
+          progress.completed,
+        );
         return {
           storyId: story.id,
           title: story.title,

@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsString, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 export type ReadStatus = 'done' | 'reading';
 
@@ -14,6 +22,13 @@ export class UpdateGuestProgressDto {
   @Min(0)
   @Max(100)
   progress: number;
+
+  @ApiPropertyOptional({
+    description: 'Whether the story has been finished/completed',
+  })
+  @IsOptional()
+  @IsBoolean()
+  completed?: boolean;
 }
 
 export class CreateGuestSessionResponseDto {
