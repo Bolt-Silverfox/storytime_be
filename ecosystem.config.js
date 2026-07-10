@@ -48,7 +48,9 @@ module.exports = {
       ...baseConfig,
       name: 'storytime-api-staging',
       instances: stagingInstances,
-      exec_mode: 'cluster',
+      // Single-instance staging runs in fork mode (no cluster master +
+      // worker doubling); only cluster when explicitly scaled past 1.
+      exec_mode: stagingInstances > 1 ? 'cluster' : 'fork',
       env: {
         NODE_ENV: 'staging',
       },

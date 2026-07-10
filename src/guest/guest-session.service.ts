@@ -25,6 +25,8 @@ export type GuestStoryAccessResult =
 export interface StoryProgress {
   /** Progress percentage (0-100) */
   progress: number;
+  /** Whether the story has been finished/completed (monotonic once true) */
+  completed?: boolean;
   /** Timestamp when the story was last read */
   lastReadAt: Date;
 }
@@ -208,12 +210,14 @@ export class GuestSessionService {
    * @param sessionId - The session ID
    * @param storyId - The story ID
    * @param progress - Progress percentage (0-100)
+   * @param completed - Explicit completion flag from the client (optional)
    * @returns The updated guest session, or null if session not found
    */
   async updateGuestProgress(
     sessionId: string,
     storyId: string,
     progress: number,
+    completed?: boolean,
   ): Promise<GuestSession | null> {
     const session = await this.getGuestSession(sessionId);
 
@@ -227,10 +231,20 @@ export class GuestSessionService {
     // Validate progress is between 0 and 100
     const clampedProgress = Math.max(0, Math.min(100, progress));
 
-    // Update reading history only when clampedProgress > 0
-    if (clampedProgress > 0 || session.readingHistory[storyId]) {
+    // Completion is monotonic: once a story is finished it stays finished.
+    // Derive it from the explicit flag or a full progress reading.
+    const existing = session.readingHistory[storyId];
+    const isCompleted =
+      existing?.completed === true ||
+      completed === true ||
+      clampedProgress >= 100;
+
+    // Update reading history when there is progress, a completion signal, or
+    // an existing entry to preserve.
+    if (clampedProgress > 0 || isCompleted || existing) {
       session.readingHistory[storyId] = {
         progress: clampedProgress,
+        completed: isCompleted,
         lastReadAt: new Date(),
       };
     }
