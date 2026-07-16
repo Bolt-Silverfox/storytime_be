@@ -23,6 +23,7 @@ import { RewardModule } from './reward/reward.module';
 import { SettingsModule } from './settings/settings.module';
 import { StoryBuddyModule } from './story-buddy/story-buddy.module';
 import { StoryModule } from './story/story.module';
+import { GuestModule } from './guest/guest.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { CloudinaryModule } from './upload/cloudinary.module';
 import { UploadModule } from './upload/upload.module';
@@ -125,6 +126,7 @@ import { BullBoardConfigModule } from './admin/bull-board.module';
     CloudinaryModule,
     UploadModule,
     StoryModule,
+    GuestModule,
     RewardModule,
     AnalyticsModule,
     PrismaModule,
