@@ -1,5 +1,6 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { GuestSessionService } from '../guest/guest-session.service';
+import { NotificationService } from '../notification/notification.service';
 
 /** Max session time in seconds (24 h), matching the DTO contract. */
 const MAX_SESSION_TIME = 86_400;
@@ -122,6 +123,8 @@ export class StoryService {
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
     private readonly guestSessionService: GuestSessionService,
+    // NotificationModule is @Global, so no module import change is needed.
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -1232,6 +1235,17 @@ export class StoryService {
       include: { images: true, branches: true },
     });
 
+    // TODO(new-story-notification): needs batched fan-out or topic broadcast
+    // The NewStory notification is meant for many/all users. The requested emit
+    // path (notificationService.sendNotification(type, data, targetUserId))
+    // targets a single user, so announcing a new story to everyone would require
+    // a naive findMany over the whole users table + per-user loop, which we must
+    // not ship. A push-topic broadcast helper exists (notification.broadcast
+    // event -> queueTopicPush over the 'all_users' FCM topic), but it is
+    // push-only and does not route through the NewStory registry entry (no
+    // per-user in_app records), so it is not a drop-in for sendNotification.
+    // Wire this once a batched fan-out / registry-backed topic broadcast exists.
+
     await this.invalidateStoryCaches();
     return story;
   }
@@ -1440,6 +1454,20 @@ export class StoryService {
         const msg = e instanceof Error ? e.message : String(e);
         this.logger.error(`Failed to adjust reading level: ${msg}`);
       });
+
+      // Best-effort StoryFinished notification to the kid's parent. Emitted only
+      // on the false->true completion transition (newlyCompleted). Must never
+      // break the progress flow, so failures are logged and swallowed.
+      try {
+        await this.notificationService.sendNotification(
+          'StoryFinished',
+          { kidName: kid.name ?? 'Your child', storyTitle: story.title },
+          kid.parentId,
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.warn(`Failed to send StoryFinished notification: ${msg}`);
+      }
     }
     return result;
   }

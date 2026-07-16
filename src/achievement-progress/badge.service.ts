@@ -11,7 +11,8 @@ import {
   FullBadgeListResponseDto,
 } from './dto/badge-response.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma, UserBadge } from '@prisma/client';
+import { Badge, Prisma, UserBadge } from '@prisma/client';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class BadgeService {
@@ -21,6 +22,7 @@ export class BadgeService {
     private prisma: PrismaService,
     private badgeConstants: BadgeConstants,
     private eventEmitter: EventEmitter2,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -222,7 +224,7 @@ export class BadgeService {
         continue;
       }
 
-      await this.prisma.$transaction(async (tx) => {
+      const didUnlock = await this.prisma.$transaction(async (tx) => {
         const compositeKey = {
           userId,
           kidId: typeof kidId === 'undefined' ? null : kidId,
@@ -242,12 +244,12 @@ export class BadgeService {
           this.logger.error(
             `UserBadge not found for user ${userId} and badge ${badge.id}`,
           );
-          return;
+          return false;
         }
 
         // Skip if already unlocked
         if (userBadge.unlocked) {
-          return;
+          return false;
         }
 
         const newCount = userBadge.count + increment;
@@ -274,7 +276,55 @@ export class BadgeService {
             timestamp: new Date(),
           });
         }
+
+        return shouldUnlock;
       });
+
+      // Only notify on the transition to newly-earned, and only for a
+      // per-kid unlock (kidId present) so we can resolve the kid's name and
+      // avoid double-notifying for the parent-level aggregate record.
+      if (didUnlock && kidId) {
+        await this.emitBadgeEarnedNotification(userId, kidId, badge);
+      }
+    }
+  }
+
+  /**
+   * Notify the parent when a kid newly earns a badge/achievement.
+   * `userId` is the parent (owning) user id. Never throws.
+   */
+  private async emitBadgeEarnedNotification(
+    parentUserId: string,
+    kidId: string,
+    badge: Badge,
+  ): Promise<void> {
+    try {
+      const kid = await this.prisma.kid.findUnique({
+        where: { id: kidId },
+        select: { name: true },
+      });
+      const kidName = kid?.name ?? 'Your child';
+
+      // `special` badges represent one-off achievements; everything else
+      // (count/streak/time progress badges) is surfaced as a badge earned.
+      if (badge.badgeType === 'special') {
+        await this.notificationService.sendNotification(
+          'AchievementUnlocked',
+          { kidName, achievementName: badge.title },
+          parentUserId,
+        );
+      } else {
+        await this.notificationService.sendNotification(
+          'BadgeEarned',
+          { kidName, badgeName: badge.title },
+          parentUserId,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit badge-earned notification for user ${parentUserId}, kid ${kidId}, badge ${badge.id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
     }
   }
 
