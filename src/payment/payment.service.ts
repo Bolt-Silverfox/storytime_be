@@ -46,7 +46,7 @@ export class PaymentService {
    * break the payment/subscription flow.
    */
   private async emitNotification(
-    type: 'PaymentSuccess' | 'PaymentFailed',
+    type: 'PaymentSuccess' | 'PaymentFailed' | 'SubscriptionAlert',
     data: Record<string, unknown>,
     userId: string,
   ): Promise<void> {
@@ -470,6 +470,15 @@ export class PaymentService {
       where: { id: existing.id },
       data: { status: 'cancelled', endsAt },
     });
+
+    const cancelledPlan = existing.productId
+      ? this.resolvePlanDisplay(existing.productId)
+      : existing.plan;
+    await this.emitNotification(
+      'SubscriptionAlert',
+      { message: `Your ${cancelledPlan} subscription was cancelled.` },
+      userId,
+    );
 
     if (appleAutoRenewWarning) {
       return {
