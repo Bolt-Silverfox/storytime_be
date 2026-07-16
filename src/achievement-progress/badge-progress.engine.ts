@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { BadgeService } from './badge.service';
+import { StreakService } from './streak.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 import { BadgeMetadata } from './badge.constants';
 
 interface BadgeEvent {
@@ -20,10 +22,15 @@ interface BadgeEvent {
 export class BadgeProgressEngine implements OnModuleInit {
   private readonly logger = new Logger(BadgeProgressEngine.name);
 
+  // Streak lengths (in days) that trigger a milestone notification.
+  private readonly STREAK_MILESTONES = [3, 7, 30];
+
   constructor(
     private eventEmitter: EventEmitter2,
     private badgeService: BadgeService,
+    private streakService: StreakService,
     private prisma: PrismaService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   onModuleInit() {
@@ -39,6 +46,19 @@ export class BadgeProgressEngine implements OnModuleInit {
     metadata?: BadgeMetadata,
   ): Promise<void> {
     try {
+      // Detect whether this is the kid's first activity today BEFORE logging,
+      // so we only evaluate a streak milestone on the day the streak grows.
+      let hadActivityToday = true;
+      if (kidId) {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const priorToday = await this.prisma.activityLog.findFirst({
+          where: { kidId, createdAt: { gte: startOfToday } },
+          select: { id: true },
+        });
+        hadActivityToday = priorToday !== null;
+      }
+
       // Log activity
       await this.prisma.activityLog.create({
         data: {
@@ -53,6 +73,12 @@ export class BadgeProgressEngine implements OnModuleInit {
 
       // Emit corresponding badge events (pass kidId through)
       await this.handleBadgeEvent(userId, action, kidId, metadata);
+
+      // If the streak just advanced today (first activity of the day),
+      // notify the parent when it lands on a milestone threshold.
+      if (kidId && !hadActivityToday) {
+        await this.maybeEmitStreakMilestone(userId, kidId);
+      }
     } catch (error) {
       this.logger.error(
         `Error recording activity: ${error.message}`,
@@ -103,6 +129,41 @@ export class BadgeProgressEngine implements OnModuleInit {
   handleUserLogin(event: BadgeEvent) {
     this.logger.log(`User login event: ${event.userId}`);
     // Could track login streak badges here
+  }
+
+  /**
+   * Notify the parent when a kid's reading streak reaches a milestone.
+   * `userId` is the parent (owning) user id. Never throws.
+   */
+  private async maybeEmitStreakMilestone(
+    parentUserId: string,
+    kidId: string,
+  ): Promise<void> {
+    try {
+      const { currentStreak } =
+        await this.streakService.getStreakSummaryForKid(kidId);
+
+      if (!this.STREAK_MILESTONES.includes(currentStreak)) {
+        return;
+      }
+
+      const kid = await this.prisma.kid.findUnique({
+        where: { id: kidId },
+        select: { name: true },
+      });
+      const kidName = kid?.name ?? 'Your child';
+
+      await this.notificationService.sendNotification(
+        'StreakMilestone',
+        { kidName, days: currentStreak },
+        parentUserId,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit streak-milestone notification for user ${parentUserId}, kid ${kidId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   private async handleBadgeEvent(

@@ -2,6 +2,7 @@ import { Global, Module, forwardRef } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bullmq';
 import { NotificationService } from './notification.service';
+import { NotificationSchedulerService } from './notification-scheduler.service';
 import { NotificationController } from './notification.controller';
 import { InAppNotificationController } from './in-app-notification.controller';
 import { UserPreferencesController } from './user-preferences.controller';
@@ -39,6 +40,7 @@ import { PushProcessor } from './queue/push.processor';
   ],
   providers: [
     NotificationService,
+    NotificationSchedulerService,
     InAppProvider,
     EmailProvider,
     PushProvider,
