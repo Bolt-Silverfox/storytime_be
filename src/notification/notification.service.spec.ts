@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { InAppProvider } from './providers/in-app.provider';
 import { EmailProvider } from './providers/email.provider';
 import { PushProvider } from './providers/push.provider';
+import { PushQueueService } from './queue/push-queue.service';
 import { EmailQueueService } from './queue/email-queue.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotificationCategory as PrismaCategory } from '@prisma/client';
@@ -133,6 +134,10 @@ describe('NotificationService', () => {
         { provide: EmailProvider, useValue: mockEmailProvider },
         { provide: EmailQueueService, useValue: mockEmailQueueService },
         { provide: PushProvider, useValue: { send: jest.fn() } },
+        {
+          provide: PushQueueService,
+          useValue: { queueTopicPush: jest.fn() },
+        },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();

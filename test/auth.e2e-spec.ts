@@ -7,6 +7,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AuthModule } from '../src/auth/auth.module';
 import { PrismaModule } from '../src/prisma/prisma.module';
+import { SharedModule } from '../src/shared/shared.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { CacheModule } from '@nestjs/cache-manager';
@@ -18,6 +19,9 @@ import { PrismaExceptionFilter } from '../src/shared/filters/prisma-exception.fi
 import { EMAIL_QUEUE_NAME } from '../src/notification/queue/email-queue.constants';
 import { EmailQueueService } from '../src/notification/queue/email-queue.service';
 import { EmailProcessor } from '../src/notification/queue/email.processor';
+import { PUSH_QUEUE_NAME } from '../src/notification/queue/push-queue.constants';
+import { PushQueueService } from '../src/notification/queue/push-queue.service';
+import { PushProcessor } from '../src/notification/queue/push.processor';
 import { EmailProvider } from '../src/notification/providers/email.provider';
 import { AuthThrottleGuard } from '../src/shared/guards/auth-throttle.guard';
 
@@ -94,6 +98,7 @@ describe('Authentication (e2e)', () => {
           }),
         }),
         EventEmitterModule.forRoot(),
+        SharedModule,
         PrismaModule,
         AuthModule,
       ],
@@ -119,6 +124,26 @@ describe('Authentication (e2e)', () => {
       })
       // Mock EmailProcessor
       .overrideProvider(EmailProcessor)
+      .useValue({
+        process: jest.fn().mockResolvedValue(undefined),
+      })
+      // Mock push BullMQ queue
+      .overrideProvider(getQueueToken(PUSH_QUEUE_NAME))
+      .useValue({
+        add: jest.fn().mockResolvedValue({ id: 'mock-job-id' }),
+        getJob: jest.fn().mockResolvedValue(null),
+        obliterate: jest.fn().mockResolvedValue(undefined),
+        close: jest.fn().mockResolvedValue(undefined),
+      })
+      // Mock PushQueueService
+      .overrideProvider(PushQueueService)
+      .useValue({
+        queueTopicPush: jest.fn().mockResolvedValue({ id: 'mock-job-id' }),
+        onModuleInit: jest.fn(),
+        onModuleDestroy: jest.fn(),
+      })
+      // Mock PushProcessor
+      .overrideProvider(PushProcessor)
       .useValue({
         process: jest.fn().mockResolvedValue(undefined),
       })
