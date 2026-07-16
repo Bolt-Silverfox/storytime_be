@@ -40,6 +40,7 @@ import {
 } from './dto/coupon.dto';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
+import { GuestActivityFilterDto } from './dto/guest-stats.dto';
 import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
 import { ExportAnalyticsDto } from './dto/admin-export.dto';
 import { PaginationUtil } from '../shared/utils/pagination.util';
@@ -2517,6 +2518,46 @@ export class AdminController {
       statusCode: 201,
       message: 'Topic subscription seed initiated',
       data,
+    };
+  }
+
+  // =====================
+  // GUEST ANALYTICS
+  // =====================
+
+  @Get('dashboard/guest-stats')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get guest analytics stats' })
+  @ApiResponse({
+    status: 200,
+    description: 'Guest stats retrieved successfully',
+  })
+  async getGuestStats() {
+    const data = await this.adminService.getGuestStats();
+    return {
+      statusCode: 200,
+      message: 'Guest stats retrieved successfully',
+      data,
+    };
+  }
+
+  @Get('guests/activity')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get guest activity log' })
+  @ApiResponse({
+    status: 200,
+    description: 'Guest activity retrieved successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  async getGuestActivity(@Query() filters: GuestActivityFilterDto) {
+    const result = await this.adminService.getGuestActivity(filters);
+    return {
+      statusCode: 200,
+      message: 'Guest activity retrieved successfully',
+      ...result,
     };
   }
 }

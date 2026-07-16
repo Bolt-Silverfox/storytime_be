@@ -12,6 +12,7 @@ export const CACHE_KEYS = {
   REVENUE_ANALYTICS: (params: string) => `admin:revenue:analytics:${params}`,
   AI_CREDIT_ANALYTICS: 'admin:ai-credit:analytics',
   USER_GROWTH_MONTHLY: 'admin:user-growth-monthly',
+  GUEST_STATS: 'admin:guest:stats',
 
   // Content caches (static data)
   CATEGORIES_ALL: 'categories:all',

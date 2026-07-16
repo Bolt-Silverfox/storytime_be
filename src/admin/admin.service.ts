@@ -60,6 +60,12 @@ import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { ResetQuotaDto } from './dto/reset-quota.dto';
 import { CouponService } from '../coupon/coupon.service';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
+import { GuestStatsDto, GuestActivityFilterDto } from './dto/guest-stats.dto';
+import {
+  GUEST_SESSION_CREATED,
+  GUEST_STORY_ACCESSED,
+  GUEST_QUOTA_EXHAUSTED,
+} from '@/guest/guest-activity.constants';
 import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
 import { GoogleVerificationService } from '../payment/google-verification.service';
 import { AppleVerificationService } from '../payment/apple-verification.service';
@@ -2925,5 +2931,169 @@ export class AdminService {
         error: error.message ?? 'Verification failed',
       };
     }
+  }
+
+  async getGuestStats(): Promise<GuestStatsDto> {
+    const cached = await this.cacheManager.get<GuestStatsDto>(
+      CACHE_KEYS.GUEST_STATS,
+    );
+    if (cached) return cached;
+
+    const now = new Date();
+    const rangeThisMonth = DateUtil.getRange(Timeframe.THIS_MONTH, now);
+    const rangeLastMonth = DateUtil.getRange(Timeframe.LAST_MONTH, now);
+    // Total counts
+    const [totalSessions, totalStoriesRead, quotaExhausted] = await Promise.all(
+      [
+        this.prisma.activityLog.count({
+          where: { action: GUEST_SESSION_CREATED, isDeleted: false },
+        }),
+        this.prisma.activityLog.count({
+          where: { action: GUEST_STORY_ACCESSED, isDeleted: false },
+        }),
+        this.prisma.activityLog.count({
+          where: { action: GUEST_QUOTA_EXHAUSTED, isDeleted: false },
+        }),
+      ],
+    );
+
+    // This month counts
+    const thisMonthWhere = {
+      createdAt: { gte: rangeThisMonth.start },
+      isDeleted: false,
+    };
+    const [sessionsThisMonth, storiesThisMonth, quotaThisMonth] =
+      await Promise.all([
+        this.prisma.activityLog.count({
+          where: { ...thisMonthWhere, action: GUEST_SESSION_CREATED },
+        }),
+        this.prisma.activityLog.count({
+          where: { ...thisMonthWhere, action: GUEST_STORY_ACCESSED },
+        }),
+        this.prisma.activityLog.count({
+          where: { ...thisMonthWhere, action: GUEST_QUOTA_EXHAUSTED },
+        }),
+      ]);
+
+    // Last month counts for trend
+    const lastMonthWhere = {
+      createdAt: { gte: rangeLastMonth.start, lt: rangeThisMonth.start },
+      isDeleted: false,
+    };
+    const [sessionsLastMonth, storiesLastMonth, quotaLastMonth] =
+      await Promise.all([
+        this.prisma.activityLog.count({
+          where: { ...lastMonthWhere, action: GUEST_SESSION_CREATED },
+        }),
+        this.prisma.activityLog.count({
+          where: { ...lastMonthWhere, action: GUEST_STORY_ACCESSED },
+        }),
+        this.prisma.activityLog.count({
+          where: { ...lastMonthWhere, action: GUEST_QUOTA_EXHAUSTED },
+        }),
+      ]);
+
+    // Unique stories accessed
+    const uniqueStoriesResult = await this.prisma.$queryRaw<
+      [{ count: bigint }]
+    >`
+      SELECT COUNT(DISTINCT details::jsonb->>'storyId') as count
+      FROM "activity_logs"
+      WHERE action = ${GUEST_STORY_ACCESSED} AND "isDeleted" = false
+      AND details IS NOT NULL AND details LIKE '{%'
+    `;
+    const uniqueStoriesAccessed = Number(uniqueStoriesResult[0]?.count ?? 0);
+
+    const timeframe = TrendLabel.VS_LAST_MONTH;
+    const result: GuestStatsDto = {
+      totalSessions,
+      sessionsThisMonth: DashboardUtil.calculateTrend(
+        sessionsThisMonth,
+        sessionsLastMonth,
+        timeframe,
+      ),
+      totalStoriesRead,
+      storiesReadThisMonth: DashboardUtil.calculateTrend(
+        storiesThisMonth,
+        storiesLastMonth,
+        timeframe,
+      ),
+      quotaExhausted,
+      quotaExhaustedThisMonth: DashboardUtil.calculateTrend(
+        quotaThisMonth,
+        quotaLastMonth,
+        timeframe,
+      ),
+      uniqueStoriesAccessed,
+    };
+
+    await this.cacheManager.set(
+      CACHE_KEYS.GUEST_STATS,
+      result,
+      CACHE_TTL_MS.DASHBOARD,
+    );
+    return result;
+  }
+
+  async getGuestActivity(filters: GuestActivityFilterDto) {
+    const page = Math.max(1, filters.page ?? 1);
+    const limit = Math.min(100, Math.max(1, filters.limit ?? 10));
+    const where: Prisma.ActivityLogWhereInput = {
+      action: { startsWith: 'GUEST_' },
+      isDeleted: false,
+    };
+    if (filters.action) {
+      if (!filters.action.startsWith('GUEST_')) {
+        throw new BadRequestException('Invalid guest action filter');
+      }
+      where.action = filters.action;
+    }
+    if (filters.startDate || filters.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) {
+        where.createdAt.gte = /^\d{4}-\d{2}-\d{2}$/.test(filters.startDate)
+          ? new Date(`${filters.startDate}T00:00:00.000Z`)
+          : new Date(filters.startDate);
+      }
+      if (filters.endDate) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(filters.endDate)) {
+          const endDate = new Date(`${filters.endDate}T00:00:00.000Z`);
+          endDate.setUTCDate(endDate.getUTCDate() + 1);
+          where.createdAt.lt = endDate;
+        } else {
+          where.createdAt.lte = new Date(filters.endDate);
+        }
+      }
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.activityLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+        select: {
+          id: true,
+          action: true,
+          status: true,
+          details: true,
+          ipAddress: true,
+          deviceName: true,
+          os: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.activityLog.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 }
