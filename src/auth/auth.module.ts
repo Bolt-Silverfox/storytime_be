@@ -13,12 +13,14 @@ import { OAuthService } from './services/oauth.service';
 import { OnboardingService } from './services/onboarding.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { NotificationModule } from '../notification/notification.module';
 import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
+    NotificationModule,
     PassportModule.register({ session: false }),
 
     JwtModule.registerAsync({
