@@ -1,7 +1,10 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { TTS_BATCH_QUEUE_NAME } from './tts-batch-queue.constants';
+import {
+  MAX_RETRY_GENERATIONS,
+  TTS_BATCH_QUEUE_NAME,
+} from './tts-batch-queue.constants';
 import {
   TtsBatchJobData,
   TtsBatchJobResult,
@@ -80,14 +83,21 @@ export class TtsBatchProcessor extends WorkerHost {
       isPremium,
       provider,
       paragraphs,
+      totalParagraphs,
+      retryGeneration,
     } = job.data;
 
+    const generation = retryGeneration ?? 0;
+
     this.logger.log(
-      `Processing TTS batch ${batchJobId}: ${paragraphs.length} paragraphs for story ${storyId} with ${provider}`,
+      `Processing TTS batch ${batchJobId} (generation ${generation}): ${paragraphs.length} paragraphs for story ${storyId} with ${provider}`,
     );
 
     let completedCount = 0;
     let failedCount = 0;
+    // Paragraphs that exhausted the whole provider chain this run — candidates
+    // for a delayed self-heal round.
+    const failedThisRun: TtsBatchJobData['paragraphs'] = [];
 
     // Shared hint: once we learn a provider is quota-exhausted, later paragraphs
     // start straight from the next provider instead of re-hitting the dead one.
@@ -213,28 +223,63 @@ export class TtsBatchProcessor extends WorkerHost {
             throw redisErr;
           }
           failedCount++;
+          failedThisRun.push(chunk[j]);
         }
       }
     }
 
-    // A batch with ANY usable audio is COMPLETED (partial success is still
-    // playable per-paragraph); only a batch where every paragraph failed is
-    // FAILED. The error note flags partial failures for observability.
+    // Self-heal: schedule a delayed follow-up for paragraphs that exhausted the
+    // whole provider chain this run, bounded by MAX_RETRY_GENERATIONS so it can
+    // never loop. The retry re-uses this batchJobId, so recovered paragraphs
+    // heal in place for anyone still polling the batch.
+    if (failedThisRun.length > 0 && generation < MAX_RETRY_GENERATIONS) {
+      try {
+        await this.queueService.queueRetryBatch(
+          job.data,
+          failedThisRun,
+          generation + 1,
+        );
+        this.logger.log(
+          `TTS batch ${batchJobId}: scheduled self-heal (generation ${generation + 1}) for ${failedThisRun.length} paragraph(s)`,
+        );
+      } catch (retryErr) {
+        this.logger.error(
+          `TTS batch ${batchJobId}: failed to schedule self-heal retry`,
+          retryErr,
+        );
+      }
+    }
+
+    // Derive the batch status from the AGGREGATE Redis state, not this run's
+    // local counts: a retry run only touches a subset and must never clobber an
+    // already-partially-good batch back to FAILED. A batch with ANY usable
+    // audio is COMPLETED (partial narration is playable per-paragraph); only an
+    // all-failed batch is FAILED. An empty error string clears a stale
+    // partial-failure note once the batch has fully healed.
+    const snapshot = await this.queueService.getBatchStatus(batchJobId);
+    const aggregateCompleted =
+      snapshot?.completedParagraphs.length ?? completedCount;
+    const aggregateFailed = snapshot?.failedParagraphs.length ?? failedCount;
+    const totalQueued = snapshot?.totalQueued ?? totalParagraphs;
+
     const status =
-      completedCount > 0 ? TtsBatchStatus.COMPLETED : TtsBatchStatus.FAILED;
+      aggregateCompleted > 0
+        ? TtsBatchStatus.COMPLETED
+        : TtsBatchStatus.FAILED;
 
     await this.queueService.updateBatchMeta(batchJobId, {
       status,
-      ...(failedCount > 0
-        ? { error: `${failedCount}/${paragraphs.length} paragraphs failed` }
-        : {}),
+      error:
+        aggregateFailed > 0
+          ? `${aggregateFailed}/${totalQueued} paragraphs failed`
+          : '',
     });
 
     this.logger.log(
-      `TTS batch ${batchJobId} finished: ${completedCount} completed, ${failedCount} failed`,
+      `TTS batch ${batchJobId} finished (generation ${generation}): ${completedCount} completed / ${failedCount} failed this run; aggregate ${aggregateCompleted} completed / ${aggregateFailed} failed`,
     );
 
-    return { success: failedCount === 0, completedCount, failedCount };
+    return { success: aggregateFailed === 0, completedCount, failedCount };
   }
 
   @OnWorkerEvent('failed')
