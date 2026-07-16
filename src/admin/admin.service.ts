@@ -1962,7 +1962,7 @@ export class AdminService {
 
   async getUserGrowthMonthly(
     duration: 'last_year' | 'last_month' | 'last_week' = 'last_year',
-  ): Promise<UserGrowthMonthlyDto> {
+  ): Promise<{ data: UserGrowthMonthlyDto }> {
     const now = new Date();
     let startDate: Date;
     let genLabels: () => string[];

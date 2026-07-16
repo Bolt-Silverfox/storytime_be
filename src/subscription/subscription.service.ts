@@ -31,29 +31,6 @@ export class SubscriptionService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async isPremiumUser(userId: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        role: true,
-        premiumAccessUntil: true,
-        subscription: { select: { status: true, endsAt: true } },
-      },
-    });
-    if (!user) return false;
-    if (user.role === Role.admin) return true;
-
-    // Check coupon-granted premium access
-    if (user.premiumAccessUntil && user.premiumAccessUntil > new Date()) {
-      return true;
-    }
-
-    const sub = user.subscription;
-    if (!sub || sub.status !== SUBSCRIPTION_STATUS.ACTIVE) return false;
-
-    return sub.endsAt === null || sub.endsAt > new Date();
-  }
-
   getPlans() {
     return PLANS;
   }
@@ -170,17 +147,29 @@ export class SubscriptionService {
     return this.cacheMetrics.getOrSet(
       cacheKey,
       async () => {
-        // Query database
-        const subscription = await this.prisma.subscription.findFirst({
-          where: {
-            userId,
-            status: SUBSCRIPTION_STATUS.ACTIVE,
-            OR: [{ endsAt: { gt: new Date() } }, { endsAt: null }],
+        // Admins and coupon-granted access are premium regardless of an
+        // active paid subscription — keep these checks alongside the
+        // subscription lookup so caching doesn't drop the business rules.
+        const user = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            role: true,
+            premiumAccessUntil: true,
+            subscription: { select: { status: true, endsAt: true } },
           },
-          select: { id: true }, // Only need to know if it exists
         });
+        if (!user) return false;
+        if (user.role === Role.admin) return true;
 
-        return !!subscription;
+        // Coupon-granted premium access
+        if (user.premiumAccessUntil && user.premiumAccessUntil > new Date()) {
+          return true;
+        }
+
+        const sub = user.subscription;
+        if (!sub || sub.status !== SUBSCRIPTION_STATUS.ACTIVE) return false;
+
+        return sub.endsAt === null || sub.endsAt > new Date();
       },
       SUBSCRIPTION_CACHE_TTL_MS,
       CACHE_KEY_PATTERN,

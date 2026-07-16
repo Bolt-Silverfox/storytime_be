@@ -436,13 +436,6 @@ export class VerifyEmailDto {
   token: string;
 }
 
-export class RefreshTokenDto {
-  @ApiProperty({ description: 'Refresh token' })
-  @IsString()
-  @IsNotEmpty()
-  token: string;
-}
-
 export class ChangePasswordDto {
   @ApiProperty({ example: 'OldPassword1#' })
   @IsNotEmpty()

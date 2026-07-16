@@ -190,6 +190,21 @@ export class TextToSpeechService {
   }
 
   /**
+   * Synthesize a full story's text into a single hosted audio file and return
+   * its cloud URL. Domain-named wrapper around {@link textToSpeechCloudUrl}
+   * used by the voice queue processor and story generation pipeline.
+   */
+  async synthesizeStory(
+    storyId: string,
+    text: string,
+    voicetype?: VoiceType | string,
+    userId?: string,
+    options?: { skipQuotaCheck?: boolean; isPremium?: boolean },
+  ): Promise<string> {
+    return this.textToSpeechCloudUrl(storyId, text, voicetype, userId, options);
+  }
+
+  /**
    * Public wrapper around generateTTS for use by the batch queue processor.
    * Generates TTS for a single paragraph with a locked provider (no fallback).
    */
