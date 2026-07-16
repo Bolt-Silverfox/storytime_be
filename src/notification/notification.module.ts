@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Global, Module, forwardRef } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bullmq';
 import { NotificationService } from './notification.service';
@@ -17,6 +17,7 @@ import { EmailProcessor } from './queue/email.processor';
 import { PushQueueService } from './queue/push-queue.service';
 import { PushProcessor } from './queue/push.processor';
 
+@Global()
 @Module({
   imports: [
     HttpModule,
