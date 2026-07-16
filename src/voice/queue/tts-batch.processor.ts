@@ -263,9 +263,7 @@ export class TtsBatchProcessor extends WorkerHost {
     const totalQueued = snapshot?.totalQueued ?? totalParagraphs;
 
     const status =
-      aggregateCompleted > 0
-        ? TtsBatchStatus.COMPLETED
-        : TtsBatchStatus.FAILED;
+      aggregateCompleted > 0 ? TtsBatchStatus.COMPLETED : TtsBatchStatus.FAILED;
 
     await this.queueService.updateBatchMeta(batchJobId, {
       status,
