@@ -42,12 +42,15 @@ import {
 
 /** User-facing notification categories that can be toggled in settings. */
 const USER_CONFIGURABLE_CATEGORIES: PrismaCategory[] = [
-  PrismaCategory.SUBSCRIPTION_REMINDER,
-  PrismaCategory.SUBSCRIPTION_ALERT,
   PrismaCategory.NEW_STORY,
   PrismaCategory.STORY_FINISHED,
+  PrismaCategory.ACHIEVEMENT_UNLOCKED,
+  PrismaCategory.BADGE_EARNED,
+  PrismaCategory.STREAK_MILESTONE,
+  PrismaCategory.WE_MISS_YOU,
   PrismaCategory.INCOMPLETE_STORY_REMINDER,
   PrismaCategory.DAILY_LISTENING_REMINDER,
+  PrismaCategory.SUBSCRIPTION_REMINDER,
 ];
 
 @Injectable()
