@@ -16,7 +16,6 @@ import {
   DownloadedStory,
   RestrictedStory,
   ParentRecommendation,
-  StoryAudioCache,
   UserUsage,
   Kid,
   User,
@@ -814,31 +813,6 @@ export class PrismaStoryRepository implements IStoryRepository {
       take: limit,
     });
     return result;
-  }
-
-  // ==================== Audio Cache Operations ====================
-
-  async findStoryAudioCache(
-    storyId: string,
-    voiceType: string,
-  ): Promise<StoryAudioCache | null> {
-    return this.prisma.storyAudioCache.findUnique({
-      where: { storyId_voiceType: { storyId, voiceType } },
-    });
-  }
-
-  async createStoryAudioCache(
-    storyId: string,
-    voiceType: string,
-    audioUrl: string,
-  ): Promise<StoryAudioCache> {
-    return this.prisma.storyAudioCache.create({
-      data: {
-        storyId,
-        voiceType,
-        audioUrl,
-      },
-    });
   }
 
   // ==================== Usage Tracking Operations ====================

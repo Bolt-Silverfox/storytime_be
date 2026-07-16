@@ -14,7 +14,6 @@ import {
   DownloadedStory,
   RestrictedStory,
   ParentRecommendation,
-  StoryAudioCache,
   UserUsage,
   Kid,
   User,
@@ -366,19 +365,6 @@ export interface IStoryRepository {
   groupParentRecommendationsByStory(
     limit: number,
   ): Promise<{ storyId: string; _count: { storyId: number } }[]>;
-
-  // ==================== Audio Cache Operations ====================
-
-  findStoryAudioCache(
-    storyId: string,
-    voiceType: string,
-  ): Promise<StoryAudioCache | null>;
-
-  createStoryAudioCache(
-    storyId: string,
-    voiceType: string,
-    audioUrl: string,
-  ): Promise<StoryAudioCache>;
 
   // ==================== Usage Tracking Operations ====================
 

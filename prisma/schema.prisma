@@ -91,9 +91,6 @@ model User {
   // SOFT DELETE FIELDS
   isDeleted               Boolean                  @default(false)
   deletedAt               DateTime?
-  // SUSPENSION FIELDS
-  isSuspended             Boolean                  @default(false)
-  suspendedAt             DateTime?
   profile                 Profile?
   auth                    Session[]
   Token                   Token[]
@@ -352,7 +349,6 @@ model Story {
   parentRecommendations ParentRecommendation[]
   // ADDED: Restricted stories
   restrictedStories     RestrictedStory[]
-  paragraphAudioCaches  ParagraphAudioCache[]
   elevenLabsTrialUsers  UserUsage[] @relation("ElevenLabsTrial")
 
   @@index([isDeleted])
@@ -796,21 +792,6 @@ model Theme {
 // -------------------------
 // PARAGRAPH AUDIO CACHE
 // -------------------------
-model ParagraphAudioCache {
-  id        String   @id @default(uuid())
-  storyId   String
-  textHash  String
-  voiceId   String
-  audioUrl  String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([storyId, textHash, voiceId])
-  @@index([storyId])
-  @@map("paragraph_audio_cache")
-}
-
 model StoryQuestion {
   id            String           @id @default(uuid())
   storyId       String

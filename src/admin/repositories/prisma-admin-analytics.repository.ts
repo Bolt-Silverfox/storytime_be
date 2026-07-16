@@ -708,7 +708,7 @@ export class PrismaAdminAnalyticsRepository
     });
 
     return {
-      yearly: months.map((m) => ({ month: m, ...dataMap.get(m)! })),
+      yearly: months.map((m) => ({ label: m, month: m, ...dataMap.get(m)! })),
     };
   }
 

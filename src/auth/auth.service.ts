@@ -20,11 +20,11 @@ import {
   ResetPasswordDto,
   ChangePasswordDto,
   CompleteProfileDto,
-  updateProfileDto,
+  UpdateProfileDto,
 } from './dto/auth.dto';
 import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
-import { generateToken } from '@/utils/generate-token';
+import { generateToken } from '@/shared/utils/generate-token';
 import { GoogleOAuthProfile } from '@/shared/types';
 import * as crypto from 'crypto';
 import { NotificationService } from '@/notification/notification.service';
@@ -395,7 +395,7 @@ export class AuthService {
     });
   }
 
-  async updateProfile(userId: string, data: updateProfileDto) {
+  async updateProfile(userId: string, data: UpdateProfileDto) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId },
       include: { profile: true },

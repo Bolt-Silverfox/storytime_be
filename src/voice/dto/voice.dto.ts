@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -144,4 +145,45 @@ export class BatchStoryAudioDto {
   @IsString()
   @MaxLength(100)
   voiceId?: VoiceType | string;
+}
+
+export class AsyncStorySynthesisDto {
+  @ApiProperty({
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    description: 'ID of an existing story to synthesize audio for',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @IsUUID()
+  storyId: string;
+
+  @ApiProperty({
+    required: false,
+    example: 'NIMBUS',
+    description: 'Preferred voice type (Enum value or UUID)',
+    type: 'string',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  voiceType?: VoiceType | string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Custom cloned voice ID to use instead of the voice type',
+    type: 'string',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  customVoiceId?: string;
+
+  @ApiProperty({
+    required: false,
+    default: false,
+    description: 'Whether to persist the generated audio URL on the story',
+  })
+  @IsOptional()
+  @IsBoolean()
+  updateStory?: boolean;
 }
