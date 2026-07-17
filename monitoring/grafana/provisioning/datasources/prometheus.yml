@@ -1,0 +1,10 @@
+# Grafana datasource provisioning — Prometheus scraping the Storytime API.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # Adjust to your Prometheus URL (the app exposes /metrics on port 9464)
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
