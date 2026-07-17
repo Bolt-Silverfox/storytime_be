@@ -1,9 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   NotificationCategory as PrismaCategory,
   NotificationType as PrismaNotificationType,
 } from '@prisma/client';
-import { PrismaService } from '@/prisma/prisma.service';
+import {
+  NOTIFICATION_PREFERENCE_REPOSITORY,
+  INotificationPreferenceRepository,
+} from '../repositories';
 import { NotificationRegistry, Notifications } from '../notification.registry';
 import { InAppProvider } from '../providers/in-app.provider';
 import { EmailProvider } from '../providers/email.provider';
@@ -28,7 +31,8 @@ export class NotificationDispatchService {
   private providers: Map<string, INotificationProvider>;
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(NOTIFICATION_PREFERENCE_REPOSITORY)
+    private readonly notificationPreferenceRepository: INotificationPreferenceRepository,
     private readonly inAppProvider: InAppProvider,
     private readonly emailProvider: EmailProvider,
     private readonly pushProvider: PushProvider,
@@ -179,18 +183,14 @@ export class NotificationDispatchService {
       in_app: PrismaNotificationType.in_app,
     };
 
-    const preferences = await this.prisma.notificationPreference.findMany({
-      where: {
+    const preferences =
+      await this.notificationPreferenceRepository.findManyByUserCategoryAndTypes(
         userId,
         category,
-        type: {
-          in: requestedChannels
-            .map((c) => channelToType[c])
-            .filter((t) => t !== undefined),
-        },
-        isDeleted: false,
-      },
-    });
+        requestedChannels
+          .map((c) => channelToType[c])
+          .filter((t) => t !== undefined),
+      );
 
     // Create a map of channel -> enabled status
     const prefMap = new Map<string, boolean>();

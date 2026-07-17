@@ -1,11 +1,15 @@
 import {
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
 import { DeviceToken, DevicePlatform } from '@prisma/client';
+import {
+  DEVICE_TOKEN_REPOSITORY,
+  IDeviceTokenRepository,
+} from '../repositories';
 
 export interface RegisterDeviceDto {
   token: string;
@@ -25,7 +29,10 @@ export interface DeviceTokenResponse {
 export class DeviceTokenService {
   private readonly logger = new Logger(DeviceTokenService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(DEVICE_TOKEN_REPOSITORY)
+    private readonly deviceTokenRepository: IDeviceTokenRepository,
+  ) {}
 
   /**
    * Register a device token for push notifications
@@ -38,21 +45,17 @@ export class DeviceTokenService {
     const { token, platform, deviceName } = dto;
 
     // Check if token already exists
-    const existingToken = await this.prisma.deviceToken.findUnique({
-      where: { token },
-    });
+    const existingToken =
+      await this.deviceTokenRepository.findUniqueByToken(token);
 
     if (existingToken) {
       // If same user, just reactivate and update
       if (existingToken.userId === userId) {
-        const updated = await this.prisma.deviceToken.update({
-          where: { token },
-          data: {
-            isActive: true,
-            platform,
-            lastUsed: new Date(),
-            ...(deviceName !== undefined && { deviceName }),
-          },
+        const updated = await this.deviceTokenRepository.updateByToken(token, {
+          isActive: true,
+          platform,
+          lastUsed: new Date(),
+          ...(deviceName !== undefined && { deviceName }),
         });
 
         this.logger.log(
@@ -63,15 +66,12 @@ export class DeviceTokenService {
 
       // Token belongs to another user - reassign it
       // (This happens when user logs out and another user logs in on same device)
-      const reassigned = await this.prisma.deviceToken.update({
-        where: { token },
-        data: {
-          userId,
-          platform,
-          isActive: true,
-          lastUsed: new Date(),
-          ...(deviceName !== undefined && { deviceName }),
-        },
+      const reassigned = await this.deviceTokenRepository.updateByToken(token, {
+        userId,
+        platform,
+        isActive: true,
+        lastUsed: new Date(),
+        ...(deviceName !== undefined && { deviceName }),
       });
 
       this.logger.log(
@@ -81,24 +81,28 @@ export class DeviceTokenService {
     }
 
     // Create new token (with deduplication for same device)
-    const created = await this.prisma.$transaction(async (tx) => {
-      // Deactivate old tokens for same device
-      if (deviceName) {
-        await tx.deviceToken.updateMany({
-          where: {
-            userId,
-            platform,
-            deviceName,
-            isDeleted: false,
-            token: { not: token },
-          },
-          data: { isActive: false, isDeleted: true, deletedAt: new Date() },
-        });
-      }
-      return tx.deviceToken.create({
-        data: { userId, token, platform, isActive: true, deviceName },
-      });
-    });
+    const created = await this.deviceTokenRepository.executeTransaction(
+      async (tx) => {
+        // Deactivate old tokens for same device
+        if (deviceName) {
+          await this.deviceTokenRepository.updateManyTokens(
+            {
+              userId,
+              platform,
+              deviceName,
+              isDeleted: false,
+              token: { not: token },
+            },
+            { isActive: false, isDeleted: true, deletedAt: new Date() },
+            tx,
+          );
+        }
+        return this.deviceTokenRepository.createToken(
+          { userId, token, platform, isActive: true, deviceName },
+          tx,
+        );
+      },
+    );
 
     this.logger.log(
       `Registered new device token for user ${userId} (${platform})`,
@@ -114,9 +118,8 @@ export class DeviceTokenService {
     userId: string,
     token: string,
   ): Promise<{ success: boolean }> {
-    const deviceToken = await this.prisma.deviceToken.findUnique({
-      where: { token },
-    });
+    const deviceToken =
+      await this.deviceTokenRepository.findUniqueByToken(token);
 
     if (!deviceToken) {
       throw new NotFoundException('Device token not found');
@@ -127,10 +130,7 @@ export class DeviceTokenService {
     }
 
     // Soft delete by marking as inactive
-    await this.prisma.deviceToken.update({
-      where: { token },
-      data: { isActive: false },
-    });
+    await this.deviceTokenRepository.updateByToken(token, { isActive: false });
 
     this.logger.log(`Unregistered device token for user ${userId}`);
     return { success: true };
@@ -140,13 +140,7 @@ export class DeviceTokenService {
    * Get all active device tokens for a user
    */
   async getUserDeviceTokens(userId: string): Promise<DeviceTokenResponse[]> {
-    const tokens = await this.prisma.deviceToken.findMany({
-      where: {
-        userId,
-        isActive: true,
-      },
-      orderBy: { lastUsed: 'desc' },
-    });
+    const tokens = await this.deviceTokenRepository.findActiveByUser(userId);
 
     return tokens.map((t) => this.toResponse(t));
   }
@@ -155,13 +149,13 @@ export class DeviceTokenService {
    * Unregister all device tokens for a user (e.g., on logout from all devices)
    */
   async unregisterAllUserTokens(userId: string): Promise<{ count: number }> {
-    const result = await this.prisma.deviceToken.updateMany({
-      where: {
+    const result = await this.deviceTokenRepository.updateManyTokens(
+      {
         userId,
         isActive: true,
       },
-      data: { isActive: false },
-    });
+      { isActive: false },
+    );
 
     this.logger.log(
       `Unregistered ${result.count} device tokens for user ${userId}`,
@@ -174,13 +168,8 @@ export class DeviceTokenService {
    * (Used to determine if push notifications are available)
    */
   async hasActiveMobileTokens(userId: string): Promise<boolean> {
-    const count = await this.prisma.deviceToken.count({
-      where: {
-        userId,
-        isActive: true,
-        platform: { in: ['ios', 'android'] },
-      },
-    });
+    const count =
+      await this.deviceTokenRepository.countActiveMobileTokens(userId);
 
     return count > 0;
   }
@@ -189,13 +178,8 @@ export class DeviceTokenService {
    * Check if user has web token registered (for SSE preference)
    */
   async hasActiveWebToken(userId: string): Promise<boolean> {
-    const count = await this.prisma.deviceToken.count({
-      where: {
-        userId,
-        isActive: true,
-        platform: 'web',
-      },
-    });
+    const count =
+      await this.deviceTokenRepository.countActiveWebTokens(userId);
 
     return count > 0;
   }
@@ -208,11 +192,8 @@ export class DeviceTokenService {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const result = await this.prisma.deviceToken.deleteMany({
-      where: {
-        OR: [{ isActive: false }, { lastUsed: { lt: ninetyDaysAgo } }],
-      },
-    });
+    const result =
+      await this.deviceTokenRepository.deleteStaleTokens(ninetyDaysAgo);
 
     this.logger.log(`Cleaned up ${result.count} stale device tokens`);
     return { count: result.count };

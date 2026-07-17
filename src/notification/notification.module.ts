@@ -35,6 +35,10 @@ import {
   PrismaNotificationPreferenceRepository,
   IN_APP_NOTIFICATION_REPOSITORY,
   PrismaInAppNotificationRepository,
+  DEVICE_TOKEN_REPOSITORY,
+  PrismaDeviceTokenRepository,
+  USER_REPOSITORY,
+  PrismaUserRepository,
 } from './repositories';
 
 @Module({
@@ -92,6 +96,14 @@ import {
       provide: IN_APP_NOTIFICATION_REPOSITORY,
       useClass: PrismaInAppNotificationRepository,
     },
+    {
+      provide: DEVICE_TOKEN_REPOSITORY,
+      useClass: PrismaDeviceTokenRepository,
+    },
+    {
+      provide: USER_REPOSITORY,
+      useClass: PrismaUserRepository,
+    },
   ],
   exports: [
     NotificationService,
@@ -104,6 +116,8 @@ import {
     JobEventsService,
     NOTIFICATION_PREFERENCE_REPOSITORY,
     IN_APP_NOTIFICATION_REPOSITORY,
+    DEVICE_TOKEN_REPOSITORY,
+    USER_REPOSITORY,
   ],
 })
 export class NotificationModule {}

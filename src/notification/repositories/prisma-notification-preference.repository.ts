@@ -59,6 +59,16 @@ export class PrismaNotificationPreferenceRepository
     });
   }
 
+  async updateNotificationPreferenceById(
+    id: string,
+    data: Partial<NotificationPreference>,
+  ): Promise<NotificationPreference> {
+    return this.prisma.notificationPreference.update({
+      where: { id },
+      data,
+    });
+  }
+
   async findManyNotificationPreferences(where: {
     userId?: string;
     kidId?: string;
@@ -143,6 +153,73 @@ export class PrismaNotificationPreferenceRepository
         isDeleted: false,
       },
     });
+  }
+
+  async findManyByUserCategoryAndTypes(
+    userId: string,
+    category: NotificationCategory,
+    types: NotificationType[],
+  ): Promise<NotificationPreference[]> {
+    return this.prisma.notificationPreference.findMany({
+      where: {
+        userId,
+        category,
+        type: {
+          in: types,
+        },
+        isDeleted: false,
+      },
+    });
+  }
+
+  async bulkUpdateEnabledInTransaction(
+    updates: { id: string; enabled?: boolean }[],
+  ): Promise<NotificationPreference[]> {
+    return this.prisma.$transaction(
+      updates.map((u) =>
+        this.prisma.notificationPreference.update({
+          where: {
+            id: u.id,
+            isDeleted: false,
+          },
+          data: { enabled: u.enabled },
+        }),
+      ),
+    );
+  }
+
+  async upsertManyInTransaction(
+    items: {
+      userId: string;
+      category: NotificationCategory;
+      type: NotificationType;
+      enabled: boolean;
+    }[],
+  ): Promise<void> {
+    await this.prisma.$transaction(
+      items.map((i) =>
+        this.prisma.notificationPreference.upsert({
+          where: {
+            userId_category_type: {
+              userId: i.userId,
+              category: i.category,
+              type: i.type,
+            },
+          },
+          create: {
+            userId: i.userId,
+            category: i.category,
+            type: i.type,
+            enabled: i.enabled,
+          },
+          update: {
+            enabled: i.enabled,
+            isDeleted: false,
+            deletedAt: null,
+          },
+        }),
+      ),
+    );
   }
 
   async deleteNotificationPreference(id: string): Promise<void> {

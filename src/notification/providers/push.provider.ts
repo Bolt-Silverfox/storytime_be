@@ -1,8 +1,11 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
-import { PrismaService } from '@/prisma/prisma.service';
 import { EnvConfig } from '@/shared/config/env.validation';
+import {
+  DEVICE_TOKEN_REPOSITORY,
+  IDeviceTokenRepository,
+} from '../repositories';
 import {
   INotificationProvider,
   NotificationPayload,
@@ -20,7 +23,8 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
 
   constructor(
     private readonly configService: ConfigService<EnvConfig, true>,
-    private readonly prisma: PrismaService,
+    @Inject(DEVICE_TOKEN_REPOSITORY)
+    private readonly deviceTokenRepository: IDeviceTokenRepository,
   ) {}
 
   onModuleInit() {
@@ -82,14 +86,10 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
 
     try {
       // Get all active device tokens for the user
-      const deviceTokens = await this.prisma.deviceToken.findMany({
-        where: {
-          userId: payload.userId,
-          isActive: true,
-          isDeleted: false,
-        },
-        select: { id: true, token: true },
-      });
+      const deviceTokens =
+        await this.deviceTokenRepository.findActiveNotDeletedWithIds(
+          payload.userId,
+        );
 
       this.logger.log(
         `send() found ${deviceTokens.length} active token(s) for user=${payload.userId.substring(0, 8)}`,
@@ -363,10 +363,10 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
     });
 
     if (invalidTokenIds.length > 0) {
-      await this.prisma.deviceToken.updateMany({
-        where: { id: { in: invalidTokenIds } },
-        data: { isActive: false },
-      });
+      await this.deviceTokenRepository.updateManyTokens(
+        { id: { in: invalidTokenIds } },
+        { isActive: false },
+      );
       this.logger.log(`Marked ${invalidTokenIds.length} tokens as inactive`);
     }
   }

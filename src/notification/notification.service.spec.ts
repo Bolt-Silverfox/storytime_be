@@ -14,6 +14,7 @@ import { NotificationDispatchService } from './services/notification-dispatch.se
 import { NotificationSettingsService } from './services/notification-settings.service';
 import { NotificationDeviceService } from './services/notification-device.service';
 import { InAppNotificationService } from './services/in-app-notification.service';
+import { NOTIFICATION_PREFERENCE_REPOSITORY } from './repositories';
 
 // Mock nodemailer
 jest.mock('nodemailer', () => ({
@@ -142,6 +143,12 @@ describe('NotificationService', () => {
         { provide: NotificationDeviceService, useValue: {} },
         { provide: InAppNotificationService, useValue: {} },
         { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: NOTIFICATION_PREFERENCE_REPOSITORY,
+          useValue: {
+            findManyByUserCategoryAndTypes: jest.fn().mockResolvedValue([]),
+          },
+        },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: InAppProvider, useValue: mockInAppProvider },
         { provide: EmailProvider, useValue: mockEmailProvider },

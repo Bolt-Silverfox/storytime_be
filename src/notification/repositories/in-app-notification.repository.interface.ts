@@ -1,7 +1,12 @@
-import type { Notification } from '@prisma/client';
+import type { Notification, Prisma } from '@prisma/client';
 
 // ==================== Repository Interface ====================
 export interface IInAppNotificationRepository {
+  // Create an in-app notification record
+  createNotification(
+    data: Prisma.NotificationUncheckedCreateInput,
+  ): Promise<Notification>;
+
   // Find notifications with pagination and filtering
   findNotifications(params: {
     userId: string;

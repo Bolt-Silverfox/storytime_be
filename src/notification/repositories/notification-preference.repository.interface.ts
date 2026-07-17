@@ -24,8 +24,14 @@ export interface INotificationPreferenceRepository {
     kidId?: string;
   }): Promise<NotificationPreference>;
 
-  // Update notification preference
+  // Update notification preference (only matches non-deleted rows)
   updateNotificationPreference(
+    id: string,
+    data: Partial<NotificationPreference>,
+  ): Promise<NotificationPreference>;
+
+  // Update notification preference by id only (matches rows regardless of soft-delete state)
+  updateNotificationPreferenceById(
     id: string,
     data: Partial<NotificationPreference>,
   ): Promise<NotificationPreference>;
@@ -86,6 +92,28 @@ export interface INotificationPreferenceRepository {
     ids: string[],
     userId: string,
   ): Promise<NotificationPreference[]>;
+
+  // Find many notification preferences for a user, category and set of types
+  findManyByUserCategoryAndTypes(
+    userId: string,
+    category: NotificationCategory,
+    types: NotificationType[],
+  ): Promise<NotificationPreference[]>;
+
+  // Update the `enabled` flag of several preferences atomically (array-form transaction)
+  bulkUpdateEnabledInTransaction(
+    updates: { id: string; enabled?: boolean }[],
+  ): Promise<NotificationPreference[]>;
+
+  // Upsert several preferences atomically (array-form transaction)
+  upsertManyInTransaction(
+    items: {
+      userId: string;
+      category: NotificationCategory;
+      type: NotificationType;
+      enabled: boolean;
+    }[],
+  ): Promise<void>;
 
   // Delete notification preference (permanent)
   deleteNotificationPreference(id: string): Promise<void>;

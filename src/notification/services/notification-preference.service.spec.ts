@@ -47,12 +47,16 @@ describe('NotificationPreferenceService', () => {
       findKid: jest.fn(),
       createNotificationPreference: jest.fn(),
       updateNotificationPreference: jest.fn(),
+      updateNotificationPreferenceById: jest.fn(),
       findManyNotificationPreferences: jest.fn(),
       findUniqueNotificationPreference: jest.fn(),
       upsertNotificationPreference: jest.fn(),
       executeTransaction: jest.fn((fn) => fn({})),
       createManyNotificationPreferences: jest.fn(),
       findManyNotificationPreferencesByIds: jest.fn(),
+      findManyByUserCategoryAndTypes: jest.fn(),
+      bulkUpdateEnabledInTransaction: jest.fn(),
+      upsertManyInTransaction: jest.fn(),
       deleteNotificationPreference: jest.fn(),
     };
 
