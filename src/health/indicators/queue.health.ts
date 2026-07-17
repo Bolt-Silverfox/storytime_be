@@ -9,7 +9,6 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { EMAIL_QUEUE_NAME } from '@/notification/queue/email-queue.constants';
 import { STORY_QUEUE_NAME } from '@/story/queue/story-queue.constants';
-import { VOICE_QUEUE_NAME } from '@/voice/queue/voice-queue.constants';
 import { ALERTING_THRESHOLDS } from '@/shared/config/alerting.config';
 
 interface QueueStats {
@@ -33,7 +32,7 @@ interface QueueHealthResult {
 
 /**
  * Health indicator for BullMQ queues
- * Monitors email, story generation, and voice synthesis queues
+ * Monitors the email and story generation queues
  */
 @Injectable()
 export class QueueHealthIndicator extends HealthIndicator {
@@ -45,18 +44,12 @@ export class QueueHealthIndicator extends HealthIndicator {
     @Optional()
     @InjectQueue(STORY_QUEUE_NAME)
     private readonly storyQueue: Queue | null,
-    @Optional()
-    @InjectQueue(VOICE_QUEUE_NAME)
-    private readonly voiceQueue: Queue | null,
   ) {
     super();
     // Register available queues
     this.queues.set('email', this.emailQueue);
     if (this.storyQueue) {
       this.queues.set('story', this.storyQueue);
-    }
-    if (this.voiceQueue) {
-      this.queues.set('voice', this.voiceQueue);
     }
   }
 
@@ -118,7 +111,7 @@ export class QueueHealthIndicator extends HealthIndicator {
    */
   async checkQueue(
     key: string,
-    queueName: 'email' | 'story' | 'voice',
+    queueName: 'email' | 'story',
   ): Promise<HealthIndicatorResult> {
     const queue = this.queues.get(queueName);
     if (!queue) {

@@ -12,7 +12,6 @@ import {
 import { PrismaModule } from '@/prisma/prisma.module';
 import { EMAIL_QUEUE_NAME } from '@/notification/queue/email-queue.constants';
 import { STORY_QUEUE_NAME } from '@/story/queue/story-queue.constants';
-import { VOICE_QUEUE_NAME } from '@/voice/queue/voice-queue.constants';
 
 @Module({
   imports: [
@@ -22,7 +21,6 @@ import { VOICE_QUEUE_NAME } from '@/voice/queue/voice-queue.constants';
     BullModule.registerQueue(
       { name: EMAIL_QUEUE_NAME },
       { name: STORY_QUEUE_NAME },
-      { name: VOICE_QUEUE_NAME },
     ),
   ],
   controllers: [HealthController],
