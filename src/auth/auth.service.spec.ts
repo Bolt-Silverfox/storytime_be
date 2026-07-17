@@ -1,20 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
-import { PrismaService } from '@/prisma/prisma.service';
-import { NotificationService } from '@/notification/notification.service';
+import { AUTH_REPOSITORY } from './repositories';
 import { TokenService } from './services/token.service';
-import { PasswordService } from './services/password.service';
 import { Role } from '@prisma/client';
 
 jest.mock('bcryptjs');
 
 describe('AuthService', () => {
   let service: AuthService;
-  let prisma: { user: { findUnique: jest.Mock } };
+  let authRepository: { findUserByEmailWithRelations: jest.Mock };
   let tokenService: jest.Mocked<
     Pick<
       TokenService,
@@ -41,8 +38,8 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
-    const mockPrisma = {
-      user: { findUnique: jest.fn() },
+    const mockAuthRepository = {
+      findUserByEmailWithRelations: jest.fn(),
     };
 
     const mockTokenService = {
@@ -53,33 +50,25 @@ describe('AuthService', () => {
       deleteAllUserSessions: jest.fn(),
     };
 
-    const mockPasswordService = {
-      hashPassword: jest.fn(),
-      verifyPassword: jest.fn(),
-    };
-
     jest.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: PrismaService, useValue: mockPrisma },
-        { provide: NotificationService, useValue: {} },
+        { provide: AUTH_REPOSITORY, useValue: mockAuthRepository },
         { provide: TokenService, useValue: mockTokenService },
-        { provide: PasswordService, useValue: mockPasswordService },
-        { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    prisma = module.get(PrismaService);
+    authRepository = module.get(AUTH_REPOSITORY);
     tokenService = module.get(TokenService);
   });
 
   describe('login', () => {
     it('should login successfully with valid credentials', async () => {
-      prisma.user.findUnique.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailWithRelations.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
       tokenService.createTokenPair.mockResolvedValue({
         jwt: 'jwt-token',
@@ -96,13 +85,13 @@ describe('AuthService', () => {
       expect(result?.refreshToken).toBe('refresh-token');
       expect(result?.user.email).toBe('test@example.com');
       expect(result?.user.numberOfKids).toBe(2);
-      expect(prisma.user.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { email: 'test@example.com' } }),
+      expect(authRepository.findUserByEmailWithRelations).toHaveBeenCalledWith(
+        'test@example.com',
       );
     });
 
     it('should throw BadRequestException for unknown email', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
+      authRepository.findUserByEmailWithRelations.mockResolvedValue(null);
 
       await expect(
         service.login({ email: 'wrong@example.com', password: 'password123' }),
@@ -110,7 +99,7 @@ describe('AuthService', () => {
     });
 
     it('should throw BadRequestException for invalid password', async () => {
-      prisma.user.findUnique.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailWithRelations.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
       await expect(
@@ -119,7 +108,7 @@ describe('AuthService', () => {
     });
 
     it('should throw BadRequestException for unverified email', async () => {
-      prisma.user.findUnique.mockResolvedValue({
+      authRepository.findUserByEmailWithRelations.mockResolvedValue({
         ...mockUser,
         isEmailVerified: false,
       });

@@ -22,6 +22,7 @@ import { OAuthService } from './services/oauth.service';
 import { OnboardingService } from './services/onboarding.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { PasswordService } from './services/password.service';
+import { AccountLinkingService } from './services/account-linking.service';
 import {
   LoginDto,
   LoginResponseDto,
@@ -63,6 +64,7 @@ export class AuthController {
     private readonly onboardingService: OnboardingService,
     private readonly emailVerificationService: EmailVerificationService,
     private readonly passwordService: PasswordService,
+    private readonly accountLinkingService: AccountLinkingService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -385,7 +387,9 @@ export class AuthController {
   @ApiOperation({ summary: 'Get linked auth providers for current user' })
   @ApiResponse({ status: 200, description: 'Linked accounts retrieved.' })
   async getLinkedAccounts(@Req() req: AuthenticatedRequest) {
-    return this.authService.getLinkedAccounts(req.authUserData['userId']);
+    return this.accountLinkingService.getLinkedAccounts(
+      req.authUserData['userId'],
+    );
   }
 
   @Post('link/google')
@@ -404,7 +408,10 @@ export class AuthController {
     if (!idToken) {
       throw new BadRequestException('id_token is required');
     }
-    return this.authService.linkGoogle(req.authUserData['userId'], idToken);
+    return this.accountLinkingService.linkGoogle(
+      req.authUserData['userId'],
+      idToken,
+    );
   }
 
   @Post('link/apple')
@@ -423,7 +430,10 @@ export class AuthController {
     if (!idToken) {
       throw new BadRequestException('id_token is required');
     }
-    return this.authService.linkApple(req.authUserData['userId'], idToken);
+    return this.accountLinkingService.linkApple(
+      req.authUserData['userId'],
+      idToken,
+    );
   }
 
   @Delete('unlink/:provider')
@@ -436,7 +446,7 @@ export class AuthController {
     @Req() req: AuthenticatedRequest,
     @Param('provider') provider: string,
   ) {
-    return this.authService.unlinkProvider(
+    return this.accountLinkingService.unlinkProvider(
       req.authUserData['userId'],
       provider,
     );

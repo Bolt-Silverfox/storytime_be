@@ -12,6 +12,7 @@ import { PasswordService } from './services/password.service';
 import { OAuthService } from './services/oauth.service';
 import { OnboardingService } from './services/onboarding.service';
 import { EmailVerificationService } from './services/email-verification.service';
+import { AccountLinkingService } from './services/account-linking.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationModule } from '../notification/notification.module';
 import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
@@ -42,6 +43,7 @@ import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
     PasswordService,
     OAuthService,
     OnboardingService,
+    AccountLinkingService,
     GoogleStrategy,
     GoogleAuthGuard,
     GoogleOAuthStrategy,
@@ -58,6 +60,7 @@ import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
     PasswordService,
     OAuthService,
     OnboardingService,
+    AccountLinkingService,
     JwtModule,
     PassportModule,
     AUTH_REPOSITORY,

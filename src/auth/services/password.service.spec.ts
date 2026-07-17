@@ -367,6 +367,8 @@ describe('PasswordService', () => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
           updateUser: jest.fn().mockResolvedValue({} as any),
           deleteOtherSessions: jest.fn().mockResolvedValue(undefined),
+          findActiveUserLinkedProviderFields: jest.fn().mockResolvedValue(null),
+          unlinkProviderField: jest.fn().mockResolvedValue(undefined),
         };
         return fn(tx);
       });
@@ -390,6 +392,8 @@ describe('PasswordService', () => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
           updateUser: jest.fn().mockResolvedValue({} as any),
           deleteOtherSessions: jest.fn().mockResolvedValue(undefined),
+          findActiveUserLinkedProviderFields: jest.fn().mockResolvedValue(null),
+          unlinkProviderField: jest.fn().mockResolvedValue(undefined),
         };
         return fn(tx);
       });
@@ -474,6 +478,8 @@ describe('PasswordService', () => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
           updateUser: mockTxUpdateUser,
           deleteOtherSessions: mockTxDeleteOtherSessions,
+          findActiveUserLinkedProviderFields: jest.fn().mockResolvedValue(null),
+          unlinkProviderField: jest.fn().mockResolvedValue(undefined),
         };
         return fn(tx);
       });
