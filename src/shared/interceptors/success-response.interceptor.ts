@@ -11,10 +11,9 @@ import { SuccessResponse } from '../dtos/api-response.dto';
 
 // Transforms the response data from all successful Controller methods
 @Injectable()
-export class SuccessResponseInterceptor<T> implements NestInterceptor<
-  T,
-  SuccessResponse<T>
-> {
+export class SuccessResponseInterceptor<T>
+  implements NestInterceptor<T, SuccessResponse<T>>
+{
   intercept(
     context: ExecutionContext,
     next: CallHandler,

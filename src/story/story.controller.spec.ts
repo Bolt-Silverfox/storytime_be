@@ -196,7 +196,11 @@ describe('StoryController', () => {
     it('should throw NotFoundException when story does not exist', async () => {
       mockPrismaService.story.findFirst.mockResolvedValue(null);
       await expect(
-        controller.updateStory(mockReq, 'non-existent-story', {}),
+        controller.updateStory(
+          mockReq,
+          'non-existent-story',
+          {} as UpdateStoryDto,
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -208,7 +212,7 @@ describe('StoryController', () => {
         creatorKid: { parentId: 'other-user' },
       });
       await expect(
-        controller.updateStory(mockReq, 'story-123', {}),
+        controller.updateStory(mockReq, 'story-123', {} as UpdateStoryDto),
       ).rejects.toThrow(ForbiddenException);
       expect(mockStoryService.updateStory).not.toHaveBeenCalled();
     });

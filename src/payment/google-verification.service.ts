@@ -82,7 +82,8 @@ interface GooglePythonErrorResponse {
 }
 
 type GooglePythonResponse =
-  GooglePythonSuccessResponse | GooglePythonErrorResponse;
+  | GooglePythonSuccessResponse
+  | GooglePythonErrorResponse;
 
 const execFileAsync = promisify(execFile) as (
   file: string,
