@@ -37,6 +37,19 @@ export interface TokenWithUser extends Token {
   user: User;
 }
 
+// ==================== Account Linking Types ====================
+export interface UserLinkedProviderFields {
+  googleId: string | null;
+  appleId: string | null;
+  hasLocalPassword: boolean;
+}
+
+export interface UserLinkedAccountInfo extends UserLinkedProviderFields {
+  email: string;
+}
+
+export type LinkableProviderField = 'googleId' | 'appleId';
+
 // ==================== Repository Interface ====================
 export interface IAuthRepository {
   // User operations
@@ -91,6 +104,18 @@ export interface IAuthRepository {
     categoryIds: string[],
   ): Promise<void>;
   countKidsByParentId(parentId: string): Promise<number>;
+
+  // Account linking operations
+  findActiveUserById(id: string): Promise<User | null>;
+  findUserLinkedAccountInfo(id: string): Promise<UserLinkedAccountInfo | null>;
+  linkGoogleAccountIfUnset(
+    userId: string,
+    googleId: string,
+  ): Promise<{ count: number }>;
+  linkAppleAccountIfUnset(
+    userId: string,
+    appleId: string,
+  ): Promise<{ count: number }>;
 
   // Session operations
   createSession(data: {
@@ -165,6 +190,13 @@ export interface IAuthRepository {
 export interface IAuthRepositoryTransaction {
   updateUser(id: string, data: { passwordHash: string }): Promise<User>;
   deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void>;
+  findActiveUserLinkedProviderFields(
+    userId: string,
+  ): Promise<UserLinkedProviderFields | null>;
+  unlinkProviderField(
+    userId: string,
+    field: LinkableProviderField,
+  ): Promise<void>;
 }
 
 export const AUTH_REPOSITORY = Symbol('AUTH_REPOSITORY');

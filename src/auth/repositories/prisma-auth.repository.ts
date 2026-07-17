@@ -17,6 +17,7 @@ import {
   UserWithLearningExpectations,
   SessionWithUser,
   TokenWithUser,
+  UserLinkedAccountInfo,
 } from './auth.repository.interface';
 
 @Injectable()
@@ -158,6 +159,48 @@ export class PrismaAuthRepository implements IAuthRepository {
 
   async countKidsByParentId(parentId: string): Promise<number> {
     return this.prisma.kid.count({ where: { parentId } });
+  }
+
+  // ==================== Account Linking Operations ====================
+
+  async findActiveUserById(id: string): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { id, isDeleted: false },
+    });
+  }
+
+  async findUserLinkedAccountInfo(
+    id: string,
+  ): Promise<UserLinkedAccountInfo | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        email: true,
+        googleId: true,
+        appleId: true,
+        hasLocalPassword: true,
+      },
+    });
+  }
+
+  async linkGoogleAccountIfUnset(
+    userId: string,
+    googleId: string,
+  ): Promise<{ count: number }> {
+    return this.prisma.user.updateMany({
+      where: { id: userId, googleId: null, isDeleted: false },
+      data: { googleId },
+    });
+  }
+
+  async linkAppleAccountIfUnset(
+    userId: string,
+    appleId: string,
+  ): Promise<{ count: number }> {
+    return this.prisma.user.updateMany({
+      where: { id: userId, appleId: null, isDeleted: false },
+      data: { appleId },
+    });
   }
 
   // ==================== Session Operations ====================
@@ -354,6 +397,22 @@ export class PrismaAuthRepository implements IAuthRepository {
               userId,
               id: { not: exceptSessionId },
             },
+          });
+        },
+        findActiveUserLinkedProviderFields: async (userId) => {
+          return prisma.user.findUnique({
+            where: { id: userId, isDeleted: false },
+            select: {
+              googleId: true,
+              appleId: true,
+              hasLocalPassword: true,
+            },
+          });
+        },
+        unlinkProviderField: async (userId, field) => {
+          await prisma.user.update({
+            where: { id: userId },
+            data: { [field]: null },
           });
         },
       };
