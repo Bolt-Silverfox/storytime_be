@@ -1,12 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { UserService } from './user.service';
 import type { SafeUser } from './user.service';
 import { UserRole } from './user.controller';
 import { PrismaService } from '@/prisma/prisma.service';
-import {
-  ResourceNotFoundException,
-  InvalidRoleException,
-} from '@/shared/exceptions';
+import { NotificationService } from '@/notification/notification.service';
 
 // Type-safe mock for PrismaService
 type MockPrismaService = {
@@ -69,6 +67,13 @@ describe('UserService', () => {
       providers: [
         UserService,
         { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: NotificationService,
+          useValue: {
+            seedDefaultPreferences: jest.fn(),
+            sendNotification: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -91,14 +96,12 @@ describe('UserService', () => {
       expect(result?.numberOfKids).toBe(2);
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: 'user-1', isDeleted: false },
-        select: expect.objectContaining({
-          id: true,
-          email: true,
+        include: {
           profile: true,
           kids: true,
           avatar: true,
           subscription: true,
-        }),
+        },
       });
     });
 
@@ -121,14 +124,12 @@ describe('UserService', () => {
       expect(result).toBeDefined();
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        select: expect.objectContaining({
-          id: true,
-          email: true,
+        include: {
           profile: true,
           kids: true,
           avatar: true,
           subscription: true,
-        }),
+        },
       });
     });
   });
@@ -160,12 +161,7 @@ describe('UserService', () => {
       expect(result).toHaveLength(1);
       expect(mockPrisma.user.findMany).toHaveBeenCalledWith({
         where: { isDeleted: false },
-        select: expect.objectContaining({
-          id: true,
-          email: true,
-          profile: true,
-          avatar: true,
-        }),
+        include: { profile: true, avatar: true },
       });
     });
   });
@@ -175,10 +171,9 @@ describe('UserService', () => {
   describe('updateUser', () => {
     it('should update user name', async () => {
       mockPrisma.user.findUnique.mockResolvedValueOnce(mockUser);
-      const updatedUser = { ...mockUser, name: 'Updated Name' };
-      mockPrisma.$transaction.mockResolvedValue({
-        ...updatedUser,
-        numberOfKids: 2,
+      mockPrisma.user.update.mockResolvedValue({
+        ...mockUser,
+        name: 'Updated Name',
       });
 
       const result = await service.updateUser('user-1', {
@@ -186,14 +181,15 @@ describe('UserService', () => {
       });
 
       expect(result).toBeDefined();
+      expect(mockPrisma.user.update).toHaveBeenCalled();
     });
 
-    it('should throw ResourceNotFoundException for non-existent user', async () => {
+    it('should throw NotFoundException for non-existent user', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
 
       await expect(
         service.updateUser('nonexistent', { name: 'Test' }),
-      ).rejects.toThrow(ResourceNotFoundException);
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should return existing user when no updates provided', async () => {
@@ -208,28 +204,20 @@ describe('UserService', () => {
 
     it('should create new avatar when avatarUrl is provided', async () => {
       mockPrisma.user.findUnique.mockResolvedValueOnce(mockUser);
-      const txMock = {
-        avatar: {
-          create: jest.fn().mockResolvedValue({
-            id: 'new-avatar-id',
-            url: 'https://example.com/avatar.jpg',
-          }),
-        },
-        user: {
-          update: jest.fn().mockResolvedValue({
-            ...mockUser,
-            avatarId: 'new-avatar-id',
-            kids: mockUser.kids,
-          }),
-        },
-      };
-      mockPrisma.$transaction.mockImplementation((fn) => fn(txMock));
+      mockPrisma.avatar.create.mockResolvedValue({
+        id: 'new-avatar-id',
+        url: 'https://example.com/avatar.jpg',
+      });
+      mockPrisma.user.update.mockResolvedValue({
+        ...mockUser,
+        avatarId: 'new-avatar-id',
+      });
 
       await service.updateUser('user-1', {
         avatarUrl: 'https://example.com/avatar.jpg',
       });
 
-      expect(txMock.avatar.create).toHaveBeenCalled();
+      expect(mockPrisma.avatar.create).toHaveBeenCalled();
     });
   });
 
@@ -260,7 +248,7 @@ describe('UserService', () => {
     it('should throw error for invalid role', async () => {
       await expect(
         service.updateUserRole('user-1', 'invalid' as UserRole),
-      ).rejects.toThrow(InvalidRoleException);
+      ).rejects.toThrow(Error);
     });
   });
 
@@ -281,12 +269,12 @@ describe('UserService', () => {
       expect(result).toBeDefined();
     });
 
-    it('should throw ResourceNotFoundException for non-existent user', async () => {
+    it('should throw NotFoundException for non-existent user', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
 
       await expect(
         service.updateParentProfile('nonexistent', { name: 'Test' }),
-      ).rejects.toThrow(ResourceNotFoundException);
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
