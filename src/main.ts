@@ -1,4 +1,7 @@
-// CRITICAL: OpenTelemetry must be initialized BEFORE any other imports
+// CRITICAL: Observability must be initialized BEFORE any other imports.
+// Sentry first so its OTel wiring is available when otel-setup builds the NodeSDK;
+// both are SAFE NO-OPs when SENTRY_DSN / Grafana Cloud env vars are unset.
+import { isSentryEnabled, captureException } from './sentry-setup';
 import './otel-setup';
 import { json, urlencoded } from 'express';
 
@@ -12,6 +15,7 @@ import compression from 'compression';
 import { SuccessResponseInterceptor } from './shared/interceptors/success-response.interceptor';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter';
+import { SentryExceptionFilter } from './shared/filters/sentry-exception.filter';
 import { requestLogger } from './shared/middleware/request-logger.middleware';
 import { WinstonModule } from 'nest-winston';
 import { winstonConfig } from './shared/config/logger.config';
@@ -20,11 +24,13 @@ const bootstrapLogger = new Logger('Bootstrap');
 const isProduction = process.env.NODE_ENV === 'production';
 
 process.on('uncaughtException', (error: Error) => {
+  captureException(error);
   bootstrapLogger.error(`Uncaught Exception: ${error.message}`, error.stack);
   setTimeout(() => process.exit(1), 1000);
 });
 
 process.on('unhandledRejection', (reason: unknown) => {
+  captureException(reason);
   bootstrapLogger.error(
     `Unhandled Rejection at: Promise, reason: ${reason instanceof Error ? reason.message : String(reason)}`,
     reason instanceof Error ? reason.stack : undefined,
@@ -130,6 +136,14 @@ async function bootstrap() {
 
   // Get the HttpAdapterHost for registering global filters that require DI context
   const { httpAdapter } = app.get(HttpAdapterHost);
+
+  // Sentry catch-all is registered FIRST so Nest gives it the LOWEST priority:
+  // it only reports exceptions that no other filter handled, and preserves the
+  // default error response. Only active when Sentry is enabled (SENTRY_DSN set),
+  // so with no DSN the filter chain is unchanged.
+  if (isSentryEnabled) {
+    app.useGlobalFilters(new SentryExceptionFilter(httpAdapter));
+  }
 
   // Catch standard NestJS HttpExceptions (handles validation errors, 404s, etc.)
   app.useGlobalFilters(new HttpExceptionFilter());

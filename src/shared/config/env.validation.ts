@@ -55,6 +55,25 @@ export const envSchema = z
     FIREBASE_PROJECT_ID: z.string().optional(),
     FIREBASE_CLIENT_EMAIL: z.string().email().optional(),
     FIREBASE_PRIVATE_KEY: z.string().optional(),
+    // ----- Observability (all OPTIONAL — unset = safe no-op, unchanged boot) -----
+    // OpenTelemetry / Grafana Cloud OTLP push
+    OTEL_SERVICE_NAME: z.string().optional(),
+    OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+    OTEL_EXPORTER_LOGS_ENDPOINT: z.string().url().optional(),
+    OTEL_EXPORTER_METRICS_ENDPOINT: z.string().url().optional(),
+    OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
+    OTEL_METRICS_EXPORTER: z.enum(['prometheus', 'otlp']).optional(),
+    OTEL_METRIC_EXPORT_INTERVAL: z.coerce.number().optional(),
+    PROMETHEUS_PORT: z.coerce.number().optional(),
+    // Grafana Cloud auth (Basic auth built from instance id + token)
+    GRAFANA_CLOUD_INSTANCE_ID: z.string().optional(),
+    GRAFANA_CLOUD_API_TOKEN: z.string().optional(),
+    // Legacy alias for GRAFANA_CLOUD_API_TOKEN (kept for backward compatibility)
+    GRAFANA_CLOUD_API_KEY: z.string().optional(),
+    // Sentry (error tracking, linked to OTel traces)
+    SENTRY_DSN: z.string().url().optional(),
+    SENTRY_RELEASE: z.string().optional(),
+    SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).optional(),
   })
   .refine(
     (data) => {
