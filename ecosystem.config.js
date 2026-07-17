@@ -4,7 +4,7 @@ const cpus = os.cpus().length;
 const prodInstances = Math.max(2, cpus - 1);
 
 const baseConfig = {
-  script: 'dist/src/main.js',
+  script: 'dist/main.js',
   instances: 'max',
   exec_mode: 'cluster',
   autorestart: true,

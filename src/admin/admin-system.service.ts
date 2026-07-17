@@ -20,7 +20,7 @@ import {
   themes,
   defaultAgeGroups,
   systemAvatars,
-} from '../../prisma/data';
+} from '../prisma/seed-data';
 import { CACHE_INVALIDATION } from '@/shared/constants/cache-keys.constants';
 import { PrismaService } from '../prisma/prisma.service';
 

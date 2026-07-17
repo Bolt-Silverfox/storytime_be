@@ -1,5 +1,5 @@
 import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
-import { systemAvatars } from '../../prisma/data';
+import { systemAvatars } from '../prisma/seed-data';
 import { IAvatarRepository, AVATAR_REPOSITORY } from './repositories';
 
 @Injectable()

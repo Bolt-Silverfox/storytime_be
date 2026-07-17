@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { storyBuddiesData } from '../../prisma/data';
+import { storyBuddiesData } from '../prisma/seed-data';
 
 const prisma = new PrismaClient();
 

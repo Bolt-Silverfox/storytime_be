@@ -43,7 +43,7 @@ log "Active color = $active. Deploying '$new' on port $new_port (env=$ENV)."
 
 # --- 2. Start the new color with the fresh build -----------------------------
 pm2 delete "${APP}-${new}" >/dev/null 2>&1 || true
-PORT="$new_port" NODE_ENV="$ENV" pm2 start dist/src/main.js \
+PORT="$new_port" NODE_ENV="$ENV" pm2 start dist/main.js \
   --name "${APP}-${new}" --instances "$INSTANCES" --exec-mode cluster \
   --max-memory-restart 1G --update-env
 

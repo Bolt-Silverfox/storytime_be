@@ -1,4 +1,4 @@
-import { systemAvatars } from '../data';
+import { systemAvatars } from '../../src/prisma/seed-data';
 import { SeedContext, SeedResult } from './types';
 
 export async function seedAvatars(ctx: SeedContext): Promise<SeedResult> {
