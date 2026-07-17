@@ -1235,16 +1235,17 @@ export class StoryService {
       include: { images: true, branches: true },
     });
 
-    // TODO(new-story-notification): needs batched fan-out or topic broadcast
-    // The NewStory notification is meant for many/all users. The requested emit
-    // path (notificationService.sendNotification(type, data, targetUserId))
-    // targets a single user, so announcing a new story to everyone would require
-    // a naive findMany over the whole users table + per-user loop, which we must
-    // not ship. A push-topic broadcast helper exists (notification.broadcast
-    // event -> queueTopicPush over the 'all_users' FCM topic), but it is
-    // push-only and does not route through the NewStory registry entry (no
-    // per-user in_app records), so it is not a drop-in for sendNotification.
-    // Wire this once a batched fan-out / registry-backed topic broadcast exists.
+    // Announce the new catalog story to all users — batched, preference-aware,
+    // and best-effort. Fire-and-forget so story creation isn't blocked.
+    void this.notificationService
+      .broadcastNewStoryToUsers(story.id, story.title)
+      .catch((error) =>
+        this.logger.warn(
+          `NewStory broadcast failed for story ${story.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
 
     await this.invalidateStoryCaches();
     return story;
