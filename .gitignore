@@ -67,3 +67,7 @@ helper-scripts
 
 # Serena MCP local tooling config (per-developer)
 .serena/
+
+# TS incremental build cache (stale copy breaks clean builds)
+tsconfig.build.tsbuildinfo
+*.tsbuildinfo
