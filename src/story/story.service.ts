@@ -1,15 +1,4 @@
 import { PrismaService } from '../prisma/prisma.service';
-
-/** Max session time in seconds (24 h), matching the DTO contract. */
-const MAX_SESSION_TIME = 86_400;
-
-/** Parse, clamp and floor a raw sessionTime value to a safe integer in [0, MAX_SESSION_TIME]. */
-function normalizeSessionTime(value: unknown): number {
-  const raw = Number(value ?? 0);
-  return Number.isFinite(raw)
-    ? Math.min(Math.max(0, Math.floor(raw)), MAX_SESSION_TIME)
-    : 0;
-}
 import {
   CreateStoryDto,
   UpdateStoryDto,
@@ -38,12 +27,9 @@ import {
 
 import { UploadService } from '../upload/upload.service';
 import {
-  StoryPath,
   DailyChallengeAssignment,
   Category,
-  Theme,
   DailyChallenge,
-  ParentRecommendation,
 } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -54,7 +40,6 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  ForbiddenException,
 } from '@nestjs/common';
 import {
   GeminiService,
@@ -69,6 +54,13 @@ import {
   DEFAULT_CURSOR_LIMIT,
   PaginationUtil,
 } from '@/shared/utils/pagination.util';
+import { StoryFavoriteService } from './story-favorite.service';
+import { StoryDownloadService } from './story-download.service';
+import { StoryPathService } from './story-path.service';
+import { StoryMetadataService } from './story-metadata.service';
+import { StoryProgressService } from './story-progress.service';
+import { StoryRecommendationService } from './story-recommendation.service';
+import { DailyChallengeService } from './daily-challenge.service';
 
 @Injectable()
 export class StoryService {
@@ -109,6 +101,13 @@ export class StoryService {
     public readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
+    private readonly storyFavoriteService: StoryFavoriteService,
+    private readonly storyDownloadService: StoryDownloadService,
+    private readonly storyPathService: StoryPathService,
+    private readonly storyMetadataService: StoryMetadataService,
+    private readonly storyProgressService: StoryProgressService,
+    private readonly storyRecommendationService: StoryRecommendationService,
+    private readonly dailyChallengeService: DailyChallengeService,
   ) {}
 
   /**
@@ -468,22 +467,6 @@ export class StoryService {
         hasPreviousPage: !!filter.cursor,
         limit,
       },
-    };
-  }
-
-  private mapProgressRecord(record: {
-    id: string;
-    progress: number;
-    totalTimeSpent: number;
-    lastAccessed: Date;
-    story: Record<string, unknown>;
-  }) {
-    return {
-      ...record.story,
-      progressId: record.id,
-      progress: record.progress,
-      totalTimeSpent: record.totalTimeSpent,
-      lastAccessed: record.lastAccessed,
     };
   }
 
@@ -854,128 +837,31 @@ export class StoryService {
   }
 
   async addImage(storyId: string, image: StoryImageDto) {
-    const story = await this.prisma.story.findUnique({
-      where: { id: storyId, isDeleted: false },
-    });
-    if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.storyImage.create({ data: { ...image, storyId } });
+    return this.storyMetadataService.addImage(storyId, image);
   }
 
   async addBranch(storyId: string, branch: StoryBranchDto) {
-    const story = await this.prisma.story.findUnique({
-      where: { id: storyId, isDeleted: false },
-    });
-    if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.storyBranch.create({
-      data: { ...branch, storyId },
-    });
+    return this.storyMetadataService.addBranch(storyId, branch);
   }
 
   async addFavorite(dto: FavoriteDto) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: dto.kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({
-      where: { id: dto.storyId, isDeleted: false },
-    });
-    if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.favorite.create({
-      data: { kidId: dto.kidId, storyId: dto.storyId },
-    });
+    return this.storyFavoriteService.addFavorite(dto);
   }
 
   async removeFavorite(kidId: string, storyId: string) {
-    return await this.prisma.favorite.deleteMany({ where: { kidId, storyId } });
+    return this.storyFavoriteService.removeFavorite(kidId, storyId);
   }
 
   async getFavorites(kidId: string, cursor?: string, limit?: number) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-
-    const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? DEFAULT_CURSOR_LIMIT;
-
-    const records = await this.withCursorErrorHandling(() =>
-      this.prisma.favorite.findMany({
-        where: { kidId, isDeleted: false, story: { isDeleted: false } },
-        include: { story: true },
-        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-        ...(useCursor ? { take: take + 1 } : {}),
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      }),
-    );
-
-    if (!useCursor) {
-      return {
-        data: records,
-        pagination: { nextCursor: null, hasNextPage: false },
-      };
-    }
-
-    return PaginationUtil.buildCursorResponse(records, take);
+    return this.storyFavoriteService.getFavorites(kidId, cursor, limit);
   }
 
   async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: dto.kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({
-      where: { id: dto.storyId, isDeleted: false },
-    });
-    if (!story) throw new NotFoundException('Story not found');
-
-    const sessionTime = normalizeSessionTime(dto.sessionTime);
-
-    const existing = await this.prisma.storyProgress.findUnique({
-      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
-    });
-
-    const result = await this.prisma.storyProgress.upsert({
-      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
-      update: {
-        progress: dto.progress,
-        completed: dto.completed ?? false,
-        lastAccessed: new Date(),
-        totalTimeSpent: { increment: sessionTime },
-      },
-      create: {
-        kidId: dto.kidId,
-        storyId: dto.storyId,
-        progress: dto.progress,
-        completed: dto.completed ?? false,
-        totalTimeSpent: sessionTime,
-      },
-    });
-
-    if (dto.completed && (!existing || !existing.completed)) {
-      this.adjustReadingLevel(
-        dto.kidId,
-        dto.storyId,
-        result.totalTimeSpent,
-      ).catch((e) => {
-        const msg = e instanceof Error ? e.message : String(e);
-        this.logger.error(`Failed to adjust reading level: ${msg}`);
-      });
-    }
-    return result;
+    return this.storyProgressService.setProgress(dto);
   }
 
   async getProgress(kidId: string, storyId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({
-      where: { id: storyId, isDeleted: false },
-    });
-    if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.storyProgress.findUnique({
-      where: { kidId_storyId: { kidId, storyId } },
-    });
+    return this.storyProgressService.getProgress(kidId, storyId);
   }
 
   // --- USER STORY PROGRESS (Parent/User - non-kid specific) ---
@@ -984,86 +870,14 @@ export class StoryService {
     userId: string,
     dto: UserStoryProgressDto,
   ): Promise<UserStoryProgressResponseDto> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-    });
-    if (!user) throw new NotFoundException('User not found');
-    const story = await this.prisma.story.findUnique({
-      where: { id: dto.storyId, isDeleted: false },
-    });
-    if (!story) throw new NotFoundException('Story not found');
-
-    const existing = await this.prisma.userStoryProgress.findUnique({
-      where: { userId_storyId: { userId, storyId: dto.storyId } },
-    });
-
-    const sessionTime = normalizeSessionTime(dto.sessionTime);
-
-    // If restoring a soft-deleted record, reset totalTimeSpent instead of
-    // accumulating stale time from before the removal.
-    const totalTimeSpentUpdate = existing?.isDeleted
-      ? sessionTime
-      : { increment: sessionTime };
-
-    const result = await this.prisma.userStoryProgress.upsert({
-      where: { userId_storyId: { userId, storyId: dto.storyId } },
-      update: {
-        progress: dto.progress,
-        completed: dto.completed ?? false,
-        lastAccessed: new Date(),
-        totalTimeSpent: totalTimeSpentUpdate,
-        // Restore soft-deleted records when user re-reads a removed story
-        isDeleted: false,
-        deletedAt: null,
-      },
-      create: {
-        userId,
-        storyId: dto.storyId,
-        progress: dto.progress,
-        completed: dto.completed ?? false,
-        totalTimeSpent: sessionTime,
-      },
-    });
-
-    return {
-      id: result.id,
-      userId: result.userId,
-      storyId: result.storyId,
-      progress: result.progress,
-      completed: result.completed,
-      lastAccessed: result.lastAccessed,
-      totalTimeSpent: result.totalTimeSpent,
-    };
+    return this.storyProgressService.setUserProgress(userId, dto);
   }
 
   async getUserProgress(
     userId: string,
     storyId: string,
   ): Promise<UserStoryProgressResponseDto | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-    });
-    if (!user) throw new NotFoundException('User not found');
-    const story = await this.prisma.story.findUnique({
-      where: { id: storyId, isDeleted: false },
-    });
-    if (!story) throw new NotFoundException('Story not found');
-
-    const progress = await this.prisma.userStoryProgress.findFirst({
-      where: { userId, storyId, isDeleted: false },
-    });
-
-    if (!progress) return null;
-
-    return {
-      id: progress.id,
-      userId: progress.userId,
-      storyId: progress.storyId,
-      progress: progress.progress,
-      completed: progress.completed,
-      lastAccessed: progress.lastAccessed,
-      totalTimeSpent: progress.totalTimeSpent,
-    };
+    return this.storyProgressService.getUserProgress(userId, storyId);
   }
 
   async getUserContinueReading(
@@ -1071,43 +885,11 @@ export class StoryService {
     cursor?: string,
     limit?: number,
   ) {
-    const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? DEFAULT_CURSOR_LIMIT;
-
-    const progressRecords = await this.withCursorErrorHandling(() =>
-      this.prisma.userStoryProgress.findMany({
-        where: {
-          userId,
-          progress: { gt: 0 },
-          completed: false,
-          isDeleted: false,
-          story: { isDeleted: false },
-        },
-        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
-        include: {
-          story: {
-            include: { categories: true },
-          },
-        },
-        ...(useCursor ? { take: take + 1 } : {}),
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      }),
+    return this.storyProgressService.getUserContinueReading(
+      userId,
+      cursor,
+      limit,
     );
-
-    if (!useCursor) {
-      return {
-        data: progressRecords.map((r) => this.mapProgressRecord(r)),
-        pagination: { nextCursor: null, hasNextPage: false },
-      };
-    }
-
-    // Cursor comes from progress table ID (Prisma cursor operates on this table).
-    // Build response from raw records first, then map to the enriched shape.
-    const { data, pagination } = PaginationUtil.buildCursorResponse(
-      progressRecords,
-      take,
-    );
-    return { data: data.map((r) => this.mapProgressRecord(r)), pagination };
   }
 
   async getUserCompletedStories(
@@ -1115,297 +897,91 @@ export class StoryService {
     cursor?: string,
     limit?: number,
   ) {
-    const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? DEFAULT_CURSOR_LIMIT;
-
-    const records = await this.withCursorErrorHandling(() =>
-      this.prisma.userStoryProgress.findMany({
-        where: {
-          userId,
-          completed: true,
-          isDeleted: false,
-          story: { isDeleted: false },
-        },
-        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
-        include: {
-          story: {
-            include: { categories: true },
-          },
-        },
-        ...(useCursor ? { take: take + 1 } : {}),
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      }),
+    return this.storyProgressService.getUserCompletedStories(
+      userId,
+      cursor,
+      limit,
     );
-
-    if (!useCursor) {
-      return {
-        data: records.map((r) => r.story),
-        pagination: { nextCursor: null, hasNextPage: false },
-      };
-    }
-
-    const { data, pagination } = PaginationUtil.buildCursorResponse(
-      records,
-      take,
-    );
-    return { data: data.map((r) => r.story), pagination };
   }
 
   async removeFromUserLibrary(userId: string, storyId: string) {
-    return await this.prisma.$transaction([
-      this.prisma.parentFavorite.deleteMany({ where: { userId, storyId } }),
-      // Soft-delete progress so checkStoryAccess still recognises the story
-      // as "already read" and free users can re-read without spending quota.
-      this.prisma.userStoryProgress.updateMany({
-        where: { userId, storyId },
-        data: {
-          isDeleted: true,
-          deletedAt: new Date(),
-          progress: 0,
-          completed: false,
-        },
-      }),
-    ]);
+    return this.storyProgressService.removeFromUserLibrary(userId, storyId);
   }
 
   async restrictStory(dto: RestrictStoryDto & { userId: string }) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: dto.kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-
-    // Ensure parent owns the kid
-    if (kid.parentId !== dto.userId) {
-      throw new ForbiddenException('You are not the parent of this kid');
-    }
-
-    const story = await this.prisma.story.findUnique({
-      where: { id: dto.storyId, isDeleted: false },
-    });
-    if (!story) throw new NotFoundException('Story not found');
-
-    return await this.prisma.restrictedStory.upsert({
-      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
-      create: {
-        kidId: dto.kidId,
-        storyId: dto.storyId,
-        userId: dto.userId,
-        reason: dto.reason,
-      },
-      update: {
-        reason: dto.reason,
-      },
-    });
+    return this.storyRecommendationService.restrictStory(dto);
   }
 
   async unrestrictStory(kidId: string, storyId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-
-    if (kid.parentId !== userId) {
-      throw new ForbiddenException('You are not the parent of this kid');
-    }
-
-    const restriction = await this.prisma.restrictedStory.findUnique({
-      where: { kidId_storyId: { kidId, storyId } },
-    });
-
-    if (!restriction) {
-      throw new NotFoundException('Story is not restricted for this kid');
-    }
-
-    return await this.prisma.restrictedStory.delete({
-      where: { kidId_storyId: { kidId, storyId } },
-    });
+    return this.storyRecommendationService.unrestrictStory(
+      kidId,
+      storyId,
+      userId,
+    );
   }
 
   async getRestrictedStories(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-
-    if (kid.parentId !== userId) {
-      throw new ForbiddenException('You are not the parent of this kid');
-    }
-
-    const restricted = await this.prisma.restrictedStory.findMany({
-      where: { kidId },
-      include: { story: true },
-    });
-
-    return restricted.map((r) => ({
-      ...r.story,
-      restrictionReason: r.reason,
-      restrictedAt: r.createdAt,
-    }));
+    return this.storyRecommendationService.getRestrictedStories(kidId, userId);
   }
 
   async setDailyChallenge(dto: DailyChallengeDto) {
-    const story = await this.prisma.story.findUnique({
-      where: { id: dto.storyId, isDeleted: false },
-    });
-    if (!story) throw new NotFoundException('Story not found');
-    return await this.prisma.dailyChallenge.create({ data: dto });
+    return this.dailyChallengeService.setDailyChallenge(dto);
   }
 
   async getDailyChallenge(date: string) {
-    return await this.prisma.dailyChallenge.findMany({
-      where: { challengeDate: new Date(date), isDeleted: false },
-      include: { story: true },
-    });
-  }
-
-  // ... [Keep Assignment, Voice, and StoryPath methods] ...
-
-  private toDailyChallengeAssignmentDto(
-    assignment: DailyChallengeAssignment,
-  ): DailyChallengeAssignmentDto {
-    return {
-      id: assignment.id,
-      kidId: assignment.kidId,
-      challengeId: assignment.challengeId,
-      completed: assignment.completed,
-      completedAt: assignment.completedAt ?? undefined,
-      assignedAt: assignment.assignedAt,
-    };
+    return this.dailyChallengeService.getDailyChallenge(date);
   }
 
   async assignDailyChallenge(
     dto: AssignDailyChallengeDto,
   ): Promise<DailyChallengeAssignmentDto> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: dto.kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-    const challenge = await this.prisma.dailyChallenge.findUnique({
-      where: { id: dto.challengeId, isDeleted: false },
-    });
-    if (!challenge) throw new NotFoundException('Daily challenge not found');
-
-    const assignment = await this.prisma.dailyChallengeAssignment.create({
-      data: { kidId: dto.kidId, challengeId: dto.challengeId },
-    });
-    return this.toDailyChallengeAssignmentDto(assignment);
+    return this.dailyChallengeService.assignDailyChallenge(dto);
   }
 
   async completeDailyChallenge(
     dto: CompleteDailyChallengeDto,
   ): Promise<DailyChallengeAssignmentDto> {
-    const assignment = await this.prisma.dailyChallengeAssignment.update({
-      where: { id: dto.assignmentId },
-      data: { completed: true, completedAt: new Date() },
-    });
-    return this.toDailyChallengeAssignmentDto(assignment);
+    return this.dailyChallengeService.completeDailyChallenge(dto);
   }
 
   async getAssignmentsForKid(
     kidId: string,
   ): Promise<DailyChallengeAssignmentDto[]> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-    const assignments = await this.prisma.dailyChallengeAssignment.findMany({
-      where: { kidId },
-    });
-    return assignments.map((a: DailyChallengeAssignment) =>
-      this.toDailyChallengeAssignmentDto(a),
-    );
+    return this.dailyChallengeService.getAssignmentsForKid(kidId);
   }
 
   async getAssignmentById(
     id: string,
   ): Promise<DailyChallengeAssignmentDto | null> {
-    const assignment = await this.prisma.dailyChallengeAssignment.findUnique({
-      where: { id },
-    });
-    return assignment ? this.toDailyChallengeAssignmentDto(assignment) : null;
-  }
-
-  private toStoryPathDto(path: StoryPath): StoryPathDto {
-    return {
-      id: path.id,
-      kidId: path.kidId,
-      storyId: path.storyId,
-      path: path.path,
-      startedAt: path.startedAt,
-      completedAt: path.completedAt ?? undefined,
-    };
+    return this.dailyChallengeService.getAssignmentById(id);
   }
 
   async startStoryPath(dto: StartStoryPathDto): Promise<StoryPathDto> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: dto.kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-    const story = await this.prisma.story.findUnique({
-      where: { id: dto.storyId, isDeleted: false },
-    });
-    if (!story) throw new NotFoundException('Story not found');
-
-    const storyPath = await this.prisma.storyPath.create({
-      data: { kidId: dto.kidId, storyId: dto.storyId, path: '' },
-    });
-    return this.toStoryPathDto(storyPath);
+    return this.storyPathService.startStoryPath(dto);
   }
 
   async updateStoryPath(dto: UpdateStoryPathDto): Promise<StoryPathDto> {
-    const storyPath = await this.prisma.storyPath.update({
-      where: { id: dto.pathId },
-      data: { path: dto.path, completedAt: dto.completedAt },
-    });
-    return this.toStoryPathDto(storyPath);
+    return this.storyPathService.updateStoryPath(dto);
   }
 
   async getStoryPathsForKid(kidId: string): Promise<StoryPathDto[]> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-    const paths = await this.prisma.storyPath.findMany({ where: { kidId } });
-    return paths.map((p: StoryPath) => this.toStoryPathDto(p));
+    return this.storyPathService.getStoryPathsForKid(kidId);
   }
 
   async getStoryPathById(id: string): Promise<StoryPathDto | null> {
-    const path = await this.prisma.storyPath.findUnique({ where: { id } });
-    return path ? this.toStoryPathDto(path) : null;
+    return this.storyPathService.getStoryPathById(id);
   }
 
   async getCategories(): Promise<CategoryDto[]> {
-    this.logger.log('Fetching categories with story counts from database');
-    const categories = await this.prisma.category.findMany({
-      where: { isDeleted: false },
-      include: { _count: { select: { stories: true } } },
-    });
-    return categories.map((c) => ({
-      id: c.id,
-      name: c.name,
-      image: c.image ?? undefined,
-      description: c.description ?? undefined,
-      storyCount: c._count.stories,
-    }));
+    return this.storyMetadataService.getCategories();
   }
 
   async getThemes(): Promise<ThemeDto[]> {
-    const themes = await this.prisma.theme.findMany({
-      where: { isDeleted: false },
-    });
-    return themes.map((t: Theme) => ({
-      ...t,
-      image: t.image ?? undefined,
-      description: t.description ?? undefined,
-    }));
+    return this.storyMetadataService.getThemes();
   }
 
   async getSeasons() {
-    const seasons = await this.prisma.season.findMany({
-      where: { isDeleted: false },
-      orderBy: { startDate: 'asc' },
-    });
-    return seasons;
+    return this.storyMetadataService.getSeasons();
   }
 
   // ... [Keep daily challenge automation methods] ...
@@ -1491,50 +1067,14 @@ export class StoryService {
   }
 
   async getTodaysDailyChallengeAssignment(kidId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-    const assignment = await this.prisma.dailyChallengeAssignment.findFirst({
-      where: {
-        kidId,
-        challenge: {
-          challengeDate: { gte: today, lt: tomorrow },
-          isDeleted: false,
-        },
-      },
-      include: { challenge: { include: { story: true } } },
-    });
-    if (!assignment)
-      throw new NotFoundException(
-        'No daily challenge assignment found for today',
-      );
-    return assignment;
+    return this.dailyChallengeService.getTodaysDailyChallengeAssignment(kidId);
   }
 
   async getWeeklyDailyChallengeAssignments(kidId: string, weekStart: Date) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found');
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 7);
-    const assignments = await this.prisma.dailyChallengeAssignment.findMany({
-      where: {
-        kidId,
-        challenge: {
-          challengeDate: { gte: weekStart, lt: weekEnd },
-          isDeleted: false,
-        },
-      },
-      include: { challenge: { include: { story: true } } },
-      orderBy: { assignedAt: 'asc' },
-    });
-    return assignments;
+    return this.dailyChallengeService.getWeeklyDailyChallengeAssignments(
+      kidId,
+      weekStart,
+    );
   }
 
   async getStoryById(id: string) {
@@ -1835,108 +1375,12 @@ export class StoryService {
     return story;
   }
 
-  private async adjustReadingLevel(
-    kidId: string,
-    storyId: string,
-    totalTimeSeconds: number,
-  ) {
-    const story = await this.prisma.story.findUnique({
-      where: { id: storyId, isDeleted: false },
-    });
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, isDeleted: false },
-    });
-    if (!story || !kid || story.wordCount === 0) return;
-    const minutes = totalTimeSeconds / 60;
-    const wpm = minutes > 0 ? story.wordCount / minutes : 0;
-    let newLevel = kid.currentReadingLevel;
-    if (wpm > 120 && story.difficultyLevel >= kid.currentReadingLevel) {
-      newLevel = Math.min(10, kid.currentReadingLevel + 1);
-    } else if (wpm < 40 && story.difficultyLevel >= kid.currentReadingLevel) {
-      newLevel = Math.max(1, kid.currentReadingLevel - 1);
-    }
-    if (newLevel !== kid.currentReadingLevel) {
-      await this.prisma.kid.update({
-        where: { id: kidId },
-        data: { currentReadingLevel: newLevel },
-      });
-      this.logger.log(`Adjusted Kid ${kidId} reading level to ${newLevel}`);
-    }
-  }
-
   async getContinueReading(kidId: string, cursor?: string, limit?: number) {
-    const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? DEFAULT_CURSOR_LIMIT;
-
-    const progressRecords = await this.withCursorErrorHandling(() =>
-      this.prisma.storyProgress.findMany({
-        where: {
-          kidId,
-          progress: { gt: 0 },
-          completed: false,
-          isDeleted: false,
-          story: { isDeleted: false },
-        },
-        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
-        include: {
-          story: {
-            include: { categories: true },
-          },
-        },
-        ...(useCursor ? { take: take + 1 } : {}),
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      }),
-    );
-
-    if (!useCursor) {
-      return {
-        data: progressRecords.map((r) => this.mapProgressRecord(r)),
-        pagination: { nextCursor: null, hasNextPage: false },
-      };
-    }
-
-    const { data, pagination } = PaginationUtil.buildCursorResponse(
-      progressRecords,
-      take,
-    );
-    return { data: data.map((r) => this.mapProgressRecord(r)), pagination };
+    return this.storyProgressService.getContinueReading(kidId, cursor, limit);
   }
 
   async getCompletedStories(kidId: string, cursor?: string, limit?: number) {
-    const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? DEFAULT_CURSOR_LIMIT;
-
-    const records = await this.withCursorErrorHandling(() =>
-      this.prisma.storyProgress.findMany({
-        where: {
-          kidId,
-          completed: true,
-          isDeleted: false,
-          story: { isDeleted: false },
-        },
-        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
-        include: {
-          story: {
-            include: { categories: true },
-          },
-        },
-        ...(useCursor ? { take: take + 1 } : {}),
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      }),
-    );
-
-    if (!useCursor) {
-      return {
-        data: records.map((r) => r.story),
-        pagination: { nextCursor: null, hasNextPage: false },
-      };
-    }
-
-    const { data, pagination } = PaginationUtil.buildCursorResponse(
-      records,
-      take,
-    );
-    return { data: data.map((r) => r.story), pagination };
+    return this.storyProgressService.getCompletedStories(kidId, cursor, limit);
   }
 
   async getCreatedStories(kidId: string, cursor?: string, limit?: number) {
@@ -1963,31 +1407,7 @@ export class StoryService {
   }
 
   async getDownloads(kidId: string, cursor?: string, limit?: number) {
-    const useCursor = cursor !== undefined || limit !== undefined;
-    const take = limit ?? DEFAULT_CURSOR_LIMIT;
-
-    const downloads = await this.withCursorErrorHandling(() =>
-      this.prisma.downloadedStory.findMany({
-        where: { kidId },
-        include: { story: true },
-        orderBy: [{ downloadedAt: 'desc' }, { id: 'asc' }],
-        ...(useCursor ? { take: take + 1 } : {}),
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      }),
-    );
-
-    if (!useCursor) {
-      return {
-        data: downloads.map((d) => d.story),
-        pagination: { nextCursor: null, hasNextPage: false },
-      };
-    }
-
-    const { data, pagination } = PaginationUtil.buildCursorResponse(
-      downloads,
-      take,
-    );
-    return { data: data.map((d) => d.story), pagination };
+    return this.storyDownloadService.getDownloads(kidId, cursor, limit);
   }
 
   async addDownload(kidId: string, storyId: string) {
@@ -2003,13 +1423,7 @@ export class StoryService {
   }
 
   async removeDownload(kidId: string, storyId: string) {
-    try {
-      return await this.prisma.downloadedStory.delete({
-        where: { kidId_storyId: { kidId, storyId } },
-      });
-    } catch {
-      return { message: 'Download removed' };
-    }
+    return this.storyDownloadService.removeDownload(kidId, storyId);
   }
 
   async removeFromLibrary(kidId: string, storyId: string) {
@@ -2024,85 +1438,14 @@ export class StoryService {
     userId: string,
     dto: ParentRecommendationDto,
   ): Promise<RecommendationResponseDto> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: dto.kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found or access denied');
-    const story = await this.prisma.story.findUnique({
-      where: { id: dto.storyId, isDeleted: false },
-    });
-    if (!story) throw new NotFoundException('Story not found');
-
-    const isRestricted = await this.prisma.restrictedStory.findUnique({
-      where: { kidId_storyId: { kidId: dto.kidId, storyId: dto.storyId } },
-    });
-
-    if (isRestricted) {
-      throw new BadRequestException(
-        'This story is currently restricted for this kid. Please unrestrict it first.',
-      );
-    }
-
-    const existing = await this.prisma.parentRecommendation.findUnique({
-      where: {
-        userId_kidId_storyId: {
-          userId,
-          kidId: dto.kidId,
-          storyId: dto.storyId,
-        },
-      },
-    });
-    if (existing) {
-      if (existing.isDeleted) {
-        const restored = await this.prisma.parentRecommendation.update({
-          where: { id: existing.id },
-          data: { isDeleted: false, deletedAt: null, message: dto.message },
-          include: {
-            story: true,
-            user: { select: { id: true, name: true, email: true } },
-            kid: { select: { id: true, name: true } },
-          },
-        });
-        return this.toRecommendationResponse(restored);
-      }
-      throw new BadRequestException(
-        `You have already recommended this story to ${kid.name}`,
-      );
-    }
-    const recommendation = await this.prisma.parentRecommendation.create({
-      data: {
-        userId,
-        kidId: dto.kidId,
-        storyId: dto.storyId,
-        message: dto.message,
-      },
-      include: {
-        story: true,
-        user: { select: { id: true, name: true, email: true } },
-        kid: { select: { id: true, name: true } },
-      },
-    });
-    return this.toRecommendationResponse(recommendation);
+    return this.storyRecommendationService.recommendStoryToKid(userId, dto);
   }
 
   async getKidRecommendations(
     kidId: string,
     userId: string,
   ): Promise<RecommendationResponseDto[]> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found or access denied');
-    const recommendations = await this.prisma.parentRecommendation.findMany({
-      where: { kidId, isDeleted: false },
-      include: {
-        story: true,
-        user: { select: { id: true, name: true, email: true } },
-        kid: { select: { id: true, name: true } },
-      },
-      orderBy: { recommendedAt: 'desc' },
-    });
-    return recommendations.map((rec) => this.toRecommendationResponse(rec));
+    return this.storyRecommendationService.getKidRecommendations(kidId, userId);
   }
 
   async deleteRecommendation(
@@ -2110,57 +1453,21 @@ export class StoryService {
     userId: string,
     permanent: boolean = false,
   ) {
-    const recommendation = await this.prisma.parentRecommendation.findUnique({
-      where: { id: recommendationId },
-    });
-    if (!recommendation)
-      throw new NotFoundException('Recommendation not found');
-    if (recommendation.userId !== userId)
-      throw new ForbiddenException('Access denied');
-    if (permanent) {
-      return this.prisma.parentRecommendation.delete({
-        where: { id: recommendationId },
-      });
-    } else {
-      return this.prisma.parentRecommendation.update({
-        where: { id: recommendationId },
-        data: { isDeleted: true, deletedAt: new Date() },
-      });
-    }
+    return this.storyRecommendationService.deleteRecommendation(
+      recommendationId,
+      userId,
+      permanent,
+    );
   }
 
   async getRecommendationStats(
     kidId: string,
     userId: string,
   ): Promise<RecommendationsStatsDto> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) throw new NotFoundException('Kid not found or access denied');
-    const totalCount = await this.prisma.parentRecommendation.count({
-      where: { kidId, isDeleted: false },
-    });
-    return { totalCount };
-  }
-
-  private toRecommendationResponse(
-    recommendation: ParentRecommendation & {
-      story?: Record<string, unknown>;
-      user?: { id: string; name?: string | null; email?: string };
-      kid?: { id: string; name?: string | null };
-    },
-  ): RecommendationResponseDto {
-    return {
-      id: recommendation.id,
-      userId: recommendation.userId,
-      kidId: recommendation.kidId,
-      storyId: recommendation.storyId,
-      message: recommendation.message ?? undefined,
-      recommendedAt: recommendation.recommendedAt,
-      story: recommendation.story as CreateStoryDto | undefined,
-      user: recommendation.user,
-      kid: recommendation.kid,
-    };
+    return this.storyRecommendationService.getRecommendationStats(
+      kidId,
+      userId,
+    );
   }
 
   async getTopPicksFromParents(limit: number = 10) {

@@ -1,10 +1,16 @@
-import { Injectable, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   CategoryDto,
   ThemeDto,
   StoryImageDto,
   StoryBranchDto,
 } from './dto/story.dto';
+import { Theme } from '@prisma/client';
 import {
   IStoryMetadataRepository,
   STORY_METADATA_REPOSITORY,
@@ -12,47 +18,51 @@ import {
 
 @Injectable()
 export class StoryMetadataService {
+  private readonly logger = new Logger(StoryMetadataService.name);
+
   constructor(
     @Inject(STORY_METADATA_REPOSITORY)
     private readonly metadataRepository: IStoryMetadataRepository,
   ) {}
 
   async getCategories(): Promise<CategoryDto[]> {
+    this.logger.log('Fetching categories with story counts from database');
     const categories = await this.metadataRepository.findAllCategories();
     return categories.map((c) => ({
       id: c.id,
       name: c.name,
-      description: c.description || undefined,
-      image: c.image || undefined,
+      image: c.image ?? undefined,
+      description: c.description ?? undefined,
       storyCount: c._count.stories,
     }));
   }
 
   async getThemes(): Promise<ThemeDto[]> {
     const themes = await this.metadataRepository.findAllThemes();
-    return themes.map((t) => ({
-      id: t.id,
-      name: t.name,
-      description: t.description || undefined,
-      content: t.description || undefined, // Map to DTO requirements
+    return themes.map((t: Theme) => ({
+      ...t,
+      image: t.image ?? undefined,
+      description: t.description ?? undefined,
     }));
   }
 
   async getSeasons() {
-    // Return type inferred or map to DTO if SeasonDto exists
-    return await this.metadataRepository.findAllSeasons();
+    return await this.metadataRepository.getSeasons();
   }
 
-  async addImage(storyId: string, dto: StoryImageDto) {
+  async addImage(storyId: string, image: StoryImageDto) {
+    const story = await this.metadataRepository.findStoryById(storyId);
+    if (!story) throw new NotFoundException('Story not found');
     return await this.metadataRepository.createStoryImage({
-      ...dto,
+      ...image,
       story: { connect: { id: storyId } },
     });
   }
 
   async addBranch(storyId: string, branch: StoryBranchDto) {
+    const story = await this.metadataRepository.findStoryById(storyId);
+    if (!story) throw new NotFoundException('Story not found');
     return await this.metadataRepository.createStoryBranch({
-      id: undefined, // Let DB generate
       ...branch,
       story: { connect: { id: storyId } },
     });

@@ -7,6 +7,13 @@ import { GeminiService } from './gemini.service';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from './text-to-speech.service';
+import { StoryFavoriteService } from './story-favorite.service';
+import { StoryDownloadService } from './story-download.service';
+import { StoryPathService } from './story-path.service';
+import { StoryMetadataService } from './story-metadata.service';
+import { StoryProgressService } from './story-progress.service';
+import { StoryRecommendationService } from './story-recommendation.service';
+import { DailyChallengeService } from './daily-challenge.service';
 
 // Mock dependencies
 const mockPrismaService = {
@@ -70,6 +77,13 @@ describe('StoryService - Library & Generation', () => {
           provide: 'CACHE_MANAGER',
           useValue: { del: jest.fn(), get: jest.fn(), set: jest.fn() },
         },
+        { provide: StoryFavoriteService, useValue: {} },
+        { provide: StoryDownloadService, useValue: {} },
+        { provide: StoryPathService, useValue: {} },
+        { provide: StoryMetadataService, useValue: {} },
+        { provide: StoryProgressService, useValue: {} },
+        { provide: StoryRecommendationService, useValue: {} },
+        { provide: DailyChallengeService, useValue: {} },
       ],
     }).compile();
 

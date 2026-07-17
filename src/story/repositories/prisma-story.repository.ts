@@ -403,20 +403,19 @@ export class PrismaStoryRepository implements IStoryRepository {
   async findDailyChallengesByDate(
     date: Date,
   ): Promise<DailyChallengeWithStory[]> {
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
-
     return this.prisma.dailyChallenge.findMany({
       where: {
-        challengeDate: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
+        challengeDate: date,
+        isDeleted: false,
       },
       include: { story: true },
     }) as Promise<DailyChallengeWithStory[]>;
+  }
+
+  async findDailyChallengeById(id: string): Promise<DailyChallenge | null> {
+    return this.prisma.dailyChallenge.findUnique({
+      where: { id, isDeleted: false },
+    });
   }
 
   async findDailyChallengeByStoryAndDate(
@@ -495,6 +494,7 @@ export class PrismaStoryRepository implements IStoryRepository {
             gte: today,
             lt: tomorrow,
           },
+          isDeleted: false,
         },
       },
       include: {
@@ -516,8 +516,9 @@ export class PrismaStoryRepository implements IStoryRepository {
         challenge: {
           challengeDate: {
             gte: weekStart,
-            lte: weekEnd,
+            lt: weekEnd,
           },
+          isDeleted: false,
         },
       },
       include: {

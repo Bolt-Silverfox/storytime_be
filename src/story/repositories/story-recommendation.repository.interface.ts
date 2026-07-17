@@ -8,9 +8,29 @@ export interface IStoryRecommendationRepository {
     storyId: string,
   ): Promise<ParentRecommendation | null>;
 
+  /**
+   * Look up a recommendation by its composite unique key, INCLUDING
+   * soft-deleted records (used to restore a previously removed recommendation).
+   */
+  findParentRecommendationByUnique(
+    userId: string,
+    kidId: string,
+    storyId: string,
+  ): Promise<ParentRecommendation | null>;
+
   findParentRecommendationById(
     id: string,
   ): Promise<ParentRecommendation | null>;
+
+  /** Update recommendation status fields WITHOUT loading relations. */
+  updateParentRecommendationStatus(
+    id: string,
+    data: Partial<{
+      isDeleted: boolean;
+      deletedAt: Date | null;
+      message: string | null;
+    }>,
+  ): Promise<ParentRecommendation>;
 
   createParentRecommendation(
     userId: string,

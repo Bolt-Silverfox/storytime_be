@@ -9,7 +9,10 @@ export interface IStoryFavoriteRepository {
 
   deleteFavorites(kidId: string, storyId: string): Promise<{ count: number }>;
 
-  findFavoritesByKidId(kidId: string): Promise<FavoriteWithStory[]>;
+  findFavoritesByKidId(
+    kidId: string,
+    opts?: { take?: number; cursor?: string },
+  ): Promise<FavoriteWithStory[]>;
 
   // Helper lookups
   findKidById(id: string): Promise<Kid | null>;

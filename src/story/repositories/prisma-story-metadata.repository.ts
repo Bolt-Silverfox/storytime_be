@@ -10,6 +10,7 @@ import {
   StoryImage,
   StoryBranch,
   Season,
+  Story,
   Prisma,
 } from '@prisma/client';
 
@@ -17,8 +18,15 @@ import {
 export class PrismaStoryMetadataRepository implements IStoryMetadataRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findStoryById(id: string): Promise<Story | null> {
+    return await this.prisma.story.findUnique({
+      where: { id, isDeleted: false },
+    });
+  }
+
   async findAllCategories(): Promise<CategoryWithCount[]> {
     return await this.prisma.category.findMany({
+      where: { isDeleted: false },
       include: { _count: { select: { stories: true } } },
     });
   }
@@ -30,7 +38,9 @@ export class PrismaStoryMetadataRepository implements IStoryMetadataRepository {
   }
 
   async findAllThemes(): Promise<Theme[]> {
-    return await this.prisma.theme.findMany();
+    return await this.prisma.theme.findMany({
+      where: { isDeleted: false },
+    });
   }
 
   async findThemesByIds(ids: string[]): Promise<Theme[]> {
@@ -67,7 +77,10 @@ export class PrismaStoryMetadataRepository implements IStoryMetadataRepository {
   }
 
   async getSeasons(): Promise<Season[]> {
-    return this.findAllSeasons();
+    return await this.prisma.season.findMany({
+      where: { isDeleted: false },
+      orderBy: { startDate: 'asc' },
+    });
   }
 
   async getCategories(): Promise<CategoryWithCount[]> {

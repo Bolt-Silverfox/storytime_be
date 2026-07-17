@@ -171,7 +171,6 @@ export class PrismaStoryCoreRepository implements IStoryCoreRepository {
         reason,
       },
       update: {
-        userId,
         reason,
       },
     });
@@ -215,7 +214,7 @@ export class PrismaStoryCoreRepository implements IStoryCoreRepository {
 
   async findKidById(kidId: string): Promise<Kid | null> {
     return await this.prisma.kid.findUnique({
-      where: { id: kidId },
+      where: { id: kidId, isDeleted: false },
     });
   }
 
@@ -223,11 +222,8 @@ export class PrismaStoryCoreRepository implements IStoryCoreRepository {
     kidId: string,
     userId: string,
   ): Promise<Kid | null> {
-    return await this.prisma.kid.findFirst({
-      where: {
-        id: kidId,
-        parentId: userId,
-      },
+    return await this.prisma.kid.findUnique({
+      where: { id: kidId, parentId: userId, isDeleted: false },
     });
   }
 

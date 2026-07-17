@@ -1,20 +1,37 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Inject,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   StoryProgressDto,
   UserStoryProgressDto,
   UserStoryProgressResponseDto,
 } from './dto/story.dto';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import {
-  AppEvents,
-  StoryCompletedEvent,
-  StoryProgressUpdatedEvent,
-} from '@/shared/events';
 import {
   IStoryProgressRepository,
   STORY_PROGRESS_REPOSITORY,
+  StoryProgressWithStory,
+  UserStoryProgressWithStory,
 } from './repositories/story-progress.repository.interface';
-import { buildCursorPaginatedResponse } from '@/shared/utils/cursor-pagination.helper';
+import {
+  DEFAULT_CURSOR_LIMIT,
+  PaginationUtil,
+} from '@/shared/utils/pagination.util';
+
+/** Max session time in seconds (24 h), matching the DTO contract. */
+const MAX_SESSION_TIME = 86_400;
+
+/** Parse, clamp and floor a raw sessionTime value to a safe integer in [0, MAX_SESSION_TIME]. */
+function normalizeSessionTime(value: unknown): number {
+  const raw = Number(value ?? 0);
+  return Number.isFinite(raw)
+    ? Math.min(Math.max(0, Math.floor(raw)), MAX_SESSION_TIME)
+    : 0;
+}
 
 @Injectable()
 export class StoryProgressService {
@@ -23,162 +40,196 @@ export class StoryProgressService {
   constructor(
     @Inject(STORY_PROGRESS_REPOSITORY)
     private readonly progressRepository: IStoryProgressRepository,
-    private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  /**
-   * Set progress for a kid's story session
-   */
-  async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
-    const { kidId, storyId, progress, completed } = dto;
+  /** Wraps a query to handle invalid cursor IDs gracefully */
+  private async withCursorErrorHandling<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new BadRequestException('Invalid cursor: record not found');
+      }
+      throw error;
+    }
+  }
 
-    const existingProgress = await this.progressRepository.findStoryProgress(
-      kidId,
-      storyId,
+  private mapProgressRecord(
+    record: StoryProgressWithStory | UserStoryProgressWithStory,
+  ) {
+    return {
+      ...record.story,
+      progressId: record.id,
+      progress: record.progress,
+      totalTimeSpent: record.totalTimeSpent,
+      lastAccessed: record.lastAccessed,
+    };
+  }
+
+  // ==================== KID PROGRESS ====================
+
+  async setProgress(dto: StoryProgressDto & { sessionTime?: number }) {
+    const kid = await this.progressRepository.findKidById(dto.kidId);
+    if (!kid) throw new NotFoundException('Kid not found');
+    const story = await this.progressRepository.findStoryById(dto.storyId);
+    if (!story) throw new NotFoundException('Story not found');
+
+    const sessionTime = normalizeSessionTime(dto.sessionTime);
+
+    const existing = await this.progressRepository.findStoryProgress(
+      dto.kidId,
+      dto.storyId,
     );
 
-    // Calculate total time spent
-    let totalTimeSpent = existingProgress?.totalTimeSpent || 0;
-    if (dto.sessionTime && dto.sessionTime > 0) {
-      totalTimeSpent += dto.sessionTime;
-    }
-
-    const updatedProgress = await this.progressRepository.upsertStoryProgress(
-      kidId,
-      storyId,
+    const result = await this.progressRepository.upsertKidProgress(
+      dto.kidId,
+      dto.storyId,
       {
-        progress,
-        completed: completed || false,
-        totalTimeSpent,
+        progress: dto.progress,
+        completed: dto.completed ?? false,
+        sessionTime,
       },
     );
 
-    // Emit progress event
-    this.eventEmitter.emit(
-      AppEvents.STORY_PROGRESS_UPDATED,
-      AppEvents.STORY_PROGRESS_UPDATED,
-      {
-        kidId,
-        storyId,
-        progress: updatedProgress.progress,
-        sessionTime: dto.sessionTime || 0,
-        totalTimeSpent,
-        updatedAt: new Date(),
-      } as StoryProgressUpdatedEvent,
-    );
-
-    // Initial completion check
-    if (completed && (!existingProgress || !existingProgress.completed)) {
-      this.logger.log(`Story ${storyId} completed by kid ${kidId}`);
-
-      this.eventEmitter.emit(
-        AppEvents.STORY_COMPLETED,
-        AppEvents.STORY_COMPLETED,
-        {
-          kidId,
-          storyId,
-          completedAt: new Date(),
-          totalTimeSpent,
-        } as StoryCompletedEvent,
-      );
-
-      // Adjust reading level logic would ideally be moved to a listener or separate service
-      // But keeping placeholder logic if needed here or delegated
+    if (dto.completed && (!existing || !existing.completed)) {
+      this.adjustReadingLevel(
+        dto.kidId,
+        dto.storyId,
+        result.totalTimeSpent,
+      ).catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.error(`Failed to adjust reading level: ${msg}`);
+      });
     }
-
-    return updatedProgress;
+    return result;
   }
 
   async getProgress(kidId: string, storyId: string) {
-    const progress = await this.progressRepository.findStoryProgress(
-      kidId,
-      storyId,
+    const kid = await this.progressRepository.findKidById(kidId);
+    if (!kid) throw new NotFoundException('Kid not found');
+    const story = await this.progressRepository.findStoryById(storyId);
+    if (!story) throw new NotFoundException('Story not found');
+    return await this.progressRepository.findStoryProgress(kidId, storyId);
+  }
+
+  async getContinueReading(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const progressRecords = await this.withCursorErrorHandling(() =>
+      this.progressRepository.findContinueReadingProgress(kidId, {
+        take: useCursor ? take + 1 : undefined,
+        cursor,
+      }),
     );
-    return progress || { progress: 0, completed: false };
+
+    if (!useCursor) {
+      return {
+        data: progressRecords.map((r) => this.mapProgressRecord(r)),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      progressRecords,
+      take,
+    );
+    return { data: data.map((r) => this.mapProgressRecord(r)), pagination };
   }
 
-  async getContinueReading(kidId: string) {
-    const records =
-      await this.progressRepository.findContinueReadingProgress(kidId);
-    return records.map((r) => r.story);
+  async getCompletedStories(kidId: string, cursor?: string, limit?: number) {
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const records = await this.withCursorErrorHandling(() =>
+      this.progressRepository.findCompletedProgress(kidId, {
+        take: useCursor ? take + 1 : undefined,
+        cursor,
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: records.map((r) => r.story),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      records,
+      take,
+    );
+    return { data: data.map((r) => r.story), pagination };
   }
 
-  async deleteStoryProgress(kidId: string, storyId: string) {
-    return await this.progressRepository.deleteStoryProgress(kidId, storyId);
-  }
-
-  async getCompletedStories(kidId: string) {
-    const records = await this.progressRepository.findCompletedProgress(kidId);
-    return records.map((r) => r.story);
-  }
-
-  async getContinueReadingPaginated(
+  private async adjustReadingLevel(
     kidId: string,
-    cursorId: string | null,
-    limit: number,
+    storyId: string,
+    totalTimeSeconds: number,
   ) {
-    const records =
-      await this.progressRepository.findContinueReadingProgressPaginated(
-        kidId,
-        cursorId ? { id: cursorId } : undefined,
-        limit + 1,
-      );
-    return buildCursorPaginatedResponse({
-      items: records.map((r) => r.story),
-      limit,
-      cursorId,
-      getId: (item) => item.id,
-    });
+    const story = await this.progressRepository.findStoryById(storyId);
+    const kid = await this.progressRepository.findKidById(kidId);
+    if (!story || !kid || story.wordCount === 0) return;
+    const minutes = totalTimeSeconds / 60;
+    const wpm = minutes > 0 ? story.wordCount / minutes : 0;
+    let newLevel = kid.currentReadingLevel;
+    if (wpm > 120 && story.difficultyLevel >= kid.currentReadingLevel) {
+      newLevel = Math.min(10, kid.currentReadingLevel + 1);
+    } else if (wpm < 40 && story.difficultyLevel >= kid.currentReadingLevel) {
+      newLevel = Math.max(1, kid.currentReadingLevel - 1);
+    }
+    if (newLevel !== kid.currentReadingLevel) {
+      await this.progressRepository.updateKidReadingLevel(kidId, newLevel);
+      this.logger.log(`Adjusted Kid ${kidId} reading level to ${newLevel}`);
+    }
   }
 
-  async getCompletedStoriesPaginated(
-    kidId: string,
-    cursorId: string | null,
-    limit: number,
-  ) {
-    const records =
-      await this.progressRepository.findCompletedProgressPaginated(
-        kidId,
-        cursorId ? { id: cursorId } : undefined,
-        limit + 1,
-      );
-    return buildCursorPaginatedResponse({
-      items: records.map((r) => r.story),
-      limit,
-      cursorId,
-      getId: (item) => item.id,
-    });
-  }
-
-  // ==================== User (Adult) Progress ====================
+  // ==================== USER (PARENT) PROGRESS ====================
 
   async setUserProgress(
     userId: string,
     dto: UserStoryProgressDto,
   ): Promise<UserStoryProgressResponseDto> {
-    const { storyId, progress, completed } = dto;
+    const user = await this.progressRepository.findUserById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    const story = await this.progressRepository.findStoryById(dto.storyId);
+    if (!story) throw new NotFoundException('Story not found');
 
-    // Calculate total time (simplified for user progress compared to kid)
-    // Could fetch existing to increment time if we tracked it similarly
-
-    const updated = await this.progressRepository.upsertUserStoryProgress(
+    const existing = await this.progressRepository.findUserStoryProgress(
       userId,
-      storyId,
+      dto.storyId,
+    );
+
+    const sessionTime = normalizeSessionTime(dto.sessionTime);
+
+    // If restoring a soft-deleted record, reset totalTimeSpent instead of
+    // accumulating stale time from before the removal.
+    const totalTimeSpentUpdate = existing?.isDeleted
+      ? sessionTime
+      : { increment: sessionTime };
+
+    const result = await this.progressRepository.upsertUserProgress(
+      userId,
+      dto.storyId,
       {
-        progress,
-        completed: completed || false,
-        totalTimeSpent: 0, // Placeholder if not tracked in DTO
+        progress: dto.progress,
+        completed: dto.completed ?? false,
+        createTotalTimeSpent: sessionTime,
+        updateTotalTimeSpent: totalTimeSpentUpdate,
       },
     );
 
     return {
-      id: updated.id,
-      userId: updated.userId,
-      storyId: updated.storyId,
-      progress: updated.progress,
-      completed: updated.completed,
-      lastAccessed: updated.lastAccessed,
-      totalTimeSpent: 0,
+      id: result.id,
+      userId: result.userId,
+      storyId: result.storyId,
+      progress: result.progress,
+      completed: result.completed,
+      lastAccessed: result.lastAccessed,
+      totalTimeSpent: result.totalTimeSpent,
     };
   }
 
@@ -186,7 +237,12 @@ export class StoryProgressService {
     userId: string,
     storyId: string,
   ): Promise<UserStoryProgressResponseDto | null> {
-    const progress = await this.progressRepository.findUserStoryProgress(
+    const user = await this.progressRepository.findUserById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    const story = await this.progressRepository.findStoryById(storyId);
+    if (!story) throw new NotFoundException('Story not found');
+
+    const progress = await this.progressRepository.findActiveUserStoryProgress(
       userId,
       storyId,
     );
@@ -200,74 +256,69 @@ export class StoryProgressService {
       progress: progress.progress,
       completed: progress.completed,
       lastAccessed: progress.lastAccessed,
-      totalTimeSpent: 0, // Placeholder
+      totalTimeSpent: progress.totalTimeSpent,
     };
   }
 
-  async getUserContinueReading(userId: string) {
-    const records =
-      await this.progressRepository.findUserContinueReadingProgress(userId);
-
-    return records.map((record) => ({
-      ...record.story,
-      progress: record.progress,
-      totalTimeSpent: record.totalTimeSpent,
-      lastAccessed: record.lastAccessed,
-    }));
-  }
-
-  async getUserCompletedStories(userId: string) {
-    const records =
-      await this.progressRepository.findUserCompletedProgress(userId);
-    return records.map((r) => r.story);
-  }
-
-  async getUserContinueReadingPaginated(
+  async getUserContinueReading(
     userId: string,
-    cursorId: string | null,
-    limit: number,
+    cursor?: string,
+    limit?: number,
   ) {
-    const records =
-      await this.progressRepository.findUserContinueReadingProgressPaginated(
-        userId,
-        cursorId ? { id: cursorId } : undefined,
-        limit + 1,
-      );
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
-    return buildCursorPaginatedResponse({
-      items: records.map((record) => ({
-        ...record.story,
-        progress: record.progress,
-        totalTimeSpent: record.totalTimeSpent,
-        lastAccessed: record.lastAccessed,
-      })),
-      limit,
-      cursorId,
-      getId: (item) => item.id,
-    });
+    const progressRecords = await this.withCursorErrorHandling(() =>
+      this.progressRepository.findUserContinueReadingProgress(userId, {
+        take: useCursor ? take + 1 : undefined,
+        cursor,
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: progressRecords.map((r) => this.mapProgressRecord(r)),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      progressRecords,
+      take,
+    );
+    return { data: data.map((r) => this.mapProgressRecord(r)), pagination };
   }
 
-  async getUserCompletedStoriesPaginated(
+  async getUserCompletedStories(
     userId: string,
-    cursorId: string | null,
-    limit: number,
+    cursor?: string,
+    limit?: number,
   ) {
-    const records =
-      await this.progressRepository.findUserCompletedProgressPaginated(
-        userId,
-        cursorId ? { id: cursorId } : undefined,
-        limit + 1,
-      );
-    return buildCursorPaginatedResponse({
-      items: records.map((r) => r.story),
-      limit,
-      cursorId,
-      getId: (item) => item.id,
-    });
+    const useCursor = cursor !== undefined || limit !== undefined;
+    const take = limit ?? DEFAULT_CURSOR_LIMIT;
+
+    const records = await this.withCursorErrorHandling(() =>
+      this.progressRepository.findUserCompletedProgress(userId, {
+        take: useCursor ? take + 1 : undefined,
+        cursor,
+      }),
+    );
+
+    if (!useCursor) {
+      return {
+        data: records.map((r) => r.story),
+        pagination: { nextCursor: null, hasNextPage: false },
+      };
+    }
+
+    const { data, pagination } = PaginationUtil.buildCursorResponse(
+      records,
+      take,
+    );
+    return { data: data.map((r) => r.story), pagination };
   }
 
   async removeFromUserLibrary(userId: string, storyId: string) {
-    await this.progressRepository.deleteUserStoryProgress(userId, storyId);
-    return { success: true };
+    return await this.progressRepository.removeFromUserLibrary(userId, storyId);
   }
 }

@@ -1,50 +1,54 @@
-import { StoryProgress, UserStoryProgress, Story } from '@prisma/client';
+import {
+  StoryProgress,
+  UserStoryProgress,
+  Story,
+  Category,
+  Kid,
+  User,
+  Prisma,
+} from '@prisma/client';
 
 export type StoryProgressWithStory = StoryProgress & {
-  story: Story;
+  story: Story & { categories: Category[] };
 };
 
 export type UserStoryProgressWithStory = UserStoryProgress & {
-  story: Story;
+  story: Story & { categories: Category[] };
 };
 
+export interface ProgressPageOptions {
+  take?: number;
+  cursor?: string;
+}
+
 export interface IStoryProgressRepository {
+  // Entity lookups
+  findKidById(id: string): Promise<Kid | null>;
+  findStoryById(id: string): Promise<Story | null>;
+  findUserById(id: string): Promise<User | null>;
+  updateKidReadingLevel(kidId: string, newLevel: number): Promise<Kid>;
+
   // Kid Progress
   findStoryProgress(
     kidId: string,
     storyId: string,
   ): Promise<StoryProgress | null>;
 
-  upsertStoryProgress(
+  upsertKidProgress(
     kidId: string,
     storyId: string,
-    data: {
-      progress: number;
-      completed: boolean;
-      totalTimeSpent?: number;
-    },
+    data: { progress: number; completed: boolean; sessionTime: number },
   ): Promise<StoryProgress>;
 
-  findContinueReadingProgress(kidId: string): Promise<StoryProgressWithStory[]>;
-
-  findCompletedProgress(kidId: string): Promise<StoryProgressWithStory[]>;
-
-  findContinueReadingProgressPaginated(
+  findContinueReadingProgress(
     kidId: string,
-    cursor?: { id: string },
-    take?: number,
+    opts?: ProgressPageOptions,
   ): Promise<StoryProgressWithStory[]>;
 
-  findCompletedProgressPaginated(
+  findCompletedProgress(
     kidId: string,
-    cursor?: { id: string },
-    take?: number,
+    opts?: ProgressPageOptions,
   ): Promise<StoryProgressWithStory[]>;
-
-  deleteStoryProgress(
-    kidId: string,
-    storyId: string,
-  ): Promise<{ count: number }>;
 
   // User (Adult) Progress
   findUserStoryProgress(
@@ -52,40 +56,36 @@ export interface IStoryProgressRepository {
     storyId: string,
   ): Promise<UserStoryProgress | null>;
 
-  upsertUserStoryProgress(
+  findActiveUserStoryProgress(
+    userId: string,
+    storyId: string,
+  ): Promise<UserStoryProgress | null>;
+
+  upsertUserProgress(
     userId: string,
     storyId: string,
     data: {
       progress: number;
       completed: boolean;
-      totalTimeSpent?: number;
+      createTotalTimeSpent: number;
+      updateTotalTimeSpent: number | Prisma.IntFieldUpdateOperationsInput;
     },
   ): Promise<UserStoryProgress>;
 
   findUserContinueReadingProgress(
     userId: string,
+    opts?: ProgressPageOptions,
   ): Promise<UserStoryProgressWithStory[]>;
 
   findUserCompletedProgress(
     userId: string,
+    opts?: ProgressPageOptions,
   ): Promise<UserStoryProgressWithStory[]>;
 
-  findUserContinueReadingProgressPaginated(
-    userId: string,
-    cursor?: { id: string },
-    take?: number,
-  ): Promise<UserStoryProgressWithStory[]>;
-
-  findUserCompletedProgressPaginated(
-    userId: string,
-    cursor?: { id: string },
-    take?: number,
-  ): Promise<UserStoryProgressWithStory[]>;
-
-  deleteUserStoryProgress(
+  removeFromUserLibrary(
     userId: string,
     storyId: string,
-  ): Promise<{ count: number }>;
+  ): Promise<[Prisma.BatchPayload, Prisma.BatchPayload]>;
 }
 
 export const STORY_PROGRESS_REPOSITORY = Symbol('STORY_PROGRESS_REPOSITORY');
