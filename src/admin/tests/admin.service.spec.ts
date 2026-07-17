@@ -7,6 +7,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CouponService } from '../../coupon/coupon.service';
 import { GoogleVerificationService } from '../../payment/google-verification.service';
 import { AppleVerificationService } from '../../payment/apple-verification.service';
+import { NotificationService } from '../../notification/notification.service';
 
 // Mock Cache Manager
 const mockCacheManager = {
@@ -127,6 +128,10 @@ describe('AdminService', () => {
         {
           provide: AppleVerificationService,
           useValue: mockAppleVerificationService,
+        },
+        {
+          provide: NotificationService,
+          useValue: { broadcastInAppToAllUsers: jest.fn() },
         },
       ],
     }).compile();
