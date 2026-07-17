@@ -28,11 +28,16 @@ export class PrismaStoryFavoriteRepository implements IStoryFavoriteRepository {
     });
   }
 
-  async findFavoritesByKidId(kidId: string): Promise<FavoriteWithStory[]> {
+  async findFavoritesByKidId(
+    kidId: string,
+    opts?: { take?: number; cursor?: string },
+  ): Promise<FavoriteWithStory[]> {
     return await this.prisma.favorite.findMany({
-      where: { kidId },
+      where: { kidId, isDeleted: false, story: { isDeleted: false } },
       include: { story: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      ...(opts?.take !== undefined ? { take: opts.take } : {}),
+      ...(opts?.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
   }
 

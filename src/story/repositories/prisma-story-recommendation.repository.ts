@@ -25,11 +25,41 @@ export class PrismaStoryRecommendationRepository
     });
   }
 
+  async findParentRecommendationByUnique(
+    userId: string,
+    kidId: string,
+    storyId: string,
+  ): Promise<ParentRecommendation | null> {
+    return this.prisma.parentRecommendation.findUnique({
+      where: {
+        userId_kidId_storyId: {
+          userId,
+          kidId,
+          storyId,
+        },
+      },
+    });
+  }
+
   async findParentRecommendationById(
     id: string,
   ): Promise<ParentRecommendation | null> {
     return this.prisma.parentRecommendation.findUnique({
       where: { id },
+    });
+  }
+
+  async updateParentRecommendationStatus(
+    id: string,
+    data: Partial<{
+      isDeleted: boolean;
+      deletedAt: Date | null;
+      message: string | null;
+    }>,
+  ): Promise<ParentRecommendation> {
+    return this.prisma.parentRecommendation.update({
+      where: { id },
+      data,
     });
   }
 

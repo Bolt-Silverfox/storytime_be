@@ -223,6 +223,8 @@ export interface IStoryRepository {
     date: Date,
   ): Promise<DailyChallenge | null>;
 
+  findDailyChallengeById(id: string): Promise<DailyChallenge | null>;
+
   // ==================== Daily Challenge Assignment Operations ====================
 
   createDailyChallengeAssignment(

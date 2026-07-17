@@ -4,6 +4,7 @@ import {
   StoryImage,
   StoryBranch,
   Season,
+  Story,
   Prisma,
 } from '@prisma/client';
 
@@ -13,6 +14,8 @@ export type CategoryWithCount = Category & {
 
 export interface IStoryMetadataRepository {
   findAllCategories(): Promise<CategoryWithCount[]>;
+
+  findStoryById(id: string): Promise<Story | null>;
 
   findCategoriesByIds(ids: string[]): Promise<Category[]>;
 

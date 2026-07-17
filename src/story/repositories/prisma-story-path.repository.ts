@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IStoryPathRepository } from './story-path.repository.interface';
-import { StoryPath } from '@prisma/client';
+import { StoryPath, Kid, Story } from '@prisma/client';
 
 @Injectable()
 export class PrismaStoryPathRepository implements IStoryPathRepository {
@@ -12,14 +12,14 @@ export class PrismaStoryPathRepository implements IStoryPathRepository {
       data: {
         kidId,
         storyId,
-        path: JSON.stringify([]), // Initial empty path
+        path: '',
       },
     });
   }
 
   async updateStoryPath(
     id: string,
-    data: Partial<{ path: string; completedAt: Date | null }>,
+    data: Partial<{ path: string; completedAt: Date | null | undefined }>,
   ): Promise<StoryPath> {
     return await this.prisma.storyPath.update({
       where: { id },
@@ -34,7 +34,18 @@ export class PrismaStoryPathRepository implements IStoryPathRepository {
   async findStoryPathsByKidId(kidId: string): Promise<StoryPath[]> {
     return await this.prisma.storyPath.findMany({
       where: { kidId },
-      orderBy: { startedAt: 'desc' },
+    });
+  }
+
+  async findKidById(id: string): Promise<Kid | null> {
+    return await this.prisma.kid.findUnique({
+      where: { id, isDeleted: false },
+    });
+  }
+
+  async findStoryById(id: string): Promise<Story | null> {
+    return await this.prisma.story.findUnique({
+      where: { id, isDeleted: false },
     });
   }
 }

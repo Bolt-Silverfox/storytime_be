@@ -17,53 +17,47 @@ export class StoryPathService {
     private readonly pathRepository: IStoryPathRepository,
   ) {}
 
-  async startStoryPath(dto: StartStoryPathDto): Promise<StoryPathDto> {
-    const path = await this.pathRepository.createStoryPath(
-      dto.kidId,
-      dto.storyId,
-    );
-    return this.toStoryPathDto(path);
-  }
-
-  async updateStoryPath(
-    id: string,
-    dto: UpdateStoryPathDto,
-  ): Promise<StoryPathDto> {
-    const existingPath = await this.pathRepository.findStoryPathById(id);
-    if (!existingPath) throw new NotFoundException('Story path not found');
-
-    const updated = await this.pathRepository.updateStoryPath(id, {
-      path: dto.path,
-      completedAt: dto.completedAt ?? null,
-    });
-
-    return this.toStoryPathDto(updated);
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getStoryPaths(_storyId: string) {
-    // This looks like it was possibly filtering by kidId in original service?
-    // Based on original method signature, let's implement get by id
-    // Or if it was meant to be get paths FOR a story across kids (unlikely for frontend)
-    // Let's implement getting paths for a kid if that's the common use case
-    // For now, mirroring repository method
-    return [];
-  }
-
-  async getStoryPathById(id: string): Promise<StoryPathDto> {
-    const path = await this.pathRepository.findStoryPathById(id);
-    if (!path) throw new NotFoundException('Story path not found');
-    return this.toStoryPathDto(path);
-  }
-
-  toStoryPathDto(path: StoryPath): StoryPathDto {
+  private toStoryPathDto(path: StoryPath): StoryPathDto {
     return {
       id: path.id,
       kidId: path.kidId,
       storyId: path.storyId,
-      path: typeof path.path === 'string' ? JSON.parse(path.path) : path.path,
+      path: path.path,
       startedAt: path.startedAt,
       completedAt: path.completedAt ?? undefined,
     };
+  }
+
+  async startStoryPath(dto: StartStoryPathDto): Promise<StoryPathDto> {
+    const kid = await this.pathRepository.findKidById(dto.kidId);
+    if (!kid) throw new NotFoundException('Kid not found');
+    const story = await this.pathRepository.findStoryById(dto.storyId);
+    if (!story) throw new NotFoundException('Story not found');
+
+    const storyPath = await this.pathRepository.createStoryPath(
+      dto.kidId,
+      dto.storyId,
+    );
+    return this.toStoryPathDto(storyPath);
+  }
+
+  async updateStoryPath(dto: UpdateStoryPathDto): Promise<StoryPathDto> {
+    const storyPath = await this.pathRepository.updateStoryPath(dto.pathId, {
+      path: dto.path,
+      completedAt: dto.completedAt,
+    });
+    return this.toStoryPathDto(storyPath);
+  }
+
+  async getStoryPathsForKid(kidId: string): Promise<StoryPathDto[]> {
+    const kid = await this.pathRepository.findKidById(kidId);
+    if (!kid) throw new NotFoundException('Kid not found');
+    const paths = await this.pathRepository.findStoryPathsByKidId(kidId);
+    return paths.map((p: StoryPath) => this.toStoryPathDto(p));
+  }
+
+  async getStoryPathById(id: string): Promise<StoryPathDto | null> {
+    const path = await this.pathRepository.findStoryPathById(id);
+    return path ? this.toStoryPathDto(path) : null;
   }
 }

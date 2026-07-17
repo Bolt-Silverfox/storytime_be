@@ -15,7 +15,10 @@ export interface IStoryDownloadRepository {
 
   deleteDownloads(kidId: string, storyId: string): Promise<{ count: number }>;
 
-  findDownloadsByKidId(kidId: string): Promise<DownloadedStoryWithStory[]>;
+  findDownloadsByKidId(
+    kidId: string,
+    opts?: { take?: number; cursor?: string },
+  ): Promise<DownloadedStoryWithStory[]>;
 
   findStoryById(id: string): Promise<Story | null>;
 }

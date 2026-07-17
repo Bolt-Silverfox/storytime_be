@@ -59,9 +59,11 @@ export class DailyChallengeService {
   ): Promise<DailyChallengeAssignmentDto> {
     const kid = await this.storyRepository.findKidById(dto.kidId);
     if (!kid) throw new NotFoundException('Kid not found');
+    const challenge = await this.storyRepository.findDailyChallengeById(
+      dto.challengeId,
+    );
+    if (!challenge) throw new NotFoundException('Daily challenge not found');
 
-    // Check if daily challenge exists by looking up by date and story
-    // Note: Repository doesn't have findDailyChallengeById, use findDailyChallengeAssignmentById to verify
     const assignment =
       await this.storyRepository.createDailyChallengeAssignment(
         dto.kidId,

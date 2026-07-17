@@ -45,11 +45,14 @@ export class PrismaStoryDownloadRepository implements IStoryDownloadRepository {
 
   async findDownloadsByKidId(
     kidId: string,
+    opts?: { take?: number; cursor?: string },
   ): Promise<DownloadedStoryWithStory[]> {
     return await this.prisma.downloadedStory.findMany({
       where: { kidId },
       include: { story: true },
-      orderBy: { downloadedAt: 'desc' },
+      orderBy: [{ downloadedAt: 'desc' }, { id: 'asc' }],
+      ...(opts?.take !== undefined ? { take: opts.take } : {}),
+      ...(opts?.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
   }
 
