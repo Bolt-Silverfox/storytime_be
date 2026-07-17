@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { OnEvent } from '@nestjs/event-emitter';
-import { PrismaService } from '@/prisma/prisma.service';
+import { USER_REPOSITORY, IUserRepository } from '../repositories';
 import { NotificationService } from '../notification.service';
 import {
   AppEvents,
@@ -22,7 +22,8 @@ export class EventNotificationService {
   private readonly logger = new Logger(EventNotificationService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: IUserRepository,
     private readonly notificationService: NotificationService,
   ) {}
 
@@ -32,10 +33,7 @@ export class EventNotificationService {
   @OnEvent(AppEvents.QUOTA_EXHAUSTED)
   async handleQuotaExhausted(event: QuotaExhaustedEvent): Promise<void> {
     try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: event.userId },
-        select: { email: true, name: true },
-      });
+      const user = await this.userRepository.findContactById(event.userId);
 
       if (!user?.email) {
         this.logger.warn(
@@ -76,10 +74,7 @@ export class EventNotificationService {
     event: SubscriptionCreatedEvent,
   ): Promise<void> {
     try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: event.userId },
-        select: { email: true, name: true },
-      });
+      const user = await this.userRepository.findContactById(event.userId);
 
       if (!user?.email) {
         this.logger.warn(
@@ -115,10 +110,7 @@ export class EventNotificationService {
   @OnEvent(AppEvents.PAYMENT_FAILED)
   async handlePaymentFailed(event: PaymentFailedEvent): Promise<void> {
     try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: event.userId },
-        select: { email: true, name: true },
-      });
+      const user = await this.userRepository.findContactById(event.userId);
 
       if (!user?.email) {
         this.logger.warn(

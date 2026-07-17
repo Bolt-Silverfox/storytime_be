@@ -1,23 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DeviceTokenService, RegisterDeviceDto } from './device-token.service';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
+import {
+  DEVICE_TOKEN_REPOSITORY,
+  IDeviceTokenRepository,
+} from '../repositories';
 import { DevicePlatform } from '@prisma/client';
 
 describe('DeviceTokenService', () => {
   let service: DeviceTokenService;
-  let prismaService: {
-    deviceToken: {
-      findUnique: jest.Mock;
-      findMany: jest.Mock;
-      create: jest.Mock;
-      update: jest.Mock;
-      updateMany: jest.Mock;
-      deleteMany: jest.Mock;
-      count: jest.Mock;
-    };
-    $transaction: jest.Mock;
-  };
+  let repository: jest.Mocked<IDeviceTokenRepository>;
 
   const mockDeviceToken = {
     id: 'token-1',
@@ -29,32 +21,40 @@ describe('DeviceTokenService', () => {
     isDeleted: false,
     deletedAt: null,
     createdAt: new Date('2026-01-01'),
+    updatedAt: new Date('2026-01-15'),
     lastUsed: new Date('2026-01-15'),
   };
 
   beforeEach(async () => {
-    const mockPrismaService: any = {
-      deviceToken: {
-        findUnique: jest.fn(),
-        findMany: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        updateMany: jest.fn(),
-        deleteMany: jest.fn(),
-        count: jest.fn(),
-      },
-      $transaction: jest.fn((fn) => fn(mockPrismaService)),
+    const mockRepository: Record<keyof IDeviceTokenRepository, jest.Mock> = {
+      findUniqueByToken: jest.fn(),
+      findFirstByUserAndTokenNotDeleted: jest.fn(),
+      findActiveByUser: jest.fn(),
+      findActiveNotDeletedByUser: jest.fn(),
+      findTokensForDeviceDedup: jest.fn(),
+      findActiveMobileTokens: jest.fn(),
+      findActiveNotDeletedWithIds: jest.fn(),
+      findActiveNotDeletedBatch: jest.fn(),
+      countActiveMobileTokens: jest.fn(),
+      countActiveWebTokens: jest.fn(),
+      createToken: jest.fn(),
+      updateByToken: jest.fn(),
+      updateById: jest.fn(),
+      updateManyTokens: jest.fn(),
+      deleteStaleTokens: jest.fn(),
+      // Execute the transaction callback immediately with a dummy tx client
+      executeTransaction: jest.fn((fn) => fn({})),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DeviceTokenService,
-        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: DEVICE_TOKEN_REPOSITORY, useValue: mockRepository },
       ],
     }).compile();
 
     service = module.get<DeviceTokenService>(DeviceTokenService);
-    prismaService = module.get(PrismaService);
+    repository = module.get(DEVICE_TOKEN_REPOSITORY);
   });
 
   describe('registerDeviceToken', () => {
@@ -68,53 +68,53 @@ describe('DeviceTokenService', () => {
       const existingToken = { ...mockDeviceToken, isActive: false };
       const updatedToken = { ...mockDeviceToken, isActive: true };
 
-      prismaService.deviceToken.findUnique.mockResolvedValue(existingToken);
-      prismaService.deviceToken.update.mockResolvedValue(updatedToken);
+      repository.findUniqueByToken.mockResolvedValue(existingToken);
+      repository.updateByToken.mockResolvedValue(updatedToken);
 
       const result = await service.registerDeviceToken('user-1', dto);
 
       expect(result.id).toBe('token-1');
       expect(result.isActive).toBe(true);
       expect(result.platform).toBe('ios');
-      expect(prismaService.deviceToken.findUnique).toHaveBeenCalledWith({
-        where: { token: 'device-token-abc' },
-      });
-      expect(prismaService.deviceToken.update).toHaveBeenCalledWith({
-        where: { token: 'device-token-abc' },
-        data: expect.objectContaining({
+      expect(repository.findUniqueByToken).toHaveBeenCalledWith(
+        'device-token-abc',
+      );
+      expect(repository.updateByToken).toHaveBeenCalledWith(
+        'device-token-abc',
+        expect.objectContaining({
           isActive: true,
           platform: 'ios',
           deviceName: 'iPhone 15',
         }),
-      });
+      );
     });
 
     it('should reassign token to a different user when token belongs to another user', async () => {
       const existingToken = { ...mockDeviceToken, userId: 'user-2' };
       const reassignedToken = { ...mockDeviceToken, userId: 'user-1' };
 
-      prismaService.deviceToken.findUnique.mockResolvedValue(existingToken);
-      prismaService.deviceToken.update.mockResolvedValue(reassignedToken);
+      repository.findUniqueByToken.mockResolvedValue(existingToken);
+      repository.updateByToken.mockResolvedValue(reassignedToken);
 
       const result = await service.registerDeviceToken('user-1', dto);
 
       expect(result.id).toBe('token-1');
-      expect(prismaService.deviceToken.update).toHaveBeenCalledWith({
-        where: { token: 'device-token-abc' },
-        data: expect.objectContaining({
+      expect(repository.updateByToken).toHaveBeenCalledWith(
+        'device-token-abc',
+        expect.objectContaining({
           userId: 'user-1',
           platform: 'ios',
           isActive: true,
         }),
-      });
+      );
     });
 
     it('should create a new token and deactivate old tokens for same device', async () => {
       const createdToken = { ...mockDeviceToken, token: 'new-device-token' };
 
-      prismaService.deviceToken.findUnique.mockResolvedValue(null);
-      prismaService.deviceToken.updateMany.mockResolvedValue({ count: 1 });
-      prismaService.deviceToken.create.mockResolvedValue(createdToken);
+      repository.findUniqueByToken.mockResolvedValue(null);
+      repository.updateManyTokens.mockResolvedValue({ count: 1 });
+      repository.createToken.mockResolvedValue(createdToken);
 
       const newDto: RegisterDeviceDto = {
         token: 'new-device-token',
@@ -125,40 +125,42 @@ describe('DeviceTokenService', () => {
       const result = await service.registerDeviceToken('user-1', newDto);
 
       expect(result.id).toBe('token-1');
-      expect(prismaService.$transaction).toHaveBeenCalled();
-      expect(prismaService.deviceToken.updateMany).toHaveBeenCalledWith({
-        where: {
+      expect(repository.executeTransaction).toHaveBeenCalled();
+      expect(repository.updateManyTokens).toHaveBeenCalledWith(
+        {
           userId: 'user-1',
           platform: 'ios',
           deviceName: 'iPhone 15',
           isDeleted: false,
           token: { not: 'new-device-token' },
         },
-        data: expect.objectContaining({
+        expect.objectContaining({
           isActive: false,
           isDeleted: true,
         }),
-      });
-      expect(prismaService.deviceToken.create).toHaveBeenCalledWith({
-        data: {
+        expect.anything(),
+      );
+      expect(repository.createToken).toHaveBeenCalledWith(
+        {
           userId: 'user-1',
           token: 'new-device-token',
           platform: 'ios',
           isActive: true,
           deviceName: 'iPhone 15',
         },
-      });
+        expect.anything(),
+      );
     });
 
     it('should create a new token without deduplication when deviceName is not provided', async () => {
       const createdToken = {
         ...mockDeviceToken,
-        deviceName: undefined,
+        deviceName: null,
         token: 'new-device-token',
       };
 
-      prismaService.deviceToken.findUnique.mockResolvedValue(null);
-      prismaService.deviceToken.create.mockResolvedValue(createdToken);
+      repository.findUniqueByToken.mockResolvedValue(null);
+      repository.createToken.mockResolvedValue(createdToken);
 
       const noNameDto: RegisterDeviceDto = {
         token: 'new-device-token',
@@ -167,24 +169,25 @@ describe('DeviceTokenService', () => {
 
       await service.registerDeviceToken('user-1', noNameDto);
 
-      expect(prismaService.deviceToken.updateMany).not.toHaveBeenCalled();
-      expect(prismaService.deviceToken.create).toHaveBeenCalledWith({
-        data: {
+      expect(repository.updateManyTokens).not.toHaveBeenCalled();
+      expect(repository.createToken).toHaveBeenCalledWith(
+        {
           userId: 'user-1',
           token: 'new-device-token',
           platform: 'ios',
           isActive: true,
           deviceName: undefined,
         },
-      });
+        expect.anything(),
+      );
     });
 
     it('should not include deviceName in update when it is undefined on reactivation', async () => {
       const existingToken = { ...mockDeviceToken };
       const updatedToken = { ...mockDeviceToken };
 
-      prismaService.deviceToken.findUnique.mockResolvedValue(existingToken);
-      prismaService.deviceToken.update.mockResolvedValue(updatedToken);
+      repository.findUniqueByToken.mockResolvedValue(existingToken);
+      repository.updateByToken.mockResolvedValue(updatedToken);
 
       const noNameDto: RegisterDeviceDto = {
         token: 'device-token-abc',
@@ -193,17 +196,17 @@ describe('DeviceTokenService', () => {
 
       await service.registerDeviceToken('user-1', noNameDto);
 
-      expect(prismaService.deviceToken.update).toHaveBeenCalledWith({
-        where: { token: 'device-token-abc' },
-        data: expect.not.objectContaining({ deviceName: expect.anything() }),
-      });
+      expect(repository.updateByToken).toHaveBeenCalledWith(
+        'device-token-abc',
+        expect.not.objectContaining({ deviceName: expect.anything() }),
+      );
     });
   });
 
   describe('unregisterDeviceToken', () => {
     it('should unregister a token owned by the user', async () => {
-      prismaService.deviceToken.findUnique.mockResolvedValue(mockDeviceToken);
-      prismaService.deviceToken.update.mockResolvedValue({
+      repository.findUniqueByToken.mockResolvedValue(mockDeviceToken);
+      repository.updateByToken.mockResolvedValue({
         ...mockDeviceToken,
         isActive: false,
       });
@@ -214,14 +217,13 @@ describe('DeviceTokenService', () => {
       );
 
       expect(result).toEqual({ success: true });
-      expect(prismaService.deviceToken.update).toHaveBeenCalledWith({
-        where: { token: 'device-token-abc' },
-        data: { isActive: false },
+      expect(repository.updateByToken).toHaveBeenCalledWith('device-token-abc', {
+        isActive: false,
       });
     });
 
     it('should throw NotFoundException when token does not exist', async () => {
-      prismaService.deviceToken.findUnique.mockResolvedValue(null);
+      repository.findUniqueByToken.mockResolvedValue(null);
 
       await expect(
         service.unregisterDeviceToken('user-1', 'nonexistent-token'),
@@ -229,7 +231,7 @@ describe('DeviceTokenService', () => {
     });
 
     it('should throw ForbiddenException when token belongs to another user', async () => {
-      prismaService.deviceToken.findUnique.mockResolvedValue(mockDeviceToken);
+      repository.findUniqueByToken.mockResolvedValue(mockDeviceToken);
 
       await expect(
         service.unregisterDeviceToken('user-2', 'device-token-abc'),
@@ -241,24 +243,25 @@ describe('DeviceTokenService', () => {
     it('should return active device tokens for a user', async () => {
       const tokens = [
         mockDeviceToken,
-        { ...mockDeviceToken, id: 'token-2', platform: 'android' },
+        {
+          ...mockDeviceToken,
+          id: 'token-2',
+          platform: 'android' as DevicePlatform,
+        },
       ];
 
-      prismaService.deviceToken.findMany.mockResolvedValue(tokens);
+      repository.findActiveByUser.mockResolvedValue(tokens);
 
       const result = await service.getUserDeviceTokens('user-1');
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('token-1');
       expect(result[1].platform).toBe('android');
-      expect(prismaService.deviceToken.findMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1', isActive: true },
-        orderBy: { lastUsed: 'desc' },
-      });
+      expect(repository.findActiveByUser).toHaveBeenCalledWith('user-1');
     });
 
     it('should return empty array when user has no active tokens', async () => {
-      prismaService.deviceToken.findMany.mockResolvedValue([]);
+      repository.findActiveByUser.mockResolvedValue([]);
 
       const result = await service.getUserDeviceTokens('user-1');
 
@@ -268,19 +271,19 @@ describe('DeviceTokenService', () => {
 
   describe('unregisterAllUserTokens', () => {
     it('should deactivate all active tokens for a user', async () => {
-      prismaService.deviceToken.updateMany.mockResolvedValue({ count: 3 });
+      repository.updateManyTokens.mockResolvedValue({ count: 3 });
 
       const result = await service.unregisterAllUserTokens('user-1');
 
       expect(result).toEqual({ count: 3 });
-      expect(prismaService.deviceToken.updateMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1', isActive: true },
-        data: { isActive: false },
-      });
+      expect(repository.updateManyTokens).toHaveBeenCalledWith(
+        { userId: 'user-1', isActive: true },
+        { isActive: false },
+      );
     });
 
     it('should return zero count when user has no active tokens', async () => {
-      prismaService.deviceToken.updateMany.mockResolvedValue({ count: 0 });
+      repository.updateManyTokens.mockResolvedValue({ count: 0 });
 
       const result = await service.unregisterAllUserTokens('user-1');
 
@@ -290,22 +293,16 @@ describe('DeviceTokenService', () => {
 
   describe('hasActiveMobileTokens', () => {
     it('should return true when user has active mobile tokens', async () => {
-      prismaService.deviceToken.count.mockResolvedValue(2);
+      repository.countActiveMobileTokens.mockResolvedValue(2);
 
       const result = await service.hasActiveMobileTokens('user-1');
 
       expect(result).toBe(true);
-      expect(prismaService.deviceToken.count).toHaveBeenCalledWith({
-        where: {
-          userId: 'user-1',
-          isActive: true,
-          platform: { in: ['ios', 'android'] },
-        },
-      });
+      expect(repository.countActiveMobileTokens).toHaveBeenCalledWith('user-1');
     });
 
     it('should return false when user has no active mobile tokens', async () => {
-      prismaService.deviceToken.count.mockResolvedValue(0);
+      repository.countActiveMobileTokens.mockResolvedValue(0);
 
       const result = await service.hasActiveMobileTokens('user-1');
 
@@ -315,22 +312,16 @@ describe('DeviceTokenService', () => {
 
   describe('hasActiveWebToken', () => {
     it('should return true when user has an active web token', async () => {
-      prismaService.deviceToken.count.mockResolvedValue(1);
+      repository.countActiveWebTokens.mockResolvedValue(1);
 
       const result = await service.hasActiveWebToken('user-1');
 
       expect(result).toBe(true);
-      expect(prismaService.deviceToken.count).toHaveBeenCalledWith({
-        where: {
-          userId: 'user-1',
-          isActive: true,
-          platform: 'web',
-        },
-      });
+      expect(repository.countActiveWebTokens).toHaveBeenCalledWith('user-1');
     });
 
     it('should return false when user has no active web token', async () => {
-      prismaService.deviceToken.count.mockResolvedValue(0);
+      repository.countActiveWebTokens.mockResolvedValue(0);
 
       const result = await service.hasActiveWebToken('user-1');
 
@@ -340,20 +331,18 @@ describe('DeviceTokenService', () => {
 
   describe('cleanupStaleTokens', () => {
     it('should delete stale and inactive tokens', async () => {
-      prismaService.deviceToken.deleteMany.mockResolvedValue({ count: 5 });
+      repository.deleteStaleTokens.mockResolvedValue({ count: 5 });
 
       const result = await service.cleanupStaleTokens();
 
       expect(result).toEqual({ count: 5 });
-      expect(prismaService.deviceToken.deleteMany).toHaveBeenCalledWith({
-        where: {
-          OR: [{ isActive: false }, { lastUsed: { lt: expect.any(Date) } }],
-        },
-      });
+      expect(repository.deleteStaleTokens).toHaveBeenCalledWith(
+        expect.any(Date),
+      );
     });
 
     it('should return zero count when there are no stale tokens', async () => {
-      prismaService.deviceToken.deleteMany.mockResolvedValue({ count: 0 });
+      repository.deleteStaleTokens.mockResolvedValue({ count: 0 });
 
       const result = await service.cleanupStaleTokens();
 

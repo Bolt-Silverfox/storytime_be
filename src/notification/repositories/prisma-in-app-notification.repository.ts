@@ -1,13 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { IInAppNotificationRepository } from './in-app-notification.repository.interface';
-import type { Notification } from '@prisma/client';
+import type { Notification, Prisma } from '@prisma/client';
 
 @Injectable()
 export class PrismaInAppNotificationRepository
   implements IInAppNotificationRepository
 {
   constructor(private readonly prisma: PrismaService) {}
+
+  async createNotification(
+    data: Prisma.NotificationUncheckedCreateInput,
+  ): Promise<Notification> {
+    return this.prisma.notification.create({ data });
+  }
 
   async findNotifications(params: {
     userId: string;

@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -9,13 +10,16 @@ import {
   NotificationCategory as PrismaCategory,
   NotificationType as PrismaNotificationType,
 } from '@prisma/client';
-import { PrismaService } from '@/prisma/prisma.service';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
   BulkUpdateNotificationPreferenceDto,
   NotificationPreferenceDto,
 } from '../dto/notification.dto';
+import {
+  INotificationPreferenceRepository,
+  NOTIFICATION_PREFERENCE_REPOSITORY,
+} from '../repositories';
 
 /** User-facing notification categories that can be toggled in settings. */
 const USER_CONFIGURABLE_CATEGORIES: PrismaCategory[] = [
@@ -39,7 +43,10 @@ const USER_CONFIGURABLE_CATEGORIES: PrismaCategory[] = [
 export class NotificationSettingsService {
   private readonly logger = new Logger(NotificationSettingsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(NOTIFICATION_PREFERENCE_REPOSITORY)
+    private readonly notificationPreferenceRepository: INotificationPreferenceRepository,
+  ) {}
 
   private toNotificationPreferenceDto(
     pref: NotificationPreference,
@@ -61,34 +68,27 @@ export class NotificationSettingsService {
   ): Promise<NotificationPreferenceDto> {
     // Verify user or kid exists and is not soft deleted
     if (dto.userId) {
-      const user = await this.prisma.user.findUnique({
-        where: {
-          id: dto.userId,
-          isDeleted: false, // CANNOT CREATE PREFERENCES FOR SOFT DELETED USERS
-        },
-      });
+      const user = await this.notificationPreferenceRepository.findUser(
+        dto.userId,
+      );
       if (!user) throw new NotFoundException('User not found');
     }
 
     if (dto.kidId) {
-      const kid = await this.prisma.kid.findUnique({
-        where: {
-          id: dto.kidId,
-          isDeleted: false, // CANNOT CREATE PREFERENCES FOR SOFT DELETED KIDS
-        },
-      });
+      const kid = await this.notificationPreferenceRepository.findKid(
+        dto.kidId,
+      );
       if (!kid) throw new NotFoundException('Kid not found');
     }
 
-    const pref = await this.prisma.notificationPreference.create({
-      data: {
+    const pref =
+      await this.notificationPreferenceRepository.createNotificationPreference({
         type: dto.type,
         category: dto.category,
         enabled: dto.enabled,
         userId: dto.userId,
         kidId: dto.kidId,
-      },
-    });
+      });
     return this.toNotificationPreferenceDto(pref);
   }
 
@@ -96,13 +96,11 @@ export class NotificationSettingsService {
     id: string,
     dto: UpdateNotificationPreferenceDto,
   ): Promise<NotificationPreferenceDto> {
-    const pref = await this.prisma.notificationPreference.update({
-      where: {
+    const pref =
+      await this.notificationPreferenceRepository.updateNotificationPreference(
         id,
-        isDeleted: false, // CANNOT UPDATE SOFT DELETED PREFERENCES
-      },
-      data: dto,
-    });
+        dto,
+      );
     return this.toNotificationPreferenceDto(pref);
   }
 
@@ -113,10 +111,11 @@ export class NotificationSettingsService {
     const ids = dtos.map((dto) => dto.id);
 
     // Verify all preferences belong to the requesting user
-    const owned = await this.prisma.notificationPreference.findMany({
-      where: { id: { in: ids }, userId, isDeleted: false },
-      select: { id: true },
-    });
+    const owned =
+      await this.notificationPreferenceRepository.findManyNotificationPreferencesByIds(
+        ids,
+        userId,
+      );
 
     const ownedIds = new Set(owned.map((p) => p.id));
     const unauthorized = ids.filter((id) => !ownedIds.has(id));
@@ -126,69 +125,53 @@ export class NotificationSettingsService {
       );
     }
 
-    const updates = dtos.map((dto) =>
-      this.prisma.notificationPreference.update({
-        where: {
-          id: dto.id,
-          isDeleted: false,
-        },
-        data: { enabled: dto.enabled },
-      }),
-    );
-
-    const results = await this.prisma.$transaction(updates);
+    const results =
+      await this.notificationPreferenceRepository.bulkUpdateEnabledInTransaction(
+        dtos.map((dto) => ({ id: dto.id, enabled: dto.enabled })),
+      );
     return results.map((pref) => this.toNotificationPreferenceDto(pref));
   }
 
   async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id: userId,
-        isDeleted: false, // CANNOT GET PREFERENCES FOR SOFT DELETED USERS
-      },
-    });
+    const user = await this.notificationPreferenceRepository.findUser(userId);
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const prefs = await this.prisma.notificationPreference.findMany({
-      where: {
-        userId,
-        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
-      },
-    });
+    const prefs =
+      await this.notificationPreferenceRepository.findManyNotificationPreferences(
+        {
+          userId,
+          isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
+        },
+      );
     return prefs.map((p) => this.toNotificationPreferenceDto(p));
   }
 
   async getForKid(kidId: string): Promise<NotificationPreferenceDto[]> {
-    const kid = await this.prisma.kid.findUnique({
-      where: {
-        id: kidId,
-        isDeleted: false, // CANNOT GET PREFERENCES FOR SOFT DELETED KIDS
-      },
-    });
+    const kid = await this.notificationPreferenceRepository.findKid(kidId);
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
     }
 
-    const prefs = await this.prisma.notificationPreference.findMany({
-      where: {
-        kidId,
-        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
-      },
-    });
+    const prefs =
+      await this.notificationPreferenceRepository.findManyNotificationPreferences(
+        {
+          kidId,
+          isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
+        },
+      );
     return prefs.map((p) => this.toNotificationPreferenceDto(p));
   }
 
   async getById(id: string): Promise<NotificationPreferenceDto> {
-    const pref = await this.prisma.notificationPreference.findUnique({
-      where: {
+    const pref =
+      await this.notificationPreferenceRepository.findUniqueNotificationPreference(
         id,
-        isDeleted: false, // EXCLUDE SOFT DELETED PREFERENCES
-      },
-    });
+        false,
+      );
     if (!pref) throw new NotFoundException('Notification preference not found');
     return this.toNotificationPreferenceDto(pref);
   }
@@ -216,26 +199,27 @@ export class NotificationSettingsService {
     const results: NotificationPreferenceDto[] = [];
 
     for (const type of channels) {
-      const pref = await this.prisma.notificationPreference.upsert({
-        where: {
-          userId_category_type: {
+      const pref =
+        await this.notificationPreferenceRepository.upsertNotificationPreference(
+          {
+            userId_category_type: {
+              userId,
+              category,
+              type,
+            },
+          },
+          {
             userId,
             category,
             type,
+            enabled,
           },
-        },
-        create: {
-          userId,
-          category,
-          type,
-          enabled,
-        },
-        update: {
-          enabled,
-          isDeleted: false, // Restore if previously soft deleted
-          deletedAt: null,
-        },
-      });
+          {
+            enabled,
+            isDeleted: false, // Restore if previously soft deleted
+            deletedAt: null,
+          },
+        );
       results.push(this.toNotificationPreferenceDto(pref));
     }
 
@@ -249,12 +233,13 @@ export class NotificationSettingsService {
   async getUserPreferencesGrouped(
     userId: string,
   ): Promise<Record<string, { push: boolean; in_app: boolean }>> {
-    const prefs = await this.prisma.notificationPreference.findMany({
-      where: {
-        userId,
-        isDeleted: false,
-      },
-    });
+    const prefs =
+      await this.notificationPreferenceRepository.findManyNotificationPreferences(
+        {
+          userId,
+          isDeleted: false,
+        },
+      );
 
     // Group by category with per-channel status
     const grouped: Record<string, { push: boolean; in_app: boolean }> = {};
@@ -304,17 +289,11 @@ export class NotificationSettingsService {
     ];
 
     // Upsert preferences for each category + channel combination in a single transaction
-    const upserts = categories.flatMap((category) => {
+    const items = categories.flatMap((category) => {
       const enabled = preferences[category];
-      return channels.map((type) =>
-        this.prisma.notificationPreference.upsert({
-          where: { userId_category_type: { userId, category, type } },
-          create: { userId, category, type, enabled },
-          update: { enabled, isDeleted: false, deletedAt: null },
-        }),
-      );
+      return channels.map((type) => ({ userId, category, type, enabled }));
     });
-    await this.prisma.$transaction(upserts);
+    await this.notificationPreferenceRepository.upsertManyInTransaction(items);
 
     return this.getUserPreferencesGrouped(userId);
   }
@@ -342,10 +321,9 @@ export class NotificationSettingsService {
     );
 
     // Use createMany with skipDuplicates to avoid errors if preferences already exist
-    await this.prisma.notificationPreference.createMany({
-      data: preferences,
-      skipDuplicates: true,
-    });
+    await this.notificationPreferenceRepository.createManyNotificationPreferences(
+      preferences,
+    );
 
     this.logger.log(
       `Seeded ${preferences.length} default preferences for user ${userId}`,
@@ -358,29 +336,28 @@ export class NotificationSettingsService {
    * @param permanent Whether to permanently delete (default: false)
    */
   async delete(id: string, permanent: boolean = false): Promise<void> {
-    const pref = await this.prisma.notificationPreference.findUnique({
-      where: {
+    const pref =
+      await this.notificationPreferenceRepository.findUniqueNotificationPreference(
         id,
-        isDeleted: false, // CANNOT DELETE ALREADY DELETED PREFERENCES
-      },
-    });
+        false,
+      );
 
     if (!pref) {
       throw new NotFoundException('Notification preference not found');
     }
 
     if (permanent) {
-      await this.prisma.notificationPreference.delete({
-        where: { id },
-      });
+      await this.notificationPreferenceRepository.deleteNotificationPreference(
+        id,
+      );
     } else {
-      await this.prisma.notificationPreference.update({
-        where: { id },
-        data: {
+      await this.notificationPreferenceRepository.updateNotificationPreferenceById(
+        id,
+        {
           isDeleted: true,
           deletedAt: new Date(),
         },
-      });
+      );
     }
   }
 
@@ -389,9 +366,11 @@ export class NotificationSettingsService {
    * @param id Notification preference ID
    */
   async undoDelete(id: string): Promise<NotificationPreferenceDto> {
-    const pref = await this.prisma.notificationPreference.findUnique({
-      where: { id },
-    });
+    const pref =
+      await this.notificationPreferenceRepository.findUniqueNotificationPreference(
+        id,
+        true,
+      );
 
     if (!pref) {
       throw new NotFoundException('Notification preference not found');
@@ -401,13 +380,14 @@ export class NotificationSettingsService {
       throw new BadRequestException('Notification preference is not deleted');
     }
 
-    const restored = await this.prisma.notificationPreference.update({
-      where: { id },
-      data: {
-        isDeleted: false,
-        deletedAt: null,
-      },
-    });
+    const restored =
+      await this.notificationPreferenceRepository.updateNotificationPreferenceById(
+        id,
+        {
+          isDeleted: false,
+          deletedAt: null,
+        },
+      );
 
     return this.toNotificationPreferenceDto(restored);
   }

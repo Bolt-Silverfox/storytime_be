@@ -1,8 +1,11 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
-import { PrismaService } from '@/prisma/prisma.service';
+import {
+  DEVICE_TOKEN_REPOSITORY,
+  IDeviceTokenRepository,
+} from '../repositories';
 
 export interface PushNotificationPayload {
   userId: string;
@@ -26,7 +29,8 @@ export class FcmService implements OnModuleInit {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly prisma: PrismaService,
+    @Inject(DEVICE_TOKEN_REPOSITORY)
+    private readonly deviceTokenRepository: IDeviceTokenRepository,
   ) {}
 
   onModuleInit() {
@@ -79,14 +83,10 @@ export class FcmService implements OnModuleInit {
 
     try {
       // Get user's active device tokens (excluding web - web uses SSE)
-      const deviceTokens = await this.prisma.deviceToken.findMany({
-        where: {
-          userId: payload.userId,
-          isActive: true,
-          platform: { in: ['ios', 'android'] },
-        },
-        select: { token: true },
-      });
+      const deviceTokens =
+        await this.deviceTokenRepository.findActiveMobileTokens(
+          payload.userId,
+        );
 
       if (deviceTokens.length === 0) {
         this.logger.debug(
@@ -163,10 +163,10 @@ export class FcmService implements OnModuleInit {
       // Update lastUsed for successful tokens
       const successfulTokens = tokens.filter((t) => !invalidTokens.includes(t));
       if (successfulTokens.length > 0) {
-        await this.prisma.deviceToken.updateMany({
-          where: { token: { in: successfulTokens } },
-          data: { lastUsed: new Date() },
-        });
+        await this.deviceTokenRepository.updateManyTokens(
+          { token: { in: successfulTokens } },
+          { lastUsed: new Date() },
+        );
       }
 
       return {
@@ -272,10 +272,10 @@ export class FcmService implements OnModuleInit {
    */
   private async deactivateTokens(tokens: string[]): Promise<void> {
     try {
-      await this.prisma.deviceToken.updateMany({
-        where: { token: { in: tokens } },
-        data: { isActive: false },
-      });
+      await this.deviceTokenRepository.updateManyTokens(
+        { token: { in: tokens } },
+        { isActive: false },
+      );
       this.logger.log(`Deactivated ${tokens.length} invalid device tokens`);
     } catch (error) {
       this.logger.error(

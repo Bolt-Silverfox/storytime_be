@@ -1,6 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../../prisma/prisma.service';
+import {
+  IInAppNotificationRepository,
+  IN_APP_NOTIFICATION_REPOSITORY,
+} from '../repositories';
 import {
   INotificationProvider,
   NotificationPayload,
@@ -13,20 +16,22 @@ import {
  */
 @Injectable()
 export class InAppProvider implements INotificationProvider {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(IN_APP_NOTIFICATION_REPOSITORY)
+    private readonly inAppNotificationRepository: IInAppNotificationRepository,
+  ) {}
 
   async send(payload: NotificationPayload): Promise<NotificationResult> {
     try {
-      const notification = await this.prisma.notification.create({
-        data: {
+      const notification =
+        await this.inAppNotificationRepository.createNotification({
           userId: payload.userId,
           category: payload.category,
           title: payload.title,
           body: payload.body,
           data: (payload.data ?? {}) as unknown as Prisma.InputJsonValue,
           isRead: false,
-        },
-      });
+        });
 
       return {
         success: true,
