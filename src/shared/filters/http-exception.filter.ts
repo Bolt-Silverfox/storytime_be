@@ -9,6 +9,7 @@ import {
 import { Request, Response } from 'express';
 import { ErrorResponse } from '../dtos/api-response.dto';
 import { DomainException } from '../exceptions/domain.exception';
+import { captureException } from '../../sentry-setup';
 
 /** Shape of NestJS exception response objects */
 interface ExceptionResponseObject {
@@ -68,6 +69,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     // Log the error for debugging purposes (excluding 400s/404s which are expected client errors)
     if (statusCode >= 500) {
+      // Report server-side failures to Sentry (no-op when Sentry is disabled).
+      captureException(exception);
       this.logger.error(
         `[${request.method}] ${request.url} - Status: ${statusCode}${code ? ` - Code: ${code}` : ''}`,
         exception.stack,

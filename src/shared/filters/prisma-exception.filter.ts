@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { BaseExceptionFilter } from '@nestjs/core';
 import { Request, Response } from 'express';
 import { ErrorResponse } from '../dtos/api-response.dto';
+import { captureException } from '../../sentry-setup';
 
 // Catches all exceptions thrown by Prisma Client
 @Catch(Prisma.PrismaClientKnownRequestError)
@@ -72,6 +73,11 @@ export class PrismaExceptionFilter
         error = 'Internal Server Error';
         break;
       }
+    }
+
+    // Report unexpected database failures (5xx) to Sentry (no-op when disabled).
+    if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      captureException(exception);
     }
 
     // Create the standardized error response
