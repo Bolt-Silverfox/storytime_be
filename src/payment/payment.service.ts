@@ -309,6 +309,7 @@ export class PaymentService {
 
     return {
       success: true,
+      alreadyProcessed: false,
       transaction,
       subscription: {
         plan: subscription.plan,
