@@ -1547,11 +1547,30 @@ export class StoryService {
 
     let completed = result.completed;
     if (shouldComplete && !completed) {
-      await this.prisma.userStoryProgress.updateMany({
+      const flipped = await this.prisma.userStoryProgress.updateMany({
         where: { userId, storyId: dto.storyId, completed: false },
         data: { completed: true },
       });
       completed = true;
+
+      // Best-effort StoryFinished notification on the user (web) completion
+      // path — mirrors the kid setProgress path. Only on the true false->true
+      // transition; never breaks progress recording.
+      if (flipped.count === 1) {
+        try {
+          await this.notificationService.sendNotification(
+            'StoryFinished',
+            { kidName: user.name ?? 'You', storyTitle: story.title },
+            userId,
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Failed to send StoryFinished (user path): ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
     }
 
     return {
