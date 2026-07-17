@@ -56,6 +56,7 @@ import {
 } from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
+import { NotificationService } from '../notification/notification.service';
 import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { ResetQuotaDto } from './dto/reset-quota.dto';
 import { GuestStatsDto, GuestActivityFilterDto } from './dto/guest-stats.dto';
@@ -85,6 +86,7 @@ export class AdminService {
     private readonly couponService: CouponService,
     private readonly googleVerificationService: GoogleVerificationService,
     private readonly appleVerificationService: AppleVerificationService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   // =====================
@@ -1815,11 +1817,7 @@ export class AdminService {
 
   async getAiCreditAnalytics(
     duration:
-      | 'yearly'
-      | 'quarterly'
-      | 'monthly'
-      | 'weekly'
-      | 'daily' = 'yearly',
+      'yearly' | 'quarterly' | 'monthly' | 'weekly' | 'daily' = 'yearly',
   ): Promise<AiCreditAnalyticsDto> {
     const now = new Date();
     let startDate: Date;
@@ -2740,7 +2738,7 @@ export class AdminService {
    */
   async broadcastNotification(
     dto: BroadcastNotificationDto,
-  ): Promise<{ sent: boolean; topic: string }> {
+  ): Promise<{ sent: boolean; topic: string; inAppDelivered: number }> {
     const topic = dto.topic ?? 'all_users';
 
     await this.eventEmitter.emitAsync('notification.broadcast', {
@@ -2752,7 +2750,24 @@ export class AdminService {
     this.logger.log(
       `Broadcast notification emitted to topic "${topic}": "${dto.title}"`,
     );
-    return { sent: true, topic };
+
+    // Also write an in-app inbox entry for every user so the broadcast shows in
+    // the app's notification list, not just as an ephemeral push.
+    let inAppDelivered = 0;
+    try {
+      const inApp = await this.notificationService.broadcastInAppToAllUsers(
+        dto.title,
+        dto.body,
+        dto.data,
+      );
+      inAppDelivered = inApp.delivered;
+    } catch (error) {
+      this.logger.error(
+        `In-app broadcast failed for "${dto.title}": ${(error as Error).message}`,
+      );
+    }
+
+    return { sent: true, topic, inAppDelivered };
   }
 
   /**
