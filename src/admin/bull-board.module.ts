@@ -3,7 +3,6 @@ import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { STORY_QUEUE_NAME } from '../story/queue/story-queue.constants';
-import { VOICE_QUEUE_NAME } from '../voice/queue/voice-queue.constants';
 import { EMAIL_QUEUE_NAME } from '../notification/queue/email-queue.constants';
 
 /**
@@ -26,10 +25,6 @@ import { EMAIL_QUEUE_NAME } from '../notification/queue/email-queue.constants';
     BullBoardModule.forFeature(
       {
         name: STORY_QUEUE_NAME,
-        adapter: BullMQAdapter,
-      },
-      {
-        name: VOICE_QUEUE_NAME,
         adapter: BullMQAdapter,
       },
       {
