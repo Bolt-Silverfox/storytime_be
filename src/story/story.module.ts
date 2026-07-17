@@ -8,6 +8,7 @@ import { UploadModule } from '../upload/upload.module';
 import { NotificationModule } from '../notification/notification.module';
 import { GeminiService } from './gemini.service';
 import { StoryController } from './story.controller';
+import { StoryAsyncController } from './story-async.controller';
 import { StoryService } from './story.service';
 import { StoryProgressService } from './story-progress.service';
 import { StoryRecommendationService } from './story-recommendation.service';
@@ -61,7 +62,7 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
       name: STORY_QUEUE_NAME,
     }),
   ],
-  controllers: [StoryController],
+  controllers: [StoryController, StoryAsyncController],
   providers: [
     StoryService,
     StoryProgressService,
