@@ -206,23 +206,38 @@ Import pre-built community dashboards in Grafana by ID:
 
 ### Custom Metrics (Storytime API)
 
-The API exposes custom Prometheus metrics at `http://localhost:9464/metrics`:
+The API exposes custom Prometheus metrics at `http://localhost:9464/metrics`
+(port configurable via `PROMETHEUS_PORT`). Actual metric names emitted by the
+code:
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `http_request_duration_seconds` | Histogram | Request duration by route |
-| `http_requests_total` | Counter | Total requests by method, route, status |
-| `cache_operations_total` | Counter | Cache hits/misses by key pattern |
-| `cache_hit_ratio` | Gauge | Cache hit ratio (updated periodically) |
-| `bullmq_job_duration_seconds` | Histogram | Job processing time by queue |
-| `bullmq_jobs_total` | Counter | Total jobs by queue, status |
-| `bullmq_queue_depth` | Gauge | Current queue depth by queue |
+| Metric | Type | Source |
+|--------|------|--------|
+| `http_client_requests_total` | Counter | `http-latency.interceptor` |
+| `http_client_request_duration_seconds` | Histogram | `http-latency.interceptor` |
+| `http_client_request_errors_total` | Counter | `http-latency.interceptor` |
+| `cache_operations_total` | Counter | `cache-metrics.service` (label `result`) |
+| `cache_operation_duration_seconds` | Histogram | `cache-metrics.service` |
+| `cache_hit_ratio` | Gauge | `cache-metrics.service` |
 
-### Dashboard Screenshots
+> Note: the OpenTelemetry Prometheus exporter appends `_bucket`/`_sum`/`_count`
+> to histograms, so query them as e.g. `http_client_request_duration_seconds_bucket`.
 
-After importing, you should see:
+### Storytime API Dashboard (bundled in this repo)
 
-1. **Overview Dashboard**: Request rate, error rate, latency percentiles
-2. **Database Dashboard**: Connection pool usage, slow queries, table sizes
-3. **Cache Dashboard**: Hit/miss ratio, memory usage, evictions
+A ready-made dashboard lives at
+`monitoring/grafana/dashboards/storytime-api.json` (uid `storytime-api`). It
+covers HTTP request rate / error rate / latency (p50/p95/p99) and cache hit
+ratio / ops-by-result / operation latency.
+
+**Import manually:** Grafana → Dashboards → Import → Upload the JSON → pick your
+Prometheus data source.
+
+**Auto-provision (recommended):** mount the bundled configs into your Grafana +
+Prometheus containers:
+
+- Grafana datasource: `monitoring/grafana/provisioning/datasources/prometheus.yml`
+- Grafana dashboard provider: `monitoring/grafana/provisioning/dashboards/dashboards.yml`
+  (mount `monitoring/grafana/dashboards/` at `/etc/grafana/provisioning/dashboards/storytime`)
+- Prometheus scrape job: merge `monitoring/prometheus/scrape.storytime.yml` into
+  your `prometheus.yml` `scrape_configs:` (targets the API on `:9464`).
 4. **Queue Dashboard**: Job throughput, processing times, failure rates

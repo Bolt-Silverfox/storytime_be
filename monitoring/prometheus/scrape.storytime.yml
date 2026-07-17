@@ -1,0 +1,10 @@
+# Prometheus scrape config for the Storytime API's OpenTelemetry Prometheus
+# exporter. Merge this job into your prometheus.yml `scrape_configs:`.
+# The app serves metrics at http://<host>:${PROMETHEUS_PORT:-9464}/metrics
+- job_name: storytime-api
+  metrics_path: /metrics
+  scrape_interval: 15s
+  static_configs:
+    - targets: ['storytime-api:9464']
+      labels:
+        service: storytime-api
