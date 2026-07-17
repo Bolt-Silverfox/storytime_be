@@ -37,11 +37,11 @@ export const envSchema = z
     WEB_APP_BASE_URL: z.string().url('WEB_APP_BASE_URL must be a valid URL'),
     GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
     GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET is required'),
-    GOOGLE_WEB_CLIENT_ID: z.string().min(1, 'GOOGLE_WEB_CLIENT_ID is required'),
-    GOOGLE_ANDROID_CLIENT_ID: z
-      .string()
-      .min(1, 'GOOGLE_ANDROID_CLIENT_ID is required'),
-    GOOGLE_IOS_CLIENT_ID: z.string().min(1, 'GOOGLE_IOS_CLIENT_ID is required'),
+    // Optional per design: extra OAuth audiences for web/android/ios clients.
+    // Undefined entries are filtered out where the audience list is built.
+    GOOGLE_WEB_CLIENT_ID: z.string().optional(),
+    GOOGLE_ANDROID_CLIENT_ID: z.string().optional(),
+    GOOGLE_IOS_CLIENT_ID: z.string().optional(),
     BACKEND_BASE_URL: z.string().url('BACKEND_BASE_URL must be a valid URL'),
     // Deepgram API key (used for STT and TTS)
     DEEPGRAM_API_KEY: z.string().min(1, 'DEEPGRAM_API_KEY is required'),
