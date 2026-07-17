@@ -368,6 +368,7 @@ jobs:
           command_timeout: 10m
           script: |
             source ~/.nvm/nvm.sh
+            corepack enable
             cd /home/ubuntu/storytime/development/storytime-api
 
             # Install Node dependencies
