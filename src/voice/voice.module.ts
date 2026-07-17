@@ -18,6 +18,12 @@ import { SSMLFormatter } from './utils/ssml-formatter';
 import { TextChunker } from './utils/text-chunker';
 import { StreamConverter } from './utils/stream-converter';
 import { VoiceQuotaService } from './voice-quota.service';
+import { VoiceResponseMapper } from './services/voice-response.mapper';
+import { VoiceCatalogService } from './services/voice-catalog.service';
+import { VoicePreferenceService } from './services/voice-preference.service';
+import { VoiceLibraryService } from './services/voice-library.service';
+import { VoiceUsageService } from './services/voice-usage.service';
+import { VoiceIdResolverService } from './services/voice-id-resolver.service';
 import { TTS_BATCH_QUEUE_NAME } from './queue/tts-batch-queue.constants';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
 import { TtsBatchProcessor } from './queue/tts-batch.processor';
@@ -35,6 +41,12 @@ import { TtsBatchRedisProvider } from './queue/tts-batch-redis.provider';
   controllers: [VoiceController],
   providers: [
     VoiceService,
+    VoiceResponseMapper,
+    VoiceCatalogService,
+    VoicePreferenceService,
+    VoiceLibraryService,
+    VoiceUsageService,
+    VoiceIdResolverService,
     TextToSpeechService,
     SpeechToTextService,
     ElevenLabsTTSProvider,
