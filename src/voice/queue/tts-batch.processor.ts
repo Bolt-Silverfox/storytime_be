@@ -1,7 +1,10 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { TTS_BATCH_QUEUE_NAME } from './tts-batch-queue.constants';
+import {
+  MAX_RETRY_GENERATIONS,
+  TTS_BATCH_QUEUE_NAME,
+} from './tts-batch-queue.constants';
 import {
   TtsBatchJobData,
   TtsBatchJobResult,
@@ -13,9 +16,18 @@ import { QuotaExhaustedError } from '../errors/quota-exhausted.error';
 
 const MAX_CONCURRENT_PER_JOB = 5;
 
+/** Transient (non-quota) retries on the SAME provider before cascading */
+const MAX_ATTEMPTS_PER_PROVIDER = 2;
+
+/** Base backoff (ms) between transient retries on the same provider */
+const RETRY_BACKOFF_MS = 300;
+
 type TtsProvider = 'elevenlabs' | 'deepgram' | 'edgetts';
 
-/** Fallback chain when a provider's quota is exhausted */
+/** Provider precedence — used to only advance the shared hint forwards */
+const PROVIDER_ORDER: TtsProvider[] = ['elevenlabs', 'deepgram', 'edgetts'];
+
+/** Fallback chain when a provider fails (quota exhaustion or transient errors) */
 const PROVIDER_FALLBACK: Record<TtsProvider, TtsProvider[]> = {
   elevenlabs: ['deepgram', 'edgetts'],
   deepgram: ['edgetts'],
@@ -58,6 +70,10 @@ export class TtsBatchProcessor extends WorkerHost {
     ];
   }
 
+  private async delay(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   async process(job: Job<TtsBatchJobData>): Promise<TtsBatchJobResult> {
     const {
       batchJobId,
@@ -67,54 +83,106 @@ export class TtsBatchProcessor extends WorkerHost {
       isPremium,
       provider,
       paragraphs,
+      totalParagraphs,
+      retryGeneration,
     } = job.data;
 
+    const generation = retryGeneration ?? 0;
+
     this.logger.log(
-      `Processing TTS batch ${batchJobId}: ${paragraphs.length} paragraphs for story ${storyId} with ${provider}`,
+      `Processing TTS batch ${batchJobId} (generation ${generation}): ${paragraphs.length} paragraphs for story ${storyId} with ${provider}`,
     );
 
     let completedCount = 0;
     let failedCount = 0;
-    let currentProvider: TtsProvider = provider;
+    // Paragraphs that exhausted the whole provider chain this run — candidates
+    // for a delayed self-heal round.
+    const failedThisRun: TtsBatchJobData['paragraphs'] = [];
+
+    // Shared hint: once we learn a provider is quota-exhausted, later paragraphs
+    // start straight from the next provider instead of re-hitting the dead one.
+    // It only ever moves forwards through PROVIDER_ORDER.
+    let preferredProvider: TtsProvider = provider;
+
+    const advancePreferred = (exhausted: TtsProvider): void => {
+      const next = PROVIDER_FALLBACK[exhausted]?.[0];
+      if (
+        next &&
+        PROVIDER_ORDER.indexOf(next) > PROVIDER_ORDER.indexOf(preferredProvider)
+      ) {
+        preferredProvider = next;
+      }
+    };
+
+    /**
+     * Generate a single paragraph, walking the provider fallback chain.
+     * - Transient errors: retried up to MAX_ATTEMPTS_PER_PROVIDER on the SAME
+     *   provider (with backoff), then cascade to the next provider.
+     * - Quota errors: no point retrying the same provider — cascade immediately.
+     * Throws the last error only after the whole chain is exhausted.
+     */
+    const generateWithFallback = async (
+      index: number,
+      text: string,
+    ): Promise<{ index: number; audioUrl: string }> => {
+      const chain: TtsProvider[] = [
+        preferredProvider,
+        ...PROVIDER_FALLBACK[preferredProvider],
+      ];
+      let lastError: unknown;
+
+      for (const activeProvider of chain) {
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_PROVIDER; attempt++) {
+          try {
+            const result = await this.ttsService.generateSingleParagraphTTS(
+              storyId,
+              text,
+              voiceId,
+              userId,
+              { isPremium, providerOverride: activeProvider },
+            );
+            return { index, audioUrl: result.audioUrl };
+          } catch (err) {
+            lastError = err;
+
+            if (this.isQuotaError(err)) {
+              // Quota exhausted — retrying the same provider is pointless.
+              this.logger.warn(
+                `TTS batch ${batchJobId}: ${activeProvider} quota exhausted for paragraph ${index}, cascading to fallback`,
+              );
+              advancePreferred(activeProvider);
+              break; // move to the next provider in the chain
+            }
+
+            const errorMessage =
+              err instanceof Error ? err.message : String(err);
+            if (attempt < MAX_ATTEMPTS_PER_PROVIDER) {
+              this.logger.warn(
+                `TTS batch ${batchJobId}: transient failure on ${activeProvider} for paragraph ${index} (attempt ${attempt}/${MAX_ATTEMPTS_PER_PROVIDER}) — ${errorMessage}; retrying`,
+              );
+              await this.delay(RETRY_BACKOFF_MS * attempt);
+            } else {
+              this.logger.warn(
+                `TTS batch ${batchJobId}: ${activeProvider} exhausted retries for paragraph ${index} — ${errorMessage}; cascading to fallback`,
+              );
+            }
+          }
+        }
+      }
+
+      throw lastError;
+    };
 
     for (let i = 0; i < paragraphs.length; i += MAX_CONCURRENT_PER_JOB) {
       const chunk = paragraphs.slice(i, i + MAX_CONCURRENT_PER_JOB);
 
       const results = await Promise.allSettled(
-        chunk.map(async ({ index, text }) => {
-          const result = await this.ttsService.generateSingleParagraphTTS(
-            storyId,
-            text,
-            voiceId,
-            userId,
-            { isPremium, providerOverride: currentProvider },
-          );
-          return { index, audioUrl: result.audioUrl };
-        }),
+        chunk.map(({ index, text }) => generateWithFallback(index, text)),
       );
-
-      // Detect quota exhaustion — switch provider for remaining chunks
-      const hasQuotaError = results.some(
-        (r) => r.status === 'rejected' && this.isQuotaError(r.reason),
-      );
-
-      if (hasQuotaError) {
-        const fallbacks = PROVIDER_FALLBACK[currentProvider] ?? [];
-        if (fallbacks.length > 0) {
-          this.logger.warn(
-            `TTS batch ${batchJobId}: ${currentProvider} quota exhausted, switching to ${fallbacks[0]} for remaining paragraphs`,
-          );
-          currentProvider = fallbacks[0];
-        }
-      }
-
-      // Collect quota-failed paragraphs for retry through the fallback chain
-      let retryParagraphs: Array<{ index: number; text: string }> = [];
 
       for (let j = 0; j < results.length; j++) {
         const result = results[j];
-        const paragraph = chunk[j];
-        const paragraphIndex = paragraph.index;
+        const paragraphIndex = chunk[j].index;
         const allIndices = this.getDuplicateIndices(paragraphs, paragraphIndex);
 
         if (result.status === 'fulfilled') {
@@ -134,15 +202,14 @@ export class TtsBatchProcessor extends WorkerHost {
             );
             throw redisErr;
           }
-        } else if (hasQuotaError && this.isQuotaError(result.reason)) {
-          retryParagraphs.push({ index: paragraphIndex, text: paragraph.text });
         } else {
+          // Only reached once every provider + retry has been exhausted.
           const errorMessage =
             result.reason instanceof Error
               ? result.reason.message
               : String(result.reason);
           this.logger.warn(
-            `TTS batch ${batchJobId}: TTS generation failed for paragraph ${paragraphIndex} — ${errorMessage}`,
+            `TTS batch ${batchJobId}: paragraph ${paragraphIndex} failed after all providers — ${errorMessage}`,
           );
           try {
             for (const idx of allIndices) {
@@ -156,132 +223,61 @@ export class TtsBatchProcessor extends WorkerHost {
             throw redisErr;
           }
           failedCount++;
-        }
-      }
-
-      // Cascade quota-failed paragraphs through the remaining fallback chain
-      let retryProvider: TtsProvider | undefined = hasQuotaError
-        ? currentProvider
-        : undefined;
-
-      while (retryParagraphs.length > 0 && retryProvider) {
-        this.logger.log(
-          `TTS batch ${batchJobId}: retrying ${retryParagraphs.length} quota-failed paragraphs with ${retryProvider}`,
-        );
-
-        const retryResults = await Promise.allSettled(
-          retryParagraphs.map(async ({ index, text }) => {
-            const result = await this.ttsService.generateSingleParagraphTTS(
-              storyId,
-              text,
-              voiceId,
-              userId,
-              { isPremium, providerOverride: retryProvider! },
-            );
-            return { index, audioUrl: result.audioUrl };
-          }),
-        );
-
-        const nextRetryParagraphs: Array<{ index: number; text: string }> = [];
-
-        for (let r = 0; r < retryResults.length; r++) {
-          const retryResult = retryResults[r];
-          const retryParagraph = retryParagraphs[r];
-          const allRetryIndices = this.getDuplicateIndices(
-            paragraphs,
-            retryParagraph.index,
-          );
-
-          if (retryResult.status === 'fulfilled') {
-            try {
-              for (const idx of allRetryIndices) {
-                await this.queueService.markParagraphCompleted(
-                  batchJobId,
-                  idx,
-                  retryResult.value.audioUrl,
-                );
-              }
-              completedCount++;
-            } catch (redisErr) {
-              this.logger.error(
-                `TTS batch ${batchJobId}: Redis write failed for retried paragraph ${retryParagraph.index}`,
-                redisErr,
-              );
-              throw redisErr;
-            }
-          } else if (this.isQuotaError(retryResult.reason)) {
-            // Cascade to next provider
-            nextRetryParagraphs.push({
-              index: retryParagraph.index,
-              text: retryParagraph.text,
-            });
-          } else {
-            const retryErrorMsg =
-              retryResult.reason instanceof Error
-                ? retryResult.reason.message
-                : String(retryResult.reason);
-            this.logger.warn(
-              `TTS batch ${batchJobId}: retry with ${retryProvider} failed for paragraph ${retryParagraph.index} — ${retryErrorMsg}`,
-            );
-            try {
-              for (const idx of allRetryIndices) {
-                await this.queueService.markParagraphFailed(batchJobId, idx);
-              }
-            } catch (redisErr) {
-              this.logger.error(
-                `TTS batch ${batchJobId}: Redis write failed for failed retry paragraph ${retryParagraph.index}`,
-                redisErr,
-              );
-              throw redisErr;
-            }
-            failedCount++;
-          }
-        }
-
-        // Advance to the next provider in the fallback chain
-        retryParagraphs = nextRetryParagraphs;
-        if (retryParagraphs.length > 0) {
-          const nextFallbacks = PROVIDER_FALLBACK[retryProvider] ?? [];
-          if (nextFallbacks.length > 0) {
-            this.logger.warn(
-              `TTS batch ${batchJobId}: ${retryProvider} quota also exhausted, cascading to ${nextFallbacks[0]}`,
-            );
-            retryProvider = nextFallbacks[0];
-            currentProvider = retryProvider;
-          } else {
-            // No more providers — mark remaining as failed
-            this.logger.error(
-              `TTS batch ${batchJobId}: all providers exhausted, marking ${retryParagraphs.length} paragraphs as failed`,
-            );
-            for (const p of retryParagraphs) {
-              const allIndices = this.getDuplicateIndices(paragraphs, p.index);
-              for (const idx of allIndices) {
-                await this.queueService.markParagraphFailed(batchJobId, idx);
-              }
-              failedCount++;
-            }
-            retryParagraphs = [];
-            retryProvider = undefined;
-          }
+          failedThisRun.push(chunk[j]);
         }
       }
     }
 
-    const success = failedCount === 0;
-    const status = success ? TtsBatchStatus.COMPLETED : TtsBatchStatus.FAILED;
+    // Self-heal: schedule a delayed follow-up for paragraphs that exhausted the
+    // whole provider chain this run, bounded by MAX_RETRY_GENERATIONS so it can
+    // never loop. The retry re-uses this batchJobId, so recovered paragraphs
+    // heal in place for anyone still polling the batch.
+    if (failedThisRun.length > 0 && generation < MAX_RETRY_GENERATIONS) {
+      try {
+        await this.queueService.queueRetryBatch(
+          job.data,
+          failedThisRun,
+          generation + 1,
+        );
+        this.logger.log(
+          `TTS batch ${batchJobId}: scheduled self-heal (generation ${generation + 1}) for ${failedThisRun.length} paragraph(s)`,
+        );
+      } catch (retryErr) {
+        this.logger.error(
+          `TTS batch ${batchJobId}: failed to schedule self-heal retry`,
+          retryErr,
+        );
+      }
+    }
+
+    // Derive the batch status from the AGGREGATE Redis state, not this run's
+    // local counts: a retry run only touches a subset and must never clobber an
+    // already-partially-good batch back to FAILED. A batch with ANY usable
+    // audio is COMPLETED (partial narration is playable per-paragraph); only an
+    // all-failed batch is FAILED. An empty error string clears a stale
+    // partial-failure note once the batch has fully healed.
+    const snapshot = await this.queueService.getBatchStatus(batchJobId);
+    const aggregateCompleted =
+      snapshot?.completedParagraphs.length ?? completedCount;
+    const aggregateFailed = snapshot?.failedParagraphs.length ?? failedCount;
+    const totalQueued = snapshot?.totalQueued ?? totalParagraphs;
+
+    const status =
+      aggregateCompleted > 0 ? TtsBatchStatus.COMPLETED : TtsBatchStatus.FAILED;
 
     await this.queueService.updateBatchMeta(batchJobId, {
       status,
-      ...(failedCount > 0
-        ? { error: `${failedCount}/${paragraphs.length} paragraphs failed` }
-        : {}),
+      error:
+        aggregateFailed > 0
+          ? `${aggregateFailed}/${totalQueued} paragraphs failed`
+          : '',
     });
 
     this.logger.log(
-      `TTS batch ${batchJobId} finished: ${completedCount} completed, ${failedCount} failed`,
+      `TTS batch ${batchJobId} finished (generation ${generation}): ${completedCount} completed / ${failedCount} failed this run; aggregate ${aggregateCompleted} completed / ${aggregateFailed} failed`,
     );
 
-    return { success, completedCount, failedCount };
+    return { success: aggregateFailed === 0, completedCount, failedCount };
   }
 
   @OnWorkerEvent('failed')

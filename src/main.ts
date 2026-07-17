@@ -1,6 +1,6 @@
 import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
@@ -11,19 +11,44 @@ import { requestLogger } from './shared/middleware/request-logger.middleware';
 
 async function bootstrap() {
   const logger = new Logger('Main');
+  let app: INestApplication | undefined;
+  let shuttingDown = false;
+
+  // Close the Nest app (which runs onModuleDestroy on every provider — e.g.
+  // PrismaService.$disconnect() and BullMQ teardown) BEFORE the process exits.
+  // A bare process.exit() bypasses enableShutdownHooks and orphans the open
+  // database connections; in dev's restart-on-save loop those leaked
+  // connections pile up until Postgres refuses new ones. A short unref'd
+  // timeout guarantees we still exit even if close() hangs.
+  const shutdown = async (code: number, reason: string): Promise<void> => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    logger.log(`Shutting down (${reason})`);
+    const force = setTimeout(() => process.exit(code), 8000);
+    force.unref();
+    try {
+      await app?.close();
+    } catch (err) {
+      logger.error('Error during graceful shutdown', err as Error);
+    } finally {
+      clearTimeout(force);
+      process.exit(code);
+    }
+  };
 
   process.on('unhandledRejection', (reason) => {
     logger.error('Unhandled Rejection', reason);
-    // Exit to avoid running in a potentially corrupt state
-    setTimeout(() => process.exit(1), 1000);
+    void shutdown(1, 'unhandledRejection');
   });
 
   process.on('uncaughtException', (error) => {
     logger.error('Uncaught Exception', error);
-    process.exit(1);
+    void shutdown(1, 'uncaughtException');
   });
 
-  const app = await NestFactory.create(AppModule, {
+  app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
 

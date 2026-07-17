@@ -7,6 +7,7 @@ import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
 import { Prisma } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { NotificationService } from '../notification/notification.service';
 
 // Type-safe mock for PrismaService
 type MockPrismaService = {
@@ -72,6 +73,10 @@ describe('PaymentService', () => {
         },
         { provide: AppleVerificationService, useValue: mockAppleVerification },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+        {
+          provide: NotificationService,
+          useValue: { sendNotification: jest.fn() },
+        },
       ],
     }).compile();
 
