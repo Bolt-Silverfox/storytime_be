@@ -7,6 +7,7 @@ import {
   ApiOkResponse,
 } from '@nestjs/swagger';
 import { SubscriptionStatusResponseDto } from './dto/subscription-status-response.dto';
+import { CancelSubscriptionResponseDto } from './dto/cancel-subscription-response.dto';
 import { PaymentService } from './payment.service';
 import {
   AuthSessionGuard,
@@ -39,6 +40,7 @@ export class PaymentController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cancel subscription (keeps access until endsAt)' })
+  @ApiOkResponse({ type: CancelSubscriptionResponseDto })
   async cancel(@Req() req: AuthenticatedRequest) {
     return this.paymentService.cancelSubscription(req.authUserData.userId);
   }
