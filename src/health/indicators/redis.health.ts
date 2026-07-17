@@ -25,7 +25,7 @@ export class RedisHealthIndicator {
         return indicator.down({
           duration: `${duration}ms`,
           error: 'PING check failed',
-          connectionStatus: this.redisService.client.status,
+          status: this.redisService.client.status,
         });
       }
 
@@ -40,7 +40,7 @@ export class RedisHealthIndicator {
         duration: `${duration}ms`,
         response: 'PONG',
         usedMemory,
-        connectionStatus: this.redisService.client.status,
+        status: this.redisService.client.status,
       });
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -50,7 +50,7 @@ export class RedisHealthIndicator {
       return indicator.down({
         duration: `${duration}ms`,
         error: errorMessage,
-        connectionStatus: this.redisService.client.status,
+        status: this.redisService.client.status,
       });
     }
   }

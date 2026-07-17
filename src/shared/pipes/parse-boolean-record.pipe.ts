@@ -9,10 +9,9 @@ import { PipeTransform, Injectable, BadRequestException } from '@nestjs/common';
  * @Body(ParseBooleanRecordPipe) preferences: Record<string, boolean>
  */
 @Injectable()
-export class ParseBooleanRecordPipe implements PipeTransform<
-  unknown,
-  Record<string, boolean>
-> {
+export class ParseBooleanRecordPipe
+  implements PipeTransform<unknown, Record<string, boolean>>
+{
   transform(value: unknown): Record<string, boolean> {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
       throw new BadRequestException(
