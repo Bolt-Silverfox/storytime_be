@@ -17,8 +17,8 @@
 - [x] Phase 8: Voice — TTS Service & Constants (done 2026-02-23)
 - [x] Phase 9: Payment — Google Play Acknowledgement & Mobile IDs (done 2026-02-23)
 - [x] Phase 10: Auth Guard & Session Improvements (done 2026-02-23)
-- [ ] Phase 11: Story — Categories & Library Endpoints
-- [ ] Phase 12: Cleanup & Dead Code Removal
+- [x] Phase 11: Story — Categories & Library Endpoints (already satisfied: continue-reading/completed repository queries include `story: { include: { categories: true } }`; verified 2026-07-17)
+- [x] Phase 12: Cleanup & Dead Code Removal (done 2026-07-17: removed orphaned voice-synthesis-queue — VoiceQueueService/VoiceProcessor/constants/interface + phantom bull-board & health registrations. StyleTTS2 provider already removed earlier in 3d24670.)
 
 ---
 
