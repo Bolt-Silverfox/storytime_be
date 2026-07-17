@@ -1,4 +1,4 @@
-import { storyBuddiesData } from '../data';
+import { storyBuddiesData } from '../../src/prisma/seed-data';
 import { SeedContext, SeedResult } from './types';
 
 export async function seedStoryBuddies(ctx: SeedContext): Promise<SeedResult> {

@@ -38,7 +38,7 @@ import {
   themes,
   defaultAgeGroups,
   systemAvatars,
-} from '../../prisma/data';
+} from '../prisma/seed-data';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DateUtil } from '@/shared/utils/date.util';
 import { Timeframe, TrendLabel } from '@/shared/constants/time.constants';

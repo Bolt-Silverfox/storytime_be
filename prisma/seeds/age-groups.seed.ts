@@ -1,4 +1,4 @@
-import { defaultAgeGroups } from '../data';
+import { defaultAgeGroups } from '../../src/prisma/seed-data';
 import { SeedContext, SeedResult } from './types';
 
 export async function seedAgeGroups(ctx: SeedContext): Promise<SeedResult> {

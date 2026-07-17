@@ -1,4 +1,4 @@
-import { themes } from '../data';
+import { themes } from '../../src/prisma/seed-data';
 import { SeedContext, SeedResult } from './types';
 
 export async function seedThemes(ctx: SeedContext): Promise<SeedResult> {

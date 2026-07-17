@@ -1,4 +1,4 @@
-import { learningExpectations } from '../data';
+import { learningExpectations } from '../../src/prisma/seed-data';
 import { SeedContext, SeedResult } from './types';
 
 export async function seedLearningExpectations(
