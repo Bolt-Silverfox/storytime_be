@@ -38,9 +38,10 @@ const prisma = new PrismaClient({
   datasourceUrl: process.env.DATABASE_URL,
 });
 
-const HF_API_URL =
-  'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell';
-const HF_TIMEOUT_MS = 60_000;
+// FLUX.1-schnell via the HF router, fal-ai provider (the hf-inference provider
+// deprecated the direct model endpoint). Returns JSON with an image URL.
+const HF_API_URL = 'https://router.huggingface.co/fal-ai/fal-ai/flux/schnell';
+const HF_TIMEOUT_MS = 90_000;
 
 // Exact category names (per prisma/data) + a tailored image prompt for each.
 const CATEGORIES: { name: string; prompt: string }[] = [
@@ -67,9 +68,8 @@ async function generateAndUpload(prompt: string): Promise<string> {
       headers: {
         Authorization: `Bearer ${process.env.HF_TOKEN}`,
         'Content-Type': 'application/json',
-        Accept: 'image/png',
       },
-      body: JSON.stringify({ inputs: prompt }),
+      body: JSON.stringify({ prompt, image_size: 'square_hd' }),
       signal: controller.signal,
     });
   } catch (err) {
@@ -86,42 +86,26 @@ async function generateAndUpload(prompt: string): Promise<string> {
     throw new Error(`HF API error ${response.status}: ${errorText}`);
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.length === 0) {
-    throw new Error('Hugging Face returned no image data');
+  const data = (await response.json()) as { images?: { url?: string }[] };
+  const imageUrl = data.images?.[0]?.url;
+  if (!imageUrl) {
+    throw new Error('Hugging Face response had no image URL');
   }
 
-  const result = await new Promise<{ secure_url: string }>(
-    (resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: 'storytime/categories',
-          resource_type: 'image',
-          transformation: [
-            { width: 1024, height: 1024, crop: 'limit' },
-            { quality: 'auto' },
-            { format: 'webp' },
-          ],
-        },
-        (error: unknown, uploaded) => {
-          if (error) {
-            return reject(
-              error instanceof Error
-                ? error
-                : new Error('Cloudinary upload failed'),
-            );
-          }
-          if (!uploaded?.secure_url) {
-            return reject(new Error('Cloudinary upload missing secure_url'));
-          }
-          resolve({ secure_url: uploaded.secure_url });
-        },
-      );
-      stream.end(buffer);
-    },
-  );
-
-  return result.secure_url;
+  // Cloudinary ingests the remote image URL directly.
+  const uploaded = await cloudinary.uploader.upload(imageUrl, {
+    folder: 'storytime/categories',
+    resource_type: 'image',
+    transformation: [
+      { width: 1024, height: 1024, crop: 'limit' },
+      { quality: 'auto' },
+      { format: 'webp' },
+    ],
+  });
+  if (!uploaded.secure_url) {
+    throw new Error('Cloudinary upload missing secure_url');
+  }
+  return uploaded.secure_url;
 }
 
 async function main() {
