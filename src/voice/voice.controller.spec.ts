@@ -11,6 +11,7 @@ import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { SpeechToTextService } from './speech-to-text.service';
 import { VoiceQuotaService } from './voice-quota.service';
+import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
 
 const mockVoiceService = {
   listVoices: jest.fn(),
@@ -22,12 +23,16 @@ const mockStoryService = {
 };
 const mockUploadService = {};
 const mockTextToSpeechService = {
-  batchTextToSpeechCloudUrls: jest.fn(),
+  batchTextToSpeechEager: jest.fn(),
 };
 const mockSpeechToTextService = {};
 const mockVoiceQuotaService = {
   canUseVoice: jest.fn().mockResolvedValue(true),
   getVoiceAccess: jest.fn(),
+};
+const mockTtsBatchQueueService = {
+  queueBatch: jest.fn(),
+  getBatchStatus: jest.fn(),
 };
 
 describe('VoiceController', () => {
@@ -48,6 +53,10 @@ describe('VoiceController', () => {
         { provide: TextToSpeechService, useValue: mockTextToSpeechService },
         { provide: SpeechToTextService, useValue: mockSpeechToTextService },
         { provide: VoiceQuotaService, useValue: mockVoiceQuotaService },
+        {
+          provide: TtsBatchQueueService,
+          useValue: mockTtsBatchQueueService,
+        },
       ],
     })
       .overrideGuard(AuthSessionGuard)
@@ -92,7 +101,7 @@ describe('VoiceController', () => {
         id: 'story-1',
         textContent: 'Hello world',
       });
-      mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
+      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
         results: [
           {
             index: 0,
@@ -101,6 +110,7 @@ describe('VoiceController', () => {
           },
         ],
         totalParagraphs: 1,
+        remainingUncached: [],
         wasTruncated: false,
         usedProvider: 'deepgram',
       });
@@ -124,7 +134,7 @@ describe('VoiceController', () => {
         id: 'story-1',
         textContent: 'Hello world',
       });
-      mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
+      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
         results: [
           {
             index: 0,
@@ -133,6 +143,7 @@ describe('VoiceController', () => {
           },
         ],
         totalParagraphs: 1,
+        remainingUncached: [],
         wasTruncated: false,
         usedProvider: 'deepgram',
         preferredProvider: 'elevenlabs',
@@ -153,7 +164,7 @@ describe('VoiceController', () => {
         id: 'story-1',
         textContent: 'Hello world',
       });
-      mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
+      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
         results: [
           {
             index: 0,
@@ -162,6 +173,7 @@ describe('VoiceController', () => {
           },
         ],
         totalParagraphs: 1,
+        remainingUncached: [],
         wasTruncated: false,
         usedProvider: 'deepgram',
       });
@@ -181,7 +193,7 @@ describe('VoiceController', () => {
         id: 'story-1',
         textContent: 'Hello world',
       });
-      mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
+      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
         results: [
           {
             index: 0,
@@ -190,6 +202,7 @@ describe('VoiceController', () => {
           },
         ],
         totalParagraphs: 1,
+        remainingUncached: [],
         wasTruncated: false,
         usedProvider: 'deepgram',
         preferredProvider: 'elevenlabs',
@@ -211,7 +224,7 @@ describe('VoiceController', () => {
         id: 'story-1',
         textContent: 'Hello world',
       });
-      mockTextToSpeechService.batchTextToSpeechCloudUrls.mockResolvedValue({
+      mockTextToSpeechService.batchTextToSpeechEager.mockResolvedValue({
         results: [
           {
             index: 0,
@@ -220,6 +233,7 @@ describe('VoiceController', () => {
           },
         ],
         totalParagraphs: 1,
+        remainingUncached: [],
         wasTruncated: false,
         usedProvider: 'elevenlabs',
       });
@@ -244,7 +258,7 @@ describe('VoiceController', () => {
 
       expect(mockStoryService.getStoryById).not.toHaveBeenCalled();
       expect(
-        mockTextToSpeechService.batchTextToSpeechCloudUrls,
+        mockTextToSpeechService.batchTextToSpeechEager,
       ).not.toHaveBeenCalled();
     });
   });
