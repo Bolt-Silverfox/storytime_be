@@ -13,7 +13,17 @@ export type Notifications =
   | 'PasswordChanged'
   | 'PinReset'
   | 'NewStory'
-  | 'AchievementUnlocked';
+  | 'StoryFinished'
+  | 'AchievementUnlocked'
+  | 'BadgeEarned'
+  | 'StreakMilestone'
+  | 'PaymentSuccess'
+  | 'PaymentFailed'
+  | 'SubscriptionAlert'
+  | 'SubscriptionReminder'
+  | 'WeMissYou'
+  | 'IncompleteStoryReminder'
+  | 'DailyListeningReminder';
 
 export type Medium = 'email' | 'sms' | 'push' | 'in_app';
 
@@ -136,12 +146,24 @@ export const NotificationRegistry: Record<
     subject: 'New Story Available!',
     validate: (data) => {
       if (!data.storyTitle) return 'Story title is required';
+      if (!data.storyId) return 'Story id is required';
       return null;
     },
     getTemplate: (data) => {
-      return Promise.resolve(
-        `A new story "${data.storyTitle}" is now available for you to read!`,
-      );
+      return Promise.resolve(`A new story is out: ${data.storyTitle}`);
+    },
+  },
+  StoryFinished: {
+    medium: 'in_app',
+    category: NotificationCategory.STORY_FINISHED,
+    subject: 'Story Finished!',
+    validate: (data) => {
+      if (!data.kidName) return 'Kid name is required';
+      if (!data.storyTitle) return 'Story title is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(`${data.kidName} finished ${data.storyTitle} 🎉`);
     },
   },
   AchievementUnlocked: {
@@ -149,13 +171,143 @@ export const NotificationRegistry: Record<
     category: NotificationCategory.ACHIEVEMENT_UNLOCKED,
     subject: 'Achievement Unlocked!',
     validate: (data) => {
+      if (!data.kidName) return 'Kid name is required';
       if (!data.achievementName) return 'Achievement name is required';
       return null;
     },
     getTemplate: (data) => {
       return Promise.resolve(
-        `Congratulations! You've unlocked the "${data.achievementName}" achievement.`,
+        `${data.kidName} unlocked the "${data.achievementName}" achievement!`,
       );
+    },
+  },
+  BadgeEarned: {
+    medium: 'in_app',
+    category: NotificationCategory.BADGE_EARNED,
+    subject: 'Badge Earned!',
+    validate: (data) => {
+      if (!data.kidName) return 'Kid name is required';
+      if (!data.badgeName) return 'Badge name is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `${data.kidName} earned the "${data.badgeName}" badge!`,
+      );
+    },
+  },
+  StreakMilestone: {
+    medium: 'in_app',
+    category: NotificationCategory.STREAK_MILESTONE,
+    subject: 'Streak Milestone!',
+    validate: (data) => {
+      if (!data.kidName) return 'Kid name is required';
+      if (data.days === undefined || data.days === null)
+        return 'Days is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `${data.kidName} is on a ${data.days}-day streak! Keep it up 🔥`,
+      );
+    },
+  },
+  PaymentSuccess: {
+    medium: 'in_app',
+    category: NotificationCategory.PAYMENT_SUCCESS,
+    subject: 'Payment Successful',
+    validate: (data) => {
+      if (data.amount === undefined || data.amount === null)
+        return 'Amount is required';
+      if (!data.plan) return 'Plan is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `Your payment of ${data.amount} for the ${data.plan} plan was successful.`,
+      );
+    },
+  },
+  PaymentFailed: {
+    medium: 'in_app',
+    category: NotificationCategory.PAYMENT_FAILED,
+    subject: 'Payment Failed',
+    validate: (data) => {
+      if (!data.plan) return 'Plan is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `We couldn't process your payment for the ${data.plan} plan. Please update your payment details.`,
+      );
+    },
+  },
+  SubscriptionAlert: {
+    medium: 'in_app',
+    category: NotificationCategory.SUBSCRIPTION_ALERT,
+    subject: 'Subscription Alert',
+    validate: (data) => {
+      if (!data.message) return 'Message is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(`${data.message}`);
+    },
+  },
+  SubscriptionReminder: {
+    medium: 'in_app',
+    category: NotificationCategory.SUBSCRIPTION_REMINDER,
+    subject: 'Subscription Reminder',
+    validate: (data) => {
+      if (!data.plan) return 'Plan is required';
+      if (data.daysLeft === undefined || data.daysLeft === null)
+        return 'Days left is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `Your ${data.plan} plan renews in ${data.daysLeft} day(s).`,
+      );
+    },
+  },
+  WeMissYou: {
+    medium: 'in_app',
+    category: NotificationCategory.WE_MISS_YOU,
+    subject: 'We Miss You!',
+    validate: (data) => {
+      if (!data.name) return 'Name is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `We miss you, ${data.name}! Come back for a new story.`,
+      );
+    },
+  },
+  IncompleteStoryReminder: {
+    medium: 'in_app',
+    category: NotificationCategory.INCOMPLETE_STORY_REMINDER,
+    subject: 'Finish Your Story',
+    validate: (data) => {
+      if (!data.storyTitle) return 'Story title is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `You still have "${data.storyTitle}" waiting to be finished!`,
+      );
+    },
+  },
+  DailyListeningReminder: {
+    medium: 'in_app',
+    category: NotificationCategory.DAILY_LISTENING_REMINDER,
+    subject: 'Daily Listening Reminder',
+    validate: (data) => {
+      if (!data.name) return 'Name is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(`Hi ${data.name}, ready for today's story time?`);
     },
   },
 };

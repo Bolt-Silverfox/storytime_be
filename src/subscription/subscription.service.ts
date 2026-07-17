@@ -2,17 +2,47 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
+import { NotificationService } from '../notification/notification.service';
 
 // Re-export PLANS for backward compatibility
 export { PLANS } from './subscription.constants';
 
 @Injectable()
 export class SubscriptionService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(SubscriptionService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
+
+  /**
+   * Emit a SubscriptionAlert notification, swallowing any error so that
+   * notification failures never break the subscription flow.
+   */
+  private async emitSubscriptionAlert(
+    userId: string,
+    message: string,
+  ): Promise<void> {
+    try {
+      await this.notificationService.sendNotification(
+        'SubscriptionAlert',
+        { message },
+        userId,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit SubscriptionAlert for user ${userId.substring(0, 8)}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
 
   async isPremiumUser(userId: string): Promise<boolean> {
     const user = await this.prisma.user.findUnique({
@@ -69,6 +99,8 @@ export class SubscriptionService {
       where: { userId },
     });
 
+    const activatedMessage = `Your ${plan.display} subscription is now active.`;
+
     if (existing) {
       const updated = await this.prisma.subscription.update({
         where: { id: existing.id },
@@ -79,6 +111,7 @@ export class SubscriptionService {
           endsAt,
         },
       });
+      await this.emitSubscriptionAlert(userId, activatedMessage);
       return { subscription: updated };
     }
 
@@ -91,6 +124,8 @@ export class SubscriptionService {
         endsAt,
       },
     });
+
+    await this.emitSubscriptionAlert(userId, activatedMessage);
 
     return { subscription: sub };
   }
@@ -110,6 +145,12 @@ export class SubscriptionService {
       where: { id: existing.id },
       data: { status: SUBSCRIPTION_STATUS.CANCELLED, endsAt },
     });
+
+    const planDisplay = PLANS[existing.plan]?.display ?? existing.plan;
+    await this.emitSubscriptionAlert(
+      userId,
+      `Your ${planDisplay} subscription was cancelled.`,
+    );
 
     return cancelled;
   }

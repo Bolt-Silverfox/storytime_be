@@ -1,5 +1,6 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { GuestSessionService } from '../guest/guest-session.service';
+import { NotificationService } from '../notification/notification.service';
 
 /** Max session time in seconds (24 h), matching the DTO contract. */
 const MAX_SESSION_TIME = 86_400;
@@ -122,6 +123,8 @@ export class StoryService {
     private readonly textToSpeechService: TextToSpeechService,
     private readonly geminiService: GeminiService,
     private readonly guestSessionService: GuestSessionService,
+    // NotificationModule is @Global, so no module import change is needed.
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -1232,6 +1235,18 @@ export class StoryService {
       include: { images: true, branches: true },
     });
 
+    // Announce the new catalog story to all users — batched, preference-aware,
+    // and best-effort. Fire-and-forget so story creation isn't blocked.
+    void this.notificationService
+      .broadcastNewStoryToUsers(story.id, story.title)
+      .catch((error) =>
+        this.logger.warn(
+          `NewStory broadcast failed for story ${story.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
+
     await this.invalidateStoryCaches();
     return story;
   }
@@ -1440,6 +1455,20 @@ export class StoryService {
         const msg = e instanceof Error ? e.message : String(e);
         this.logger.error(`Failed to adjust reading level: ${msg}`);
       });
+
+      // Best-effort StoryFinished notification to the kid's parent. Emitted only
+      // on the false->true completion transition (newlyCompleted). Must never
+      // break the progress flow, so failures are logged and swallowed.
+      try {
+        await this.notificationService.sendNotification(
+          'StoryFinished',
+          { kidName: kid.name ?? 'Your child', storyTitle: story.title },
+          kid.parentId,
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.warn(`Failed to send StoryFinished notification: ${msg}`);
+      }
     }
     return result;
   }
@@ -1518,11 +1547,30 @@ export class StoryService {
 
     let completed = result.completed;
     if (shouldComplete && !completed) {
-      await this.prisma.userStoryProgress.updateMany({
+      const flipped = await this.prisma.userStoryProgress.updateMany({
         where: { userId, storyId: dto.storyId, completed: false },
         data: { completed: true },
       });
       completed = true;
+
+      // Best-effort StoryFinished notification on the user (web) completion
+      // path — mirrors the kid setProgress path. Only on the true false->true
+      // transition; never breaks progress recording.
+      if (flipped.count === 1) {
+        try {
+          await this.notificationService.sendNotification(
+            'StoryFinished',
+            { kidName: user.name ?? 'You', storyTitle: story.title },
+            userId,
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Failed to send StoryFinished (user path): ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
     }
 
     return {

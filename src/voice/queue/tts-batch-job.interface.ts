@@ -18,6 +18,12 @@ export interface TtsBatchJobData {
     duplicateIndices?: number[];
   }>;
   totalParagraphs: number;
+  /**
+   * Self-heal round for this job. Absent/0 on the initial run; incremented on
+   * each delayed follow-up that re-attempts paragraphs which exhausted the
+   * whole provider chain. Bounded by MAX_RETRY_GENERATIONS.
+   */
+  retryGeneration?: number;
 }
 
 export interface TtsBatchJobResult {
