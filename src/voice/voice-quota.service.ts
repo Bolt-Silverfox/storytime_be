@@ -1,128 +1,44 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionService } from '../subscription/subscription.service';
-import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { VOICE_CONFIG } from './voice.constants';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from './dto/voice.dto';
+import { VoiceUsageService } from './services/voice-usage.service';
+import { VoiceIdResolverService } from './services/voice-id-resolver.service';
 
+/**
+ * Coordinates voice quota and access control. Thin facade over:
+ *
+ * - {@link VoiceUsageService}      — usage counters + AI activity logging
+ * - {@link VoiceIdResolverService} — voice-id canonicalisation / UUID resolution
+ *
+ * The intricate, race-sensitive free-tier locking and premium per-story limit
+ * logic is kept here deliberately to preserve its exact compare-and-set
+ * semantics.
+ */
 @Injectable()
 export class VoiceQuotaService {
   private readonly logger = new Logger(VoiceQuotaService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subscriptionService: SubscriptionService,
+    private readonly usage: VoiceUsageService,
+    private readonly resolver: VoiceIdResolverService,
+  ) {}
 
   /**
    * Map a stored voiceId (VoiceType enum, UUID, or elevenLabsId) to
    * its canonical ElevenLabs voice ID so comparisons are consistent.
    */
-  async resolveCanonicalVoiceId(voiceId: string): Promise<string> {
-    // Already a VoiceType enum key → look up elevenLabsId
-    if (Object.values(VoiceType).includes(voiceId as VoiceType)) {
-      return VOICE_CONFIG[voiceId as VoiceType].elevenLabsId;
-    }
-    // Check migration map for old enum names (CHARLIE → MILO, etc.)
-    const migrated = VOICE_TYPE_MIGRATION_MAP[voiceId];
-    if (migrated) {
-      return VOICE_CONFIG[migrated].elevenLabsId;
-    }
-    // Could be a UUID from the Voice table
-    const voice = await this.prisma.voice.findUnique({
-      where: { id: voiceId, isDeleted: false },
-    });
-    if (voice?.elevenLabsVoiceId) {
-      return voice.elevenLabsVoiceId;
-    }
-    // Already an elevenLabsId or unknown — return as-is
-    return voiceId;
-  }
-
-  /**
-   * Resolve an ElevenLabs voice ID to the Voice table UUID.
-   * If no DB row exists but the ID belongs to a known system voice,
-   * auto-creates the row so voice locking works without manual seeding.
-   */
-  private async resolveVoiceUuid(
-    elevenLabsVoiceId: string,
-  ): Promise<string | null> {
-    const voice = await this.prisma.voice.findFirst({
-      where: { elevenLabsVoiceId, isDeleted: false, userId: null },
-      select: { id: true },
-    });
-    if (voice) return voice.id;
-
-    // Auto-seed from VOICE_CONFIG if this is a known system voice
-    const configEntry = Object.entries(VOICE_CONFIG).find(
-      ([, config]) => config.elevenLabsId === elevenLabsVoiceId,
-    );
-    if (!configEntry) return null;
-
-    const [key, config] = configEntry;
-    const created = await this.prisma.voice.create({
-      data: {
-        elevenLabsVoiceId: config.elevenLabsId,
-        name: key,
-        type: 'elevenlabs',
-        voiceAvatar: config.voiceAvatar,
-        url: config.previewUrl,
-        isDeleted: false,
-        userId: null,
-      },
-      select: { id: true },
-    });
-    this.logger.log(
-      `Auto-seeded voice ${key} (${elevenLabsVoiceId}) with UUID ${created.id}`,
-    );
-    return created.id;
-  }
-
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly subscriptionService: SubscriptionService,
-  ) {}
-
-  private getCurrentMonth(): string {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  }
-
-  /**
-   * Atomically increment a usage counter with monthly rollover.
-   * When the stored month differs from the current month, ALL counters
-   * are reset to zero (not just the one being incremented) so that
-   * whichever counter triggers first in a new month performs a full reset.
-   */
-  private async incrementCounter(
-    userId: string,
-    field: 'elevenLabsCount' | 'geminiStoryCount' | 'geminiImageCount',
-    amount: number,
-  ): Promise<void> {
-    const currentMonth = this.getCurrentMonth();
-    await this.prisma.$transaction(async (tx) => {
-      await tx.userUsage.updateMany({
-        where: { userId, currentMonth: { not: currentMonth } },
-        data: {
-          currentMonth,
-          elevenLabsCount: 0,
-          geminiStoryCount: 0,
-          geminiImageCount: 0,
-        },
-      });
-      await tx.userUsage.upsert({
-        where: { userId },
-        create: { userId, currentMonth, [field]: amount },
-        update: { currentMonth, [field]: { increment: amount } },
-      });
-    });
+  resolveCanonicalVoiceId(voiceId: string): Promise<string> {
+    return this.resolver.resolveCanonicalVoiceId(voiceId);
   }
 
   async incrementUsage(userId: string): Promise<void> {
-    await this.incrementCounter(userId, 'elevenLabsCount', 1);
-    await this.logAiActivity(
-      userId,
-      AiProviders.ElevenLabs,
-      'tts_generation',
-      1,
-    );
+    return this.usage.incrementUsage(userId);
   }
 
   /**
@@ -130,67 +46,24 @@ export class VoiceQuotaService {
    * This method only increments counters — access control (premium
    * per-story limit, free-tier voice lock) is enforced by callers.
    */
-  async recordUsage(userId: string, credits: number): Promise<number> {
-    await this.incrementCounter(userId, 'elevenLabsCount', credits);
-    await this.logAiActivity(
-      userId,
-      AiProviders.ElevenLabs,
-      'tts_batch_reservation',
-      credits,
-    );
-    return credits;
+  recordUsage(userId: string, credits: number): Promise<number> {
+    return this.usage.recordUsage(userId, credits);
   }
 
   /**
    * Release previously reserved ElevenLabs credits (e.g. when batch
    * paragraphs fail after quota was reserved).
    */
-  async releaseReservedUsage(userId: string, credits: number): Promise<void> {
-    if (credits <= 0) return;
-    // Atomic decrement floored at zero — avoids read-then-update race that
-    // could push elevenLabsCount negative under concurrent requests.
-    // Sync: references Prisma model UserUsage, columns elevenLabsCount and userId.
-    const affected = await this.prisma
-      .$executeRaw`UPDATE "user_usages" SET "elevenLabsCount" = GREATEST("elevenLabsCount" - ${credits}, 0) WHERE "userId" = ${userId}`;
-    if (affected > 0) {
-      this.logger.log(
-        `Released up to ${credits} ElevenLabs credits for user ${userId}`,
-      );
-    }
+  releaseReservedUsage(userId: string, credits: number): Promise<void> {
+    return this.usage.releaseReservedUsage(userId, credits);
   }
 
-  async trackGeminiStory(userId: string): Promise<void> {
-    await this.incrementCounter(userId, 'geminiStoryCount', 1);
-    await this.logAiActivity(userId, AiProviders.Gemini, 'story_generation', 1);
+  trackGeminiStory(userId: string): Promise<void> {
+    return this.usage.trackGeminiStory(userId);
   }
 
-  async trackGeminiImage(userId: string): Promise<void> {
-    await this.incrementCounter(userId, 'geminiImageCount', 1);
-    await this.logAiActivity(userId, AiProviders.Gemini, 'image_generation', 1);
-  }
-
-  private async logAiActivity(
-    userId: string,
-    provider: string,
-    type: string,
-    credits: number,
-  ) {
-    try {
-      await this.prisma.activityLog.create({
-        data: {
-          userId,
-          action: 'AI_GENERATION',
-          status: 'SUCCESS',
-          details: JSON.stringify({ provider, type, credits }),
-        },
-      });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `Failed to log AI activity for user ${userId}: ${errorMessage}`,
-      );
-    }
+  trackGeminiImage(userId: string): Promise<void> {
+    return this.usage.trackGeminiImage(userId);
   }
 
   /**
@@ -264,7 +137,8 @@ export class VoiceQuotaService {
     const usedVoices = await this.getUsedVoicesForStory(storyId);
 
     // Normalize the incoming voiceId to canonical form for comparison
-    const canonicalVoiceId = await this.resolveCanonicalVoiceId(voiceId);
+    const canonicalVoiceId =
+      await this.resolver.resolveCanonicalVoiceId(voiceId);
 
     // Resolve used voices to canonical elevenLabsIds for comparison
     const canonicalUsedIds = usedVoices.map((key) => {
@@ -301,7 +175,7 @@ export class VoiceQuotaService {
     storyId: string,
   ): Promise<boolean> {
     // Ensure usage record exists
-    const currentMonth = this.getCurrentMonth();
+    const currentMonth = this.usage.getCurrentMonth();
     const usage = await this.prisma.userUsage.upsert({
       where: { userId },
       create: { userId, currentMonth },
@@ -311,7 +185,7 @@ export class VoiceQuotaService {
     // === Voice locking check ===
     // Resolve ElevenLabs ID to Voice table UUID for FK-safe storage.
     // selectedSecondVoiceId has a FK constraint referencing voices.id.
-    const voiceUuid = await this.resolveVoiceUuid(elevenLabsVoiceId);
+    const voiceUuid = await this.resolver.resolveVoiceUuid(elevenLabsVoiceId);
     if (!voiceUuid) {
       this.logger.warn(
         `No voice record found for ElevenLabs ID ${elevenLabsVoiceId}. Denying free-tier voice.`,
@@ -404,7 +278,8 @@ export class VoiceQuotaService {
     const isPremium = await this.subscriptionService.isPremiumUser(userId);
     if (isPremium) return true;
 
-    const requestedCanonical = await this.resolveCanonicalVoiceId(voiceId);
+    const requestedCanonical =
+      await this.resolver.resolveCanonicalVoiceId(voiceId);
 
     const usage = await this.prisma.userUsage.findUnique({
       where: { userId },
@@ -412,7 +287,7 @@ export class VoiceQuotaService {
 
     // Check explicit lock first
     if (usage?.selectedSecondVoiceId) {
-      const lockedCanonical = await this.resolveCanonicalVoiceId(
+      const lockedCanonical = await this.resolver.resolveCanonicalVoiceId(
         usage.selectedSecondVoiceId,
       );
       return lockedCanonical === requestedCanonical;
@@ -425,7 +300,7 @@ export class VoiceQuotaService {
     });
 
     if (user?.preferredVoiceId) {
-      const preferredCanonical = await this.resolveCanonicalVoiceId(
+      const preferredCanonical = await this.resolver.resolveCanonicalVoiceId(
         user.preferredVoiceId,
       );
       return preferredCanonical === requestedCanonical;
@@ -441,8 +316,8 @@ export class VoiceQuotaService {
   // Uses compare-and-set: only locks when selectedSecondVoiceId is null.
   // Returns true if locked successfully, false if CAS failed or voice not found.
   async lockFreeUserVoice(userId: string, voiceId: string): Promise<boolean> {
-    const canonicalId = await this.resolveCanonicalVoiceId(voiceId);
-    const voiceUuid = await this.resolveVoiceUuid(canonicalId);
+    const canonicalId = await this.resolver.resolveCanonicalVoiceId(voiceId);
+    const voiceUuid = await this.resolver.resolveVoiceUuid(canonicalId);
     if (!voiceUuid) {
       this.logger.warn(
         `No voice record found for ElevenLabs ID ${canonicalId}. Skipping lock for user ${userId}.`,
@@ -450,7 +325,7 @@ export class VoiceQuotaService {
       return false;
     }
 
-    const currentMonth = this.getCurrentMonth();
+    const currentMonth = this.usage.getCurrentMonth();
 
     // Ensure the usage record exists (without setting the lock)
     await this.prisma.userUsage.upsert({

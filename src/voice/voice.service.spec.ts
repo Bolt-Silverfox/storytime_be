@@ -5,6 +5,10 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { VoiceResponseMapper } from './services/voice-response.mapper';
+import { VoiceCatalogService } from './services/voice-catalog.service';
+import { VoicePreferenceService } from './services/voice-preference.service';
+import { VoiceLibraryService } from './services/voice-library.service';
 
 const mockCacheManager = {
   get: jest.fn(),
@@ -44,6 +48,10 @@ describe('VoiceService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         VoiceService,
+        VoiceResponseMapper,
+        VoiceCatalogService,
+        VoicePreferenceService,
+        VoiceLibraryService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: HttpService, useValue: mockHttpService },
