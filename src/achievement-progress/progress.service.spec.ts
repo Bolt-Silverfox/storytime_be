@@ -308,6 +308,8 @@ describe('ProgressService', () => {
         where: {
           kidId: { in: ['kid-1', 'kid-2'] },
           completed: true,
+          isDeleted: false,
+          story: { isDeleted: false },
         },
       });
       expect(
