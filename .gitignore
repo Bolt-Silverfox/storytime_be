@@ -64,3 +64,6 @@ CLAUDE.md
 .claude
 
 helper-scripts
+
+# Serena MCP local tooling config (per-developer)
+.serena/
