@@ -17,6 +17,8 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AdminService } from './admin.service';
+import { AdminStoryService } from './admin-story.service';
+import { AdminSystemService } from './admin-system.service';
 import { Admin } from './decorators/admin.decorator';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import {
@@ -68,7 +70,11 @@ import {
 @Admin()
 @ApiTags('admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly adminStoryService: AdminStoryService,
+    private readonly adminSystemService: AdminSystemService,
+  ) {}
 
   // =====================
   // DASHBOARD & ANALYTICS
@@ -483,7 +489,10 @@ export class AdminController {
   ) {
     const { limit: l } = PaginationUtil.sanitize(1, limit, 100);
     const trimmedUserId = userId?.trim() || undefined;
-    const data = await this.adminService.getRecentActivity(l, trimmedUserId);
+    const data = await this.adminSystemService.getRecentActivity(
+      l,
+      trimmedUserId,
+    );
     return {
       statusCode: 200,
       message: 'Recent activity logs retrieved successfully',
@@ -995,7 +1004,7 @@ export class AdminController {
     @Query('limit') limit?: number,
   ) {
     const { page: p, limit: l } = PaginationUtil.sanitize(page, limit);
-    const result = await this.adminService.getDeletionRequests(p, l);
+    const result = await this.adminSystemService.getDeletionRequests(p, l);
     return {
       statusCode: 200,
       message: 'Deletion requests retrieved successfully',
@@ -1734,7 +1743,7 @@ export class AdminController {
     },
   })
   async getAllStories(@Query() filters: StoryFilterDto) {
-    const result = await this.adminService.getAllStories(filters);
+    const result = await this.adminStoryService.getAllStories(filters);
     return {
       statusCode: 200,
       message: 'Stories retrieved successfully',
@@ -1978,7 +1987,7 @@ export class AdminController {
     },
   })
   async getCategories() {
-    const data = await this.adminService.getCategories();
+    const data = await this.adminStoryService.getCategories();
     return {
       statusCode: 200,
       message: 'Categories retrieved successfully',
@@ -2026,7 +2035,7 @@ export class AdminController {
     },
   })
   async getThemes() {
-    const data = await this.adminService.getThemes();
+    const data = await this.adminStoryService.getThemes();
     return {
       statusCode: 200,
       message: 'Themes retrieved successfully',
@@ -2092,7 +2101,7 @@ export class AdminController {
     },
   })
   async getSubscriptions(@Query('status') status?: string) {
-    const data = await this.adminService.getSubscriptions(status);
+    const data = await this.adminSystemService.getSubscriptions(status);
     return {
       statusCode: 200,
       message: 'Subscriptions retrieved successfully',
@@ -2163,7 +2172,7 @@ export class AdminController {
     },
   })
   createBackup() {
-    const data = this.adminService.createBackup();
+    const data = this.adminSystemService.createBackup();
     return {
       statusCode: 200,
       message: 'Backup created successfully',
@@ -2242,7 +2251,7 @@ export class AdminController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get ElevenLabs credit balance' })
   async getElevenLabsBalance() {
-    const data = await this.adminService.getElevenLabsBalance();
+    const data = await this.adminSystemService.getElevenLabsBalance();
     return {
       statusCode: 200,
       message: 'ElevenLabs balance retrieved',
@@ -2266,7 +2275,11 @@ export class AdminController {
     @Query('status') status?: string,
   ) {
     const { page: p, limit: l } = PaginationUtil.sanitize(page, limit);
-    const result = await this.adminService.getAllSupportTickets(p, l, status);
+    const result = await this.adminSystemService.getAllSupportTickets(
+      p,
+      l,
+      status,
+    );
     return {
       statusCode: 200,
       message: 'Support tickets retrieved',
@@ -2288,7 +2301,10 @@ export class AdminController {
     @Param('id') id: string,
     @Body('status') status: string,
   ) {
-    const result = await this.adminService.updateSupportTicket(id, status);
+    const result = await this.adminSystemService.updateSupportTicket(
+      id,
+      status,
+    );
     return {
       statusCode: 200,
       message: 'Support ticket updated',
@@ -2327,7 +2343,10 @@ export class AdminController {
     @Body() body: CreateAdminTicketDto,
   ) {
     const creatorId = body.userId ?? req.authUserData.userId;
-    const data = await this.adminService.createSupportTicket(creatorId, body);
+    const data = await this.adminSystemService.createSupportTicket(
+      creatorId,
+      body,
+    );
     return {
       statusCode: 201,
       message: 'Support ticket created',

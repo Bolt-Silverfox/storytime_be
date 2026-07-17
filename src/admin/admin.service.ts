@@ -21,19 +21,12 @@ import {
   PaginatedResponseDto,
   SubscriptionAnalyticsDto,
   RevenueAnalyticsDto,
-  CategoryDto,
-  ThemeDto,
-  SubscriptionDto,
   ActivityLogDto,
   AiCreditAnalyticsDto,
   UserGrowthMonthlyDto,
 } from './dto/admin-responses.dto';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
-import {
-  UserFilterDto,
-  StoryFilterDto,
-  DateRangeDto,
-} from './dto/admin-filters.dto';
+import { UserFilterDto, DateRangeDto } from './dto/admin-filters.dto';
 import {
   CreateAdminDto,
   UpdateUserDto,
@@ -56,7 +49,6 @@ import {
 } from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
-import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { ResetQuotaDto } from './dto/reset-quota.dto';
 import { CouponService } from '../coupon/coupon.service';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
@@ -70,8 +62,6 @@ import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
 import { GoogleVerificationService } from '../payment/google-verification.service';
 import { AppleVerificationService } from '../payment/apple-verification.service';
 import { PRODUCT_ID_TO_PLAN } from '../subscription/subscription.constants';
-
-const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
 
 @Injectable()
 export class AdminService {
@@ -1178,83 +1168,6 @@ export class AdminService {
   // STORY MANAGEMENT
   // =====================
 
-  async getAllStories(
-    filters: StoryFilterDto,
-  ): Promise<PaginatedResponseDto<any>> {
-    const {
-      page = 1,
-      limit = 10,
-      sortBy = 'createdAt',
-      sortOrder = 'desc',
-      search,
-      recommended,
-      aiGenerated,
-      isDeleted,
-      language,
-      minAge,
-      maxAge,
-      categoryId,
-    } = filters;
-
-    const skip = (page - 1) * limit;
-
-    const where: Prisma.StoryWhereInput = {};
-
-    if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-
-    if (typeof recommended === 'boolean') where.recommended = recommended;
-    if (typeof aiGenerated === 'boolean') where.aiGenerated = aiGenerated;
-    if (typeof isDeleted === 'boolean') where.isDeleted = isDeleted;
-    if (language) where.language = language;
-    if (minAge) where.ageMin = { gte: minAge };
-    if (maxAge) where.ageMax = { lte: maxAge };
-    if (categoryId) where.categories = { some: { id: categoryId } };
-
-    const [stories, total] = await Promise.all([
-      this.prisma.story.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { [sortBy]: sortOrder },
-        include: {
-          categories: true,
-          themes: true,
-          _count: {
-            select: {
-              favorites: true,
-              progresses: true,
-              parentFavorites: true,
-              downloads: true,
-            },
-          },
-        },
-      }),
-      this.prisma.story.count({ where }),
-    ]);
-
-    return {
-      data: stories.map((story) => ({
-        ...story,
-        favoritesCount: story._count.favorites,
-        viewsCount: story._count.progresses,
-        parentFavoritesCount: story._count.parentFavorites,
-        downloadsCount: story._count.downloads,
-        _count: undefined,
-      })),
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
   async getStoryById(storyId: string): Promise<any> {
     const story = await this.prisma.story.findUnique({
       where: { id: storyId },
@@ -1351,64 +1264,6 @@ export class AdminService {
     }
 
     return result;
-  }
-
-  // =====================
-  // CATEGORY & THEME MANAGEMENT
-  // =====================
-
-  async getCategories(): Promise<CategoryDto[]> {
-    const categories = await this.prisma.category.findMany({
-      where: { isDeleted: false },
-      include: {
-        _count: {
-          select: {
-            stories: true,
-            preferredByKids: true,
-          },
-        },
-      },
-      orderBy: { name: 'asc' },
-    });
-
-    return categories.map((cat) => ({
-      id: cat.id,
-      name: cat.name,
-      image: cat.image || undefined,
-      description: cat.description || undefined,
-      isDeleted: cat.isDeleted,
-      deletedAt: cat.deletedAt || undefined,
-      _count: {
-        stories: cat._count.stories,
-        preferredByKids: cat._count.preferredByKids,
-      },
-    }));
-  }
-
-  async getThemes(): Promise<ThemeDto[]> {
-    const themes = await this.prisma.theme.findMany({
-      where: { isDeleted: false },
-      include: {
-        _count: {
-          select: {
-            stories: true,
-          },
-        },
-      },
-      orderBy: { name: 'asc' },
-    });
-
-    return themes.map((theme) => ({
-      id: theme.id,
-      name: theme.name,
-      image: theme.image || undefined,
-      description: theme.description || undefined,
-      isDeleted: theme.isDeleted,
-      deletedAt: theme.deletedAt || undefined,
-      _count: {
-        stories: theme._count.stories,
-      },
-    }));
   }
 
   // =====================
@@ -2060,61 +1915,9 @@ export class AdminService {
     };
   }
 
-  async getRecentActivity(
-    limit: number = 50,
-    userId?: string,
-  ): Promise<ActivityLogDto[]> {
-    const trimmed = userId?.trim();
-    if (userId !== undefined && !trimmed) return [];
-    const activities = await this.prisma.activityLog.findMany({
-      where: { isDeleted: false, ...(trimmed && { userId: trimmed }) },
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
-          },
-        },
-        kid: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
-
-    return activities.map((activity) => ({
-      id: activity.id,
-      userId: activity.userId || undefined,
-      kidId: activity.kidId || undefined,
-      action: activity.action,
-      status: activity.status,
-      deviceName: activity.deviceName || undefined,
-      deviceModel: activity.deviceModel || undefined,
-      os: activity.os || undefined,
-      ipAddress: activity.ipAddress || undefined,
-      details: activity.details || undefined,
-      createdAt: activity.createdAt,
-      isDeleted: activity.isDeleted,
-      deletedAt: activity.deletedAt || undefined,
-      user: activity.user || undefined,
-      kid: activity.kid || undefined,
-    }));
-  }
-
   // =====================
   // SYSTEM MANAGEMENT
   // =====================
-
-  createBackup(): { message: string; timestamp: Date } {
-    // Implement backup logic based on your database
-    return { message: 'Backup created successfully', timestamp: new Date() };
-  }
 
   async getSystemLogs(
     level?: string,
@@ -2155,116 +1958,6 @@ export class AdminService {
       user: log.user || undefined,
       kid: undefined, // Not included in this query
     }));
-  }
-
-  // =====================
-  // ADDITIONAL METHODS
-  // =====================
-
-  async getSubscriptions(status?: string): Promise<SubscriptionDto[]> {
-    const where: Prisma.SubscriptionWhereInput = { isDeleted: false };
-
-    if (status) {
-      where.status = status;
-    }
-
-    const subscriptions = await this.prisma.subscription.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-          },
-        },
-      },
-      orderBy: { startedAt: 'desc' },
-    });
-
-    return subscriptions.map((sub) => ({
-      id: sub.id,
-      plan: sub.plan,
-      status: sub.status,
-      startedAt: sub.startedAt,
-      endsAt: sub.endsAt || undefined,
-      isDeleted: sub.isDeleted,
-      deletedAt: sub.deletedAt || undefined,
-      user: sub.user,
-    }));
-  }
-
-  // =====================
-  // INTEGRATIONS & SUPPORT
-  // =====================
-
-  async getElevenLabsBalance() {
-    return this.elevenLabsProvider.getSubscriptionInfo();
-  }
-
-  async getAllSupportTickets(
-    page: number = 1,
-    limit: number = 10,
-    status?: string,
-  ) {
-    const skip = (page - 1) * limit;
-    const where: Prisma.SupportTicketWhereInput = {};
-    if (status) where.status = status;
-
-    const [tickets, total] = await Promise.all([
-      this.prisma.supportTicket.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          user: {
-            select: { id: true, name: true, email: true },
-          },
-        },
-      }),
-      this.prisma.supportTicket.count({ where }),
-    ]);
-
-    return {
-      data: tickets,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  async updateSupportTicket(id: string, status: string) {
-    return await this.prisma.supportTicket.update({
-      where: { id },
-      data: { status },
-    });
-  }
-
-  async createSupportTicket(userId: string, dto: CreateAdminTicketDto) {
-    // Verify user exists if creating on behalf of someone
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-    if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
-    }
-
-    return this.prisma.supportTicket.create({
-      data: {
-        userId,
-        subject: dto.subject,
-        message: dto.message,
-      },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true },
-        },
-      },
-    });
   }
 
   // =====================
@@ -2507,74 +2200,6 @@ export class AdminService {
       where: { userId },
       data: updateData,
     });
-  }
-
-  async getDeletionRequests(page: number = 1, limit: number = 10) {
-    const skip = (page - 1) * limit;
-
-    // Filter for tickets with specific subject
-    const where: Prisma.SupportTicketWhereInput = {
-      subject: 'Delete Account Request',
-      isDeleted: false,
-    };
-
-    const [tickets, total] = await Promise.all([
-      this.prisma.supportTicket.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          user: {
-            select: { id: true, name: true, email: true },
-          },
-        },
-      }),
-      this.prisma.supportTicket.count({ where }),
-    ]);
-
-    const parsedTickets = tickets.map((ticket) => {
-      const message = ticket.message || '';
-
-      // Extract reasons
-      const reasonsMatch = message.match(/Reasons: (.*?)(\n|$)/);
-      const reasonsString = reasonsMatch ? reasonsMatch[1] : '';
-      const reasons = reasonsString
-        ? reasonsString
-            .split(',')
-            .map((r) => r.trim())
-            .filter(Boolean)
-        : [];
-
-      // Extract notes
-      const notesMatch = message.match(/Notes: (.*?)(\n|$)/);
-      const notes = notesMatch ? notesMatch[1].trim() : '';
-
-      // Check if permanent
-      const isPermanent = message.includes(PERMANENT_DELETION_MSG);
-
-      return {
-        id: ticket.id,
-        userId: ticket.userId,
-        userEmail: ticket.user.email,
-        userName: ticket.user.name,
-        reasons,
-        notes,
-        createdAt: ticket.createdAt,
-        status: ticket.status,
-        isPermanent,
-      };
-    });
-
-    return {
-      data: parsedTickets,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
   }
 
   // =====================

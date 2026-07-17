@@ -1,5 +1,11 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Inject,
+  NotFoundException,
+} from '@nestjs/common';
 import { ValidationException } from '@/shared/exceptions';
+import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
@@ -103,6 +109,29 @@ export class AdminSystemService {
 
   async updateSupportTicket(id: string, status: string) {
     return this.adminSystemRepository.updateSupportTicket(id, status);
+  }
+
+  async createSupportTicket(userId: string, dto: CreateAdminTicketDto) {
+    // Verify user exists if creating on behalf of someone
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    return this.prisma.supportTicket.create({
+      data: {
+        userId,
+        subject: dto.subject,
+        message: dto.message,
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
   }
 
   async getDeletionRequests(page: number = 1, limit: number = 10) {
