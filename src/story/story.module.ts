@@ -1,5 +1,5 @@
 import { HttpModule } from '@nestjs/axios';
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '@/auth/auth.module';
@@ -19,7 +19,6 @@ import { StoryAccessGuard } from '@/shared/guards/story-access.guard';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
 import { STORY_QUEUE_NAME, StoryQueueService, StoryProcessor } from './queue';
 import { PrismaModule } from '../prisma/prisma.module';
-import { TextToSpeechService } from './text-to-speech.service';
 import { ElevenLabsService } from './elevenlabs.service';
 import { HttpLatencyInterceptor } from '@/shared/interceptors/http-latency.interceptor';
 
@@ -54,10 +53,9 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
     AuthModule,
     SubscriptionModule,
     UploadModule,
-    SubscriptionModule,
     NotificationModule,
     PrismaModule,
-    VoiceModule,
+    forwardRef(() => VoiceModule),
     // Register story generation queue
     BullModule.registerQueue({
       name: STORY_QUEUE_NAME,
@@ -72,7 +70,6 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
     StoryGenerationService,
     GeminiService,
     StoryQuotaService,
-    TextToSpeechService,
     ElevenLabsService,
     HttpLatencyInterceptor,
     StoryAccessGuard,
