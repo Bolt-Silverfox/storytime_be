@@ -310,7 +310,7 @@ jobs:
         run: DATABASE_URL="${{ secrets.DATABASE_URL }}" pnpm db:seed
 
       - name: Prepare deployment directory
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
@@ -343,7 +343,7 @@ jobs:
             ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/staging/storytime-api/
 
       - name: Install dependencies and restart application
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
@@ -351,6 +351,7 @@ jobs:
           command_timeout: 10m
           script: |
             source ~/.nvm/nvm.sh
+            corepack enable
             cd /home/ubuntu/storytime/staging/storytime-api
             [ -f .env ] && chmod 600 .env
 
@@ -370,7 +371,7 @@ jobs:
             pnpm deploy:staging
 
       - name: Verify deployment
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}

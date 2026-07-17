@@ -42,12 +42,15 @@ import {
 
 /** User-facing notification categories that can be toggled in settings. */
 const USER_CONFIGURABLE_CATEGORIES: PrismaCategory[] = [
-  PrismaCategory.SUBSCRIPTION_REMINDER,
-  PrismaCategory.SUBSCRIPTION_ALERT,
   PrismaCategory.NEW_STORY,
   PrismaCategory.STORY_FINISHED,
+  PrismaCategory.ACHIEVEMENT_UNLOCKED,
+  PrismaCategory.BADGE_EARNED,
+  PrismaCategory.STREAK_MILESTONE,
+  PrismaCategory.WE_MISS_YOU,
   PrismaCategory.INCOMPLETE_STORY_REMINDER,
   PrismaCategory.DAILY_LISTENING_REMINDER,
+  PrismaCategory.SUBSCRIPTION_REMINDER,
 ];
 
 @Injectable()
@@ -84,6 +87,118 @@ export class NotificationService {
     this.providers.set('email', this.emailProvider);
     this.providers.set('in_app', this.inAppProvider);
     this.providers.set('push', this.pushProvider);
+  }
+
+  /**
+   * Fan out a NewStory notification to every active user, batched by id cursor.
+   * Each send goes through sendNotification so it respects the user's NEW_STORY
+   * preference (opt-out) and writes both the in-app record and push. Best-effort:
+   * one failure never aborts the batch. Meant to be fire-and-forget from the
+   * story-create path.
+   */
+  async broadcastNewStoryToUsers(
+    storyId: string,
+    storyTitle: string,
+  ): Promise<void> {
+    const BATCH = 500;
+    let cursor: string | undefined;
+    let sent = 0;
+    let failed = 0;
+    for (;;) {
+      const users = await this.prisma.user.findMany({
+        where: { isDeleted: false, isSuspended: false },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+        take: BATCH,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      });
+      if (users.length === 0) {
+        break;
+      }
+      for (const user of users) {
+        try {
+          await this.sendNotification(
+            'NewStory',
+            { storyTitle, storyId },
+            user.id,
+          );
+          sent++;
+        } catch (error) {
+          failed++;
+          this.logger.warn(
+            `NewStory send failed for user ${user.id.substring(0, 8)}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
+      cursor = users[users.length - 1].id;
+      if (users.length < BATCH) {
+        break;
+      }
+    }
+    this.logger.log(
+      `NewStory broadcast for story ${storyId}: ${sent} sent, ${failed} failed`,
+    );
+  }
+
+  /**
+   * Write an in-app inbox record for every active user (batched). Used by admin
+   * broadcasts so an announcement lands in the in-app inbox, not just push.
+   * Best-effort per user; category defaults to SYSTEM_ALERT.
+   */
+  async broadcastInAppToAllUsers(
+    title: string,
+    body: string,
+    data?: Record<string, unknown>,
+  ): Promise<{ delivered: number; failed: number }> {
+    const BATCH = 500;
+    let cursor: string | undefined;
+    let delivered = 0;
+    let failed = 0;
+    for (;;) {
+      const users = await this.prisma.user.findMany({
+        where: { isDeleted: false, isSuspended: false },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+        take: BATCH,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      });
+      if (users.length === 0) {
+        break;
+      }
+      for (const user of users) {
+        try {
+          const result = await this.inAppProvider.send({
+            userId: user.id,
+            category: PrismaCategory.SYSTEM_ALERT,
+            title,
+            body,
+            data,
+          });
+          if (result.success) {
+            delivered++;
+          } else {
+            failed++;
+          }
+        } catch (error) {
+          failed++;
+          this.logger.warn(
+            `In-app broadcast failed for user ${user.id.substring(0, 8)}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
+      cursor = users[users.length - 1].id;
+      if (users.length < BATCH) {
+        break;
+      }
+    }
+    this.logger.log(
+      `In-app broadcast "${title}": ${delivered} delivered, ${failed} failed`,
+    );
+    return { delivered, failed };
   }
 
   async sendNotification(
