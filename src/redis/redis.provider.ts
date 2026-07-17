@@ -304,7 +304,7 @@ export const KeyvStoreProvider: Provider = {
     // Cast is safe: IoredisStore implements KeyvStoreAdapter interface
     // which Keyv uses for tiered caching. Exposing as Map<string, unknown>
     // for KEYV_STORE token allows Keyv to use our custom adapter.
-    return new IoredisStore(redisClient) as unknown as Map<string, unknown>;
+    return new IoredisStore(redisClient);
   },
   inject: [REDIS_CLIENT],
 };
