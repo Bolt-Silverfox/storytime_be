@@ -2,6 +2,10 @@ import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bullmq';
 import { NotificationService } from './notification.service';
+import { NotificationEmailService } from './services/notification-email.service';
+import { NotificationDispatchService } from './services/notification-dispatch.service';
+import { NotificationSettingsService } from './services/notification-settings.service';
+import { NotificationDeviceService } from './services/notification-device.service';
 import { NotificationPreferenceService } from './services/notification-preference.service';
 import { InAppNotificationService } from './services/in-app-notification.service';
 import { EventNotificationService } from './services/event-notification.service';
@@ -55,6 +59,11 @@ import {
   providers: [
     HttpLatencyInterceptor,
     NotificationService,
+    // Focused services backing the NotificationService facade
+    NotificationEmailService,
+    NotificationDispatchService,
+    NotificationSettingsService,
+    NotificationDeviceService,
     NotificationPreferenceService,
     InAppNotificationService,
     EventNotificationService,

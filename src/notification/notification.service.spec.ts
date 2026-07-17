@@ -9,6 +9,11 @@ import { PushQueueService } from './queue/push-queue.service';
 import { EmailQueueService } from './queue/email-queue.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotificationCategory as PrismaCategory } from '@prisma/client';
+import { NotificationEmailService } from './services/notification-email.service';
+import { NotificationDispatchService } from './services/notification-dispatch.service';
+import { NotificationSettingsService } from './services/notification-settings.service';
+import { NotificationDeviceService } from './services/notification-device.service';
+import { InAppNotificationService } from './services/in-app-notification.service';
 
 // Mock nodemailer
 jest.mock('nodemailer', () => ({
@@ -128,6 +133,14 @@ describe('NotificationService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationService,
+        // Real focused services exercised by the facade tests below, wired to
+        // the same mocks so the delegated behavior is asserted end-to-end.
+        NotificationEmailService,
+        NotificationDispatchService,
+        // Delegate services not exercised by these tests are stubbed.
+        { provide: NotificationSettingsService, useValue: {} },
+        { provide: NotificationDeviceService, useValue: {} },
+        { provide: InAppNotificationService, useValue: {} },
         { provide: PrismaService, useValue: mockPrisma },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: InAppProvider, useValue: mockInAppProvider },
