@@ -139,6 +139,28 @@ describe('Story (e2e)', () => {
       .fn()
       .mockResolvedValue({ message: 'Download removed' }),
     removeFromLibrary: jest.fn().mockResolvedValue(undefined),
+    // Progress operations live on StoryService (controller delegates here)
+    setProgress: jest.fn().mockResolvedValue(MOCK_PROGRESS),
+    getProgress: jest.fn().mockResolvedValue(MOCK_PROGRESS),
+  };
+
+  // Prisma mock defined as a referenceable const so individual tests can
+  // stub findFirst results for ownership checks (kid/story) done in the
+  // merged controller before delegating to the service layer.
+  const mockPrismaService = {
+    kid: {
+      findFirst: jest.fn(),
+    },
+    story: {
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+    },
+    userStoryProgress: {
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      upsert: jest.fn(),
+    },
   };
 
   const mockStoryGenerationService = {
@@ -253,18 +275,7 @@ describe('Story (e2e)', () => {
         { provide: StoryQueueService, useValue: mockStoryQueueService },
         {
           provide: PrismaService,
-          useValue: {
-            story: {
-              findUnique: jest.fn(),
-              findFirst: jest.fn(),
-              findMany: jest.fn(),
-            },
-            userStoryProgress: {
-              findFirst: jest.fn(),
-              findMany: jest.fn(),
-              upsert: jest.fn(),
-            },
-          },
+          useValue: mockPrismaService,
         },
       ],
     })
@@ -369,9 +380,10 @@ describe('Story (e2e)', () => {
   // ==================== GET STORIES TESTS ====================
 
   describe('GET /stories', () => {
-    // TODO(delta-port): merged controller behavior drift (auth model / routes / 500s / stateful mocks); reconcile in a focused e2e pass
-    it.skip('should return paginated stories without authentication', async () => {
-      const res = await request(server).get('/api/v1/stories');
+    // Story read endpoints now require auth (public browsing moved to the
+    // guest module); the merged StoryController has a class-level AuthSessionGuard.
+    it('should return paginated stories when authenticated', async () => {
+      const res = await authenticatedGet('/api/v1/stories');
 
       expectSuccessResponse(res, 200);
       expect(res.body.data).toHaveProperty('stories');
@@ -382,9 +394,8 @@ describe('Story (e2e)', () => {
       expect(Array.isArray(res.body.data.stories)).toBe(true);
     });
 
-    // TODO(delta-port): merged controller behavior drift (auth model / routes / 500s / stateful mocks); reconcile in a focused e2e pass
-    it.skip('should pass query parameters to the service', async () => {
-      await request(server).get(
+    it('should pass query parameters to the service', async () => {
+      await authenticatedGet(
         '/api/v1/stories?theme=Adventure&category=Bedtime&page=2&limit=5',
       );
 
@@ -402,9 +413,9 @@ describe('Story (e2e)', () => {
   // ==================== GET CATEGORIES TESTS ====================
 
   describe('GET /stories/categories', () => {
-    // TODO(delta-port): merged controller behavior drift (auth model / routes / 500s / stateful mocks); reconcile in a focused e2e pass
-    it.skip('should return categories without authentication', async () => {
-      const res = await request(server).get('/api/v1/stories/categories');
+    // Categories endpoint now requires auth under the merged controller.
+    it('should return categories when authenticated', async () => {
+      const res = await authenticatedGet('/api/v1/stories/categories');
 
       expectSuccessResponse(res, 200);
       expect(Array.isArray(res.body.data)).toBe(true);
@@ -417,9 +428,9 @@ describe('Story (e2e)', () => {
   // ==================== GET THEMES TESTS ====================
 
   describe('GET /stories/themes', () => {
-    // TODO(delta-port): merged controller behavior drift (auth model / routes / 500s / stateful mocks); reconcile in a focused e2e pass
-    it.skip('should return themes without authentication', async () => {
-      const res = await request(server).get('/api/v1/stories/themes');
+    // Themes endpoint now requires auth under the merged controller.
+    it('should return themes when authenticated', async () => {
+      const res = await authenticatedGet('/api/v1/stories/themes');
 
       expectSuccessResponse(res, 200);
       expect(Array.isArray(res.body.data)).toBe(true);
@@ -432,9 +443,9 @@ describe('Story (e2e)', () => {
   // ==================== GET SEASONS TESTS ====================
 
   describe('GET /stories/seasons', () => {
-    // TODO(delta-port): merged controller behavior drift (auth model / routes / 500s / stateful mocks); reconcile in a focused e2e pass
-    it.skip('should return seasons without authentication', async () => {
-      const res = await request(server).get('/api/v1/stories/seasons');
+    // Seasons endpoint now requires auth under the merged controller.
+    it('should return seasons when authenticated', async () => {
+      const res = await authenticatedGet('/api/v1/stories/seasons');
 
       expectSuccessResponse(res, 200);
       expect(Array.isArray(res.body.data)).toBe(true);
@@ -542,8 +553,15 @@ describe('Story (e2e)', () => {
   // ==================== UPDATE STORY TESTS ====================
 
   describe('PATCH /stories/:id', () => {
-    // TODO(delta-port): merged controller behavior drift (auth model / routes / 500s / stateful mocks); reconcile in a focused e2e pass
-    it.skip('should update a story when authenticated', async () => {
+    it('should update a story when authenticated', async () => {
+      // The merged controller verifies story ownership via Prisma before
+      // delegating to StoryService.updateStory, so stub an owned story.
+      mockPrismaService.story.findFirst.mockResolvedValueOnce({
+        id: 'story-1',
+        creatorKidId: 'kid-1',
+        creatorKid: { parentId: TEST_USER_ID },
+      });
+
       const res = await authenticatedPatch('/api/v1/stories/story-1').send({
         title: 'Updated Title',
       });
@@ -576,8 +594,14 @@ describe('Story (e2e)', () => {
   // ==================== DELETE STORY TESTS ====================
 
   describe('DELETE /stories/:id', () => {
-    // TODO(delta-port): merged controller behavior drift (auth model / routes / 500s / stateful mocks); reconcile in a focused e2e pass
-    it.skip('should delete a story when authenticated', async () => {
+    it('should delete a story when authenticated', async () => {
+      // Ownership check runs first in the merged controller; stub an owned story.
+      mockPrismaService.story.findFirst.mockResolvedValueOnce({
+        id: 'story-1',
+        creatorKidId: 'kid-1',
+        creatorKid: { parentId: TEST_USER_ID },
+      });
+
       const res = await authenticatedDelete('/api/v1/stories/story-1');
 
       expectSuccessResponse(res, 200);
@@ -602,8 +626,14 @@ describe('Story (e2e)', () => {
       storyId: '550e8400-e29b-41d4-a716-446655440001',
     };
 
-    // TODO(delta-port): merged controller behavior drift (auth model / routes / 500s / stateful mocks); reconcile in a focused e2e pass
-    it.skip('should add a favorite when authenticated with valid data', async () => {
+    it('should add a favorite when authenticated with valid data', async () => {
+      // Controller verifies kid ownership via Prisma before StoryService.addFavorite.
+      mockPrismaService.kid.findFirst.mockResolvedValueOnce({
+        id: validFavoriteBody.kidId,
+        parentId: TEST_USER_ID,
+        isDeleted: false,
+      });
+
       const res = await authenticatedPost('/api/v1/stories/favorites').send(
         validFavoriteBody,
       );
@@ -652,14 +682,21 @@ describe('Story (e2e)', () => {
       progress: 50,
     };
 
-    // TODO(delta-port): merged controller behavior drift (auth model / routes / 500s / stateful mocks); reconcile in a focused e2e pass
-    it.skip('should set progress when authenticated with valid data', async () => {
+    it('should set progress when authenticated with valid data', async () => {
+      // Controller verifies kid ownership via Prisma, then delegates to
+      // StoryService.setProgress (kid-scoped progress lives on StoryService).
+      mockPrismaService.kid.findFirst.mockResolvedValueOnce({
+        id: validProgressBody.kidId,
+        parentId: TEST_USER_ID,
+        isDeleted: false,
+      });
+
       const res = await authenticatedPost('/api/v1/stories/progress').send(
         validProgressBody,
       );
 
       expectSuccessResponse(res, 201);
-      expect(mockStoryProgressService.setProgress).toHaveBeenCalledWith(
+      expect(mockStoryService.setProgress).toHaveBeenCalledWith(
         expect.objectContaining({
           kidId: validProgressBody.kidId,
           storyId: validProgressBody.storyId,

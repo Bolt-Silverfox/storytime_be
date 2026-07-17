@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import request from 'supertest';
@@ -298,8 +299,7 @@ describe('Payment (e2e)', () => {
       expectErrorResponse(res, 400, 'Bad Request');
     });
 
-    // TODO(delta-port): merged controller behavior drift (auth model / routes / 500s / stateful mocks); reconcile in a focused e2e pass
-    it.skip('should handle duplicate receipt for the same user (idempotency)', async () => {
+    it('should handle duplicate receipt for the same user (idempotency)', async () => {
       // First purchase
       const firstRes = await request(server)
         .post('/api/v1/payment/verify-purchase')
@@ -390,8 +390,7 @@ describe('Payment (e2e)', () => {
       expectErrorResponse(res, 404, 'Not Found');
     });
 
-    // TODO(delta-port): merged controller behavior drift (auth model / routes / 500s / stateful mocks); reconcile in a focused e2e pass
-    it.skip('should include platform warning for Apple subscriptions', async () => {
+    it('should include platform warning for Apple subscriptions', async () => {
       // Create an Apple subscription
       await request(server).post('/api/v1/payment/verify-purchase').send({
         platform: 'apple',
@@ -403,9 +402,11 @@ describe('Payment (e2e)', () => {
 
       expectSuccessResponse(res, 201);
       expect(res.body.data).toHaveProperty('status', 'cancelled');
-      // Apple subscriptions should include platformWarning about managing via Apple ID
-      expect(res.body.data).toHaveProperty('platformWarning');
-      expect(res.body.data.platformWarning).toContain('Apple');
+      // When Apple auto-renewal is still active (mocked getSubscriptionStatus
+      // returns autoRenewActive: true), the merged cancelSubscription attaches
+      // a `warning` (mentioning Apple) plus a `manageUrl` to the response.
+      expect(res.body.data).toHaveProperty('warning');
+      expect(res.body.data.warning).toContain('Apple');
       expect(res.body.data).toHaveProperty('manageUrl');
     });
   });
@@ -576,6 +577,24 @@ function createMockPrismaService() {
         },
       ),
       create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
+        // Simulate the DB unique constraint on `reference`. When a transaction
+        // with the same reference already exists, throw a Prisma P2002 error so
+        // PaymentService.createTransactionAtomic takes its dedup path
+        // (findFirst existing tx -> alreadyProcessed: true).
+        if (data.reference != null) {
+          for (const existing of paymentTransactions.values()) {
+            if (existing.reference === data.reference) {
+              throw new Prisma.PrismaClientKnownRequestError(
+                'Unique constraint failed on the fields: (`reference`)',
+                {
+                  code: 'P2002',
+                  clientVersion: 'test',
+                  meta: { target: ['reference'] },
+                },
+              );
+            }
+          }
+        }
         const id = `tx-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const tx = {
           id,
