@@ -8,6 +8,7 @@ import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from './text-to-speech.service';
 import { GuestSessionService } from '../guest/guest-session.service';
+import { NotificationService } from '../notification/notification.service';
 
 // Mock dependencies
 const mockPrismaService = {
@@ -76,6 +77,13 @@ describe('StoryService - Library & Generation', () => {
           useValue: { del: jest.fn(), get: jest.fn(), set: jest.fn() },
         },
         { provide: GuestSessionService, useValue: mockGuestSessionService },
+        {
+          provide: NotificationService,
+          useValue: {
+            sendNotification: jest.fn(),
+            broadcastNewStoryToUsers: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
