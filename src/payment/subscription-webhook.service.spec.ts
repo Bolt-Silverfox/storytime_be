@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SubscriptionWebhookService } from './subscription-webhook.service';
 import {
@@ -14,6 +15,7 @@ type MockPrisma = {
     findUnique: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
+    updateMany: jest.Mock;
   };
   subscription: { findFirst: jest.Mock; update: jest.Mock };
 };
@@ -56,6 +58,12 @@ const googleBody = (payload: Record<string, unknown>, messageId = 'msg-1') => ({
   subscription: 'projects/x/subscriptions/y',
 });
 
+/** Build a Pub/Sub body from a raw (already base64-encoded) data string. */
+const googleBody0 = (data: string, messageId = 'msg-0') => ({
+  message: { data, messageId },
+  subscription: 'projects/x/subscriptions/y',
+});
+
 describe('SubscriptionWebhookService', () => {
   let service: SubscriptionWebhookService;
   let prisma: MockPrisma;
@@ -70,6 +78,7 @@ describe('SubscriptionWebhookService', () => {
           .fn()
           .mockResolvedValue({ id: 'evt-1', status: 'received' }),
         update: jest.fn().mockResolvedValue({ id: 'evt-1' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       subscription: {
         findFirst: jest.fn().mockResolvedValue({ ...SUB }),
@@ -358,6 +367,130 @@ describe('SubscriptionWebhookService', () => {
           message: { data: 'x', messageId: '' },
         } as never),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects a non-object RTDN payload (base64 "null") with 400', async () => {
+      const body = googleBody0(
+        Buffer.from('null').toString('base64'),
+        'msg-null',
+      );
+      await expect(service.handleGoogle(body)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      // Malformed input must never reach subscription mutation.
+      expect(prisma.subscription.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-object RTDN payload (base64 array) with 400', async () => {
+      const body = googleBody0(
+        Buffer.from('[1,2,3]').toString('base64'),
+        'msg-arr',
+      );
+      await expect(service.handleGoogle(body)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+  });
+
+  // ----------------------------------------------------- idempotency race ----
+  describe('idempotency / concurrent duplicate deliveries', () => {
+    const renewInfo = () =>
+      appleInfo({ notificationType: 'DID_RENEW', notificationUUID: 'race-1' });
+
+    const p2002 = () =>
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+      });
+
+    it('does not reprocess when a concurrent delivery already owns the row (P2002 -> received)', async () => {
+      apple.parseSignedNotification.mockReturnValue(renewInfo());
+      // Fast-path findUnique: no row yet. Then create loses the race (P2002),
+      // and the re-read shows a concurrent delivery is already processing it.
+      prisma.webhookEvent.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 'evt-race', status: 'received' });
+      prisma.webhookEvent.create.mockRejectedValueOnce(p2002());
+
+      const res = await service.handleApple({ signedPayload: 'jws' });
+
+      expect(res.duplicate).toBe(true);
+      // The losing delivery must NOT run the handler / mutate the subscription.
+      expect(prisma.subscription.update).not.toHaveBeenCalled();
+    });
+
+    it('does not reprocess an in-flight (received) event', async () => {
+      apple.parseSignedNotification.mockReturnValue(renewInfo());
+      prisma.webhookEvent.findUnique.mockResolvedValue({
+        id: 'evt-inflight',
+        status: 'received',
+      });
+
+      const res = await service.handleApple({ signedPayload: 'jws' });
+
+      expect(res.duplicate).toBe(true);
+      expect(prisma.webhookEvent.create).not.toHaveBeenCalled();
+      expect(prisma.subscription.update).not.toHaveBeenCalled();
+    });
+
+    it('processes exactly once: only the delivery that wins the create claim runs the handler', async () => {
+      apple.parseSignedNotification.mockReturnValue(renewInfo());
+
+      // Delivery A: no row -> create succeeds -> claims -> processes.
+      prisma.webhookEvent.findUnique.mockResolvedValueOnce(null);
+      prisma.webhookEvent.create.mockResolvedValueOnce({
+        id: 'evt-A',
+        status: 'received',
+      });
+      const resA = await service.handleApple({ signedPayload: 'jws' });
+
+      // Delivery B (concurrent duplicate): create loses (P2002), re-read shows
+      // the row is now processed -> idempotent replay, no reprocessing.
+      prisma.webhookEvent.findUnique.mockResolvedValueOnce({
+        id: 'evt-A',
+        status: 'processed',
+      });
+      const resB = await service.handleApple({ signedPayload: 'jws' });
+
+      expect(resA.duplicate).toBe(false);
+      expect(resA.status).toBe('processed');
+      expect(resB.duplicate).toBe(true);
+      // Subscription mutated exactly once across both deliveries.
+      expect(prisma.subscription.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries a previously failed event by atomically re-claiming the row', async () => {
+      apple.parseSignedNotification.mockReturnValue(renewInfo());
+      prisma.webhookEvent.findUnique.mockResolvedValue({
+        id: 'evt-failed',
+        status: 'failed',
+      });
+      prisma.webhookEvent.updateMany.mockResolvedValue({ count: 1 });
+
+      const res = await service.handleApple({ signedPayload: 'jws' });
+
+      expect(prisma.webhookEvent.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'evt-failed', status: 'failed' },
+        }),
+      );
+      expect(res.status).toBe('processed');
+      expect(prisma.subscription.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not reprocess a failed event if another delivery already re-claimed it', async () => {
+      apple.parseSignedNotification.mockReturnValue(renewInfo());
+      prisma.webhookEvent.findUnique.mockResolvedValue({
+        id: 'evt-failed',
+        status: 'failed',
+      });
+      // The status-guarded claim matched 0 rows -> someone else won.
+      prisma.webhookEvent.updateMany.mockResolvedValue({ count: 0 });
+
+      const res = await service.handleApple({ signedPayload: 'jws' });
+
+      expect(res.duplicate).toBe(true);
+      expect(prisma.subscription.update).not.toHaveBeenCalled();
     });
 
     // ----------------------------------------------- linkedPurchaseToken ----

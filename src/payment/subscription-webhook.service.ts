@@ -232,11 +232,21 @@ export class SubscriptionWebhookService {
 
   private decodeGooglePayload(data: string): GoogleRtdnPayload {
     const json = Buffer.from(data, 'base64').toString('utf8');
+    let parsed: unknown;
     try {
-      return JSON.parse(json) as GoogleRtdnPayload;
+      parsed = JSON.parse(json);
     } catch {
       throw new BadRequestException('Invalid JSON in Pub/Sub message data');
     }
+    // `JSON.parse('null')` (and other non-object JSON) parses successfully;
+    // reject it here so googleEventType() never dereferences a non-object and
+    // turns malformed input into an unhandled 500 instead of a 400.
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new BadRequestException(
+        'Pub/Sub message data must be a JSON object',
+      );
+    }
+    return parsed as GoogleRtdnPayload;
   }
 
   private googleEventType(payload: GoogleRtdnPayload): string {
@@ -377,11 +387,21 @@ export class SubscriptionWebhookService {
 
   /**
    * Records the notification in `webhook_events` (keyed by platform +
-   * externalEventId) and runs `handler` exactly once. Duplicate deliveries of
-   * an already-processed/skipped event short-circuit and return 200.
+   * externalEventId) and runs `handler` exactly once, even under concurrent
+   * duplicate deliveries.
    *
-   * The WebhookEvent bookkeeping is wrapped in its own try/catch so a failure
-   * writing the audit row never masks the original processing error.
+   * Idempotency is enforced by atomically CLAIMING the event row before running
+   * the handler:
+   *  - a terminal row (processed/skipped) -> idempotent replay, return 200;
+   *  - a row currently `received` (another delivery in-flight) -> return 200
+   *    without reprocessing;
+   *  - only a delivery that actually creates the row, or that atomically flips a
+   *    prior `failed` row back to `received`, owns the claim and runs `handler`.
+   *
+   * The claim uses the `(platform, externalEventId)` unique constraint (via
+   * `create`) and a status-guarded `updateMany`, so two concurrent duplicate
+   * deliveries can never both process. Success is only acknowledged after the
+   * terminal status is durably committed.
    */
   private async processWithIdempotency(
     platform: 'apple' | 'google',
@@ -408,26 +428,51 @@ export class SubscriptionWebhookService {
       };
     }
 
-    // Create (or reset) the audit row in "received" state.
-    const event = await this.upsertReceived(
-      existing?.id ?? null,
+    if (existing && existing.status === 'received') {
+      // Another delivery of this exact event is already being processed. Do not
+      // reprocess; ack 200 so the store stops retrying while the in-flight
+      // delivery completes.
+      this.logger.log(
+        `Concurrent ${platform} webhook ${externalEventId} in-flight, skipping reprocess`,
+      );
+      return { duplicate: true, status: 'processed', action: 'duplicate' };
+    }
+
+    // No row, or a prior `failed` row we may retry. Atomically claim it.
+    const event = await this.claimEvent(
+      existing,
       platform,
       externalEventId,
       eventType,
       payload,
     );
 
+    if (!event) {
+      // Lost the claim race to a concurrent delivery; it owns processing.
+      this.logger.log(
+        `Lost claim race for ${platform} webhook ${externalEventId}, skipping reprocess`,
+      );
+      return { duplicate: true, status: 'processed', action: 'duplicate' };
+    }
+
     try {
       const result = await handler();
-      await this.safeUpdateEvent(event.id, {
-        status: result.status,
-        processedAt: new Date(),
-        errorMessage: null,
+      // Durably commit the terminal status BEFORE acknowledging success. If this
+      // write fails it falls through to the catch below (recorded failed +
+      // rethrown -> 5xx), so we never return 200 without a persisted outcome.
+      await this.prisma.webhookEvent.update({
+        where: { id: event.id },
+        data: {
+          status: result.status,
+          processedAt: new Date(),
+          errorMessage: null,
+        },
       });
       return { duplicate: false, status: result.status, action: result.action };
     } catch (error) {
-      // Processing failed (e.g. transient DB error). Record it, then rethrow so
-      // the store retries. Guard the bookkeeping so it cannot mask `error`.
+      // Processing (or the terminal write) failed. Record it best-effort, then
+      // rethrow so the store retries. Guard the bookkeeping so it cannot mask
+      // `error`.
       await this.safeUpdateEvent(event.id, {
         status: 'failed',
         errorMessage: this.errorMessage(error).slice(0, 500),
@@ -436,13 +481,24 @@ export class SubscriptionWebhookService {
     }
   }
 
-  private async upsertReceived(
-    id: string | null,
+  /**
+   * Atomically claim a webhook event for processing. Returns the claimed row, or
+   * `null` when another concurrent delivery already owns it (so the caller must
+   * not reprocess).
+   */
+  private async claimEvent(
+    existing: { id: string; status: string } | null,
     platform: string,
     externalEventId: string,
     eventType: string,
     payload: Record<string, unknown>,
-  ) {
+  ): Promise<{ id: string } | null> {
+    // Retry of a prior `failed` row: flip failed -> received, guarded on status
+    // so only one delivery wins.
+    if (existing && existing.status === 'failed') {
+      return this.claimFailedRow(existing.id);
+    }
+
     const data = {
       platform,
       eventType,
@@ -453,25 +509,38 @@ export class SubscriptionWebhookService {
       processedAt: null,
     };
 
-    if (id) {
-      return this.prisma.webhookEvent.update({ where: { id }, data });
-    }
-
     try {
       return await this.prisma.webhookEvent.create({ data });
     } catch (error) {
-      // Race: another delivery created it between findUnique and create.
+      // Race: another delivery created the row between findUnique and create.
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        return this.prisma.webhookEvent.update({
+        const now = await this.prisma.webhookEvent.findUnique({
           where: { platform_externalEventId: { platform, externalEventId } },
-          data,
         });
+        // The concurrent creator owns processing (received) or already finished
+        // (processed/skipped). Only a `failed` row is eligible for a retry claim.
+        if (now && now.status === 'failed') {
+          return this.claimFailedRow(now.id);
+        }
+        return null;
       }
       throw error;
     }
+  }
+
+  /**
+   * Claim a `failed` row for a retry by atomically flipping it to `received`.
+   * The `status: 'failed'` guard means at most one concurrent delivery wins.
+   */
+  private async claimFailedRow(id: string): Promise<{ id: string } | null> {
+    const res = await this.prisma.webhookEvent.updateMany({
+      where: { id, status: 'failed' },
+      data: { status: 'received', errorMessage: null, processedAt: null },
+    });
+    return res.count === 1 ? { id } : null;
   }
 
   private async safeUpdateEvent(
