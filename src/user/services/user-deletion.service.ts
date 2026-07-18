@@ -1,13 +1,14 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { Prisma, User, Profile, Kid, Avatar } from '@prisma/client';
-import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, UserDeletedEvent } from '@/shared/events';
+import { USER_REPOSITORY, IUserRepository } from '../repositories';
 
 /** Response for permanent delete operation */
 export interface DeleteUserResult {
@@ -33,7 +34,8 @@ type UserWithRelations = User & {
 @Injectable()
 export class UserDeletionService {
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: IUserRepository,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -49,9 +51,7 @@ export class UserDeletionService {
     try {
       if (permanent) {
         // Check if user exists first
-        const existingUser = await this.prisma.user.findUnique({
-          where: { id },
-        });
+        const existingUser = await this.userRepository.findUserById(id, true);
 
         if (!existingUser) {
           throw new NotFoundException('Account not found');
@@ -61,7 +61,7 @@ export class UserDeletionService {
         await this.terminateUserSessions(id);
 
         // Delete the user and all associated data
-        const deletedUser = await this.prisma.user.delete({ where: { id } });
+        const deletedUser = await this.userRepository.deleteUserPermanently(id);
 
         // Emit user deleted event for GDPR compliance logging, analytics, etc.
         this.eventEmitter.emit(AppEvents.USER_DELETED, {
@@ -79,13 +79,7 @@ export class UserDeletionService {
           permanent: true,
         };
       } else {
-        const updatedUser = await this.prisma.user.update({
-          where: { id },
-          data: {
-            isDeleted: true,
-            deletedAt: new Date(),
-          },
-        });
+        const updatedUser = await this.userRepository.softDeleteUser(id);
 
         // Emit user deleted event for soft deletion (deactivation)
         this.eventEmitter.emit(AppEvents.USER_DELETED, {
@@ -127,35 +121,25 @@ export class UserDeletionService {
   private async terminateUserSessions(userId: string): Promise<void> {
     try {
       // Delete all active sessions
-      await this.prisma.session.deleteMany({
-        where: { userId },
-      });
+      await this.userRepository.deleteAllUserSessions(userId);
 
       // Delete all tokens
-      await this.prisma.token.deleteMany({
-        where: { userId },
-      });
+      await this.userRepository.deleteAllUserTokens(userId);
 
       // Create activity log for session termination
-      await this.prisma.activityLog.create({
-        data: {
-          userId,
-          action: 'SESSION_TERMINATION',
-          status: 'SUCCESS',
-          details: 'All sessions terminated due to permanent account deletion',
-          createdAt: new Date(),
-        },
+      await this.userRepository.createActivityLog({
+        userId,
+        action: 'SESSION_TERMINATION',
+        status: 'SUCCESS',
+        details: 'All sessions terminated due to permanent account deletion',
       });
     } catch (error) {
       // If session termination fails, log it but continue with deletion
-      await this.prisma.activityLog.create({
-        data: {
-          userId,
-          action: 'SESSION_TERMINATION',
-          status: 'FAILED',
-          details: `Failed to terminate sessions: ${error.message}`,
-          createdAt: new Date(),
-        },
+      await this.userRepository.createActivityLog({
+        userId,
+        action: 'SESSION_TERMINATION',
+        status: 'FAILED',
+        details: `Failed to terminate sessions: ${error.message}`,
       });
     }
   }
@@ -188,9 +172,7 @@ export class UserDeletionService {
     permanent: boolean = false,
   ) {
     // Find user regardless of deletion status
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
+    const user = await this.userRepository.findUserById(userId, true);
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -228,12 +210,10 @@ export class UserDeletionService {
       );
     }
 
-    await this.prisma.supportTicket.create({
-      data: {
-        userId,
-        subject: 'Delete Account Request',
-        message: messageLines.join('\n'),
-      },
+    await this.userRepository.createSupportTicket({
+      userId,
+      subject: 'Delete Account Request',
+      message: messageLines.join('\n'),
     });
 
     return {
@@ -247,26 +227,17 @@ export class UserDeletionService {
    * @param id User ID
    */
   async undoDeleteUser(id: string): Promise<UserWithRelations> {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.userRepository.findUserById(id, true);
     if (!user) throw new NotFoundException('User not found');
     if (!user.isDeleted) throw new BadRequestException('User is not deleted');
 
-    const restoredUser = await this.prisma.user.update({
-      where: { id },
-      data: {
-        isDeleted: false,
-        deletedAt: null,
-      },
-      include: { profile: true, kids: true, avatar: true },
-    });
+    const restoredUser = await this.userRepository.restoreUser(id);
 
     // Log restoration
-    await this.prisma.supportTicket.create({
-      data: {
-        userId: id,
-        subject: 'Account Restoration',
-        message: `Account restored by admin at ${new Date().toISOString()}`,
-      },
+    await this.userRepository.createSupportTicket({
+      userId: id,
+      subject: 'Account Restoration',
+      message: `Account restored by admin at ${new Date().toISOString()}`,
     });
 
     return restoredUser;
@@ -277,27 +248,18 @@ export class UserDeletionService {
    * @param userId Current user ID
    */
   async undoDeleteMyAccount(userId: string): Promise<UserWithRelations> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.userRepository.findUserById(userId, true);
     if (!user) throw new NotFoundException('User not found');
     if (!user.isDeleted)
       throw new BadRequestException('Your account is not deleted');
 
-    const restoredUser = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        isDeleted: false,
-        deletedAt: null,
-      },
-      include: { profile: true, kids: true, avatar: true },
-    });
+    const restoredUser = await this.userRepository.restoreUser(userId);
 
     // Log self-restoration
-    await this.prisma.supportTicket.create({
-      data: {
-        userId,
-        subject: 'Account Self-Restoration',
-        message: `User restored their own account at ${new Date().toISOString()}`,
-      },
+    await this.userRepository.createSupportTicket({
+      userId,
+      subject: 'Account Self-Restoration',
+      message: `User restored their own account at ${new Date().toISOString()}`,
     });
 
     return restoredUser;
