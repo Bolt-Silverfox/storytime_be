@@ -954,4 +954,159 @@ export class PrismaStoryRepository implements IStoryRepository {
     `;
     return result.map((r) => r.id);
   }
+
+  // ==================== Generic Story Delegate Passthroughs ====================
+
+  async findManyStoriesRaw<T extends Prisma.StoryFindManyArgs>(
+    args: Prisma.SelectSubset<T, Prisma.StoryFindManyArgs>,
+  ): Promise<Prisma.StoryGetPayload<T>[]> {
+    return this.prisma.story.findMany(args);
+  }
+
+  async findUniqueStoryRaw<T extends Prisma.StoryFindUniqueArgs>(
+    args: Prisma.SelectSubset<T, Prisma.StoryFindUniqueArgs>,
+  ): Promise<Prisma.StoryGetPayload<T> | null> {
+    return this.prisma.story.findUnique(args);
+  }
+
+  async createStoryRaw<T extends Prisma.StoryCreateArgs>(
+    args: Prisma.SelectSubset<T, Prisma.StoryCreateArgs>,
+  ): Promise<Prisma.StoryGetPayload<T>> {
+    return this.prisma.story.create(args);
+  }
+
+  async updateStoryRaw<T extends Prisma.StoryUpdateArgs>(
+    args: Prisma.SelectSubset<T, Prisma.StoryUpdateArgs>,
+  ): Promise<Prisma.StoryGetPayload<T>> {
+    return this.prisma.story.update(args);
+  }
+
+  async deleteStoryRaw<T extends Prisma.StoryDeleteArgs>(
+    args: Prisma.SelectSubset<T, Prisma.StoryDeleteArgs>,
+  ): Promise<Prisma.StoryGetPayload<T>> {
+    return this.prisma.story.delete(args);
+  }
+
+  async countStoriesRaw(where: Prisma.StoryWhereInput): Promise<number> {
+    return this.prisma.story.count({ where });
+  }
+
+  async findManyKidsRaw<T extends Prisma.KidFindManyArgs>(
+    args: Prisma.SelectSubset<T, Prisma.KidFindManyArgs>,
+  ): Promise<Prisma.KidGetPayload<T>[]> {
+    return this.prisma.kid.findMany(args);
+  }
+
+  async findUniqueKidRaw<T extends Prisma.KidFindUniqueArgs>(
+    args: Prisma.SelectSubset<T, Prisma.KidFindUniqueArgs>,
+  ): Promise<Prisma.KidGetPayload<T> | null> {
+    return this.prisma.kid.findUnique(args);
+  }
+
+  async findUniqueUserRaw<T extends Prisma.UserFindUniqueArgs>(
+    args: Prisma.SelectSubset<T, Prisma.UserFindUniqueArgs>,
+  ): Promise<Prisma.UserGetPayload<T> | null> {
+    return this.prisma.user.findUnique(args);
+  }
+
+  async findManySeasonsRaw<T extends Prisma.SeasonFindManyArgs>(
+    args: Prisma.SelectSubset<T, Prisma.SeasonFindManyArgs>,
+  ): Promise<Prisma.SeasonGetPayload<T>[]> {
+    return this.prisma.season.findMany(args);
+  }
+
+  async findManyThemesRaw<T extends Prisma.ThemeFindManyArgs>(
+    args: Prisma.SelectSubset<T, Prisma.ThemeFindManyArgs>,
+  ): Promise<Prisma.ThemeGetPayload<T>[]> {
+    return this.prisma.theme.findMany(args);
+  }
+
+  async findManyCategoriesRaw<T extends Prisma.CategoryFindManyArgs>(
+    args: Prisma.SelectSubset<T, Prisma.CategoryFindManyArgs>,
+  ): Promise<Prisma.CategoryGetPayload<T>[]> {
+    return this.prisma.category.findMany(args);
+  }
+
+  async findManyUserStoryProgressRaw<
+    T extends Prisma.UserStoryProgressFindManyArgs,
+  >(
+    args: Prisma.SelectSubset<T, Prisma.UserStoryProgressFindManyArgs>,
+  ): Promise<Prisma.UserStoryProgressGetPayload<T>[]> {
+    return this.prisma.userStoryProgress.findMany(args);
+  }
+
+  async findManyDailyChallengeAssignmentsRaw<
+    T extends Prisma.DailyChallengeAssignmentFindManyArgs,
+  >(
+    args: Prisma.SelectSubset<T, Prisma.DailyChallengeAssignmentFindManyArgs>,
+  ): Promise<Prisma.DailyChallengeAssignmentGetPayload<T>[]> {
+    return this.prisma.dailyChallengeAssignment.findMany(args);
+  }
+
+  async findFirstDailyChallengeAssignmentRaw<
+    T extends Prisma.DailyChallengeAssignmentFindFirstArgs,
+  >(
+    args: Prisma.SelectSubset<T, Prisma.DailyChallengeAssignmentFindFirstArgs>,
+  ): Promise<Prisma.DailyChallengeAssignmentGetPayload<T> | null> {
+    return this.prisma.dailyChallengeAssignment.findFirst(args);
+  }
+
+  async createDailyChallengeAssignmentRaw<
+    T extends Prisma.DailyChallengeAssignmentCreateArgs,
+  >(
+    args: Prisma.SelectSubset<T, Prisma.DailyChallengeAssignmentCreateArgs>,
+  ): Promise<Prisma.DailyChallengeAssignmentGetPayload<T>> {
+    return this.prisma.dailyChallengeAssignment.create(args);
+  }
+
+  async findFirstDailyChallengeRaw<
+    T extends Prisma.DailyChallengeFindFirstArgs,
+  >(
+    args: Prisma.SelectSubset<T, Prisma.DailyChallengeFindFirstArgs>,
+  ): Promise<Prisma.DailyChallengeGetPayload<T> | null> {
+    return this.prisma.dailyChallenge.findFirst(args);
+  }
+
+  async createDailyChallengeRaw<T extends Prisma.DailyChallengeCreateArgs>(
+    args: Prisma.SelectSubset<T, Prisma.DailyChallengeCreateArgs>,
+  ): Promise<Prisma.DailyChallengeGetPayload<T>> {
+    return this.prisma.dailyChallenge.create(args);
+  }
+
+  async removeFromLibraryTransaction(
+    kidId: string,
+    storyId: string,
+  ): Promise<Prisma.BatchPayload[]> {
+    return this.prisma.$transaction([
+      this.prisma.favorite.deleteMany({ where: { kidId, storyId } }),
+      this.prisma.downloadedStory.deleteMany({ where: { kidId, storyId } }),
+      this.prisma.storyProgress.deleteMany({ where: { kidId, storyId } }),
+    ]);
+  }
+
+  async getRandomStoryIdsFromStories(limit: number): Promise<string[]> {
+    const randomIds = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "stories"
+      WHERE "isDeleted" = false
+      ORDER BY RANDOM()
+      LIMIT ${limit}
+    `;
+
+    return randomIds.map((r) => r.id);
+  }
+
+  async getDeterministicStoryIdsFromStories(
+    limit: number,
+    offset = 0,
+  ): Promise<string[]> {
+    const ids = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "stories"
+      WHERE "isDeleted" = false
+      ORDER BY "createdAt" DESC, id ASC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
+
+    return ids.map((r) => r.id);
+  }
 }

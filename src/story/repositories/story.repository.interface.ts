@@ -416,6 +416,99 @@ export interface IStoryRepository {
   // ==================== Raw Query Operations ====================
 
   getRandomStoryIds(limit: number, offset?: number): Promise<string[]>;
+
+  // ==================== Generic Story Delegate Passthroughs ====================
+  // These preserve the exact Prisma call semantics (where/include/orderBy/
+  // select/skip/take/cursor) and inferred return types byte-for-byte, so
+  // callers keep identical behaviour while routing DB access through the repo.
+
+  findManyStoriesRaw<T extends Prisma.StoryFindManyArgs>(
+    args: Prisma.SelectSubset<T, Prisma.StoryFindManyArgs>,
+  ): Promise<Prisma.StoryGetPayload<T>[]>;
+
+  findUniqueStoryRaw<T extends Prisma.StoryFindUniqueArgs>(
+    args: Prisma.SelectSubset<T, Prisma.StoryFindUniqueArgs>,
+  ): Promise<Prisma.StoryGetPayload<T> | null>;
+
+  createStoryRaw<T extends Prisma.StoryCreateArgs>(
+    args: Prisma.SelectSubset<T, Prisma.StoryCreateArgs>,
+  ): Promise<Prisma.StoryGetPayload<T>>;
+
+  updateStoryRaw<T extends Prisma.StoryUpdateArgs>(
+    args: Prisma.SelectSubset<T, Prisma.StoryUpdateArgs>,
+  ): Promise<Prisma.StoryGetPayload<T>>;
+
+  deleteStoryRaw<T extends Prisma.StoryDeleteArgs>(
+    args: Prisma.SelectSubset<T, Prisma.StoryDeleteArgs>,
+  ): Promise<Prisma.StoryGetPayload<T>>;
+
+  countStoriesRaw(where: Prisma.StoryWhereInput): Promise<number>;
+
+  findManyKidsRaw<T extends Prisma.KidFindManyArgs>(
+    args: Prisma.SelectSubset<T, Prisma.KidFindManyArgs>,
+  ): Promise<Prisma.KidGetPayload<T>[]>;
+
+  findUniqueKidRaw<T extends Prisma.KidFindUniqueArgs>(
+    args: Prisma.SelectSubset<T, Prisma.KidFindUniqueArgs>,
+  ): Promise<Prisma.KidGetPayload<T> | null>;
+
+  findUniqueUserRaw<T extends Prisma.UserFindUniqueArgs>(
+    args: Prisma.SelectSubset<T, Prisma.UserFindUniqueArgs>,
+  ): Promise<Prisma.UserGetPayload<T> | null>;
+
+  findManySeasonsRaw<T extends Prisma.SeasonFindManyArgs>(
+    args: Prisma.SelectSubset<T, Prisma.SeasonFindManyArgs>,
+  ): Promise<Prisma.SeasonGetPayload<T>[]>;
+
+  findManyThemesRaw<T extends Prisma.ThemeFindManyArgs>(
+    args: Prisma.SelectSubset<T, Prisma.ThemeFindManyArgs>,
+  ): Promise<Prisma.ThemeGetPayload<T>[]>;
+
+  findManyCategoriesRaw<T extends Prisma.CategoryFindManyArgs>(
+    args: Prisma.SelectSubset<T, Prisma.CategoryFindManyArgs>,
+  ): Promise<Prisma.CategoryGetPayload<T>[]>;
+
+  findManyUserStoryProgressRaw<T extends Prisma.UserStoryProgressFindManyArgs>(
+    args: Prisma.SelectSubset<T, Prisma.UserStoryProgressFindManyArgs>,
+  ): Promise<Prisma.UserStoryProgressGetPayload<T>[]>;
+
+  findManyDailyChallengeAssignmentsRaw<
+    T extends Prisma.DailyChallengeAssignmentFindManyArgs,
+  >(
+    args: Prisma.SelectSubset<T, Prisma.DailyChallengeAssignmentFindManyArgs>,
+  ): Promise<Prisma.DailyChallengeAssignmentGetPayload<T>[]>;
+
+  findFirstDailyChallengeAssignmentRaw<
+    T extends Prisma.DailyChallengeAssignmentFindFirstArgs,
+  >(
+    args: Prisma.SelectSubset<T, Prisma.DailyChallengeAssignmentFindFirstArgs>,
+  ): Promise<Prisma.DailyChallengeAssignmentGetPayload<T> | null>;
+
+  createDailyChallengeAssignmentRaw<
+    T extends Prisma.DailyChallengeAssignmentCreateArgs,
+  >(
+    args: Prisma.SelectSubset<T, Prisma.DailyChallengeAssignmentCreateArgs>,
+  ): Promise<Prisma.DailyChallengeAssignmentGetPayload<T>>;
+
+  findFirstDailyChallengeRaw<T extends Prisma.DailyChallengeFindFirstArgs>(
+    args: Prisma.SelectSubset<T, Prisma.DailyChallengeFindFirstArgs>,
+  ): Promise<Prisma.DailyChallengeGetPayload<T> | null>;
+
+  createDailyChallengeRaw<T extends Prisma.DailyChallengeCreateArgs>(
+    args: Prisma.SelectSubset<T, Prisma.DailyChallengeCreateArgs>,
+  ): Promise<Prisma.DailyChallengeGetPayload<T>>;
+
+  removeFromLibraryTransaction(
+    kidId: string,
+    storyId: string,
+  ): Promise<Prisma.BatchPayload[]>;
+
+  getRandomStoryIdsFromStories(limit: number): Promise<string[]>;
+
+  getDeterministicStoryIdsFromStories(
+    limit: number,
+    offset?: number,
+  ): Promise<string[]>;
 }
 
 // Injection token

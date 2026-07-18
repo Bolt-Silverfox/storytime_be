@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { StoryService } from './story.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { STORY_REPOSITORY } from './repositories/story.repository.interface';
 import { GeminiService } from './gemini.service';
 import { ElevenLabsService } from './elevenlabs.service';
 import { UploadService } from '../upload/upload.service';
@@ -15,30 +15,32 @@ import { StoryProgressService } from './story-progress.service';
 import { StoryRecommendationService } from './story-recommendation.service';
 import { DailyChallengeService } from './daily-challenge.service';
 
-// Mock dependencies
-const mockPrismaService = {
-  kid: { findUnique: jest.fn() },
-  user: { findUnique: jest.fn() },
-  story: {
-    create: jest.fn(),
-    findMany: jest.fn(),
-    findUnique: jest.fn(),
-    count: jest.fn(),
-  },
-  theme: { findMany: jest.fn() },
-  category: { findMany: jest.fn() },
-  season: { findMany: jest.fn() },
-  downloadedStory: {
-    findMany: jest.fn(),
-    upsert: jest.fn(),
-    delete: jest.fn(),
-    deleteMany: jest.fn(),
-  },
-  favorite: { deleteMany: jest.fn() },
-  storyProgress: { deleteMany: jest.fn() },
-  userStoryProgress: { findMany: jest.fn() },
-  parentRecommendation: { groupBy: jest.fn() },
-  $transaction: jest.fn((args) => args), // Pass through transaction
+// Mock dependencies — StoryService now routes all DB access through
+// STORY_REPOSITORY, so we mock the repository methods it calls.
+const mockStoryRepository = {
+  findUniqueKidRaw: jest.fn(),
+  findManyKidsRaw: jest.fn(),
+  findUniqueUserRaw: jest.fn(),
+  createStoryRaw: jest.fn(),
+  updateStoryRaw: jest.fn(),
+  deleteStoryRaw: jest.fn(),
+  findManyStoriesRaw: jest.fn(),
+  findUniqueStoryRaw: jest.fn(),
+  countStoriesRaw: jest.fn(),
+  findManyThemesRaw: jest.fn(),
+  findManyCategoriesRaw: jest.fn(),
+  findManySeasonsRaw: jest.fn(),
+  findManyUserStoryProgressRaw: jest.fn(),
+  findManyDailyChallengeAssignmentsRaw: jest.fn(),
+  findFirstDailyChallengeAssignmentRaw: jest.fn(),
+  createDailyChallengeAssignmentRaw: jest.fn(),
+  findFirstDailyChallengeRaw: jest.fn(),
+  createDailyChallengeRaw: jest.fn(),
+  upsertDownload: jest.fn(),
+  removeFromLibraryTransaction: jest.fn(),
+  groupParentRecommendationsByStory: jest.fn(),
+  getRandomStoryIdsFromStories: jest.fn(),
+  getDeterministicStoryIdsFromStories: jest.fn(),
 };
 
 const mockGeminiService = {
@@ -48,14 +50,14 @@ const mockGeminiService = {
 
 describe('StoryService - Library & Generation', () => {
   let service: StoryService;
-  let prisma: typeof mockPrismaService;
+  let prisma: typeof mockStoryRepository;
   let gemini: typeof mockGeminiService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StoryService,
-        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: STORY_REPOSITORY, useValue: mockStoryRepository },
         { provide: GeminiService, useValue: mockGeminiService },
         {
           provide: ElevenLabsService,
@@ -88,7 +90,7 @@ describe('StoryService - Library & Generation', () => {
     }).compile();
 
     service = module.get<StoryService>(StoryService);
-    prisma = module.get(PrismaService);
+    prisma = module.get(STORY_REPOSITORY);
     gemini = module.get(GeminiService);
     jest.clearAllMocks();
   });
@@ -99,14 +101,14 @@ describe('StoryService - Library & Generation', () => {
       const kidId = 'kid-123';
 
       // Mock Data
-      prisma.kid.findUnique.mockResolvedValue({
+      prisma.findUniqueKidRaw.mockResolvedValue({
         id: kidId,
         name: 'Tise',
         preferredCategories: [],
         excludedTags: [],
       });
-      prisma.theme.findMany.mockResolvedValue([{ id: 'theme-1' }]);
-      prisma.category.findMany.mockResolvedValue([{ id: 'cat-1' }]);
+      prisma.findManyThemesRaw.mockResolvedValue([{ id: 'theme-1' }]);
+      prisma.findManyCategoriesRaw.mockResolvedValue([{ id: 'cat-1' }]);
 
       gemini.generateStory.mockResolvedValue({
         title: 'AI Story',
@@ -119,7 +121,7 @@ describe('StoryService - Library & Generation', () => {
         questions: [],
       });
       gemini.generateStoryImage.mockResolvedValue('image-url');
-      prisma.story.create.mockResolvedValue({
+      prisma.createStoryRaw.mockResolvedValue({
         id: 'story-123',
         textContent: 'Content',
         title: 'AI Story',
@@ -129,7 +131,7 @@ describe('StoryService - Library & Generation', () => {
       await service.generateStoryForKid(kidId, ['Theme'], ['Cat']);
 
       // VERIFY: Did we save creatorKidId?
-      expect(prisma.story.create).toHaveBeenCalledWith(
+      expect(prisma.createStoryRaw).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             creatorKidId: kidId, // <--- THIS IS THE CRITICAL CHECK
@@ -144,13 +146,13 @@ describe('StoryService - Library & Generation', () => {
   describe('Library Methods', () => {
     describe('getStories', () => {
       it('should filter by minAge and maxAge', async () => {
-        prisma.story.count.mockResolvedValue(1);
-        prisma.story.findMany.mockResolvedValue([]);
-        prisma.userStoryProgress.findMany.mockResolvedValue([]);
+        prisma.countStoriesRaw.mockResolvedValue(1);
+        prisma.findManyStoriesRaw.mockResolvedValue([]);
+        prisma.findManyUserStoryProgressRaw.mockResolvedValue([]);
 
         await service.getStories({ userId: 'user-1', minAge: 3, maxAge: 5 });
 
-        expect(prisma.story.findMany).toHaveBeenCalledWith(
+        expect(prisma.findManyStoriesRaw).toHaveBeenCalledWith(
           expect.objectContaining({
             where: expect.objectContaining({
               isDeleted: false,
@@ -163,13 +165,13 @@ describe('StoryService - Library & Generation', () => {
       });
 
       it('should filter by minAge only', async () => {
-        prisma.story.count.mockResolvedValue(1);
-        prisma.story.findMany.mockResolvedValue([]);
-        prisma.userStoryProgress.findMany.mockResolvedValue([]);
+        prisma.countStoriesRaw.mockResolvedValue(1);
+        prisma.findManyStoriesRaw.mockResolvedValue([]);
+        prisma.findManyUserStoryProgressRaw.mockResolvedValue([]);
 
         await service.getStories({ userId: 'user-1', minAge: 4 });
 
-        expect(prisma.story.findMany).toHaveBeenCalledWith(
+        expect(prisma.findManyStoriesRaw).toHaveBeenCalledWith(
           expect.objectContaining({
             where: expect.objectContaining({
               isDeleted: false,
@@ -180,13 +182,13 @@ describe('StoryService - Library & Generation', () => {
       });
 
       it('should filter by maxAge only', async () => {
-        prisma.story.count.mockResolvedValue(1);
-        prisma.story.findMany.mockResolvedValue([]);
-        prisma.userStoryProgress.findMany.mockResolvedValue([]);
+        prisma.countStoriesRaw.mockResolvedValue(1);
+        prisma.findManyStoriesRaw.mockResolvedValue([]);
+        prisma.findManyUserStoryProgressRaw.mockResolvedValue([]);
 
         await service.getStories({ userId: 'user-1', maxAge: 8 });
 
-        expect(prisma.story.findMany).toHaveBeenCalledWith(
+        expect(prisma.findManyStoriesRaw).toHaveBeenCalledWith(
           expect.objectContaining({
             where: expect.objectContaining({
               isDeleted: false,
@@ -202,9 +204,9 @@ describe('StoryService - Library & Generation', () => {
           { id: 'story-2', title: 'In Progress Story' },
           { id: 'story-3', title: 'Unread Story' },
         ];
-        prisma.story.count.mockResolvedValue(3);
-        prisma.story.findMany.mockResolvedValue(stories);
-        prisma.userStoryProgress.findMany.mockResolvedValue([
+        prisma.countStoriesRaw.mockResolvedValue(3);
+        prisma.findManyStoriesRaw.mockResolvedValue(stories);
+        prisma.findManyUserStoryProgressRaw.mockResolvedValue([
           { storyId: 'story-1', completed: true },
           { storyId: 'story-2', completed: false },
         ]);
@@ -221,8 +223,8 @@ describe('StoryService - Library & Generation', () => {
         expect(result.data[2]).toEqual(
           expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
         );
-        expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
-        expect(prisma.userStoryProgress.findMany).toHaveBeenCalledWith({
+        expect(prisma.findManyUserStoryProgressRaw).toHaveBeenCalledTimes(1);
+        expect(prisma.findManyUserStoryProgressRaw).toHaveBeenCalledWith({
           where: {
             userId: 'user-1',
             storyId: { in: ['story-1', 'story-2', 'story-3'] },
@@ -238,7 +240,7 @@ describe('StoryService - Library & Generation', () => {
     it('getCreatedStories: should filter by creatorKidId', async () => {
       await service.getCreatedStories(kidId);
 
-      expect(prisma.story.findMany).toHaveBeenCalledWith(
+      expect(prisma.findManyStoriesRaw).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
             creatorKidId: kidId,
@@ -255,7 +257,7 @@ describe('StoryService - Library & Generation', () => {
         { id: 'story-2', title: 'Story 2' },
         { id: 'story-3', title: 'Story 3' },
       ];
-      prisma.story.findMany.mockResolvedValue(stories);
+      prisma.findManyStoriesRaw.mockResolvedValue(stories);
 
       const result = await service.getCreatedStories(kidId, undefined, 2);
 
@@ -273,16 +275,13 @@ describe('StoryService - Library & Generation', () => {
 
     it('addDownload: should use upsert to prevent duplicates', async () => {
       const storyId = 'story-456';
-      prisma.story.findUnique.mockResolvedValue({ id: storyId }); // Story exists
+      prisma.findUniqueStoryRaw.mockResolvedValue({ id: storyId }); // Story exists
 
       await service.addDownload(kidId, storyId);
 
-      expect(prisma.downloadedStory.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { kidId_storyId: { kidId, storyId } },
-          create: { kidId, storyId },
-        }),
-      );
+      // Repository encapsulates the upsert (where/create/update) — verify it is
+      // invoked with the correct kid/story to prevent duplicate downloads.
+      expect(prisma.upsertDownload).toHaveBeenCalledWith(kidId, storyId);
     });
 
     it('removeFromLibrary: should delete from Favorites, Downloads, and Progress', async () => {
@@ -290,17 +289,12 @@ describe('StoryService - Library & Generation', () => {
 
       await service.removeFromLibrary(kidId, storyId);
 
-      // Verify transaction contents
-      expect(prisma.$transaction).toHaveBeenCalled();
-      expect(prisma.favorite.deleteMany).toHaveBeenCalledWith({
-        where: { kidId, storyId },
-      });
-      expect(prisma.downloadedStory.deleteMany).toHaveBeenCalledWith({
-        where: { kidId, storyId },
-      });
-      expect(prisma.storyProgress.deleteMany).toHaveBeenCalledWith({
-        where: { kidId, storyId },
-      });
+      // Repository runs the favorite/download/progress deletes in one
+      // transaction — verify it is invoked for the correct kid/story.
+      expect(prisma.removeFromLibraryTransaction).toHaveBeenCalledWith(
+        kidId,
+        storyId,
+      );
     });
   });
 
@@ -308,7 +302,7 @@ describe('StoryService - Library & Generation', () => {
   describe('getHomePageStories', () => {
     it('should enrich recommended, seasonal, and topLiked with readStatus', async () => {
       const userId = 'user-1';
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.findUniqueUserRaw.mockResolvedValue({
         id: userId,
         isDeleted: false,
         preferredCategories: [{ id: 'cat-1' }],
@@ -322,13 +316,13 @@ describe('StoryService - Library & Generation', () => {
 
       // story.findMany: 1st call = recommended, 2nd call = topLiked
       // (no seasonal call since season.findMany returns [])
-      prisma.story.findMany
+      prisma.findManyStoriesRaw
         .mockResolvedValueOnce(recommended)
         .mockResolvedValueOnce(topLiked);
 
-      prisma.season.findMany.mockResolvedValue([]);
+      prisma.findManySeasonsRaw.mockResolvedValue([]);
 
-      prisma.userStoryProgress.findMany.mockResolvedValue([
+      prisma.findManyUserStoryProgressRaw.mockResolvedValue([
         { storyId: 'story-1', completed: true },
         { storyId: 'story-2', completed: false },
         // story-3 has no progress (unread)
@@ -349,7 +343,7 @@ describe('StoryService - Library & Generation', () => {
       );
 
       // Verify only 1 DB call for progress (not 1 per section)
-      expect(prisma.userStoryProgress.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.findManyUserStoryProgressRaw).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -377,8 +371,10 @@ describe('StoryService - Library & Generation', () => {
         },
       ];
 
-      prisma.parentRecommendation.groupBy.mockResolvedValue(mockGroupByResult);
-      prisma.story.findMany.mockResolvedValue(mockStories);
+      prisma.groupParentRecommendationsByStory.mockResolvedValue(
+        mockGroupByResult,
+      );
+      prisma.findManyStoriesRaw.mockResolvedValue(mockStories);
 
       const result = await service.getTopPicksFromParents(10);
 
@@ -390,22 +386,20 @@ describe('StoryService - Library & Generation', () => {
     });
 
     it('should respect the limit parameter', async () => {
-      prisma.parentRecommendation.groupBy.mockResolvedValue([]);
+      prisma.groupParentRecommendationsByStory.mockResolvedValue([]);
 
       await service.getTopPicksFromParents(5);
 
-      expect(prisma.parentRecommendation.groupBy).toHaveBeenCalledWith(
-        expect.objectContaining({ take: 5 }),
-      );
+      expect(prisma.groupParentRecommendationsByStory).toHaveBeenCalledWith(5);
     });
 
     it('should return empty array when no recommendations exist', async () => {
-      prisma.parentRecommendation.groupBy.mockResolvedValue([]);
+      prisma.groupParentRecommendationsByStory.mockResolvedValue([]);
 
       const result = await service.getTopPicksFromParents(10);
 
       expect(result).toEqual([]);
-      expect(prisma.story.findMany).not.toHaveBeenCalled();
+      expect(prisma.findManyStoriesRaw).not.toHaveBeenCalled();
     });
 
     it('should include themes, categories, and images in the result', async () => {
@@ -420,8 +414,10 @@ describe('StoryService - Library & Generation', () => {
         images: [{ url: 'http://example.com/img.png' }],
       };
 
-      prisma.parentRecommendation.groupBy.mockResolvedValue(mockGroupByResult);
-      prisma.story.findMany.mockResolvedValue([mockStory]);
+      prisma.groupParentRecommendationsByStory.mockResolvedValue(
+        mockGroupByResult,
+      );
+      prisma.findManyStoriesRaw.mockResolvedValue([mockStory]);
 
       const result = await service.getTopPicksFromParents(10);
 
@@ -435,7 +431,7 @@ describe('StoryService - Library & Generation', () => {
   // --- 5. CURSOR ERROR HANDLING ---
   describe('withCursorErrorHandling (via getCreatedStories)', () => {
     it('should throw BadRequestException for invalid cursor (P2025)', async () => {
-      prisma.story.findMany.mockRejectedValue(
+      prisma.findManyStoriesRaw.mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('Record not found', {
           code: 'P2025',
           clientVersion: '5.0.0',
@@ -448,7 +444,7 @@ describe('StoryService - Library & Generation', () => {
     });
 
     it('should re-throw non-P2025 Prisma errors', async () => {
-      prisma.story.findMany.mockRejectedValue(
+      prisma.findManyStoriesRaw.mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('Unique constraint', {
           code: 'P2002',
           clientVersion: '5.0.0',
@@ -461,7 +457,7 @@ describe('StoryService - Library & Generation', () => {
     });
 
     it('should re-throw non-Prisma errors', async () => {
-      prisma.story.findMany.mockRejectedValue(new Error('Network error'));
+      prisma.findManyStoriesRaw.mockRejectedValue(new Error('Network error'));
 
       await expect(
         service.getCreatedStories('kid-1', 'some-cursor', 10),
