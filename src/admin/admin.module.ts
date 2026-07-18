@@ -1,5 +1,10 @@
 import { Module } from '@nestjs/common';
-import { AdminController } from './admin.controller';
+import { AdminDashboardController } from './admin-dashboard.controller';
+import { AdminUserAdminController } from './admin-user-admin.controller';
+import { AdminStoryAdminController } from './admin-story-admin.controller';
+import { AdminSupportController } from './admin-support.controller';
+import { AdminCouponController } from './admin-coupon.controller';
+import { AdminSystemController } from './admin-system.controller';
 import { AdminService } from './admin.service';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminUserService } from './admin-user.service';
@@ -41,7 +46,15 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
 
 @Module({
   imports: [PrismaModule, AuthModule, VoiceModule, CouponModule, PaymentModule],
-  controllers: [AdminController, AdminSseController],
+  controllers: [
+    AdminDashboardController,
+    AdminUserAdminController,
+    AdminStoryAdminController,
+    AdminSupportController,
+    AdminCouponController,
+    AdminSystemController,
+    AdminSseController,
+  ],
   providers: [
     AdminService,
     AdminAnalyticsService,
