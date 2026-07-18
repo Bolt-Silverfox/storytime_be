@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
-import { StoryBuddyController } from './story-buddy.controller';
+import { StoryBuddyPublicController } from './story-buddy-public.controller';
+import { StoryBuddyKidController } from './story-buddy-kid.controller';
+import { StoryBuddyAdminController } from './story-buddy-admin.controller';
 import { StoryBuddyService } from './story-buddy.service';
 import { BuddySelectionService } from './buddy-selection.service';
 import { BuddyMessagingService } from './buddy-messaging.service';
@@ -22,7 +24,11 @@ import { AuthModule } from '../auth/auth.module';
     UploadModule, // Make sure this is properly imported
     AuthModule,
   ],
-  controllers: [StoryBuddyController],
+  controllers: [
+    StoryBuddyPublicController,
+    StoryBuddyKidController,
+    StoryBuddyAdminController,
+  ],
   providers: [
     StoryBuddyService,
     BuddySelectionService,
