@@ -8,6 +8,7 @@ import { PrismaModule } from '@/prisma/prisma.module';
 import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
 import { SubscriptionWebhookService } from './subscription-webhook.service';
+import { GooglePubSubVerifierService } from './google-pubsub-verifier.service';
 
 @Module({
   imports: [PrismaModule, ConfigModule, forwardRef(() => AuthModule)],
@@ -16,6 +17,7 @@ import { SubscriptionWebhookService } from './subscription-webhook.service';
     GoogleVerificationService,
     AppleVerificationService,
     SubscriptionWebhookService,
+    GooglePubSubVerifierService,
   ],
   controllers: [PaymentController, WebhookController],
   exports: [
