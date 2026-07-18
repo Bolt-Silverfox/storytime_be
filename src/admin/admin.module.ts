@@ -1,12 +1,18 @@
 import { Module } from '@nestjs/common';
 import { AdminDashboardController } from './admin-dashboard.controller';
-import { AdminUserAdminController } from './admin-user-admin.controller';
+import { AdminUserQueryController } from './admin-user-query.controller';
+import { AdminUserModerationController } from './admin-user-moderation.controller';
+import { AdminUserBillingController } from './admin-user-billing.controller';
 import { AdminStoryAdminController } from './admin-story-admin.controller';
 import { AdminSupportController } from './admin-support.controller';
 import { AdminCouponController } from './admin-coupon.controller';
 import { AdminSystemController } from './admin-system.controller';
 import { AdminService } from './admin.service';
 import { AdminAnalyticsService } from './admin-analytics.service';
+import { AdminDashboardMetricsService } from './admin-dashboard-metrics.service';
+import { AdminRevenueAnalyticsService } from './admin-revenue-analytics.service';
+import { AdminSystemMetricsService } from './admin-system-metrics.service';
+import { AdminGuestAnalyticsService } from './admin-guest-analytics.service';
 import { AdminUserService } from './admin-user.service';
 import { AdminCouponService } from './admin-coupon.service';
 import { AdminExportService } from './admin-export.service';
@@ -48,7 +54,9 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
   imports: [PrismaModule, AuthModule, VoiceModule, CouponModule, PaymentModule],
   controllers: [
     AdminDashboardController,
-    AdminUserAdminController,
+    AdminUserQueryController,
+    AdminUserModerationController,
+    AdminUserBillingController,
     AdminStoryAdminController,
     AdminSupportController,
     AdminCouponController,
@@ -58,6 +66,10 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
   providers: [
     AdminService,
     AdminAnalyticsService,
+    AdminDashboardMetricsService,
+    AdminRevenueAnalyticsService,
+    AdminSystemMetricsService,
+    AdminGuestAnalyticsService,
     AdminUserService,
     AdminCouponService,
     AdminExportService,
