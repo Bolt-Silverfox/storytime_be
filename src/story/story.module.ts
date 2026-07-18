@@ -20,6 +20,7 @@ import { StoryLibraryController } from './story-library.controller';
 import { StoryRecommendationController } from './story-recommendation.controller';
 import { StoryAsyncController } from './story-async.controller';
 import { StoryService } from './story.service';
+import { StoryFeedService } from './story-feed.service';
 import { StoryProgressService } from './story-progress.service';
 import { StoryRecommendationService } from './story-recommendation.service';
 import { DailyChallengeService } from './daily-challenge.service';
@@ -89,6 +90,7 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
   ],
   providers: [
     StoryService,
+    StoryFeedService,
     StoryProgressService,
     StoryRecommendationService,
     DailyChallengeService,
