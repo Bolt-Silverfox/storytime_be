@@ -348,6 +348,7 @@ export class PaymentService {
       'PaymentSuccess',
       {
         amount: transaction.amount,
+        currency: transaction.currency ?? 'USD',
         plan: PLANS[plan]?.display ?? plan,
       },
       userId,
