@@ -3,7 +3,17 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import request from 'supertest';
 import { Server } from 'http';
-import { StoryController } from '../src/story/story.controller';
+import { StoryCoreController } from '../src/story/story-core.controller';
+import { StoryFavoriteController } from '../src/story/story-favorite.controller';
+import { StoryRestrictController } from '../src/story/story-restrict.controller';
+import { StoryProgressController } from '../src/story/story-progress.controller';
+import { StoryUserController } from '../src/story/story-user.controller';
+import { StoryDailyChallengeController } from '../src/story/story-daily-challenge.controller';
+import { StoryPathController } from '../src/story/story-path.controller';
+import { StoryGenerateController } from '../src/story/story-generate.controller';
+import { StoryReadController } from '../src/story/story-read.controller';
+import { StoryLibraryController } from '../src/story/story-library.controller';
+import { StoryRecommendationController } from '../src/story/story-recommendation.controller';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { StoryService } from '../src/story/story.service';
 import { StoryGenerationService } from '../src/story/story-generation.service';
@@ -258,7 +268,19 @@ describe('Story (e2e)', () => {
         ]),
         EventEmitterModule.forRoot(),
       ],
-      controllers: [StoryController],
+      controllers: [
+        StoryCoreController,
+        StoryFavoriteController,
+        StoryRestrictController,
+        StoryProgressController,
+        StoryUserController,
+        StoryDailyChallengeController,
+        StoryPathController,
+        StoryGenerateController,
+        StoryReadController,
+        StoryLibraryController,
+        StoryRecommendationController,
+      ],
       providers: [
         { provide: StoryService, useValue: mockStoryService },
         {

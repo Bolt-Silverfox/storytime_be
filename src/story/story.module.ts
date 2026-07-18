@@ -7,7 +7,17 @@ import { SubscriptionModule } from '../subscription/subscription.module';
 import { UploadModule } from '../upload/upload.module';
 import { NotificationModule } from '../notification/notification.module';
 import { GeminiService } from './gemini.service';
-import { StoryController } from './story.controller';
+import { StoryCoreController } from './story-core.controller';
+import { StoryFavoriteController } from './story-favorite.controller';
+import { StoryRestrictController } from './story-restrict.controller';
+import { StoryProgressController } from './story-progress.controller';
+import { StoryUserController } from './story-user.controller';
+import { StoryDailyChallengeController } from './story-daily-challenge.controller';
+import { StoryPathController } from './story-path.controller';
+import { StoryGenerateController } from './story-generate.controller';
+import { StoryReadController } from './story-read.controller';
+import { StoryLibraryController } from './story-library.controller';
+import { StoryRecommendationController } from './story-recommendation.controller';
 import { StoryAsyncController } from './story-async.controller';
 import { StoryService } from './story.service';
 import { StoryProgressService } from './story-progress.service';
@@ -62,7 +72,20 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
       name: STORY_QUEUE_NAME,
     }),
   ],
-  controllers: [StoryController, StoryAsyncController],
+  controllers: [
+    StoryCoreController,
+    StoryFavoriteController,
+    StoryRestrictController,
+    StoryProgressController,
+    StoryUserController,
+    StoryDailyChallengeController,
+    StoryPathController,
+    StoryGenerateController,
+    StoryReadController,
+    StoryLibraryController,
+    StoryRecommendationController,
+    StoryAsyncController,
+  ],
   providers: [
     StoryService,
     StoryProgressService,

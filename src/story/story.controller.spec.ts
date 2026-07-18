@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { StoryController } from './story.controller';
+import { StoryCoreController } from './story-core.controller';
+import { StoryGenerateController } from './story-generate.controller';
+import { StoryLibraryController } from './story-library.controller';
+import { StoryRecommendationController } from './story-recommendation.controller';
 import { StoryService } from './story.service';
 import { StoryQuotaService } from './story-quota.service';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
@@ -40,12 +43,20 @@ const mockReq = {
 } as unknown as AuthenticatedRequest;
 
 describe('StoryController', () => {
-  let controller: StoryController;
+  let coreController: StoryCoreController;
+  let generateController: StoryGenerateController;
+  let libraryController: StoryLibraryController;
+  let recommendationController: StoryRecommendationController;
   let service: typeof mockStoryService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [StoryController],
+      controllers: [
+        StoryCoreController,
+        StoryGenerateController,
+        StoryLibraryController,
+        StoryRecommendationController,
+      ],
       providers: [
         { provide: StoryService, useValue: mockStoryService },
         { provide: StoryQuotaService, useValue: mockStoryQuotaService },
@@ -63,7 +74,14 @@ describe('StoryController', () => {
       .useValue({ canActivate: () => true })
       .compile();
 
-    controller = module.get<StoryController>(StoryController);
+    coreController = module.get<StoryCoreController>(StoryCoreController);
+    generateController =
+      module.get<StoryGenerateController>(StoryGenerateController);
+    libraryController =
+      module.get<StoryLibraryController>(StoryLibraryController);
+    recommendationController = module.get<StoryRecommendationController>(
+      StoryRecommendationController,
+    );
     service = module.get(StoryService);
     jest.clearAllMocks();
     mockPrismaService.kid.findFirst.mockResolvedValue({
@@ -79,7 +97,7 @@ describe('StoryController', () => {
       const theme = 'Space';
       const category = 'Adventure';
 
-      await controller.generateStoryForKid(mockReq, kidId, theme, category);
+      await generateController.generateStoryForKid(mockReq, kidId, theme, category);
 
       // Verify the controller converts single strings to arrays for the service
       expect(service.generateStoryForKid).toHaveBeenCalledWith(
@@ -91,7 +109,7 @@ describe('StoryController', () => {
 
     it('should handle missing theme/category params', async () => {
       const kidId = 'kid-123';
-      await controller.generateStoryForKid(mockReq, kidId);
+      await generateController.generateStoryForKid(mockReq, kidId);
 
       expect(service.generateStoryForKid).toHaveBeenCalledWith(
         kidId,
@@ -107,7 +125,7 @@ describe('StoryController', () => {
     const storyId = 'story-456';
 
     it('getCreated: should call getCreatedStories service method', async () => {
-      await controller.getCreated(mockReq, kidId);
+      await libraryController.getCreated(mockReq, kidId);
       expect(service.getCreatedStories).toHaveBeenCalledWith(
         kidId,
         undefined,
@@ -116,7 +134,7 @@ describe('StoryController', () => {
     });
 
     it('getDownloads: should call getDownloads service method', async () => {
-      await controller.getDownloads(mockReq, kidId);
+      await libraryController.getDownloads(mockReq, kidId);
       expect(service.getDownloads).toHaveBeenCalledWith(
         kidId,
         undefined,
@@ -125,32 +143,32 @@ describe('StoryController', () => {
     });
 
     it('getCreated: should pass sanitized cursor and limit to service', async () => {
-      await controller.getCreated(mockReq, kidId, 'abc', '10');
+      await libraryController.getCreated(mockReq, kidId, 'abc', '10');
       expect(service.getCreatedStories).toHaveBeenCalledWith(kidId, 'abc', 10);
     });
 
     it('getCreated: should default limit when not provided with cursor', async () => {
-      await controller.getCreated(mockReq, kidId, 'abc');
+      await libraryController.getCreated(mockReq, kidId, 'abc');
       expect(service.getCreatedStories).toHaveBeenCalledWith(kidId, 'abc', 20);
     });
 
     it('getDownloads: should pass sanitized cursor and limit to service', async () => {
-      await controller.getDownloads(mockReq, kidId, 'xyz', '5');
+      await libraryController.getDownloads(mockReq, kidId, 'xyz', '5');
       expect(service.getDownloads).toHaveBeenCalledWith(kidId, 'xyz', 5);
     });
 
     it('getDownloads: should default limit when not provided with cursor', async () => {
-      await controller.getDownloads(mockReq, kidId, 'xyz');
+      await libraryController.getDownloads(mockReq, kidId, 'xyz');
       expect(service.getDownloads).toHaveBeenCalledWith(kidId, 'xyz', 20);
     });
 
     it('addDownload: should call addDownload service method', async () => {
-      await controller.addDownload(mockReq, kidId, storyId);
+      await libraryController.addDownload(mockReq, kidId, storyId);
       expect(service.addDownload).toHaveBeenCalledWith(kidId, storyId);
     });
 
     it('removeFromLibrary: should call removeFromLibrary service method', async () => {
-      await controller.removeFromLibrary(mockReq, kidId, storyId);
+      await libraryController.removeFromLibrary(mockReq, kidId, storyId);
       expect(service.removeFromLibrary).toHaveBeenCalledWith(kidId, storyId);
     });
   });
@@ -158,17 +176,17 @@ describe('StoryController', () => {
   // --- 3. TOP PICKS ENDPOINT ---
   describe('getTopPicksFromParents', () => {
     it('should call service with capped limit of 50 when exceeding max', async () => {
-      await controller.getTopPicksFromParents(100);
+      await recommendationController.getTopPicksFromParents(100);
       expect(service.getTopPicksFromParents).toHaveBeenCalledWith(50);
     });
 
     it('should call service with provided limit when within bounds', async () => {
-      await controller.getTopPicksFromParents(25);
+      await recommendationController.getTopPicksFromParents(25);
       expect(service.getTopPicksFromParents).toHaveBeenCalledWith(25);
     });
 
     it('should use default limit of 10', async () => {
-      await controller.getTopPicksFromParents(10);
+      await recommendationController.getTopPicksFromParents(10);
       expect(service.getTopPicksFromParents).toHaveBeenCalledWith(10);
     });
 
@@ -178,7 +196,7 @@ describe('StoryController', () => {
       ];
       service.getTopPicksFromParents.mockResolvedValue(mockResult);
 
-      const result = await controller.getTopPicksFromParents(10);
+      const result = await recommendationController.getTopPicksFromParents(10);
 
       expect(result).toEqual(mockResult);
     });
@@ -188,7 +206,7 @@ describe('StoryController', () => {
   describe('IDOR protection', () => {
     it('should throw NotFoundException when kid does not belong to parent', async () => {
       mockPrismaService.kid.findFirst.mockResolvedValue(null);
-      await expect(controller.getCreated(mockReq, 'kid-999')).rejects.toThrow(
+      await expect(libraryController.getCreated(mockReq, 'kid-999')).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -196,7 +214,7 @@ describe('StoryController', () => {
     it('should throw NotFoundException when story does not exist', async () => {
       mockPrismaService.story.findFirst.mockResolvedValue(null);
       await expect(
-        controller.updateStory(
+        coreController.updateStory(
           mockReq,
           'non-existent-story',
           {} as UpdateStoryDto,
@@ -212,7 +230,7 @@ describe('StoryController', () => {
         creatorKid: { parentId: 'other-user' },
       });
       await expect(
-        controller.updateStory(mockReq, 'story-123', {} as UpdateStoryDto),
+        coreController.updateStory(mockReq, 'story-123', {} as UpdateStoryDto),
       ).rejects.toThrow(ForbiddenException);
       expect(mockStoryService.updateStory).not.toHaveBeenCalled();
     });
