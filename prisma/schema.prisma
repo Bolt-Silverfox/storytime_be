@@ -490,6 +490,12 @@ model Subscription {
   platform      String? // "google" or "apple"
   productId     String? // e.g. "com.storytime.monthly"
   purchaseToken String? // token from the platform
+  // Out-of-order delivery protection: the authoritative timestamp of the most
+  // recent store webhook applied to this row (Apple signedDate / Google
+  // eventTimeMillis). A later event whose timestamp is <= this is stale and is
+  // skipped so it cannot clobber newer state (e.g. a delayed EXPIRED after a
+  // DID_RENEW). Nullable so pre-existing rows and untimestamped events work.
+  lastEventAt   DateTime?
   // SOFT DELETE FIELDS
   isDeleted     Boolean   @default(false)
   deletedAt     DateTime?

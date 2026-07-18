@@ -30,6 +30,7 @@ const SUB = {
   platform: 'apple',
   productId: 'com.storytime.monthly',
   purchaseToken: 'orig-tx-123',
+  lastEventAt: null as Date | null,
   isDeleted: false,
   deletedAt: null,
 };
@@ -678,6 +679,162 @@ describe('SubscriptionWebhookService', () => {
         expect(google.verify).not.toHaveBeenCalled();
         expect(prisma.subscription.update).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  // --------------------------------------- out-of-order delivery watermark ----
+  describe('out-of-order delivery protection (event watermark)', () => {
+    const OLD = new Date('2026-05-01T00:00:00Z');
+    const NEW = new Date('2026-06-01T00:00:00Z');
+
+    // ------------------------------------------------------------- Apple ----
+    it('applies a newer Apple event and advances lastEventAt atomically', async () => {
+      prisma.subscription.findFirst.mockResolvedValue({
+        ...SUB,
+        lastEventAt: OLD,
+      });
+      apple.parseSignedNotification.mockReturnValue(
+        appleInfo({
+          notificationType: 'DID_RENEW',
+          notificationUUID: 'wm-a-new',
+          signedDate: NEW.getTime(),
+        }),
+      );
+
+      const res = await service.handleApple({ signedPayload: 'jws' });
+
+      expect(res.status).toBe('processed');
+      expect(prisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub-1' },
+        data: {
+          status: 'active',
+          endsAt: new Date('2026-03-01'),
+          lastEventAt: NEW,
+        },
+      });
+    });
+
+    it('skips a stale Apple event (older than lastEventAt) without regressing state', async () => {
+      // Already applied a DID_RENEW at NEW; a delayed EXPIRED at OLD arrives.
+      prisma.subscription.findFirst.mockResolvedValue({
+        ...SUB,
+        lastEventAt: NEW,
+      });
+      apple.parseSignedNotification.mockReturnValue(
+        appleInfo({
+          notificationType: 'EXPIRED',
+          notificationUUID: 'wm-a-stale',
+          signedDate: OLD.getTime(),
+        }),
+      );
+
+      const res = await service.handleApple({ signedPayload: 'jws' });
+
+      expect(res.status).toBe('skipped');
+      expect(res.action).toContain('stale/out-of-order');
+      expect(prisma.subscription.update).not.toHaveBeenCalled();
+    });
+
+    it('skips a duplicate Apple event arriving at the exact same timestamp', async () => {
+      prisma.subscription.findFirst.mockResolvedValue({
+        ...SUB,
+        lastEventAt: NEW,
+      });
+      apple.parseSignedNotification.mockReturnValue(
+        appleInfo({
+          notificationType: 'DID_RENEW',
+          notificationUUID: 'wm-a-dup',
+          signedDate: NEW.getTime(),
+        }),
+      );
+
+      const res = await service.handleApple({ signedPayload: 'jws' });
+
+      expect(res.status).toBe('skipped');
+      expect(prisma.subscription.update).not.toHaveBeenCalled();
+    });
+
+    it('applies an Apple event and sets lastEventAt when no prior watermark exists', async () => {
+      prisma.subscription.findFirst.mockResolvedValue({
+        ...SUB,
+        lastEventAt: null,
+      });
+      apple.parseSignedNotification.mockReturnValue(
+        appleInfo({
+          notificationType: 'DID_RENEW',
+          notificationUUID: 'wm-a-first',
+          signedDate: NEW.getTime(),
+        }),
+      );
+
+      const res = await service.handleApple({ signedPayload: 'jws' });
+
+      expect(res.status).toBe('processed');
+      const call = prisma.subscription.update.mock.calls[0][0];
+      expect(call.data.lastEventAt).toEqual(NEW);
+    });
+
+    // ------------------------------------------------------------ Google ----
+    it('applies a newer Google event and advances lastEventAt', async () => {
+      prisma.subscription.findFirst.mockResolvedValue({
+        ...SUB,
+        platform: 'google',
+        purchaseToken: 'g-token-1',
+        lastEventAt: OLD,
+      });
+      google.verify.mockResolvedValue({
+        success: true,
+        expirationTime: new Date('2026-07-01'),
+      });
+      const body = googleBody(
+        {
+          eventTimeMillis: String(NEW.getTime()),
+          subscriptionNotification: {
+            notificationType: 2,
+            purchaseToken: 'g-token-1',
+            subscriptionId: 'com.storytime.monthly',
+          },
+        },
+        'wm-g-new',
+      );
+
+      const res = await service.handleGoogle(body);
+
+      expect(res.status).toBe('processed');
+      expect(prisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub-1' },
+        data: {
+          status: 'active',
+          endsAt: new Date('2026-07-01'),
+          lastEventAt: NEW,
+        },
+      });
+    });
+
+    it('skips a stale Google EXPIRED that would clobber a newer RENEWED', async () => {
+      prisma.subscription.findFirst.mockResolvedValue({
+        ...SUB,
+        platform: 'google',
+        purchaseToken: 'g-token-1',
+        lastEventAt: NEW,
+      });
+      const body = googleBody(
+        {
+          eventTimeMillis: String(OLD.getTime()),
+          subscriptionNotification: {
+            notificationType: 13, // EXPIRED
+            purchaseToken: 'g-token-1',
+            subscriptionId: 'com.storytime.monthly',
+          },
+        },
+        'wm-g-stale',
+      );
+
+      const res = await service.handleGoogle(body);
+
+      expect(res.status).toBe('skipped');
+      expect(res.action).toContain('stale/out-of-order');
+      expect(prisma.subscription.update).not.toHaveBeenCalled();
     });
   });
 });

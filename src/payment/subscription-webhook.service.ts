@@ -158,11 +158,43 @@ export class SubscriptionWebhookService {
       };
     }
 
-    await this.applyAction(subscription, action, endsAt);
+    const eventAt = this.appleEventAt(info);
+    const applied = await this.applyAction(
+      subscription,
+      action,
+      endsAt,
+      eventAt,
+    );
+    if (!applied) {
+      return {
+        status: 'skipped',
+        action: `apple:${info.notificationType} stale/out-of-order (event <= lastEventAt)`,
+      };
+    }
     return {
       status: 'processed',
       action: `apple:${info.notificationType} -> ${action}`,
     };
+  }
+
+  /**
+   * Authoritative timestamp for an Apple notification, used as the out-of-order
+   * watermark. Prefers the outer notification `signedDate`, then the signed
+   * transaction/renewal `signedDate`. Returns `null` when none is present (then
+   * ordering cannot be established and the event is applied without gating).
+   */
+  private appleEventAt(info: AppleNotificationInfo): Date | null {
+    const candidates: unknown[] = [
+      info.signedDate,
+      info.transactionInfo?.signedDate,
+      info.renewalInfo?.signedDate,
+    ];
+    for (const ms of candidates) {
+      if (typeof ms === 'number' && Number.isFinite(ms) && ms > 0) {
+        return new Date(ms);
+      }
+    }
+    return null;
   }
 
   private mapAppleAction(info: AppleNotificationInfo): {
@@ -268,6 +300,8 @@ export class SubscriptionWebhookService {
   private async applyGoogleNotification(
     payload: GoogleRtdnPayload,
   ): Promise<{ status: 'processed' | 'skipped'; action: string }> {
+    const eventAt = this.googleEventAt(payload);
+
     // Voided purchase (refund/chargeback) -> revoke access.
     if (payload.voidedPurchaseNotification?.purchaseToken) {
       const sub = await this.findSubscription(
@@ -277,7 +311,13 @@ export class SubscriptionWebhookService {
       if (!sub) {
         return { status: 'skipped', action: 'google:voided no subscription' };
       }
-      await this.applyAction(sub, 'revoke');
+      const applied = await this.applyAction(sub, 'revoke', undefined, eventAt);
+      if (!applied) {
+        return {
+          status: 'skipped',
+          action: 'google:voided stale/out-of-order (event <= lastEventAt)',
+        };
+      }
       return { status: 'processed', action: 'google:voided -> revoke' };
     }
 
@@ -327,11 +367,35 @@ export class SubscriptionWebhookService {
       );
     }
 
-    await this.applyAction(subscription, action, endsAt);
+    const applied = await this.applyAction(
+      subscription,
+      action,
+      endsAt,
+      eventAt,
+    );
+    if (!applied) {
+      return {
+        status: 'skipped',
+        action: `google:SUBSCRIPTION_${sub.notificationType} stale/out-of-order (event <= lastEventAt)`,
+      };
+    }
     return {
       status: 'processed',
       action: `google:SUBSCRIPTION_${sub.notificationType} -> ${action}`,
     };
+  }
+
+  /**
+   * Authoritative timestamp for a Google RTDN, used as the out-of-order
+   * watermark. RTDN carries `eventTimeMillis` (epoch millis as a string).
+   * Returns `null` when absent/malformed (then the event is applied without
+   * ordering gating).
+   */
+  private googleEventAt(payload: GoogleRtdnPayload): Date | null {
+    const raw = payload.eventTimeMillis;
+    if (raw == null || raw === '') return null;
+    const ms = Number(raw);
+    return Number.isFinite(ms) && ms > 0 ? new Date(ms) : null;
   }
 
   private mapGoogleAction(type: number): SubscriptionAction {
@@ -657,12 +721,19 @@ export class SubscriptionWebhookService {
    * - will_not_renew: status cancelled, keep existing endsAt (access until expiry)
    * - deactivate:     status cancelled, endsAt = now (access ends immediately)
    * - revoke:         status cancelled, endsAt = now (refund/chargeback)
+   *
+   * Out-of-order protection: when `eventAt` is known and the subscription's
+   * stored `lastEventAt` is >= `eventAt`, the event is stale (a late/duplicate
+   * delivery) and the mutation is SKIPPED (returns `false`) so it cannot clobber
+   * newer state. Otherwise the state change AND the advanced `lastEventAt`
+   * watermark are written in a single update (atomic), and `true` is returned.
    */
   private async applyAction(
     subscription: Subscription,
     action: SubscriptionAction,
     endsAt?: Date | null,
-  ): Promise<void> {
+    eventAt?: Date | null,
+  ): Promise<boolean> {
     const now = new Date();
     let data: Prisma.SubscriptionUpdateInput;
 
@@ -682,7 +753,26 @@ export class SubscriptionWebhookService {
         break;
       case 'noop':
       default:
-        return;
+        return false;
+    }
+
+    // Skip stale / out-of-order deliveries. `>=` also drops a distinct event
+    // arriving at the exact same timestamp as the last applied one.
+    if (
+      eventAt &&
+      subscription.lastEventAt &&
+      subscription.lastEventAt.getTime() >= eventAt.getTime()
+    ) {
+      this.logger.log(
+        `Skipping stale/out-of-order ${action} for subscription ${subscription.id} ` +
+          `(event ${eventAt.toISOString()} <= lastEventAt ${subscription.lastEventAt.toISOString()})`,
+      );
+      return false;
+    }
+
+    // Advance the watermark atomically with the state change (same UPDATE).
+    if (eventAt) {
+      data.lastEventAt = eventAt;
     }
 
     await this.prisma.subscription.update({
@@ -698,6 +788,8 @@ export class SubscriptionWebhookService {
     this.eventEmitter.emit('admin.sse.stats', {
       trigger: `webhook_${action}`,
     });
+
+    return true;
   }
 
   private errorMessage(error: unknown): string {
