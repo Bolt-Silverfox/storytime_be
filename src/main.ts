@@ -11,6 +11,10 @@ import { requestLogger } from './shared/middleware/request-logger.middleware';
 
 async function bootstrap() {
   const logger = new Logger('Main');
+  // Declared before the error handlers + shutdown closure below (which reference
+  // it) so a failure during NestFactory.create is still caught and closed
+  // gracefully. This is a genuine read-before-assign, which prefer-const misflags.
+  // eslint-disable-next-line prefer-const
   let app: INestApplication | undefined;
   let shuttingDown = false;
 

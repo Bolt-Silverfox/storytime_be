@@ -15,6 +15,13 @@ export interface GoogleVerificationResult {
   purchaseTime?: Date | null;
   expirationTime?: Date | null;
   isSubscription?: boolean;
+  /**
+   * The purchase token of the prior subscription this purchase supersedes.
+   * Google Play issues a new token on upgrade/downgrade/re-subscribe and links
+   * it back to the previous token via this field. Used to migrate the stored
+   * Subscription.purchaseToken forward. `null`/`undefined` when there is no link.
+   */
+  linkedPurchaseToken?: string | null;
   raw?: unknown;
   metadata?: Record<string, unknown>;
 }
@@ -55,6 +62,7 @@ interface GoogleSubscriptionPurchase {
   acknowledgementState?: number;
   paymentState?: number;
   cancelReason?: number;
+  linkedPurchaseToken?: string | null;
 }
 
 /** Google one-time product purchase data */
@@ -72,6 +80,7 @@ interface GooglePythonSuccessResponse {
   success: true;
   isSubscription: boolean;
   data: GoogleSubscriptionPurchase | GoogleProductPurchase;
+  linkedPurchaseToken?: string | null;
 }
 
 interface GooglePythonErrorResponse {
@@ -194,6 +203,8 @@ export class GoogleVerificationService {
           purchaseTime: this.toDate(subData.startTimeMillis),
           expirationTime: this.toDate(subData.expiryTimeMillis),
           isSubscription: true,
+          linkedPurchaseToken:
+            result.linkedPurchaseToken ?? subData.linkedPurchaseToken ?? null,
           raw: data,
           metadata: {
             acknowledgementState: subData.acknowledgementState,
@@ -217,6 +228,7 @@ export class GoogleVerificationService {
           purchaseTime: this.toDate(productData.purchaseTimeMillis),
           expirationTime: null,
           isSubscription: false,
+          linkedPurchaseToken: null,
           raw: data,
           metadata: {
             consumptionState: productData.consumptionState,
