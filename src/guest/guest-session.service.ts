@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -77,48 +78,81 @@ export const GUEST_STORY_LIMIT = 3; // Guests can read 3 unique stories per sess
  * Uses Redis via Keyv for persistence, with in-memory fallback for local development.
  */
 @Injectable()
-export class GuestSessionService {
+export class GuestSessionService implements OnModuleInit {
   private readonly logger = new Logger(GuestSessionService.name);
   private keyv: Keyv;
+  private readonly redisUrl: string;
 
   constructor(
     private readonly configService: ConfigService,
     @Inject(GUEST_REPOSITORY)
     private readonly guestRepository: IGuestRepository,
   ) {
-    const redisUrl =
+    this.redisUrl =
       this.configService.get<string>('REDIS_URL') || 'redis://localhost:6379';
+    // Default to an in-memory store. onModuleInit upgrades to Redis only if a
+    // real set->get round-trips. We deliberately do NOT hot-swap the store on
+    // runtime 'error' events: the previous implementation replaced `this.keyv`
+    // with a *fresh empty* instance mid-request, so a value written by `set`
+    // was lost and the immediate read-back returned undefined (500).
+    this.keyv = this.createMemoryKeyv();
+  }
 
-    // Try to use Redis, fall back to in-memory if connection fails
+  /**
+   * Probe Redis once at startup. Use it for persistence only if a set->get
+   * round-trips; otherwise keep the in-memory store. This makes the store
+   * selection deterministic and race-free.
+   */
+  async onModuleInit(): Promise<void> {
+    let redisKeyv: Keyv | undefined;
     try {
-      this.keyv = new Keyv({
-        store: new KeyvRedis(redisUrl, { throwOnConnectError: true }),
+      redisKeyv = new Keyv({
+        store: new KeyvRedis(this.redisUrl, { throwOnConnectError: true }),
       });
-
-      this.keyv.on('error', (err) => {
+      // Keep an 'error' listener so redis client errors never become an
+      // unhandled 'error' event (which would crash the process).
+      redisKeyv.on('error', (err) => {
         this.logger.error(
-          `Redis connection error, falling back to in-memory store: ${err.message}`,
+          `Guest session Redis error: ${(err as Error)?.message ?? err}`,
         );
-        // Switch to in-memory fallback
-        this.keyv = new Keyv({
-          store: new CacheableMemory({
-            ttl: GUEST_SESSION_TTL_MS,
-            lruSize: 1000,
-          }),
-        });
-        // now using in-memory fallback
       });
 
-      this.logger.log('GuestSessionService using Redis for persistence');
-    } catch {
-      this.logger.warn('Failed to connect to Redis, using in-memory cache');
-      this.keyv = new Keyv({
-        store: new CacheableMemory({
-          ttl: GUEST_SESSION_TTL_MS,
-          lruSize: 1000,
-        }),
-      });
+      const probeKey = `${GUEST_SESSION_PREFIX}__healthcheck__`;
+      await redisKeyv.set(probeKey, '1', 10_000);
+      const ok = await redisKeyv.get<string>(probeKey);
+      if (ok === '1') {
+        await redisKeyv.delete(probeKey);
+        this.keyv = redisKeyv;
+        this.logger.log('GuestSessionService using Redis for persistence');
+        return;
+      }
+      this.logger.warn(
+        'Redis health-check did not round-trip; using in-memory store for guest sessions',
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Redis unavailable for guest sessions (${(err as Error)?.message}); using in-memory store`,
+      );
     }
+
+    // Redis unusable: drop the probe client so it stops retrying in the
+    // background, and keep the in-memory store created in the constructor.
+    if (redisKeyv) {
+      try {
+        await redisKeyv.disconnect();
+      } catch {
+        /* best-effort cleanup */
+      }
+    }
+  }
+
+  private createMemoryKeyv(): Keyv {
+    return new Keyv({
+      store: new CacheableMemory({
+        ttl: GUEST_SESSION_TTL_MS,
+        lruSize: 1000,
+      }),
+    });
   }
 
   /**
