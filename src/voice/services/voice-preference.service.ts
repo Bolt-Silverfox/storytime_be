@@ -1,10 +1,10 @@
 import {
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import type { Voice } from '@prisma/client';
-import { PrismaService } from '../../prisma/prisma.service';
 import {
   SetPreferredVoiceDto,
   VoiceResponseDto,
@@ -14,6 +14,12 @@ import {
 } from '../dto/voice.dto';
 import { VOICE_CONFIG } from '../voice.constants';
 import { VoiceResponseMapper } from './voice-response.mapper';
+import {
+  VOICE_REPOSITORY,
+  IVoiceRepository,
+  VOICE_USER_REPOSITORY,
+  IVoiceUserRepository,
+} from '../repositories';
 
 /**
  * Manages a parent's preferred (default) voice selection.
@@ -23,7 +29,10 @@ import { VoiceResponseMapper } from './voice-response.mapper';
 @Injectable()
 export class VoicePreferenceService {
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(VOICE_REPOSITORY)
+    private readonly voiceRepository: IVoiceRepository,
+    @Inject(VOICE_USER_REPOSITORY)
+    private readonly userRepository: IVoiceUserRepository,
     private readonly mapper: VoiceResponseMapper,
   ) {}
 
@@ -43,17 +52,11 @@ export class VoicePreferenceService {
 
     if (Object.values(VoiceType).includes(voiceTypeKey)) {
       const config = VOICE_CONFIG[voiceTypeKey];
-      voice = await this.prisma.voice.findFirst({
-        where: {
-          elevenLabsVoiceId: config.elevenLabsId,
-          userId: null,
-          isDeleted: false,
-        },
-      });
+      voice = await this.voiceRepository.findSystemVoiceByElevenLabsId(
+        config.elevenLabsId,
+      );
     } else {
-      voice = await this.prisma.voice.findFirst({
-        where: { id: dto.voiceId, isDeleted: false },
-      });
+      voice = await this.voiceRepository.findFirstByIdNotDeleted(dto.voiceId);
     }
 
     if (!voice) {
@@ -62,11 +65,10 @@ export class VoicePreferenceService {
       );
     }
 
-    const result = await this.prisma.user.update({
-      where: { id: userId },
-      data: { preferredVoiceId: voice.id },
-      include: { preferredVoice: true },
-    });
+    const result = await this.userRepository.updatePreferredVoiceWithInclude(
+      userId,
+      voice.id,
+    );
 
     if (!result.preferredVoice) {
       throw new InternalServerErrorException(
@@ -79,10 +81,7 @@ export class VoicePreferenceService {
 
   // --- Get the preferred voice for a user ---
   async getPreferredVoice(userId: string): Promise<VoiceResponseDto> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { preferredVoice: true },
-    });
+    const user = await this.userRepository.findByIdWithPreferredVoice(userId);
 
     if (!user || !user.preferredVoice) {
       return {

@@ -4,7 +4,16 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject } from '@nestjs/common';
 import { StreakService } from './streak.service';
 import { BadgeService } from './badge.service';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  KID_REPOSITORY,
+  IKidRepository,
+  STORY_PROGRESS_REPOSITORY,
+  IStoryProgressRepository,
+  DAILY_CHALLENGE_ASSIGNMENT_REPOSITORY,
+  IDailyChallengeAssignmentRepository,
+  SCREEN_TIME_SESSION_REPOSITORY,
+  IScreenTimeSessionRepository,
+} from './repositories';
 import { ProgressHomeResponseDto } from './dto/progress-response.dto';
 import { ProgressOverviewResponseDto } from './dto/progress-response.dto';
 import { ProgressStatsDto } from './dto/progress-response.dto';
@@ -21,7 +30,14 @@ export class ProgressService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private streakService: StreakService,
     private badgeService: BadgeService,
-    private prisma: PrismaService,
+    @Inject(KID_REPOSITORY)
+    private readonly kidRepository: IKidRepository,
+    @Inject(STORY_PROGRESS_REPOSITORY)
+    private readonly storyProgressRepository: IStoryProgressRepository,
+    @Inject(DAILY_CHALLENGE_ASSIGNMENT_REPOSITORY)
+    private readonly dailyChallengeAssignmentRepository: IDailyChallengeAssignmentRepository,
+    @Inject(SCREEN_TIME_SESSION_REPOSITORY)
+    private readonly screenTimeSessionRepository: IScreenTimeSessionRepository,
   ) {}
 
   // Get aggregated home screen data
@@ -98,42 +114,23 @@ export class ProgressService {
   private async getProgressStats(userId: string): Promise<ProgressStatsDto> {
     try {
       // Get user's kids
-      const kids = await this.prisma.kid.findMany({
-        where: { parentId: userId },
-        select: { id: true },
-      });
+      const kids = await this.kidRepository.findIdsByParent(userId);
 
       const kidIds = kids.map((k) => k.id);
 
       // Stories completed (from StoryProgress)
-      const storiesCompleted = await this.prisma.storyProgress.count({
-        where: {
-          kidId: { in: kidIds },
-          completed: true,
-          isDeleted: false,
-          story: { isDeleted: false },
-        },
-      });
+      const storiesCompleted =
+        await this.storyProgressRepository.countCompletedForKids(kidIds);
 
       // Challenges completed
       const challengesCompleted =
-        await this.prisma.dailyChallengeAssignment.count({
-          where: {
-            kidId: { in: kidIds },
-            completed: true,
-          },
-        });
+        await this.dailyChallengeAssignmentRepository.countCompletedForKids(
+          kidIds,
+        );
 
       // Total reading time from screen time sessions
-      const sessions = await this.prisma.screenTimeSession.aggregate({
-        where: {
-          kidId: { in: kidIds },
-          endTime: { not: null },
-        },
-        _sum: {
-          duration: true,
-        },
-      });
+      const sessions =
+        await this.screenTimeSessionRepository.sumDurationForKids(kidIds);
 
       const totalReadingTimeMins = Math.floor(
         (sessions._sum.duration || 0) / 60,

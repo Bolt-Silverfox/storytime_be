@@ -1,16 +1,24 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
-import { PrismaService } from '@/prisma/prisma.service';
 import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, SubscriptionCancelledEvent } from '@/shared/events';
 import { CACHE_KEYS } from '@/shared/constants/cache-keys.constants';
 import { CacheMetricsService } from '@/shared/services/cache-metrics.service';
+import {
+  SUBSCRIPTION_REPOSITORY,
+  ISubscriptionRepository,
+  PAYMENT_TRANSACTION_REPOSITORY,
+  IPaymentTransactionRepository,
+  USER_REPOSITORY,
+  IUserRepository,
+} from './repositories';
 
 // Re-export PLANS for backward compatibility
 export { PLANS } from './subscription.constants';
@@ -26,7 +34,12 @@ export class SubscriptionService {
   private readonly logger = new Logger(SubscriptionService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(SUBSCRIPTION_REPOSITORY)
+    private readonly subscriptionRepository: ISubscriptionRepository,
+    @Inject(PAYMENT_TRANSACTION_REPOSITORY)
+    private readonly paymentTransactionRepository: IPaymentTransactionRepository,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: IUserRepository,
     private readonly cacheMetrics: CacheMetricsService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -36,7 +49,7 @@ export class SubscriptionService {
   }
 
   async getSubscriptionForUser(userId: string) {
-    return this.prisma.subscription.findFirst({ where: { userId } });
+    return this.subscriptionRepository.findFirstByUser(userId);
   }
 
   /**
@@ -59,33 +72,38 @@ export class SubscriptionService {
     const now = new Date();
     const endsAt = new Date(now.getTime() + plan.days * 24 * 60 * 60 * 1000);
 
-    const subscription = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.subscription.findFirst({
-        where: { userId },
-      });
+    const subscription = await this.subscriptionRepository.executeTransaction(
+      async (tx) => {
+        const existing = await this.subscriptionRepository.findFirstByUser(
+          userId,
+          tx,
+        );
 
-      if (existing) {
-        return tx.subscription.update({
-          where: { id: existing.id },
-          data: {
+        if (existing) {
+          return this.subscriptionRepository.updateById(
+            existing.id,
+            {
+              plan: planKey,
+              status: SUBSCRIPTION_STATUS.ACTIVE,
+              startedAt: now,
+              endsAt,
+            },
+            tx,
+          );
+        }
+
+        return this.subscriptionRepository.create(
+          {
+            userId,
             plan: planKey,
             status: SUBSCRIPTION_STATUS.ACTIVE,
             startedAt: now,
             endsAt,
           },
-        });
-      }
-
-      return tx.subscription.create({
-        data: {
-          userId,
-          plan: planKey,
-          status: SUBSCRIPTION_STATUS.ACTIVE,
-          startedAt: now,
-          endsAt,
-        },
-      });
-    });
+          tx,
+        );
+      },
+    );
 
     // Invalidate cache after subscription change
     await this.invalidateCache(userId);
@@ -94,9 +112,7 @@ export class SubscriptionService {
   }
 
   async cancel(userId: string) {
-    const existing = await this.prisma.subscription.findFirst({
-      where: { userId },
-    });
+    const existing = await this.subscriptionRepository.findFirstByUser(userId);
     if (!existing) throw new NotFoundException('No active subscription');
 
     const now = new Date();
@@ -104,10 +120,10 @@ export class SubscriptionService {
     const endsAt =
       existing.endsAt && existing.endsAt > now ? existing.endsAt : now;
 
-    const cancelled = await this.prisma.subscription.update({
-      where: { id: existing.id },
-      data: { status: SUBSCRIPTION_STATUS.CANCELLED, endsAt },
-    });
+    const cancelled = await this.subscriptionRepository.updateById(
+      existing.id,
+      { status: SUBSCRIPTION_STATUS.CANCELLED, endsAt },
+    );
 
     // Emit subscription cancelled event
     const cancelledEvent: SubscriptionCancelledEvent = {
@@ -129,10 +145,7 @@ export class SubscriptionService {
   }
 
   async listHistory(userId: string) {
-    return this.prisma.paymentTransaction.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.paymentTransactionRepository.findManyByUser(userId);
   }
 
   /**
@@ -150,14 +163,8 @@ export class SubscriptionService {
         // Admins and coupon-granted access are premium regardless of an
         // active paid subscription — keep these checks alongside the
         // subscription lookup so caching doesn't drop the business rules.
-        const user = await this.prisma.user.findUnique({
-          where: { id: userId },
-          select: {
-            role: true,
-            premiumAccessUntil: true,
-            subscription: { select: { status: true, endsAt: true } },
-          },
-        });
+        const user =
+          await this.userRepository.findByIdWithSubscriptionStatus(userId);
         if (!user) return false;
         if (user.role === Role.admin) return true;
 

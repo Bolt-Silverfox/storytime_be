@@ -1,9 +1,45 @@
-import type { Kid, StoryBuddy, BuddyInteraction } from '@prisma/client';
+import type { Kid, StoryBuddy, BuddyInteraction, Prisma } from '@prisma/client';
 
 // ==================== Types ====================
 export interface KidWithBuddy extends Kid {
   storyBuddy: StoryBuddy | null;
 }
+
+// Kid with a summary of its selected buddy
+// (id/name/displayName/imageUrl/profileAvatarUrl/type)
+export type KidWithSelectedBuddy = Prisma.KidGetPayload<{
+  include: {
+    storyBuddy: {
+      select: {
+        id: true;
+        name: true;
+        displayName: true;
+        imageUrl: true;
+        profileAvatarUrl: true;
+        type: true;
+      };
+    };
+  };
+}>;
+
+// Kid with a detailed view of its selected buddy
+// (summary fields plus description/themeColor)
+export type KidWithBuddyDetails = Prisma.KidGetPayload<{
+  include: {
+    storyBuddy: {
+      select: {
+        id: true;
+        name: true;
+        displayName: true;
+        imageUrl: true;
+        profileAvatarUrl: true;
+        type: true;
+        description: true;
+        themeColor: true;
+      };
+    };
+  };
+}>;
 
 // ==================== Repository Interface ====================
 export interface IBuddySelectionRepository {
@@ -22,6 +58,24 @@ export interface IBuddySelectionRepository {
     buddyId: string,
     buddySelectedAt: Date,
   ): Promise<Kid>;
+
+  // Update kid's buddy assignment, returning the kid with a summary of the
+  // newly selected buddy (id/name/displayName/imageUrl/profileAvatarUrl/type)
+  updateKidBuddySelection(
+    kidId: string,
+    buddyId: string,
+    buddySelectedAt: Date,
+  ): Promise<KidWithSelectedBuddy>;
+
+  // Find kid with a summary of its selected buddy
+  findKidWithSelectedBuddy(
+    kidId: string,
+  ): Promise<KidWithSelectedBuddy | null>;
+
+  // Find kid with a detailed view of its selected buddy
+  findKidWithBuddyDetails(
+    kidId: string,
+  ): Promise<KidWithBuddyDetails | null>;
 
   // Create buddy interaction log
   createBuddyInteraction(

@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HelpSupportService } from './help-support.service';
-import { PrismaService } from '@/prisma/prisma.service';
+import {
+  SUPPORT_TICKET_REPOSITORY,
+  ISupportTicketRepository,
+} from './repositories';
 import { NotificationService } from '@/notification/notification.service';
 import { ConfigService } from '@nestjs/config';
 
@@ -8,18 +11,21 @@ describe('HelpSupportService', () => {
   let service: HelpSupportService;
 
   beforeEach(async () => {
+    const mockSupportTicketRepository: Record<
+      keyof ISupportTicketRepository,
+      jest.Mock
+    > = {
+      create: jest.fn(),
+      findManyByUser: jest.fn(),
+      findUniqueById: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         HelpSupportService,
         {
-          provide: PrismaService,
-          useValue: {
-            supportTicket: {
-              create: jest.fn(),
-              findMany: jest.fn(),
-              findUnique: jest.fn(),
-            },
-          },
+          provide: SUPPORT_TICKET_REPOSITORY,
+          useValue: mockSupportTicketRepository,
         },
         {
           provide: NotificationService,

@@ -1,29 +1,42 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadgeService } from './badge.service';
-import { PrismaService } from '../prisma/prisma.service';
 import { BadgeConstants } from './badge.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  BADGE_REPOSITORY,
+  IBadgeRepository,
+  USER_BADGE_REPOSITORY,
+  IUserBadgeRepository,
+  KID_REPOSITORY,
+  IKidRepository,
+} from './repositories';
 
 // ---------------------------------------------------------------------------
 // Mock factories
 // ---------------------------------------------------------------------------
 
-const mockPrismaService = {
-  badge: {
-    findMany: jest.fn(),
-    count: jest.fn(),
-    create: jest.fn(),
-  },
-  userBadge: {
-    findMany: jest.fn(),
-    findUnique: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-  },
-  kid: {
-    findMany: jest.fn(),
-  },
-  $transaction: jest.fn(),
+const mockBadgeRepository: Record<keyof IBadgeRepository, jest.Mock> = {
+  findAll: jest.fn(),
+  findManyByTitles: jest.fn(),
+  count: jest.fn(),
+  createBadgesInTransaction: jest.fn(),
+};
+
+const mockUserBadgeRepository: Record<keyof IUserBadgeRepository, jest.Mock> = {
+  createUserBadgesInTransaction: jest.fn(),
+  findPreviewBadges: jest.fn(),
+  findRemainingPreviewBadges: jest.fn(),
+  findFullBadgeList: jest.fn(),
+  findByCompositeKey: jest.fn(),
+  findByCompositeKeyForUpdate: jest.fn(),
+  updateById: jest.fn(),
+  // Execute the transaction callback immediately with a dummy tx client
+  executeTransaction: jest.fn((fn) => fn({})),
+};
+
+const mockKidRepository: Record<keyof IKidRepository, jest.Mock> = {
+  findIdsByParent: jest.fn(),
+  findParentIdById: jest.fn(),
 };
 
 const mockBadgeConstants = {
@@ -144,23 +157,31 @@ function makeUserBadge(overrides: Record<string, unknown> = {}) {
 
 describe('BadgeService', () => {
   let service: BadgeService;
-  let prisma: jest.Mocked<typeof mockPrismaService>;
+  let badgeRepository: jest.Mocked<typeof mockBadgeRepository>;
+  let userBadgeRepository: jest.Mocked<typeof mockUserBadgeRepository>;
+  let kidRepository: jest.Mocked<typeof mockKidRepository>;
   let eventEmitter: jest.Mocked<typeof mockEventEmitter>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BadgeService,
-        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: BADGE_REPOSITORY, useValue: mockBadgeRepository },
+        { provide: USER_BADGE_REPOSITORY, useValue: mockUserBadgeRepository },
+        { provide: KID_REPOSITORY, useValue: mockKidRepository },
         { provide: BadgeConstants, useValue: mockBadgeConstants },
         { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     }).compile();
 
     service = module.get<BadgeService>(BadgeService);
-    prisma = module.get(PrismaService);
+    badgeRepository = module.get(BADGE_REPOSITORY);
+    userBadgeRepository = module.get(USER_BADGE_REPOSITORY);
+    kidRepository = module.get(KID_REPOSITORY);
     eventEmitter = module.get(EventEmitter2);
     jest.clearAllMocks();
+    // Restore the passthrough transaction executor cleared above
+    userBadgeRepository.executeTransaction.mockImplementation((fn) => fn({}));
   });
 
   it('should be defined', () => {
@@ -175,13 +196,15 @@ describe('BadgeService', () => {
     const userId = 'user-1';
 
     it('should return early when no badges exist in catalog', async () => {
-      prisma.badge.findMany.mockResolvedValue([]);
+      badgeRepository.findAll.mockResolvedValue([]);
 
       await service.initializeUserBadges(userId);
 
-      expect(prisma.badge.findMany).toHaveBeenCalled();
-      expect(prisma.kid.findMany).not.toHaveBeenCalled();
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(badgeRepository.findAll).toHaveBeenCalled();
+      expect(kidRepository.findIdsByParent).not.toHaveBeenCalled();
+      expect(
+        userBadgeRepository.createUserBadgesInTransaction,
+      ).not.toHaveBeenCalled();
     });
 
     it('should create parent-level userBadge records when user has no kids', async () => {
@@ -189,36 +212,37 @@ describe('BadgeService', () => {
         makeBadge(),
         makeBadge({ id: 'badge-2', title: 'Story Explorer' }),
       ];
-      prisma.badge.findMany.mockResolvedValue(badges);
-      prisma.kid.findMany.mockResolvedValue([]);
-      prisma.userBadge.create.mockResolvedValue(makeUserBadge());
-      prisma.$transaction.mockResolvedValue([]);
+      badgeRepository.findAll.mockResolvedValue(badges);
+      kidRepository.findIdsByParent.mockResolvedValue([]);
+      userBadgeRepository.createUserBadgesInTransaction.mockResolvedValue([]);
 
       await service.initializeUserBadges(userId);
 
-      expect(prisma.kid.findMany).toHaveBeenCalledWith({
-        where: { parentId: userId },
-        select: { id: true },
-      });
+      expect(kidRepository.findIdsByParent).toHaveBeenCalledWith(userId);
       // 2 badges, 0 kids = 2 parent-level create operations
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-      const txOps = prisma.$transaction.mock.calls[0][0];
+      expect(
+        userBadgeRepository.createUserBadgesInTransaction,
+      ).toHaveBeenCalledTimes(1);
+      const txOps =
+        userBadgeRepository.createUserBadgesInTransaction.mock.calls[0][0];
       expect(txOps).toHaveLength(2);
     });
 
     it('should create parent-level + per-kid userBadge records', async () => {
       const badges = [makeBadge()];
       const kids = [{ id: 'kid-1' }, { id: 'kid-2' }];
-      prisma.badge.findMany.mockResolvedValue(badges);
-      prisma.kid.findMany.mockResolvedValue(kids);
-      prisma.userBadge.create.mockResolvedValue(makeUserBadge());
-      prisma.$transaction.mockResolvedValue([]);
+      badgeRepository.findAll.mockResolvedValue(badges);
+      kidRepository.findIdsByParent.mockResolvedValue(kids);
+      userBadgeRepository.createUserBadgesInTransaction.mockResolvedValue([]);
 
       await service.initializeUserBadges(userId);
 
       // 1 badge * (1 parent + 2 kids) = 3 create operations
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-      const txOps = prisma.$transaction.mock.calls[0][0];
+      expect(
+        userBadgeRepository.createUserBadgesInTransaction,
+      ).toHaveBeenCalledTimes(1);
+      const txOps =
+        userBadgeRepository.createUserBadgesInTransaction.mock.calls[0][0];
       expect(txOps).toHaveLength(3);
     });
 
@@ -228,15 +252,15 @@ describe('BadgeService', () => {
         makeBadge({ id: 'badge-2', title: 'Story Explorer' }),
       ];
       const kids = [{ id: 'kid-1' }, { id: 'kid-2' }, { id: 'kid-3' }];
-      prisma.badge.findMany.mockResolvedValue(badges);
-      prisma.kid.findMany.mockResolvedValue(kids);
-      prisma.userBadge.create.mockResolvedValue(makeUserBadge());
-      prisma.$transaction.mockResolvedValue([]);
+      badgeRepository.findAll.mockResolvedValue(badges);
+      kidRepository.findIdsByParent.mockResolvedValue(kids);
+      userBadgeRepository.createUserBadgesInTransaction.mockResolvedValue([]);
 
       await service.initializeUserBadges(userId);
 
       // 2 badges * (1 parent + 3 kids) = 8 create operations
-      const txOps = prisma.$transaction.mock.calls[0][0];
+      const txOps =
+        userBadgeRepository.createUserBadgesInTransaction.mock.calls[0][0];
       expect(txOps).toHaveLength(8);
     });
   });
@@ -264,7 +288,7 @@ describe('BadgeService', () => {
           badge: makeBadge({ id: 'badge-3', title: 'Story Master' }),
         }),
       ];
-      prisma.userBadge.findMany.mockResolvedValue(userBadges);
+      userBadgeRepository.findPreviewBadges.mockResolvedValue(userBadges);
 
       const result = await service.getBadgePreview(userId);
 
@@ -276,11 +300,9 @@ describe('BadgeService', () => {
         locked: false,
         count: 1,
       });
-      expect(prisma.userBadge.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { userId, kidId: null },
-          take: 3,
-        }),
+      expect(userBadgeRepository.findPreviewBadges).toHaveBeenCalledWith(
+        { userId, kidId: null },
+        3,
       );
     });
 
@@ -302,21 +324,26 @@ describe('BadgeService', () => {
           badge: makeBadge({ id: 'badge-3', title: 'Story Master' }),
         }),
       ];
-      prisma.userBadge.findMany
-        .mockResolvedValueOnce(firstBatch)
-        .mockResolvedValueOnce(remaining);
+      userBadgeRepository.findPreviewBadges.mockResolvedValue(firstBatch);
+      userBadgeRepository.findRemainingPreviewBadges.mockResolvedValue(
+        remaining,
+      );
 
       const result = await service.getBadgePreview(userId);
 
       expect(result).toHaveLength(3);
       // Second query should ask for 2 more (3 - 1)
-      expect(prisma.userBadge.findMany).toHaveBeenCalledTimes(2);
-      const secondCall = prisma.userBadge.findMany.mock.calls[1][0];
-      expect(secondCall.take).toBe(2);
+      expect(userBadgeRepository.findPreviewBadges).toHaveBeenCalledTimes(1);
+      expect(
+        userBadgeRepository.findRemainingPreviewBadges,
+      ).toHaveBeenCalledTimes(1);
+      const secondCallTake =
+        userBadgeRepository.findRemainingPreviewBadges.mock.calls[0][1];
+      expect(secondCallTake).toBe(2);
     });
 
     it('should pass kidId in where clause when provided', async () => {
-      prisma.userBadge.findMany.mockResolvedValue([
+      userBadgeRepository.findPreviewBadges.mockResolvedValue([
         makeUserBadge({ id: 'ub-1', kidId: 'kid-1' }),
         makeUserBadge({ id: 'ub-2', kidId: 'kid-1' }),
         makeUserBadge({ id: 'ub-3', kidId: 'kid-1' }),
@@ -324,15 +351,16 @@ describe('BadgeService', () => {
 
       await service.getBadgePreview(userId, 'kid-1');
 
-      expect(prisma.userBadge.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { userId, kidId: 'kid-1' },
-        }),
+      expect(userBadgeRepository.findPreviewBadges).toHaveBeenCalledWith(
+        { userId, kidId: 'kid-1' },
+        3,
       );
     });
 
     it('should return empty array on error', async () => {
-      prisma.userBadge.findMany.mockRejectedValue(new Error('DB failure'));
+      userBadgeRepository.findPreviewBadges.mockRejectedValue(
+        new Error('DB failure'),
+      );
 
       const result = await service.getBadgePreview(userId);
 
@@ -340,9 +368,8 @@ describe('BadgeService', () => {
     });
 
     it('should return empty array when no badges exist at all', async () => {
-      prisma.userBadge.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+      userBadgeRepository.findPreviewBadges.mockResolvedValue([]);
+      userBadgeRepository.findRemainingPreviewBadges.mockResolvedValue([]);
 
       const result = await service.getBadgePreview(userId);
 
@@ -379,7 +406,7 @@ describe('BadgeService', () => {
           }),
         }),
       ];
-      prisma.userBadge.findMany.mockResolvedValue(userBadges);
+      userBadgeRepository.findFullBadgeList.mockResolvedValue(userBadges);
 
       const result = await service.getFullBadgeList(userId);
 
@@ -398,31 +425,29 @@ describe('BadgeService', () => {
     });
 
     it('should set kidId to null when kidId is not provided', async () => {
-      prisma.userBadge.findMany.mockResolvedValue([]);
+      userBadgeRepository.findFullBadgeList.mockResolvedValue([]);
 
       await service.getFullBadgeList(userId);
 
-      expect(prisma.userBadge.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { userId, kidId: null },
-        }),
-      );
+      expect(userBadgeRepository.findFullBadgeList).toHaveBeenCalledWith({
+        userId,
+        kidId: null,
+      });
     });
 
     it('should use kidId when provided', async () => {
-      prisma.userBadge.findMany.mockResolvedValue([]);
+      userBadgeRepository.findFullBadgeList.mockResolvedValue([]);
 
       await service.getFullBadgeList(userId, 'kid-1');
 
-      expect(prisma.userBadge.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { userId, kidId: 'kid-1' },
-        }),
-      );
+      expect(userBadgeRepository.findFullBadgeList).toHaveBeenCalledWith({
+        userId,
+        kidId: 'kid-1',
+      });
     });
 
     it('should return empty badges array when user has no badges', async () => {
-      prisma.userBadge.findMany.mockResolvedValue([]);
+      userBadgeRepository.findFullBadgeList.mockResolvedValue([]);
 
       const result = await service.getFullBadgeList(userId);
 
@@ -440,44 +465,34 @@ describe('BadgeService', () => {
 
     it('should find a user badge by compound key without kidId', async () => {
       const expected = makeUserBadge();
-      prisma.userBadge.findUnique.mockResolvedValue(expected);
+      userBadgeRepository.findByCompositeKey.mockResolvedValue(expected);
 
       const result = await service.getUserBadge(userId, badgeId);
 
       expect(result).toEqual(expected);
-      expect(prisma.userBadge.findUnique).toHaveBeenCalledWith({
-        where: {
-          userId_kidId_badgeId: {
-            userId,
-            kidId: null,
-            badgeId,
-          },
-        },
-        include: { badge: true },
-      });
+      expect(userBadgeRepository.findByCompositeKey).toHaveBeenCalledWith(
+        userId,
+        null,
+        badgeId,
+      );
     });
 
     it('should find a user badge by compound key with kidId', async () => {
       const expected = makeUserBadge({ kidId: 'kid-1' });
-      prisma.userBadge.findUnique.mockResolvedValue(expected);
+      userBadgeRepository.findByCompositeKey.mockResolvedValue(expected);
 
       const result = await service.getUserBadge(userId, badgeId, 'kid-1');
 
       expect(result).toEqual(expected);
-      expect(prisma.userBadge.findUnique).toHaveBeenCalledWith({
-        where: {
-          userId_kidId_badgeId: {
-            userId,
-            kidId: 'kid-1',
-            badgeId,
-          },
-        },
-        include: { badge: true },
-      });
+      expect(userBadgeRepository.findByCompositeKey).toHaveBeenCalledWith(
+        userId,
+        'kid-1',
+        badgeId,
+      );
     });
 
     it('should return null when no matching user badge exists', async () => {
-      prisma.userBadge.findUnique.mockResolvedValue(null);
+      userBadgeRepository.findByCompositeKey.mockResolvedValue(null);
 
       const result = await service.getUserBadge(userId, 'nonexistent-badge');
 
@@ -495,8 +510,8 @@ describe('BadgeService', () => {
     it('should return early when no badge defs exist for the given type', async () => {
       await service.updateBadgeProgress(userId, 'nonexistent_type');
 
-      expect(prisma.badge.findMany).not.toHaveBeenCalled();
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(badgeRepository.findManyByTitles).not.toHaveBeenCalled();
+      expect(userBadgeRepository.executeTransaction).not.toHaveBeenCalled();
     });
 
     it('should increment badge count without unlocking when threshold not met', async () => {
@@ -507,26 +522,21 @@ describe('BadgeService', () => {
       });
       const userBadge = makeUserBadge({ count: 2, unlocked: false });
 
-      prisma.badge.findMany.mockResolvedValue([badge]);
-
-      // The interactive transaction receives a callback
-      prisma.$transaction.mockImplementation(
-        async (cb: (tx: unknown) => Promise<void>) => {
-          const tx = {
-            userBadge: {
-              findUnique: jest.fn().mockResolvedValue(userBadge),
-              update: jest.fn().mockResolvedValue({ ...userBadge, count: 3 }),
-            },
-          };
-          return cb(tx);
-        },
+      badgeRepository.findManyByTitles.mockResolvedValue([badge]);
+      userBadgeRepository.findByCompositeKeyForUpdate.mockResolvedValue(
+        userBadge,
       );
+      userBadgeRepository.updateById.mockResolvedValue({
+        ...userBadge,
+        count: 3,
+      });
 
       await service.updateBadgeProgress(userId, 'story_read', 1);
 
-      expect(prisma.badge.findMany).toHaveBeenCalledWith({
-        where: { title: { in: ['First Story', 'Story Explorer'] } },
-      });
+      expect(badgeRepository.findManyByTitles).toHaveBeenCalledWith([
+        'First Story',
+        'Story Explorer',
+      ]);
       // Should NOT emit badge.unlocked since threshold not met
       expect(eventEmitter.emit).not.toHaveBeenCalled();
     });
@@ -539,33 +549,25 @@ describe('BadgeService', () => {
       });
       const userBadge = makeUserBadge({ count: 0, unlocked: false });
 
-      prisma.badge.findMany.mockResolvedValue([badge]);
-
-      const txUpdateMock = jest
-        .fn()
-        .mockResolvedValue({ ...userBadge, count: 1, unlocked: true });
-
-      prisma.$transaction.mockImplementation(
-        async (cb: (tx: unknown) => Promise<void>) => {
-          const tx = {
-            userBadge: {
-              findUnique: jest.fn().mockResolvedValue(userBadge),
-              update: txUpdateMock,
-            },
-          };
-          return cb(tx);
-        },
+      badgeRepository.findManyByTitles.mockResolvedValue([badge]);
+      userBadgeRepository.findByCompositeKeyForUpdate.mockResolvedValue(
+        userBadge,
       );
+      userBadgeRepository.updateById.mockResolvedValue({
+        ...userBadge,
+        count: 1,
+        unlocked: true,
+      });
 
       await service.updateBadgeProgress(userId, 'story_read', 1);
 
-      expect(txUpdateMock).toHaveBeenCalledWith(
+      expect(userBadgeRepository.updateById).toHaveBeenCalledWith(
+        userBadge.id,
         expect.objectContaining({
-          data: expect.objectContaining({
-            count: 1,
-            unlocked: true,
-          }),
+          count: 1,
+          unlocked: true,
         }),
+        expect.anything(),
       );
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         'badge.unlocked',
@@ -585,25 +587,14 @@ describe('BadgeService', () => {
       });
       const userBadge = makeUserBadge({ count: 1, unlocked: true });
 
-      prisma.badge.findMany.mockResolvedValue([badge]);
-
-      const txUpdateMock = jest.fn();
-
-      prisma.$transaction.mockImplementation(
-        async (cb: (tx: unknown) => Promise<void>) => {
-          const tx = {
-            userBadge: {
-              findUnique: jest.fn().mockResolvedValue(userBadge),
-              update: txUpdateMock,
-            },
-          };
-          return cb(tx);
-        },
+      badgeRepository.findManyByTitles.mockResolvedValue([badge]);
+      userBadgeRepository.findByCompositeKeyForUpdate.mockResolvedValue(
+        userBadge,
       );
 
       await service.updateBadgeProgress(userId, 'story_read', 1);
 
-      expect(txUpdateMock).not.toHaveBeenCalled();
+      expect(userBadgeRepository.updateById).not.toHaveBeenCalled();
       expect(eventEmitter.emit).not.toHaveBeenCalled();
     });
 
@@ -614,25 +605,12 @@ describe('BadgeService', () => {
         requiredAmount: 1,
       });
 
-      prisma.badge.findMany.mockResolvedValue([badge]);
-
-      const txUpdateMock = jest.fn();
-
-      prisma.$transaction.mockImplementation(
-        async (cb: (tx: unknown) => Promise<void>) => {
-          const tx = {
-            userBadge: {
-              findUnique: jest.fn().mockResolvedValue(null),
-              update: txUpdateMock,
-            },
-          };
-          return cb(tx);
-        },
-      );
+      badgeRepository.findManyByTitles.mockResolvedValue([badge]);
+      userBadgeRepository.findByCompositeKeyForUpdate.mockResolvedValue(null);
 
       await service.updateBadgeProgress(userId, 'story_read', 1);
 
-      expect(txUpdateMock).not.toHaveBeenCalled();
+      expect(userBadgeRepository.updateById).not.toHaveBeenCalled();
     });
 
     it('should pass kidId into the composite key when provided', async () => {
@@ -647,21 +625,14 @@ describe('BadgeService', () => {
         kidId: 'kid-1',
       });
 
-      prisma.badge.findMany.mockResolvedValue([badge]);
-
-      const txFindUniqueMock = jest.fn().mockResolvedValue(userBadge);
-
-      prisma.$transaction.mockImplementation(
-        async (cb: (tx: unknown) => Promise<void>) => {
-          const tx = {
-            userBadge: {
-              findUnique: txFindUniqueMock,
-              update: jest.fn().mockResolvedValue({ ...userBadge, count: 1 }),
-            },
-          };
-          return cb(tx);
-        },
+      badgeRepository.findManyByTitles.mockResolvedValue([badge]);
+      userBadgeRepository.findByCompositeKeyForUpdate.mockResolvedValue(
+        userBadge,
       );
+      userBadgeRepository.updateById.mockResolvedValue({
+        ...userBadge,
+        count: 1,
+      });
 
       await service.updateBadgeProgress(
         userId,
@@ -671,16 +642,15 @@ describe('BadgeService', () => {
         'kid-1',
       );
 
-      expect(txFindUniqueMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            userId_kidId_badgeId: {
-              userId,
-              kidId: 'kid-1',
-              badgeId: badge.id,
-            },
-          },
-        }),
+      expect(
+        userBadgeRepository.findByCompositeKeyForUpdate,
+      ).toHaveBeenCalledWith(
+        {
+          userId,
+          kidId: 'kid-1',
+          badgeId: badge.id,
+        },
+        expect.anything(),
       );
     });
 
@@ -693,14 +663,14 @@ describe('BadgeService', () => {
         metadata: { eventType: 'quiz_answered', correctOnly: true },
       });
 
-      prisma.badge.findMany.mockResolvedValue([quizBadge]);
+      badgeRepository.findManyByTitles.mockResolvedValue([quizBadge]);
 
       await service.updateBadgeProgress(userId, 'quiz_answered', 1, {
         isCorrect: false,
       });
 
       // Transaction should not be called because the badge should be skipped
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(userBadgeRepository.executeTransaction).not.toHaveBeenCalled();
     });
 
     it('should process quiz badge when isCorrect is true', async () => {
@@ -713,29 +683,20 @@ describe('BadgeService', () => {
       });
       const userBadge = makeUserBadge({ badgeId: 'badge-quiz', count: 0 });
 
-      prisma.badge.findMany.mockResolvedValue([quizBadge]);
-
-      const txUpdateMock = jest
-        .fn()
-        .mockResolvedValue({ ...userBadge, count: 1 });
-
-      prisma.$transaction.mockImplementation(
-        async (cb: (tx: unknown) => Promise<void>) => {
-          const tx = {
-            userBadge: {
-              findUnique: jest.fn().mockResolvedValue(userBadge),
-              update: txUpdateMock,
-            },
-          };
-          return cb(tx);
-        },
+      badgeRepository.findManyByTitles.mockResolvedValue([quizBadge]);
+      userBadgeRepository.findByCompositeKeyForUpdate.mockResolvedValue(
+        userBadge,
       );
+      userBadgeRepository.updateById.mockResolvedValue({
+        ...userBadge,
+        count: 1,
+      });
 
       await service.updateBadgeProgress(userId, 'quiz_answered', 1, {
         isCorrect: true,
       });
 
-      expect(txUpdateMock).toHaveBeenCalled();
+      expect(userBadgeRepository.updateById).toHaveBeenCalled();
     });
 
     it('should use default increment of 1 when not specified', async () => {
@@ -746,32 +707,23 @@ describe('BadgeService', () => {
       });
       const userBadge = makeUserBadge({ count: 2, unlocked: false });
 
-      prisma.badge.findMany.mockResolvedValue([badge]);
-
-      const txUpdateMock = jest
-        .fn()
-        .mockResolvedValue({ ...userBadge, count: 3 });
-
-      prisma.$transaction.mockImplementation(
-        async (cb: (tx: unknown) => Promise<void>) => {
-          const tx = {
-            userBadge: {
-              findUnique: jest.fn().mockResolvedValue(userBadge),
-              update: txUpdateMock,
-            },
-          };
-          return cb(tx);
-        },
+      badgeRepository.findManyByTitles.mockResolvedValue([badge]);
+      userBadgeRepository.findByCompositeKeyForUpdate.mockResolvedValue(
+        userBadge,
       );
+      userBadgeRepository.updateById.mockResolvedValue({
+        ...userBadge,
+        count: 3,
+      });
 
       await service.updateBadgeProgress(userId, 'story_read');
 
-      expect(txUpdateMock).toHaveBeenCalledWith(
+      expect(userBadgeRepository.updateById).toHaveBeenCalledWith(
+        expect.anything(),
         expect.objectContaining({
-          data: expect.objectContaining({
-            count: 3, // 2 + 1 default increment
-          }),
+          count: 3, // 2 + 1 default increment
         }),
+        expect.anything(),
       );
     });
 
@@ -783,32 +735,23 @@ describe('BadgeService', () => {
       });
       const userBadge = makeUserBadge({ count: 3, unlocked: false });
 
-      prisma.badge.findMany.mockResolvedValue([badge]);
-
-      const txUpdateMock = jest
-        .fn()
-        .mockResolvedValue({ ...userBadge, count: 8 });
-
-      prisma.$transaction.mockImplementation(
-        async (cb: (tx: unknown) => Promise<void>) => {
-          const tx = {
-            userBadge: {
-              findUnique: jest.fn().mockResolvedValue(userBadge),
-              update: txUpdateMock,
-            },
-          };
-          return cb(tx);
-        },
+      badgeRepository.findManyByTitles.mockResolvedValue([badge]);
+      userBadgeRepository.findByCompositeKeyForUpdate.mockResolvedValue(
+        userBadge,
       );
+      userBadgeRepository.updateById.mockResolvedValue({
+        ...userBadge,
+        count: 8,
+      });
 
       await service.updateBadgeProgress(userId, 'story_read', 5);
 
-      expect(txUpdateMock).toHaveBeenCalledWith(
+      expect(userBadgeRepository.updateById).toHaveBeenCalledWith(
+        expect.anything(),
         expect.objectContaining({
-          data: expect.objectContaining({
-            count: 8, // 3 + 5
-          }),
+          count: 8, // 3 + 5
         }),
+        expect.anything(),
       );
     });
 
@@ -821,28 +764,19 @@ describe('BadgeService', () => {
       });
       const userBadge = makeUserBadge({ count: 0, unlocked: false });
 
-      prisma.badge.findMany.mockResolvedValue([badge]);
-
-      const txUpdateMock = jest
-        .fn()
-        .mockResolvedValue({ ...userBadge, count: 1 });
-
-      prisma.$transaction.mockImplementation(
-        async (cb: (tx: unknown) => Promise<void>) => {
-          const tx = {
-            userBadge: {
-              findUnique: jest.fn().mockResolvedValue(userBadge),
-              update: txUpdateMock,
-            },
-          };
-          return cb(tx);
-        },
+      badgeRepository.findManyByTitles.mockResolvedValue([badge]);
+      userBadgeRepository.findByCompositeKeyForUpdate.mockResolvedValue(
+        userBadge,
       );
+      userBadgeRepository.updateById.mockResolvedValue({
+        ...userBadge,
+        count: 1,
+      });
 
       await service.updateBadgeProgress(userId, 'story_read', 1);
 
       // Should still process the badge that was found
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(userBadgeRepository.executeTransaction).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -852,44 +786,47 @@ describe('BadgeService', () => {
 
   describe('seedBadges', () => {
     it('should skip seeding when badges already exist', async () => {
-      prisma.badge.count.mockResolvedValue(5);
+      badgeRepository.count.mockResolvedValue(5);
 
       await service.seedBadges();
 
-      expect(prisma.badge.count).toHaveBeenCalled();
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(badgeRepository.count).toHaveBeenCalled();
+      expect(badgeRepository.createBadgesInTransaction).not.toHaveBeenCalled();
     });
 
     it('should seed badges when none exist', async () => {
-      prisma.badge.count.mockResolvedValue(0);
-      prisma.badge.create.mockResolvedValue(makeBadge());
-      prisma.$transaction.mockResolvedValue([]);
+      badgeRepository.count.mockResolvedValue(0);
+      badgeRepository.createBadgesInTransaction.mockResolvedValue([]);
 
       await service.seedBadges();
 
-      expect(prisma.badge.count).toHaveBeenCalled();
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-      const txOps = prisma.$transaction.mock.calls[0][0];
-      expect(txOps).toHaveLength(mockBadgeConstants.CATALOG.length);
+      expect(badgeRepository.count).toHaveBeenCalled();
+      expect(badgeRepository.createBadgesInTransaction).toHaveBeenCalledTimes(
+        1,
+      );
+      const catalogArg =
+        badgeRepository.createBadgesInTransaction.mock.calls[0][0];
+      expect(catalogArg).toHaveLength(mockBadgeConstants.CATALOG.length);
     });
 
     it('should create badge records with correct data from CATALOG', async () => {
-      prisma.badge.count.mockResolvedValue(0);
-      prisma.badge.create.mockResolvedValue(makeBadge());
-      prisma.$transaction.mockResolvedValue([]);
+      badgeRepository.count.mockResolvedValue(0);
+      badgeRepository.createBadgesInTransaction.mockResolvedValue([]);
 
       await service.seedBadges();
 
-      // Verify prisma.badge.create was called via the transaction with catalog data
-      expect(prisma.badge.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          title: 'First Story',
-          description: 'Read your first story',
-          badgeType: 'count',
-          requiredAmount: 1,
-          priority: 10,
-        }),
-      });
+      // Verify the catalog passed to the repository carries the expected data
+      expect(badgeRepository.createBadgesInTransaction).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            title: 'First Story',
+            description: 'Read your first story',
+            badgeType: 'count',
+            requiredAmount: 1,
+            priority: 10,
+          }),
+        ]),
+      );
     });
   });
 
@@ -926,12 +863,12 @@ describe('BadgeService', () => {
         badgeType: 'special',
         requiredAmount: 1,
       });
-      prisma.badge.findMany.mockResolvedValue([earlyBadge]);
+      badgeRepository.findManyByTitles.mockResolvedValue([earlyBadge]);
 
       await service.updateBadgeProgress(userId, 'early_special', 1);
 
       // Badge should be skipped - no transaction
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(userBadgeRepository.executeTransaction).not.toHaveBeenCalled();
 
       // Restore
       (mockBadgeConstants as Record<string, unknown>).BADGE_DEFS_BY_TYPE =
@@ -963,11 +900,11 @@ describe('BadgeService', () => {
         badgeType: 'special',
         requiredAmount: 1,
       });
-      prisma.badge.findMany.mockResolvedValue([nightBadge]);
+      badgeRepository.findManyByTitles.mockResolvedValue([nightBadge]);
 
       await service.updateBadgeProgress(userId, 'night_special', 1);
 
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(userBadgeRepository.executeTransaction).not.toHaveBeenCalled();
 
       (mockBadgeConstants as Record<string, unknown>).BADGE_DEFS_BY_TYPE =
         originalDefs;
@@ -1003,26 +940,20 @@ describe('BadgeService', () => {
         count: 0,
         unlocked: false,
       });
-      prisma.badge.findMany.mockResolvedValue([earlyBadge]);
-
-      prisma.$transaction.mockImplementation(
-        async (cb: (tx: unknown) => Promise<void>) => {
-          const tx = {
-            userBadge: {
-              findUnique: jest.fn().mockResolvedValue(userBadge),
-              update: jest
-                .fn()
-                .mockResolvedValue({ ...userBadge, count: 1, unlocked: true }),
-            },
-          };
-          return cb(tx);
-        },
+      badgeRepository.findManyByTitles.mockResolvedValue([earlyBadge]);
+      userBadgeRepository.findByCompositeKeyForUpdate.mockResolvedValue(
+        userBadge,
       );
+      userBadgeRepository.updateById.mockResolvedValue({
+        ...userBadge,
+        count: 1,
+        unlocked: true,
+      });
 
       await service.updateBadgeProgress(userId, 'early_special', 1);
 
       // Badge should be processed - transaction should be called
-      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(userBadgeRepository.executeTransaction).toHaveBeenCalled();
 
       (mockBadgeConstants as Record<string, unknown>).BADGE_DEFS_BY_TYPE =
         originalDefs;

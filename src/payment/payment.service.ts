@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -6,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '@/prisma/prisma.service';
 import { VerifyPurchaseDto } from './dto/verify-purchase.dto';
 import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
@@ -16,6 +16,12 @@ import {
   PRODUCT_ID_TO_PLAN,
 } from '@/subscription/subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  SUBSCRIPTION_REPOSITORY,
+  ISubscriptionRepository,
+  PAYMENT_TRANSACTION_REPOSITORY,
+  IPaymentTransactionRepository,
+} from './repositories';
 
 /** Transaction result from payment processing */
 export interface TransactionRecord {
@@ -32,7 +38,10 @@ export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(SUBSCRIPTION_REPOSITORY)
+    private readonly subscriptionRepository: ISubscriptionRepository,
+    @Inject(PAYMENT_TRANSACTION_REPOSITORY)
+    private readonly paymentTransactionRepository: IPaymentTransactionRepository,
     private readonly configService: ConfigService,
     private readonly googleVerificationService: GoogleVerificationService,
     private readonly appleVerificationService: AppleVerificationService,
@@ -123,9 +132,8 @@ export class PaymentService {
     );
 
     if (alreadyProcessed) {
-      const existingSub = await this.prisma.subscription.findFirst({
-        where: { userId },
-      });
+      const existingSub =
+        await this.subscriptionRepository.findFirstByUser(userId);
       return {
         success: true,
         alreadyProcessed: true,
@@ -186,9 +194,8 @@ export class PaymentService {
     );
 
     if (alreadyProcessed) {
-      const existingSub = await this.prisma.subscription.findFirst({
-        where: { userId },
-      });
+      const existingSub =
+        await this.subscriptionRepository.findFirstByUser(userId);
       return {
         success: true,
         alreadyProcessed: true,
@@ -272,9 +279,8 @@ export class PaymentService {
     },
   ) {
     const now = new Date();
-    const existingSub = await this.prisma.subscription.findFirst({
-      where: { userId },
-    });
+    const existingSub =
+      await this.subscriptionRepository.findFirstByUser(userId);
 
     const data = {
       plan,
@@ -287,15 +293,10 @@ export class PaymentService {
     };
 
     const subscription = existingSub
-      ? await this.prisma.subscription.update({
-          where: { id: existingSub.id },
-          data,
-        })
-      : await this.prisma.subscription.create({
-          data: {
-            userId,
-            ...data,
-          },
+      ? await this.subscriptionRepository.updateById(existingSub.id, data)
+      : await this.subscriptionRepository.create({
+          userId,
+          ...data,
         });
 
     this.eventEmitter.emit('admin.sse.activity', {
@@ -321,15 +322,12 @@ export class PaymentService {
   }
 
   async getSubscription(userId: string) {
-    const subscription = await this.prisma.subscription.findFirst({
-      where: { userId },
-    });
+    const subscription =
+      await this.subscriptionRepository.findFirstByUser(userId);
     if (!subscription) return null;
 
-    const latestTransaction = await this.prisma.paymentTransaction.findFirst({
-      where: { userId, status: 'success' },
-      orderBy: { createdAt: 'desc' },
-    });
+    const latestTransaction =
+      await this.paymentTransactionRepository.findLatestSuccessfulByUser(userId);
 
     const planDef = PLANS[subscription.plan];
     const price = latestTransaction?.amount ?? planDef?.amount ?? 0;
@@ -348,9 +346,8 @@ export class PaymentService {
   }
 
   async cancelSubscription(userId: string) {
-    const existing = await this.prisma.subscription.findFirst({
-      where: { userId },
-    });
+    const existing =
+      await this.subscriptionRepository.findFirstByUser(userId);
     if (!existing) throw new NotFoundException('No subscription to cancel');
 
     // Cancel on Google Play if this is a Google subscription with stored tokens
@@ -421,10 +418,10 @@ export class PaymentService {
     const endsAt =
       existing.endsAt && existing.endsAt > now ? existing.endsAt : now;
 
-    const subscription = await this.prisma.subscription.update({
-      where: { id: existing.id },
-      data: { status: 'cancelled', endsAt },
-    });
+    const subscription = await this.subscriptionRepository.updateById(
+      existing.id,
+      { status: 'cancelled', endsAt },
+    );
 
     if (appleAutoRenewWarning) {
       return {
@@ -453,15 +450,13 @@ export class PaymentService {
     currency: string,
   ): Promise<{ tx: TransactionRecord; alreadyProcessed: boolean }> {
     try {
-      const tx = await this.prisma.paymentTransaction.create({
-        data: {
-          userId,
-          paymentMethodId: null,
-          amount,
-          currency,
-          status: 'success',
-          reference,
-        },
+      const tx = await this.paymentTransactionRepository.create({
+        userId,
+        paymentMethodId: null,
+        amount,
+        currency,
+        status: 'success',
+        reference,
       });
       return { tx, alreadyProcessed: false };
     } catch (error) {
@@ -470,9 +465,10 @@ export class PaymentService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        const existingTx = await this.prisma.paymentTransaction.findFirst({
-          where: { reference },
-        });
+        const existingTx =
+          await this.paymentTransactionRepository.findFirstByReference(
+            reference,
+          );
 
         if (!existingTx) {
           // Should not happen, but handle gracefully

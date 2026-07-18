@@ -21,6 +21,12 @@ import { GoogleVerificationService } from '../src/payment/google-verification.se
 import { AppleVerificationService } from '../src/payment/apple-verification.service';
 import { SubscriptionService } from '../src/subscription/subscription.service';
 import { CacheMetricsService } from '../src/shared/services/cache-metrics.service';
+import {
+  SUBSCRIPTION_REPOSITORY,
+  PrismaSubscriptionRepository,
+  PAYMENT_TRANSACTION_REPOSITORY,
+  PrismaPaymentTransactionRepository,
+} from '../src/payment/repositories';
 
 /**
  * E2E Tests for Payment Flows
@@ -94,6 +100,16 @@ describe('Payment (e2e)', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        // Repository providers delegate to the mock PrismaService above,
+        // preserving the existing stateful e2e behavior.
+        {
+          provide: SUBSCRIPTION_REPOSITORY,
+          useClass: PrismaSubscriptionRepository,
+        },
+        {
+          provide: PAYMENT_TRANSACTION_REPOSITORY,
+          useClass: PrismaPaymentTransactionRepository,
         },
         {
           provide: GoogleVerificationService,

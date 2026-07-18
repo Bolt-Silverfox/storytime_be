@@ -1,5 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import {
   BadgeConstants,
   BadgeDefinition,
@@ -11,14 +10,27 @@ import {
   FullBadgeListResponseDto,
 } from './dto/badge-response.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma, UserBadge } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import {
+  BADGE_REPOSITORY,
+  IBadgeRepository,
+  USER_BADGE_REPOSITORY,
+  IUserBadgeRepository,
+  KID_REPOSITORY,
+  IKidRepository,
+} from './repositories';
 
 @Injectable()
 export class BadgeService {
   private readonly logger = new Logger(BadgeService.name);
 
   constructor(
-    private prisma: PrismaService,
+    @Inject(BADGE_REPOSITORY)
+    private readonly badgeRepository: IBadgeRepository,
+    @Inject(USER_BADGE_REPOSITORY)
+    private readonly userBadgeRepository: IUserBadgeRepository,
+    @Inject(KID_REPOSITORY)
+    private readonly kidRepository: IKidRepository,
     private badgeConstants: BadgeConstants,
     private eventEmitter: EventEmitter2,
   ) {}
@@ -27,51 +39,40 @@ export class BadgeService {
    * Initialize badges for a new user
    */
   async initializeUserBadges(userId: string): Promise<void> {
-    const badges = await this.prisma.badge.findMany();
+    const badges = await this.badgeRepository.findAll();
     if (badges.length === 0) {
       this.logger.warn('No badges found in catalog. Run seed first.');
       return;
     }
 
     // Fetch kids for user and create per-kid and parent-level badge records
-    const kids = await this.prisma.kid.findMany({
-      where: { parentId: userId },
-      select: { id: true },
-    });
+    const kids = await this.kidRepository.findIdsByParent(userId);
 
-    const txOps: Prisma.PrismaPromise<UserBadge>[] = [];
+    const txOps: Prisma.UserBadgeUncheckedCreateInput[] = [];
 
     for (const badge of badges) {
       // Parent-level (kidId omitted)
-      txOps.push(
-        this.prisma.userBadge.create({
-          data: {
-            userId,
-            badgeId: badge.id,
-            count: 0,
-            unlocked: false,
-          },
-        }),
-      );
+      txOps.push({
+        userId,
+        badgeId: badge.id,
+        count: 0,
+        unlocked: false,
+      });
 
       // Per-kid badges
       for (const k of kids) {
-        txOps.push(
-          this.prisma.userBadge.create({
-            data: {
-              userId,
-              kidId: k.id,
-              badgeId: badge.id,
-              count: 0,
-              unlocked: false,
-            },
-          }),
-        );
+        txOps.push({
+          userId,
+          kidId: k.id,
+          badgeId: badge.id,
+          count: 0,
+          unlocked: false,
+        });
       }
     }
 
     if (txOps.length > 0) {
-      await this.prisma.$transaction(txOps);
+      await this.userBadgeRepository.createUserBadgesInTransaction(txOps);
     }
 
     this.logger.log(
@@ -95,18 +96,10 @@ export class BadgeService {
         where.kidId = kidId;
       }
 
-      const userBadges = await this.prisma.userBadge.findMany({
+      const userBadges = await this.userBadgeRepository.findPreviewBadges(
         where,
-        include: {
-          badge: true,
-        },
-        orderBy: [
-          { unlocked: 'desc' }, // Show unlocked first
-          { badge: { priority: 'desc' } }, // Then by priority
-          { badge: { createdAt: 'asc' } }, // Then by creation date
-        ],
-        take: 3,
-      });
+        3,
+      );
 
       // If less than 3, fill with locked badges
       if (userBadges.length < 3) {
@@ -122,12 +115,11 @@ export class BadgeService {
           kidId: typeof kidId === 'undefined' ? null : kidId,
         };
 
-        const remaining = await this.prisma.userBadge.findMany({
-          where: where2,
-          include: { badge: true },
-          orderBy: [{ badge: { priority: 'desc' } }],
-          take: 3 - userBadges.length,
-        });
+        const remaining =
+          await this.userBadgeRepository.findRemainingPreviewBadges(
+            where2,
+            3 - userBadges.length,
+          );
         userBadges.push(...remaining);
       }
 
@@ -158,13 +150,8 @@ export class BadgeService {
       kidId: typeof kidId === 'undefined' ? null : kidId,
     };
 
-    const userBadges = await this.prisma.userBadge.findMany({
-      where: whereAll,
-      include: {
-        badge: true,
-      },
-      orderBy: [{ badge: { priority: 'desc' } }],
-    });
+    const userBadges =
+      await this.userBadgeRepository.findFullBadgeList(whereAll);
 
     const badges: BadgeDetailDto[] = userBadges.map((ub) => ({
       badgeId: ub.badge.id,
@@ -183,18 +170,11 @@ export class BadgeService {
   // Get a specific user badge
 
   async getUserBadge(userId: string, badgeId: string, kidId?: string) {
-    // Prisma compound key with nullable field requires type assertion
-    // kidId is optional in the schema (String?) but compound key typing can be strict
-    return this.prisma.userBadge.findUnique({
-      where: {
-        userId_kidId_badgeId: {
-          userId,
-          kidId: (kidId ?? null) as string,
-          badgeId,
-        },
-      },
-      include: { badge: true },
-    });
+    return this.userBadgeRepository.findByCompositeKey(
+      userId,
+      kidId ?? null,
+      badgeId,
+    );
   }
 
   // Update badge progress
@@ -215,9 +195,7 @@ export class BadgeService {
 
     // Batch fetch all badges by title to avoid N+1 queries
     const badgeTitles = relevantBadges.map((b) => b.title);
-    const badges = await this.prisma.badge.findMany({
-      where: { title: { in: badgeTitles } },
-    });
+    const badges = await this.badgeRepository.findManyByTitles(badgeTitles);
     const badgeMap = new Map(badges.map((b) => [b.title, b]));
 
     for (const badgeDef of relevantBadges) {
@@ -233,21 +211,17 @@ export class BadgeService {
         continue;
       }
 
-      await this.prisma.$transaction(async (tx) => {
+      await this.userBadgeRepository.executeTransaction(async (tx) => {
         const compositeKey = {
           userId,
           kidId: typeof kidId === 'undefined' ? null : kidId,
           badgeId: badge.id,
         };
-        const userBadge = await tx.userBadge.findUnique({
-          where: { userId_kidId_badgeId: compositeKey } as {
-            userId_kidId_badgeId: {
-              userId: string;
-              kidId: string;
-              badgeId: string;
-            };
-          },
-        });
+        const userBadge =
+          await this.userBadgeRepository.findByCompositeKeyForUpdate(
+            compositeKey,
+            tx,
+          );
 
         if (!userBadge) {
           this.logger.error(
@@ -266,14 +240,15 @@ export class BadgeService {
         // Check if badge should unlock
         const shouldUnlock = newCount >= badge.requiredAmount;
 
-        await tx.userBadge.update({
-          where: { id: userBadge.id },
-          data: {
+        await this.userBadgeRepository.updateById(
+          userBadge.id,
+          {
             count: newCount,
             unlocked: shouldUnlock,
             unlockedAt: shouldUnlock ? new Date() : undefined,
           },
-        });
+          tx,
+        );
 
         if (shouldUnlock) {
           this.logger.log(`User ${userId} unlocked badge: ${badge.title}`);
@@ -316,27 +291,14 @@ export class BadgeService {
   // Seed initial badge catalog (run once)
 
   async seedBadges(): Promise<void> {
-    const existingCount = await this.prisma.badge.count();
+    const existingCount = await this.badgeRepository.count();
     if (existingCount > 0) {
       this.logger.log('Badges already seeded, skipping...');
       return;
     }
 
-    await this.prisma.$transaction(
-      this.badgeConstants.CATALOG.map((badge) =>
-        this.prisma.badge.create({
-          data: {
-            title: badge.title,
-            description: badge.description,
-            iconUrl: badge.iconUrl,
-            unlockCondition: badge.unlockCondition,
-            badgeType: badge.badgeType,
-            requiredAmount: badge.requiredAmount,
-            priority: badge.priority,
-            metadata: badge.metadata,
-          },
-        }),
-      ),
+    await this.badgeRepository.createBadgesInTransaction(
+      this.badgeConstants.CATALOG,
     );
 
     this.logger.log(`Seeded ${this.badgeConstants.CATALOG.length} badges`);

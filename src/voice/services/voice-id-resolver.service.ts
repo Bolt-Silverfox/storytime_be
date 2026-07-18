@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { VOICE_CONFIG } from '../voice.constants';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../dto/voice.dto';
+import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
 
 /**
  * Resolves voice identifiers between their three interchangeable forms:
@@ -15,7 +15,10 @@ import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../dto/voice.dto';
 export class VoiceIdResolverService {
   private readonly logger = new Logger(VoiceIdResolverService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(VOICE_REPOSITORY)
+    private readonly voiceRepository: IVoiceRepository,
+  ) {}
 
   /**
    * Map a stored voiceId (VoiceType enum, UUID, or elevenLabsId) to
@@ -32,9 +35,7 @@ export class VoiceIdResolverService {
       return VOICE_CONFIG[migrated].elevenLabsId;
     }
     // Could be a UUID from the Voice table
-    const voice = await this.prisma.voice.findUnique({
-      where: { id: voiceId, isDeleted: false },
-    });
+    const voice = await this.voiceRepository.findUniqueByIdNotDeleted(voiceId);
     if (voice?.elevenLabsVoiceId) {
       return voice.elevenLabsVoiceId;
     }
@@ -48,10 +49,10 @@ export class VoiceIdResolverService {
    * auto-creates the row so voice locking works without manual seeding.
    */
   async resolveVoiceUuid(elevenLabsVoiceId: string): Promise<string | null> {
-    const voice = await this.prisma.voice.findFirst({
-      where: { elevenLabsVoiceId, isDeleted: false, userId: null },
-      select: { id: true },
-    });
+    const voice =
+      await this.voiceRepository.findSystemVoiceIdByElevenLabsId(
+        elevenLabsVoiceId,
+      );
     if (voice) return voice.id;
 
     // Auto-seed from VOICE_CONFIG if this is a known system voice
@@ -61,17 +62,14 @@ export class VoiceIdResolverService {
     if (!configEntry) return null;
 
     const [key, config] = configEntry;
-    const created = await this.prisma.voice.create({
-      data: {
-        elevenLabsVoiceId: config.elevenLabsId,
-        name: key,
-        type: 'elevenlabs',
-        voiceAvatar: config.voiceAvatar,
-        url: config.previewUrl,
-        isDeleted: false,
-        userId: null,
-      },
-      select: { id: true },
+    const created = await this.voiceRepository.createVoiceReturningId({
+      elevenLabsVoiceId: config.elevenLabsId,
+      name: key,
+      type: 'elevenlabs',
+      voiceAvatar: config.voiceAvatar,
+      url: config.previewUrl,
+      isDeleted: false,
+      userId: null,
     });
     this.logger.log(
       `Auto-seeded voice ${key} (${elevenLabsVoiceId}) with UUID ${created.id}`,

@@ -3,7 +3,16 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ProgressService } from './progress.service';
 import { StreakService } from './streak.service';
 import { BadgeService } from './badge.service';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  KID_REPOSITORY,
+  IKidRepository,
+  STORY_PROGRESS_REPOSITORY,
+  IStoryProgressRepository,
+  DAILY_CHALLENGE_ASSIGNMENT_REPOSITORY,
+  IDailyChallengeAssignmentRepository,
+  SCREEN_TIME_SESSION_REPOSITORY,
+  IScreenTimeSessionRepository,
+} from './repositories';
 import {
   CACHE_KEYS,
   CACHE_TTL_MS,
@@ -23,19 +32,32 @@ const mockBadgeService = {
   getBadgePreview: jest.fn(),
 };
 
-const mockPrismaService = {
-  kid: {
-    findMany: jest.fn(),
-  },
-  storyProgress: {
-    count: jest.fn(),
-  },
-  dailyChallengeAssignment: {
-    count: jest.fn(),
-  },
-  screenTimeSession: {
-    aggregate: jest.fn(),
-  },
+const mockKidRepository: Record<keyof IKidRepository, jest.Mock> = {
+  findIdsByParent: jest.fn(),
+  findParentIdById: jest.fn(),
+};
+
+const mockStoryProgressRepository: Record<
+  keyof IStoryProgressRepository,
+  jest.Mock
+> = {
+  countCompletedForKids: jest.fn(),
+};
+
+const mockDailyChallengeAssignmentRepository: Record<
+  keyof IDailyChallengeAssignmentRepository,
+  jest.Mock
+> = {
+  countCompletedForKids: jest.fn(),
+  markCompleted: jest.fn(),
+  findFirstByKidAndChallenge: jest.fn(),
+};
+
+const mockScreenTimeSessionRepository: Record<
+  keyof IScreenTimeSessionRepository,
+  jest.Mock
+> = {
+  sumDurationForKids: jest.fn(),
 };
 
 // --- Test fixtures ---
@@ -94,7 +116,19 @@ describe('ProgressService', () => {
         { provide: CACHE_MANAGER, useValue: mockCacheManager },
         { provide: StreakService, useValue: mockStreakService },
         { provide: BadgeService, useValue: mockBadgeService },
-        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: KID_REPOSITORY, useValue: mockKidRepository },
+        {
+          provide: STORY_PROGRESS_REPOSITORY,
+          useValue: mockStoryProgressRepository,
+        },
+        {
+          provide: DAILY_CHALLENGE_ASSIGNMENT_REPOSITORY,
+          useValue: mockDailyChallengeAssignmentRepository,
+        },
+        {
+          provide: SCREEN_TIME_SESSION_REPOSITORY,
+          useValue: mockScreenTimeSessionRepository,
+        },
       ],
     }).compile();
 
@@ -126,10 +160,12 @@ describe('ProgressService', () => {
       mockCacheManager.get.mockResolvedValue(null);
       mockStreakService.getStreakSummary.mockResolvedValue(mockStreakData);
       mockBadgeService.getBadgePreview.mockResolvedValue(mockBadgePreviewData);
-      mockPrismaService.kid.findMany.mockResolvedValue(mockKids);
-      mockPrismaService.storyProgress.count.mockResolvedValue(12);
-      mockPrismaService.dailyChallengeAssignment.count.mockResolvedValue(8);
-      mockPrismaService.screenTimeSession.aggregate.mockResolvedValue({
+      mockKidRepository.findIdsByParent.mockResolvedValue(mockKids);
+      mockStoryProgressRepository.countCompletedForKids.mockResolvedValue(12);
+      mockDailyChallengeAssignmentRepository.countCompletedForKids.mockResolvedValue(
+        8,
+      );
+      mockScreenTimeSessionRepository.sumDurationForKids.mockResolvedValue({
         _sum: { duration: 2700 }, // 2700 seconds = 45 minutes
       });
 
@@ -155,10 +191,12 @@ describe('ProgressService', () => {
         new Error('Streak service unavailable'),
       );
       mockBadgeService.getBadgePreview.mockResolvedValue(mockBadgePreviewData);
-      mockPrismaService.kid.findMany.mockResolvedValue(mockKids);
-      mockPrismaService.storyProgress.count.mockResolvedValue(0);
-      mockPrismaService.dailyChallengeAssignment.count.mockResolvedValue(0);
-      mockPrismaService.screenTimeSession.aggregate.mockResolvedValue({
+      mockKidRepository.findIdsByParent.mockResolvedValue(mockKids);
+      mockStoryProgressRepository.countCompletedForKids.mockResolvedValue(0);
+      mockDailyChallengeAssignmentRepository.countCompletedForKids.mockResolvedValue(
+        0,
+      );
+      mockScreenTimeSessionRepository.sumDurationForKids.mockResolvedValue({
         _sum: { duration: null },
       });
 
@@ -188,10 +226,12 @@ describe('ProgressService', () => {
       mockCacheManager.get.mockResolvedValue(null);
       mockStreakService.getStreakSummary.mockResolvedValue(mockStreakData);
       mockBadgeService.getBadgePreview.mockResolvedValue(mockBadgePreviewData);
-      mockPrismaService.kid.findMany.mockResolvedValue(mockKids);
-      mockPrismaService.storyProgress.count.mockResolvedValue(12);
-      mockPrismaService.dailyChallengeAssignment.count.mockResolvedValue(8);
-      mockPrismaService.screenTimeSession.aggregate.mockResolvedValue({
+      mockKidRepository.findIdsByParent.mockResolvedValue(mockKids);
+      mockStoryProgressRepository.countCompletedForKids.mockResolvedValue(12);
+      mockDailyChallengeAssignmentRepository.countCompletedForKids.mockResolvedValue(
+        8,
+      );
+      mockScreenTimeSessionRepository.sumDurationForKids.mockResolvedValue({
         _sum: { duration: 2700 },
       });
 
@@ -215,10 +255,12 @@ describe('ProgressService', () => {
       mockCacheManager.get.mockResolvedValue(null);
       mockStreakService.getStreakSummary.mockResolvedValue(mockStreakData);
       mockBadgeService.getBadgePreview.mockResolvedValue(mockBadgePreviewData);
-      mockPrismaService.kid.findMany.mockResolvedValue(mockKids);
-      mockPrismaService.storyProgress.count.mockResolvedValue(25);
-      mockPrismaService.dailyChallengeAssignment.count.mockResolvedValue(15);
-      mockPrismaService.screenTimeSession.aggregate.mockResolvedValue({
+      mockKidRepository.findIdsByParent.mockResolvedValue(mockKids);
+      mockStoryProgressRepository.countCompletedForKids.mockResolvedValue(25);
+      mockDailyChallengeAssignmentRepository.countCompletedForKids.mockResolvedValue(
+        15,
+      );
+      mockScreenTimeSessionRepository.sumDurationForKids.mockResolvedValue({
         _sum: { duration: 600 },
       });
 
@@ -236,10 +278,12 @@ describe('ProgressService', () => {
       mockBadgeService.getBadgePreview.mockRejectedValue(
         new Error('Badge service down'),
       );
-      mockPrismaService.kid.findMany.mockResolvedValue([]);
-      mockPrismaService.storyProgress.count.mockResolvedValue(0);
-      mockPrismaService.dailyChallengeAssignment.count.mockResolvedValue(0);
-      mockPrismaService.screenTimeSession.aggregate.mockResolvedValue({
+      mockKidRepository.findIdsByParent.mockResolvedValue([]);
+      mockStoryProgressRepository.countCompletedForKids.mockResolvedValue(0);
+      mockDailyChallengeAssignmentRepository.countCompletedForKids.mockResolvedValue(
+        0,
+      );
+      mockScreenTimeSessionRepository.sumDurationForKids.mockResolvedValue({
         _sum: { duration: null },
       });
 
@@ -291,44 +335,29 @@ describe('ProgressService', () => {
     });
 
     it('should query kids by parentId and aggregate stats', async () => {
-      mockPrismaService.kid.findMany.mockResolvedValue(mockKids);
-      mockPrismaService.storyProgress.count.mockResolvedValue(5);
-      mockPrismaService.dailyChallengeAssignment.count.mockResolvedValue(3);
-      mockPrismaService.screenTimeSession.aggregate.mockResolvedValue({
+      mockKidRepository.findIdsByParent.mockResolvedValue(mockKids);
+      mockStoryProgressRepository.countCompletedForKids.mockResolvedValue(5);
+      mockDailyChallengeAssignmentRepository.countCompletedForKids.mockResolvedValue(
+        3,
+      );
+      mockScreenTimeSessionRepository.sumDurationForKids.mockResolvedValue({
         _sum: { duration: 1800 },
       });
 
       const result = await service.getHomeScreenData(TEST_USER_ID);
 
-      expect(mockPrismaService.kid.findMany).toHaveBeenCalledWith({
-        where: { parentId: TEST_USER_ID },
-        select: { id: true },
-      });
-      expect(mockPrismaService.storyProgress.count).toHaveBeenCalledWith({
-        where: {
-          kidId: { in: ['kid-1', 'kid-2'] },
-          completed: true,
-          isDeleted: false,
-          story: { isDeleted: false },
-        },
-      });
+      expect(mockKidRepository.findIdsByParent).toHaveBeenCalledWith(
+        TEST_USER_ID,
+      );
       expect(
-        mockPrismaService.dailyChallengeAssignment.count,
-      ).toHaveBeenCalledWith({
-        where: {
-          kidId: { in: ['kid-1', 'kid-2'] },
-          completed: true,
-        },
-      });
+        mockStoryProgressRepository.countCompletedForKids,
+      ).toHaveBeenCalledWith(['kid-1', 'kid-2']);
       expect(
-        mockPrismaService.screenTimeSession.aggregate,
-      ).toHaveBeenCalledWith({
-        where: {
-          kidId: { in: ['kid-1', 'kid-2'] },
-          endTime: { not: null },
-        },
-        _sum: { duration: true },
-      });
+        mockDailyChallengeAssignmentRepository.countCompletedForKids,
+      ).toHaveBeenCalledWith(['kid-1', 'kid-2']);
+      expect(
+        mockScreenTimeSessionRepository.sumDurationForKids,
+      ).toHaveBeenCalledWith(['kid-1', 'kid-2']);
       expect(result.progressStats).toEqual({
         storiesCompleted: 5,
         challengesCompleted: 3,
@@ -337,10 +366,12 @@ describe('ProgressService', () => {
     });
 
     it('should handle null duration sum gracefully (0 minutes)', async () => {
-      mockPrismaService.kid.findMany.mockResolvedValue(mockKids);
-      mockPrismaService.storyProgress.count.mockResolvedValue(0);
-      mockPrismaService.dailyChallengeAssignment.count.mockResolvedValue(0);
-      mockPrismaService.screenTimeSession.aggregate.mockResolvedValue({
+      mockKidRepository.findIdsByParent.mockResolvedValue(mockKids);
+      mockStoryProgressRepository.countCompletedForKids.mockResolvedValue(0);
+      mockDailyChallengeAssignmentRepository.countCompletedForKids.mockResolvedValue(
+        0,
+      );
+      mockScreenTimeSessionRepository.sumDurationForKids.mockResolvedValue({
         _sum: { duration: null },
       });
 
@@ -350,10 +381,12 @@ describe('ProgressService', () => {
     });
 
     it('should floor reading time minutes (not round)', async () => {
-      mockPrismaService.kid.findMany.mockResolvedValue(mockKids);
-      mockPrismaService.storyProgress.count.mockResolvedValue(1);
-      mockPrismaService.dailyChallengeAssignment.count.mockResolvedValue(0);
-      mockPrismaService.screenTimeSession.aggregate.mockResolvedValue({
+      mockKidRepository.findIdsByParent.mockResolvedValue(mockKids);
+      mockStoryProgressRepository.countCompletedForKids.mockResolvedValue(1);
+      mockDailyChallengeAssignmentRepository.countCompletedForKids.mockResolvedValue(
+        0,
+      );
+      mockScreenTimeSessionRepository.sumDurationForKids.mockResolvedValue({
         _sum: { duration: 150 }, // 150 seconds = 2.5 minutes -> floors to 2
       });
 
@@ -363,10 +396,12 @@ describe('ProgressService', () => {
     });
 
     it('should handle user with no kids', async () => {
-      mockPrismaService.kid.findMany.mockResolvedValue([]);
-      mockPrismaService.storyProgress.count.mockResolvedValue(0);
-      mockPrismaService.dailyChallengeAssignment.count.mockResolvedValue(0);
-      mockPrismaService.screenTimeSession.aggregate.mockResolvedValue({
+      mockKidRepository.findIdsByParent.mockResolvedValue([]);
+      mockStoryProgressRepository.countCompletedForKids.mockResolvedValue(0);
+      mockDailyChallengeAssignmentRepository.countCompletedForKids.mockResolvedValue(
+        0,
+      );
+      mockScreenTimeSessionRepository.sumDurationForKids.mockResolvedValue({
         _sum: { duration: null },
       });
 
@@ -380,7 +415,7 @@ describe('ProgressService', () => {
     });
 
     it('should return default stats {0,0,0} when prisma throws', async () => {
-      mockPrismaService.kid.findMany.mockRejectedValue(
+      mockKidRepository.findIdsByParent.mockRejectedValue(
         new Error('Database connection lost'),
       );
 

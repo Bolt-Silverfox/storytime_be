@@ -3,11 +3,19 @@ import {
   Injectable,
   Logger,
   OnModuleInit,
+  Inject,
 } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { BadgeService } from './badge.service';
-import { PrismaService } from '../prisma/prisma.service';
 import { BadgeMetadata } from './badge.constants';
+import {
+  STREAK_REPOSITORY,
+  IStreakRepository,
+  KID_REPOSITORY,
+  IKidRepository,
+  DAILY_CHALLENGE_ASSIGNMENT_REPOSITORY,
+  IDailyChallengeAssignmentRepository,
+} from './repositories';
 
 interface BadgeEvent {
   userId: string;
@@ -23,7 +31,12 @@ export class BadgeProgressEngine implements OnModuleInit {
   constructor(
     private eventEmitter: EventEmitter2,
     private badgeService: BadgeService,
-    private prisma: PrismaService,
+    @Inject(STREAK_REPOSITORY)
+    private readonly streakRepository: IStreakRepository,
+    @Inject(KID_REPOSITORY)
+    private readonly kidRepository: IKidRepository,
+    @Inject(DAILY_CHALLENGE_ASSIGNMENT_REPOSITORY)
+    private readonly dailyChallengeAssignmentRepository: IDailyChallengeAssignmentRepository,
   ) {}
 
   onModuleInit() {
@@ -40,15 +53,13 @@ export class BadgeProgressEngine implements OnModuleInit {
   ): Promise<void> {
     try {
       // Log activity
-      await this.prisma.activityLog.create({
-        data: {
-          userId,
-          kidId,
-          action,
-          status: 'SUCCESS',
-          createdAt: new Date(),
-          ...(metadata && { details: JSON.stringify(metadata) }),
-        },
+      await this.streakRepository.createActivityLog({
+        userId,
+        kidId,
+        action,
+        status: 'SUCCESS',
+        createdAt: new Date(),
+        ...(metadata && { details: JSON.stringify(metadata) }),
       });
 
       // Emit corresponding badge events (pass kidId through)
@@ -137,27 +148,23 @@ export class BadgeProgressEngine implements OnModuleInit {
    * Mark a daily challenge as completed
    */
   async completeDailyChallenge(kidId: string, challengeId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
-      select: { parentId: true },
-    });
+    const kid = await this.kidRepository.findParentIdById(kidId);
 
     if (!kid) {
       throw new BadRequestException('Kid not found');
     }
 
     // Use updateMany since there's no unique constraint
-    await this.prisma.dailyChallengeAssignment.updateMany({
-      where: { kidId, challengeId },
-      data: {
-        completed: true,
-        completedAt: new Date(),
-      },
-    });
+    await this.dailyChallengeAssignmentRepository.markCompleted(
+      kidId,
+      challengeId,
+    );
 
-    const assignment = await this.prisma.dailyChallengeAssignment.findFirst({
-      where: { kidId, challengeId },
-    });
+    const assignment =
+      await this.dailyChallengeAssignmentRepository.findFirstByKidAndChallenge(
+        kidId,
+        challengeId,
+      );
 
     // Trigger badge progress
     await this.recordActivity(kid.parentId, 'challenge_completed', kidId, {

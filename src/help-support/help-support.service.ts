@@ -1,13 +1,21 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { ConfigService } from '@nestjs/config';
 import { render } from '@react-email/render';
-import { PrismaService } from '@/prisma/prisma.service';
 import { NotificationService } from '@/notification/notification.service';
 import { FeedbackNotificationTemplate } from '@/notification/templates/feedback-notification';
 import { EnvConfig } from '@/shared/config/env.validation';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
+import {
+  SUPPORT_TICKET_REPOSITORY,
+  ISupportTicketRepository,
+} from './repositories';
 
 @Injectable()
 export class HelpSupportService {
@@ -15,7 +23,8 @@ export class HelpSupportService {
   private readonly feedbackRecipientEmail: string;
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(SUPPORT_TICKET_REPOSITORY)
+    private readonly supportTicketRepository: ISupportTicketRepository,
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService<EnvConfig, true>,
   ) {
@@ -152,26 +161,19 @@ export class HelpSupportService {
 
   // --- Support Tickets ---
   async createTicket(userId: string, dto: CreateSupportTicketDto) {
-    return this.prisma.supportTicket.create({
-      data: {
-        userId,
-        subject: dto.subject,
-        message: dto.message,
-      },
+    return this.supportTicketRepository.create({
+      userId,
+      subject: dto.subject,
+      message: dto.message,
     });
   }
 
   async listMyTickets(userId: string) {
-    return this.prisma.supportTicket.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.supportTicketRepository.findManyByUser(userId);
   }
 
   async getTicket(userId: string, id: string) {
-    const ticket = await this.prisma.supportTicket.findUnique({
-      where: { id },
-    });
+    const ticket = await this.supportTicketRepository.findUniqueById(id);
     if (!ticket || ticket.userId !== userId) {
       throw new NotFoundException('Ticket not found');
     }

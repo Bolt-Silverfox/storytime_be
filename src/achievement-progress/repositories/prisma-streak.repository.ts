@@ -4,10 +4,17 @@ import type {
   IStreakRepository,
   ActivityLogCreatedAt,
 } from './streak.repository.interface';
+import type { ActivityLog, Prisma } from '@prisma/client';
 
 @Injectable()
 export class PrismaStreakRepository implements IStreakRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  async createActivityLog(
+    data: Prisma.ActivityLogUncheckedCreateInput,
+  ): Promise<ActivityLog> {
+    return this.prisma.activityLog.create({ data });
+  }
 
   async findUserActivityLogs(
     userId: string,

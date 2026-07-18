@@ -1,16 +1,27 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  BUDDY_SELECTION_REPOSITORY,
+  IBuddySelectionRepository,
+  BUDDY_MESSAGING_REPOSITORY,
+  IBuddyMessagingRepository,
+} from './repositories';
 
 @Injectable()
 export class BuddyMessagingService {
   private readonly logger = new Logger(BuddyMessagingService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(BUDDY_SELECTION_REPOSITORY)
+    private readonly buddySelectionRepository: IBuddySelectionRepository,
+    @Inject(BUDDY_MESSAGING_REPOSITORY)
+    private readonly buddyMessagingRepository: IBuddyMessagingRepository,
+  ) {}
 
   /**
    * Get buddy message for specific context
@@ -27,24 +38,8 @@ export class BuddyMessagingService {
     message?: string,
     userId?: string,
   ) {
-    const kid = await this.prisma.kid.findUnique({
-      where: {
-        id: kidId,
-        isDeleted: false, // CANNOT GET MESSAGE FOR SOFT DELETED KIDS
-      },
-      include: {
-        storyBuddy: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            imageUrl: true,
-            profileAvatarUrl: true,
-            type: true,
-          },
-        },
-      },
-    });
+    const kid =
+      await this.buddySelectionRepository.findKidWithSelectedBuddy(kidId);
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
@@ -66,13 +61,8 @@ export class BuddyMessagingService {
     if (contextId) {
       switch (context) {
         case 'challenge': {
-          const challenge = await this.prisma.dailyChallenge.findUnique({
-            where: {
-              id: contextId,
-              isDeleted: false, // ONLY USE NON-DELETED CHALLENGES
-            },
-            select: { wordOfTheDay: true, meaning: true },
-          });
+          const challenge =
+            await this.buddyMessagingRepository.findChallengeContext(contextId);
           if (challenge) {
             contextData = {
               challengeId: contextId,
@@ -84,13 +74,8 @@ export class BuddyMessagingService {
 
         case 'story_start':
         case 'story_complete': {
-          const story = await this.prisma.story.findUnique({
-            where: {
-              id: contextId,
-              isDeleted: false, // ONLY USE NON-DELETED STORIES
-            },
-            select: { title: true },
-          });
+          const story =
+            await this.buddyMessagingRepository.findStoryContext(contextId);
           if (story) {
             contextData = {
               storyId: contextId,
@@ -158,15 +143,12 @@ export class BuddyMessagingService {
     context?: string | null;
   }) {
     try {
-      return await this.prisma.buddyInteraction.create({
-        data: {
-          kidId: data.kidId,
-          buddyId: data.buddyId,
-          interactionType: data.interactionType,
-          context: data.context || null,
-          message: null, // No longer saving messages
-        },
-      });
+      return await this.buddyMessagingRepository.createBuddyInteraction(
+        data.kidId,
+        data.buddyId,
+        data.interactionType,
+        data.context,
+      );
     } catch (error) {
       this.logger.error('Failed to log buddy interaction:', error);
       // Don't throw error for logging failures
