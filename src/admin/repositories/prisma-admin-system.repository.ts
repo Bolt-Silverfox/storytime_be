@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { IAdminSystemRepository } from './admin-system.repository.interface';
+import type { User } from '@prisma/client';
+import {
+  IAdminSystemRepository,
+  SupportTicketWithUser,
+} from './admin-system.repository.interface';
 import { ActivityLogDto, SubscriptionDto } from '../dto/admin-responses.dto';
 
 @Injectable()
@@ -120,6 +124,31 @@ export class PrismaAdminSystemRepository implements IAdminSystemRepository {
     return this.prisma.supportTicket.update({
       where: { id },
       data: { status },
+    });
+  }
+
+  createSupportTicket(data: {
+    userId: string;
+    subject: string;
+    message: string;
+  }): Promise<SupportTicketWithUser> {
+    return this.prisma.supportTicket.create({
+      data: {
+        userId: data.userId,
+        subject: data.subject,
+        message: data.message,
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+  }
+
+  findUserById(userId: string): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
     });
   }
 }

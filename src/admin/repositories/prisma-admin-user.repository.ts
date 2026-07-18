@@ -1,29 +1,71 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma, Role, User, UserUsage } from '@prisma/client';
 import type {
   IAdminUserRepository,
-  UserWithRelations,
-  UserDetail,
+  AdminUserListItem,
+  AdminUserDetail,
+  AdminUserGrowthRow,
+  AdminUserGrowthMonthlyRow,
 } from './admin-user.repository.interface';
-import type { Prisma, User } from '@prisma/client';
 
 @Injectable()
 export class PrismaAdminUserRepository implements IAdminUserRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findUsers(params: {
+  count(where: Prisma.UserWhereInput): Promise<number> {
+    return this.prisma.user.count({ where });
+  }
+
+  findManyWithSubscription(params: {
+    where: Prisma.UserWhereInput;
+    orderBy: Prisma.UserOrderByWithRelationInput;
+  }): Promise<AdminUserGrowthRow[]> {
+    return this.prisma.user.findMany({
+      where: params.where,
+      include: {
+        subscription: true,
+      },
+      orderBy: params.orderBy,
+    });
+  }
+
+  findManyForGrowthMonthly(
+    startDate: Date,
+  ): Promise<AdminUserGrowthMonthlyRow[]> {
+    return this.prisma.user.findMany({
+      where: {
+        createdAt: { gte: startDate },
+        isDeleted: false,
+      },
+      select: {
+        createdAt: true,
+        id: true,
+        subscription: true,
+      },
+    });
+  }
+
+  findManyWithDetails(params: {
     where: Prisma.UserWhereInput;
     skip: number;
     take: number;
     orderBy: Prisma.UserOrderByWithRelationInput;
-  }): Promise<UserWithRelations[]> {
+  }): Promise<AdminUserListItem[]> {
     return this.prisma.user.findMany({
       where: params.where,
       skip: params.skip,
       take: params.take,
       orderBy: params.orderBy,
       include: {
-        subscription: true,
+        subscription: {
+          select: {
+            id: true,
+            plan: true,
+            status: true,
+            endsAt: true,
+          },
+        },
         profile: true,
         avatar: true,
         usage: {
@@ -37,8 +79,8 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
           },
         },
         paymentTransactions: {
-          where: { status: 'success' },
-          select: { amount: true },
+          where: { status: 'success', deletedAt: null },
+          select: { amount: true, currency: true },
         },
         _count: {
           select: {
@@ -49,14 +91,10 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
           },
         },
       },
-    }) as Promise<UserWithRelations[]>;
+    });
   }
 
-  async countUsers(where: Prisma.UserWhereInput): Promise<number> {
-    return this.prisma.user.count({ where });
-  }
-
-  async findUserById(userId: string): Promise<UserDetail | null> {
+  findByIdWithDetails(userId: string): Promise<AdminUserDetail | null> {
     return this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -73,6 +111,7 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
         },
         avatar: true,
         subscription: true,
+        usage: true,
         paymentTransactions: {
           orderBy: { createdAt: 'desc' },
           take: 10,
@@ -87,61 +126,38 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
           },
         },
       },
-    }) as Promise<UserDetail | null>;
-  }
-
-  async aggregatePaymentTransactions(params: {
-    userId: string;
-    status: string;
-  }): Promise<{ _sum: { amount: number | null } }> {
-    return this.prisma.paymentTransaction.aggregate({
-      where: {
-        userId: params.userId,
-        status: params.status,
-      },
-      _sum: {
-        amount: true,
-      },
     });
   }
 
-  async userExistsByEmail(email: string): Promise<boolean> {
-    const count = await this.prisma.user.count({
-      where: { email },
-    });
-    return count > 0;
+  findById(userId: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { id: userId } });
   }
 
-  async findUserByEmail(email: string): Promise<User | null> {
-    return this.prisma.user.findUnique({
-      where: { email },
+  findByEmail(email: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { email } });
+  }
+
+  findActiveById(userId: string): Promise<User | null> {
+    return this.prisma.user.findFirst({
+      where: { id: userId, isDeleted: false },
     });
   }
 
-  async createUser(data: {
+  createAdmin(data: {
     email: string;
     passwordHash: string;
     name: string;
-    role: string;
-    isEmailVerified: boolean;
-    profile: { country: string };
-  }): Promise<{
-    id: string;
-    email: string;
-    name: string | null;
-    role: string;
-    createdAt: Date;
-  }> {
+  }): Promise<Pick<User, 'id' | 'email' | 'name' | 'role' | 'createdAt'>> {
     return this.prisma.user.create({
       data: {
         email: data.email,
         passwordHash: data.passwordHash,
         name: data.name,
-        role: data.role as any,
-        isEmailVerified: data.isEmailVerified,
+        role: Role.admin,
+        isEmailVerified: true,
         profile: {
           create: {
-            country: data.profile.country,
+            country: 'NG',
           },
         },
       },
@@ -155,24 +171,18 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
     });
   }
 
-  async findUserByIdSimple(userId: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { id: userId } });
-  }
-
-  async updateUser(params: {
-    userId: string;
-    data: Prisma.UserUpdateInput;
-  }): Promise<{
-    id: string;
-    email: string;
-    name: string | null;
-    role: string;
-    isEmailVerified: boolean;
-    updatedAt: Date;
-  }> {
+  updateUserFields(
+    userId: string,
+    data: Prisma.UserUpdateInput,
+  ): Promise<
+    Pick<
+      User,
+      'id' | 'email' | 'name' | 'role' | 'isEmailVerified' | 'updatedAt'
+    >
+  > {
     return this.prisma.user.update({
-      where: { id: params.userId },
-      data: params.data,
+      where: { id: userId },
+      data,
       select: {
         id: true,
         email: true,
@@ -184,78 +194,95 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
     });
   }
 
-  async softDeleteUser(userId: string): Promise<{
-    id: string;
-    email: string;
-    name: string | null;
-    role: string;
-    isDeleted: boolean;
-    deletedAt: Date | null;
-  }> {
+  hardDeleteUser(userId: string): Promise<User> {
+    return this.prisma.user.delete({ where: { id: userId } });
+  }
+
+  softDeleteUser(userId: string): Promise<User> {
     return this.prisma.user.update({
       where: { id: userId },
       data: {
         isDeleted: true,
         deletedAt: new Date(),
       },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isDeleted: true,
-        deletedAt: true,
-      },
     });
   }
 
-  async hardDeleteUser(userId: string): Promise<{
-    id: string;
-    email: string;
-    name: string | null;
-    role: string;
-    isDeleted: boolean;
-    deletedAt: Date | null;
-  }> {
-    return this.prisma.user.delete({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isDeleted: true,
-        deletedAt: true,
-      },
-    });
-  }
-
-  async restoreUser(userId: string): Promise<{
-    id: string;
-    email: string;
-    name: string | null;
-    role: string;
-    isDeleted: boolean;
-    deletedAt: Date | null;
-  }> {
+  restoreUser(userId: string): Promise<User> {
     return this.prisma.user.update({
       where: { id: userId },
       data: {
         isDeleted: false,
         deletedAt: null,
       },
+    });
+  }
+
+  suspendUser(
+    userId: string,
+  ): Promise<
+    Pick<
+      User,
+      | 'id'
+      | 'email'
+      | 'name'
+      | 'role'
+      | 'isSuspended'
+      | 'suspendedAt'
+      | 'updatedAt'
+    >
+  > {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isSuspended: true,
+        suspendedAt: new Date(),
+      },
       select: {
         id: true,
         email: true,
         name: true,
         role: true,
-        isDeleted: true,
-        deletedAt: true,
+        isSuspended: true,
+        suspendedAt: true,
+        updatedAt: true,
       },
     });
   }
 
-  async bulkSoftDeleteUsers(userIds: string[]): Promise<{ count: number }> {
+  unsuspendUser(
+    userId: string,
+  ): Promise<
+    Pick<
+      User,
+      | 'id'
+      | 'email'
+      | 'name'
+      | 'role'
+      | 'isSuspended'
+      | 'suspendedAt'
+      | 'updatedAt'
+    >
+  > {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isSuspended: false,
+        suspendedAt: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isSuspended: true,
+        suspendedAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async bulkSoftDelete(userIds: string[]): Promise<{ count: number }> {
     return this.prisma.user.updateMany({
       where: { id: { in: userIds } },
       data: {
@@ -265,7 +292,7 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
     });
   }
 
-  async bulkRestoreUsers(userIds: string[]): Promise<{ count: number }> {
+  async bulkRestore(userIds: string[]): Promise<{ count: number }> {
     return this.prisma.user.updateMany({
       where: { id: { in: userIds } },
       data: {
@@ -275,12 +302,28 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
     });
   }
 
-  async bulkVerifyUsers(userIds: string[]): Promise<{ count: number }> {
+  async bulkVerify(userIds: string[]): Promise<{ count: number }> {
     return this.prisma.user.updateMany({
       where: { id: { in: userIds } },
       data: {
         isEmailVerified: true,
       },
+    });
+  }
+
+  findUserUsage(userId: string): Promise<UserUsage | null> {
+    return this.prisma.userUsage.findUnique({
+      where: { userId },
+    });
+  }
+
+  updateUserUsage(
+    userId: string,
+    data: Prisma.UserUsageUpdateInput,
+  ): Promise<UserUsage> {
+    return this.prisma.userUsage.update({
+      where: { userId },
+      data,
     });
   }
 }

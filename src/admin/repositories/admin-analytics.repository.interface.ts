@@ -1,29 +1,9 @@
-import { DateRangeDto } from '../dto/admin-filters.dto';
-import {
-  DashboardStatsDto,
-  UserGrowthDto,
-  StoryStatsDto,
-  ContentBreakdownDto,
-  SubscriptionAnalyticsDto,
-  RevenueAnalyticsDto,
-  AiCreditAnalyticsDto,
-  UserGrowthMonthlyDto,
-} from '../dto/admin-responses.dto';
-
 export interface IAdminAnalyticsRepository {
-  // Statistics
-  getDashboardStats(): Promise<DashboardStatsDto>;
-  getUserGrowth(dateRange: DateRangeDto): Promise<UserGrowthDto[]>;
-  getStoryStats(): Promise<StoryStatsDto>;
-  getContentBreakdown(): Promise<ContentBreakdownDto>;
+  // Lightweight DB connectivity probe (system health check)
+  pingDatabase(): Promise<void>;
 
-  // Advanced Analytics
-  getSubscriptionAnalytics(
-    dateRange?: DateRangeDto,
-  ): Promise<SubscriptionAnalyticsDto>;
-  getRevenueAnalytics(dateRange?: DateRangeDto): Promise<RevenueAnalyticsDto>;
-  getAiCreditAnalytics(): Promise<AiCreditAnalyticsDto>;
-  getUserGrowthMonthly(): Promise<{ data: UserGrowthMonthlyDto[] }>;
+  // COUNT(DISTINCT storyId) of guest story-access logs (raw SQL / JSON extract)
+  countUniqueGuestStories(guestStoryAccessedAction: string): Promise<number>;
 }
 
 export const ADMIN_ANALYTICS_REPOSITORY = Symbol('ADMIN_ANALYTICS_REPOSITORY');

@@ -1,38 +1,39 @@
-import { Injectable, Inject } from '@nestjs/common';
 import {
-  ResourceNotFoundException,
-  ResourceAlreadyExistsException,
-  ValidationException,
-  ForbiddenActionException,
+  Injectable,
+  NotFoundException,
+  BadRequestException,
   ConflictException,
-} from '@/shared/exceptions';
-import { Role, Prisma, User } from '@prisma/client';
-import { IAdminUserRepository, ADMIN_USER_REPOSITORY } from './repositories';
-import { PasswordService } from '../auth/services/password.service';
-import {
-  PaginatedResponseDto,
-  UserListItemDto,
-  AdminCreatedDto,
-  UserUpdatedDto,
-} from './dto/admin-responses.dto';
+  Inject,
+} from '@nestjs/common';
+import { Role, Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+import { PaginatedResponseDto } from './dto/admin-responses.dto';
 import { UserFilterDto } from './dto/admin-filters.dto';
 import {
   CreateAdminDto,
   UpdateUserDto,
   BulkActionDto,
 } from './dto/user-management.dto';
+import { ResetQuotaDto } from './dto/reset-quota.dto';
+import {
+  IAdminUserRepository,
+  ADMIN_USER_REPOSITORY,
+  IAdminPaymentRepository,
+  ADMIN_PAYMENT_REPOSITORY,
+} from './repositories';
 
 @Injectable()
 export class AdminUserService {
   constructor(
     @Inject(ADMIN_USER_REPOSITORY)
-    private readonly adminUserRepository: IAdminUserRepository,
-    private readonly passwordService: PasswordService,
+    private readonly userRepo: IAdminUserRepository,
+    @Inject(ADMIN_PAYMENT_REPOSITORY)
+    private readonly paymentRepo: IAdminPaymentRepository,
   ) {}
 
   async getAllUsers(
     filters: UserFilterDto,
-  ): Promise<PaginatedResponseDto<UserListItemDto>> {
+  ): Promise<PaginatedResponseDto<any>> {
     const {
       page = 1,
       limit = 10,
@@ -83,47 +84,67 @@ export class AdminUserService {
       };
 
       if (wantsActiveSubscription) {
-        where.subscription = {
-          is: activeSubscriptionCriteria,
-        };
+        where.subscription = activeSubscriptionCriteria;
       } else {
-        where.NOT = {
-          subscription: {
-            is: activeSubscriptionCriteria,
-          },
-        };
+        where.OR = [
+          { subscription: null },
+          { subscription: { NOT: activeSubscriptionCriteria } },
+        ];
       }
     }
 
+    // Build orderBy — handle computed fields that don't map to User columns
+    const VALID_USER_SORT_FIELDS = [
+      'createdAt',
+      'updatedAt',
+      'email',
+      'name',
+      'role',
+      'isEmailVerified',
+      'isDeleted',
+      'isSuspended',
+    ] as const;
+
+    let orderBy: Prisma.UserOrderByWithRelationInput;
+    if (sortBy === 'isPaidUser') {
+      // Sort by subscription status (relation-based ordering)
+      orderBy = { subscription: { status: sortOrder } };
+    } else if (
+      VALID_USER_SORT_FIELDS.includes(
+        sortBy as (typeof VALID_USER_SORT_FIELDS)[number],
+      )
+    ) {
+      orderBy = { [sortBy]: sortOrder };
+    } else {
+      orderBy = { createdAt: sortOrder };
+    }
+
     const [users, total] = await Promise.all([
-      this.adminUserRepository.findUsers({
+      this.userRepo.findManyWithDetails({
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy,
       }),
-      this.adminUserRepository.countUsers(where),
+      this.userRepo.count(where),
     ]);
 
     return {
       data: users.map((user) => {
         // Sanitize user object - exclude sensitive fields
-        /* eslint-disable @typescript-eslint/no-unused-vars */
         const {
-          passwordHash: _passwordHash,
-          pinHash: _pinHash,
-          kids,
-          paymentTransactions,
-          usage,
-          subscription,
-          _count,
+          passwordHash, // eslint-disable-line @typescript-eslint/no-unused-vars
+          pinHash, // eslint-disable-line @typescript-eslint/no-unused-vars
+          kids, // eslint-disable-line @typescript-eslint/no-unused-vars
+          paymentTransactions, // eslint-disable-line @typescript-eslint/no-unused-vars
+          usage, // eslint-disable-line @typescript-eslint/no-unused-vars
+          subscription, // eslint-disable-line @typescript-eslint/no-unused-vars
           ...safeUser
         } = user;
-        /* eslint-enable @typescript-eslint/no-unused-vars */
 
         // Calculate metrics
-        const creditUsed = usage?.elevenLabsCount || 0;
-        const activityLength = kids.reduce(
+        const creditUsed = user.usage?.elevenLabsCount || 0;
+        const activityLength = user.kids.reduce(
           (total, kid) =>
             total +
             kid.screenTimeSessions.reduce(
@@ -132,10 +153,28 @@ export class AdminUserService {
             ),
           0,
         );
-        const amountSpent = paymentTransactions.reduce(
-          (sum, txn) => sum + txn.amount,
-          0,
-        );
+        // Group spending by currency (most users have one currency)
+        const spendingByCurrency = new Map<string, number>();
+        for (const txn of user.paymentTransactions) {
+          if (!txn.currency) continue;
+          const curr = txn.currency;
+          spendingByCurrency.set(
+            curr,
+            (spendingByCurrency.get(curr) ?? 0) + txn.amount,
+          );
+        }
+        // Primary currency = the one with the most spending
+        const primaryCurrency = [...spendingByCurrency.entries()].sort(
+          (a, b) => b[1] - a[1],
+        )[0];
+        const amountSpent = primaryCurrency?.[1] ?? 0;
+        const currency = primaryCurrency?.[0] ?? null;
+
+        // Check if user has active subscription (same logic as getUserById)
+        const now = new Date();
+        const hasActiveSubscription =
+          user.subscription?.status === 'active' &&
+          (!user.subscription.endsAt || user.subscription.endsAt > now);
 
         return {
           ...safeUser,
@@ -143,13 +182,13 @@ export class AdminUserService {
           activityLength,
           creditUsed,
           amountSpent,
-          isPaidUser: subscription !== null,
-          activeSubscription: subscription || null,
-          kidsCount: _count.kids,
-          sessionsCount: _count.auth,
-          favoritesCount: _count.parentFavorites,
-          subscriptionsCount: subscription ? 1 : 0,
-          transactionsCount: _count.paymentTransactions,
+          currency,
+          isPaidUser: hasActiveSubscription,
+          activeSubscription: hasActiveSubscription ? user.subscription : null,
+          kidsCount: user._count.kids,
+          sessionsCount: user._count.auth,
+          favoritesCount: user._count.parentFavorites,
+          transactionsCount: user._count.paymentTransactions,
         };
       }),
       meta: {
@@ -161,84 +200,66 @@ export class AdminUserService {
     };
   }
 
-  async getUserById(userId: string): Promise<
-    Omit<User, 'passwordHash' | 'pinHash'> & {
-      isPaidUser: boolean;
-      totalSpent: number;
-      stats: {
-        sessionsCount: number;
-        favoritesCount: number;
-        voicesCount: number;
-        subscriptionsCount: number;
-        ticketsCount: number;
-        transactionsCount: number;
-      };
-    }
-  > {
-    const user = await this.adminUserRepository.findUserById(userId);
+  async getUserById(userId: string): Promise<any> {
+    const user = await this.userRepo.findByIdWithDetails(userId);
 
     if (!user) {
-      throw new ResourceNotFoundException('User', userId);
+      throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
     // Check if user has active subscription
     const now = new Date();
-    const sub = user.subscription;
     const hasActiveSubscription =
-      sub !== null &&
-      sub.status === 'active' &&
-      (!sub.endsAt || sub.endsAt > now);
+      user.subscription?.status === 'active' &&
+      (!user.subscription.endsAt || user.subscription.endsAt > now);
 
-    const totalSpentResult =
-      await this.adminUserRepository.aggregatePaymentTransactions({
-        userId,
-        status: 'success',
-      });
+    const userTransactions =
+      await this.paymentRepo.findSuccessfulByUser(userId);
+    const spendingByCurrency = new Map<string, number>();
+    for (const txn of userTransactions) {
+      if (!txn.currency) continue;
+      const curr = txn.currency;
+      spendingByCurrency.set(
+        curr,
+        (spendingByCurrency.get(curr) ?? 0) + txn.amount,
+      );
+    }
+    const primarySpend = [...spendingByCurrency.entries()].sort(
+      (a, b) => b[1] - a[1],
+    )[0];
 
-    /* eslint-disable @typescript-eslint/no-unused-vars */
-    const {
-      passwordHash: _passwordHash,
-      pinHash: _pinHash,
-      _count,
-      ...safeUser
-    } = user;
-    /* eslint-enable @typescript-eslint/no-unused-vars */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash, pinHash, ...safeUser } = user;
 
     return {
       ...safeUser,
       isPaidUser: hasActiveSubscription,
-      totalSpent: totalSpentResult._sum.amount || 0,
+      amountSpent: primarySpend?.[1] ?? 0,
+      currency: primarySpend?.[0] ?? null,
       stats: {
-        sessionsCount: _count.auth,
-        favoritesCount: _count.parentFavorites,
-        voicesCount: _count.voices,
-        subscriptionsCount: user.subscription ? 1 : 0,
-        ticketsCount: _count.supportTickets,
-        transactionsCount: _count.paymentTransactions,
+        sessionsCount: user._count.auth,
+        favoritesCount: user._count.parentFavorites,
+        voicesCount: user._count.voices,
+        ticketsCount: user._count.supportTickets,
+        transactionsCount: user._count.paymentTransactions,
       },
+      _count: undefined,
     };
   }
 
-  async createAdmin(data: CreateAdminDto): Promise<AdminCreatedDto> {
-    const existingUser = await this.adminUserRepository.findUserByEmail(
-      data.email,
-    );
+  async createAdmin(data: CreateAdminDto): Promise<any> {
+    const existingUser = await this.userRepo.findByEmail(data.email);
 
     if (existingUser) {
-      throw new ResourceAlreadyExistsException('User', 'email', data.email);
+      throw new ConflictException('User with this email already exists');
     }
 
-    const passwordHash = await this.passwordService.hashPassword(data.password);
+    const passwordHash = await bcrypt.hash(data.password, 10);
 
-    return this.adminUserRepository.createUser({
+    return this.userRepo.createAdmin({
       email: data.email,
       passwordHash,
       name: data.name,
-      role: Role.admin,
-      isEmailVerified: true,
-      profile: {
-        country: 'NG',
-      },
     });
   }
 
@@ -246,26 +267,24 @@ export class AdminUserService {
     userId: string,
     data: UpdateUserDto,
     currentAdminId?: string,
-  ): Promise<UserUpdatedDto> {
+  ): Promise<any> {
     // Safety check: prevent self-demotion
     if (userId === currentAdminId && data.role && data.role !== Role.admin) {
-      throw new ValidationException(
+      throw new BadRequestException(
         'You cannot demote yourself from admin status.',
       );
     }
 
-    const user = await this.adminUserRepository.findUserByIdSimple(userId);
+    const user = await this.userRepo.findById(userId);
 
     if (!user) {
-      throw new ResourceNotFoundException('User', userId);
+      throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
     if (data.email && data.email !== user.email) {
-      const existingUser = await this.adminUserRepository.findUserByEmail(
-        data.email,
-      );
+      const existingUser = await this.userRepo.findByEmail(data.email);
       if (existingUser) {
-        throw new ResourceAlreadyExistsException('User', 'email', data.email);
+        throw new ConflictException('Email already in use');
       }
     }
 
@@ -275,150 +294,121 @@ export class AdminUserService {
       ...(data.email && { email: data.email }),
     };
 
-    return this.adminUserRepository.updateUser({
-      userId,
-      data: updateData,
-    });
+    return this.userRepo.updateUserFields(userId, updateData);
   }
 
   async deleteUser(
     userId: string,
     permanent: boolean = false,
     currentAdminId?: string,
-  ): Promise<{
-    id: string;
-    email: string;
-    name: string | null;
-    role: string;
-    isDeleted: boolean;
-    deletedAt: Date | null;
-  }> {
+  ): Promise<any> {
     // Safety check: prevent self-deletion
     if (userId === currentAdminId) {
-      throw new ValidationException('You cannot delete your own account.');
+      throw new BadRequestException('You cannot delete your own account.');
     }
 
-    const user = await this.adminUserRepository.findUserByIdSimple(userId);
+    const user = await this.userRepo.findById(userId);
 
     if (!user) {
-      throw new ResourceNotFoundException('User', userId);
+      throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
     if (permanent) {
-      return this.adminUserRepository.hardDeleteUser(userId);
+      return this.userRepo.hardDeleteUser(userId);
     } else {
-      return this.adminUserRepository.softDeleteUser(userId);
+      return this.userRepo.softDeleteUser(userId);
     }
   }
 
-  async restoreUser(userId: string): Promise<{
-    id: string;
-    email: string;
-    name: string | null;
-    role: string;
-    isDeleted: boolean;
-    deletedAt: Date | null;
-  }> {
-    const user = await this.adminUserRepository.findUserByIdSimple(userId);
+  async restoreUser(userId: string): Promise<any> {
+    const user = await this.userRepo.findById(userId);
 
     if (!user) {
-      throw new ResourceNotFoundException('User', userId);
+      throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    return this.adminUserRepository.restoreUser(userId);
-  }
-
-  async suspendUser(userId: string) {
-    const user = await this.adminUserRepository.findUserByIdSimple(userId);
-    if (!user) throw new ResourceNotFoundException('User', userId);
-    if (user.role === 'admin')
-      throw new ForbiddenActionException('Cannot suspend admin users');
-    if (user.isSuspended)
-      throw new ConflictException('User is already suspended');
-
-    return this.adminUserRepository.updateUser({
-      userId,
-      data: { isSuspended: true, suspendedAt: new Date() },
-    });
-  }
-
-  async unsuspendUser(userId: string) {
-    const user = await this.adminUserRepository.findUserByIdSimple(userId);
-    if (!user) throw new ResourceNotFoundException('User', userId);
-    if (!user.isSuspended) throw new ConflictException('User is not suspended');
-
-    return this.adminUserRepository.updateUser({
-      userId,
-      data: { isSuspended: false, suspendedAt: null },
-    });
+    return this.userRepo.restoreUser(userId);
   }
 
   async bulkUserAction(data: BulkActionDto): Promise<{ count: number }> {
     const { userIds, action } = data;
 
     switch (action) {
-      case 'delete':
-        return this.adminUserRepository.bulkSoftDeleteUsers(userIds);
-
-      case 'restore':
-        return this.adminUserRepository.bulkRestoreUsers(userIds);
-
-      case 'verify':
-        return this.adminUserRepository.bulkVerifyUsers(userIds);
-
-      default:
-        throw new ValidationException('Invalid action');
-    }
-  }
-
-  async exportUsersAsCsv(): Promise<string> {
-    const CHUNK_SIZE = 1000;
-    const headers = [
-      'ID',
-      'Email',
-      'Name',
-      'Role',
-      'Verified',
-      'Created',
-      'Suspended',
-    ];
-
-    const csvParts: string[] = [headers.join(',')];
-    let skip = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-      const users = await this.adminUserRepository.findUsers({
-        where: {},
-        skip,
-        take: CHUNK_SIZE,
-        orderBy: { createdAt: 'desc' },
-      });
-
-      for (const u of users) {
-        csvParts.push(
-          [
-            u.id,
-            this.sanitizeCsvValue(u.email),
-            this.sanitizeCsvValue(u.name || ''),
-            u.role,
-            u.isEmailVerified ? 'Yes' : 'No',
-            u.createdAt.toISOString(),
-            u.isSuspended ? 'Yes' : 'No',
-          ].join(','),
-        );
+      case 'delete': {
+        const deleteResult = await this.userRepo.bulkSoftDelete(userIds);
+        return { count: deleteResult.count };
       }
 
-      hasMore = users.length === CHUNK_SIZE;
-      skip += CHUNK_SIZE;
-    }
+      case 'restore': {
+        const restoreResult = await this.userRepo.bulkRestore(userIds);
+        return { count: restoreResult.count };
+      }
 
-    return csvParts.join('\n');
+      case 'verify': {
+        const verifyResult = await this.userRepo.bulkVerify(userIds);
+        return { count: verifyResult.count };
+      }
+
+      default:
+        throw new BadRequestException('Invalid action');
+    }
   }
 
-  /** CSV injection prevention helper */
-  private sanitizeCsvValue(val: string): string {
-    if (/^[=+\-@\t\r]/.test(val)) return `\t${val}`;
-    return val;
+  async suspendUser(userId: string): Promise<any> {
+    const user = await this.userRepo.findById(userId);
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    if (user.isSuspended) {
+      throw new BadRequestException('User is already suspended');
+    }
+
+    if (user.role === Role.admin) {
+      throw new BadRequestException('Cannot suspend an admin user');
+    }
+
+    return this.userRepo.suspendUser(userId);
+  }
+
+  async unsuspendUser(userId: string): Promise<any> {
+    const user = await this.userRepo.findById(userId);
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    if (!user.isSuspended) {
+      throw new BadRequestException('User is not suspended');
+    }
+
+    return this.userRepo.unsuspendUser(userId);
+  }
+
+  async resetUserQuota(userId: string, body: ResetQuotaDto) {
+    const usage = await this.userRepo.findUserUsage(userId);
+
+    if (!usage) {
+      throw new NotFoundException('User usage record not found');
+    }
+
+    const updateData: Prisma.UserUsageUpdateInput = {};
+
+    if (body.resetStoryQuota) updateData.uniqueStoriesRead = 0;
+    if (body.resetBonusStories) updateData.bonusStories = 0;
+    if (body.resetElevenLabsCount) updateData.elevenLabsCount = 0;
+    if (body.resetGeminiStory) updateData.geminiStoryCount = 0;
+    if (body.resetGeminiImage) updateData.geminiImageCount = 0;
+    if (body.resetVoiceLock) {
+      updateData.selectedSecondVoice = { disconnect: true };
+      updateData.elevenLabsTrialStory = { disconnect: true };
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      throw new BadRequestException('No quota fields selected for reset');
+    }
+
+    return this.userRepo.updateUserUsage(userId, updateData);
   }
 }

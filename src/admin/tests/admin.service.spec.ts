@@ -1,12 +1,38 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { AdminService } from '../admin.service';
+import { AdminAnalyticsService } from '../admin-analytics.service';
+import { AdminUserService } from '../admin-user.service';
+import { AdminCouponService } from '../admin-coupon.service';
+import { AdminExportService } from '../admin-export.service';
+import { AdminSubscriptionOpsService } from '../admin-subscription-ops.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ElevenLabsTTSProvider } from '../../voice/providers/eleven-labs-tts.provider';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CouponService } from '../../coupon/coupon.service';
 import { GoogleVerificationService } from '../../payment/google-verification.service';
 import { AppleVerificationService } from '../../payment/apple-verification.service';
+import {
+  ADMIN_STORY_REPOSITORY,
+  PrismaAdminStoryRepository,
+  ADMIN_SYSTEM_REPOSITORY,
+  PrismaAdminSystemRepository,
+  ADMIN_USER_REPOSITORY,
+  PrismaAdminUserRepository,
+  ADMIN_SUBSCRIPTION_REPOSITORY,
+  PrismaAdminSubscriptionRepository,
+  ADMIN_PAYMENT_REPOSITORY,
+  PrismaAdminPaymentRepository,
+  ADMIN_COUPON_REPOSITORY,
+  PrismaAdminCouponRepository,
+  ADMIN_CONTENT_REPOSITORY,
+  PrismaAdminContentRepository,
+  ADMIN_ENGAGEMENT_REPOSITORY,
+  PrismaAdminEngagementRepository,
+  ADMIN_ACTIVITY_REPOSITORY,
+  PrismaAdminActivityRepository,
+  ADMIN_ANALYTICS_REPOSITORY,
+  PrismaAdminAnalyticsRepository,
+} from '../repositories';
 
 // Mock Cache Manager
 const mockCacheManager = {
@@ -14,11 +40,6 @@ const mockCacheManager = {
   set: jest.fn(),
   del: jest.fn(),
   reset: jest.fn(),
-};
-
-// Mock ElevenLabs TTS Provider
-const mockElevenLabsProvider = {
-  getUsageStats: jest.fn(),
 };
 
 // Mock EventEmitter2
@@ -99,14 +120,59 @@ describe('AdminService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        // Facade + focused services (real) — behaviour is driven through the
+        // repositories down to the mocked PrismaService, so result assertions
+        // remain valid end-to-end.
         AdminService,
+        AdminAnalyticsService,
+        AdminUserService,
+        AdminCouponService,
+        AdminExportService,
+        AdminSubscriptionOpsService,
+        // Repositories (real) wired to the mocked Prisma client.
+        {
+          provide: ADMIN_STORY_REPOSITORY,
+          useClass: PrismaAdminStoryRepository,
+        },
+        {
+          provide: ADMIN_SYSTEM_REPOSITORY,
+          useClass: PrismaAdminSystemRepository,
+        },
+        {
+          provide: ADMIN_USER_REPOSITORY,
+          useClass: PrismaAdminUserRepository,
+        },
+        {
+          provide: ADMIN_SUBSCRIPTION_REPOSITORY,
+          useClass: PrismaAdminSubscriptionRepository,
+        },
+        {
+          provide: ADMIN_PAYMENT_REPOSITORY,
+          useClass: PrismaAdminPaymentRepository,
+        },
+        {
+          provide: ADMIN_COUPON_REPOSITORY,
+          useClass: PrismaAdminCouponRepository,
+        },
+        {
+          provide: ADMIN_CONTENT_REPOSITORY,
+          useClass: PrismaAdminContentRepository,
+        },
+        {
+          provide: ADMIN_ENGAGEMENT_REPOSITORY,
+          useClass: PrismaAdminEngagementRepository,
+        },
+        {
+          provide: ADMIN_ACTIVITY_REPOSITORY,
+          useClass: PrismaAdminActivityRepository,
+        },
+        {
+          provide: ADMIN_ANALYTICS_REPOSITORY,
+          useClass: PrismaAdminAnalyticsRepository,
+        },
         {
           provide: PrismaService,
           useValue: mockPrismaService,
-        },
-        {
-          provide: ElevenLabsTTSProvider,
-          useValue: mockElevenLabsProvider,
         },
         {
           provide: CACHE_MANAGER,

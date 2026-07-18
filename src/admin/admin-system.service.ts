@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  Inject,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, Inject, NotFoundException } from '@nestjs/common';
 import { ValidationException } from '@/shared/exceptions';
 import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -12,6 +7,8 @@ import { Prisma } from '@prisma/client';
 import {
   IAdminSystemRepository,
   ADMIN_SYSTEM_REPOSITORY,
+  IAdminContentRepository,
+  ADMIN_CONTENT_REPOSITORY,
 } from './repositories';
 import { ActivityLogDto, SubscriptionDto } from './dto/admin-responses.dto';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
@@ -22,7 +19,6 @@ import {
   systemAvatars,
 } from '../prisma/seed-data';
 import { CACHE_INVALIDATION } from '@/shared/constants/cache-keys.constants';
-import { PrismaService } from '../prisma/prisma.service';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
 
@@ -33,9 +29,10 @@ export class AdminSystemService {
   constructor(
     @Inject(ADMIN_SYSTEM_REPOSITORY)
     private readonly adminSystemRepository: IAdminSystemRepository,
+    @Inject(ADMIN_CONTENT_REPOSITORY)
+    private readonly contentRepo: IAdminContentRepository,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-    private readonly prisma: PrismaService, // For seedDatabase (complex transaction)
   ) {}
 
   async getRecentActivity(
@@ -113,24 +110,15 @@ export class AdminSystemService {
 
   async createSupportTicket(userId: string, dto: CreateAdminTicketDto) {
     // Verify user exists if creating on behalf of someone
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
+    const user = await this.adminSystemRepository.findUserById(userId);
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    return this.prisma.supportTicket.create({
-      data: {
-        userId,
-        subject: dto.subject,
-        message: dto.message,
-      },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true },
-        },
-      },
+    return this.adminSystemRepository.createSupportTicket({
+      userId,
+      subject: dto.subject,
+      message: dto.message,
     });
   }
 
@@ -202,125 +190,24 @@ export class AdminSystemService {
     try {
       this.logger.log('Seeding database components...');
 
-      // I'll keep the direct prisma usage for seedDatabase if it's very complex,
-      // but ideally it should use specialized repositories too if they have create/upsert.
-      // Since it's a seed script, it's often more practical to keep it centralized.
-
-      // Categories
+      // Categories (upsert-by-id with find-first fallback)
       for (const category of categories) {
-        await this.prisma.category
-          .upsert({
-            where: { id: category.name }, // Or name if unique
-            update: {
-              image: category.image,
-              description: category.description,
-              isDeleted: false,
-              deletedAt: null,
-            },
-            create: {
-              name: category.name,
-              image: category.image,
-              description: category.description,
-            },
-          })
-          .catch(async () => {
-            // Fallback if upsert by id fails because name is unique
-            const existing = await this.prisma.category.findFirst({
-              where: { name: category.name },
-            });
-            if (existing) {
-              return this.prisma.category.update({
-                where: { id: existing.id },
-                data: {
-                  image: category.image,
-                  description: category.description,
-                  isDeleted: false,
-                  deletedAt: null,
-                },
-              });
-            }
-            return this.prisma.category.create({
-              data: {
-                name: category.name,
-                image: category.image,
-                description: category.description,
-              },
-            });
-          });
+        await this.contentRepo.upsertCategorySeed(category);
       }
 
       // Themes
       for (const theme of themes) {
-        const existing = await this.prisma.theme.findFirst({
-          where: { name: theme.name },
-        });
-        if (existing) {
-          await this.prisma.theme.update({
-            where: { id: existing.id },
-            data: {
-              image: theme.image,
-              description: theme.description,
-              isDeleted: false,
-              deletedAt: null,
-            },
-          });
-        } else {
-          await this.prisma.theme.create({
-            data: {
-              name: theme.name,
-              image: theme.image,
-              description: theme.description,
-            },
-          });
-        }
+        await this.contentRepo.seedTheme(theme);
       }
 
       // Age Groups
       for (const ageGroup of defaultAgeGroups) {
-        const existing = await this.prisma.ageGroup.findFirst({
-          where: { name: ageGroup.name },
-        });
-        if (existing) {
-          await this.prisma.ageGroup.update({
-            where: { id: existing.id },
-            data: {
-              min: ageGroup.min,
-              max: ageGroup.max,
-              isDeleted: false,
-              deletedAt: null,
-            },
-          });
-        } else {
-          await this.prisma.ageGroup.create({
-            data: { name: ageGroup.name, min: ageGroup.min, max: ageGroup.max },
-          });
-        }
+        await this.contentRepo.seedAgeGroup(ageGroup);
       }
 
       // System Avatars
       for (const avatarData of systemAvatars) {
-        const existing = await this.prisma.avatar.findFirst({
-          where: { name: avatarData.name, isSystemAvatar: true },
-        });
-        if (existing) {
-          await this.prisma.avatar.update({
-            where: { id: existing.id },
-            data: {
-              url: avatarData.url,
-              isSystemAvatar: true,
-              isDeleted: false,
-              deletedAt: null,
-            },
-          });
-        } else {
-          await this.prisma.avatar.create({
-            data: {
-              name: avatarData.name,
-              url: avatarData.url,
-              isSystemAvatar: true,
-            },
-          });
-        }
+        await this.contentRepo.seedSystemAvatar(avatarData);
       }
 
       // Invalidate all content caches after seeding (both story content and metadata)
