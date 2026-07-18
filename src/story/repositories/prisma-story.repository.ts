@@ -36,6 +36,7 @@ import {
   ParentRecommendationWithRelations,
   FavoriteWithStory,
   CategoryWithCount,
+  StoryWithCreatorParent,
 } from './story.repository.interface';
 
 @Injectable()
@@ -73,6 +74,16 @@ export class PrismaStoryRepository implements IStoryRepository {
         seasons: true,
         questions: { select: { id: true } },
       },
+    });
+  }
+
+  async findStoryByIdWithCreatorParent(
+    id: string,
+    includeDeleted = false,
+  ): Promise<StoryWithCreatorParent | null> {
+    return this.prisma.story.findFirst({
+      where: { id, ...(includeDeleted ? {} : { isDeleted: false }) },
+      include: { creatorKid: { select: { parentId: true } } },
     });
   }
 

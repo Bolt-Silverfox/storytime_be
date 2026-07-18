@@ -7,7 +7,8 @@ import { StoryService } from './story.service';
 import { StoryQuotaService } from './story-quota.service';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
+import { STORY_REPOSITORY } from './repositories/story.repository.interface';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { UpdateStoryDto } from './dto/story.dto';
 
@@ -27,15 +28,11 @@ const mockStoryService = {
   updateStory: jest.fn(),
 };
 
-const mockPrismaService = {
-  kid: {
-    findFirst: jest
-      .fn()
-      .mockResolvedValue({ id: 'kid-123', parentId: 'user-1' }),
-  },
-  story: {
-    findFirst: jest.fn(),
-  },
+const mockStoryRepository = {
+  findKidByIdAndParent: jest
+    .fn()
+    .mockResolvedValue({ id: 'kid-123', parentId: 'user-1' }),
+  findStoryByIdWithCreatorParent: jest.fn(),
 };
 
 const mockReq = {
@@ -60,7 +57,8 @@ describe('StoryController', () => {
       providers: [
         { provide: StoryService, useValue: mockStoryService },
         { provide: StoryQuotaService, useValue: mockStoryQuotaService },
-        { provide: PrismaService, useValue: mockPrismaService },
+        KidOwnershipService,
+        { provide: STORY_REPOSITORY, useValue: mockStoryRepository },
         {
           provide: 'CACHE_MANAGER',
           useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() },
@@ -84,7 +82,7 @@ describe('StoryController', () => {
     );
     service = module.get(StoryService);
     jest.clearAllMocks();
-    mockPrismaService.kid.findFirst.mockResolvedValue({
+    mockStoryRepository.findKidByIdAndParent.mockResolvedValue({
       id: 'kid-123',
       parentId: 'user-1',
     });
@@ -205,14 +203,14 @@ describe('StoryController', () => {
   // --- 4. IDOR PROTECTION ---
   describe('IDOR protection', () => {
     it('should throw NotFoundException when kid does not belong to parent', async () => {
-      mockPrismaService.kid.findFirst.mockResolvedValue(null);
+      mockStoryRepository.findKidByIdAndParent.mockResolvedValue(null);
       await expect(libraryController.getCreated(mockReq, 'kid-999')).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('should throw NotFoundException when story does not exist', async () => {
-      mockPrismaService.story.findFirst.mockResolvedValue(null);
+      mockStoryRepository.findStoryByIdWithCreatorParent.mockResolvedValue(null);
       await expect(
         coreController.updateStory(
           mockReq,
@@ -223,7 +221,7 @@ describe('StoryController', () => {
     });
 
     it('should throw ForbiddenException when story belongs to another user', async () => {
-      mockPrismaService.story.findFirst.mockResolvedValue({
+      mockStoryRepository.findStoryByIdWithCreatorParent.mockResolvedValue({
         id: 'story-123',
         isDeleted: false,
         creatorKidId: 'other-kid',

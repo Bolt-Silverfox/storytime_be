@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  NotFoundException,
   Param,
   Patch,
   Post,
@@ -28,7 +27,7 @@ import {
   UpdateStoryPathDto,
 } from './dto/story.dto';
 import { StoryService } from './story.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -37,20 +36,8 @@ import { PrismaService } from '../prisma/prisma.service';
 export class StoryPathController {
   constructor(
     private readonly storyService: StoryService,
-    private readonly prisma: PrismaService,
+    private readonly kidOwnership: KidOwnershipService,
   ) {}
-
-  private async verifyKidOwnership(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findFirst({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) {
-      throw new NotFoundException(
-        `Kid ${kidId} not found or does not belong to this user`,
-      );
-    }
-    return kid;
-  }
 
   // --- Story Path / Choice Tracking ---
   @Post('story-path/start')
@@ -61,7 +48,7 @@ export class StoryPathController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: StartStoryPathDto,
   ) {
-    await this.verifyKidOwnership(dto.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(dto.kidId, req.authUserData.userId);
     return this.storyService.startStoryPath(dto);
   }
 
@@ -81,7 +68,7 @@ export class StoryPathController {
     @Req() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     return this.storyService.getStoryPathsForKid(kidId);
   }
 

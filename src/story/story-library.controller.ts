@@ -2,7 +2,6 @@ import {
   Controller,
   Delete,
   Get,
-  NotFoundException,
   Param,
   Post,
   Query,
@@ -29,7 +28,7 @@ import {
 } from './dto/story.dto';
 import { PaginationUtil } from '@/shared/utils/pagination.util';
 import { StoryService } from './story.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -38,20 +37,8 @@ import { PrismaService } from '../prisma/prisma.service';
 export class StoryLibraryController {
   constructor(
     private readonly storyService: StoryService,
-    private readonly prisma: PrismaService,
+    private readonly kidOwnership: KidOwnershipService,
   ) {}
-
-  private async verifyKidOwnership(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findFirst({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) {
-      throw new NotFoundException(
-        `Kid ${kidId} not found or does not belong to this user`,
-      );
-    }
-    return kid;
-  }
 
   // --- LIBRARY ENDPOINTS ---
 
@@ -67,7 +54,7 @@ export class StoryLibraryController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     const { cursor: safeCursor, limit: safeLimit } =
       PaginationUtil.sanitizeCursorParams(cursor, limit);
     return this.storyService.getContinueReading(kidId, safeCursor, safeLimit);
@@ -85,7 +72,7 @@ export class StoryLibraryController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     const { cursor: safeCursor, limit: safeLimit } =
       PaginationUtil.sanitizeCursorParams(cursor, limit);
     return this.storyService.getCompletedStories(kidId, safeCursor, safeLimit);
@@ -103,7 +90,7 @@ export class StoryLibraryController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     const { cursor: safeCursor, limit: safeLimit } =
       PaginationUtil.sanitizeCursorParams(cursor, limit);
     return this.storyService.getCreatedStories(kidId, safeCursor, safeLimit);
@@ -121,7 +108,7 @@ export class StoryLibraryController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     const { cursor: safeCursor, limit: safeLimit } =
       PaginationUtil.sanitizeCursorParams(cursor, limit);
     return this.storyService.getDownloads(kidId, safeCursor, safeLimit);
@@ -137,7 +124,7 @@ export class StoryLibraryController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     return this.storyService.addDownload(kidId, storyId);
   }
 
@@ -151,7 +138,7 @@ export class StoryLibraryController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     return this.storyService.removeDownload(kidId, storyId);
   }
 
@@ -170,7 +157,7 @@ export class StoryLibraryController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     await this.storyService.removeFromLibrary(kidId, storyId);
     return { message: 'Story removed from library successfully' };
   }

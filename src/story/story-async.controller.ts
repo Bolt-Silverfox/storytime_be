@@ -6,7 +6,6 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
-  NotFoundException,
   Param,
   Post,
   Req,
@@ -29,7 +28,7 @@ import {
 } from '@/shared/guards/auth.guard';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
 import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
-import { PrismaService } from '../prisma/prisma.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
 import { ErrorResponseDto, GenerateStoryDto } from './dto/story.dto';
 import {
   CancelStoryJobResponseDto,
@@ -67,26 +66,8 @@ export class StoryAsyncController {
 
   constructor(
     private readonly storyQueueService: StoryQueueService,
-    private readonly prisma: PrismaService,
+    private readonly kidOwnership: KidOwnershipService,
   ) {}
-
-  /**
-   * Mirrors the sync path's kid-ownership check to keep the security posture
-   * identical between the sync and async generation flows.
-   */
-  private async verifyKidOwnership(
-    kidId: string,
-    userId: string,
-  ): Promise<void> {
-    const kid = await this.prisma.kid.findFirst({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) {
-      throw new NotFoundException(
-        `Kid ${kidId} not found or does not belong to this user`,
-      );
-    }
-  }
 
   @Post('async')
   @HttpCode(HttpStatus.ACCEPTED)
@@ -130,7 +111,7 @@ export class StoryAsyncController {
 
     // Branch identically to the sync endpoint: kidId => personalized generation.
     if (body.kidId) {
-      await this.verifyKidOwnership(body.kidId, userId);
+      await this.kidOwnership.getOwnedKidOrThrow(body.kidId, userId);
       result = await this.storyQueueService.queueStoryForKid({
         userId,
         kidId: body.kidId,
