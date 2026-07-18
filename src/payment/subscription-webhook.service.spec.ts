@@ -359,5 +359,192 @@ describe('SubscriptionWebhookService', () => {
         } as never),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    // ----------------------------------------------- linkedPurchaseToken ----
+    describe('linkedPurchaseToken chain', () => {
+      it('migrates the token forward when a new token links to an existing subscription', async () => {
+        // The event carries a brand-new token ('new-token') that is not stored.
+        // Its linkedPurchaseToken points at 'g-token-1', which we do store.
+        prisma.subscription.findFirst.mockImplementation(
+          ({ where }: { where: { purchaseToken?: string } }) =>
+            where.purchaseToken === 'g-token-1'
+              ? Promise.resolve({
+                  ...SUB,
+                  platform: 'google',
+                  purchaseToken: 'g-token-1',
+                })
+              : Promise.resolve(null),
+        );
+        // First verify() call (chain resolution) returns the link; a later
+        // verify() (expiry enrichment) returns the expiry.
+        google.verify
+          .mockResolvedValueOnce({
+            success: true,
+            linkedPurchaseToken: 'g-token-1',
+          })
+          .mockResolvedValue({
+            success: true,
+            expirationTime: new Date('2026-04-01'),
+          });
+
+        const body = googleBody(
+          {
+            packageName: 'com.storytime.app',
+            subscriptionNotification: {
+              notificationType: 4, // PURCHASED (re-subscribe/upgrade)
+              purchaseToken: 'new-token',
+              subscriptionId: 'com.storytime.monthly',
+            },
+          },
+          'msg-link-1',
+        );
+
+        const res = await service.handleGoogle(body);
+
+        expect(res.status).toBe('processed');
+        expect(res.action).toBe('google:SUBSCRIPTION_4 -> activate');
+        // Row's purchaseToken migrated from the old token to the new one.
+        expect(prisma.subscription.update).toHaveBeenCalledWith({
+          where: { id: 'sub-1' },
+          data: { purchaseToken: 'new-token' },
+        });
+      });
+
+      it('follows a multi-hop chain (C -> B -> A, only A known) and caps depth', async () => {
+        // Only 'token-A' is stored. Event token 'token-C' links to 'token-B'
+        // which links to 'token-A'.
+        prisma.subscription.findFirst.mockImplementation(
+          ({ where }: { where: { purchaseToken?: string } }) =>
+            where.purchaseToken === 'token-A'
+              ? Promise.resolve({
+                  ...SUB,
+                  platform: 'google',
+                  purchaseToken: 'token-A',
+                })
+              : Promise.resolve(null),
+        );
+        google.verify.mockImplementation(
+          ({ purchaseToken }: { purchaseToken: string }) => {
+            if (purchaseToken === 'token-C')
+              return Promise.resolve({
+                success: true,
+                linkedPurchaseToken: 'token-B',
+              });
+            if (purchaseToken === 'token-B')
+              return Promise.resolve({
+                success: true,
+                linkedPurchaseToken: 'token-A',
+              });
+            // Enrichment call on the resolved (event) token.
+            return Promise.resolve({
+              success: true,
+              expirationTime: new Date('2026-05-01'),
+            });
+          },
+        );
+
+        const body = googleBody(
+          {
+            packageName: 'com.storytime.app',
+            subscriptionNotification: {
+              notificationType: 2,
+              purchaseToken: 'token-C',
+              subscriptionId: 'com.storytime.monthly',
+            },
+          },
+          'msg-link-multi',
+        );
+
+        const res = await service.handleGoogle(body);
+
+        expect(res.status).toBe('processed');
+        expect(prisma.subscription.update).toHaveBeenCalledWith({
+          where: { id: 'sub-1' },
+          data: { purchaseToken: 'token-C' },
+        });
+      });
+
+      it('skips (no crash, no false attribution) when the chain is unknown', async () => {
+        prisma.subscription.findFirst.mockResolvedValue(null);
+        google.verify.mockResolvedValue({
+          success: true,
+          linkedPurchaseToken: 'unknown-old-token',
+        });
+
+        const body = googleBody(
+          {
+            packageName: 'com.storytime.app',
+            subscriptionNotification: {
+              notificationType: 2,
+              purchaseToken: 'orphan-token',
+              subscriptionId: 'com.storytime.monthly',
+            },
+          },
+          'msg-link-unknown',
+        );
+
+        const res = await service.handleGoogle(body);
+
+        expect(res.status).toBe('skipped');
+        expect(res.action).toBe(
+          'google:SUBSCRIPTION_2 no matching subscription',
+        );
+        expect(prisma.subscription.update).not.toHaveBeenCalled();
+      });
+
+      it('does not infinite-loop on a cyclic chain', async () => {
+        prisma.subscription.findFirst.mockResolvedValue(null);
+        // token-X links to token-Y which links back to token-X (cycle).
+        google.verify.mockImplementation(
+          ({ purchaseToken }: { purchaseToken: string }) =>
+            Promise.resolve({
+              success: true,
+              linkedPurchaseToken:
+                purchaseToken === 'token-X' ? 'token-Y' : 'token-X',
+            }),
+        );
+
+        const body = googleBody(
+          {
+            packageName: 'com.storytime.app',
+            subscriptionNotification: {
+              notificationType: 2,
+              purchaseToken: 'token-X',
+              subscriptionId: 'com.storytime.monthly',
+            },
+          },
+          'msg-link-cycle',
+        );
+
+        const res = await service.handleGoogle(body);
+
+        expect(res.status).toBe('skipped');
+        expect(prisma.subscription.update).not.toHaveBeenCalled();
+        // Guard stopped the walk well within the hop cap (no runaway calls).
+        expect(google.verify.mock.calls.length).toBeLessThanOrEqual(5);
+      });
+
+      it('skips without following the chain when subscriptionId is absent', async () => {
+        prisma.subscription.findFirst.mockResolvedValue(null);
+
+        const body = googleBody(
+          {
+            packageName: 'com.storytime.app',
+            subscriptionNotification: {
+              notificationType: 2,
+              purchaseToken: 'no-product-token',
+              // subscriptionId omitted -> cannot query the Play API.
+            },
+          },
+          'msg-link-noproduct',
+        );
+
+        const res = await service.handleGoogle(body);
+
+        expect(res.status).toBe('skipped');
+        expect(google.verify).not.toHaveBeenCalled();
+        expect(prisma.subscription.update).not.toHaveBeenCalled();
+      });
+    });
   });
 });

@@ -47,6 +47,13 @@ const GOOGLE_SUB_TYPE = {
   EXPIRED: 13,
 } as const;
 
+/**
+ * Maximum number of `linkedPurchaseToken` hops to follow when mapping a new
+ * Google Play purchase token back to an existing Subscription. Bounds the work
+ * per event and guards against a malformed/cyclic chain looping forever.
+ */
+const MAX_LINKED_TOKEN_HOPS = 5;
+
 interface GoogleRtdnPayload {
   version?: string;
   packageName?: string;
@@ -281,13 +288,18 @@ export class SubscriptionWebhookService {
       };
     }
 
-    const subscription = await this.findSubscription(
-      'google',
+    // Google issues a NEW purchase token on upgrade/downgrade/re-subscribe,
+    // linked to the prior token via `linkedPurchaseToken`. Follow that chain so
+    // events for the new token still resolve to the user's Subscription and
+    // migrate the stored token forward.
+    const subscription = await this.resolveGoogleSubscription(
       sub.purchaseToken,
+      payload.packageName,
+      sub.subscriptionId,
     );
     if (!subscription) {
       this.logger.warn(
-        `No subscription for Google purchaseToken ${this.mask(sub.purchaseToken)}`,
+        `No subscription for Google purchaseToken ${this.mask(sub.purchaseToken)} (linked-token chain unresolved)`,
       );
       return {
         status: 'skipped',
@@ -482,6 +494,92 @@ export class SubscriptionWebhookService {
     return this.prisma.subscription.findFirst({
       where: { platform, purchaseToken },
     });
+  }
+
+  /**
+   * Resolve the Subscription for a Google purchase token, following the
+   * `linkedPurchaseToken` chain when the token is not directly known.
+   *
+   * Google mints a new purchase token on upgrade/downgrade/re-subscribe and
+   * links it to the prior token. The first RTDN for the new token therefore has
+   * no matching Subscription. We walk the chain (new -> ... -> old) via the Play
+   * Developer API until we hit a token we already store, then migrate that row's
+   * `purchaseToken` forward to the newest token (`eventToken`) so this and all
+   * subsequent events resolve directly. Because `Subscription.userId` is unique
+   * (one row per user) this is an in-place update, never a merge.
+   *
+   * Returns the (possibly migrated) Subscription, or `null` if the chain is
+   * exhausted / capped without finding a known token.
+   */
+  private async resolveGoogleSubscription(
+    eventToken: string,
+    packageName: string | undefined,
+    subscriptionId: string | undefined,
+  ): Promise<Subscription | null> {
+    // Fast path: the token is already stored.
+    const direct = await this.findSubscription('google', eventToken);
+    if (direct) return direct;
+
+    // Follow linkedPurchaseToken hops. `subscriptionId` (productId) and
+    // packageName are required to query the Play Developer API.
+    if (!subscriptionId) return null;
+
+    const visited = new Set<string>([eventToken]);
+    let currentToken = eventToken;
+
+    for (let hop = 0; hop < MAX_LINKED_TOKEN_HOPS; hop++) {
+      const linkedToken = await this.fetchLinkedPurchaseToken(
+        packageName,
+        subscriptionId,
+        currentToken,
+      );
+
+      // No further link, or a cycle -> give up.
+      if (!linkedToken || visited.has(linkedToken)) return null;
+      visited.add(linkedToken);
+
+      const sub = await this.findSubscription('google', linkedToken);
+      if (sub) {
+        // Migrate the known row forward to the newest (event) token in place.
+        const migrated = await this.prisma.subscription.update({
+          where: { id: sub.id },
+          data: { purchaseToken: eventToken },
+        });
+        this.logger.log(
+          `Migrated Google purchaseToken ${this.mask(linkedToken)} -> ${this.mask(eventToken)} for subscription ${sub.id} (${hop + 1} hop(s))`,
+        );
+        return migrated;
+      }
+
+      currentToken = linkedToken;
+    }
+
+    return null;
+  }
+
+  /**
+   * Fetch a purchase token's `linkedPurchaseToken` via the Play Developer API.
+   * Returns `null` on any error (verification failure, network) so the caller
+   * can stop chasing the chain rather than crash the webhook.
+   */
+  private async fetchLinkedPurchaseToken(
+    packageName: string | undefined,
+    productId: string,
+    purchaseToken: string,
+  ): Promise<string | null> {
+    try {
+      const result = await this.googleVerification.verify({
+        packageName,
+        productId,
+        purchaseToken,
+      });
+      return result.linkedPurchaseToken ?? null;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to fetch linkedPurchaseToken for ${this.mask(purchaseToken)}: ${this.errorMessage(error)}`,
+      );
+      return null;
+    }
   }
 
   /**

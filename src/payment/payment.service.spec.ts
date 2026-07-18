@@ -139,6 +139,69 @@ describe('PaymentService', () => {
       expect(result.subscription?.plan).toBe('monthly');
     });
 
+    it('migrates the stored purchaseToken forward on a Google upgrade (linkedPurchaseToken)', async () => {
+      const userId = 'user-1';
+      const dto = {
+        platform: 'google' as const,
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'new-google-token',
+      };
+      const now = new Date();
+
+      // The verified purchase links back to the user's currently-stored token.
+      mockGoogleVerification.verify.mockResolvedValue({
+        success: true,
+        isSubscription: true,
+        platformTxId: 'GPA.5678',
+        amount: 4.99,
+        currency: 'USD',
+        expirationTime: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+        linkedPurchaseToken: 'old-google-token',
+        metadata: { acknowledgementState: 1 },
+      });
+
+      // The single per-user row still holds the OLD token.
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        id: 'sub-1',
+        userId,
+        plan: 'monthly',
+        status: 'active',
+        startedAt: now,
+        endsAt: now,
+        platform: 'google',
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'old-google-token',
+      });
+      mockPrisma.paymentTransaction.create.mockResolvedValue({
+        id: 'tx-2',
+        userId,
+        amount: 4.99,
+        currency: 'USD',
+        status: 'success',
+        reference: 'hash-new',
+      });
+      mockPrisma.subscription.update.mockResolvedValue({
+        id: 'sub-1',
+        userId,
+        plan: 'monthly',
+        status: 'active',
+        startedAt: now,
+        endsAt: now,
+        purchaseToken: 'new-google-token',
+      });
+
+      const result = await service.verifyPurchase(userId, dto);
+
+      expect(result.success).toBe(true);
+      // Explicit migration update targets the same row with the new token.
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub-1' },
+        data: { purchaseToken: 'new-google-token' },
+      });
+      // Never creates a second subscription row.
+      expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
+    });
+
     it('should verify Apple purchase and create subscription', async () => {
       const userId = 'user-1';
       const dto = {
