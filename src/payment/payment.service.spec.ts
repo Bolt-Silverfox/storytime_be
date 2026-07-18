@@ -15,7 +15,12 @@ type MockPrismaService = {
     create: jest.Mock;
     findFirst: jest.Mock;
   };
-  subscription: { findFirst: jest.Mock; create: jest.Mock; update: jest.Mock };
+  subscription: {
+    findFirst: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+    updateMany: jest.Mock;
+  };
 };
 
 const createMockPrismaService = (): MockPrismaService => ({
@@ -23,7 +28,12 @@ const createMockPrismaService = (): MockPrismaService => ({
     create: jest.fn(),
     findFirst: jest.fn(),
   },
-  subscription: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+  subscription: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+  },
 });
 
 describe('PaymentService', () => {
@@ -193,9 +203,11 @@ describe('PaymentService', () => {
       const result = await service.verifyPurchase(userId, dto);
 
       expect(result.success).toBe(true);
-      // Explicit migration update targets the same row with the new token.
-      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
-        where: { id: 'sub-1' },
+      // Explicit migration is a compare-and-swap: the token match is folded into
+      // the write, guarded on the still-stored old token so a concurrent
+      // replacement cannot mis-map the row.
+      expect(mockPrisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: { id: 'sub-1', purchaseToken: 'old-google-token' },
         data: { purchaseToken: 'new-google-token' },
       });
       // Never creates a second subscription row.
