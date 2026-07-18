@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
-import { AvatarController } from './avatar.controller';
+import { AvatarSystemController } from './avatar-system.controller';
+import { AvatarAssignmentController } from './avatar-assignment.controller';
+import { AvatarCoreController } from './avatar-core.controller';
 import { AvatarService } from './avatar.service';
 import { AvatarSeederService } from './avatar.seeder.service';
 import { CloudinaryModule } from '../upload/cloudinary.module';
@@ -10,7 +12,11 @@ import { AVATAR_REPOSITORY, PrismaAvatarRepository } from './repositories';
 
 @Module({
   imports: [CloudinaryModule, AuthModule, UploadModule, PrismaModule],
-  controllers: [AvatarController],
+  controllers: [
+    AvatarSystemController,
+    AvatarAssignmentController,
+    AvatarCoreController,
+  ],
   providers: [
     AvatarService,
     AvatarSeederService,
