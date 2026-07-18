@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { GuestSessionService } from './guest-session.service';
-import { GuestController } from './guest.controller';
+import { GuestSessionController } from './guest-session.controller';
+import { GuestStoryController } from './guest-story.controller';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { StoryModule } from '@/story/story.module';
 import { GuestActivityListener } from './listeners/guest-activity.listener';
@@ -9,7 +10,7 @@ import { PrismaGuestRepository } from './repositories/prisma-guest.repository';
 
 @Module({
   imports: [PrismaModule, forwardRef(() => StoryModule)],
-  controllers: [GuestController],
+  controllers: [GuestSessionController, GuestStoryController],
   providers: [
     GuestSessionService,
     GuestActivityListener,
