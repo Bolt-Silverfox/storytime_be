@@ -118,8 +118,15 @@ export class GooglePubSubVerifierService {
 
   private extractBearer(header?: string): string | null {
     if (!header) return null;
-    const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-    return match ? match[1].trim() : null;
+    // Parse the "Bearer <token>" scheme WITHOUT a backtracking-prone regex.
+    // The previous /^Bearer\s+(.+)$/ let `\s+` and `.+` both match whitespace,
+    // a polynomial-ReDoS on the attacker-controlled Authorization header.
+    const trimmed = header.trim();
+    const firstSpace = trimmed.search(/\s/); // single class, no quantifier — linear
+    if (firstSpace === -1) return null;
+    if (trimmed.slice(0, firstSpace).toLowerCase() !== 'bearer') return null;
+    const token = trimmed.slice(firstSpace + 1).trim();
+    return token || null;
   }
 
   private errorMessage(error: unknown): string {
