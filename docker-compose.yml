@@ -22,13 +22,17 @@ services:
     container_name: storytime_redis
     restart: unless-stopped
     environment:
-      REDIS_PASSWORD: redis_password
+      REDIS_PASSWORD: redispassword123
+    # The official redis image ignores REDIS_PASSWORD; it must be enforced via
+    # --requirepass. Keep this in sync with the password in REDIS_URL (.env).
+    command: ['sh', '-c', 'exec redis-server --requirepass "$$REDIS_PASSWORD"']
     ports:
       - '6379:6379'
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test:
+        ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping']
       interval: 10s
       timeout: 5s
       retries: 5
