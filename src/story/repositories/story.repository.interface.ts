@@ -176,6 +176,7 @@ export interface IStoryRepository {
   findUserStoryProgress(
     userId: string,
     storyId: string,
+    tx?: Prisma.TransactionClient,
   ): Promise<UserStoryProgress | null>;
 
   upsertUserStoryProgress(
@@ -205,6 +206,37 @@ export interface IStoryRepository {
     userId: string,
     storyId: string,
   ): Promise<UserStoryProgress>;
+
+  // ==================== Story Quota Operations ====================
+
+  // Find a story created by one of the given parent's (non-deleted) kids.
+  findStoryCreatedByKid(
+    storyId: string,
+    userId: string,
+  ): Promise<{ id: string } | null>;
+
+  // Create the minimal UserStoryProgress record used when recording a new
+  // unique story access for quota tracking (progress-only, no completed field).
+  createUserStoryProgressForQuota(
+    userId: string,
+    storyId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserStoryProgress>;
+
+  // Upsert usage when a new unique story is recorded: create the first-read
+  // record or increment the existing unique-stories counter.
+  upsertUserUsageForNewStory(
+    userId: string,
+    currentMonth: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserUsage>;
+
+  // Create a fresh usage record for a first-time user (no bonus accrual yet).
+  createInitialUserUsage(
+    userId: string,
+    currentMonth: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserUsage>;
 
   // ==================== Daily Challenge Operations ====================
 
@@ -370,13 +402,17 @@ export interface IStoryRepository {
 
   // ==================== Usage Tracking Operations ====================
 
-  findUserUsage(userId: string): Promise<UserUsage | null>;
+  findUserUsage(
+    userId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserUsage | null>;
 
   createUserUsage(data: Prisma.UserUsageCreateInput): Promise<UserUsage>;
 
   updateUserUsage(
     userId: string,
     data: Prisma.UserUsageUpdateInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<UserUsage>;
 
   upsertUserUsage(

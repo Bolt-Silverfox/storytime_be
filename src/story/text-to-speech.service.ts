@@ -12,6 +12,7 @@ import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service
 import { TtsCacheService } from './tts/tts-cache.service';
 import { TtsSynthesisService } from './tts/tts-synthesis.service';
 import { TtsBatchService } from './tts/tts-batch.service';
+import { PrismaStoryTtsRepository } from './repositories/prisma-story-tts.repository';
 
 // Re-export so existing importers keep resolving `preprocessTextForTTS`
 // from this module unchanged.
@@ -46,13 +47,17 @@ export class TextToSpeechService {
     private readonly subscriptionService: SubscriptionService,
     private readonly cbService: CircuitBreakerService,
   ) {
-    const cache = new TtsCacheService(this.prisma);
+    // The TTS collaborators route DB access through a repository. Like the
+    // services themselves (see class doc), the repository is hand-constructed
+    // here from the injected PrismaService rather than DI-registered.
+    const ttsRepository = new PrismaStoryTtsRepository(this.prisma);
+    const cache = new TtsCacheService(ttsRepository);
     this.synthesis = new TtsSynthesisService(
       this.uploadService,
       this.elevenLabsProvider,
       this.deepgramProvider,
       this.edgeTtsProvider,
-      this.prisma,
+      ttsRepository,
       this.voiceQuota,
       this.subscriptionService,
       this.cbService,

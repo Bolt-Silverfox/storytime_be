@@ -7,6 +7,10 @@ import { ActivityLogEventListener } from '../listeners/activity-log-event.listen
 import { SubscriptionCacheListener } from '../listeners/subscription-cache.listener';
 import { KidCacheListener } from '../listeners/kid-cache.listener';
 import { UserCleanupListener } from '../listeners/user-cleanup.listener';
+import { ACTIVITY_LOG_REPOSITORY } from '../repositories/activity-log.repository.interface';
+import { PrismaActivityLogRepository } from '../repositories/prisma-activity-log.repository';
+import { USER_CLEANUP_REPOSITORY } from '../repositories/user-cleanup.repository.interface';
+import { PrismaUserCleanupRepository } from '../repositories/prisma-user-cleanup.repository';
 
 /**
  * Events Module
@@ -32,6 +36,14 @@ import { UserCleanupListener } from '../listeners/user-cleanup.listener';
     SubscriptionCacheListener,
     KidCacheListener,
     UserCleanupListener,
+    {
+      provide: ACTIVITY_LOG_REPOSITORY,
+      useClass: PrismaActivityLogRepository,
+    },
+    {
+      provide: USER_CLEANUP_REPOSITORY,
+      useClass: PrismaUserCleanupRepository,
+    },
   ],
   exports: [
     EventListenersService,

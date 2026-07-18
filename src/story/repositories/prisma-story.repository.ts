@@ -298,8 +298,10 @@ export class PrismaStoryRepository implements IStoryRepository {
   async findUserStoryProgress(
     userId: string,
     storyId: string,
+    tx?: Prisma.TransactionClient,
   ): Promise<UserStoryProgress | null> {
-    return this.prisma.userStoryProgress.findUnique({
+    const client = tx ?? this.prisma;
+    return client.userStoryProgress.findUnique({
       where: { userId_storyId: { userId, storyId } },
     });
   }
@@ -382,6 +384,74 @@ export class PrismaStoryRepository implements IStoryRepository {
         progress: 0,
         completed: false,
         totalTimeSpent: 0,
+      },
+    });
+  }
+
+  // ==================== Story Quota Operations ====================
+
+  async findStoryCreatedByKid(
+    storyId: string,
+    userId: string,
+  ): Promise<{ id: string } | null> {
+    return this.prisma.story.findFirst({
+      where: {
+        id: storyId,
+        isDeleted: false,
+        creatorKid: { parentId: userId, isDeleted: false },
+      },
+      select: { id: true },
+    });
+  }
+
+  async createUserStoryProgressForQuota(
+    userId: string,
+    storyId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserStoryProgress> {
+    const client = tx ?? this.prisma;
+    return client.userStoryProgress.create({
+      data: {
+        userId,
+        storyId,
+        progress: 0,
+      },
+    });
+  }
+
+  async upsertUserUsageForNewStory(
+    userId: string,
+    currentMonth: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserUsage> {
+    const client = tx ?? this.prisma;
+    return client.userUsage.upsert({
+      where: { userId },
+      create: {
+        userId,
+        currentMonth,
+        uniqueStoriesRead: 1,
+        lastBonusGrantedAt: new Date(),
+      },
+      update: {
+        uniqueStoriesRead: { increment: 1 },
+      },
+    });
+  }
+
+  async createInitialUserUsage(
+    userId: string,
+    currentMonth: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserUsage> {
+    const client = tx ?? this.prisma;
+    return client.userUsage.create({
+      data: {
+        userId,
+        currentMonth,
+        uniqueStoriesRead: 0,
+        bonusStories: 0,
+        lastBonusGrantedAt: null,
       },
     });
   }
@@ -818,8 +888,12 @@ export class PrismaStoryRepository implements IStoryRepository {
 
   // ==================== Usage Tracking Operations ====================
 
-  async findUserUsage(userId: string): Promise<UserUsage | null> {
-    return this.prisma.userUsage.findUnique({
+  async findUserUsage(
+    userId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserUsage | null> {
+    const client = tx ?? this.prisma;
+    return client.userUsage.findUnique({
       where: { userId },
     });
   }
@@ -831,8 +905,10 @@ export class PrismaStoryRepository implements IStoryRepository {
   async updateUserUsage(
     userId: string,
     data: Prisma.UserUsageUpdateInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<UserUsage> {
-    return this.prisma.userUsage.update({
+    const client = tx ?? this.prisma;
+    return client.userUsage.update({
       where: { userId },
       data,
     });

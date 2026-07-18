@@ -1,7 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
+import {
+  STORY_REPOSITORY,
+  IStoryRepository,
+} from './repositories/story.repository.interface';
 
 export interface StoryAccessResult {
   canAccess: boolean;
@@ -25,7 +28,8 @@ export class StoryQuotaService {
   private readonly logger = new Logger(StoryQuotaService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(STORY_REPOSITORY)
+    private readonly storyRepository: IStoryRepository,
     private readonly subscriptionService: SubscriptionService,
   ) {}
 
@@ -45,22 +49,19 @@ export class StoryQuotaService {
     // 2. Check if story was already read (re-reading is always free).
     // Deliberately does NOT filter isDeleted — soft-deleted progress records
     // still count as "already read" so users can re-read after library removal.
-    const existingProgress = await this.prisma.userStoryProgress.findUnique({
-      where: { userId_storyId: { userId, storyId } },
-    });
+    const existingProgress = await this.storyRepository.findUserStoryProgress(
+      userId,
+      storyId,
+    );
     if (existingProgress) {
       return { canAccess: true, reason: 'already_read' };
     }
 
     // 3. Check if one of the user's kids created this story (always accessible)
-    const createdByKid = await this.prisma.story.findFirst({
-      where: {
-        id: storyId,
-        isDeleted: false,
-        creatorKid: { parentId: userId, isDeleted: false },
-      },
-      select: { id: true },
-    });
+    const createdByKid = await this.storyRepository.findStoryCreatedByKid(
+      storyId,
+      userId,
+    );
     if (createdByKid) {
       return { canAccess: true, reason: 'kid_created' };
     }
@@ -94,38 +95,31 @@ export class StoryQuotaService {
     const currentMonth = this.getCurrentMonth();
 
     // Use interactive transaction to handle race condition atomically
-    await this.prisma.$transaction(async (tx) => {
+    await this.storyRepository.executeTransaction(async (tx) => {
       // Check inside transaction to prevent race conditions
-      const existing = await tx.userStoryProgress.findUnique({
-        where: { userId_storyId: { userId, storyId } },
-      });
+      const existing = await this.storyRepository.findUserStoryProgress(
+        userId,
+        storyId,
+        tx,
+      );
 
       if (existing) {
         return; // Already recorded, nothing to do
       }
 
       // Create UserStoryProgress record to mark story as "read"
-      await tx.userStoryProgress.create({
-        data: {
-          userId,
-          storyId,
-          progress: 0,
-        },
-      });
+      await this.storyRepository.createUserStoryProgressForQuota(
+        userId,
+        storyId,
+        tx,
+      );
 
       // Increment the unique stories count
-      await tx.userUsage.upsert({
-        where: { userId },
-        create: {
-          userId,
-          currentMonth,
-          uniqueStoriesRead: 1,
-          lastBonusGrantedAt: new Date(),
-        },
-        update: {
-          uniqueStoriesRead: { increment: 1 },
-        },
-      });
+      await this.storyRepository.upsertUserUsageForNewStory(
+        userId,
+        currentMonth,
+        tx,
+      );
 
       this.logger.debug(
         `Recorded new story access for user ${userId}, story ${storyId}`,
@@ -166,21 +160,17 @@ export class StoryQuotaService {
     const currentMonth = this.getCurrentMonth();
     const baseLimit = FREE_TIER_LIMITS.STORIES.BASE_LIMIT;
 
-    return await this.prisma.$transaction(async (tx) => {
-      let usage = await tx.userUsage.findUnique({ where: { userId } });
+    return await this.storyRepository.executeTransaction(async (tx) => {
+      let usage = await this.storyRepository.findUserUsage(userId, tx);
 
       if (!usage) {
         // Create new usage record for first-time user
         // Don't set lastBonusGrantedAt yet - only set when base limit is exhausted
-        usage = await tx.userUsage.create({
-          data: {
-            userId,
-            currentMonth,
-            uniqueStoriesRead: 0,
-            bonusStories: 0,
-            lastBonusGrantedAt: null,
-          },
-        });
+        usage = await this.storyRepository.createInitialUserUsage(
+          userId,
+          currentMonth,
+          tx,
+        );
         return usage;
       }
 
@@ -195,10 +185,11 @@ export class StoryQuotaService {
       // User has exhausted base limit - start or continue bonus accrual
       if (!usage.lastBonusGrantedAt) {
         // First time hitting limit - start tracking bonus from now
-        usage = await tx.userUsage.update({
-          where: { userId },
-          data: { lastBonusGrantedAt: now },
-        });
+        usage = await this.storyRepository.updateUserUsage(
+          userId,
+          { lastBonusGrantedAt: now },
+          tx,
+        );
         this.logger.debug(
           `User ${userId} exhausted base limit, bonus accrual started`,
         );
@@ -212,13 +203,14 @@ export class StoryQuotaService {
       );
 
       if (bonusesToGrant > 0) {
-        usage = await tx.userUsage.update({
-          where: { userId },
-          data: {
+        usage = await this.storyRepository.updateUserUsage(
+          userId,
+          {
             bonusStories: { increment: bonusesToGrant },
             lastBonusGrantedAt: now,
           },
-        });
+          tx,
+        );
         this.logger.debug(
           `Granted ${bonusesToGrant} bonus stories to user ${userId}`,
         );
