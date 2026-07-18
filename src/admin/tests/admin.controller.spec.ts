@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AdminController } from '../admin.controller';
+import { AdminDashboardController } from '../admin-dashboard.controller';
+import { AdminUserAdminController } from '../admin-user-admin.controller';
+import { AdminStoryAdminController } from '../admin-story-admin.controller';
+import { AdminSystemController } from '../admin-system.controller';
 import { AdminService } from '../admin.service';
 import { AdminStoryService } from '../admin-story.service';
 import { AdminSystemService } from '../admin-system.service';
@@ -38,14 +41,22 @@ const mockAdminSystemService = {
 };
 
 describe('AdminController', () => {
-  let controller: AdminController;
+  let dashboardController: AdminDashboardController;
+  let userController: AdminUserAdminController;
+  let storyController: AdminStoryAdminController;
+  let systemController: AdminSystemController;
   let adminService: typeof mockAdminService;
   let adminStoryService: typeof mockAdminStoryService;
   let adminSystemService: typeof mockAdminSystemService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [AdminController],
+      controllers: [
+        AdminDashboardController,
+        AdminUserAdminController,
+        AdminStoryAdminController,
+        AdminSystemController,
+      ],
       providers: [
         {
           provide: AdminService,
@@ -67,7 +78,16 @@ describe('AdminController', () => {
       .useValue({ canActivate: () => true })
       .compile();
 
-    controller = module.get<AdminController>(AdminController);
+    dashboardController = module.get<AdminDashboardController>(
+      AdminDashboardController,
+    );
+    userController = module.get<AdminUserAdminController>(
+      AdminUserAdminController,
+    );
+    storyController = module.get<AdminStoryAdminController>(
+      AdminStoryAdminController,
+    );
+    systemController = module.get<AdminSystemController>(AdminSystemController);
     adminService = module.get(AdminService);
     adminStoryService = module.get(AdminStoryService);
     adminSystemService = module.get(AdminSystemService);
@@ -75,7 +95,10 @@ describe('AdminController', () => {
   });
 
   it('should be defined', () => {
-    expect(controller).toBeDefined();
+    expect(dashboardController).toBeDefined();
+    expect(userController).toBeDefined();
+    expect(storyController).toBeDefined();
+    expect(systemController).toBeDefined();
   });
 
   describe('Dashboard Endpoints', () => {
@@ -83,7 +106,7 @@ describe('AdminController', () => {
       const mockStats = { totalUsers: 100, totalRevenue: 5000 };
       adminService.getDashboardStats.mockResolvedValue(mockStats);
 
-      const result = (await controller.getDashboardStats()) as any;
+      const result = (await dashboardController.getDashboardStats()) as any;
 
       expect(result.data).toEqual(mockStats);
       expect(adminService.getDashboardStats).toHaveBeenCalled();
@@ -94,7 +117,9 @@ describe('AdminController', () => {
       const mockGrowth = [{ date: '2023-01-01', newUsers: 5 }];
       adminService.getUserGrowth.mockResolvedValue(mockGrowth);
 
-      const result = (await controller.getUserGrowth(mockDateRange)) as any;
+      const result = (await dashboardController.getUserGrowth(
+        mockDateRange,
+      )) as any;
 
       expect(result.data).toEqual(mockGrowth);
       expect(adminService.getUserGrowth).toHaveBeenCalledWith(mockDateRange);
@@ -107,7 +132,7 @@ describe('AdminController', () => {
       const mockResult = { data: [{ id: '1' }], meta: { total: 1 } };
       adminService.getAllUsers.mockResolvedValue(mockResult);
 
-      const result = (await controller.getAllUsers(mockFilters)) as any;
+      const result = (await userController.getAllUsers(mockFilters)) as any;
 
       expect(result.data).toEqual(mockResult.data);
       expect(result.meta).toEqual(mockResult.meta);
@@ -119,7 +144,7 @@ describe('AdminController', () => {
       const mockUser = { id: userId, name: 'Test' };
       adminService.getUserById.mockResolvedValue(mockUser);
 
-      const result = (await controller.getUserById(userId)) as any;
+      const result = (await userController.getUserById(userId)) as any;
 
       expect(result.data).toEqual(mockUser);
       expect(adminService.getUserById).toHaveBeenCalledWith(userId);
@@ -131,7 +156,7 @@ describe('AdminController', () => {
       const mockResult = { data: [{ id: 'story-1' }], meta: { total: 1 } };
       adminStoryService.getAllStories.mockResolvedValue(mockResult);
 
-      const result = (await controller.getAllStories({} as any)) as any;
+      const result = (await storyController.getAllStories({} as any)) as any;
 
       expect(result.data).toEqual(mockResult.data);
       expect(result.meta).toEqual(mockResult.meta);
@@ -142,7 +167,7 @@ describe('AdminController', () => {
       const mockCategories = [{ id: 'cat-1', name: 'Adventure' }];
       adminStoryService.getCategories.mockResolvedValue(mockCategories);
 
-      const result = (await controller.getCategories()) as any;
+      const result = (await storyController.getCategories()) as any;
 
       expect(result.data).toEqual(mockCategories);
       expect(adminStoryService.getCategories).toHaveBeenCalled();
@@ -152,7 +177,7 @@ describe('AdminController', () => {
       const mockThemes = [{ id: 'theme-1', name: 'Friendship' }];
       adminStoryService.getThemes.mockResolvedValue(mockThemes);
 
-      const result = (await controller.getThemes()) as any;
+      const result = (await storyController.getThemes()) as any;
 
       expect(result.data).toEqual(mockThemes);
       expect(adminStoryService.getThemes).toHaveBeenCalled();
@@ -164,7 +189,7 @@ describe('AdminController', () => {
       const mockSubs = [{ id: 'sub-1', plan: 'monthly' }];
       adminSystemService.getSubscriptions.mockResolvedValue(mockSubs);
 
-      const result = (await controller.getSubscriptions('active')) as any;
+      const result = (await systemController.getSubscriptions('active')) as any;
 
       expect(result.data).toEqual(mockSubs);
       expect(adminSystemService.getSubscriptions).toHaveBeenCalledWith('active');
@@ -174,7 +199,7 @@ describe('AdminController', () => {
       const mockBackup = { message: 'Backup created successfully', timestamp: new Date() };
       adminSystemService.createBackup.mockReturnValue(mockBackup);
 
-      const result = controller.createBackup() as any;
+      const result = systemController.createBackup() as any;
 
       expect(result.data).toEqual(mockBackup);
       expect(adminSystemService.createBackup).toHaveBeenCalled();
@@ -184,7 +209,7 @@ describe('AdminController', () => {
       const mockBalance = { tier: 'pro', characterCount: 5 };
       adminSystemService.getElevenLabsBalance.mockResolvedValue(mockBalance);
 
-      const result = (await controller.getElevenLabsBalance()) as any;
+      const result = (await systemController.getElevenLabsBalance()) as any;
 
       expect(result.data).toEqual(mockBalance);
       expect(adminSystemService.getElevenLabsBalance).toHaveBeenCalled();
@@ -194,7 +219,7 @@ describe('AdminController', () => {
       const mockResult = { data: [{ id: 'ticket-1' }], meta: { total: 1 } };
       adminSystemService.getDeletionRequests.mockResolvedValue(mockResult);
 
-      const result = (await controller.getDeletionRequests(1, 10)) as any;
+      const result = (await userController.getDeletionRequests(1, 10)) as any;
 
       expect(result.data).toEqual(mockResult.data);
       expect(result.meta).toEqual(mockResult.meta);
