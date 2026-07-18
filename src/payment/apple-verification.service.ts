@@ -170,6 +170,20 @@ export class AppleVerificationService {
 
     const data = (outer.data ?? {}) as Record<string, unknown>;
 
+    // Reject notifications addressed to a different app. A JWS can be validly
+    // Apple-signed yet belong to another bundle; without this check any such
+    // notification would be recorded and routed into subscription processing.
+    const bundleId = data.bundleId as string | undefined;
+    if (this.bundleId && bundleId && bundleId !== this.bundleId) {
+      this.logger.warn(
+        `Apple notification bundleId mismatch (got ${this.sanitizeForLog(bundleId)})`,
+      );
+      throw new HttpException(
+        'Apple notification bundleId does not match configured app',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     let transactionInfo: AppleDecodedTransaction | undefined;
     let renewalInfo: AppleDecodedRenewal | undefined;
 
@@ -221,9 +235,15 @@ export class AppleVerificationService {
 
     let header: { alg?: string; x5c?: string[] };
     try {
-      header = JSON.parse(
+      const parsed: unknown = JSON.parse(
         Buffer.from(parts[0], 'base64url').toString('utf8'),
-      ) as { alg?: string; x5c?: string[] };
+      );
+      // `JSON.parse('null')` (and other non-object JSON) succeeds; guard against
+      // it so dereferencing header.alg below cannot throw an unhandled 500.
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('JWS header must be a JSON object');
+      }
+      header = parsed as { alg?: string; x5c?: string[] };
     } catch {
       throw new HttpException('Invalid JWS header', HttpStatus.BAD_REQUEST);
     }

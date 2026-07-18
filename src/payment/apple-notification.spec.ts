@@ -227,4 +227,67 @@ describeIf('AppleVerificationService.parseSignedNotification', () => {
       HttpException,
     );
   });
+
+  it('rejects a notification addressed to a different bundleId (400)', async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AppleVerificationService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: string) => {
+              if (key === 'APPLE_ROOT_CA_FINGERPRINT')
+                return chain.rootFingerprint;
+              if (key === 'APPLE_BUNDLE_ID') return 'com.storytime.app';
+              return undefined;
+            },
+          },
+        },
+      ],
+    }).compile();
+    const scoped = module.get(AppleVerificationService);
+
+    const signedPayload = makeSignedPayload(chain, {
+      ...notificationPayload,
+      data: { ...notificationPayload.data, bundleId: 'com.evil.other' },
+    });
+
+    expect(() => scoped.parseSignedNotification(signedPayload)).toThrow(
+      /bundleId/i,
+    );
+  });
+});
+
+describe('AppleVerificationService.parseSignedNotification malformed header', () => {
+  let service: AppleVerificationService;
+
+  const b64 = (s: string): string => Buffer.from(s).toString('base64url');
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AppleVerificationService,
+        { provide: ConfigService, useValue: { get: () => undefined } },
+      ],
+    }).compile();
+    service = module.get(AppleVerificationService);
+  });
+
+  // These exercise the header guard before any certificate work, so they do not
+  // need a generated chain / openssl.
+  it('rejects a JWS whose header decodes to null (no unhandled 500)', () => {
+    const jws = `${b64('null')}.${b64('{}')}.${b64('sig')}`;
+    try {
+      service.parseSignedNotification(jws);
+      throw new Error('expected parseSignedNotification to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(HttpException);
+      expect((err as HttpException).getStatus()).toBe(400);
+    }
+  });
+
+  it('rejects a JWS whose header decodes to an array', () => {
+    const jws = `${b64('[]')}.${b64('{}')}.${b64('sig')}`;
+    expect(() => service.parseSignedNotification(jws)).toThrow(HttpException);
+  });
 });
