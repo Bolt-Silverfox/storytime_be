@@ -2,6 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { AdminService } from '../admin.service';
 import { AdminAnalyticsService } from '../admin-analytics.service';
+import { AdminDashboardMetricsService } from '../admin-dashboard-metrics.service';
+import { AdminRevenueAnalyticsService } from '../admin-revenue-analytics.service';
+import { AdminSystemMetricsService } from '../admin-system-metrics.service';
+import { AdminGuestAnalyticsService } from '../admin-guest-analytics.service';
 import { AdminUserService } from '../admin-user.service';
 import { AdminCouponService } from '../admin-coupon.service';
 import { AdminExportService } from '../admin-export.service';
@@ -125,6 +129,10 @@ describe('AdminService', () => {
         // remain valid end-to-end.
         AdminService,
         AdminAnalyticsService,
+        AdminDashboardMetricsService,
+        AdminRevenueAnalyticsService,
+        AdminSystemMetricsService,
+        AdminGuestAnalyticsService,
         AdminUserService,
         AdminCouponService,
         AdminExportService,

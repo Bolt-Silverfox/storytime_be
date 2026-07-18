@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminDashboardController } from '../admin-dashboard.controller';
-import { AdminUserAdminController } from '../admin-user-admin.controller';
+import { AdminUserQueryController } from '../admin-user-query.controller';
 import { AdminStoryAdminController } from '../admin-story-admin.controller';
 import { AdminSystemController } from '../admin-system.controller';
 import { AdminService } from '../admin.service';
@@ -42,7 +42,7 @@ const mockAdminSystemService = {
 
 describe('AdminController', () => {
   let dashboardController: AdminDashboardController;
-  let userController: AdminUserAdminController;
+  let userController: AdminUserQueryController;
   let storyController: AdminStoryAdminController;
   let systemController: AdminSystemController;
   let adminService: typeof mockAdminService;
@@ -53,7 +53,7 @@ describe('AdminController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [
         AdminDashboardController,
-        AdminUserAdminController,
+        AdminUserQueryController,
         AdminStoryAdminController,
         AdminSystemController,
       ],
@@ -81,8 +81,8 @@ describe('AdminController', () => {
     dashboardController = module.get<AdminDashboardController>(
       AdminDashboardController,
     );
-    userController = module.get<AdminUserAdminController>(
-      AdminUserAdminController,
+    userController = module.get<AdminUserQueryController>(
+      AdminUserQueryController,
     );
     storyController = module.get<AdminStoryAdminController>(
       AdminStoryAdminController,
