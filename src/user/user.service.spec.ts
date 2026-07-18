@@ -3,44 +3,37 @@ import { NotFoundException } from '@nestjs/common';
 import { UserService } from './user.service';
 import type { SafeUser } from './user.service';
 import { UserRole } from './user.controller';
-import { PrismaService } from '@/prisma/prisma.service';
 import { NotificationService } from '@/notification/notification.service';
+import { USER_REPOSITORY } from './repositories';
 
-// Type-safe mock for PrismaService
-type MockPrismaService = {
-  user: {
-    findUnique: jest.Mock;
-    findMany: jest.Mock;
-    update: jest.Mock;
-    delete: jest.Mock;
-  };
-  avatar: {
-    create: jest.Mock;
-  };
-  $transaction: jest.Mock;
+// Type-safe mock for the user repository
+type MockUserRepository = {
+  findUserById: jest.Mock;
+  findUserByIdWithRelations: jest.Mock;
+  findAllUsers: jest.Mock;
+  findActiveUsers: jest.Mock;
+  createAvatar: jest.Mock;
+  updateUserWithProfileUpsert: jest.Mock;
+  updateParentProfile: jest.Mock;
+  updateUserRole: jest.Mock;
+  updateParentAvatar: jest.Mock;
 };
 
-const createMockPrismaService = (): MockPrismaService => ({
-  user: {
-    findUnique: jest.fn(),
-    findMany: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-  },
-  avatar: {
-    create: jest.fn(),
-  },
-  $transaction: jest.fn((fn) =>
-    fn({
-      user: { update: jest.fn() },
-      avatar: { create: jest.fn() },
-    }),
-  ),
+const createMockUserRepository = (): MockUserRepository => ({
+  findUserById: jest.fn(),
+  findUserByIdWithRelations: jest.fn(),
+  findAllUsers: jest.fn(),
+  findActiveUsers: jest.fn(),
+  createAvatar: jest.fn(),
+  updateUserWithProfileUpsert: jest.fn(),
+  updateParentProfile: jest.fn(),
+  updateUserRole: jest.fn(),
+  updateParentAvatar: jest.fn(),
 });
 
 describe('UserService', () => {
   let service: UserService;
-  let mockPrisma: MockPrismaService;
+  let mockRepo: MockUserRepository;
 
   const mockUser = {
     id: 'user-1',
@@ -59,14 +52,14 @@ describe('UserService', () => {
   };
 
   beforeEach(async () => {
-    mockPrisma = createMockPrismaService();
+    mockRepo = createMockUserRepository();
 
     jest.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserService,
-        { provide: PrismaService, useValue: mockPrisma },
+        { provide: USER_REPOSITORY, useValue: mockRepo },
         {
           provide: NotificationService,
           useValue: {
@@ -88,25 +81,17 @@ describe('UserService', () => {
 
   describe('getUser', () => {
     it('should return user with numberOfKids', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockRepo.findUserByIdWithRelations.mockResolvedValue(mockUser);
 
       const result = await service.getUser('user-1');
 
       expect(result).toBeDefined();
       expect(result?.numberOfKids).toBe(2);
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'user-1', isDeleted: false },
-        include: {
-          profile: true,
-          kids: true,
-          avatar: true,
-          subscription: true,
-        },
-      });
+      expect(mockRepo.findUserByIdWithRelations).toHaveBeenCalledWith('user-1');
     });
 
     it('should return null for non-existent user', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockRepo.findUserByIdWithRelations.mockResolvedValue(null);
 
       const result = await service.getUser('nonexistent');
 
@@ -117,20 +102,15 @@ describe('UserService', () => {
   describe('getUserIncludingDeleted', () => {
     it('should return deleted user', async () => {
       const deletedUser = { ...mockUser, isDeleted: true };
-      mockPrisma.user.findUnique.mockResolvedValue(deletedUser);
+      mockRepo.findUserByIdWithRelations.mockResolvedValue(deletedUser);
 
       const result = await service.getUserIncludingDeleted('user-1');
 
       expect(result).toBeDefined();
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-        include: {
-          profile: true,
-          kids: true,
-          avatar: true,
-          subscription: true,
-        },
-      });
+      expect(mockRepo.findUserByIdWithRelations).toHaveBeenCalledWith(
+        'user-1',
+        true,
+      );
     });
   });
 
@@ -138,7 +118,7 @@ describe('UserService', () => {
 
   describe('getAllUsers', () => {
     it('should return all users without sensitive fields', async () => {
-      mockPrisma.user.findMany.mockResolvedValue([mockUser]);
+      mockRepo.findAllUsers.mockResolvedValue([mockUser]);
 
       const result = await service.getAllUsers();
 
@@ -154,15 +134,12 @@ describe('UserService', () => {
 
   describe('getActiveUsers', () => {
     it('should return only active (non-deleted) users', async () => {
-      mockPrisma.user.findMany.mockResolvedValue([mockUser]);
+      mockRepo.findActiveUsers.mockResolvedValue([mockUser]);
 
       const result = await service.getActiveUsers();
 
       expect(result).toHaveLength(1);
-      expect(mockPrisma.user.findMany).toHaveBeenCalledWith({
-        where: { isDeleted: false },
-        include: { profile: true, avatar: true },
-      });
+      expect(mockRepo.findActiveUsers).toHaveBeenCalledWith();
     });
   });
 
@@ -170,8 +147,8 @@ describe('UserService', () => {
 
   describe('updateUser', () => {
     it('should update user name', async () => {
-      mockPrisma.user.findUnique.mockResolvedValueOnce(mockUser);
-      mockPrisma.user.update.mockResolvedValue({
+      mockRepo.findUserById.mockResolvedValueOnce(mockUser);
+      mockRepo.updateUserWithProfileUpsert.mockResolvedValue({
         ...mockUser,
         name: 'Updated Name',
       });
@@ -181,11 +158,11 @@ describe('UserService', () => {
       });
 
       expect(result).toBeDefined();
-      expect(mockPrisma.user.update).toHaveBeenCalled();
+      expect(mockRepo.updateUserWithProfileUpsert).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException for non-existent user', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockRepo.findUserById.mockResolvedValue(null);
 
       await expect(
         service.updateUser('nonexistent', { name: 'Test' }),
@@ -193,9 +170,8 @@ describe('UserService', () => {
     });
 
     it('should return existing user when no updates provided', async () => {
-      mockPrisma.user.findUnique
-        .mockResolvedValueOnce(mockUser)
-        .mockResolvedValueOnce(mockUser);
+      mockRepo.findUserById.mockResolvedValueOnce(mockUser);
+      mockRepo.findUserByIdWithRelations.mockResolvedValueOnce(mockUser);
 
       const result = await service.updateUser('user-1', {});
 
@@ -203,12 +179,12 @@ describe('UserService', () => {
     });
 
     it('should create new avatar when avatarUrl is provided', async () => {
-      mockPrisma.user.findUnique.mockResolvedValueOnce(mockUser);
-      mockPrisma.avatar.create.mockResolvedValue({
+      mockRepo.findUserById.mockResolvedValueOnce(mockUser);
+      mockRepo.createAvatar.mockResolvedValue({
         id: 'new-avatar-id',
         url: 'https://example.com/avatar.jpg',
       });
-      mockPrisma.user.update.mockResolvedValue({
+      mockRepo.updateUserWithProfileUpsert.mockResolvedValue({
         ...mockUser,
         avatarId: 'new-avatar-id',
       });
@@ -217,7 +193,7 @@ describe('UserService', () => {
         avatarUrl: 'https://example.com/avatar.jpg',
       });
 
-      expect(mockPrisma.avatar.create).toHaveBeenCalled();
+      expect(mockRepo.createAvatar).toHaveBeenCalled();
     });
   });
 
@@ -225,7 +201,7 @@ describe('UserService', () => {
 
   describe('getUserRole', () => {
     it('should return user role', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockRepo.findUserById.mockResolvedValue(mockUser);
 
       const result = await service.getUserRole('user-1');
 
@@ -235,7 +211,7 @@ describe('UserService', () => {
 
   describe('updateUserRole', () => {
     it('should update user role', async () => {
-      mockPrisma.user.update.mockResolvedValue({
+      mockRepo.updateUserRole.mockResolvedValue({
         ...mockUser,
         role: 'admin',
       });
@@ -256,8 +232,8 @@ describe('UserService', () => {
 
   describe('updateParentProfile', () => {
     it('should update parent profile', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      mockPrisma.user.update.mockResolvedValue({
+      mockRepo.findUserById.mockResolvedValue(mockUser);
+      mockRepo.updateParentProfile.mockResolvedValue({
         ...mockUser,
         name: 'Updated Name',
       });
@@ -270,7 +246,7 @@ describe('UserService', () => {
     });
 
     it('should throw NotFoundException for non-existent user', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockRepo.findUserById.mockResolvedValue(null);
 
       await expect(
         service.updateParentProfile('nonexistent', { name: 'Test' }),
@@ -280,7 +256,7 @@ describe('UserService', () => {
 
   describe('updateAvatarForParent', () => {
     it('should update avatar for parent', async () => {
-      mockPrisma.user.update.mockResolvedValue({
+      mockRepo.updateParentAvatar.mockResolvedValue({
         ...mockUser,
         avatarId: 'new-avatar-id',
         avatar: { id: 'new-avatar-id', url: 'https://example.com/avatar.jpg' },

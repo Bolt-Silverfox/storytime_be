@@ -18,6 +18,13 @@ export interface UserWithRelations extends User {
   subscriptions?: Subscription[];
 }
 
+/** User with profile, kids and avatar (no subscription include) */
+export interface UserWithProfileKidsAvatar extends User {
+  profile?: Profile | null;
+  kids?: Kid[];
+  avatar?: Avatar | null;
+}
+
 export interface UserWithProfileAndAvatar extends User {
   profile?: Profile | null;
   avatar?: Avatar | null;
@@ -27,6 +34,11 @@ export interface UserWithProfileAvatarAndCategories extends User {
   profile?: Profile | null;
   avatar?: Avatar | null;
   preferredCategories?: { id: string }[];
+}
+
+/** User with the avatar relation only */
+export interface UserWithAvatar extends User {
+  avatar?: Avatar | null;
 }
 
 export interface SafeUser extends Omit<User, 'passwordHash' | 'pinHash'> {
@@ -49,10 +61,6 @@ export interface IUserRepository {
   findActiveUsers(): Promise<UserWithProfileAndAvatar[]>;
 
   // User write operations
-  updateUser(
-    id: string,
-    data: Prisma.UserUpdateInput,
-  ): Promise<UserWithRelations>;
   updateUserSimple(
     id: string,
     data: Partial<{
@@ -64,19 +72,30 @@ export interface IUserRepository {
       onboardingStatus: string;
     }>,
   ): Promise<User>;
+  updateActiveUserSimple(
+    id: string,
+    data: Partial<{
+      role: string;
+      avatarId: string | null;
+      pinHash: string;
+      onboardingStatus: string;
+    }>,
+  ): Promise<User>;
   updateUserWithProfileUpsert(
     id: string,
     userData: Prisma.UserUncheckedUpdateInput,
     profileData: Prisma.ProfileUpdateInput,
-  ): Promise<UserWithRelations>;
+  ): Promise<UserWithProfileKidsAvatar>;
   updateParentProfile(
     id: string,
     userData: Prisma.UserUpdateInput,
     profileData: Prisma.ProfileUpdateInput,
   ): Promise<UserWithProfileAvatarAndCategories>;
+  updateUserRole(id: string, role: string): Promise<UserWithAvatar>;
+  updateParentAvatar(userId: string, avatarId: string): Promise<UserWithAvatar>;
   deleteUserPermanently(id: string): Promise<User>;
   softDeleteUser(id: string): Promise<User>;
-  restoreUser(id: string): Promise<UserWithRelations>;
+  restoreUser(id: string): Promise<UserWithProfileKidsAvatar>;
 
   // Avatar operations
   createAvatar(data: {
@@ -84,10 +103,11 @@ export interface IUserRepository {
     name: string;
     isSystemAvatar: boolean;
   }): Promise<Avatar>;
-  updateUserAvatar(
+  createAndAssignAvatar(
     userId: string,
-    avatarId: string,
-  ): Promise<UserWithProfileAndAvatar>;
+    url: string,
+    publicId: string,
+  ): Promise<UserWithAvatar>;
 
   // Session operations
   deleteAllUserSessions(userId: string): Promise<void>;

@@ -1,10 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { UserDeletionService } from './user-deletion.service';
-import { PrismaService } from '@/prisma/prisma.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { USER_REPOSITORY } from '../repositories';
 
 // Mock bcrypt
 jest.mock('bcrypt', () => ({
@@ -13,24 +13,15 @@ jest.mock('bcrypt', () => ({
 
 describe('UserDeletionService', () => {
   let service: UserDeletionService;
-  let mockPrisma: {
-    user: {
-      findUnique: jest.Mock;
-      update: jest.Mock;
-      delete: jest.Mock;
-    };
-    session: {
-      deleteMany: jest.Mock;
-    };
-    token: {
-      deleteMany: jest.Mock;
-    };
-    activityLog: {
-      create: jest.Mock;
-    };
-    supportTicket: {
-      create: jest.Mock;
-    };
+  let mockRepo: {
+    findUserById: jest.Mock;
+    deleteUserPermanently: jest.Mock;
+    softDeleteUser: jest.Mock;
+    restoreUser: jest.Mock;
+    deleteAllUserSessions: jest.Mock;
+    deleteAllUserTokens: jest.Mock;
+    createActivityLog: jest.Mock;
+    createSupportTicket: jest.Mock;
   };
 
   const mockUser = {
@@ -56,32 +47,23 @@ describe('UserDeletionService', () => {
   };
 
   beforeEach(async () => {
-    mockPrisma = {
-      user: {
-        findUnique: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
-      },
-      session: {
-        deleteMany: jest.fn(),
-      },
-      token: {
-        deleteMany: jest.fn(),
-      },
-      activityLog: {
-        create: jest.fn(),
-      },
-      supportTicket: {
-        create: jest.fn(),
-      },
+    mockRepo = {
+      findUserById: jest.fn(),
+      deleteUserPermanently: jest.fn(),
+      softDeleteUser: jest.fn(),
+      restoreUser: jest.fn(),
+      deleteAllUserSessions: jest.fn(),
+      deleteAllUserTokens: jest.fn(),
+      createActivityLog: jest.fn(),
+      createSupportTicket: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserDeletionService,
         {
-          provide: PrismaService,
-          useValue: mockPrisma,
+          provide: USER_REPOSITORY,
+          useValue: mockRepo,
         },
         {
           provide: EventEmitter2,
@@ -102,17 +84,11 @@ describe('UserDeletionService', () => {
           isDeleted: true,
           deletedAt: new Date(),
         };
-        mockPrisma.user.update.mockResolvedValue(updatedUser);
+        mockRepo.softDeleteUser.mockResolvedValue(updatedUser);
 
         const result = await service.deleteUser('user-123');
 
-        expect(mockPrisma.user.update).toHaveBeenCalledWith({
-          where: { id: 'user-123' },
-          data: {
-            isDeleted: true,
-            deletedAt: expect.any(Date),
-          },
-        });
+        expect(mockRepo.softDeleteUser).toHaveBeenCalledWith('user-123');
         expect(result).toMatchObject({
           message: 'Account deactivated successfully',
           permanent: false,
@@ -124,7 +100,7 @@ describe('UserDeletionService', () => {
           'Record not found',
           { code: 'P2025', clientVersion: '5.0.0' },
         );
-        mockPrisma.user.update.mockRejectedValue(prismaError);
+        mockRepo.softDeleteUser.mockRejectedValue(prismaError);
 
         await expect(service.deleteUser('nonexistent')).rejects.toThrow(
           NotFoundException,
@@ -134,36 +110,24 @@ describe('UserDeletionService', () => {
 
     describe('permanent delete', () => {
       it('should permanently delete user and terminate sessions', async () => {
-        mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-        mockPrisma.session.deleteMany.mockResolvedValue({ count: 2 });
-        mockPrisma.token.deleteMany.mockResolvedValue({ count: 3 });
-        mockPrisma.activityLog.create.mockResolvedValue({});
-        mockPrisma.user.delete.mockResolvedValue(mockUser);
+        mockRepo.findUserById.mockResolvedValue(mockUser);
+        mockRepo.deleteAllUserSessions.mockResolvedValue(undefined);
+        mockRepo.deleteAllUserTokens.mockResolvedValue(undefined);
+        mockRepo.createActivityLog.mockResolvedValue({});
+        mockRepo.deleteUserPermanently.mockResolvedValue(mockUser);
 
         const result = await service.deleteUser('user-123', true);
 
-        expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-          where: { id: 'user-123' },
+        expect(mockRepo.findUserById).toHaveBeenCalledWith('user-123', true);
+        expect(mockRepo.deleteAllUserSessions).toHaveBeenCalledWith('user-123');
+        expect(mockRepo.deleteAllUserTokens).toHaveBeenCalledWith('user-123');
+        expect(mockRepo.createActivityLog).toHaveBeenCalledWith({
+          userId: 'user-123',
+          action: 'SESSION_TERMINATION',
+          status: 'SUCCESS',
+          details: 'All sessions terminated due to permanent account deletion',
         });
-        expect(mockPrisma.session.deleteMany).toHaveBeenCalledWith({
-          where: { userId: 'user-123' },
-        });
-        expect(mockPrisma.token.deleteMany).toHaveBeenCalledWith({
-          where: { userId: 'user-123' },
-        });
-        expect(mockPrisma.activityLog.create).toHaveBeenCalledWith({
-          data: {
-            userId: 'user-123',
-            action: 'SESSION_TERMINATION',
-            status: 'SUCCESS',
-            details:
-              'All sessions terminated due to permanent account deletion',
-            createdAt: expect.any(Date),
-          },
-        });
-        expect(mockPrisma.user.delete).toHaveBeenCalledWith({
-          where: { id: 'user-123' },
-        });
+        expect(mockRepo.deleteUserPermanently).toHaveBeenCalledWith('user-123');
         expect(result).toMatchObject({
           id: 'user-123',
           email: 'test@example.com',
@@ -172,7 +136,7 @@ describe('UserDeletionService', () => {
       });
 
       it('should throw BadRequestException with not found message if user not found for permanent delete', async () => {
-        mockPrisma.user.findUnique.mockResolvedValue(null);
+        mockRepo.findUserById.mockResolvedValue(null);
 
         await expect(service.deleteUser('nonexistent', true)).rejects.toThrow(
           BadRequestException,
@@ -180,20 +144,20 @@ describe('UserDeletionService', () => {
         await expect(service.deleteUser('nonexistent', true)).rejects.toThrow(
           'Account not found',
         );
-        expect(mockPrisma.user.delete).not.toHaveBeenCalled();
+        expect(mockRepo.deleteUserPermanently).not.toHaveBeenCalled();
       });
 
       it('should throw BadRequestException on foreign key constraint error', async () => {
-        mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-        mockPrisma.session.deleteMany.mockResolvedValue({ count: 0 });
-        mockPrisma.token.deleteMany.mockResolvedValue({ count: 0 });
-        mockPrisma.activityLog.create.mockResolvedValue({});
+        mockRepo.findUserById.mockResolvedValue(mockUser);
+        mockRepo.deleteAllUserSessions.mockResolvedValue(undefined);
+        mockRepo.deleteAllUserTokens.mockResolvedValue(undefined);
+        mockRepo.createActivityLog.mockResolvedValue({});
 
         const prismaError = new Prisma.PrismaClientKnownRequestError(
           'Foreign key constraint',
           { code: 'P2003', clientVersion: '5.0.0' },
         );
-        mockPrisma.user.delete.mockRejectedValue(prismaError);
+        mockRepo.deleteUserPermanently.mockRejectedValue(prismaError);
 
         await expect(service.deleteUser('user-123', true)).rejects.toThrow(
           BadRequestException,
@@ -201,22 +165,24 @@ describe('UserDeletionService', () => {
       });
 
       it('should log failure if session termination fails but continue with deletion', async () => {
-        mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-        mockPrisma.session.deleteMany.mockRejectedValue(new Error('DB error'));
-        mockPrisma.activityLog.create.mockResolvedValue({});
-        mockPrisma.user.delete.mockResolvedValue(mockUser);
+        mockRepo.findUserById.mockResolvedValue(mockUser);
+        mockRepo.deleteAllUserSessions.mockRejectedValue(
+          new Error('DB error'),
+        );
+        mockRepo.createActivityLog.mockResolvedValue({});
+        mockRepo.deleteUserPermanently.mockResolvedValue(mockUser);
 
         const result = await service.deleteUser('user-123', true);
 
         // Should have logged failure
-        expect(mockPrisma.activityLog.create).toHaveBeenCalledWith({
-          data: expect.objectContaining({
+        expect(mockRepo.createActivityLog).toHaveBeenCalledWith(
+          expect.objectContaining({
             action: 'SESSION_TERMINATION',
             status: 'FAILED',
           }),
-        });
+        );
         // But still delete the user
-        expect(mockPrisma.user.delete).toHaveBeenCalled();
+        expect(mockRepo.deleteUserPermanently).toHaveBeenCalled();
         expect(result.permanent).toBe(true);
       });
     });
@@ -229,7 +195,7 @@ describe('UserDeletionService', () => {
         isDeleted: true,
         deletedAt: new Date(),
       };
-      mockPrisma.user.update.mockResolvedValue(updatedUser);
+      mockRepo.softDeleteUser.mockResolvedValue(updatedUser);
 
       const result = await service.deleteUserAccount('user-123');
 
@@ -242,9 +208,9 @@ describe('UserDeletionService', () => {
 
   describe('verifyPasswordAndLogDeletion', () => {
     it('should verify password and create support ticket', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockRepo.findUserById.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-      mockPrisma.supportTicket.create.mockResolvedValue({});
+      mockRepo.createSupportTicket.mockResolvedValue({});
 
       const result = await service.verifyPasswordAndLogDeletion(
         'user-123',
@@ -254,19 +220,15 @@ describe('UserDeletionService', () => {
         false,
       );
 
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'user-123' },
-      });
+      expect(mockRepo.findUserById).toHaveBeenCalledWith('user-123', true);
       expect(bcrypt.compare).toHaveBeenCalledWith(
         'correctPassword',
         'hashedPassword123',
       );
-      expect(mockPrisma.supportTicket.create).toHaveBeenCalledWith({
-        data: {
-          userId: 'user-123',
-          subject: 'Delete Account Request',
-          message: expect.stringContaining('Deletion request submitted'),
-        },
+      expect(mockRepo.createSupportTicket).toHaveBeenCalledWith({
+        userId: 'user-123',
+        subject: 'Delete Account Request',
+        message: expect.stringContaining('Deletion request submitted'),
       });
       expect(result).toEqual({
         success: true,
@@ -275,9 +237,9 @@ describe('UserDeletionService', () => {
     });
 
     it('should include warning for permanent deletion request', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockRepo.findUserById.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-      mockPrisma.supportTicket.create.mockResolvedValue({});
+      mockRepo.createSupportTicket.mockResolvedValue({});
 
       await service.verifyPasswordAndLogDeletion(
         'user-123',
@@ -287,17 +249,15 @@ describe('UserDeletionService', () => {
         true,
       );
 
-      expect(mockPrisma.supportTicket.create).toHaveBeenCalledWith({
-        data: {
-          userId: 'user-123',
-          subject: 'Delete Account Request',
-          message: expect.stringContaining('WARNING'),
-        },
+      expect(mockRepo.createSupportTicket).toHaveBeenCalledWith({
+        userId: 'user-123',
+        subject: 'Delete Account Request',
+        message: expect.stringContaining('WARNING'),
       });
     });
 
     it('should throw NotFoundException if user not found', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockRepo.findUserById.mockResolvedValue(null);
 
       await expect(
         service.verifyPasswordAndLogDeletion('nonexistent', 'password'),
@@ -305,7 +265,7 @@ describe('UserDeletionService', () => {
     });
 
     it('should throw BadRequestException if user is already deleted', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
+      mockRepo.findUserById.mockResolvedValue({
         ...mockUser,
         isDeleted: true,
       });
@@ -319,7 +279,7 @@ describe('UserDeletionService', () => {
     });
 
     it('should throw BadRequestException if password is invalid', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockRepo.findUserById.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
       await expect(
@@ -338,35 +298,24 @@ describe('UserDeletionService', () => {
         isDeleted: true,
         deletedAt: new Date(),
       };
-      mockPrisma.user.findUnique.mockResolvedValue(deletedUser);
-      mockPrisma.user.update.mockResolvedValue(mockUserWithRelations);
-      mockPrisma.supportTicket.create.mockResolvedValue({});
+      mockRepo.findUserById.mockResolvedValue(deletedUser);
+      mockRepo.restoreUser.mockResolvedValue(mockUserWithRelations);
+      mockRepo.createSupportTicket.mockResolvedValue({});
 
       const result = await service.undoDeleteUser('user-123');
 
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'user-123' },
-      });
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-123' },
-        data: {
-          isDeleted: false,
-          deletedAt: null,
-        },
-        include: { profile: true, kids: true, avatar: true },
-      });
-      expect(mockPrisma.supportTicket.create).toHaveBeenCalledWith({
-        data: {
-          userId: 'user-123',
-          subject: 'Account Restoration',
-          message: expect.stringContaining('Account restored by admin'),
-        },
+      expect(mockRepo.findUserById).toHaveBeenCalledWith('user-123', true);
+      expect(mockRepo.restoreUser).toHaveBeenCalledWith('user-123');
+      expect(mockRepo.createSupportTicket).toHaveBeenCalledWith({
+        userId: 'user-123',
+        subject: 'Account Restoration',
+        message: expect.stringContaining('Account restored by admin'),
       });
       expect(result).toEqual(mockUserWithRelations);
     });
 
     it('should throw NotFoundException if user not found', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockRepo.findUserById.mockResolvedValue(null);
 
       await expect(service.undoDeleteUser('nonexistent')).rejects.toThrow(
         NotFoundException,
@@ -374,7 +323,7 @@ describe('UserDeletionService', () => {
     });
 
     it('should throw BadRequestException if user is not deleted', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockRepo.findUserById.mockResolvedValue(mockUser);
 
       await expect(service.undoDeleteUser('user-123')).rejects.toThrow(
         BadRequestException,
@@ -392,32 +341,23 @@ describe('UserDeletionService', () => {
         isDeleted: true,
         deletedAt: new Date(),
       };
-      mockPrisma.user.findUnique.mockResolvedValue(deletedUser);
-      mockPrisma.user.update.mockResolvedValue(mockUserWithRelations);
-      mockPrisma.supportTicket.create.mockResolvedValue({});
+      mockRepo.findUserById.mockResolvedValue(deletedUser);
+      mockRepo.restoreUser.mockResolvedValue(mockUserWithRelations);
+      mockRepo.createSupportTicket.mockResolvedValue({});
 
       const result = await service.undoDeleteMyAccount('user-123');
 
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-123' },
-        data: {
-          isDeleted: false,
-          deletedAt: null,
-        },
-        include: { profile: true, kids: true, avatar: true },
-      });
-      expect(mockPrisma.supportTicket.create).toHaveBeenCalledWith({
-        data: {
-          userId: 'user-123',
-          subject: 'Account Self-Restoration',
-          message: expect.stringContaining('User restored their own account'),
-        },
+      expect(mockRepo.restoreUser).toHaveBeenCalledWith('user-123');
+      expect(mockRepo.createSupportTicket).toHaveBeenCalledWith({
+        userId: 'user-123',
+        subject: 'Account Self-Restoration',
+        message: expect.stringContaining('User restored their own account'),
       });
       expect(result).toEqual(mockUserWithRelations);
     });
 
     it('should throw NotFoundException if user not found', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockRepo.findUserById.mockResolvedValue(null);
 
       await expect(service.undoDeleteMyAccount('nonexistent')).rejects.toThrow(
         NotFoundException,
@@ -425,7 +365,7 @@ describe('UserDeletionService', () => {
     });
 
     it('should throw BadRequestException if account is not deleted', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockRepo.findUserById.mockResolvedValue(mockUser);
 
       await expect(service.undoDeleteMyAccount('user-123')).rejects.toThrow(
         BadRequestException,

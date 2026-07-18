@@ -1,10 +1,10 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { randomUUID } from 'crypto';
 import {
   Prisma,
   User,
@@ -13,7 +13,6 @@ import {
   Avatar,
   Subscription,
 } from '@prisma/client';
-import { PrismaService } from '@/prisma/prisma.service';
 import { UserRole } from './user.controller';
 import { UpdateUserDto } from './dto/user.dto';
 import { UpdateParentProfileDto } from './dto/update-parent-profile.dto';
@@ -21,6 +20,7 @@ import { UpdateAvatarDto } from './dto/update-avatar.dto';
 import { hashPin, verifyPinHash } from './utils/pin.util';
 import * as bcrypt from 'bcrypt';
 import { NotificationService } from '@/notification/notification.service';
+import { USER_REPOSITORY, IUserRepository } from './repositories';
 
 /** User with relations but sensitive fields excluded */
 export type SafeUser = Omit<User, 'passwordHash' | 'pinHash'> & {
@@ -55,34 +55,26 @@ type UserWithRelations = User & {
 @Injectable()
 export class UserService {
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: IUserRepository,
     private readonly notificationService: NotificationService,
   ) {}
 
   async getUser(id: string): Promise<SafeUser | null> {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id,
-        isDeleted: false,
-      },
-      include: { profile: true, kids: true, avatar: true, subscription: true },
-    });
+    const user = await this.userRepository.findUserByIdWithRelations(id);
     if (!user) return null;
 
-    return { ...user, numberOfKids: user.kids.length };
+    return { ...user, numberOfKids: user.kids?.length ?? 0 };
   }
 
   /**
    * Get user including deleted ones (for checking account status)
    */
   async getUserIncludingDeleted(id: string): Promise<SafeUser | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
-      include: { profile: true, kids: true, avatar: true, subscription: true },
-    });
+    const user = await this.userRepository.findUserByIdWithRelations(id, true);
 
     if (user) {
-      return { ...user, numberOfKids: user.kids.length };
+      return { ...user, numberOfKids: user.kids?.length ?? 0 };
     }
     return null;
   }
@@ -91,13 +83,7 @@ export class UserService {
    * Get all users (admin only) - includes both active and soft deleted users
    */
   async getAllUsers(): Promise<SafeUser[]> {
-    const users = await this.prisma.user.findMany({
-      include: {
-        profile: true,
-        avatar: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const users = await this.userRepository.findAllUsers();
 
     return users.map((user) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -110,12 +96,7 @@ export class UserService {
    * Get only active users (non-admin)
    */
   async getActiveUsers(): Promise<SafeUser[]> {
-    const users = await this.prisma.user.findMany({
-      where: {
-        isDeleted: false,
-      },
-      include: { profile: true, avatar: true },
-    });
+    const users = await this.userRepository.findActiveUsers();
 
     return users.map((user) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -136,9 +117,7 @@ export class UserService {
     try {
       if (permanent) {
         // Check if user exists first
-        const existingUser = await this.prisma.user.findUnique({
-          where: { id },
-        });
+        const existingUser = await this.userRepository.findUserById(id, true);
 
         if (!existingUser) {
           throw new NotFoundException('Account not found');
@@ -148,7 +127,7 @@ export class UserService {
         await this.terminateUserSessions(id);
 
         // Delete the user and all associated data
-        const deletedUser = await this.prisma.user.delete({ where: { id } });
+        const deletedUser = await this.userRepository.deleteUserPermanently(id);
 
         return {
           id: deletedUser.id,
@@ -158,13 +137,7 @@ export class UserService {
           permanent: true,
         };
       } else {
-        const updatedUser = await this.prisma.user.update({
-          where: { id },
-          data: {
-            isDeleted: true,
-            deletedAt: new Date(),
-          },
-        });
+        const updatedUser = await this.userRepository.softDeleteUser(id);
 
         return {
           ...updatedUser,
@@ -198,35 +171,25 @@ export class UserService {
   private async terminateUserSessions(userId: string): Promise<void> {
     try {
       // Delete all active sessions
-      await this.prisma.session.deleteMany({
-        where: { userId },
-      });
+      await this.userRepository.deleteAllUserSessions(userId);
 
       // Delete all tokens
-      await this.prisma.token.deleteMany({
-        where: { userId },
-      });
+      await this.userRepository.deleteAllUserTokens(userId);
 
       // Create activity log for session termination
-      await this.prisma.activityLog.create({
-        data: {
-          userId,
-          action: 'SESSION_TERMINATION',
-          status: 'SUCCESS',
-          details: 'All sessions terminated due to permanent account deletion',
-          createdAt: new Date(),
-        },
+      await this.userRepository.createActivityLog({
+        userId,
+        action: 'SESSION_TERMINATION',
+        status: 'SUCCESS',
+        details: 'All sessions terminated due to permanent account deletion',
       });
     } catch (error) {
       // If session termination fails, log it but continue with deletion
-      await this.prisma.activityLog.create({
-        data: {
-          userId,
-          action: 'SESSION_TERMINATION',
-          status: 'FAILED',
-          details: `Failed to terminate sessions: ${error.message}`,
-          createdAt: new Date(),
-        },
+      await this.userRepository.createActivityLog({
+        userId,
+        action: 'SESSION_TERMINATION',
+        status: 'FAILED',
+        details: `Failed to terminate sessions: ${error.message}`,
       });
     }
   }
@@ -259,9 +222,7 @@ export class UserService {
     permanent: boolean = false,
   ) {
     // Find user regardless of deletion status
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
+    const user = await this.userRepository.findUserById(userId, true);
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -299,12 +260,10 @@ export class UserService {
       );
     }
 
-    await this.prisma.supportTicket.create({
-      data: {
-        userId,
-        subject: 'Delete Account Request',
-        message: messageLines.join('\n'),
-      },
+    await this.userRepository.createSupportTicket({
+      userId,
+      subject: 'Delete Account Request',
+      message: messageLines.join('\n'),
     });
 
     return {
@@ -318,26 +277,17 @@ export class UserService {
    * @param id User ID
    */
   async undoDeleteUser(id: string): Promise<UserWithRelations> {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.userRepository.findUserById(id, true);
     if (!user) throw new NotFoundException('User not found');
     if (!user.isDeleted) throw new BadRequestException('User is not deleted');
 
-    const restoredUser = await this.prisma.user.update({
-      where: { id },
-      data: {
-        isDeleted: false,
-        deletedAt: null,
-      },
-      include: { profile: true, kids: true, avatar: true },
-    });
+    const restoredUser = await this.userRepository.restoreUser(id);
 
     // Log restoration
-    await this.prisma.supportTicket.create({
-      data: {
-        userId: id,
-        subject: 'Account Restoration',
-        message: `Account restored by admin at ${new Date().toISOString()}`,
-      },
+    await this.userRepository.createSupportTicket({
+      userId: id,
+      subject: 'Account Restoration',
+      message: `Account restored by admin at ${new Date().toISOString()}`,
     });
 
     return restoredUser;
@@ -348,39 +298,25 @@ export class UserService {
    * @param userId Current user ID
    */
   async undoDeleteMyAccount(userId: string): Promise<UserWithRelations> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.userRepository.findUserById(userId, true);
     if (!user) throw new NotFoundException('User not found');
     if (!user.isDeleted)
       throw new BadRequestException('Your account is not deleted');
 
-    const restoredUser = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        isDeleted: false,
-        deletedAt: null,
-      },
-      include: { profile: true, kids: true, avatar: true },
-    });
+    const restoredUser = await this.userRepository.restoreUser(userId);
 
     // Log self-restoration
-    await this.prisma.supportTicket.create({
-      data: {
-        userId,
-        subject: 'Account Self-Restoration',
-        message: `User restored their own account at ${new Date().toISOString()}`,
-      },
+    await this.userRepository.createSupportTicket({
+      userId,
+      subject: 'Account Self-Restoration',
+      message: `User restored their own account at ${new Date().toISOString()}`,
     });
 
     return restoredUser;
   }
 
   async updateUser(id: string, data: UpdateUserDto): Promise<unknown> {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id,
-        isDeleted: false,
-      },
-    });
+    const user = await this.userRepository.findUserById(id);
     if (!user) throw new NotFoundException('User not found');
 
     const updateData: Prisma.UserUncheckedUpdateInput = {};
@@ -396,12 +332,10 @@ export class UserService {
     if (data.avatarId !== undefined) {
       updateData.avatarId = data.avatarId;
     } else if (data.avatarUrl !== undefined) {
-      const newAvatar = await this.prisma.avatar.create({
-        data: {
-          url: data.avatarUrl,
-          name: `Custom Avatar for ${id}`,
-          isSystemAvatar: false,
-        },
+      const newAvatar = await this.userRepository.createAvatar({
+        url: data.avatarUrl,
+        name: `Custom Avatar for ${id}`,
+        isSystemAvatar: false,
       });
       updateData.avatarId = newAvatar.id;
     }
@@ -418,21 +352,11 @@ export class UserService {
       return this.getUser(id);
     }
 
-    const updatedUser = await this.prisma.user.update({
-      where: { id },
-      data: {
-        ...updateData,
-        ...(Object.keys(profileUpdate).length > 0 && {
-          profile: {
-            upsert: {
-              create: profileUpdate,
-              update: profileUpdate,
-            },
-          },
-        }),
-      } as Prisma.UserUpdateInput,
-      include: { profile: true, kids: true, avatar: true },
-    });
+    const updatedUser = await this.userRepository.updateUserWithProfileUpsert(
+      id,
+      updateData,
+      profileUpdate,
+    );
 
     return {
       ...updatedUser,
@@ -441,12 +365,7 @@ export class UserService {
   }
 
   async getUserRole(id: string) {
-    const u = await this.prisma.user.findUnique({
-      where: {
-        id,
-        isDeleted: false,
-      },
-    });
+    const u = await this.userRepository.findUserById(id);
     return { id: u?.id, role: u?.role };
   }
 
@@ -455,14 +374,7 @@ export class UserService {
       throw new Error('Invalid role');
     }
 
-    const user = await this.prisma.user.update({
-      where: {
-        id,
-        isDeleted: false,
-      },
-      data: { role },
-      include: { avatar: true },
-    });
+    const user = await this.userRepository.updateUserRole(id, role);
 
     return { id: user.id, role: user.role };
   }
@@ -472,12 +384,7 @@ export class UserService {
   // ----------------------------------------------------------
 
   async updateParentProfile(userId: string, data: UpdateParentProfileDto) {
-    const existing = await this.prisma.user.findUnique({
-      where: {
-        id: userId,
-        isDeleted: false,
-      },
-    });
+    const existing = await this.userRepository.findUserById(userId);
     if (!existing) throw new NotFoundException('User not found');
 
     const updateUser: Prisma.UserUpdateInput = {};
@@ -507,80 +414,26 @@ export class UserService {
       };
     }
 
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        ...updateUser,
-        ...(Object.keys(updateProfile).length > 0 && {
-          profile: {
-            upsert: {
-              create: updateProfile,
-              update: updateProfile,
-            },
-          },
-        }),
-      } as Prisma.UserUpdateInput,
-      include: { profile: true, avatar: true, preferredCategories: true },
-    });
+    return this.userRepository.updateParentProfile(
+      userId,
+      updateUser,
+      updateProfile,
+    );
   }
 
   async updateAvatarForParent(userId: string, body: UpdateAvatarDto) {
-    return this.prisma.user.update({
-      where: {
-        id: userId,
-        isDeleted: false,
-      },
-      data: { avatarId: body.avatarId },
-      include: { avatar: true },
-    });
+    return this.userRepository.updateParentAvatar(userId, body.avatarId);
   }
 
   async createAndAssignAvatar(userId: string, url: string, publicId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      // Fetch current avatar so we can retire it after assigning the new one
-      const user = await tx.user.findUnique({
-        where: { id: userId, isDeleted: false },
-        select: { avatarId: true },
-      });
-
-      if (!user) {
-        throw new NotFoundException(`User ${userId} not found or deleted`);
-      }
-
-      const avatar = await tx.avatar.create({
-        data: {
-          url,
-          publicId,
-          name: `user_avatar_${userId}_${randomUUID()}`,
-          isSystemAvatar: false,
-        },
-      });
-
-      const updated = await tx.user.update({
-        where: { id: userId, isDeleted: false },
-        data: { avatarId: avatar.id },
-        include: { avatar: true },
-      });
-
-      // Delete the previous custom avatar if it exists and wasn't a system avatar.
-      // deleteMany is idempotent — safe if the record was already deleted concurrently.
-      if (user?.avatarId) {
-        await tx.avatar.deleteMany({
-          where: { id: user.avatarId, isSystemAvatar: false },
-        });
-      }
-
-      return updated;
-    });
+    return this.userRepository.createAndAssignAvatar(userId, url, publicId);
   }
 
   async setPin(userId: string, pin: string) {
     if (!/^\d{6}$/.test(pin))
       throw new BadRequestException('PIN must be exactly 6 digits');
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId, isDeleted: false },
-    });
+    const user = await this.userRepository.findUserById(userId);
 
     if (!user) throw new NotFoundException('User not found');
     if (user.onboardingStatus !== 'profile_setup') {
@@ -591,24 +444,16 @@ export class UserService {
 
     const hash = await hashPin(pin);
 
-    await this.prisma.user.update({
-      where: {
-        id: userId,
-        isDeleted: false,
-      },
-      data: { pinHash: hash, onboardingStatus: 'pin_setup' },
+    await this.userRepository.updateActiveUserSimple(userId, {
+      pinHash: hash,
+      onboardingStatus: 'pin_setup',
     });
 
     return { success: true, message: 'PIN set successfully' };
   }
 
   async verifyPin(userId: string, pin: string) {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id: userId,
-        isDeleted: false,
-      },
-    });
+    const user = await this.userRepository.findUserById(userId);
     if (!user?.pinHash) throw new BadRequestException('No PIN is set');
 
     const match = await verifyPinHash(pin, user.pinHash);
@@ -622,18 +467,11 @@ export class UserService {
   // ----------------------------------------------------------
 
   async requestPinResetOtp(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id: userId,
-        isDeleted: false,
-      },
-    });
+    const user = await this.userRepository.findUserById(userId);
     if (!user) throw new NotFoundException('User not found');
 
     // Delete any existing PIN reset tokens for this user
-    await this.prisma.token.deleteMany({
-      where: { userId: user.id, type: 'pin_reset' },
-    });
+    await this.userRepository.deleteTokensByUserAndType(user.id, 'pin_reset');
 
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -646,13 +484,11 @@ export class UserService {
     const crypto = await import('crypto');
     const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
 
-    await this.prisma.token.create({
-      data: {
-        userId: user.id,
-        token: hashedOtp,
-        expiresAt,
-        type: 'pin_reset',
-      },
+    await this.userRepository.createToken({
+      userId: user.id,
+      token: hashedOtp,
+      expiresAt,
+      type: 'pin_reset',
     });
 
     // Send OTP via email using notification service
@@ -679,20 +515,18 @@ export class UserService {
     const crypto = await import('crypto');
     const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
 
-    const resetToken = await this.prisma.token.findFirst({
-      where: {
-        userId,
-        token: hashedOtp,
-        type: 'pin_reset',
-      },
-    });
+    const resetToken = await this.userRepository.findTokenByHashedToken(
+      userId,
+      hashedOtp,
+      'pin_reset',
+    );
 
     if (!resetToken) {
       throw new BadRequestException('Invalid OTP');
     }
 
     if (resetToken.expiresAt < new Date()) {
-      await this.prisma.token.delete({ where: { id: resetToken.id } });
+      await this.userRepository.deleteToken(resetToken.id);
       throw new BadRequestException(
         'OTP has expired. Please request a new one.',
       );
@@ -716,31 +550,24 @@ export class UserService {
     const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
 
     // Verify OTP
-    const resetToken = await this.prisma.token.findFirst({
-      where: {
-        userId,
-        token: hashedOtp,
-        type: 'pin_reset',
-      },
-    });
+    const resetToken = await this.userRepository.findTokenByHashedToken(
+      userId,
+      hashedOtp,
+      'pin_reset',
+    );
 
     if (!resetToken) {
       throw new BadRequestException('Invalid OTP');
     }
 
     if (resetToken.expiresAt < new Date()) {
-      await this.prisma.token.delete({ where: { id: resetToken.id } });
+      await this.userRepository.deleteToken(resetToken.id);
       throw new BadRequestException(
         'OTP has expired. Please request a new one.',
       );
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id: userId,
-        isDeleted: false,
-      },
-    });
+    const user = await this.userRepository.findUserById(userId);
     if (!user) throw new NotFoundException('User not found');
 
     // Check if new PIN is same as old PIN (using bcrypt)
@@ -754,13 +581,10 @@ export class UserService {
     // Hash and save new PIN using bcrypt
     const pinHash = await hashPin(newPin);
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { pinHash },
-    });
+    await this.userRepository.updateUserSimple(userId, { pinHash });
 
     // Delete the used OTP token
-    await this.prisma.token.delete({ where: { id: resetToken.id } });
+    await this.userRepository.deleteToken(resetToken.id);
 
     return { success: true, message: 'PIN has been reset successfully' };
   }

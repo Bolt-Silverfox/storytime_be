@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import {
   Prisma,
   User,
@@ -11,8 +12,10 @@ import { PrismaService } from '@/prisma/prisma.service';
 import {
   IUserRepository,
   UserWithRelations,
+  UserWithProfileKidsAvatar,
   UserWithProfileAndAvatar,
   UserWithProfileAvatarAndCategories,
+  UserWithAvatar,
 } from './user.repository.interface';
 
 @Injectable()
@@ -64,22 +67,6 @@ export class PrismaUserRepository implements IUserRepository {
 
   // ==================== User Write Operations ====================
 
-  async updateUser(
-    id: string,
-    data: Prisma.UserUpdateInput,
-  ): Promise<UserWithRelations> {
-    return this.prisma.user.update({
-      where: { id },
-      data,
-      include: {
-        profile: true,
-        kids: true,
-        avatar: true,
-        subscription: true,
-      },
-    });
-  }
-
   async updateUserSimple(
     id: string,
     data: Partial<{
@@ -97,11 +84,26 @@ export class PrismaUserRepository implements IUserRepository {
     });
   }
 
+  async updateActiveUserSimple(
+    id: string,
+    data: Partial<{
+      role: string;
+      avatarId: string | null;
+      pinHash: string;
+      onboardingStatus: string;
+    }>,
+  ): Promise<User> {
+    return this.prisma.user.update({
+      where: { id, isDeleted: false },
+      data: data as Prisma.UserUpdateInput,
+    });
+  }
+
   async updateUserWithProfileUpsert(
     id: string,
     userData: Prisma.UserUncheckedUpdateInput,
     profileData: Prisma.ProfileUpdateInput,
-  ): Promise<UserWithRelations> {
+  ): Promise<UserWithProfileKidsAvatar> {
     const hasProfileData = Object.keys(profileData).length > 0;
 
     return this.prisma.user.update({
@@ -117,12 +119,7 @@ export class PrismaUserRepository implements IUserRepository {
           },
         }),
       } as Prisma.UserUpdateInput,
-      include: {
-        profile: true,
-        kids: true,
-        avatar: true,
-        subscription: true,
-      },
+      include: { profile: true, kids: true, avatar: true },
     });
   }
 
@@ -146,11 +143,26 @@ export class PrismaUserRepository implements IUserRepository {
           },
         }),
       } as Prisma.UserUpdateInput,
-      include: {
-        profile: true,
-        avatar: true,
-        preferredCategories: true,
-      },
+      include: { profile: true, avatar: true, preferredCategories: true },
+    });
+  }
+
+  async updateUserRole(id: string, role: string): Promise<UserWithAvatar> {
+    return this.prisma.user.update({
+      where: { id, isDeleted: false },
+      data: { role } as Prisma.UserUpdateInput,
+      include: { avatar: true },
+    });
+  }
+
+  async updateParentAvatar(
+    userId: string,
+    avatarId: string,
+  ): Promise<UserWithAvatar> {
+    return this.prisma.user.update({
+      where: { id: userId, isDeleted: false },
+      data: { avatarId },
+      include: { avatar: true },
     });
   }
 
@@ -168,19 +180,14 @@ export class PrismaUserRepository implements IUserRepository {
     });
   }
 
-  async restoreUser(id: string): Promise<UserWithRelations> {
+  async restoreUser(id: string): Promise<UserWithProfileKidsAvatar> {
     return this.prisma.user.update({
       where: { id },
       data: {
         isDeleted: false,
         deletedAt: null,
       },
-      include: {
-        profile: true,
-        kids: true,
-        avatar: true,
-        subscription: true,
-      },
+      include: { profile: true, kids: true, avatar: true },
     });
   }
 
@@ -194,14 +201,46 @@ export class PrismaUserRepository implements IUserRepository {
     return this.prisma.avatar.create({ data });
   }
 
-  async updateUserAvatar(
+  async createAndAssignAvatar(
     userId: string,
-    avatarId: string,
-  ): Promise<UserWithProfileAndAvatar> {
-    return this.prisma.user.update({
-      where: { id: userId, isDeleted: false },
-      data: { avatarId },
-      include: { profile: true, avatar: true },
+    url: string,
+    publicId: string,
+  ): Promise<UserWithAvatar> {
+    return this.prisma.$transaction(async (tx) => {
+      // Fetch current avatar so we can retire it after assigning the new one
+      const user = await tx.user.findUnique({
+        where: { id: userId, isDeleted: false },
+        select: { avatarId: true },
+      });
+
+      if (!user) {
+        throw new NotFoundException(`User ${userId} not found or deleted`);
+      }
+
+      const avatar = await tx.avatar.create({
+        data: {
+          url,
+          publicId,
+          name: `user_avatar_${userId}_${randomUUID()}`,
+          isSystemAvatar: false,
+        },
+      });
+
+      const updated = await tx.user.update({
+        where: { id: userId, isDeleted: false },
+        data: { avatarId: avatar.id },
+        include: { avatar: true },
+      });
+
+      // Delete the previous custom avatar if it exists and wasn't a system avatar.
+      // deleteMany is idempotent — safe if the record was already deleted concurrently.
+      if (user?.avatarId) {
+        await tx.avatar.deleteMany({
+          where: { id: user.avatarId, isSystemAvatar: false },
+        });
+      }
+
+      return updated;
     });
   }
 
