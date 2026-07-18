@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { StoryService } from './story.service';
+import { StoryFeedService } from './story-feed.service';
 import { STORY_REPOSITORY } from './repositories/story.repository.interface';
 import { GeminiService } from './gemini.service';
 import { ElevenLabsService } from './elevenlabs.service';
@@ -57,6 +58,7 @@ describe('StoryService - Library & Generation', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StoryService,
+        StoryFeedService,
         { provide: STORY_REPOSITORY, useValue: mockStoryRepository },
         { provide: GeminiService, useValue: mockGeminiService },
         {
