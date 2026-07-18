@@ -230,10 +230,21 @@ export class PaymentService {
       return;
     }
 
-    await this.prisma.subscription.update({
-      where: { id: existing.id },
+    // Compare-and-swap: fold the token match into the write so a concurrent
+    // replacement cannot also pass the in-memory check above and leave the row
+    // mapped to the wrong token. Guarding on `purchaseToken: linkedToken` means
+    // only the delivery that still sees the old token wins; `count === 0` is a
+    // benign no-op (another writer already migrated it).
+    const res = await this.prisma.subscription.updateMany({
+      where: { id: existing.id, purchaseToken: linkedToken },
       data: { purchaseToken: newToken },
     });
+    if (res.count === 0) {
+      this.logger.log(
+        `Skipped Google purchaseToken migration for user ${userId.substring(0, 8)} (already migrated concurrently)`,
+      );
+      return;
+    }
     this.logger.log(
       `Migrated Google purchaseToken (linked) for user ${userId.substring(0, 8)}`,
     );

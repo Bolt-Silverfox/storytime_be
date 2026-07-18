@@ -168,7 +168,7 @@ export class SubscriptionWebhookService {
     if (!applied) {
       return {
         status: 'skipped',
-        action: `apple:${info.notificationType} stale/out-of-order (event <= lastEventAt)`,
+        action: `apple:${info.notificationType} stale/out-of-order (event older than watermark)`,
       };
     }
     return {
@@ -315,7 +315,8 @@ export class SubscriptionWebhookService {
       if (!applied) {
         return {
           status: 'skipped',
-          action: 'google:voided stale/out-of-order (event <= lastEventAt)',
+          action:
+            'google:voided stale/out-of-order (event older than watermark)',
         };
       }
       return { status: 'processed', action: 'google:voided -> revoke' };
@@ -376,7 +377,7 @@ export class SubscriptionWebhookService {
     if (!applied) {
       return {
         status: 'skipped',
-        action: `google:SUBSCRIPTION_${sub.notificationType} stale/out-of-order (event <= lastEventAt)`,
+        action: `google:SUBSCRIPTION_${sub.notificationType} stale/out-of-order (event older than watermark)`,
       };
     }
     return {
@@ -673,15 +674,28 @@ export class SubscriptionWebhookService {
 
       const sub = await this.findSubscription('google', linkedToken);
       if (sub) {
-        // Migrate the known row forward to the newest (event) token in place.
-        const migrated = await this.prisma.subscription.update({
-          where: { id: sub.id },
+        // Migrate the known row forward to the newest (event) token in place,
+        // via a compare-and-swap guarded on the still-stored `linkedToken`. The
+        // in-memory read above then an id-only update would be a TOCTOU race:
+        // two concurrent replacements could both pass and the last writer could
+        // leave the row mapped to the wrong token. `updateMany` performs the
+        // token match and the write atomically.
+        const res = await this.prisma.subscription.updateMany({
+          where: { id: sub.id, purchaseToken: linkedToken },
           data: { purchaseToken: eventToken },
         });
+        if (res.count === 0) {
+          // A concurrent delivery already migrated this row. Re-resolve by the
+          // event token (now the stored token) so this event still applies.
+          this.logger.log(
+            `Lost linked-token migration race for subscription ${sub.id}; re-resolving by event token`,
+          );
+          return this.findSubscription('google', eventToken);
+        }
         this.logger.log(
           `Migrated Google purchaseToken ${this.mask(linkedToken)} -> ${this.mask(eventToken)} for subscription ${sub.id} (${hop + 1} hop(s))`,
         );
-        return migrated;
+        return { ...sub, purchaseToken: eventToken };
       }
 
       currentToken = linkedToken;
@@ -722,11 +736,27 @@ export class SubscriptionWebhookService {
    * - deactivate:     status cancelled, endsAt = now (access ends immediately)
    * - revoke:         status cancelled, endsAt = now (refund/chargeback)
    *
-   * Out-of-order protection: when `eventAt` is known and the subscription's
-   * stored `lastEventAt` is >= `eventAt`, the event is stale (a late/duplicate
-   * delivery) and the mutation is SKIPPED (returns `false`) so it cannot clobber
-   * newer state. Otherwise the state change AND the advanced `lastEventAt`
-   * watermark are written in a single update (atomic), and `true` is returned.
+   * Out-of-order protection (compare-and-swap): the `lastEventAt` watermark guard
+   * runs INSIDE the write, never as a separate read-then-write. A prior in-memory
+   * compare-then-`update` was a TOCTOU race — two concurrent deliveries could both
+   * read the old watermark, both pass, and both write, letting the older event
+   * commit last and regress the subscription. Here a conditional `updateMany`
+   * performs the comparison and the state mutation as a single atomic statement,
+   * and we branch on the affected-row count:
+   *  - count === 1 -> the guard matched; state change + advanced watermark applied.
+   *  - count === 0 -> a newer watermark is already stored (this event lost the race
+   *    / is stale); nothing is written and we return `false`.
+   *
+   * Ordering semantics (see also `prisma/schema.prisma` `Subscription.lastEventAt`):
+   * apply when there is no stored watermark yet OR the stored watermark is <= this
+   * event (`lte`). Equality APPLIES rather than skips: two DISTINCT notifications
+   * can share a millisecond, and true duplicates are already filtered upstream by
+   * the `WebhookEvent (platform, externalEventId)` idempotency layer, so a
+   * same-instant event reaching here is always a distinct one that must be
+   * processed in arrival order. Only a STRICTLY greater stored watermark skips.
+   *
+   * When `eventAt` is null the event has no derivable timestamp; ordering cannot
+   * be established, so it is applied unconditionally (never blocked).
    */
   private async applyAction(
     subscription: Subscription,
@@ -756,29 +786,33 @@ export class SubscriptionWebhookService {
         return false;
     }
 
-    // Skip stale / out-of-order deliveries. `>=` also drops a distinct event
-    // arriving at the exact same timestamp as the last applied one.
-    if (
-      eventAt &&
-      subscription.lastEventAt &&
-      subscription.lastEventAt.getTime() >= eventAt.getTime()
-    ) {
-      this.logger.log(
-        `Skipping stale/out-of-order ${action} for subscription ${subscription.id} ` +
-          `(event ${eventAt.toISOString()} <= lastEventAt ${subscription.lastEventAt.toISOString()})`,
-      );
-      return false;
-    }
-
-    // Advance the watermark atomically with the state change (same UPDATE).
     if (eventAt) {
+      // Advance the watermark atomically with the state change (same write).
       data.lastEventAt = eventAt;
+      // CAS guard: apply only when no watermark is stored yet, or the stored one
+      // is <= this event. A strictly-greater stored watermark means a newer event
+      // already won -> the WHERE does not match and count === 0 (stale/skip).
+      const res = await this.prisma.subscription.updateMany({
+        where: {
+          id: subscription.id,
+          OR: [{ lastEventAt: null }, { lastEventAt: { lte: eventAt } }],
+        },
+        data: data as Prisma.SubscriptionUpdateManyMutationInput,
+      });
+      if (res.count === 0) {
+        this.logger.log(
+          `Skipping stale/out-of-order ${action} for subscription ${subscription.id} ` +
+            `(event ${eventAt.toISOString()} older than stored watermark)`,
+        );
+        return false;
+      }
+    } else {
+      // No derivable event timestamp -> apply without ordering gating.
+      await this.prisma.subscription.update({
+        where: { id: subscription.id },
+        data,
+      });
     }
-
-    await this.prisma.subscription.update({
-      where: { id: subscription.id },
-      data,
-    });
 
     this.eventEmitter.emit('admin.sse.activity', {
       type: 'SUBSCRIPTION',
