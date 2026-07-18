@@ -44,6 +44,18 @@ export type ThemeWithCounts = Theme & {
   };
 };
 
+// Story grouped by language with counts
+export interface StoryLanguageCount {
+  language: string;
+  _count: number;
+}
+
+// Story age range projection
+export interface StoryAgeRange {
+  ageMin: number;
+  ageMax: number;
+}
+
 export interface IAdminStoryRepository {
   // Find stories with pagination and filtering
   findStories(params: {
@@ -58,6 +70,15 @@ export interface IAdminStoryRepository {
 
   // Find story by ID with all relations
   findStoryById(storyId: string): Promise<StoryDetail | null>;
+
+  // Find story by ID without relations (recommendation toggle / delete guard)
+  findStoryBasicById(storyId: string): Promise<Story | null>;
+
+  // Story language breakdown (content breakdown)
+  groupByLanguage(): Promise<StoryLanguageCount[]>;
+
+  // Age ranges of non-deleted stories (content breakdown)
+  findAgeRanges(): Promise<StoryAgeRange[]>;
 
   // Update story recommendation status
   updateStoryRecommendation(params: {

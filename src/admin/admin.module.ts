@@ -1,6 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { AdminAnalyticsService } from './admin-analytics.service';
+import { AdminUserService } from './admin-user.service';
+import { AdminCouponService } from './admin-coupon.service';
+import { AdminExportService } from './admin-export.service';
+import { AdminSubscriptionOpsService } from './admin-subscription-ops.service';
 import { AdminStoryService } from './admin-story.service';
 import { AdminSystemService } from './admin-system.service';
 import {
@@ -8,6 +13,22 @@ import {
   PrismaAdminStoryRepository,
   ADMIN_SYSTEM_REPOSITORY,
   PrismaAdminSystemRepository,
+  ADMIN_USER_REPOSITORY,
+  PrismaAdminUserRepository,
+  ADMIN_SUBSCRIPTION_REPOSITORY,
+  PrismaAdminSubscriptionRepository,
+  ADMIN_PAYMENT_REPOSITORY,
+  PrismaAdminPaymentRepository,
+  ADMIN_COUPON_REPOSITORY,
+  PrismaAdminCouponRepository,
+  ADMIN_CONTENT_REPOSITORY,
+  PrismaAdminContentRepository,
+  ADMIN_ENGAGEMENT_REPOSITORY,
+  PrismaAdminEngagementRepository,
+  ADMIN_ACTIVITY_REPOSITORY,
+  PrismaAdminActivityRepository,
+  ADMIN_ANALYTICS_REPOSITORY,
+  PrismaAdminAnalyticsRepository,
 } from './repositories';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
@@ -23,6 +44,11 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
   controllers: [AdminController, AdminSseController],
   providers: [
     AdminService,
+    AdminAnalyticsService,
+    AdminUserService,
+    AdminCouponService,
+    AdminExportService,
+    AdminSubscriptionOpsService,
     AdminStoryService,
     AdminSystemService,
     {
@@ -32,6 +58,38 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     {
       provide: ADMIN_SYSTEM_REPOSITORY,
       useClass: PrismaAdminSystemRepository,
+    },
+    {
+      provide: ADMIN_USER_REPOSITORY,
+      useClass: PrismaAdminUserRepository,
+    },
+    {
+      provide: ADMIN_SUBSCRIPTION_REPOSITORY,
+      useClass: PrismaAdminSubscriptionRepository,
+    },
+    {
+      provide: ADMIN_PAYMENT_REPOSITORY,
+      useClass: PrismaAdminPaymentRepository,
+    },
+    {
+      provide: ADMIN_COUPON_REPOSITORY,
+      useClass: PrismaAdminCouponRepository,
+    },
+    {
+      provide: ADMIN_CONTENT_REPOSITORY,
+      useClass: PrismaAdminContentRepository,
+    },
+    {
+      provide: ADMIN_ENGAGEMENT_REPOSITORY,
+      useClass: PrismaAdminEngagementRepository,
+    },
+    {
+      provide: ADMIN_ACTIVITY_REPOSITORY,
+      useClass: PrismaAdminActivityRepository,
+    },
+    {
+      provide: ADMIN_ANALYTICS_REPOSITORY,
+      useClass: PrismaAdminAnalyticsRepository,
     },
     AdminSseService,
     SseAuthGuard,

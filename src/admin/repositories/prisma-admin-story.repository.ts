@@ -6,6 +6,8 @@ import type {
   StoryDetail,
   CategoryWithCounts,
   ThemeWithCounts,
+  StoryLanguageCount,
+  StoryAgeRange,
 } from './admin-story.repository.interface';
 import type { Prisma, Story } from '@prisma/client';
 
@@ -62,6 +64,28 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
         },
       },
     }) as Promise<StoryDetail | null>;
+  }
+
+  findStoryBasicById(storyId: string): Promise<Story | null> {
+    return this.prisma.story.findUnique({
+      where: { id: storyId },
+    });
+  }
+
+  async groupByLanguage(): Promise<StoryLanguageCount[]> {
+    const result = await this.prisma.story.groupBy({
+      by: ['language'],
+      where: { isDeleted: false },
+      _count: true,
+    });
+    return result as StoryLanguageCount[];
+  }
+
+  findAgeRanges(): Promise<StoryAgeRange[]> {
+    return this.prisma.story.findMany({
+      where: { isDeleted: false },
+      select: { ageMin: true, ageMax: true },
+    });
   }
 
   async updateStoryRecommendation(params: {

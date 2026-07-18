@@ -5,6 +5,10 @@ import {
   ADMIN_SYSTEM_REPOSITORY,
   IAdminSystemRepository,
 } from './repositories/admin-system.repository.interface';
+import {
+  ADMIN_CONTENT_REPOSITORY,
+  PrismaAdminContentRepository,
+} from './repositories';
 import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { ValidationException } from '@/shared/exceptions';
@@ -78,6 +82,8 @@ describe('AdminSystemService', () => {
       countSupportTickets: jest.fn(),
       findSupportTicketById: jest.fn(),
       updateSupportTicket: jest.fn(),
+      createSupportTicket: jest.fn(),
+      findUserById: jest.fn(),
     };
 
     const mockElevenLabsProvider = {
@@ -124,6 +130,10 @@ describe('AdminSystemService', () => {
         {
           provide: ElevenLabsTTSProvider,
           useValue: mockElevenLabsProvider,
+        },
+        {
+          provide: ADMIN_CONTENT_REPOSITORY,
+          useClass: PrismaAdminContentRepository,
         },
         {
           provide: PrismaService,
