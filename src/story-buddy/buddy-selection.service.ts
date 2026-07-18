@@ -1,16 +1,21 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  BUDDY_SELECTION_REPOSITORY,
+  IBuddySelectionRepository,
+} from './repositories';
 import { BuddyMessagingService } from './buddy-messaging.service';
 
 @Injectable()
 export class BuddySelectionService {
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(BUDDY_SELECTION_REPOSITORY)
+    private readonly buddySelectionRepository: IBuddySelectionRepository,
     private readonly buddyMessagingService: BuddyMessagingService,
   ) {}
 
@@ -22,12 +27,7 @@ export class BuddySelectionService {
    */
   async selectBuddyForKid(kidId: string, buddyId: string, userId: string) {
     // Verify kid exists and is not soft deleted
-    const kid = await this.prisma.kid.findUnique({
-      where: {
-        id: kidId,
-        isDeleted: false, // CANNOT SELECT BUDDY FOR SOFT DELETED KIDS
-      },
-    });
+    const kid = await this.buddySelectionRepository.findKidById(kidId);
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
@@ -39,12 +39,9 @@ export class BuddySelectionService {
     }
 
     // Verify buddy exists, is active, and not soft deleted
-    const buddy = await this.prisma.storyBuddy.findUnique({
-      where: {
-        id: buddyId,
-        isDeleted: false, // CANNOT SELECT SOFT DELETED BUDDIES
-      },
-    });
+    const buddy = await this.buddySelectionRepository.findStoryBuddyById(
+      buddyId,
+    );
 
     if (!buddy) {
       throw new NotFoundException('Story buddy not found');
@@ -55,25 +52,12 @@ export class BuddySelectionService {
     }
 
     // Update kid's buddy selection
-    const updatedKid = await this.prisma.kid.update({
-      where: { id: kidId },
-      data: {
-        storyBuddyId: buddyId,
-        buddySelectedAt: new Date(),
-      },
-      include: {
-        storyBuddy: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            imageUrl: true,
-            profileAvatarUrl: true,
-            type: true,
-          },
-        },
-      },
-    });
+    const updatedKid =
+      await this.buddySelectionRepository.updateKidBuddySelection(
+        kidId,
+        buddyId,
+        new Date(),
+      );
 
     // Log the selection interaction
     await this.buddyMessagingService.logBuddyInteraction({
@@ -95,24 +79,8 @@ export class BuddySelectionService {
    * @param userId - The authenticated user's ID (parent)
    */
   async getBuddyWelcome(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: {
-        id: kidId,
-        isDeleted: false, // CANNOT GET WELCOME FOR SOFT DELETED KIDS
-      },
-      include: {
-        storyBuddy: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            imageUrl: true,
-            profileAvatarUrl: true,
-            type: true,
-          },
-        },
-      },
-    });
+    const kid =
+      await this.buddySelectionRepository.findKidWithSelectedBuddy(kidId);
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
@@ -156,26 +124,8 @@ export class BuddySelectionService {
    * @param userId - The authenticated user's ID (parent)
    */
   async getKidCurrentBuddy(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: {
-        id: kidId,
-        isDeleted: false, // CANNOT GET BUDDY FOR SOFT DELETED KIDS
-      },
-      include: {
-        storyBuddy: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            imageUrl: true,
-            profileAvatarUrl: true,
-            type: true,
-            description: true,
-            themeColor: true,
-          },
-        },
-      },
-    });
+    const kid =
+      await this.buddySelectionRepository.findKidWithBuddyDetails(kidId);
 
     if (!kid) {
       throw new NotFoundException('Kid not found');

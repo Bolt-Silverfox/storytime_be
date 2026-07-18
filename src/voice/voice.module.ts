@@ -28,6 +28,18 @@ import { TTS_BATCH_QUEUE_NAME } from './queue/tts-batch-queue.constants';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
 import { TtsBatchProcessor } from './queue/tts-batch.processor';
 import { TtsBatchRedisProvider } from './queue/tts-batch-redis.provider';
+import {
+  VOICE_REPOSITORY,
+  PrismaVoiceRepository,
+  USER_USAGE_REPOSITORY,
+  PrismaUserUsageRepository,
+  VOICE_USER_REPOSITORY,
+  PrismaVoiceUserRepository,
+  ACTIVITY_LOG_REPOSITORY,
+  PrismaActivityLogRepository,
+  PARAGRAPH_AUDIO_CACHE_REPOSITORY,
+  PrismaParagraphAudioCacheRepository,
+} from './repositories';
 
 @Module({
   imports: [
@@ -61,6 +73,27 @@ import { TtsBatchRedisProvider } from './queue/tts-batch-redis.provider';
     TtsBatchRedisProvider,
     TtsBatchQueueService,
     TtsBatchProcessor,
+    // Repository Pattern (testability, decoupling)
+    {
+      provide: VOICE_REPOSITORY,
+      useClass: PrismaVoiceRepository,
+    },
+    {
+      provide: USER_USAGE_REPOSITORY,
+      useClass: PrismaUserUsageRepository,
+    },
+    {
+      provide: VOICE_USER_REPOSITORY,
+      useClass: PrismaVoiceUserRepository,
+    },
+    {
+      provide: ACTIVITY_LOG_REPOSITORY,
+      useClass: PrismaActivityLogRepository,
+    },
+    {
+      provide: PARAGRAPH_AUDIO_CACHE_REPOSITORY,
+      useClass: PrismaParagraphAudioCacheRepository,
+    },
   ],
   exports: [
     VoiceService,

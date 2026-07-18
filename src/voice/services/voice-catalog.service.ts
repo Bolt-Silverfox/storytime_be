@@ -1,9 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { PrismaService } from '../../prisma/prisma.service';
 import { VoiceResponseDto, VoiceSourceType } from '../dto/voice.dto';
 import { VOICE_CONFIG } from '../voice.constants';
+import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
 
 /** Cache key for available voices */
 const AVAILABLE_VOICES_CACHE_KEY = 'available-voices';
@@ -21,7 +21,8 @@ export class VoiceCatalogService {
   private readonly logger = new Logger(VoiceCatalogService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(VOICE_REPOSITORY)
+    private readonly voiceRepository: IVoiceRepository,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
@@ -47,13 +48,8 @@ export class VoiceCatalogService {
     const systemIds = Object.values(VOICE_CONFIG).map((c) => c.elevenLabsId);
 
     // Fetch DB records to get UUIDs (best-effort — voices work without DB rows)
-    const dbVoices = await this.prisma.voice.findMany({
-      where: {
-        elevenLabsVoiceId: { in: systemIds },
-        userId: null,
-        isDeleted: false,
-      },
-    });
+    const dbVoices =
+      await this.voiceRepository.findSystemVoicesByElevenLabsIds(systemIds);
 
     // Index DB voices by elevenLabsId for O(1) lookup
     const dbVoiceMap = new Map(dbVoices.map((v) => [v.elevenLabsVoiceId, v]));

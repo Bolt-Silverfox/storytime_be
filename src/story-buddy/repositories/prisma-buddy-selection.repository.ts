@@ -3,6 +3,8 @@ import { PrismaService } from '@/prisma/prisma.service';
 import type {
   IBuddySelectionRepository,
   KidWithBuddy,
+  KidWithSelectedBuddy,
+  KidWithBuddyDetails,
 } from './buddy-selection.repository.interface';
 import type { Kid, StoryBuddy, BuddyInteraction } from '@prisma/client';
 
@@ -52,6 +54,80 @@ export class PrismaBuddySelectionRepository
       data: {
         storyBuddyId: buddyId,
         buddySelectedAt,
+      },
+    });
+  }
+
+  async updateKidBuddySelection(
+    kidId: string,
+    buddyId: string,
+    buddySelectedAt: Date,
+  ): Promise<KidWithSelectedBuddy> {
+    return this.prisma.kid.update({
+      where: { id: kidId },
+      data: {
+        storyBuddyId: buddyId,
+        buddySelectedAt,
+      },
+      include: {
+        storyBuddy: {
+          select: {
+            id: true,
+            name: true,
+            displayName: true,
+            imageUrl: true,
+            profileAvatarUrl: true,
+            type: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findKidWithSelectedBuddy(
+    kidId: string,
+  ): Promise<KidWithSelectedBuddy | null> {
+    return this.prisma.kid.findUnique({
+      where: {
+        id: kidId,
+        isDeleted: false,
+      },
+      include: {
+        storyBuddy: {
+          select: {
+            id: true,
+            name: true,
+            displayName: true,
+            imageUrl: true,
+            profileAvatarUrl: true,
+            type: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findKidWithBuddyDetails(
+    kidId: string,
+  ): Promise<KidWithBuddyDetails | null> {
+    return this.prisma.kid.findUnique({
+      where: {
+        id: kidId,
+        isDeleted: false,
+      },
+      include: {
+        storyBuddy: {
+          select: {
+            id: true,
+            name: true,
+            displayName: true,
+            imageUrl: true,
+            profileAvatarUrl: true,
+            type: true,
+            description: true,
+            themeColor: true,
+          },
+        },
       },
     });
   }

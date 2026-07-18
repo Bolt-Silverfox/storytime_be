@@ -1,5 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
@@ -7,6 +6,16 @@ import { VOICE_CONFIG } from './voice.constants';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from './dto/voice.dto';
 import { VoiceUsageService } from './services/voice-usage.service';
 import { VoiceIdResolverService } from './services/voice-id-resolver.service';
+import {
+  VOICE_REPOSITORY,
+  IVoiceRepository,
+  USER_USAGE_REPOSITORY,
+  IUserUsageRepository,
+  VOICE_USER_REPOSITORY,
+  IVoiceUserRepository,
+  PARAGRAPH_AUDIO_CACHE_REPOSITORY,
+  IParagraphAudioCacheRepository,
+} from './repositories';
 
 /**
  * Coordinates voice quota and access control. Thin facade over:
@@ -23,7 +32,14 @@ export class VoiceQuotaService {
   private readonly logger = new Logger(VoiceQuotaService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(VOICE_REPOSITORY)
+    private readonly voiceRepository: IVoiceRepository,
+    @Inject(USER_USAGE_REPOSITORY)
+    private readonly userUsageRepository: IUserUsageRepository,
+    @Inject(VOICE_USER_REPOSITORY)
+    private readonly userRepository: IVoiceUserRepository,
+    @Inject(PARAGRAPH_AUDIO_CACHE_REPOSITORY)
+    private readonly paragraphAudioCacheRepository: IParagraphAudioCacheRepository,
     private readonly subscriptionService: SubscriptionService,
     private readonly usage: VoiceUsageService,
     private readonly resolver: VoiceIdResolverService,
@@ -72,8 +88,10 @@ export class VoiceQuotaService {
    * to VoiceType keys for consistent comparison on the client.
    */
   async getUsedVoicesForStory(storyId: string): Promise<string[]> {
-    const distinctVoices: Array<{ voiceId: string }> = await this.prisma
-      .$queryRaw`SELECT DISTINCT "voiceId" FROM "paragraph_audio_cache" WHERE "storyId" = ${storyId}`;
+    const distinctVoices: Array<{ voiceId: string }> =
+      await this.paragraphAudioCacheRepository.findDistinctVoiceIdsForStory(
+        storyId,
+      );
 
     if (distinctVoices.length === 0) return [];
 
@@ -89,10 +107,7 @@ export class VoiceQuotaService {
     // Include deleted voices — we still need the UUID → elevenLabsId mapping
     const voiceRecords =
       uuidCandidates.length > 0
-        ? await this.prisma.voice.findMany({
-            where: { id: { in: uuidCandidates } },
-            select: { id: true, elevenLabsVoiceId: true },
-          })
+        ? await this.voiceRepository.findVoiceIdElevenLabsPairs(uuidCandidates)
         : [];
     const uuidToElevenLabs = new Map(
       voiceRecords
@@ -176,11 +191,10 @@ export class VoiceQuotaService {
   ): Promise<boolean> {
     // Ensure usage record exists
     const currentMonth = this.usage.getCurrentMonth();
-    const usage = await this.prisma.userUsage.upsert({
-      where: { userId },
-      create: { userId, currentMonth },
-      update: {},
-    });
+    const usage = await this.userUsageRepository.upsertEnsureExists(
+      userId,
+      currentMonth,
+    );
 
     // === Voice locking check ===
     // Resolve ElevenLabs ID to Voice table UUID for FK-safe storage.
@@ -203,10 +217,10 @@ export class VoiceQuotaService {
       return false;
     } else {
       // No voice locked yet — atomic compare-and-set to lock this one in.
-      const { count } = await this.prisma.userUsage.updateMany({
-        where: { userId, selectedSecondVoiceId: null },
-        data: { selectedSecondVoiceId: voiceUuid },
-      });
+      const { count } = await this.userUsageRepository.lockSecondVoiceIfNull(
+        userId,
+        voiceUuid,
+      );
 
       if (count > 0) {
         this.logger.log(
@@ -214,9 +228,7 @@ export class VoiceQuotaService {
         );
       } else {
         // Another request raced and locked a different voice — re-check
-        const updated = await this.prisma.userUsage.findUnique({
-          where: { userId },
-        });
+        const updated = await this.userUsageRepository.findByUserId(userId);
         if (updated?.selectedSecondVoiceId !== voiceUuid) {
           this.logger.log(
             `Free user ${userId} lost race — voice ${updated?.selectedSecondVoiceId} was locked by concurrent request. Denying ${elevenLabsVoiceId}.`,
@@ -241,10 +253,8 @@ export class VoiceQuotaService {
     }
 
     // No trial used yet — atomic lock to this story
-    const { count: trialCount } = await this.prisma.userUsage.updateMany({
-      where: { userId, elevenLabsTrialStoryId: null },
-      data: { elevenLabsTrialStoryId: storyId },
-    });
+    const { count: trialCount } =
+      await this.userUsageRepository.lockTrialStoryIfNull(userId, storyId);
 
     if (trialCount > 0) {
       this.logger.log(
@@ -254,9 +264,7 @@ export class VoiceQuotaService {
     }
 
     // Lost race — check if same story won
-    const raceCheck = await this.prisma.userUsage.findUnique({
-      where: { userId },
-    });
+    const raceCheck = await this.userUsageRepository.findByUserId(userId);
     if (raceCheck?.elevenLabsTrialStoryId === storyId) {
       return true;
     }
@@ -281,9 +289,7 @@ export class VoiceQuotaService {
     const requestedCanonical =
       await this.resolver.resolveCanonicalVoiceId(voiceId);
 
-    const usage = await this.prisma.userUsage.findUnique({
-      where: { userId },
-    });
+    const usage = await this.userUsageRepository.findByUserId(userId);
 
     // Check explicit lock first
     if (usage?.selectedSecondVoiceId) {
@@ -294,10 +300,7 @@ export class VoiceQuotaService {
     }
 
     // Fall back to preferredVoiceId for legacy users
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { preferredVoiceId: true },
-    });
+    const user = await this.userRepository.findPreferredVoiceId(userId);
 
     if (user?.preferredVoiceId) {
       const preferredCanonical = await this.resolver.resolveCanonicalVoiceId(
@@ -328,17 +331,13 @@ export class VoiceQuotaService {
     const currentMonth = this.usage.getCurrentMonth();
 
     // Ensure the usage record exists (without setting the lock)
-    await this.prisma.userUsage.upsert({
-      where: { userId },
-      create: { userId, currentMonth },
-      update: {},
-    });
+    await this.userUsageRepository.upsertEnsureExists(userId, currentMonth);
 
     // Atomic compare-and-set: only set if currently null
-    const { count } = await this.prisma.userUsage.updateMany({
-      where: { userId, selectedSecondVoiceId: null },
-      data: { selectedSecondVoiceId: voiceUuid },
-    });
+    const { count } = await this.userUsageRepository.lockSecondVoiceIfNull(
+      userId,
+      voiceUuid,
+    );
 
     if (count > 0) {
       this.logger.log(
@@ -348,10 +347,8 @@ export class VoiceQuotaService {
     }
 
     // CAS returned 0 — could be a benign race where the same voice was locked concurrently
-    const current = await this.prisma.userUsage.findUnique({
-      where: { userId },
-      select: { selectedSecondVoiceId: true },
-    });
+    const current =
+      await this.userUsageRepository.findSelectedSecondVoiceId(userId);
     if (current?.selectedSecondVoiceId === voiceUuid) {
       return true;
     }
@@ -398,11 +395,8 @@ export class VoiceQuotaService {
     }
 
     const [usage, user] = await Promise.all([
-      this.prisma.userUsage.findUnique({ where: { userId } }),
-      this.prisma.user.findUnique({
-        where: { id: userId },
-        include: { preferredVoice: true },
-      }),
+      this.userUsageRepository.findByUserId(userId),
+      this.userRepository.findByIdWithPreferredVoice(userId),
     ]);
 
     // Explicit TTS lock takes priority, fall back to preferredVoiceId
@@ -416,10 +410,9 @@ export class VoiceQuotaService {
       // Determine source of locked voice: explicit lock vs user preference
       let lockedVoice: { elevenLabsVoiceId: string | null } | null = null;
       if (lockedUuid === usage?.selectedSecondVoiceId) {
-        lockedVoice = await this.prisma.voice.findFirst({
-          where: { id: lockedUuid, isDeleted: false },
-          select: { elevenLabsVoiceId: true },
-        });
+        lockedVoice = await this.voiceRepository.findElevenLabsIdById(
+          lockedUuid,
+        );
       } else if (user?.preferredVoice) {
         lockedVoice = {
           elevenLabsVoiceId: user.preferredVoice.elevenLabsVoiceId,

@@ -16,6 +16,14 @@ import { PrismaExceptionFilter } from '../src/shared/filters/prisma-exception.fi
 import { AuthThrottleGuard } from '../src/shared/guards/auth-throttle.guard';
 import { AuthSessionGuard } from '../src/shared/guards/auth.guard';
 import { CacheMetricsService } from '../src/shared/services/cache-metrics.service';
+import {
+  SUBSCRIPTION_REPOSITORY,
+  PrismaSubscriptionRepository,
+  PAYMENT_TRANSACTION_REPOSITORY,
+  PrismaPaymentTransactionRepository,
+  USER_REPOSITORY,
+  PrismaUserRepository,
+} from '../src/subscription/repositories';
 
 /**
  * E2E Tests for Subscription Flows
@@ -77,6 +85,20 @@ describe('Subscription (e2e)', () => {
         {
           provide: PrismaService,
           useValue: createMockPrismaService(),
+        },
+        // Repository providers delegate to the mock PrismaService above,
+        // preserving the existing stateful e2e behavior.
+        {
+          provide: SUBSCRIPTION_REPOSITORY,
+          useClass: PrismaSubscriptionRepository,
+        },
+        {
+          provide: PAYMENT_TRANSACTION_REPOSITORY,
+          useClass: PrismaPaymentTransactionRepository,
+        },
+        {
+          provide: USER_REPOSITORY,
+          useClass: PrismaUserRepository,
         },
         {
           provide: CacheMetricsService,

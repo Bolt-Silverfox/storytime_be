@@ -1,34 +1,44 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SubscriptionService } from './subscription.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
 import { SUBSCRIPTION_STATUS } from './subscription.constants';
 import { CacheMetricsService } from '@/shared/services/cache-metrics.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  SUBSCRIPTION_REPOSITORY,
+  ISubscriptionRepository,
+  PAYMENT_TRANSACTION_REPOSITORY,
+  IPaymentTransactionRepository,
+  USER_REPOSITORY,
+  IUserRepository,
+} from './repositories';
 
-// Type-safe mock for PrismaService
-type MockPrismaService = {
-  subscription: {
-    findFirst: jest.Mock;
-    create: jest.Mock;
-    update: jest.Mock;
-  };
-  paymentTransaction: {
-    findMany: jest.Mock;
-  };
-  $transaction: jest.Mock;
-};
+// Type-safe mocks for repositories
+type MockSubscriptionRepository = Record<
+  keyof ISubscriptionRepository,
+  jest.Mock
+>;
+type MockPaymentTransactionRepository = Record<
+  keyof IPaymentTransactionRepository,
+  jest.Mock
+>;
+type MockUserRepository = Record<keyof IUserRepository, jest.Mock>;
 
-const createMockPrismaService = (): MockPrismaService => ({
-  subscription: {
-    findFirst: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-  },
-  paymentTransaction: {
-    findMany: jest.fn(),
-  },
-  $transaction: jest.fn(),
+const createMockSubscriptionRepository = (): MockSubscriptionRepository => ({
+  findFirstByUser: jest.fn(),
+  updateById: jest.fn(),
+  create: jest.fn(),
+  // Execute the transaction callback immediately with a dummy tx client
+  executeTransaction: jest.fn((fn) => fn({})),
+});
+
+const createMockPaymentTransactionRepository =
+  (): MockPaymentTransactionRepository => ({
+    findManyByUser: jest.fn(),
+  });
+
+const createMockUserRepository = (): MockUserRepository => ({
+  findByIdWithSubscriptionStatus: jest.fn(),
 });
 
 const createMockCacheMetrics = () => ({
@@ -38,7 +48,9 @@ const createMockCacheMetrics = () => ({
 
 describe('SubscriptionService', () => {
   let service: SubscriptionService;
-  let mockPrisma: MockPrismaService;
+  let mockSubscriptionRepo: MockSubscriptionRepository;
+  let mockPaymentTxRepo: MockPaymentTransactionRepository;
+  let mockUserRepo: MockUserRepository;
   let mockCacheMetrics: ReturnType<typeof createMockCacheMetrics>;
 
   const mockSubscription = {
@@ -53,7 +65,9 @@ describe('SubscriptionService', () => {
   };
 
   beforeEach(async () => {
-    mockPrisma = createMockPrismaService();
+    mockSubscriptionRepo = createMockSubscriptionRepository();
+    mockPaymentTxRepo = createMockPaymentTransactionRepository();
+    mockUserRepo = createMockUserRepository();
     mockCacheMetrics = createMockCacheMetrics();
 
     jest.clearAllMocks();
@@ -61,7 +75,12 @@ describe('SubscriptionService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SubscriptionService,
-        { provide: PrismaService, useValue: mockPrisma },
+        { provide: SUBSCRIPTION_REPOSITORY, useValue: mockSubscriptionRepo },
+        {
+          provide: PAYMENT_TRANSACTION_REPOSITORY,
+          useValue: mockPaymentTxRepo,
+        },
+        { provide: USER_REPOSITORY, useValue: mockUserRepo },
         { provide: CacheMetricsService, useValue: mockCacheMetrics },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
@@ -104,18 +123,18 @@ describe('SubscriptionService', () => {
 
   describe('getSubscriptionForUser', () => {
     it('should return user subscription', async () => {
-      mockPrisma.subscription.findFirst.mockResolvedValue(mockSubscription);
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSubscription);
 
       const result = await service.getSubscriptionForUser('user-1');
 
       expect(result).toEqual(mockSubscription);
-      expect(mockPrisma.subscription.findFirst).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
-      });
+      expect(mockSubscriptionRepo.findFirstByUser).toHaveBeenCalledWith(
+        'user-1',
+      );
     });
 
     it('should return null if user has no subscription', async () => {
-      mockPrisma.subscription.findFirst.mockResolvedValue(null);
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
 
       const result = await service.getSubscriptionForUser('user-1');
 
@@ -133,23 +152,17 @@ describe('SubscriptionService', () => {
         status: SUBSCRIPTION_STATUS.ACTIVE,
       };
 
-      // $transaction executes the callback with a prisma tx client
-      mockPrisma.$transaction.mockImplementation((cb: Function) => {
-        const txClient = {
-          subscription: {
-            findFirst: jest.fn().mockResolvedValue(null),
-            create: jest.fn().mockResolvedValue(createdSub),
-            update: jest.fn(),
-          },
-        };
-        return cb(txClient);
-      });
+      // executeTransaction runs the callback; no existing subscription -> create
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
+      mockSubscriptionRepo.create.mockResolvedValue(createdSub);
       mockCacheMetrics.del.mockResolvedValue(undefined);
 
       const result = await service.subscribe('user-1', 'free');
 
       expect(result.subscription).toBeDefined();
       expect(result.subscription.plan).toBe('free');
+      expect(mockSubscriptionRepo.executeTransaction).toHaveBeenCalled();
+      expect(mockSubscriptionRepo.create).toHaveBeenCalled();
     });
 
     it('should throw BadRequestException for invalid plan', async () => {
@@ -179,22 +192,16 @@ describe('SubscriptionService', () => {
         status: SUBSCRIPTION_STATUS.ACTIVE,
       };
 
-      mockPrisma.$transaction.mockImplementation((cb: Function) => {
-        const txClient = {
-          subscription: {
-            findFirst: jest.fn().mockResolvedValue(mockSubscription),
-            create: jest.fn(),
-            update: jest.fn().mockResolvedValue(updatedSub),
-          },
-        };
-        return cb(txClient);
-      });
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSubscription);
+      mockSubscriptionRepo.updateById.mockResolvedValue(updatedSub);
       mockCacheMetrics.del.mockResolvedValue(undefined);
 
       const result = await service.subscribe('user-1', 'free');
 
       expect(result.subscription).toBeDefined();
       expect(result.subscription.plan).toBe('free');
+      expect(mockSubscriptionRepo.updateById).toHaveBeenCalled();
+      expect(mockSubscriptionRepo.create).not.toHaveBeenCalled();
     });
   });
 
@@ -202,8 +209,8 @@ describe('SubscriptionService', () => {
 
   describe('cancel', () => {
     it('should cancel subscription successfully', async () => {
-      mockPrisma.subscription.findFirst.mockResolvedValue(mockSubscription);
-      mockPrisma.subscription.update.mockResolvedValue({
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSubscription);
+      mockSubscriptionRepo.updateById.mockResolvedValue({
         ...mockSubscription,
         status: SUBSCRIPTION_STATUS.CANCELLED,
       });
@@ -211,16 +218,16 @@ describe('SubscriptionService', () => {
       const result = await service.cancel('user-1');
 
       expect(result.status).toBe(SUBSCRIPTION_STATUS.CANCELLED);
-      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
-        where: { id: mockSubscription.id },
-        data: expect.objectContaining({
+      expect(mockSubscriptionRepo.updateById).toHaveBeenCalledWith(
+        mockSubscription.id,
+        expect.objectContaining({
           status: SUBSCRIPTION_STATUS.CANCELLED,
         }),
-      });
+      );
     });
 
     it('should throw NotFoundException if no subscription exists', async () => {
-      mockPrisma.subscription.findFirst.mockResolvedValue(null);
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
 
       await expect(service.cancel('user-1')).rejects.toThrow(NotFoundException);
     });
@@ -231,22 +238,22 @@ describe('SubscriptionService', () => {
         ...mockSubscription,
         endsAt: futureEndsAt,
       };
-      mockPrisma.subscription.findFirst.mockResolvedValue(
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(
         subscriptionWithFutureEnd,
       );
-      mockPrisma.subscription.update.mockResolvedValue({
+      mockSubscriptionRepo.updateById.mockResolvedValue({
         ...subscriptionWithFutureEnd,
         status: SUBSCRIPTION_STATUS.CANCELLED,
       });
 
       await service.cancel('user-1');
 
-      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
-        where: { id: mockSubscription.id },
-        data: expect.objectContaining({
+      expect(mockSubscriptionRepo.updateById).toHaveBeenCalledWith(
+        mockSubscription.id,
+        expect.objectContaining({
           endsAt: futureEndsAt,
         }),
-      });
+      );
     });
 
     it('should set endsAt to now if already expired', async () => {
@@ -255,12 +262,12 @@ describe('SubscriptionService', () => {
         ...mockSubscription,
         endsAt: pastEndsAt,
       };
-      mockPrisma.subscription.findFirst.mockResolvedValue(
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(
         subscriptionWithPastEnd,
       );
 
       const beforeCall = Date.now();
-      mockPrisma.subscription.update.mockImplementation(({ data }) => {
+      mockSubscriptionRepo.updateById.mockImplementation((_id, data) => {
         // Should set endsAt to approximately now (not the past date)
         expect(data.endsAt.getTime()).toBeGreaterThanOrEqual(beforeCall - 1000);
         return Promise.resolve({
@@ -272,7 +279,7 @@ describe('SubscriptionService', () => {
 
       await service.cancel('user-1');
 
-      expect(mockPrisma.subscription.update).toHaveBeenCalled();
+      expect(mockSubscriptionRepo.updateById).toHaveBeenCalled();
     });
   });
 
@@ -298,19 +305,16 @@ describe('SubscriptionService', () => {
           createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
         },
       ];
-      mockPrisma.paymentTransaction.findMany.mockResolvedValue(transactions);
+      mockPaymentTxRepo.findManyByUser.mockResolvedValue(transactions);
 
       const result = await service.listHistory('user-1');
 
       expect(result).toHaveLength(2);
-      expect(mockPrisma.paymentTransaction.findMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
-        orderBy: { createdAt: 'desc' },
-      });
+      expect(mockPaymentTxRepo.findManyByUser).toHaveBeenCalledWith('user-1');
     });
 
     it('should return empty array if no transactions', async () => {
-      mockPrisma.paymentTransaction.findMany.mockResolvedValue([]);
+      mockPaymentTxRepo.findManyByUser.mockResolvedValue([]);
 
       const result = await service.listHistory('user-1');
 
@@ -326,12 +330,12 @@ describe('SubscriptionService', () => {
         ...mockSubscription,
         endsAt: null,
       };
-      mockPrisma.subscription.findFirst.mockResolvedValue(
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(
         subscriptionWithNullEnd,
       );
 
       const beforeCall = Date.now();
-      mockPrisma.subscription.update.mockImplementation(({ data }) => {
+      mockSubscriptionRepo.updateById.mockImplementation((_id, data) => {
         // Should set endsAt to now when existing is null
         expect(data.endsAt.getTime()).toBeGreaterThanOrEqual(beforeCall - 1000);
         return Promise.resolve({
@@ -343,7 +347,7 @@ describe('SubscriptionService', () => {
 
       await service.cancel('user-1');
 
-      expect(mockPrisma.subscription.update).toHaveBeenCalled();
+      expect(mockSubscriptionRepo.updateById).toHaveBeenCalled();
     });
   });
 });

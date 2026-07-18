@@ -1,3 +1,5 @@
+import type { ActivityLog, Prisma } from '@prisma/client';
+
 // ==================== Types ====================
 export interface ActivityLogCreatedAt {
   createdAt: Date;
@@ -5,6 +7,11 @@ export interface ActivityLogCreatedAt {
 
 // ==================== Repository Interface ====================
 export interface IStreakRepository {
+  // Create an activity log entry
+  createActivityLog(
+    data: Prisma.ActivityLogUncheckedCreateInput,
+  ): Promise<ActivityLog>;
+
   // Find activity logs for a user within a date range with specific actions
   findUserActivityLogs(
     userId: string,

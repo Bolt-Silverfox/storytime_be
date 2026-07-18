@@ -1,5 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
 import {
   KidOverviewStatsDto,
   KidDetailedReportDto,
@@ -8,11 +7,40 @@ import {
 import { QuestionAnswerDto } from '../story/dto/story.dto';
 import { BadgeProgressEngine } from '../achievement-progress/badge-progress.engine';
 import { ScreenTimeService } from './services/screen-time.service';
+import {
+  STORY_QUESTION_REPOSITORY,
+  IStoryQuestionRepository,
+  QUESTION_ANSWER_REPOSITORY,
+  IQuestionAnswerRepository,
+  KID_REPOSITORY,
+  IKidRepository,
+  STORY_PROGRESS_REPOSITORY,
+  IStoryProgressRepository,
+  DAILY_CHALLENGE_ASSIGNMENT_REPOSITORY,
+  IDailyChallengeAssignmentRepository,
+  REWARD_REDEMPTION_REPOSITORY,
+  IRewardRedemptionRepository,
+  FAVORITE_REPOSITORY,
+  IFavoriteRepository,
+} from './repositories';
 
 @Injectable()
 export class ReportsService {
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(STORY_QUESTION_REPOSITORY)
+    private readonly storyQuestionRepository: IStoryQuestionRepository,
+    @Inject(QUESTION_ANSWER_REPOSITORY)
+    private readonly questionAnswerRepository: IQuestionAnswerRepository,
+    @Inject(KID_REPOSITORY)
+    private readonly kidRepository: IKidRepository,
+    @Inject(STORY_PROGRESS_REPOSITORY)
+    private readonly storyProgressRepository: IStoryProgressRepository,
+    @Inject(DAILY_CHALLENGE_ASSIGNMENT_REPOSITORY)
+    private readonly dailyChallengeAssignmentRepository: IDailyChallengeAssignmentRepository,
+    @Inject(REWARD_REDEMPTION_REPOSITORY)
+    private readonly rewardRedemptionRepository: IRewardRedemptionRepository,
+    @Inject(FAVORITE_REPOSITORY)
+    private readonly favoriteRepository: IFavoriteRepository,
     private readonly badgeProgressEngine: BadgeProgressEngine,
     private readonly screenTimeService: ScreenTimeService,
   ) {}
@@ -21,14 +49,9 @@ export class ReportsService {
    * Record a question answer
    */
   async recordAnswer(dto: QuestionAnswerDto) {
-    const question = await this.prisma.storyQuestion.findUnique({
-      where: { id: dto.questionId },
-      select: {
-        id: true,
-        options: true,
-        correctOption: true,
-      },
-    });
+    const question = await this.storyQuestionRepository.findQuestionForAnswer(
+      dto.questionId,
+    );
 
     if (!question) {
       throw new BadRequestException('Question not found');
@@ -43,25 +66,16 @@ export class ReportsService {
 
     const isCorrect = question.correctOption === dto.selectedOption;
 
-    const answer = await this.prisma.questionAnswer.create({
-      data: {
-        kidId: dto.kidId,
-        questionId: dto.questionId,
-        storyId: dto.storyId,
-        selectedOption: dto.selectedOption,
-        isCorrect,
-      },
-      select: {
-        id: true,
-        isCorrect: true,
-      },
+    const answer = await this.questionAnswerRepository.createAnswer({
+      kidId: dto.kidId,
+      questionId: dto.questionId,
+      storyId: dto.storyId,
+      selectedOption: dto.selectedOption,
+      isCorrect,
     });
 
     // Trigger badge progress for quiz answered
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: dto.kidId },
-      select: { parentId: true },
-    });
+    const kid = await this.kidRepository.findParentIdByKidId(dto.kidId);
 
     if (kid?.parentId) {
       await this.badgeProgressEngine.recordActivity(
@@ -82,12 +96,8 @@ export class ReportsService {
    * Get weekly overview for all kids of a parent
    */
   async getWeeklyOverview(parentId: string): Promise<WeeklyReportDto> {
-    const kids = await this.prisma.kid.findMany({
-      where: { parentId },
-      include: {
-        avatar: true,
-      },
-    });
+    const kids =
+      await this.kidRepository.findKidsByParentWithAvatar(parentId);
 
     // Get start and end of current week (Monday to Sunday)
     const now = new Date();
@@ -103,16 +113,12 @@ export class ReportsService {
     const kidStats: KidOverviewStatsDto[] = await Promise.all(
       kids.map(async (kid, index) => {
         // Stories completed this week
-        const storiesCompleted = await this.prisma.storyProgress.count({
-          where: {
-            kidId: kid.id,
-            completed: true,
-            lastAccessed: {
-              gte: weekStart,
-              lt: weekEnd,
-            },
-          },
-        });
+        const storiesCompleted =
+          await this.storyProgressRepository.countCompletedInRange(
+            kid.id,
+            weekStart,
+            weekEnd,
+          );
 
         // Screen time this week (delegated to ScreenTimeService)
         const screenTimeMins =
@@ -123,27 +129,20 @@ export class ReportsService {
           );
 
         // Stars earned (assuming daily challenge completions)
-        const starsEarned = await this.prisma.dailyChallengeAssignment.count({
-          where: {
-            kidId: kid.id,
-            completed: true,
-            completedAt: {
-              gte: weekStart,
-              lt: weekEnd,
-            },
-          },
-        });
+        const starsEarned =
+          await this.dailyChallengeAssignmentRepository.countCompletedInRange(
+            kid.id,
+            weekStart,
+            weekEnd,
+          );
 
         // Badges earned (reward redemptions)
-        const badgesEarned = await this.prisma.rewardRedemption.count({
-          where: {
-            kidId: kid.id,
-            redeemedAt: {
-              gte: weekStart,
-              lt: weekEnd,
-            },
-          },
-        });
+        const badgesEarned =
+          await this.rewardRedemptionRepository.countInRange(
+            kid.id,
+            weekStart,
+            weekEnd,
+          );
 
         return {
           kidId: kid.id,
@@ -186,36 +185,18 @@ export class ReportsService {
    * Mark a story as completed
    */
   async completeStory(kidId: string, storyId: string) {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
-      select: { parentId: true },
-    });
+    const kid = await this.kidRepository.findParentIdByKidId(kidId);
 
     if (!kid) {
       throw new BadRequestException('Kid not found');
     }
 
     // Update or create progress record
-    const progress = await this.prisma.storyProgress.upsert({
-      where: {
-        kidId_storyId: {
-          kidId,
-          storyId,
-        },
-      },
-      update: {
-        completed: true,
-        progress: 100,
-        lastAccessed: new Date(),
-      },
-      create: {
+    const progress =
+      await this.storyProgressRepository.upsertCompletedProgress(
         kidId,
         storyId,
-        completed: true,
-        progress: 100,
-        lastAccessed: new Date(),
-      },
-    });
+      );
 
     // Trigger badge progress for story read
     await this.badgeProgressEngine.recordActivity(
@@ -232,16 +213,8 @@ export class ReportsService {
    * Get detailed report for a specific kid
    */
   async getKidDetailedReport(kidId: string): Promise<KidDetailedReportDto> {
-    const kid = await this.prisma.kid.findUnique({
-      where: { id: kidId },
-      include: {
-        avatar: true,
-        activityLogs: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-      },
-    });
+    const kid =
+      await this.kidRepository.findKidWithAvatarAndActivity(kidId);
 
     if (!kid) {
       throw new BadRequestException('Kid not found');
@@ -266,28 +239,17 @@ export class ReportsService {
         : undefined;
 
     // Stories this week
-    const storiesCompleted = await this.prisma.storyProgress.count({
-      where: {
-        kidId,
-        completed: true,
-        lastAccessed: { gte: weekStart },
-      },
-    });
+    const storiesCompleted =
+      await this.storyProgressRepository.countCompletedSince(kidId, weekStart);
 
-    const storiesInProgress = await this.prisma.storyProgress.count({
-      where: {
-        kidId,
-        completed: false,
-      },
-    });
+    const storiesInProgress =
+      await this.storyProgressRepository.countInProgress(kidId);
 
     // Quiz performance this week
-    const answers = await this.prisma.questionAnswer.findMany({
-      where: {
-        kidId,
-        answeredAt: { gte: weekStart },
-      },
-    });
+    const answers = await this.questionAnswerRepository.findAnswersByKidSince(
+      kidId,
+      weekStart,
+    );
 
     const rightAnswers = answers.filter((a) => a.isCorrect).length;
     const totalAnswers = answers.length;
@@ -295,26 +257,20 @@ export class ReportsService {
       totalAnswers > 0 ? Math.round((rightAnswers / totalAnswers) * 100) : 0;
 
     // Stars earned this week
-    const starsEarned = await this.prisma.dailyChallengeAssignment.count({
-      where: {
+    const starsEarned =
+      await this.dailyChallengeAssignmentRepository.countCompletedSince(
         kidId,
-        completed: true,
-        completedAt: { gte: weekStart },
-      },
-    });
+        weekStart,
+      );
 
     // Badges earned this week
-    const badgesEarned = await this.prisma.rewardRedemption.count({
-      where: {
-        kidId,
-        redeemedAt: { gte: weekStart },
-      },
-    });
+    const badgesEarned = await this.rewardRedemptionRepository.countSince(
+      kidId,
+      weekStart,
+    );
 
     // Favorites count
-    const favoritesCount = await this.prisma.favorite.count({
-      where: { kidId },
-    });
+    const favoritesCount = await this.favoriteRepository.countByKid(kidId);
 
     // Last active
     const lastActiveAt = kid.activityLogs[0]?.createdAt;

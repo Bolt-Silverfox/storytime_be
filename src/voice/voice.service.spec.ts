@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { VoiceService } from './voice.service';
-import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
@@ -9,6 +8,12 @@ import { VoiceResponseMapper } from './services/voice-response.mapper';
 import { VoiceCatalogService } from './services/voice-catalog.service';
 import { VoicePreferenceService } from './services/voice-preference.service';
 import { VoiceLibraryService } from './services/voice-library.service';
+import {
+  VOICE_REPOSITORY,
+  IVoiceRepository,
+  VOICE_USER_REPOSITORY,
+  IVoiceUserRepository,
+} from './repositories';
 
 const mockCacheManager = {
   get: jest.fn(),
@@ -16,15 +21,24 @@ const mockCacheManager = {
   del: jest.fn(),
 };
 
-const mockPrismaService = {
-  voice: {
-    findMany: jest.fn(),
-    create: jest.fn(),
-  },
-  user: {
-    update: jest.fn(),
-    findUnique: jest.fn(),
-  },
+const mockVoiceRepository: Record<keyof IVoiceRepository, jest.Mock> = {
+  createVoice: jest.fn(),
+  createVoiceReturningId: jest.fn(),
+  findManyByUserNotDeleted: jest.fn(),
+  findFirstByUserAndElevenLabsId: jest.fn(),
+  findSystemVoiceByElevenLabsId: jest.fn(),
+  findFirstByIdNotDeleted: jest.fn(),
+  findSystemVoicesByElevenLabsIds: jest.fn(),
+  findUniqueByIdNotDeleted: jest.fn(),
+  findSystemVoiceIdByElevenLabsId: jest.fn(),
+  findVoiceIdElevenLabsPairs: jest.fn(),
+  findElevenLabsIdById: jest.fn(),
+};
+
+const mockVoiceUserRepository: Record<keyof IVoiceUserRepository, jest.Mock> = {
+  updatePreferredVoiceWithInclude: jest.fn(),
+  findByIdWithPreferredVoice: jest.fn(),
+  findPreferredVoiceId: jest.fn(),
 };
 
 const mockConfigService = {
@@ -42,7 +56,7 @@ const mockElevenLabsProvider = {
 
 describe('VoiceService', () => {
   let service: VoiceService;
-  let prisma: typeof mockPrismaService;
+  let voiceRepository: typeof mockVoiceRepository;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -52,7 +66,8 @@ describe('VoiceService', () => {
         VoiceCatalogService,
         VoicePreferenceService,
         VoiceLibraryService,
-        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: VOICE_REPOSITORY, useValue: mockVoiceRepository },
+        { provide: VOICE_USER_REPOSITORY, useValue: mockVoiceUserRepository },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: HttpService, useValue: mockHttpService },
         { provide: ElevenLabsTTSProvider, useValue: mockElevenLabsProvider },
@@ -61,7 +76,7 @@ describe('VoiceService', () => {
     }).compile();
 
     service = module.get<VoiceService>(VoiceService);
-    prisma = module.get(PrismaService);
+    voiceRepository = module.get(VOICE_REPOSITORY);
     jest.clearAllMocks();
   });
 
@@ -84,7 +99,7 @@ describe('VoiceService', () => {
           updatedAt: new Date(),
         },
       ];
-      prisma.voice.findMany.mockResolvedValue(userVoices);
+      voiceRepository.findManyByUserNotDeleted.mockResolvedValue(userVoices);
 
       const result = await service.listVoices(userId);
 
@@ -94,9 +109,9 @@ describe('VoiceService', () => {
         name: 'Custom Voice',
       });
 
-      expect(prisma.voice.findMany).toHaveBeenCalledWith({
-        where: { userId, isDeleted: false },
-      });
+      expect(voiceRepository.findManyByUserNotDeleted).toHaveBeenCalledWith(
+        userId,
+      );
     });
   });
 });

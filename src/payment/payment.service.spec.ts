@@ -2,32 +2,44 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentService } from './payment.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '@/prisma/prisma.service';
 import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
+import {
+  SUBSCRIPTION_REPOSITORY,
+  ISubscriptionRepository,
+  PAYMENT_TRANSACTION_REPOSITORY,
+  IPaymentTransactionRepository,
+} from './repositories';
 
-// Type-safe mock for PrismaService
-type MockPrismaService = {
-  paymentTransaction: {
-    create: jest.Mock;
-    findFirst: jest.Mock;
-  };
-  subscription: { findFirst: jest.Mock; create: jest.Mock; update: jest.Mock };
-};
+// Type-safe mocks for repositories
+type MockSubscriptionRepository = Record<
+  keyof ISubscriptionRepository,
+  jest.Mock
+>;
+type MockPaymentTransactionRepository = Record<
+  keyof IPaymentTransactionRepository,
+  jest.Mock
+>;
 
-const createMockPrismaService = (): MockPrismaService => ({
-  paymentTransaction: {
-    create: jest.fn(),
-    findFirst: jest.fn(),
-  },
-  subscription: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+const createMockSubscriptionRepository = (): MockSubscriptionRepository => ({
+  findFirstByUser: jest.fn(),
+  updateById: jest.fn(),
+  create: jest.fn(),
 });
+
+const createMockPaymentTransactionRepository =
+  (): MockPaymentTransactionRepository => ({
+    findLatestSuccessfulByUser: jest.fn(),
+    findFirstByReference: jest.fn(),
+    create: jest.fn(),
+  });
 
 describe('PaymentService', () => {
   let service: PaymentService;
-  let mockPrisma: MockPrismaService;
+  let mockSubscriptionRepo: MockSubscriptionRepository;
+  let mockPaymentTxRepo: MockPaymentTransactionRepository;
   let mockGoogleVerification: {
     verify: jest.Mock;
     acknowledgePurchase: jest.Mock;
@@ -40,7 +52,8 @@ describe('PaymentService', () => {
   let mockConfigService: { get: jest.Mock };
 
   beforeEach(async () => {
-    mockPrisma = createMockPrismaService();
+    mockSubscriptionRepo = createMockSubscriptionRepository();
+    mockPaymentTxRepo = createMockPaymentTransactionRepository();
     mockGoogleVerification = {
       verify: jest.fn(),
       acknowledgePurchase: jest.fn().mockResolvedValue({ success: true }),
@@ -64,7 +77,11 @@ describe('PaymentService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentService,
-        { provide: PrismaService, useValue: mockPrisma },
+        { provide: SUBSCRIPTION_REPOSITORY, useValue: mockSubscriptionRepo },
+        {
+          provide: PAYMENT_TRANSACTION_REPOSITORY,
+          useValue: mockPaymentTxRepo,
+        },
         { provide: ConfigService, useValue: mockConfigService },
         {
           provide: GoogleVerificationService,
@@ -102,7 +119,7 @@ describe('PaymentService', () => {
         metadata: { acknowledgementState: 1 },
       });
 
-      mockPrisma.paymentTransaction.create.mockResolvedValue({
+      mockPaymentTxRepo.create.mockResolvedValue({
         id: 'tx-1',
         userId,
         paymentMethodId: null,
@@ -112,8 +129,8 @@ describe('PaymentService', () => {
         reference: 'hash-123',
       });
       // findFirst called in upsertSubscriptionWithExpiry: no existing sub
-      mockPrisma.subscription.findFirst.mockResolvedValue(null);
-      mockPrisma.subscription.create.mockResolvedValue({
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
+      mockSubscriptionRepo.create.mockResolvedValue({
         id: 'sub-1',
         userId,
         plan: 'monthly',
@@ -129,7 +146,7 @@ describe('PaymentService', () => {
         productId: 'com.storytime.monthly',
         packageName: undefined,
       });
-      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalled();
+      expect(mockPaymentTxRepo.create).toHaveBeenCalled();
       expect(result.success).toBe(true);
       expect(result.subscription?.plan).toBe('monthly');
     });
@@ -153,7 +170,7 @@ describe('PaymentService', () => {
         expirationTime: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
       });
 
-      mockPrisma.paymentTransaction.create.mockResolvedValue({
+      mockPaymentTxRepo.create.mockResolvedValue({
         id: 'tx-1',
         userId,
         paymentMethodId: null,
@@ -162,8 +179,8 @@ describe('PaymentService', () => {
         status: 'success',
         reference: 'hash-456',
       });
-      mockPrisma.subscription.findFirst.mockResolvedValue(null);
-      mockPrisma.subscription.create.mockResolvedValue({
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
+      mockSubscriptionRepo.create.mockResolvedValue({
         id: 'sub-1',
         userId,
         plan: 'monthly',
@@ -200,10 +217,10 @@ describe('PaymentService', () => {
         'Unique constraint failed',
         { code: 'P2002', clientVersion: '5.0.0' },
       );
-      mockPrisma.paymentTransaction.create.mockRejectedValue(p2002Error);
+      mockPaymentTxRepo.create.mockRejectedValue(p2002Error);
 
-      // findFirst returns existing transaction for the same user
-      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({
+      // findFirstByReference returns existing transaction for the same user
+      mockPaymentTxRepo.findFirstByReference.mockResolvedValue({
         id: 'tx-existing',
         userId: 'user-1',
         amount: 4.99,
@@ -212,7 +229,7 @@ describe('PaymentService', () => {
         reference: 'existing-hash',
       });
 
-      mockPrisma.subscription.findFirst.mockResolvedValue({
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
         id: 'sub-1',
         plan: 'monthly',
         status: 'active',
@@ -247,10 +264,10 @@ describe('PaymentService', () => {
         'Unique constraint failed',
         { code: 'P2002', clientVersion: '5.0.0' },
       );
-      mockPrisma.paymentTransaction.create.mockRejectedValue(p2002Error);
+      mockPaymentTxRepo.create.mockRejectedValue(p2002Error);
 
       // Existing transaction belongs to a different user
-      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({
+      mockPaymentTxRepo.findFirstByReference.mockResolvedValue({
         id: 'tx-existing',
         userId: 'user-1',
         amount: 4.99,
@@ -344,7 +361,7 @@ describe('PaymentService', () => {
         metadata: { acknowledgementState: 1 },
       });
 
-      mockPrisma.paymentTransaction.create.mockResolvedValue({
+      mockPaymentTxRepo.create.mockResolvedValue({
         id: 'tx-2',
         userId,
         amount: 47.99,
@@ -353,14 +370,14 @@ describe('PaymentService', () => {
         reference: 'hash-789',
       });
 
-      mockPrisma.subscription.findFirst.mockResolvedValue({
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
         id: 'existing-sub',
         userId,
         plan: 'monthly',
         status: 'active',
       });
 
-      mockPrisma.subscription.update.mockResolvedValue({
+      mockSubscriptionRepo.updateById.mockResolvedValue({
         id: 'existing-sub',
         userId,
         plan: 'yearly',
@@ -371,8 +388,8 @@ describe('PaymentService', () => {
 
       const result = await service.verifyPurchase(userId, dto);
 
-      expect(mockPrisma.subscription.update).toHaveBeenCalled();
-      expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
+      expect(mockSubscriptionRepo.updateById).toHaveBeenCalled();
+      expect(mockSubscriptionRepo.create).not.toHaveBeenCalled();
       expect(result.subscription?.plan).toBe('yearly');
     });
   });
@@ -387,8 +404,8 @@ describe('PaymentService', () => {
         endsAt: new Date(),
         platform: null,
       };
-      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
-      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSub);
+      mockPaymentTxRepo.findLatestSuccessfulByUser.mockResolvedValue({
         amount: 4.99,
         currency: 'USD',
       });
@@ -405,17 +422,14 @@ describe('PaymentService', () => {
         price: 4.99,
         currency: 'USD',
       });
-      expect(mockPrisma.subscription.findFirst).toHaveBeenCalledWith({
-        where: { userId: 'u1' },
-      });
-      expect(mockPrisma.paymentTransaction.findFirst).toHaveBeenCalledWith({
-        where: { userId: 'u1', status: 'success' },
-        orderBy: { createdAt: 'desc' },
-      });
+      expect(mockSubscriptionRepo.findFirstByUser).toHaveBeenCalledWith('u1');
+      expect(
+        mockPaymentTxRepo.findLatestSuccessfulByUser,
+      ).toHaveBeenCalledWith('u1');
     });
 
     it('should return null if no subscription exists', async () => {
-      mockPrisma.subscription.findFirst.mockResolvedValue(null);
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
 
       const result = await service.getSubscription('u1');
 
@@ -425,7 +439,7 @@ describe('PaymentService', () => {
 
   describe('cancelSubscription', () => {
     it('should throw NotFoundException if no subscription exists', async () => {
-      mockPrisma.subscription.findFirst.mockResolvedValue(null);
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
 
       await expect(service.cancelSubscription('u1')).rejects.toThrow(
         NotFoundException,
@@ -444,8 +458,8 @@ describe('PaymentService', () => {
         purchaseToken: null,
       };
 
-      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
-      mockPrisma.subscription.update.mockResolvedValue({
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSub);
+      mockSubscriptionRepo.updateById.mockResolvedValue({
         ...mockSub,
         status: 'cancelled',
       });
@@ -457,9 +471,9 @@ describe('PaymentService', () => {
       expect(
         mockAppleVerification.getSubscriptionStatus,
       ).not.toHaveBeenCalled();
-      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
-        where: { id: 'sub-1' },
-        data: { status: 'cancelled', endsAt: futureDate },
+      expect(mockSubscriptionRepo.updateById).toHaveBeenCalledWith('sub-1', {
+        status: 'cancelled',
+        endsAt: futureDate,
       });
     });
 
@@ -475,11 +489,11 @@ describe('PaymentService', () => {
         purchaseToken: 'google-token-123',
       };
 
-      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSub);
       mockGoogleVerification.cancelSubscription.mockResolvedValue({
         success: true,
       });
-      mockPrisma.subscription.update.mockResolvedValue({
+      mockSubscriptionRepo.updateById.mockResolvedValue({
         ...mockSub,
         status: 'cancelled',
       });
@@ -506,12 +520,12 @@ describe('PaymentService', () => {
         purchaseToken: 'google-token-123',
       };
 
-      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSub);
       mockGoogleVerification.cancelSubscription.mockResolvedValue({
         success: false,
         error: 'API error',
       });
-      mockPrisma.subscription.update.mockResolvedValue({
+      mockSubscriptionRepo.updateById.mockResolvedValue({
         ...mockSub,
         status: 'cancelled',
       });
@@ -533,11 +547,11 @@ describe('PaymentService', () => {
         purchaseToken: 'original-tx-123',
       };
 
-      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSub);
       mockAppleVerification.getSubscriptionStatus.mockResolvedValue({
         autoRenewActive: true,
       });
-      mockPrisma.subscription.update.mockResolvedValue({
+      mockSubscriptionRepo.updateById.mockResolvedValue({
         ...mockSub,
         status: 'cancelled',
       });
@@ -566,11 +580,11 @@ describe('PaymentService', () => {
         purchaseToken: 'original-tx-123',
       };
 
-      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSub);
       mockAppleVerification.getSubscriptionStatus.mockResolvedValue({
         autoRenewActive: false,
       });
-      mockPrisma.subscription.update.mockResolvedValue({
+      mockSubscriptionRepo.updateById.mockResolvedValue({
         ...mockSub,
         status: 'cancelled',
       });
@@ -593,12 +607,12 @@ describe('PaymentService', () => {
         purchaseToken: 'original-tx-123',
       };
 
-      mockPrisma.subscription.findFirst.mockResolvedValue(mockSub);
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSub);
       mockAppleVerification.getSubscriptionStatus.mockResolvedValue({
         autoRenewActive: false,
         error: 'Apple credentials not configured',
       });
-      mockPrisma.subscription.update.mockResolvedValue({
+      mockSubscriptionRepo.updateById.mockResolvedValue({
         ...mockSub,
         status: 'cancelled',
       });

@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -6,7 +7,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateElevenLabsVoiceDto,
   UploadVoiceDto,
@@ -16,6 +16,7 @@ import {
 import { VOICE_CONFIG } from '../voice.constants';
 import { ElevenLabsTTSProvider } from '../providers/eleven-labs-tts.provider';
 import { VoiceResponseMapper } from './voice-response.mapper';
+import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
 
 /**
  * Owns a user's personal voice library: uploaded clones, registered ElevenLabs
@@ -28,7 +29,8 @@ export class VoiceLibraryService {
   private readonly logger = new Logger(VoiceLibraryService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(VOICE_REPOSITORY)
+    private readonly voiceRepository: IVoiceRepository,
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
@@ -60,14 +62,12 @@ export class VoiceLibraryService {
       }
     }
 
-    const voice = await this.prisma.voice.create({
-      data: {
-        userId,
-        name: dto.name,
-        type: VoiceSourceType.UPLOADED,
-        url: fileUrl,
-        elevenLabsVoiceId: elevenLabsId || null,
-      },
+    const voice = await this.voiceRepository.createVoice({
+      userId,
+      name: dto.name,
+      type: VoiceSourceType.UPLOADED,
+      url: fileUrl,
+      elevenLabsVoiceId: elevenLabsId || null,
     });
     return this.mapper.toVoiceResponse(voice);
   }
@@ -77,22 +77,18 @@ export class VoiceLibraryService {
     userId: string,
     dto: CreateElevenLabsVoiceDto,
   ): Promise<VoiceResponseDto> {
-    const voice = await this.prisma.voice.create({
-      data: {
-        userId,
-        name: dto.name,
-        type: VoiceSourceType.ELEVENLABS,
-        elevenLabsVoiceId: dto.elevenLabsVoiceId,
-      },
+    const voice = await this.voiceRepository.createVoice({
+      userId,
+      name: dto.name,
+      type: VoiceSourceType.ELEVENLABS,
+      elevenLabsVoiceId: dto.elevenLabsVoiceId,
     });
     return this.mapper.toVoiceResponse(voice);
   }
 
   // --- List all voices for a user ---
   async listVoices(userId: string): Promise<VoiceResponseDto[]> {
-    const voices = await this.prisma.voice.findMany({
-      where: { userId, isDeleted: false },
-    });
+    const voices = await this.voiceRepository.findManyByUserNotDeleted(userId);
     return voices.map((v) => this.mapper.toVoiceResponse(v));
   }
 
@@ -101,13 +97,10 @@ export class VoiceLibraryService {
     userId: string,
   ): Promise<{ id: string }> {
     // 1. Check if we already have this voice locally for this user
-    const existing = await this.prisma.voice.findFirst({
-      where: {
-        userId: userId,
-        elevenLabsVoiceId: elevenLabsId,
-        isDeleted: false,
-      },
-    });
+    const existing = await this.voiceRepository.findFirstByUserAndElevenLabsId(
+      userId,
+      elevenLabsId,
+    );
 
     if (existing) {
       return { id: existing.id };
@@ -159,15 +152,13 @@ export class VoiceLibraryService {
     }
 
     // 4. Save to our Database with the URL
-    const newVoice = await this.prisma.voice.create({
-      data: {
-        userId: userId,
-        name: voiceName,
-        type: VoiceSourceType.ELEVENLABS,
-        elevenLabsVoiceId: elevenLabsId,
-        url: voicePreviewUrl,
-        // voiceAvatar could be set here if we fetched it, or let it default in retrieval
-      },
+    const newVoice = await this.voiceRepository.createVoice({
+      userId: userId,
+      name: voiceName,
+      type: VoiceSourceType.ELEVENLABS,
+      elevenLabsVoiceId: elevenLabsId,
+      url: voicePreviewUrl,
+      // voiceAvatar could be set here if we fetched it, or let it default in retrieval
     });
 
     return { id: newVoice.id };

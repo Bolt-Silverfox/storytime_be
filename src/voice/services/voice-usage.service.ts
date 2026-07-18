@@ -1,6 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
+import {
+  USER_USAGE_REPOSITORY,
+  IUserUsageRepository,
+  ACTIVITY_LOG_REPOSITORY,
+  IActivityLogRepository,
+} from '../repositories';
 
 /**
  * Tracks AI usage counters (ElevenLabs credits, Gemini story/image) with
@@ -13,7 +18,12 @@ import { AiProviders } from '@/shared/constants/ai-providers.constants';
 export class VoiceUsageService {
   private readonly logger = new Logger(VoiceUsageService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(USER_USAGE_REPOSITORY)
+    private readonly userUsageRepository: IUserUsageRepository,
+    @Inject(ACTIVITY_LOG_REPOSITORY)
+    private readonly activityLogRepository: IActivityLogRepository,
+  ) {}
 
   getCurrentMonth(): string {
     const now = new Date();
@@ -32,22 +42,12 @@ export class VoiceUsageService {
     amount: number,
   ): Promise<void> {
     const currentMonth = this.getCurrentMonth();
-    await this.prisma.$transaction(async (tx) => {
-      await tx.userUsage.updateMany({
-        where: { userId, currentMonth: { not: currentMonth } },
-        data: {
-          currentMonth,
-          elevenLabsCount: 0,
-          geminiStoryCount: 0,
-          geminiImageCount: 0,
-        },
-      });
-      await tx.userUsage.upsert({
-        where: { userId },
-        create: { userId, currentMonth, [field]: amount },
-        update: { currentMonth, [field]: { increment: amount } },
-      });
-    });
+    await this.userUsageRepository.incrementCounterWithRollover(
+      userId,
+      currentMonth,
+      field,
+      amount,
+    );
   }
 
   async incrementUsage(userId: string): Promise<void> {
@@ -84,9 +84,11 @@ export class VoiceUsageService {
     if (credits <= 0) return;
     // Atomic decrement floored at zero — avoids read-then-update race that
     // could push elevenLabsCount negative under concurrent requests.
-    // Sync: references Prisma model UserUsage, columns elevenLabsCount and userId.
-    const affected = await this.prisma
-      .$executeRaw`UPDATE "user_usages" SET "elevenLabsCount" = GREATEST("elevenLabsCount" - ${credits}, 0) WHERE "userId" = ${userId}`;
+    const affected =
+      await this.userUsageRepository.decrementElevenLabsCreditsFloored(
+        userId,
+        credits,
+      );
     if (affected > 0) {
       this.logger.log(
         `Released up to ${credits} ElevenLabs credits for user ${userId}`,
@@ -111,13 +113,11 @@ export class VoiceUsageService {
     credits: number,
   ) {
     try {
-      await this.prisma.activityLog.create({
-        data: {
-          userId,
-          action: 'AI_GENERATION',
-          status: 'SUCCESS',
-          details: JSON.stringify({ provider, type, credits }),
-        },
+      await this.activityLogRepository.createActivityLog({
+        userId,
+        action: 'AI_GENERATION',
+        status: 'SUCCESS',
+        details: JSON.stringify({ provider, type, credits }),
       });
     } catch (error) {
       const errorMessage =
