@@ -34,6 +34,10 @@ export type StoryWithRelations = Story & {
 
 export type StoryWithImages = Story & { images: StoryImage[] };
 
+export type StoryWithCreatorParent = Story & {
+  creatorKid: { parentId: string } | null;
+};
+
 export type KidWithPreferences = Kid & {
   preferredCategories: Category[];
   parentRecommendations?: { storyId: string }[];
@@ -94,6 +98,11 @@ export interface IStoryRepository {
     id: string,
     includeDeleted?: boolean,
   ): Promise<StoryWithRelations | null>;
+
+  findStoryByIdWithCreatorParent(
+    id: string,
+    includeDeleted?: boolean,
+  ): Promise<StoryWithCreatorParent | null>;
 
   findStories(params: {
     where: Prisma.StoryWhereInput;

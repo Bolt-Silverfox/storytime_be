@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  NotFoundException,
   Param,
   Post,
   Query,
@@ -33,7 +32,7 @@ import { StoryService } from './story.service';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
-import { PrismaService } from '../prisma/prisma.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -42,20 +41,8 @@ import { PrismaService } from '../prisma/prisma.service';
 export class StoryGenerateController {
   constructor(
     private readonly storyService: StoryService,
-    private readonly prisma: PrismaService,
+    private readonly kidOwnership: KidOwnershipService,
   ) {}
-
-  private async verifyKidOwnership(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findFirst({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) {
-      throw new NotFoundException(
-        `Kid ${kidId} not found or does not belong to this user`,
-      );
-    }
-    return kid;
-  }
 
   @Post('generate')
   @UseGuards(SubscriptionThrottleGuard)
@@ -79,7 +66,7 @@ export class StoryGenerateController {
   ) {
     // If kidId is provided, use the specialized method
     if (body.kidId) {
-      await this.verifyKidOwnership(body.kidId, req.authUserData.userId);
+      await this.kidOwnership.getOwnedKidOrThrow(body.kidId, req.authUserData.userId);
       return this.storyService.generateStoryForKid(
         body.kidId,
         body.themes,
@@ -134,7 +121,7 @@ export class StoryGenerateController {
     @Query('theme') theme?: string,
     @Query('category') category?: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     const themes = theme ? [theme] : undefined;
     const categories = category ? [category] : undefined;
     return this.storyService.generateStoryForKid(kidId, themes, categories);

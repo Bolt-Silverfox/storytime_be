@@ -38,6 +38,7 @@ import { StoryFavoriteService } from './story-favorite.service';
 import { StoryDownloadService } from './story-download.service';
 import { StoryPathService } from './story-path.service';
 import { StoryMetadataService } from './story-metadata.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
 
 // Repositories
 import { STORY_CORE_REPOSITORY } from './repositories/story-core.repository.interface';
@@ -106,6 +107,7 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
     StoryDownloadService,
     StoryPathService,
     StoryMetadataService,
+    KidOwnershipService,
 
     // Repositories
     {

@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  NotFoundException,
   Param,
   Post,
   Req,
@@ -22,7 +21,7 @@ import {
 
 import { RestrictStoryDto } from './dto/story.dto';
 import { StoryService } from './story.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -31,20 +30,8 @@ import { PrismaService } from '../prisma/prisma.service';
 export class StoryRestrictController {
   constructor(
     private readonly storyService: StoryService,
-    private readonly prisma: PrismaService,
+    private readonly kidOwnership: KidOwnershipService,
   ) {}
-
-  private async verifyKidOwnership(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findFirst({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) {
-      throw new NotFoundException(
-        `Kid ${kidId} not found or does not belong to this user`,
-      );
-    }
-    return kid;
-  }
 
   // === RESTRICTED STORIES ENDPOINTS ===
 
@@ -55,7 +42,7 @@ export class StoryRestrictController {
     @Req() req: AuthenticatedRequest,
     @Body() body: RestrictStoryDto,
   ) {
-    await this.verifyKidOwnership(body.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(body.kidId, req.authUserData.userId);
     return this.storyService.restrictStory({
       ...body,
       userId: req.authUserData.userId,
@@ -69,7 +56,7 @@ export class StoryRestrictController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     return this.storyService.unrestrictStory(
       kidId,
       storyId,
@@ -83,7 +70,7 @@ export class StoryRestrictController {
     @Req() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     return this.storyService.getRestrictedStories(
       kidId,
       req.authUserData.userId,

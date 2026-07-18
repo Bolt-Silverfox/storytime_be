@@ -33,7 +33,7 @@ import {
   ErrorResponseDto,
 } from './dto/story.dto';
 import { StoryService } from './story.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -43,20 +43,8 @@ export class StoryDailyChallengeController {
   private readonly logger = new Logger(StoryDailyChallengeController.name);
   constructor(
     private readonly storyService: StoryService,
-    private readonly prisma: PrismaService,
+    private readonly kidOwnership: KidOwnershipService,
   ) {}
-
-  private async verifyKidOwnership(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findFirst({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) {
-      throw new NotFoundException(
-        `Kid ${kidId} not found or does not belong to this user`,
-      );
-    }
-    return kid;
-  }
 
   // --- Daily Challenge ---
   @Post('daily-challenge')
@@ -82,7 +70,7 @@ export class StoryDailyChallengeController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: AssignDailyChallengeDto,
   ) {
-    await this.verifyKidOwnership(dto.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(dto.kidId, req.authUserData.userId);
     return this.storyService.assignDailyChallenge(dto);
   }
 
@@ -100,7 +88,7 @@ export class StoryDailyChallengeController {
     if (!assignment) {
       throw new NotFoundException('Assignment not found');
     }
-    await this.verifyKidOwnership(assignment.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(assignment.kidId, req.authUserData.userId);
     return this.storyService.completeDailyChallenge(dto);
   }
 
@@ -112,7 +100,7 @@ export class StoryDailyChallengeController {
     @Req() req: AuthenticatedRequest,
     @Param('kidId') kidId: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     return this.storyService.getAssignmentsForKid(kidId);
   }
 
@@ -128,7 +116,7 @@ export class StoryDailyChallengeController {
     if (!assignment) {
       throw new NotFoundException('Assignment not found');
     }
-    await this.verifyKidOwnership(assignment.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(assignment.kidId, req.authUserData.userId);
     return assignment;
   }
 
@@ -158,7 +146,7 @@ export class StoryDailyChallengeController {
     @Req() req: AuthenticatedRequest,
     @Query('kidId') kidId: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     this.logger.log(
       `Getting today's daily challenge assignment for kid ${kidId}`,
     );
@@ -198,7 +186,7 @@ export class StoryDailyChallengeController {
     @Param('kidId') kidId: string,
     @Query('weekStart') weekStart: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     const weekStartDate = new Date(weekStart);
     weekStartDate.setHours(0, 0, 0, 0);
     return this.storyService.getWeeklyDailyChallengeAssignments(

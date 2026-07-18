@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  NotFoundException,
   Param,
   Post,
   Query,
@@ -28,7 +27,7 @@ import {
 import { ErrorResponseDto, FavoriteDto } from './dto/story.dto';
 import { PaginationUtil } from '@/shared/utils/pagination.util';
 import { StoryService } from './story.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -37,20 +36,8 @@ import { PrismaService } from '../prisma/prisma.service';
 export class StoryFavoriteController {
   constructor(
     private readonly storyService: StoryService,
-    private readonly prisma: PrismaService,
+    private readonly kidOwnership: KidOwnershipService,
   ) {}
-
-  private async verifyKidOwnership(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findFirst({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) {
-      throw new NotFoundException(
-        `Kid ${kidId} not found or does not belong to this user`,
-      );
-    }
-    return kid;
-  }
 
   // --- Favorites ---
   @Post('favorites')
@@ -76,7 +63,7 @@ export class StoryFavoriteController {
     @Req() req: AuthenticatedRequest,
     @Body() body: FavoriteDto,
   ) {
-    await this.verifyKidOwnership(body.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(body.kidId, req.authUserData.userId);
     return this.storyService.addFavorite(body);
   }
 
@@ -105,7 +92,7 @@ export class StoryFavoriteController {
     @Param('kidId') kidId: string,
     @Param('storyId') storyId: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     return this.storyService.removeFavorite(kidId, storyId);
   }
 
@@ -140,7 +127,7 @@ export class StoryFavoriteController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
   ) {
-    await this.verifyKidOwnership(kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     const { cursor: safeCursor, limit: safeLimit } =
       PaginationUtil.sanitizeCursorParams(cursor, limit);
     return this.storyService.getFavorites(kidId, safeCursor, safeLimit);

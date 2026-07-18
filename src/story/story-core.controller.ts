@@ -4,9 +4,7 @@ import {
   Delete,
   Get,
   BadRequestException,
-  ForbiddenException,
   Logger,
-  NotFoundException,
   Param,
   Patch,
   Post,
@@ -49,7 +47,7 @@ import { StoryService } from './story.service';
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
-import { PrismaService } from '../prisma/prisma.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -59,40 +57,8 @@ export class StoryCoreController {
   private readonly logger = new Logger(StoryCoreController.name);
   constructor(
     private readonly storyService: StoryService,
-    private readonly prisma: PrismaService,
+    private readonly kidOwnership: KidOwnershipService,
   ) {}
-
-  private async verifyKidOwnership(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findFirst({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) {
-      throw new NotFoundException(
-        `Kid ${kidId} not found or does not belong to this user`,
-      );
-    }
-    return kid;
-  }
-
-  private async verifyStoryOwnership(
-    storyId: string,
-    userId: string,
-    includeDeleted = false,
-  ) {
-    const story = await this.prisma.story.findFirst({
-      where: { id: storyId, ...(includeDeleted ? {} : { isDeleted: false }) },
-      include: { creatorKid: { select: { parentId: true } } },
-    });
-    if (!story) {
-      throw new NotFoundException(`Story ${storyId} not found`);
-    }
-    if (!story.creatorKidId || story.creatorKid?.parentId !== userId) {
-      throw new ForbiddenException(
-        'You do not have permission to modify this story',
-      );
-    }
-    return story;
-  }
 
   @Get()
   @ApiOperation({
@@ -201,7 +167,7 @@ export class StoryCoreController {
     }
 
     if (kidId) {
-      await this.verifyKidOwnership(kidId, req.authUserData.userId);
+      await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
     }
 
     const baseFilter = {
@@ -404,7 +370,7 @@ export class StoryCoreController {
     @Param('id') id: string,
     @Body() body: UpdateStoryDto,
   ) {
-    await this.verifyStoryOwnership(id, req.authUserData.userId);
+    await this.kidOwnership.getOwnedStoryOrThrow(id, req.authUserData.userId);
     return this.storyService.updateStory(id, body);
   }
 
@@ -438,7 +404,7 @@ export class StoryCoreController {
     @Param('id') id: string,
     @Query('permanent') permanent: boolean = false,
   ) {
-    await this.verifyStoryOwnership(id, req.authUserData.userId, true);
+    await this.kidOwnership.getOwnedStoryOrThrow(id, req.authUserData.userId, true);
     return this.storyService.deleteStory(id, permanent);
   }
 
@@ -468,7 +434,7 @@ export class StoryCoreController {
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
   ) {
-    await this.verifyStoryOwnership(id, req.authUserData.userId, true);
+    await this.kidOwnership.getOwnedStoryOrThrow(id, req.authUserData.userId, true);
     return this.storyService.undoDeleteStory(id);
   }
 
@@ -498,7 +464,7 @@ export class StoryCoreController {
     @Param('id') id: string,
     @Body() body: StoryImageDto,
   ) {
-    await this.verifyStoryOwnership(id, req.authUserData.userId);
+    await this.kidOwnership.getOwnedStoryOrThrow(id, req.authUserData.userId);
     return this.storyService.addImage(id, body);
   }
 
@@ -528,7 +494,7 @@ export class StoryCoreController {
     @Param('id') id: string,
     @Body() body: StoryBranchDto,
   ) {
-    await this.verifyStoryOwnership(id, req.authUserData.userId);
+    await this.kidOwnership.getOwnedStoryOrThrow(id, req.authUserData.userId);
     return this.storyService.addBranch(id, body);
   }
 }

@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  NotFoundException,
   Param,
   Post,
   Query,
@@ -43,7 +42,7 @@ import {
   CACHE_KEYS,
   CACHE_TTL_MS,
 } from '@/shared/constants/cache-keys.constants';
-import { PrismaService } from '../prisma/prisma.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -52,20 +51,8 @@ import { PrismaService } from '../prisma/prisma.service';
 export class StoryRecommendationController {
   constructor(
     private readonly storyService: StoryService,
-    private readonly prisma: PrismaService,
+    private readonly kidOwnership: KidOwnershipService,
   ) {}
-
-  private async verifyKidOwnership(kidId: string, userId: string) {
-    const kid = await this.prisma.kid.findFirst({
-      where: { id: kidId, parentId: userId, isDeleted: false },
-    });
-    if (!kid) {
-      throw new NotFoundException(
-        `Kid ${kidId} not found or does not belong to this user`,
-      );
-    }
-    return kid;
-  }
 
   // --- PARENT RECOMMENDATIONS ---
 
@@ -95,7 +82,7 @@ export class StoryRecommendationController {
     @Req() req: AuthenticatedRequest,
     @Body() body: ParentRecommendationDto,
   ) {
-    await this.verifyKidOwnership(body.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(body.kidId, req.authUserData.userId);
     return this.storyService.recommendStoryToKid(req.authUserData.userId, body);
   }
 

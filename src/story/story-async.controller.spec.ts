@@ -3,7 +3,8 @@ import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { StoryAsyncController } from './story-async.controller';
 import { StoryQueueService } from './queue/story-queue.service';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
-import { PrismaService } from '../prisma/prisma.service';
+import { KidOwnershipService } from './services/kid-ownership.service';
+import { STORY_REPOSITORY } from './repositories/story.repository.interface';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { GenerateStoryDto } from './dto/story.dto';
 import { StoryJobStatus } from './queue/story-job.interface';
@@ -17,12 +18,10 @@ const mockStoryQueueService = {
   cancelJob: jest.fn(),
 };
 
-const mockPrismaService = {
-  kid: {
-    findFirst: jest
-      .fn()
-      .mockResolvedValue({ id: 'kid-123', parentId: 'user-1' }),
-  },
+const mockStoryRepository = {
+  findKidByIdAndParent: jest
+    .fn()
+    .mockResolvedValue({ id: 'kid-123', parentId: 'user-1' }),
 };
 
 const mockReq = {
@@ -39,7 +38,8 @@ describe('StoryAsyncController', () => {
       controllers: [StoryAsyncController],
       providers: [
         { provide: StoryQueueService, useValue: mockStoryQueueService },
-        { provide: PrismaService, useValue: mockPrismaService },
+        KidOwnershipService,
+        { provide: STORY_REPOSITORY, useValue: mockStoryRepository },
       ],
     })
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -51,7 +51,7 @@ describe('StoryAsyncController', () => {
 
     controller = module.get<StoryAsyncController>(StoryAsyncController);
     jest.clearAllMocks();
-    mockPrismaService.kid.findFirst.mockResolvedValue({
+    mockStoryRepository.findKidByIdAndParent.mockResolvedValue({
       id: 'kid-123',
       parentId: 'user-1',
     });
@@ -134,7 +134,7 @@ describe('StoryAsyncController', () => {
 
       const result = await controller.enqueueStoryGeneration(mockReq, body);
 
-      expect(mockPrismaService.kid.findFirst).toHaveBeenCalled();
+      expect(mockStoryRepository.findKidByIdAndParent).toHaveBeenCalled();
       expect(mockStoryQueueService.queueStoryForKid).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'user-1',
@@ -147,7 +147,7 @@ describe('StoryAsyncController', () => {
     });
 
     it('throws NotFoundException when kid does not belong to the user (IDOR)', async () => {
-      mockPrismaService.kid.findFirst.mockResolvedValue(null);
+      mockStoryRepository.findKidByIdAndParent.mockResolvedValue(null);
 
       await expect(
         controller.enqueueStoryGeneration(mockReq, {

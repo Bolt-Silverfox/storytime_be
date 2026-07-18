@@ -22,6 +22,9 @@ import { StoryRecommendationService } from '../src/story/story-recommendation.se
 import { DailyChallengeService } from '../src/story/daily-challenge.service';
 import { StoryQuotaService } from '../src/story/story-quota.service';
 import { StoryQueueService } from '../src/story/queue';
+import { KidOwnershipService } from '../src/story/services/kid-ownership.service';
+import { STORY_REPOSITORY } from '../src/story/repositories/story.repository.interface';
+import { PrismaStoryRepository } from '../src/story/repositories/prisma-story.repository';
 import { ConfigModule } from '@nestjs/config';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -299,6 +302,11 @@ describe('Story (e2e)', () => {
           provide: PrismaService,
           useValue: mockPrismaService,
         },
+        // Real repository (backed by the mocked PrismaService) + the shared
+        // ownership service, so kid/story ownership checks continue to hit the
+        // same mockPrismaService.kid.findFirst / story.findFirst stubs.
+        KidOwnershipService,
+        { provide: STORY_REPOSITORY, useClass: PrismaStoryRepository },
       ],
     })
       .overrideGuard(AuthThrottleGuard)
