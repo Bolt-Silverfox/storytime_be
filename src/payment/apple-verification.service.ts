@@ -31,6 +31,49 @@ export interface AppleVerifyParams {
   productId: string;
 }
 
+/** Decoded JWSTransaction payload from an ASSN v2 notification */
+export interface AppleDecodedTransaction {
+  transactionId?: string;
+  originalTransactionId?: string;
+  productId?: string;
+  purchaseDate?: number;
+  expiresDate?: number;
+  type?: string;
+  appAccountToken?: string;
+  revocationDate?: number;
+  revocationReason?: number;
+  environment?: string;
+  [key: string]: unknown;
+}
+
+/** Decoded JWSRenewalInfo payload from an ASSN v2 notification */
+export interface AppleDecodedRenewal {
+  originalTransactionId?: string;
+  autoRenewStatus?: number;
+  autoRenewProductId?: string;
+  productId?: string;
+  expirationIntent?: number;
+  gracePeriodExpiresDate?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Decoded & signature-verified App Store Server Notification v2.
+ * @see https://developer.apple.com/documentation/appstoreservernotifications/responsebodyv2decodedpayload
+ */
+export interface AppleNotificationInfo {
+  notificationType: string;
+  subtype?: string;
+  notificationUUID: string;
+  bundleId?: string;
+  environment?: string;
+  signedDate?: number;
+  transactionInfo?: AppleDecodedTransaction;
+  renewalInfo?: AppleDecodedRenewal;
+  /** Full decoded outer payload, kept for auditing/debugging */
+  raw: Record<string, unknown>;
+}
+
 /** Decoded transaction info from Apple */
 interface AppleTransactionInfo {
   transactionId: string;
@@ -55,6 +98,15 @@ const PRODUCTION_HOST = 'api.storekit.itunes.apple.com';
 const SANDBOX_HOST = 'api.storekit-sandbox.itunes.apple.com';
 
 /**
+ * SHA-256 fingerprint of "Apple Root CA - G3", the trust anchor for the x5c
+ * certificate chain in ASSN v2 JWS headers. Overridable via
+ * APPLE_ROOT_CA_FINGERPRINT. VERIFY THIS VALUE against the certificate at
+ * https://www.apple.com/certificateauthority/ before going live.
+ */
+const APPLE_ROOT_CA_G3_FINGERPRINT =
+  '63:34:3A:BF:B8:9A:6A:03:EB:B5:7E:9B:3F:5F:A7:BE:7C:4F:5C:75:6F:30:17:B3:A8:C4:88:C3:65:3E:91:79';
+
+/**
  * Service to verify Apple App Store purchases using App Store Server API v2.
  */
 @Injectable()
@@ -65,15 +117,202 @@ export class AppleVerificationService {
   private readonly bundleId: string;
   private readonly privateKey: string;
   private readonly environment: 'sandbox' | 'production';
+  private readonly rootCaFingerprint: string;
 
   constructor(private readonly configService: ConfigService) {
     this.keyId = this.configService.get<string>('APPLE_KEY_ID') || '';
     this.issuerId = this.configService.get<string>('APPLE_ISSUER_ID') || '';
     this.bundleId = this.configService.get<string>('APPLE_BUNDLE_ID') || '';
     this.privateKey = this.configService.get<string>('APPLE_PRIVATE_KEY') || '';
+    this.rootCaFingerprint = (
+      this.configService.get<string>('APPLE_ROOT_CA_FINGERPRINT') ||
+      APPLE_ROOT_CA_G3_FINGERPRINT
+    )
+      .toUpperCase()
+      .replace(/\s/g, '');
 
     const nodeEnv = this.configService.get<string>('NODE_ENV') || 'development';
     this.environment = nodeEnv === 'production' ? 'production' : 'sandbox';
+  }
+
+  /**
+   * Verify and decode an App Store Server Notification v2 signed payload.
+   *
+   * Cryptographically verifies the JWS signature against the x5c certificate
+   * chain (anchored to Apple Root CA - G3), then decodes the outer payload and
+   * the nested signedTransactionInfo / signedRenewalInfo JWS objects.
+   *
+   * @throws HttpException(400) when the signature/chain is invalid or the
+   *         payload is malformed.
+   */
+  parseSignedNotification(signedPayload: string): AppleNotificationInfo {
+    if (!signedPayload || typeof signedPayload !== 'string') {
+      throw new HttpException(
+        'Missing Apple signedPayload',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // 1. Verify the JWS signature + certificate chain before trusting anything.
+    this.verifyJWS(signedPayload);
+
+    // 2. Decode the outer notification payload.
+    const outer = this.decodeJWS(signedPayload) as Record<string, unknown>;
+    const notificationType = outer.notificationType as string | undefined;
+    const notificationUUID = outer.notificationUUID as string | undefined;
+
+    if (!notificationType || !notificationUUID) {
+      throw new HttpException(
+        'Invalid Apple notification payload: missing notificationType/notificationUUID',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const data = (outer.data ?? {}) as Record<string, unknown>;
+
+    let transactionInfo: AppleDecodedTransaction | undefined;
+    let renewalInfo: AppleDecodedRenewal | undefined;
+
+    try {
+      if (typeof data.signedTransactionInfo === 'string') {
+        transactionInfo = this.decodeJWS(
+          data.signedTransactionInfo,
+        ) as AppleDecodedTransaction;
+      }
+      if (typeof data.signedRenewalInfo === 'string') {
+        renewalInfo = this.decodeJWS(
+          data.signedRenewalInfo,
+        ) as AppleDecodedRenewal;
+      }
+    } catch {
+      throw new HttpException(
+        'Failed to decode Apple notification transaction data',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return {
+      notificationType,
+      subtype: outer.subtype as string | undefined,
+      notificationUUID,
+      bundleId: data.bundleId as string | undefined,
+      environment: data.environment as string | undefined,
+      signedDate: outer.signedDate as number | undefined,
+      transactionInfo,
+      renewalInfo,
+      raw: outer,
+    };
+  }
+
+  /**
+   * Verify a JWS signature using the x5c certificate chain embedded in its
+   * header. Confirms: (a) each certificate is signed by the next, (b) the root
+   * matches the pinned Apple Root CA fingerprint, (c) certificates are within
+   * their validity window, and (d) the leaf certificate's public key validates
+   * the ES256 signature.
+   *
+   * @throws HttpException(400) on any verification failure.
+   */
+  private verifyJWS(jws: string): void {
+    const parts = jws.split('.');
+    if (parts.length !== 3) {
+      throw new HttpException('Invalid JWS format', HttpStatus.BAD_REQUEST);
+    }
+
+    let header: { alg?: string; x5c?: string[] };
+    try {
+      header = JSON.parse(
+        Buffer.from(parts[0], 'base64url').toString('utf8'),
+      ) as { alg?: string; x5c?: string[] };
+    } catch {
+      throw new HttpException('Invalid JWS header', HttpStatus.BAD_REQUEST);
+    }
+
+    if (header.alg !== 'ES256') {
+      throw new HttpException(
+        `Unsupported JWS algorithm: ${String(header.alg)}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (!Array.isArray(header.x5c) || header.x5c.length < 2) {
+      throw new HttpException(
+        'JWS missing x5c certificate chain',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    let certs: crypto.X509Certificate[];
+    try {
+      certs = header.x5c.map(
+        (der) => new crypto.X509Certificate(Buffer.from(der, 'base64')),
+      );
+    } catch {
+      throw new HttpException(
+        'Invalid certificate in JWS x5c chain',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const now = Date.now();
+    for (const cert of certs) {
+      const notBefore = new Date(cert.validFrom).getTime();
+      const notAfter = new Date(cert.validTo).getTime();
+      if (Number.isFinite(notBefore) && now < notBefore) {
+        throw new HttpException(
+          'JWS certificate not yet valid',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (Number.isFinite(notAfter) && now > notAfter) {
+        throw new HttpException(
+          'JWS certificate expired',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
+    // Verify chain: each cert must be signed by the next one up.
+    for (let i = 0; i < certs.length - 1; i++) {
+      if (!certs[i].verify(certs[i + 1].publicKey)) {
+        throw new HttpException(
+          'JWS certificate chain verification failed',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
+    // Pin the root certificate to Apple's known fingerprint.
+    const root = certs[certs.length - 1];
+    const rootFingerprint = root.fingerprint256.toUpperCase();
+    if (rootFingerprint !== this.rootCaFingerprint) {
+      this.logger.error(
+        `Apple JWS root CA fingerprint mismatch (got ${rootFingerprint})`,
+      );
+      throw new HttpException(
+        'JWS root certificate is not trusted',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Verify the signature with the leaf certificate's public key. ES256
+    // signatures are raw r||s (IEEE P1363), which Node verifies with the
+    // 'ieee-p1363' dsaEncoding.
+    const signingInput = `${parts[0]}.${parts[1]}`;
+    const signature = Buffer.from(parts[2], 'base64url');
+    const verified = crypto.verify(
+      'sha256',
+      Buffer.from(signingInput),
+      { key: certs[0].publicKey, dsaEncoding: 'ieee-p1363' },
+      signature,
+    );
+
+    if (!verified) {
+      throw new HttpException(
+        'JWS signature verification failed',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   async verify(params: AppleVerifyParams): Promise<AppleVerificationResult> {
