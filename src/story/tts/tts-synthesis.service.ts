@@ -14,7 +14,7 @@ import {
 import { ElevenLabsTTSProvider } from '../../voice/providers/eleven-labs-tts.provider';
 import { DeepgramTTSProvider } from '../../voice/providers/deepgram-tts.provider';
 import { EdgeTTSProvider } from '../../voice/providers/edge-tts.provider';
-import { PrismaService } from '../../prisma/prisma.service';
+import type { IStoryTtsRepository } from '../repositories/story-tts.repository.interface';
 import { VoiceQuotaService } from '../../voice/voice-quota.service';
 import { SubscriptionService } from '../../subscription/subscription.service';
 import {
@@ -53,7 +53,7 @@ export class TtsSynthesisService {
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
     private readonly deepgramProvider: DeepgramTTSProvider,
     private readonly edgeTtsProvider: EdgeTTSProvider,
-    private readonly prisma: PrismaService,
+    private readonly ttsRepository: IStoryTtsRepository,
     private readonly voiceQuota: VoiceQuotaService,
     private readonly subscriptionService: SubscriptionService,
     private readonly cbService: CircuitBreakerService,
@@ -173,12 +173,7 @@ export class TtsSynthesisService {
       voiceSettings = config.voiceSettings;
     } else {
       // Assume dynamic UUID (Custom Voice) — try DB lookup first
-      const voice = await this.prisma.voice.findFirst({
-        where: {
-          OR: [{ id: type }, { name: type }],
-          isDeleted: false,
-        },
-      });
+      const voice = await this.ttsRepository.findVoiceByIdOrName(type);
       if (voice && voice.elevenLabsVoiceId) {
         elevenLabsId = voice.elevenLabsVoiceId;
         voiceSettings = undefined;

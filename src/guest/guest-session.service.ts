@@ -1,9 +1,17 @@
 import {
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  GUEST_REPOSITORY,
+  type GuestStoryDetail,
+  type GuestUserHistoryRow,
+  type GuestUserProgressRow,
+  type IGuestRepository,
+} from './repositories/guest.repository.interface';
 import { randomUUID } from 'node:crypto';
 import Keyv from 'keyv';
 import KeyvRedis from '@keyv/redis';
@@ -73,7 +81,11 @@ export class GuestSessionService {
   private readonly logger = new Logger(GuestSessionService.name);
   private keyv: Keyv;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    @Inject(GUEST_REPOSITORY)
+    private readonly guestRepository: IGuestRepository,
+  ) {
     const redisUrl =
       this.configService.get<string>('REDIS_URL') || 'redis://localhost:6379';
 
@@ -398,6 +410,57 @@ export class GuestSessionService {
   maskSessionId(id?: string): string {
     if (!id) return 'no_session_id';
     return id.slice(0, 8) + '...';
+  }
+
+  // ==================== Authenticated-user DB access ====================
+  // Thin repository passthroughs so controllers never touch Prisma directly.
+
+  /**
+   * Upsert an authenticated user's reading progress for a story.
+   */
+  async upsertUserStoryProgress(
+    userId: string,
+    storyId: string,
+    progress: number,
+    markCompleted: boolean,
+  ): Promise<void> {
+    return this.guestRepository.upsertUserStoryProgress(
+      userId,
+      storyId,
+      progress,
+      markCompleted,
+    );
+  }
+
+  /**
+   * Get an authenticated user's active progress for a story.
+   */
+  async getUserStoryProgress(
+    userId: string,
+    storyId: string,
+  ): Promise<GuestUserProgressRow | null> {
+    return this.guestRepository.findUserStoryProgress(userId, storyId);
+  }
+
+  /**
+   * Get a single non-deleted story's detail projection.
+   */
+  async getStoryDetail(storyId: string): Promise<GuestStoryDetail | null> {
+    return this.guestRepository.findStoryDetail(storyId);
+  }
+
+  /**
+   * Get an authenticated user's full reading history, newest first.
+   */
+  async getUserReadingHistory(userId: string): Promise<GuestUserHistoryRow[]> {
+    return this.guestRepository.findUserReadingHistory(userId);
+  }
+
+  /**
+   * Get detail projections for a set of non-deleted stories.
+   */
+  async getStoryDetailsByIds(storyIds: string[]): Promise<GuestStoryDetail[]> {
+    return this.guestRepository.findStoryDetailsByIds(storyIds);
   }
 
   private getSessionKey(sessionId: string): string {

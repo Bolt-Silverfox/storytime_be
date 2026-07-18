@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import type { IStoryTtsRepository } from '../repositories/story-tts.repository.interface';
 import { preprocessTextForTTS } from './tts-text.util';
 
 /**
@@ -10,7 +10,7 @@ import { preprocessTextForTTS } from './tts-text.util';
  */
 @Injectable()
 export class TtsCacheService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly ttsRepository: IStoryTtsRepository) {}
 
   hashText(text: string): string {
     const cleaned = preprocessTextForTTS(text);
@@ -24,10 +24,12 @@ export class TtsCacheService {
     provider?: string,
   ): Promise<string | null> {
     const textHash = this.hashText(text);
-    const cached = await this.prisma.paragraphAudioCache.findFirst({
-      where: { storyId, textHash, voiceId, ...(provider ? { provider } : {}) },
-      orderBy: { createdAt: 'desc' },
-    });
+    const cached = await this.ttsRepository.findCachedParagraphAudio(
+      storyId,
+      textHash,
+      voiceId,
+      provider,
+    );
     return cached?.audioUrl ?? null;
   }
 
@@ -39,18 +41,13 @@ export class TtsCacheService {
     provider: string,
   ): Promise<void> {
     const textHash = this.hashText(text);
-    await this.prisma.paragraphAudioCache.upsert({
-      where: {
-        storyId_textHash_voiceId_provider: {
-          storyId,
-          textHash,
-          voiceId,
-          provider,
-        },
-      },
-      create: { storyId, textHash, voiceId, audioUrl, provider },
-      update: { audioUrl },
-    });
+    await this.ttsRepository.upsertParagraphAudio(
+      storyId,
+      textHash,
+      voiceId,
+      audioUrl,
+      provider,
+    );
   }
 
   /**
@@ -71,15 +68,12 @@ export class TtsCacheService {
       duplicateIndices?: number[];
     }>;
   }> {
-    const entries = await this.prisma.paragraphAudioCache.findMany({
-      where: {
-        storyId,
-        voiceId,
-        provider,
-        textHash: { in: [...hashMap.keys()] },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const entries = await this.ttsRepository.findParagraphAudioForProvider(
+      storyId,
+      voiceId,
+      provider,
+      [...hashMap.keys()],
+    );
     // desc order + skip-if-exists ensures the newest cache entry wins.
     const cacheMap = new Map<string, string>();
     for (const e of entries) {

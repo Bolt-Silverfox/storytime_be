@@ -1,6 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { PrismaService } from '@/prisma/prisma.service';
+import {
+  USER_CLEANUP_REPOSITORY,
+  type IUserCleanupRepository,
+} from '../repositories/user-cleanup.repository.interface';
 import { AppEvents, UserDeletedEvent } from '@/shared/events';
 
 /**
@@ -11,7 +14,10 @@ import { AppEvents, UserDeletedEvent } from '@/shared/events';
 export class UserCleanupListener {
   private readonly logger = new Logger(UserCleanupListener.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(USER_CLEANUP_REPOSITORY)
+    private readonly userCleanupRepository: IUserCleanupRepository,
+  ) {}
 
   @OnEvent(AppEvents.USER_DELETED)
   async onUserDeleted(event: UserDeletedEvent): Promise<void> {
@@ -22,16 +28,10 @@ export class UserCleanupListener {
 
     try {
       // Soft-delete all active sessions
-      await this.prisma.session.updateMany({
-        where: { userId, isDeleted: false },
-        data: { isDeleted: true, deletedAt: new Date() },
-      });
+      await this.userCleanupRepository.softDeleteUserSessions(userId);
 
       // Cancel active subscriptions
-      await this.prisma.subscription.updateMany({
-        where: { userId, status: 'active' },
-        data: { status: 'cancelled', endsAt: new Date() },
-      });
+      await this.userCleanupRepository.cancelActiveUserSubscriptions(userId);
 
       this.logger.log(
         `Cleanup completed for deleted user ${userId.substring(0, 8)}`,

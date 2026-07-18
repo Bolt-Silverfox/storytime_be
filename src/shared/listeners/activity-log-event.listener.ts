@@ -1,6 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { PrismaService } from '@/prisma/prisma.service';
+import {
+  ACTIVITY_LOG_REPOSITORY,
+  type IActivityLogRepository,
+} from '../repositories/activity-log.repository.interface';
 import {
   AppEvents,
   AiUsageTrackedEvent,
@@ -23,7 +26,10 @@ import {
 export class ActivityLogEventListener {
   private readonly logger = new Logger(ActivityLogEventListener.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(ACTIVITY_LOG_REPOSITORY)
+    private readonly activityLogRepository: IActivityLogRepository,
+  ) {}
 
   /**
    * Shared helper to create an activity log entry with error handling.
@@ -35,8 +41,11 @@ export class ActivityLogEventListener {
     status: 'SUCCESS' | 'FAILED' = 'SUCCESS',
   ): Promise<void> {
     try {
-      await this.prisma.activityLog.create({
-        data: { userId, action, status, details },
+      await this.activityLogRepository.createActivityLog({
+        userId,
+        action,
+        status,
+        details,
       });
     } catch (error) {
       this.logger.error(

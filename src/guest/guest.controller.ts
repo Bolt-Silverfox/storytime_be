@@ -32,7 +32,6 @@ import {
   GUEST_SESSION_TTL_SECONDS,
   GUEST_STORY_LIMIT,
 } from './guest-session.service';
-import { PrismaService } from '@/prisma/prisma.service';
 import { ReadStatus } from './dto/guest.dto';
 import { deriveReadStatus } from '@/shared/utils/read-status.util';
 import { StoryService } from '@/story/story.service';
@@ -62,7 +61,6 @@ export class GuestController {
 
   constructor(
     private readonly guestSessionService: GuestSessionService,
-    private readonly prisma: PrismaService,
     private readonly storyService: StoryService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -341,24 +339,12 @@ export class GuestController {
       // Completion is monotonic: only ever set `completed` to true, never
       // downgrade a finished story on a later partial-progress update.
       const markCompleted = dto.completed === true || clampedProgress >= 100;
-      await this.prisma.userStoryProgress.upsert({
-        where: {
-          userId_storyId: { userId, storyId: dto.storyId },
-        },
-        update: {
-          progress: clampedProgress,
-          ...(markCompleted ? { completed: true } : {}),
-          lastAccessed: new Date(),
-          isDeleted: false,
-        },
-        create: {
-          userId,
-          storyId: dto.storyId,
-          progress: clampedProgress,
-          completed: markCompleted,
-          lastAccessed: new Date(),
-        },
-      });
+      await this.guestSessionService.upsertUserStoryProgress(
+        userId,
+        dto.storyId,
+        clampedProgress,
+        markCompleted,
+      );
     } else if (guestSessionId) {
       // Guest user - update in Redis
       this.logger.log(
@@ -438,18 +424,10 @@ export class GuestController {
 
     if (userId) {
       // Authenticated user - get from database
-      const record = await this.prisma.userStoryProgress.findFirst({
-        where: {
-          userId,
-          storyId,
-          isDeleted: false,
-        },
-        select: {
-          progress: true,
-          lastAccessed: true,
-          completed: true,
-        },
-      });
+      const record = await this.guestSessionService.getUserStoryProgress(
+        userId,
+        storyId,
+      );
 
       if (!record) {
         return null;
@@ -489,28 +467,7 @@ export class GuestController {
     }
 
     // Fetch story details to enrich the response
-    const story = await this.prisma.story.findFirst({
-      where: { id: storyId, isDeleted: false },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        coverImageUrl: true,
-        ageMax: true,
-        ageMin: true,
-        durationSeconds: true,
-        createdAt: true,
-        updatedAt: true,
-        categories: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-            description: true,
-          },
-        },
-      },
-    });
+    const story = await this.guestSessionService.getStoryDetail(storyId);
 
     if (!story) {
       return null;
@@ -584,37 +541,8 @@ export class GuestController {
 
     if (userId) {
       // Authenticated user - get from database
-      const progressRecords = await this.prisma.userStoryProgress.findMany({
-        where: { userId, isDeleted: false },
-        select: {
-          storyId: true,
-          progress: true,
-          completed: true,
-          lastAccessed: true,
-          story: {
-            select: {
-              id: true,
-              title: true,
-              description: true,
-              coverImageUrl: true,
-              ageMax: true,
-              ageMin: true,
-              durationSeconds: true,
-              createdAt: true,
-              updatedAt: true,
-              categories: {
-                select: {
-                  id: true,
-                  name: true,
-                  image: true,
-                  description: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: { lastAccessed: 'desc' },
-      });
+      const progressRecords =
+        await this.guestSessionService.getUserReadingHistory(userId);
 
       return {
         stories: progressRecords.map((record) => {
@@ -659,31 +587,8 @@ export class GuestController {
 
       // Get full story details for each story in history
       const storyIds = Object.keys(history);
-      const stories = await this.prisma.story.findMany({
-        where: {
-          id: { in: storyIds },
-          isDeleted: false,
-        },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          coverImageUrl: true,
-          ageMax: true,
-          ageMin: true,
-          durationSeconds: true,
-          createdAt: true,
-          updatedAt: true,
-          categories: {
-            select: {
-              id: true,
-              name: true,
-              image: true,
-              description: true,
-            },
-          },
-        },
-      });
+      const stories =
+        await this.guestSessionService.getStoryDetailsByIds(storyIds);
 
       // Map stories with progress and readStatus
       const storiesWithProgress = stories.map((story) => {
