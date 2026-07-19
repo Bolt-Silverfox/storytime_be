@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bullmq';
 import { NotificationService } from './notification.service';
+import { NotificationSchedulerService } from './notification-scheduler.service';
+import { NotificationRedisProvider } from './notification-redis.provider';
 import { NotificationEmailService } from './services/notification-email.service';
 import { NotificationDispatchService } from './services/notification-dispatch.service';
 import { NotificationSettingsService } from './services/notification-settings.service';
@@ -63,6 +65,10 @@ import {
   providers: [
     HttpLatencyInterceptor,
     NotificationService,
+    // Scheduled reminder emitter (subscription / we-miss-you / incomplete-story
+    // / daily-listening) + its dedicated ioredis client for the cron lock
+    NotificationSchedulerService,
+    NotificationRedisProvider,
     // Focused services backing the NotificationService facade
     NotificationEmailService,
     NotificationDispatchService,

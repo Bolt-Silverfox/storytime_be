@@ -19,7 +19,12 @@ export type Notifications =
   | 'AchievementUnlocked'
   | 'QuotaExhausted'
   | 'SubscriptionWelcome'
-  | 'PaymentFailed';
+  | 'PaymentSuccess'
+  | 'PaymentFailed'
+  | 'SubscriptionReminder'
+  | 'WeMissYou'
+  | 'IncompleteStoryReminder'
+  | 'DailyListeningReminder';
 
 export type Medium = 'email' | 'sms' | 'push' | 'in_app';
 
@@ -210,6 +215,23 @@ export const NotificationRegistry: Record<
       return emailHtml;
     },
   },
+  PaymentSuccess: {
+    medium: 'in_app',
+    category: NotificationCategory.PAYMENT_SUCCESS,
+    subject: 'Payment Successful',
+    validate: (data) => {
+      if (data.amount === undefined || data.amount === null)
+        return 'Amount is required';
+      if (!data.currency) return 'Currency is required';
+      if (!data.plan) return 'Plan is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `Your payment of ${data.currency} ${data.amount} for the ${data.plan} plan was successful.`,
+      );
+    },
+  },
   PaymentFailed: {
     medium: 'email',
     category: NotificationCategory.PAYMENT_FAILED,
@@ -228,6 +250,62 @@ export const NotificationRegistry: Record<
         }),
       );
       return emailHtml;
+    },
+  },
+  SubscriptionReminder: {
+    medium: 'in_app',
+    category: NotificationCategory.SUBSCRIPTION_REMINDER,
+    subject: 'Subscription Reminder',
+    validate: (data) => {
+      if (!data.plan) return 'Plan is required';
+      if (data.daysLeft === undefined || data.daysLeft === null)
+        return 'Days left is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `Your ${data.plan} plan renews in ${data.daysLeft} day(s).`,
+      );
+    },
+  },
+  WeMissYou: {
+    medium: 'in_app',
+    category: NotificationCategory.WE_MISS_YOU,
+    subject: 'We Miss You!',
+    validate: (data) => {
+      if (!data.name) return 'Name is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `We miss you, ${data.name}! Come back for a new story.`,
+      );
+    },
+  },
+  IncompleteStoryReminder: {
+    medium: 'in_app',
+    category: NotificationCategory.INCOMPLETE_STORY_REMINDER,
+    subject: 'Finish Your Story',
+    validate: (data) => {
+      if (!data.storyTitle) return 'Story title is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `You still have "${data.storyTitle}" waiting to be finished!`,
+      );
+    },
+  },
+  DailyListeningReminder: {
+    medium: 'in_app',
+    category: NotificationCategory.DAILY_LISTENING_REMINDER,
+    subject: 'Daily Listening Reminder',
+    validate: (data) => {
+      if (!data.name) return 'Name is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(`Hi ${data.name}, ready for today's story time?`);
     },
   },
 };
