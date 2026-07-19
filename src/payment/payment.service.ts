@@ -91,6 +91,16 @@ export class PaymentService {
       throw new BadRequestException('Google Play purchase verification failed');
     }
 
+    // Google issues a NEW purchase token on upgrade/downgrade/re-subscribe and
+    // links it to the prior token via `linkedPurchaseToken`. If the user's
+    // stored token is that linked (old) token, migrate it forward to the new
+    // token so webhook events for the new token still resolve to this user.
+    await this.migrateGoogleLinkedToken(
+      userId,
+      dto.purchaseToken,
+      result.linkedPurchaseToken ?? null,
+    );
+
     // Acknowledge the purchase to prevent auto-refund after 3 days
     const acknowledgementState = result.metadata?.acknowledgementState;
     if (acknowledgementState !== 1) {
@@ -167,6 +177,41 @@ export class PaymentService {
     }
 
     return this.upsertSubscription(userId, plan, tx, googleDetails);
+  }
+
+  /**
+   * Migrate a user's stored Google purchase token forward to a new token when
+   * the verified purchase links back to it via `linkedPurchaseToken`.
+   *
+   * No-op unless the user already has a Subscription whose stored token is the
+   * linked (old) token and differs from the incoming new token. The subsequent
+   * subscription upsert also writes the new token, so this is idempotent — it
+   * exists so the migration is explicit and happens even if the stored token is
+   * the linked one on a distinct Subscription row.
+   */
+  private async migrateGoogleLinkedToken(
+    userId: string,
+    newToken: string,
+    linkedToken: string | null,
+  ): Promise<void> {
+    if (!linkedToken || linkedToken === newToken) return;
+
+    const existing =
+      await this.subscriptionRepository.findFirstByUser(userId);
+    if (
+      !existing ||
+      existing.purchaseToken === newToken ||
+      existing.purchaseToken !== linkedToken
+    ) {
+      return;
+    }
+
+    await this.subscriptionRepository.updateById(existing.id, {
+      purchaseToken: newToken,
+    });
+    this.logger.log(
+      `Migrated Google purchaseToken (linked) for user ${userId.substring(0, 8)}`,
+    );
   }
 
   private async verifyApplePurchase(userId: string, dto: VerifyPurchaseDto) {

@@ -492,14 +492,42 @@ model Subscription {
   platform      String? // "google" or "apple"
   productId     String? // e.g. "com.storytime.monthly"
   purchaseToken String? // token from the platform
+  // Out-of-order delivery protection: the authoritative timestamp of the most
+  // recent store webhook applied to this row (Apple signedDate / Google
+  // eventTimeMillis). A later event whose timestamp is <= this is stale and is
+  // skipped so it cannot clobber newer state (e.g. a delayed EXPIRED after a
+  // DID_RENEW). Nullable so pre-existing rows and untimestamped events work.
+  lastEventAt   DateTime?
   // SOFT DELETE FIELDS
   isDeleted     Boolean   @default(false)
   deletedAt     DateTime?
 
   @@index([userId, status])
   @@index([status, isDeleted])
+  @@index([purchaseToken])
   @@index([isDeleted])
   @@map("subscriptions")
+}
+
+/// Server-to-server store webhook receipts (Apple ASSN v2 / Google Play RTDN).
+/// Every notification is recorded here for idempotency (unique on
+/// platform+externalEventId) and auditing.
+model WebhookEvent {
+  id              String    @id @default(uuid())
+  platform        String // "apple" | "google"
+  eventType       String // e.g. "DID_RENEW", "SUBSCRIPTION_RENEWED"
+  externalEventId String // Apple: notificationUUID, Google: messageId
+  payload         Json // Full decoded payload for debugging
+  status          String    @default("received") // received | processed | skipped | failed
+  errorMessage    String?
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@unique([platform, externalEventId])
+  @@index([platform, eventType])
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@map("webhook_events")
 }
 
 model SupportTicket {
