@@ -16,7 +16,7 @@ in-place nginx-upstream flip; that variant is documented at the bottom).
 |---|---|---|
 | Backend URL | `https://dev.api.storytimeapp.me` | `https://blue.dev.api.storytimeapp.me` |
 | Frontend URL | `https://dev.storytimeapp.me` | `https://blue.dev.storytimeapp.me` |
-| Backend port | `:3500` | `:3600` |
+| Backend port | `:3500` | `:3601` |
 | Frontend port | `:3000` | `:3010` |
 | Backend PM2 | `storytime-api-development` | `storytime-api-blue` (1 instance) |
 | Frontend PM2 | `storytime-fe-dev` | `storytime-fe-blue` |
@@ -33,10 +33,10 @@ it can't starve green. Don't raise these without first checking
 ## Backend blue — how it's deployed
 
 `.github/workflows/blue-deploy.yml` (manual-trigger). It **derives blue's `.env`
-from green's `ENV_FILE` secret**, overriding only `PORT=3600`,
+from green's `ENV_FILE` secret**, overriding only `PORT=3601`,
 `DATABASE_URL`→`storytime_db_blue`, `REDIS_URL`→`/3`, `connection_limit=10`; then
 creates `storytime_db_blue` if missing, migrates, and (re)starts
-`storytime-api-blue` on `:3600` (`pnpm deploy:blue`).
+`storytime-api-blue` on `:3601` (`pnpm deploy:blue`).
 
 > **`gh workflow run blue-deploy.yml` 404s** — `workflow_dispatch` is only
 > API-triggerable when the workflow file exists on the **default branch**, and
@@ -52,7 +52,7 @@ ssh storytime          # host alias in ~/.ssh/config; git-over-SSH is broken, us
 # 2. rsync develop-v1.3.0 -> /home/ubuntu/storytime/blue/storytime-api  (EXCLUDE .env)
 # 3. cp green .env, override PORT/DATABASE_URL/REDIS_URL/connection_limit (see workflow sed)
 # 4. pnpm install && pnpm db:generate && pnpm build && pnpm db:migrate:deploy
-# 5. pnpm start:pm2:blue     # PM2 storytime-api-blue on :3600
+# 5. pnpm start:pm2:blue     # PM2 storytime-api-blue on :3601
 ```
 
 ## Frontend blue — how it's deployed
@@ -78,7 +78,7 @@ ssh storytime          # host alias in ~/.ssh/config; git-over-SSH is broken, us
 
 Per-color server blocks live in each repo under `deploy/nginx/`:
 ```bash
-# backend -> :3600 ,  frontend -> :3010
+# backend -> :3601 ,  frontend -> :3010
 sudo cp deploy/nginx/blue.dev.api.storytimeapp.me.conf /etc/nginx/sites-available/   # (backend repo)
 sudo cp deploy/nginx/blue.dev.storytimeapp.me.conf     /etc/nginx/sites-available/   # (frontend repo)
 sudo ln -s /etc/nginx/sites-available/<file> /etc/nginx/sites-enabled/
@@ -133,7 +133,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://blue.dev.api.storytimeapp.me/ap
 curl -s -o /dev/null -w '%{http_code}\n' https://blue.dev.storytimeapp.me/api/health
 # on the box:
 ssh storytime 'source ~/.nvm/nvm.sh; pm2 describe storytime-api-blue | grep -i status; \
-  curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3600/api/v1/health'
+  curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3601/api/v1/health'
 ```
 
 ---

@@ -1,7 +1,7 @@
 name: Blue Deploy (develop-v1.3.0)
 
 # Deploys the v1.3.0 "blue" candidate to blue.dev.api.storytimeapp.me, which
-# runs on the SAME host as green (dev) but a separate port (:3600), directory,
+# runs on the SAME host as green (dev) but a separate port (:3601), directory,
 # database (storytime_db_blue), and Redis logical DB (/3). Green
 # (develop-v1.2.0 -> dev.api) is never touched.
 #
@@ -52,8 +52,8 @@ jobs:
           cat > .env << 'EOF'
           ${{ secrets.ENV_FILE }}
           EOF
-          # PORT -> 3600
-          sed -i '/^PORT=/d' .env; echo 'PORT=3600' >> .env
+          # PORT -> 3601
+          sed -i '/^PORT=/d' .env; echo 'PORT=3601' >> .env
           # DATABASE_URL -> the blue database (keep host/creds/query params)
           sed -i -E 's#(^DATABASE_URL="?[^/]*//[^/]+/)[^?"]+#\1storytime_db_blue#' .env
           # REDIS_URL -> logical DB /3 (green uses its own index)
@@ -127,7 +127,7 @@ jobs:
             psql "$ADMIN_URL" -tAc "SELECT 1 FROM pg_database WHERE datname='storytime_db_blue'" | grep -q 1 \
               || psql "$ADMIN_URL" -c 'CREATE DATABASE storytime_db_blue'
 
-            # migrate BLUE db (from this dir's .env) + build + (re)start blue PM2 app on :3600
+            # migrate BLUE db (from this dir's .env) + build + (re)start blue PM2 app on :3601
             pnpm deploy:blue
 
       - name: Verify blue deployment
@@ -138,5 +138,5 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             sleep 10
-            curl -sf http://localhost:3600/api/v1/health || exit 1
-            echo "Blue deployment verified on :3600"
+            curl -sf http://localhost:3601/api/v1/health || exit 1
+            echo "Blue deployment verified on :3601"

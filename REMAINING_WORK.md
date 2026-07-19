@@ -23,7 +23,7 @@ This document provides an accurate, up-to-date summary of remaining work after v
   keyv in-memory fallback, docker Redis password enforcement, TTS counter bug fix,
   and the chore backlog.
 - ✅ **Blue-green dev environment** — v1.3.0 "blue" deployed alongside green on the
-  shared host (backend `:3600` / frontend `:3010`, `storytime_db_blue`, Redis `/3`),
+  shared host (backend `:3601` / frontend `:3010`, `storytime_db_blue`, Redis `/3`),
   with per-color nginx + TLS and manual-trigger deploy workflows across all three
   repos. See `docs/DEPLOYMENT_BLUE_GREEN.md`.
 
@@ -84,6 +84,9 @@ This document provides an accurate, up-to-date summary of remaining work after v
 - ✅ **Grafana setup documented** — GRAFANA_SETUP.md
 - ✅ **Alerting rules documented** — ALERTING_RULES.md
 - ✅ **Security audit complete** — SECURITY_AUDIT.md
+- ✅ **Sentry (backend) LIVE** — project `storytime-be` (emerj org); `SENTRY_DSN`
+  wired into green (`:3500`) + blue (`:3601`) live envs, env-gated no-op when unset.
+  Errors report + link to OTel traces. (Grafana Cloud push still pending — see below.)
 
 ---
 
