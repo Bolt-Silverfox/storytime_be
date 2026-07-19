@@ -795,6 +795,65 @@ describe('SubscriptionWebhookService', () => {
       });
     });
 
+    it('applies BOTH conflicting same-timestamp events (last-write-wins, not arrival-serialized)', async () => {
+      // Two CONFLICTING lifecycle events share the exact same millisecond
+      // (distinct notificationUUIDs, so both survive the idempotency layer).
+      // The `<=` watermark guard admits both: neither is dropped, and whichever
+      // DB write commits last determines the final state. This documents the
+      // honest limitation — same-timestamp conflicts are NOT serialized by
+      // arrival order (see applyAction's doc comment). Such conflicts do not
+      // occur in practice because Apple/Google emit one notification per state
+      // transition with distinct timestamps.
+
+      // Event A: DID_RENEW (activate) at NEW. Stored watermark is OLD -> applies.
+      prisma.subscription.findFirst.mockResolvedValueOnce({
+        ...SUB,
+        lastEventAt: OLD,
+      });
+      prisma.subscription.updateMany.mockResolvedValueOnce({ count: 1 });
+      apple.parseSignedNotification.mockReturnValueOnce(
+        appleInfo({
+          notificationType: 'DID_RENEW',
+          notificationUUID: 'wm-a-tie-renew',
+          signedDate: NEW.getTime(),
+        }),
+      );
+
+      const first = await service.handleApple({ signedPayload: 'jws' });
+      expect(first.status).toBe('processed');
+
+      // Event B: EXPIRED (deactivate) at the SAME NEW timestamp. Stored watermark
+      // is now NEW; `lte` still matches, so this conflicting event ALSO applies
+      // rather than being skipped as "stale" — last-write-wins.
+      prisma.subscription.findFirst.mockResolvedValueOnce({
+        ...SUB,
+        lastEventAt: NEW,
+      });
+      prisma.subscription.updateMany.mockResolvedValueOnce({ count: 1 });
+      apple.parseSignedNotification.mockReturnValueOnce(
+        appleInfo({
+          notificationType: 'EXPIRED',
+          notificationUUID: 'wm-a-tie-expire',
+          signedDate: NEW.getTime(),
+        }),
+      );
+
+      const second = await service.handleApple({ signedPayload: 'jws' });
+      expect(second.status).toBe('processed');
+      // The second write still guards on `lte NEW` (equal watermark admitted).
+      expect(prisma.subscription.updateMany).toHaveBeenLastCalledWith({
+        where: {
+          id: 'sub-1',
+          OR: [{ lastEventAt: null }, { lastEventAt: { lte: NEW } }],
+        },
+        data: {
+          status: 'cancelled',
+          endsAt: expect.any(Date),
+          lastEventAt: NEW,
+        },
+      });
+    });
+
     it('applies an Apple event and sets lastEventAt when no prior watermark exists', async () => {
       prisma.subscription.findFirst.mockResolvedValue({
         ...SUB,
