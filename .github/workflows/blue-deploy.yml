@@ -1,0 +1,124 @@
+name: Blue Deploy (develop-v1.3.0)
+
+# Deploys the v1.3.0 "blue" candidate to blue.dev.api.storytimeapp.me, which
+# runs on the SAME host as green (dev) but a separate port (:3600), directory,
+# PM2 app, and database. Green (develop-v1.2.0 -> dev.api) is never touched.
+#
+# Required repo secrets (in addition to the existing EC2_* ones):
+#   BLUE_ENV_FILE  - the blue .env (must set PORT=3600 and a BLUE-specific
+#                    DATABASE_URL / REDIS_URL so it can't clobber green's data;
+#                    plus blue OAuth/Sentry values as needed).
+# NOTE: starts as manual-only (workflow_dispatch) so it doesn't auto-run before
+# the blue infra is ready. Once you've added the BLUE_ENV_FILE secret, created
+# the blue database, and installed the nginx block, uncomment the `push` trigger
+# below to auto-deploy blue on every push to develop-v1.3.0.
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: ['develop-v1.3.0']
+
+concurrency:
+  group: blue-deploy
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  deploy-blue:
+    name: Deploy Blue
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Create blue .env file
+        run: |
+          cat > .env << 'EOF'
+          ${{ secrets.BLUE_ENV_FILE }}
+          EOF
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (validate before shipping)
+        run: pnpm db:generate && pnpm build
+
+      - name: Setup SSH key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
+          chmod 600 /tmp/ssh_key
+
+      - name: Add server host key
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          ssh-keyscan -H "$EC2_HOST" > /tmp/known_hosts
+          chmod 600 /tmp/known_hosts
+
+      - name: Prepare blue directory
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            mkdir -p /home/ubuntu/storytime/blue/storytime-api
+
+      - name: Sync files to blue directory
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='.env.local' \
+            --exclude='coverage' \
+            --exclude='.turbo' \
+            -e "ssh -i /tmp/ssh_key -o UserKnownHostsFile=/tmp/known_hosts -o StrictHostKeyChecking=yes" \
+            ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/blue/storytime-api/
+
+      - name: Install + migrate + (re)start blue
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            source ~/.nvm/nvm.sh
+            cd /home/ubuntu/storytime/blue/storytime-api
+
+            pnpm install --frozen-lockfile
+
+            sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv
+            cd scripts
+            python3 -m venv .venv
+            .venv/bin/pip install -q -r requirements.txt
+            cd ..
+
+            # migrate BLUE db (from this dir's .env) + build + (re)start blue PM2 app on :3600
+            pnpm deploy:blue
+
+      - name: Verify blue deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sleep 10
+            curl -sf http://localhost:3600/api/v1/health || exit 1
+            echo "Blue deployment verified on :3600"

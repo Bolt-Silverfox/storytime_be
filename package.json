@@ -21,6 +21,7 @@
     "start:pm2:dev": "npx pm2 startOrReload ecosystem.config.js --only storytime-api-development --update-env",
     "start:pm2:staging": "npx pm2 startOrReload ecosystem.config.js --only storytime-api-staging --update-env",
     "start:pm2:prod": "npx pm2 startOrReload ecosystem.config.js --only storytime-api-production --update-env",
+    "start:pm2:blue": "npx pm2 startOrReload ecosystem.config.js --only storytime-api-blue --update-env",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -33,7 +34,8 @@
     "db:seed": "npx ts-node prisma/seeds/index.ts",
     "deploy:dev": "pnpm db:migrate:deploy && pnpm db:generate && pnpm start:pm2:dev",
     "deploy:staging": "pnpm db:migrate:deploy && pnpm db:generate && pnpm start:pm2:staging",
-    "deploy:prod": "pnpm db:generate && pnpm start:pm2:prod"
+    "deploy:prod": "pnpm db:generate && pnpm start:pm2:prod",
+    "deploy:blue": "pnpm db:migrate:deploy && pnpm db:generate && pnpm start:pm2:blue"
   },
   "dependencies": {
     "@andresaya/edge-tts": "^1.8.0",
