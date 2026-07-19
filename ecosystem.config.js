@@ -39,10 +39,11 @@ module.exports = {
     {
       // Blue: v1.3.0 candidate, runs on the SAME host as green (dev) on a
       // separate port. nginx routes blue.dev.api.storytimeapp.me -> :3600.
-      // A modest instance count so it shares the box without starving green.
+      // Single instance + a small DB pool (see connection_limit in the blue
+      // .env) so it can't starve the shared RDS / green on the same box.
       ...baseConfig,
       name: 'storytime-api-blue',
-      instances: 2,
+      instances: 1,
       env: {
         NODE_ENV: 'development',
         PORT: 3600,
