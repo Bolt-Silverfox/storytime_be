@@ -126,7 +126,10 @@ export class TtsBatchProcessor extends WorkerHost {
                 result.value.audioUrl,
               );
             }
-            completedCount++;
+            // A generated paragraph stands in for every duplicate position, so
+            // count each persisted index — otherwise the counters disagree with
+            // the completed/failed sets in Redis whenever duplicates exist.
+            completedCount += allIndices.length;
           } catch (redisErr) {
             this.logger.error(
               `TTS batch ${batchJobId}: Redis write failed for completed paragraph ${paragraphIndex}`,
@@ -155,7 +158,10 @@ export class TtsBatchProcessor extends WorkerHost {
             );
             throw redisErr;
           }
-          failedCount++;
+          // Count every duplicate position this paragraph was persisted under,
+          // mirroring the completed path so the counters stay consistent with
+          // the failed set in Redis.
+          failedCount += allIndices.length;
         }
       }
 
@@ -201,7 +207,8 @@ export class TtsBatchProcessor extends WorkerHost {
                   retryResult.value.audioUrl,
                 );
               }
-              completedCount++;
+              // Count each duplicate position this retried paragraph filled.
+              completedCount += allRetryIndices.length;
             } catch (redisErr) {
               this.logger.error(
                 `TTS batch ${batchJobId}: Redis write failed for retried paragraph ${retryParagraph.index}`,
@@ -234,7 +241,8 @@ export class TtsBatchProcessor extends WorkerHost {
               );
               throw redisErr;
             }
-            failedCount++;
+            // Count each duplicate position this retried paragraph was persisted under.
+            failedCount += allRetryIndices.length;
           }
         }
 
@@ -258,7 +266,8 @@ export class TtsBatchProcessor extends WorkerHost {
               for (const idx of allIndices) {
                 await this.queueService.markParagraphFailed(batchJobId, idx);
               }
-              failedCount++;
+              // Count each duplicate position marked failed here.
+              failedCount += allIndices.length;
             }
             retryParagraphs = [];
             retryProvider = undefined;
