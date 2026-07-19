@@ -1,6 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentService } from './payment.service';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/prisma/prisma.service';
 import { GoogleVerificationService } from './google-verification.service';
@@ -15,7 +19,12 @@ type MockPrismaService = {
     create: jest.Mock;
     findFirst: jest.Mock;
   };
-  subscription: { findFirst: jest.Mock; create: jest.Mock; update: jest.Mock };
+  subscription: {
+    findFirst: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+    updateMany: jest.Mock;
+  };
 };
 
 const createMockPrismaService = (): MockPrismaService => ({
@@ -23,7 +32,12 @@ const createMockPrismaService = (): MockPrismaService => ({
     create: jest.fn(),
     findFirst: jest.fn(),
   },
-  subscription: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+  subscription: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+  },
 });
 
 describe('PaymentService', () => {
@@ -193,12 +207,130 @@ describe('PaymentService', () => {
       const result = await service.verifyPurchase(userId, dto);
 
       expect(result.success).toBe(true);
-      // Explicit migration update targets the same row with the new token.
-      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
-        where: { id: 'sub-1' },
+      // Explicit migration is a compare-and-swap: the token match is folded into
+      // the write, guarded on the still-stored old token so a concurrent
+      // replacement cannot mis-map the row.
+      expect(mockPrisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: { id: 'sub-1', purchaseToken: 'old-google-token' },
         data: { purchaseToken: 'new-google-token' },
       });
       // Never creates a second subscription row.
+      expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
+    });
+
+    it('does NOT clobber a concurrently-installed DIFFERENT token (CAS conflict)', async () => {
+      const userId = 'user-1';
+      const dto = {
+        platform: 'google' as const,
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'new-google-token',
+      };
+      const now = new Date();
+
+      mockGoogleVerification.verify.mockResolvedValue({
+        success: true,
+        isSubscription: true,
+        platformTxId: 'GPA.5678',
+        amount: 4.99,
+        currency: 'USD',
+        expirationTime: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+        linkedPurchaseToken: 'old-google-token',
+        metadata: { acknowledgementState: 1 },
+      });
+
+      // First read still sees the linked (old) token -> migration is attempted.
+      // The CAS updateMany affects zero rows because a concurrent delivery
+      // already swapped the row to a DIFFERENT token; the re-read reveals that
+      // winning token.
+      mockPrisma.subscription.findFirst
+        .mockResolvedValueOnce({
+          id: 'sub-1',
+          userId,
+          plan: 'monthly',
+          status: 'active',
+          purchaseToken: 'old-google-token',
+        })
+        .mockResolvedValue({
+          id: 'sub-1',
+          userId,
+          plan: 'monthly',
+          status: 'active',
+          purchaseToken: 'concurrent-winner-token',
+        });
+      mockPrisma.subscription.updateMany.mockResolvedValue({ count: 0 });
+
+      // The delivery must abort so the concurrent winner is preserved.
+      await expect(service.verifyPurchase(userId, dto)).rejects.toThrow(
+        ConflictException,
+      );
+
+      // Only the migration CAS was attempted (count 0). The flow never reached
+      // the subscription upsert, so the winning token is never overwritten.
+      expect(mockPrisma.subscription.updateMany).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: { id: 'sub-1', purchaseToken: 'old-google-token' },
+        data: { purchaseToken: 'new-google-token' },
+      });
+      expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
+    });
+
+    it('treats a zero-row CAS as success when the row already holds OUR token (idempotent repeat)', async () => {
+      const userId = 'user-1';
+      const dto = {
+        platform: 'google' as const,
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'new-google-token',
+      };
+      const now = new Date();
+
+      mockGoogleVerification.verify.mockResolvedValue({
+        success: true,
+        isSubscription: true,
+        platformTxId: 'GPA.5678',
+        amount: 4.99,
+        currency: 'USD',
+        expirationTime: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+        linkedPurchaseToken: 'old-google-token',
+        metadata: { acknowledgementState: 1 },
+      });
+
+      // First read sees the old token; the CAS misses because an identical
+      // concurrent delivery already migrated the row to OUR new token. The
+      // re-read confirms it holds newToken, so this is an idempotent repeat and
+      // the flow proceeds to a successful result.
+      mockPrisma.subscription.findFirst
+        .mockResolvedValueOnce({
+          id: 'sub-1',
+          userId,
+          plan: 'monthly',
+          status: 'active',
+          purchaseToken: 'old-google-token',
+        })
+        .mockResolvedValue({
+          id: 'sub-1',
+          userId,
+          plan: 'monthly',
+          status: 'active',
+          startedAt: now,
+          endsAt: now,
+          purchaseToken: 'new-google-token',
+        });
+      // Migration CAS misses (0); subsequent upsert guard matches (1).
+      mockPrisma.subscription.updateMany
+        .mockResolvedValueOnce({ count: 0 })
+        .mockResolvedValue({ count: 1 });
+      mockPrisma.paymentTransaction.create.mockResolvedValue({
+        id: 'tx-idem',
+        userId,
+        amount: 4.99,
+        currency: 'USD',
+        status: 'success',
+        reference: 'hash-idem',
+      });
+
+      const result = await service.verifyPurchase(userId, dto);
+
+      expect(result.success).toBe(true);
       expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
     });
 
@@ -421,25 +553,37 @@ describe('PaymentService', () => {
         reference: 'hash-789',
       });
 
-      mockPrisma.subscription.findFirst.mockResolvedValue({
-        id: 'existing-sub',
-        userId,
-        plan: 'monthly',
-        status: 'active',
-      });
-
-      mockPrisma.subscription.update.mockResolvedValue({
-        id: 'existing-sub',
-        userId,
-        plan: 'yearly',
-        status: 'active',
-        startedAt: now,
-        endsAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
-      });
+      // Initial read sees the old row; the guarded re-read after the write
+      // returns the upgraded row.
+      mockPrisma.subscription.findFirst
+        .mockResolvedValueOnce({
+          id: 'existing-sub',
+          userId,
+          plan: 'monthly',
+          status: 'active',
+          purchaseToken: null,
+        })
+        .mockResolvedValue({
+          id: 'existing-sub',
+          userId,
+          plan: 'yearly',
+          status: 'active',
+          startedAt: now,
+          endsAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
+          purchaseToken: 'new-token',
+        });
 
       const result = await service.verifyPurchase(userId, dto);
 
-      expect(mockPrisma.subscription.update).toHaveBeenCalled();
+      // Existing-row writes go through the token-guarded CAS updateMany, not an
+      // unconditional update-by-id, so a concurrent token cannot be clobbered.
+      expect(mockPrisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: { id: 'existing-sub', purchaseToken: null },
+        data: expect.objectContaining({
+          plan: 'yearly',
+          purchaseToken: 'new-token',
+        }),
+      });
       expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
       expect(result.subscription?.plan).toBe('yearly');
     });
