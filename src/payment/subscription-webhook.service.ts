@@ -749,11 +749,20 @@ export class SubscriptionWebhookService {
    *
    * Ordering semantics (see also `prisma/schema.prisma` `Subscription.lastEventAt`):
    * apply when there is no stored watermark yet OR the stored watermark is <= this
-   * event (`lte`). Equality APPLIES rather than skips: two DISTINCT notifications
-   * can share a millisecond, and true duplicates are already filtered upstream by
-   * the `WebhookEvent (platform, externalEventId)` idempotency layer, so a
-   * same-instant event reaching here is always a distinct one that must be
-   * processed in arrival order. Only a STRICTLY greater stored watermark skips.
+   * event (`lte`). A STRICTLY greater stored watermark skips (a newer event already
+   * won). Equality APPLIES rather than skips so that two DISTINCT notifications that
+   * happen to share a millisecond are both processed (true duplicates are already
+   * filtered upstream by the `WebhookEvent (platform, externalEventId)` idempotency
+   * layer, so a same-instant event reaching here is always a distinct one).
+   *
+   * Honest limitation: for two CONFLICTING events sharing the exact same millisecond
+   * this is NOT serialized by arrival order — both pass the `<=` guard and whichever
+   * DB write commits last wins (last-write-wins in DB-commit order, which need not
+   * match arrival order). We deliberately do NOT add per-subscription serialization
+   * or a monotonic tie-breaker: Apple and Google emit one notification per state
+   * transition, each with a distinct timestamp, so conflicting same-millisecond
+   * lifecycle events for one subscription do not occur in practice, and the heavy
+   * locking/sequence infrastructure required to serialize them is not warranted.
    *
    * When `eventAt` is null the event has no derivable timestamp; ordering cannot
    * be established, so it is applied unconditionally (never blocked).
