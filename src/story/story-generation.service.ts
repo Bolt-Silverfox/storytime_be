@@ -8,7 +8,7 @@ import {
   GeneratedStory,
 } from './gemini.service';
 import { TextToSpeechService } from './text-to-speech.service';
-import { VoiceType } from '../voice/dto/voice.dto';
+import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../voice/dto/voice.dto';
 import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { CACHE_INVALIDATION } from '@/shared/constants/cache-keys.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -137,18 +137,28 @@ export class StoryGenerationService {
           : Promise.resolve([]),
       ]);
 
-      if (needThemes && availableThemes.length > 0) {
-        const randomTheme =
-          availableThemes[Math.floor(Math.random() * availableThemes.length)];
-        themes = [randomTheme.name];
+      if (needThemes) {
+        if (availableThemes.length > 0) {
+          const randomTheme =
+            availableThemes[Math.floor(Math.random() * availableThemes.length)];
+          themes = [randomTheme.name];
+        } else {
+          // Empty-DB fallback: ensure the AI always receives a theme
+          themes = ['Adventure'];
+        }
       }
 
-      if (needCategories && availableCategories.length > 0) {
-        const randomCategory =
-          availableCategories[
-            Math.floor(Math.random() * availableCategories.length)
-          ];
-        categories = [randomCategory.name];
+      if (needCategories) {
+        if (availableCategories.length > 0) {
+          const randomCategory =
+            availableCategories[
+              Math.floor(Math.random() * availableCategories.length)
+            ];
+          categories = [randomCategory.name];
+        } else {
+          // Empty-DB fallback: ensure the AI always receives a category
+          categories = ['General'];
+        }
       }
     }
 
@@ -163,6 +173,8 @@ export class StoryGenerationService {
       const voiceName = kid.preferredVoice.name.toUpperCase();
       if (voiceName in VoiceType) {
         voiceType = VoiceType[voiceName as keyof typeof VoiceType];
+      } else if (VOICE_TYPE_MIGRATION_MAP[voiceName]) {
+        voiceType = VOICE_TYPE_MIGRATION_MAP[voiceName];
       } else if (kid.preferredVoice.elevenLabsVoiceId) {
         const elId = kid.preferredVoice.elevenLabsVoiceId.toUpperCase();
         if (elId in VoiceType) {
