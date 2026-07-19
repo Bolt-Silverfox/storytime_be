@@ -100,25 +100,47 @@ Deploy to development environment (runs migrations, generates Prisma client, and
 pnpm deploy:dev
 ```
 
-## Project Structure
+**Blue-green (dev):** the v1.3.0 "blue" candidate runs alongside green on the same
+host (`:3600`, `storytime_db_blue`, Redis `/3`) behind `blue.dev.api.storytimeapp.me`.
+See [`docs/DEPLOYMENT_BLUE_GREEN.md`](docs/DEPLOYMENT_BLUE_GREEN.md) for the full
+runbook (backend + frontend + mobile OAuth + promote flow), and `pnpm deploy:blue`.
+
+## Architecture
+
+NestJS modular architecture. Each domain module follows a consistent layering:
+**controllers → services (facades) → per-model repositories → Prisma**. Services
+never touch Prisma directly — all DB access goes through repositories injected by
+Symbol token (repository pattern). Cross-module side effects flow through typed
+domain events + listeners rather than direct calls, keeping modules decoupled.
+God controllers/services have been dissolved into focused sub-units.
+
+Story generation (both the synchronous and BullMQ-async paths) runs through a
+single `StoryGenerationService` so the two paths stay consistent.
 
 ```
 src/
 ├── analytics/      - User activity tracking and analytics
-├── auth/          - Authentication (login, register, JWT)
-├── config/        - Application configuration
-├── health/        - Health check endpoints
-├── notification/  - User notifications
-├── prisma/        - Prisma client module
-├── reward/        - User reward system
-├── settings/      - User settings and preferences
-├── story/         - Story generation and management
-├── upload/        - File upload handling (Cloudinary)
-├── user/          - User profile management
-├── utils/         - Shared utilities
-├── app.module.ts  - Root application module
-└── main.ts        - Application entry point
+├── auth/           - Authentication (login, register, JWT, OAuth, sessions)
+├── admin/          - Admin operations (split into focused sub-controllers)
+├── avatar/         - Avatar management
+├── config/         - Application configuration + alerting thresholds
+├── health/         - Health indicators (DB, Redis, SMTP, queues, Firebase, ...)
+├── kid/            - Child profile management
+├── notification/   - Notifications, email queue, cron scheduler
+├── payment/        - Payment processing
+├── prisma/         - Prisma client module
+├── reward/         - Reward/gamification system
+├── settings/       - User settings and preferences
+├── story/          - Story generation + management (sub-controllers, unified gen)
+├── subscription/   - Subscriptions + store webhooks (Apple ASSN v2, Google RTDN)
+├── upload/         - File upload handling (Cloudinary)
+├── user/           - User profile management
+├── shared/ utils/  - Guards, pipes, filters, decorators, shared utilities
+├── app.module.ts   - Root application module
+└── main.ts         - Application entry point
 ```
+
+> Module set is representative, not exhaustive — see `src/` for the full list.
 
 ## Available Scripts
 

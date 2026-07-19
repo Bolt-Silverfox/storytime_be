@@ -1,8 +1,31 @@
 # Remaining Work Summary
 
-**Last Updated:** 2026-02-24
+**Last Updated:** 2026-07-19
 
 This document provides an accurate, up-to-date summary of remaining work after verifying the actual codebase state.
+
+---
+
+## ✅ Recently Landed (integration/refactor-2026-02 → develop-v1.3.0)
+
+- ✅ **God-file dissolution (complete)** — every god *service* AND god *controller*
+  split into focused sub-units. `story.controller` and `admin.controller` split
+  into cohesive sub-controllers; `story.service` reduced by extracting cohesive
+  service groups.
+- ✅ **Repository pattern everywhere** — all module services route DB access
+  through per-model repositories (Symbol-token DI); no service touches Prisma
+  directly. Straggler services + listeners migrated too.
+- ✅ **Sync/async story generation unified** — both paths now go through a single
+  `StoryGenerationService` (previously 8-way divergent), fixing the
+  sync-vs-async story inconsistency.
+- ✅ **develop-v1.2.0 delta-port** — subscription webhooks (Apple ASSN v2 + Google
+  RTDN + Pub/Sub OIDC, incl. ReDoS fix), notification cron scheduler, guest-session
+  keyv in-memory fallback, docker Redis password enforcement, TTS counter bug fix,
+  and the chore backlog.
+- ✅ **Blue-green dev environment** — v1.3.0 "blue" deployed alongside green on the
+  shared host (backend `:3600` / frontend `:3010`, `storytime_db_blue`, Redis `/3`),
+  with per-color nginx + TLS and manual-trigger deploy workflows across all three
+  repos. See `docs/DEPLOYMENT_BLUE_GREEN.md`.
 
 ---
 
@@ -23,9 +46,9 @@ This document provides an accurate, up-to-date summary of remaining work after v
 ### Code Quality
 - ✅ **Error handling** — Domain exception hierarchy with error codes
 - ✅ **Type safety** — Production `any` types eliminated, `noImplicitAny: true`
-- ✅ **God service refactoring** — 7 → 19 focused services
+- ✅ **God-file refactoring** — all god services AND controllers dissolved into focused sub-units (see "Recently Landed")
 - ✅ **Event-driven architecture** — 18+ events, 7 listeners, typed payloads
-- ✅ **Repository pattern** — Implemented across all major services (Reward, Avatar, Kid, Settings, Age)
+- ✅ **Repository pattern** — Implemented across **all** module services (not just the majors); no direct Prisma access in services
 - ✅ **Circular dependency elimination** — 7 → 0 `forwardRef` usages
 - ✅ **Shared utilities** — ErrorHandler, DateFormatUtil, isPremiumUser dedup
 - ✅ **Lint cleanup** — 638 → 0 errors
@@ -65,6 +88,15 @@ This document provides an accurate, up-to-date summary of remaining work after v
 ---
 
 ## 📋 What's Left To Do
+
+### Priority 1 (Blue-green validation & promotion)
+
+- [ ] Validate `blue.dev.*` end-to-end (auth, story gen sync+async, payments/subs, SSE)
+- [ ] Register mobile blue OAuth clients (Google iOS/Android, Firebase apps,
+      Apple App ID for `net.emerj.storytime.blue`) and confirm blue backend trusts
+      them — see the OAuth checklist in `docs/DEPLOYMENT_BLUE_GREEN.md`
+- [ ] Promote blue → green once validated (merge `develop-v1.3.0` → `develop-v1.2.0`
+      + matching FE/mobile branches, redeploy green)
 
 ### Priority 3 (Low — Optional)
 
