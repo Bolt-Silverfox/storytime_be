@@ -15,6 +15,7 @@ import { StoryMetadataService } from './story-metadata.service';
 import { StoryProgressService } from './story-progress.service';
 import { StoryRecommendationService } from './story-recommendation.service';
 import { DailyChallengeService } from './daily-challenge.service';
+import { StoryGenerationService } from './story-generation.service';
 
 // Mock dependencies — StoryService now routes all DB access through
 // STORY_REPOSITORY, so we mock the repository methods it calls.
@@ -49,10 +50,17 @@ const mockGeminiService = {
   generateStoryImage: jest.fn(),
 };
 
+// StoryService delegates all AI generation to the canonical
+// StoryGenerationService, so we mock it and assert the delegation.
+const mockStoryGenerationService = {
+  generateStoryWithAI: jest.fn(),
+  generateStoryForKid: jest.fn(),
+};
+
 describe('StoryService - Library & Generation', () => {
   let service: StoryService;
   let prisma: typeof mockStoryRepository;
-  let gemini: typeof mockGeminiService;
+  let generation: typeof mockStoryGenerationService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -88,59 +96,74 @@ describe('StoryService - Library & Generation', () => {
         { provide: StoryProgressService, useValue: {} },
         { provide: StoryRecommendationService, useValue: {} },
         { provide: DailyChallengeService, useValue: {} },
+        {
+          provide: StoryGenerationService,
+          useValue: mockStoryGenerationService,
+        },
       ],
     }).compile();
 
     service = module.get<StoryService>(StoryService);
     prisma = module.get(STORY_REPOSITORY);
-    gemini = module.get(GeminiService);
+    generation = module.get(StoryGenerationService);
     jest.clearAllMocks();
   });
 
-  // --- 1. GENERATION TEST (The Fix) ---
+  // --- 1. GENERATION TESTS (The Fix): delegate to canonical service ---
+  // The atomic persist + creatorKidId behavior itself is verified in
+  // story-generation.service.spec.ts. StoryService's job is now to forward
+  // to StoryGenerationService so the sync controller path and the async
+  // BullMQ path produce identical stories.
   describe('generateStoryForKid', () => {
-    it('should save the story with creatorKidId', async () => {
+    it('should delegate to StoryGenerationService with the kid id and args, and return its result', async () => {
       const kidId = 'kid-123';
-
-      // Mock Data
-      prisma.findUniqueKidRaw.mockResolvedValue({
-        id: kidId,
-        name: 'Tise',
-        preferredCategories: [],
-        excludedTags: [],
-      });
-      prisma.findManyThemesRaw.mockResolvedValue([{ id: 'theme-1' }]);
-      prisma.findManyCategoriesRaw.mockResolvedValue([{ id: 'cat-1' }]);
-
-      gemini.generateStory.mockResolvedValue({
-        title: 'AI Story',
-        description: 'Desc',
-        content: 'Content',
-        theme: ['Theme'],
-        category: ['Cat'],
-        ageMin: 5,
-        ageMax: 8,
-        questions: [],
-      });
-      gemini.generateStoryImage.mockResolvedValue('image-url');
-      prisma.createStoryRaw.mockResolvedValue({
+      const created = {
         id: 'story-123',
         textContent: 'Content',
         title: 'AI Story',
-      });
+        creatorKidId: kidId,
+      };
+      generation.generateStoryForKid.mockResolvedValue(created);
 
-      // Call Method
-      await service.generateStoryForKid(kidId, ['Theme'], ['Cat']);
-
-      // VERIFY: Did we save creatorKidId?
-      expect(prisma.createStoryRaw).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            creatorKidId: kidId, // <--- THIS IS THE CRITICAL CHECK
-            title: 'AI Story',
-          }),
-        }),
+      const result = await service.generateStoryForKid(
+        kidId,
+        ['Theme'],
+        ['Cat'],
       );
+
+      // VERIFY: forwarded to the canonical implementation with 1:1 args.
+      expect(generation.generateStoryForKid).toHaveBeenCalledWith(
+        kidId,
+        ['Theme'],
+        ['Cat'],
+        undefined,
+        undefined,
+      );
+      // And the canonical result (with creatorKidId) is passed straight through.
+      expect(result).toBe(created);
+      expect(result.creatorKidId).toBe(kidId);
+      // StoryService must NOT perform its own persistence anymore.
+      expect(prisma.createStoryRaw).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('generateStoryWithAI', () => {
+    it('should delegate to StoryGenerationService and return its result', async () => {
+      const options = {
+        theme: ['Theme'],
+        category: ['Cat'],
+        ageMin: 4,
+        ageMax: 8,
+        creatorKidId: 'kid-123',
+      };
+      const created = { id: 'story-456', title: 'AI Story' };
+      generation.generateStoryWithAI.mockResolvedValue(created);
+
+      const result = await service.generateStoryWithAI(options);
+
+      expect(generation.generateStoryWithAI).toHaveBeenCalledWith(options);
+      expect(result).toBe(created);
+      expect(prisma.createStoryRaw).not.toHaveBeenCalled();
     });
   });
 

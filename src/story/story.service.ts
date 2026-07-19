@@ -35,7 +35,6 @@ import {
 } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { TextToSpeechService } from './text-to-speech.service';
 import {
   BadRequestException,
   Inject,
@@ -43,14 +42,8 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  GeminiService,
-  GenerateStoryOptions,
-  GeneratedStory,
-} from './gemini.service';
+import { GenerateStoryOptions } from './gemini.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
-import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../voice/dto/voice.dto';
-import { DEFAULT_VOICE } from '../voice/voice.constants';
 import { STORY_INVALIDATION_KEYS } from '@/shared/constants/cache-keys.constants';
 import {
   DEFAULT_CURSOR_LIMIT,
@@ -64,6 +57,7 @@ import { StoryProgressService } from './story-progress.service';
 import { StoryRecommendationService } from './story-recommendation.service';
 import { DailyChallengeService } from './daily-challenge.service';
 import { StoryFeedService } from './story-feed.service';
+import { StoryGenerationService } from './story-generation.service';
 
 @Injectable()
 export class StoryService {
@@ -103,8 +97,7 @@ export class StoryService {
     private readonly storyRepository: IStoryRepository,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     public readonly uploadService: UploadService,
-    private readonly textToSpeechService: TextToSpeechService,
-    private readonly geminiService: GeminiService,
+    private readonly storyGenerationService: StoryGenerationService,
     private readonly storyFavoriteService: StoryFavoriteService,
     private readonly storyDownloadService: StoryDownloadService,
     private readonly storyPathService: StoryPathService,
@@ -550,32 +543,19 @@ export class StoryService {
     return story;
   }
 
+  /**
+   * Delegates to the canonical {@link StoryGenerationService} so that the
+   * synchronous controller path and the async BullMQ processor path produce
+   * identical stories (atomic persist + STORY_CREATED event + TTS).
+   */
   async generateStoryWithAI(options: GenerateStoryOptions) {
-    // Resolve Season IDs to names if needed for AI context
-    if (
-      options.seasonIds &&
-      options.seasonIds.length > 0 &&
-      (!options.seasons || options.seasons.length === 0)
-    ) {
-      const seasons = await this.storyRepository.findManySeasonsRaw({
-        where: { id: { in: options.seasonIds }, isDeleted: false },
-        select: { name: true },
-      });
-      options.seasons = seasons.map((s) => s.name);
-    }
-
-    // 1. Generate Story Content
-    const generatedStory = await this.geminiService.generateStory(options);
-
-    // 2. Persist with Image & Audio
-    return this.persistGeneratedStory(
-      generatedStory,
-      options.creatorKidId,
-      options.voiceType,
-      options.seasonIds,
-    );
+    return this.storyGenerationService.generateStoryWithAI(options);
   }
 
+  /**
+   * Delegates to the canonical {@link StoryGenerationService} — see
+   * {@link generateStoryWithAI} for the rationale behind unifying both paths.
+   */
   async generateStoryForKid(
     kidId: string,
     themeNames?: string[],
@@ -583,255 +563,13 @@ export class StoryService {
     seasonIds?: string[],
     kidName?: string,
   ) {
-    const kid = await this.storyRepository.findUniqueKidRaw({
-      where: { id: kidId, isDeleted: false },
-      include: { preferredCategories: true, preferredVoice: true },
-    });
-
-    if (!kid) {
-      throw new NotFoundException(`Kid with id ${kidId} not found`);
-    }
-
-    // 1. Setup options (existing logic)
-    let ageMin = 4;
-    let ageMax = 8;
-    if (kid.ageRange && typeof kid.ageRange === 'string') {
-      const match = kid.ageRange.match(/(\d+)-?(\d+)?/);
-      if (match) {
-        ageMin = parseInt(match[1], 10);
-        ageMax = match[2] ? parseInt(match[2], 10) : ageMin + 2;
-      }
-    }
-
-    let themes = themeNames || [];
-    if (themes.length === 0) {
-      const availableThemes = await this.storyRepository.findManyThemesRaw({
-        where: { isDeleted: false },
-      });
-      if (availableThemes.length === 0) {
-        themes = ['Adventure'];
-      } else {
-        const randomTheme =
-          availableThemes[Math.floor(Math.random() * availableThemes.length)];
-        themes = [randomTheme.name];
-      }
-    }
-
-    let categories = categoryNames || [];
-    if (kid.preferredCategories && kid.preferredCategories.length > 0) {
-      const prefCategoryNames = kid.preferredCategories.map((c) => c.name);
-      categories = [...new Set([...categories, ...prefCategoryNames])];
-    }
-    if (categories.length === 0) {
-      const availableCategories =
-        await this.storyRepository.findManyCategoriesRaw({
-          where: { isDeleted: false },
-        });
-      if (availableCategories.length === 0) {
-        categories = ['General'];
-      } else {
-        const randomCategory =
-          availableCategories[
-            Math.floor(Math.random() * availableCategories.length)
-          ];
-        categories = [randomCategory.name];
-      }
-    }
-
-    let contextString = '';
-    if (kid.excludedTags && kid.excludedTags.length > 0) {
-      const exclusions = kid.excludedTags.join(', ');
-      contextString = `IMPORTANT: The story must strictly AVOID the following topics, themes, creatures, or elements: ${exclusions}. Ensure the content is safe and comfortable for the child regarding these exclusions.`;
-    }
-
-    let voiceType: VoiceType | undefined;
-    if (kid.preferredVoice) {
-      const voiceName = kid.preferredVoice.name.toUpperCase();
-      if (voiceName in VoiceType) {
-        voiceType = VoiceType[voiceName as keyof typeof VoiceType];
-      } else if (VOICE_TYPE_MIGRATION_MAP[voiceName]) {
-        voiceType = VOICE_TYPE_MIGRATION_MAP[voiceName];
-      } else if (kid.preferredVoice.elevenLabsVoiceId) {
-        const elId = kid.preferredVoice.elevenLabsVoiceId.toUpperCase();
-        if (elId in VoiceType) {
-          voiceType = VoiceType[elId as keyof typeof VoiceType];
-        }
-      }
-    }
-
-    // Resolve Season IDs to Names for AI Context
-    const seasonNames: string[] = [];
-    if (seasonIds && seasonIds.length > 0) {
-      const seasons = await this.storyRepository.findManySeasonsRaw({
-        where: { id: { in: seasonIds }, isDeleted: false },
-        select: { name: true },
-      });
-      seasonNames.push(...seasons.map((s) => s.name));
-    }
-
-    // Resolve userId for tracking
-    let userId: string | undefined;
-    if (kidId) {
-      const kid = await this.storyRepository.findUniqueKidRaw({
-        where: { id: kidId },
-        select: { parentId: true },
-      });
-      if (kid) userId = kid.parentId;
-    }
-
-    const options: GenerateStoryOptions = {
-      theme: themes,
-      category: categories,
-      seasons: seasonNames,
-      ageMin,
-      ageMax,
-      kidName: kidName || kid.name || 'Hero',
-      language: 'English',
-      additionalContext: contextString,
-      creatorKidId: kidId,
-      voiceType,
-      seasonIds: seasonIds,
-      userId, // Pass resolved userId for usage tracking
-    };
-
-    this.logger.log(
-      `Generating story for ${options.kidName}. Themes: [${themes.join(', ')}].`,
-    );
-
-    // 2. Generate Content via AI
-    const generatedStory = await this.geminiService.generateStory(options);
-
-    // 3. Persist (with Image & Audio) - calling shared helper
-    return this.persistGeneratedStory(
-      generatedStory,
+    return this.storyGenerationService.generateStoryForKid(
       kidId,
-      voiceType,
+      themeNames,
+      categoryNames,
       seasonIds,
+      kidName,
     );
-  }
-
-  // --- PRIVATE HELPER: PERSIST STORY (Includes Image & Audio Gen) ---
-  private async persistGeneratedStory(
-    generatedStory: GeneratedStory & { textContent?: string },
-    creatorKidId?: string,
-    voiceType?: VoiceType,
-    seasonIds?: string[],
-  ) {
-    // Resolve userId for tracking if creatorKidId is present
-    let userId: string | undefined;
-    if (creatorKidId) {
-      const kid = await this.storyRepository.findUniqueKidRaw({
-        where: { id: creatorKidId },
-        select: { parentId: true },
-      });
-      if (kid) userId = kid.parentId;
-    }
-
-    // 1. Generate Cover Image (Pollinations → Cloudinary)
-    let coverImageUrl = '';
-    try {
-      this.logger.log(`Generating cover image for "${generatedStory.title}"`);
-      coverImageUrl = await this.geminiService.generateStoryImage(
-        generatedStory.title,
-        generatedStory.description || `A story about ${generatedStory.title}`,
-        userId, // Pass userId for tracking
-      );
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      this.logger.error(`Failed to generate story image: ${msg}`);
-    }
-
-    // 2. Prepare Relations (Categories/Themes)
-    const categoryConnect =
-      generatedStory.category?.map((c: string) => ({
-        where: { name: c },
-        create: { name: c, description: 'Auto-generated category' },
-      })) || [];
-
-    const themeConnect =
-      generatedStory.theme?.map((t: string) => ({
-        where: { name: t },
-        create: { name: t, description: 'Auto-generated theme' },
-      })) || [];
-
-    const textContent =
-      generatedStory.content ||
-      generatedStory.textContent ||
-      generatedStory.description ||
-      '';
-    const wordCount = textContent
-      .split(/\s+/)
-      .filter((word: string) => word.length > 0).length;
-    const durationSeconds = this.calculateDurationSeconds(wordCount);
-
-    // 3. Create Story Record
-    let story = await this.storyRepository.createStoryRaw({
-      data: {
-        title: generatedStory.title,
-        description: generatedStory.description,
-        language: generatedStory.language || 'English',
-        ageMin: generatedStory.ageMin ?? 4,
-        ageMax: generatedStory.ageMax ?? 8,
-        isInteractive: false,
-        coverImageUrl: coverImageUrl,
-        textContent: textContent,
-        wordCount: wordCount,
-        durationSeconds: durationSeconds,
-        audioUrl: '', // Will update momentarily
-        creatorKidId: creatorKidId || null, // Allow null for orphan stories
-        aiGenerated: true,
-
-        categories: { connectOrCreate: categoryConnect },
-        themes: { connectOrCreate: themeConnect },
-        seasons:
-          seasonIds && seasonIds.length > 0
-            ? {
-                connect: seasonIds.map((id) => ({ id })),
-              }
-            : generatedStory.seasons
-              ? {
-                  connect: generatedStory.seasons.map((s: string) => ({
-                    name: s,
-                  })),
-                }
-              : undefined,
-      },
-      include: { images: true, branches: true, categories: true, themes: true },
-    });
-
-    // 4. Generate Audio (TTS)
-    if (story.textContent) {
-      try {
-        this.logger.log(`Generating audio for story ${story.id}`);
-        const audioUrl = await this.textToSpeechService.textToSpeechCloudUrl(
-          story.id,
-          story.textContent,
-          voiceType ?? DEFAULT_VOICE,
-        );
-
-        // Update story with audio URL
-        story = await this.storyRepository.updateStoryRaw({
-          where: { id: story.id },
-          data: { audioUrl },
-          include: {
-            images: true,
-            branches: true,
-            categories: true,
-            themes: true,
-            seasons: true,
-          },
-        });
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        this.logger.error(
-          `Failed to generate audio for story ${story.id}: ${msg}`,
-        );
-      }
-    }
-
-    await this.invalidateStoryCaches();
-
-    return story;
   }
 
   async getContinueReading(kidId: string, cursor?: string, limit?: number) {
