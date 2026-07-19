@@ -101,7 +101,7 @@ pnpm deploy:dev
 ```
 
 **Blue-green (dev):** the v1.3.0 "blue" candidate runs alongside green on the same
-host (`:3600`, `storytime_db_blue`, Redis `/3`) behind `blue.dev.api.storytimeapp.me`.
+host (`:3601`, `storytime_db_blue`, Redis `/3`) behind `blue.dev.api.storytimeapp.me`.
 See [`docs/DEPLOYMENT_BLUE_GREEN.md`](docs/DEPLOYMENT_BLUE_GREEN.md) for the full
 runbook (backend + frontend + mobile OAuth + promote flow), and `pnpm deploy:blue`.
 
