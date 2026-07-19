@@ -17,7 +17,11 @@ type MockPrisma = {
     update: jest.Mock;
     updateMany: jest.Mock;
   };
-  subscription: { findFirst: jest.Mock; update: jest.Mock };
+  subscription: {
+    findFirst: jest.Mock;
+    update: jest.Mock;
+    updateMany: jest.Mock;
+  };
 };
 
 const SUB = {
@@ -84,6 +88,9 @@ describe('SubscriptionWebhookService', () => {
       subscription: {
         findFirst: jest.fn().mockResolvedValue({ ...SUB }),
         update: jest.fn().mockResolvedValue({ ...SUB }),
+        // CAS writes: default to a matched row (applied). Stale/lost-race tests
+        // override this to `{ count: 0 }`.
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
     apple = { parseSignedNotification: jest.fn() };
@@ -537,9 +544,10 @@ describe('SubscriptionWebhookService', () => {
 
         expect(res.status).toBe('processed');
         expect(res.action).toBe('google:SUBSCRIPTION_4 -> activate');
-        // Row's purchaseToken migrated from the old token to the new one.
-        expect(prisma.subscription.update).toHaveBeenCalledWith({
-          where: { id: 'sub-1' },
+        // Row's purchaseToken migrated from the old token to the new one via a
+        // compare-and-swap guarded on the still-stored linked token.
+        expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
+          where: { id: 'sub-1', purchaseToken: 'g-token-1' },
           data: { purchaseToken: 'new-token' },
         });
       });
@@ -592,8 +600,8 @@ describe('SubscriptionWebhookService', () => {
         const res = await service.handleGoogle(body);
 
         expect(res.status).toBe('processed');
-        expect(prisma.subscription.update).toHaveBeenCalledWith({
-          where: { id: 'sub-1' },
+        expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
+          where: { id: 'sub-1', purchaseToken: 'token-A' },
           data: { purchaseToken: 'token-C' },
         });
       });
@@ -683,12 +691,17 @@ describe('SubscriptionWebhookService', () => {
   });
 
   // --------------------------------------- out-of-order delivery watermark ----
-  describe('out-of-order delivery protection (event watermark)', () => {
+  describe('out-of-order delivery protection (event watermark, CAS)', () => {
     const OLD = new Date('2026-05-01T00:00:00Z');
     const NEW = new Date('2026-06-01T00:00:00Z');
 
+    // The watermark guard is a compare-and-swap: the timestamp comparison lives
+    // in the `updateMany` WHERE, and the affected-row count decides applied vs
+    // skipped. When `eventAt` is known the service uses `updateMany`, never a
+    // bare `update`.
+
     // ------------------------------------------------------------- Apple ----
-    it('applies a newer Apple event and advances lastEventAt atomically', async () => {
+    it('applies a newer Apple event via a guarded updateMany and advances lastEventAt', async () => {
       prisma.subscription.findFirst.mockResolvedValue({
         ...SUB,
         lastEventAt: OLD,
@@ -704,22 +717,30 @@ describe('SubscriptionWebhookService', () => {
       const res = await service.handleApple({ signedPayload: 'jws' });
 
       expect(res.status).toBe('processed');
-      expect(prisma.subscription.update).toHaveBeenCalledWith({
-        where: { id: 'sub-1' },
+      // State change + watermark advance are a single conditional write.
+      expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'sub-1',
+          OR: [{ lastEventAt: null }, { lastEventAt: { lte: NEW } }],
+        },
         data: {
           status: 'active',
           endsAt: new Date('2026-03-01'),
           lastEventAt: NEW,
         },
       });
+      // No unguarded update when a timestamp is present.
+      expect(prisma.subscription.update).not.toHaveBeenCalled();
     });
 
-    it('skips a stale Apple event (older than lastEventAt) without regressing state', async () => {
+    it('skips a stale Apple event when the CAS matches no row (older delivery loses the race)', async () => {
       // Already applied a DID_RENEW at NEW; a delayed EXPIRED at OLD arrives.
+      // The conditional write matches zero rows (stored watermark is newer).
       prisma.subscription.findFirst.mockResolvedValue({
         ...SUB,
         lastEventAt: NEW,
       });
+      prisma.subscription.updateMany.mockResolvedValue({ count: 0 });
       apple.parseSignedNotification.mockReturnValue(
         appleInfo({
           notificationType: 'EXPIRED',
@@ -732,10 +753,20 @@ describe('SubscriptionWebhookService', () => {
 
       expect(res.status).toBe('skipped');
       expect(res.action).toContain('stale/out-of-order');
+      // The CAS was attempted (guarded), but nothing was regressed.
+      expect(prisma.subscription.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'sub-1' }),
+        }),
+      );
       expect(prisma.subscription.update).not.toHaveBeenCalled();
     });
 
-    it('skips a duplicate Apple event arriving at the exact same timestamp', async () => {
+    it('applies a DISTINCT Apple event arriving at the exact same timestamp (equality is not stale)', async () => {
+      // Same-millisecond, different notificationUUID -> a distinct event. True
+      // duplicates are filtered by the WebhookEvent idempotency layer, so this
+      // must be processed, not dropped. The CAS WHERE uses `lte`, so an equal
+      // stored watermark still matches.
       prisma.subscription.findFirst.mockResolvedValue({
         ...SUB,
         lastEventAt: NEW,
@@ -743,15 +774,84 @@ describe('SubscriptionWebhookService', () => {
       apple.parseSignedNotification.mockReturnValue(
         appleInfo({
           notificationType: 'DID_RENEW',
-          notificationUUID: 'wm-a-dup',
+          notificationUUID: 'wm-a-same-instant',
           signedDate: NEW.getTime(),
         }),
       );
 
       const res = await service.handleApple({ signedPayload: 'jws' });
 
-      expect(res.status).toBe('skipped');
-      expect(prisma.subscription.update).not.toHaveBeenCalled();
+      expect(res.status).toBe('processed');
+      expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'sub-1',
+          OR: [{ lastEventAt: null }, { lastEventAt: { lte: NEW } }],
+        },
+        data: {
+          status: 'active',
+          endsAt: new Date('2026-03-01'),
+          lastEventAt: NEW,
+        },
+      });
+    });
+
+    it('applies BOTH conflicting same-timestamp events (last-write-wins, not arrival-serialized)', async () => {
+      // Two CONFLICTING lifecycle events share the exact same millisecond
+      // (distinct notificationUUIDs, so both survive the idempotency layer).
+      // The `<=` watermark guard admits both: neither is dropped, and whichever
+      // DB write commits last determines the final state. This documents the
+      // honest limitation — same-timestamp conflicts are NOT serialized by
+      // arrival order (see applyAction's doc comment). Such conflicts do not
+      // occur in practice because Apple/Google emit one notification per state
+      // transition with distinct timestamps.
+
+      // Event A: DID_RENEW (activate) at NEW. Stored watermark is OLD -> applies.
+      prisma.subscription.findFirst.mockResolvedValueOnce({
+        ...SUB,
+        lastEventAt: OLD,
+      });
+      prisma.subscription.updateMany.mockResolvedValueOnce({ count: 1 });
+      apple.parseSignedNotification.mockReturnValueOnce(
+        appleInfo({
+          notificationType: 'DID_RENEW',
+          notificationUUID: 'wm-a-tie-renew',
+          signedDate: NEW.getTime(),
+        }),
+      );
+
+      const first = await service.handleApple({ signedPayload: 'jws' });
+      expect(first.status).toBe('processed');
+
+      // Event B: EXPIRED (deactivate) at the SAME NEW timestamp. Stored watermark
+      // is now NEW; `lte` still matches, so this conflicting event ALSO applies
+      // rather than being skipped as "stale" — last-write-wins.
+      prisma.subscription.findFirst.mockResolvedValueOnce({
+        ...SUB,
+        lastEventAt: NEW,
+      });
+      prisma.subscription.updateMany.mockResolvedValueOnce({ count: 1 });
+      apple.parseSignedNotification.mockReturnValueOnce(
+        appleInfo({
+          notificationType: 'EXPIRED',
+          notificationUUID: 'wm-a-tie-expire',
+          signedDate: NEW.getTime(),
+        }),
+      );
+
+      const second = await service.handleApple({ signedPayload: 'jws' });
+      expect(second.status).toBe('processed');
+      // The second write still guards on `lte NEW` (equal watermark admitted).
+      expect(prisma.subscription.updateMany).toHaveBeenLastCalledWith({
+        where: {
+          id: 'sub-1',
+          OR: [{ lastEventAt: null }, { lastEventAt: { lte: NEW } }],
+        },
+        data: {
+          status: 'cancelled',
+          endsAt: expect.any(Date),
+          lastEventAt: NEW,
+        },
+      });
     });
 
     it('applies an Apple event and sets lastEventAt when no prior watermark exists', async () => {
@@ -770,12 +870,52 @@ describe('SubscriptionWebhookService', () => {
       const res = await service.handleApple({ signedPayload: 'jws' });
 
       expect(res.status).toBe('processed');
-      const call = prisma.subscription.update.mock.calls[0][0];
+      const call = prisma.subscription.updateMany.mock.calls[0][0];
       expect(call.data.lastEventAt).toEqual(NEW);
+      // Guard admits a null stored watermark.
+      expect(call.where.OR).toContainEqual({ lastEventAt: null });
+    });
+
+    it('simulated concurrent old/new delivery: the newer applies, the older is skipped', async () => {
+      // Newer event (NEW): stored watermark is OLD -> CAS matches (count 1).
+      prisma.subscription.findFirst.mockResolvedValueOnce({
+        ...SUB,
+        lastEventAt: OLD,
+      });
+      prisma.subscription.updateMany.mockResolvedValueOnce({ count: 1 });
+      apple.parseSignedNotification.mockReturnValueOnce(
+        appleInfo({
+          notificationType: 'DID_RENEW',
+          notificationUUID: 'wm-a-conc-new',
+          signedDate: NEW.getTime(),
+        }),
+      );
+
+      const newer = await service.handleApple({ signedPayload: 'jws' });
+      expect(newer.status).toBe('processed');
+
+      // Older event (OLD) races in after the watermark advanced to NEW. Both the
+      // read and the CAS now see the newer watermark -> count 0 -> skipped.
+      prisma.subscription.findFirst.mockResolvedValueOnce({
+        ...SUB,
+        lastEventAt: NEW,
+      });
+      prisma.subscription.updateMany.mockResolvedValueOnce({ count: 0 });
+      apple.parseSignedNotification.mockReturnValueOnce(
+        appleInfo({
+          notificationType: 'EXPIRED',
+          notificationUUID: 'wm-a-conc-old',
+          signedDate: OLD.getTime(),
+        }),
+      );
+
+      const older = await service.handleApple({ signedPayload: 'jws' });
+      expect(older.status).toBe('skipped');
+      expect(older.action).toContain('stale/out-of-order');
     });
 
     // ------------------------------------------------------------ Google ----
-    it('applies a newer Google event and advances lastEventAt', async () => {
+    it('applies a newer Google event via a guarded updateMany and advances lastEventAt', async () => {
       prisma.subscription.findFirst.mockResolvedValue({
         ...SUB,
         platform: 'google',
@@ -801,23 +941,28 @@ describe('SubscriptionWebhookService', () => {
       const res = await service.handleGoogle(body);
 
       expect(res.status).toBe('processed');
-      expect(prisma.subscription.update).toHaveBeenCalledWith({
-        where: { id: 'sub-1' },
+      expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'sub-1',
+          OR: [{ lastEventAt: null }, { lastEventAt: { lte: NEW } }],
+        },
         data: {
           status: 'active',
           endsAt: new Date('2026-07-01'),
           lastEventAt: NEW,
         },
       });
+      expect(prisma.subscription.update).not.toHaveBeenCalled();
     });
 
-    it('skips a stale Google EXPIRED that would clobber a newer RENEWED', async () => {
+    it('skips a stale Google EXPIRED that would clobber a newer RENEWED (CAS matches no row)', async () => {
       prisma.subscription.findFirst.mockResolvedValue({
         ...SUB,
         platform: 'google',
         purchaseToken: 'g-token-1',
         lastEventAt: NEW,
       });
+      prisma.subscription.updateMany.mockResolvedValue({ count: 0 });
       const body = googleBody(
         {
           eventTimeMillis: String(OLD.getTime()),
@@ -835,6 +980,75 @@ describe('SubscriptionWebhookService', () => {
       expect(res.status).toBe('skipped');
       expect(res.action).toContain('stale/out-of-order');
       expect(prisma.subscription.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // ----------------------------- linked-token migration is compare-and-swap ----
+  describe('linked-token migration (CAS)', () => {
+    it('re-resolves by the event token when the migration CAS loses the race', async () => {
+      // Event token 'new-token' is not stored; its linkedPurchaseToken is
+      // 'g-token-1', which we DO store. A concurrent delivery migrates the row
+      // first, so our guarded updateMany matches 0 rows and we must re-resolve by
+      // the (now stored) event token instead of mis-mapping.
+      let newTokenLookups = 0;
+      prisma.subscription.findFirst.mockImplementation(
+        ({ where }: { where: { purchaseToken?: string } }) => {
+          if (where.purchaseToken === 'g-token-1') {
+            return Promise.resolve({
+              ...SUB,
+              platform: 'google',
+              purchaseToken: 'g-token-1',
+            });
+          }
+          if (where.purchaseToken === 'new-token') {
+            // First lookup is the fast-path (token not stored yet) -> null. The
+            // second lookup is the post-lost-race re-resolution: a concurrent
+            // delivery already migrated the row, so it now holds 'new-token'.
+            newTokenLookups += 1;
+            if (newTokenLookups === 1) return Promise.resolve(null);
+            return Promise.resolve({
+              ...SUB,
+              platform: 'google',
+              purchaseToken: 'new-token',
+            });
+          }
+          return Promise.resolve(null);
+        },
+      );
+      // Lost the migration race.
+      prisma.subscription.updateMany.mockResolvedValue({ count: 0 });
+      google.verify
+        .mockResolvedValueOnce({
+          success: true,
+          linkedPurchaseToken: 'g-token-1',
+        })
+        .mockResolvedValue({
+          success: true,
+          expirationTime: new Date('2026-04-01'),
+        });
+
+      const body = googleBody(
+        {
+          packageName: 'com.storytime.app',
+          subscriptionNotification: {
+            notificationType: 4, // PURCHASED
+            purchaseToken: 'new-token',
+            subscriptionId: 'com.storytime.monthly',
+          },
+        },
+        'msg-link-cas-race',
+      );
+
+      const res = await service.handleGoogle(body);
+
+      // The migration CAS was guarded on the still-stored linked token.
+      expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: { id: 'sub-1', purchaseToken: 'g-token-1' },
+        data: { purchaseToken: 'new-token' },
+      });
+      // Despite losing the race, the event still resolves and applies.
+      expect(res.status).toBe('processed');
+      expect(res.action).toBe('google:SUBSCRIPTION_4 -> activate');
     });
   });
 });
