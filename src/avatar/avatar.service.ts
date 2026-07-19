@@ -100,8 +100,8 @@ export class AvatarService {
       throw new BadRequestException(
         'Either image file or URL is required for system avatars',
       );
-    } else if (!file && !isSystemAvatar) {
-      // For custom avatars, file is required
+    } else if (!isSystemAvatar) {
+      // For custom avatars, file is required (file is already falsy in this branch)
       throw new BadRequestException(
         'Image file is required for custom avatars',
       );
