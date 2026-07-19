@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "@andresaya/edge-tts": "^1.8.0",
-    "@deepgram/sdk": "^4.11.3",
+    "@deepgram/sdk": "^5.6.0",
     "@google/genai": "^1.52.0",
     "@google/generative-ai": "^0.24.1",
     "@hng-sdk/email": "^0.0.0",
