@@ -39,6 +39,7 @@ import {
   RedeemCouponDto,
 } from './dto/coupon.dto';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
+import { BatchedBroadcastNotificationDto } from './dto/batched-broadcast-notification.dto';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
 import { GuestActivityFilterDto } from './dto/guest-stats.dto';
 import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
@@ -2485,6 +2486,26 @@ export class AdminController {
     return {
       statusCode: 201,
       message: 'Broadcast notification queued',
+      data,
+    };
+  }
+
+  @Post('notifications/broadcast/batched')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Broadcast push to all device tokens in staggered batches (<= 500/batch)',
+  })
+  @ApiBody({ type: BatchedBroadcastNotificationDto })
+  @ApiCreatedResponse({ description: 'Batched broadcast queued' })
+  @HttpCode(HttpStatus.CREATED)
+  async broadcastNotificationBatched(
+    @Body() dto: BatchedBroadcastNotificationDto,
+  ) {
+    const data = await this.adminService.broadcastNotificationBatched(dto);
+    return {
+      statusCode: 201,
+      message: 'Batched broadcast notification queued',
       data,
     };
   }
