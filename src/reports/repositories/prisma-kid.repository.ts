@@ -18,9 +18,7 @@ export class PrismaKidRepository implements IKidRepository {
     });
   }
 
-  async findKidsByParentWithAvatar(
-    parentId: string,
-  ): Promise<KidWithAvatar[]> {
+  async findKidsByParentWithAvatar(parentId: string): Promise<KidWithAvatar[]> {
     return this.prisma.kid.findMany({
       where: { parentId },
       include: {

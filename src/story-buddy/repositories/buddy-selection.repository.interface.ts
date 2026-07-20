@@ -68,14 +68,10 @@ export interface IBuddySelectionRepository {
   ): Promise<KidWithSelectedBuddy>;
 
   // Find kid with a summary of its selected buddy
-  findKidWithSelectedBuddy(
-    kidId: string,
-  ): Promise<KidWithSelectedBuddy | null>;
+  findKidWithSelectedBuddy(kidId: string): Promise<KidWithSelectedBuddy | null>;
 
   // Find kid with a detailed view of its selected buddy
-  findKidWithBuddyDetails(
-    kidId: string,
-  ): Promise<KidWithBuddyDetails | null>;
+  findKidWithBuddyDetails(kidId: string): Promise<KidWithBuddyDetails | null>;
 
   // Create buddy interaction log
   createBuddyInteraction(

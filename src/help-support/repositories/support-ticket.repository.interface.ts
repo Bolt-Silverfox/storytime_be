@@ -3,7 +3,9 @@ import type { SupportTicket, Prisma } from '@prisma/client';
 // ==================== Repository Interface ====================
 export interface ISupportTicketRepository {
   // Create a support ticket
-  create(data: Prisma.SupportTicketUncheckedCreateInput): Promise<SupportTicket>;
+  create(
+    data: Prisma.SupportTicketUncheckedCreateInput,
+  ): Promise<SupportTicket>;
 
   // Find all support tickets for a user, ordered by createdAt desc
   findManyByUser(userId: string): Promise<SupportTicket[]>;

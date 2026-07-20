@@ -167,7 +167,10 @@ export class StoryCoreController {
     }
 
     if (kidId) {
-      await this.kidOwnership.getOwnedKidOrThrow(kidId, req.authUserData.userId);
+      await this.kidOwnership.getOwnedKidOrThrow(
+        kidId,
+        req.authUserData.userId,
+      );
     }
 
     const baseFilter = {
@@ -404,7 +407,11 @@ export class StoryCoreController {
     @Param('id') id: string,
     @Query('permanent') permanent: boolean = false,
   ) {
-    await this.kidOwnership.getOwnedStoryOrThrow(id, req.authUserData.userId, true);
+    await this.kidOwnership.getOwnedStoryOrThrow(
+      id,
+      req.authUserData.userId,
+      true,
+    );
     return this.storyService.deleteStory(id, permanent);
   }
 
@@ -434,7 +441,11 @@ export class StoryCoreController {
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
   ) {
-    await this.kidOwnership.getOwnedStoryOrThrow(id, req.authUserData.userId, true);
+    await this.kidOwnership.getOwnedStoryOrThrow(
+      id,
+      req.authUserData.userId,
+      true,
+    );
     return this.storyService.undoDeleteStory(id);
   }
 

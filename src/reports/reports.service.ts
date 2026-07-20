@@ -96,8 +96,7 @@ export class ReportsService {
    * Get weekly overview for all kids of a parent
    */
   async getWeeklyOverview(parentId: string): Promise<WeeklyReportDto> {
-    const kids =
-      await this.kidRepository.findKidsByParentWithAvatar(parentId);
+    const kids = await this.kidRepository.findKidsByParentWithAvatar(parentId);
 
     // Get start and end of current week (Monday to Sunday)
     const now = new Date();
@@ -137,12 +136,11 @@ export class ReportsService {
           );
 
         // Badges earned (reward redemptions)
-        const badgesEarned =
-          await this.rewardRedemptionRepository.countInRange(
-            kid.id,
-            weekStart,
-            weekEnd,
-          );
+        const badgesEarned = await this.rewardRedemptionRepository.countInRange(
+          kid.id,
+          weekStart,
+          weekEnd,
+        );
 
         return {
           kidId: kid.id,
@@ -192,11 +190,10 @@ export class ReportsService {
     }
 
     // Update or create progress record
-    const progress =
-      await this.storyProgressRepository.upsertCompletedProgress(
-        kidId,
-        storyId,
-      );
+    const progress = await this.storyProgressRepository.upsertCompletedProgress(
+      kidId,
+      storyId,
+    );
 
     // Trigger badge progress for story read
     await this.badgeProgressEngine.recordActivity(
@@ -213,8 +210,7 @@ export class ReportsService {
    * Get detailed report for a specific kid
    */
   async getKidDetailedReport(kidId: string): Promise<KidDetailedReportDto> {
-    const kid =
-      await this.kidRepository.findKidWithAvatarAndActivity(kidId);
+    const kid = await this.kidRepository.findKidWithAvatarAndActivity(kidId);
 
     if (!kid) {
       throw new BadRequestException('Kid not found');

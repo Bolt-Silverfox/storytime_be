@@ -7,10 +7,7 @@ export interface IDailyChallengeAssignmentRepository {
 
   // Mark matching daily challenge assignments as completed
   // (updateMany since there's no unique constraint)
-  markCompleted(
-    kidId: string,
-    challengeId: string,
-  ): Promise<{ count: number }>;
+  markCompleted(kidId: string, challengeId: string): Promise<{ count: number }>;
 
   // Find the first daily challenge assignment for a kid and challenge
   findFirstByKidAndChallenge(

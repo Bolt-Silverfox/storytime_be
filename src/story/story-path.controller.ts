@@ -48,7 +48,10 @@ export class StoryPathController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: StartStoryPathDto,
   ) {
-    await this.kidOwnership.getOwnedKidOrThrow(dto.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(
+      dto.kidId,
+      req.authUserData.userId,
+    );
     return this.storyService.startStoryPath(dto);
   }
 

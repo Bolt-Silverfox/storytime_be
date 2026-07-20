@@ -65,9 +65,7 @@ export class PrismaDeviceTokenRepository implements IDeviceTokenRepository {
     });
   }
 
-  async findActiveMobileTokens(
-    userId: string,
-  ): Promise<{ token: string }[]> {
+  async findActiveMobileTokens(userId: string): Promise<{ token: string }[]> {
     return this.prisma.deviceToken.findMany({
       where: {
         userId,

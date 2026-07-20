@@ -63,7 +63,10 @@ export class StoryFavoriteController {
     @Req() req: AuthenticatedRequest,
     @Body() body: FavoriteDto,
   ) {
-    await this.kidOwnership.getOwnedKidOrThrow(body.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(
+      body.kidId,
+      req.authUserData.userId,
+    );
     return this.storyService.addFavorite(body);
   }
 

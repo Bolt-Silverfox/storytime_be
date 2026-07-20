@@ -84,9 +84,7 @@ export class FcmService implements OnModuleInit {
     try {
       // Get user's active device tokens (excluding web - web uses SSE)
       const deviceTokens =
-        await this.deviceTokenRepository.findActiveMobileTokens(
-          payload.userId,
-        );
+        await this.deviceTokenRepository.findActiveMobileTokens(payload.userId);
 
       if (deviceTokens.length === 0) {
         this.logger.debug(

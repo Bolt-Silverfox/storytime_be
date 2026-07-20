@@ -21,7 +21,18 @@ import { CircuitBreakerService } from './services/circuit-breaker.service';
       }),
     }),
   ],
-  providers: [AuthSessionGuard, AdminGuard, CacheMetricsService, CircuitBreakerService],
-  exports: [AuthSessionGuard, AdminGuard, JwtModule, CacheMetricsService, CircuitBreakerService],
+  providers: [
+    AuthSessionGuard,
+    AdminGuard,
+    CacheMetricsService,
+    CircuitBreakerService,
+  ],
+  exports: [
+    AuthSessionGuard,
+    AdminGuard,
+    JwtModule,
+    CacheMetricsService,
+    CircuitBreakerService,
+  ],
 })
 export class SharedModule {}
