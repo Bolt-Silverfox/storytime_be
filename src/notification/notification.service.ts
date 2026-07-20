@@ -93,6 +93,14 @@ export class NotificationService {
    */
   private readonly broadcastTopic: string;
 
+  /**
+   * The legacy, un-scoped topic every device was historically subscribed to.
+   * We no longer subscribe or broadcast to it; the re-seed migration also
+   * unsubscribes existing devices from it so a manual override broadcast to
+   * `all_users` can't reach cross-environment subscribers.
+   */
+  private readonly legacyBroadcastTopic = 'all_users';
+
   constructor(
     private readonly configService: ConfigService<EnvConfig, true>,
     private readonly prisma: PrismaService,
@@ -1255,12 +1263,35 @@ export class NotificationService {
 
       const tokens = devices.map((d) => d.token);
       await this.pushProvider.subscribeToTopic(tokens, topic);
+
+      // Migration cleanup: also unsubscribe this batch from the legacy global
+      // `all_users` topic, so a manual broadcast that overrides
+      // `topic: 'all_users'` can no longer reach stale cross-environment
+      // subscribers. Skip if we're deliberately (re)seeding `all_users` itself.
+      // Best-effort: a legacy-unsubscribe failure must not abort the re-seed.
+      if (topic !== this.legacyBroadcastTopic) {
+        try {
+          await this.pushProvider.unsubscribeFromTopic(
+            tokens,
+            this.legacyBroadcastTopic,
+          );
+        } catch (err) {
+          this.logger.warn(
+            `Failed to unsubscribe batch ${batches + 1} from legacy topic ` +
+              `${this.legacyBroadcastTopic}: ${(err as Error).message}`,
+          );
+        }
+      }
+
       batches++;
       total += tokens.length;
       cursor = devices[devices.length - 1].id;
 
       this.logger.log(
-        `Subscribed batch ${batches} (${tokens.length} tokens) to topic: ${topic}`,
+        `Subscribed batch ${batches} (${tokens.length} tokens) to topic: ${topic}` +
+          (topic !== this.legacyBroadcastTopic
+            ? ` and unsubscribed from ${this.legacyBroadcastTopic}`
+            : ''),
       );
 
       if (devices.length < BATCH_SIZE) break;

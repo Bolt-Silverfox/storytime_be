@@ -151,5 +151,35 @@ describe('NotificationService - env-scoped broadcast topic', () => {
         'all_users_staging',
       );
     });
+
+    it('also unsubscribes the batch from the legacy all_users topic', async () => {
+      const { service, mockPrisma, mockPushProvider } =
+        await buildService('staging');
+
+      mockPrisma.deviceToken.findMany
+        .mockResolvedValueOnce([{ id: 'dt-1', token: 'token-1' }])
+        .mockResolvedValueOnce([]);
+
+      await service.subscribeAllExistingDevicesToTopic();
+
+      // Migration cleanup: same batch is removed from the legacy global topic.
+      expect(mockPushProvider.unsubscribeFromTopic).toHaveBeenCalledWith(
+        ['token-1'],
+        'all_users',
+      );
+    });
+
+    it('does NOT unsubscribe when deliberately re-seeding all_users itself', async () => {
+      const { service, mockPrisma, mockPushProvider } =
+        await buildService('staging');
+
+      mockPrisma.deviceToken.findMany
+        .mockResolvedValueOnce([{ id: 'dt-1', token: 'token-1' }])
+        .mockResolvedValueOnce([]);
+
+      await service.subscribeAllExistingDevicesToTopic('all_users');
+
+      expect(mockPushProvider.unsubscribeFromTopic).not.toHaveBeenCalled();
+    });
   });
 });
