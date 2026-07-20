@@ -59,7 +59,10 @@ export class StoryProgressController {
     @Req() req: AuthenticatedRequest,
     @Body() body: StoryProgressDto,
   ) {
-    await this.kidOwnership.getOwnedKidOrThrow(body.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(
+      body.kidId,
+      req.authUserData.userId,
+    );
     return this.storyService.setProgress(body);
   }
 

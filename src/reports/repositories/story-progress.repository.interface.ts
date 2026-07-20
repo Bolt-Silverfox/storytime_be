@@ -3,11 +3,7 @@ import type { StoryProgress } from '@prisma/client';
 // ==================== Repository Interface ====================
 export interface IStoryProgressRepository {
   // Count completed stories for a kid within a date range (lastAccessed)
-  countCompletedInRange(
-    kidId: string,
-    gte: Date,
-    lt: Date,
-  ): Promise<number>;
+  countCompletedInRange(kidId: string, gte: Date, lt: Date): Promise<number>;
 
   // Count completed stories for a kid since a date (lastAccessed)
   countCompletedSince(kidId: string, gte: Date): Promise<number>;

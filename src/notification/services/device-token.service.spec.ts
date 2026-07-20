@@ -217,9 +217,12 @@ describe('DeviceTokenService', () => {
       );
 
       expect(result).toEqual({ success: true });
-      expect(repository.updateByToken).toHaveBeenCalledWith('device-token-abc', {
-        isActive: false,
-      });
+      expect(repository.updateByToken).toHaveBeenCalledWith(
+        'device-token-abc',
+        {
+          isActive: false,
+        },
+      );
     });
 
     it('should throw NotFoundException when token does not exist', async () => {

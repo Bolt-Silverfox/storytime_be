@@ -178,8 +178,7 @@ export class DeviceTokenService {
    * Check if user has web token registered (for SSE preference)
    */
   async hasActiveWebToken(userId: string): Promise<boolean> {
-    const count =
-      await this.deviceTokenRepository.countActiveWebTokens(userId);
+    const count = await this.deviceTokenRepository.countActiveWebTokens(userId);
 
     return count > 0;
   }

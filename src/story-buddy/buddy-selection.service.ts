@@ -39,9 +39,8 @@ export class BuddySelectionService {
     }
 
     // Verify buddy exists, is active, and not soft deleted
-    const buddy = await this.buddySelectionRepository.findStoryBuddyById(
-      buddyId,
-    );
+    const buddy =
+      await this.buddySelectionRepository.findStoryBuddyById(buddyId);
 
     if (!buddy) {
       throw new NotFoundException('Story buddy not found');
