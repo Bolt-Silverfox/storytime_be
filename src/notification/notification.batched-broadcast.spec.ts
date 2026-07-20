@@ -162,7 +162,11 @@ describe('NotificationService - broadcastBatchedToAllDevices', () => {
       .mockImplementation(() => undefined);
     mockPushQueueService.queueTokenBatch
       .mockResolvedValueOnce({ queued: true, jobId: 'a' })
-      .mockResolvedValueOnce({ queued: false, jobId: 'b', error: 'redis down' });
+      .mockResolvedValueOnce({
+        queued: false,
+        jobId: 'b',
+        error: 'redis down',
+      });
 
     const summary = await service.broadcastBatchedToAllDevices({
       title: 'Hi',
@@ -184,7 +188,11 @@ describe('NotificationService - broadcastBatchedToAllDevices', () => {
     stubDevicePages(tokens);
     mockPushQueueService.queueTokenBatch
       .mockResolvedValueOnce({ queued: false, jobId: 'a', error: 'redis down' })
-      .mockResolvedValueOnce({ queued: false, jobId: 'b', error: 'redis down' });
+      .mockResolvedValueOnce({
+        queued: false,
+        jobId: 'b',
+        error: 'redis down',
+      });
 
     await expect(
       service.broadcastBatchedToAllDevices({
