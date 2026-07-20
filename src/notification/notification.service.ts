@@ -1365,9 +1365,7 @@ export class NotificationService {
     batchSize?: number;
     intervalSeconds?: number;
   }): Promise<BatchedBroadcastSummary> {
-    this.logger.log(
-      `Handling batched broadcast event: "${payload.title}"`,
-    );
+    this.logger.log(`Handling batched broadcast event: "${payload.title}"`);
     try {
       return await this.broadcastBatchedToAllDevices(payload);
     } catch (err) {

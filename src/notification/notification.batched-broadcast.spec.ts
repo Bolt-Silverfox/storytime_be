@@ -97,9 +97,7 @@ describe('NotificationService - broadcastBatchedToAllDevices', () => {
     expect(calls[2][0]).toHaveLength(250);
 
     // Delay is the 5th positional arg (tokens, title, body, data, delay).
-    const delays = calls
-      .map((c) => c[4] as number)
-      .sort((a, b) => a - b);
+    const delays = calls.map((c) => c[4] as number).sort((a, b) => a - b);
     expect(delays).toEqual([0, 120_000, 240_000]);
 
     // Every token is delivered exactly once, no gaps/overlaps.
@@ -157,7 +155,11 @@ describe('NotificationService - broadcastBatchedToAllDevices', () => {
     stubDevicePages(tokens);
     mockPushQueueService.queueTokenBatch
       .mockResolvedValueOnce({ queued: true, jobId: 'a' })
-      .mockResolvedValueOnce({ queued: false, jobId: 'b', error: 'redis down' });
+      .mockResolvedValueOnce({
+        queued: false,
+        jobId: 'b',
+        error: 'redis down',
+      });
 
     await expect(
       service.broadcastBatchedToAllDevices({

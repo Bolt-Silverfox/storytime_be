@@ -191,7 +191,9 @@ export class PushQueueService {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to queue token batch ${jobId}: ${errorMessage}`);
+      this.logger.error(
+        `Failed to queue token batch ${jobId}: ${errorMessage}`,
+      );
 
       return { queued: false, jobId, error: errorMessage };
     }
