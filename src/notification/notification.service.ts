@@ -59,6 +59,15 @@ export interface BatchedBroadcastSummary {
   totalDevices: number;
   /** Number of push jobs enqueued (one per chunk of <= batchSize tokens). */
   batches: number;
+  /** Batches successfully enqueued to BullMQ (these WILL deliver). */
+  succeededBatches: number;
+  /**
+   * Batches that failed to enqueue. When this is > 0 but succeededBatches is
+   * also > 0, the succeeded batches are already queued and will still fire —
+   * do NOT blindly re-run the full broadcast, or the already-queued cohort is
+   * double-delivered. Re-target only the failed cohort instead.
+   */
+  failedBatches: number;
   /** Effective chunk size after clamping to [1, 500]. */
   batchSize: number;
   /** Delay (seconds) before the final batch fires: (batches - 1) * intervalSeconds. */
@@ -1303,6 +1312,8 @@ export class NotificationService {
       return {
         totalDevices: 0,
         batches: 0,
+        succeededBatches: 0,
+        failedBatches: 0,
         batchSize,
         estimatedDurationSeconds: 0,
       };
@@ -1335,19 +1346,39 @@ export class NotificationService {
       ),
     );
 
-    // Surface enqueue failures so the caller (and emitAsync) can detect them,
-    // mirroring how the topic broadcast handler propagates queue failures.
+    // Partial-failure handling. queueTokenBatch never rejects — it returns
+    // { queued: false } on error — so by the time we're here every SUCCEEDED
+    // chunk is already enqueued in BullMQ and WILL fire. If we threw on any
+    // failure (as before), the caller would see a generic error with no idea
+    // how many batches already went out, and a blind full re-run would
+    // double-deliver to the already-queued cohort. So:
+    //   - all batches failed  -> nothing queued, a full retry is safe -> throw.
+    //   - some batches failed  -> surface counts + warn; do NOT throw.
     const failed = enqueueResults.filter((r) => !r.queued);
-    if (failed.length > 0) {
-      throw new Error(
-        `Batched broadcast failed to enqueue ${failed.length}/${enqueueResults.length} batch(es): ` +
-          failed.map((f) => f.error ?? 'unknown error').join('; '),
+    const failedBatches = failed.length;
+    const succeededBatches = enqueueResults.length - failedBatches;
+
+    if (failedBatches > 0) {
+      const errs = failed.map((f) => f.error ?? 'unknown error').join('; ');
+      if (succeededBatches === 0) {
+        // Nothing was enqueued — safe to fail loudly so the caller can retry.
+        throw new Error(
+          `Batched broadcast failed to enqueue all ${failedBatches} batch(es): ${errs}`,
+        );
+      }
+      // Partial success: some batches are already queued and will deliver.
+      this.logger.warn(
+        `Batched broadcast PARTIAL failure: ${succeededBatches}/${enqueueResults.length} batch(es) ` +
+          `enqueued and WILL deliver; ${failedBatches} failed (${errs}). Do NOT re-run the full ` +
+          `broadcast — that double-delivers to the already-queued cohort. Re-target only the failed batches.`,
       );
     }
 
     return {
       totalDevices,
       batches: chunks.length,
+      succeededBatches,
+      failedBatches,
       batchSize,
       estimatedDurationSeconds,
     };

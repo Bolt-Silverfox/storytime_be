@@ -84,6 +84,8 @@ describe('NotificationService - broadcastBatchedToAllDevices', () => {
     expect(result).toEqual({
       totalDevices: 1250,
       batches: 3,
+      succeededBatches: 3,
+      failedBatches: 0,
       batchSize: 500,
       estimatedDurationSeconds: 240, // (3 - 1) * 120
     });
@@ -143,6 +145,8 @@ describe('NotificationService - broadcastBatchedToAllDevices', () => {
     expect(result).toEqual({
       totalDevices: 0,
       batches: 0,
+      succeededBatches: 0,
+      failedBatches: 0,
       batchSize: 500,
       estimatedDurationSeconds: 0,
     });
@@ -150,16 +154,37 @@ describe('NotificationService - broadcastBatchedToAllDevices', () => {
     expect(warnSpy).toHaveBeenCalled();
   });
 
-  it('throws when a batch fails to enqueue', async () => {
+  it('does NOT throw on partial enqueue failure — returns counts and warns', async () => {
+    const tokens = Array.from({ length: 600 }, (_, i) => `t-${i}`);
+    stubDevicePages(tokens);
+    const warnSpy = jest
+      .spyOn(service['logger'], 'warn')
+      .mockImplementation(() => undefined);
+    mockPushQueueService.queueTokenBatch
+      .mockResolvedValueOnce({ queued: true, jobId: 'a' })
+      .mockResolvedValueOnce({ queued: false, jobId: 'b', error: 'redis down' });
+
+    const summary = await service.broadcastBatchedToAllDevices({
+      title: 'Hi',
+      body: 'There',
+      batchSize: 500,
+      intervalSeconds: 0,
+    });
+
+    // Successful batch is already queued, so we must NOT throw (a retry would
+    // double-deliver). Surface the split instead.
+    expect(summary.batches).toBe(2);
+    expect(summary.succeededBatches).toBe(1);
+    expect(summary.failedBatches).toBe(1);
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('throws when ALL batches fail to enqueue (nothing queued — retry is safe)', async () => {
     const tokens = Array.from({ length: 600 }, (_, i) => `t-${i}`);
     stubDevicePages(tokens);
     mockPushQueueService.queueTokenBatch
-      .mockResolvedValueOnce({ queued: true, jobId: 'a' })
-      .mockResolvedValueOnce({
-        queued: false,
-        jobId: 'b',
-        error: 'redis down',
-      });
+      .mockResolvedValueOnce({ queued: false, jobId: 'a', error: 'redis down' })
+      .mockResolvedValueOnce({ queued: false, jobId: 'b', error: 'redis down' });
 
     await expect(
       service.broadcastBatchedToAllDevices({
@@ -168,7 +193,7 @@ describe('NotificationService - broadcastBatchedToAllDevices', () => {
         batchSize: 500,
         intervalSeconds: 0,
       }),
-    ).rejects.toThrow(/failed to enqueue/i);
+    ).rejects.toThrow(/failed to enqueue all/i);
   });
 
   it('falls back to defaults for non-finite inputs', async () => {
