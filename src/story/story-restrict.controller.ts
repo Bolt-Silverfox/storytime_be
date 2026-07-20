@@ -8,12 +8,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiBody,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -42,7 +37,10 @@ export class StoryRestrictController {
     @Req() req: AuthenticatedRequest,
     @Body() body: RestrictStoryDto,
   ) {
-    await this.kidOwnership.getOwnedKidOrThrow(body.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(
+      body.kidId,
+      req.authUserData.userId,
+    );
     return this.storyService.restrictStory({
       ...body,
       userId: req.authUserData.userId,

@@ -410,9 +410,8 @@ export class VoiceQuotaService {
       // Determine source of locked voice: explicit lock vs user preference
       let lockedVoice: { elevenLabsVoiceId: string | null } | null = null;
       if (lockedUuid === usage?.selectedSecondVoiceId) {
-        lockedVoice = await this.voiceRepository.findElevenLabsIdById(
-          lockedUuid,
-        );
+        lockedVoice =
+          await this.voiceRepository.findElevenLabsIdById(lockedUuid);
       } else if (user?.preferredVoice) {
         lockedVoice = {
           elevenLabsVoiceId: user.preferredVoice.elevenLabsVoiceId,

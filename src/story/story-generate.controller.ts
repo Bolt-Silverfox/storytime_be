@@ -66,7 +66,10 @@ export class StoryGenerateController {
   ) {
     // If kidId is provided, use the specialized method
     if (body.kidId) {
-      await this.kidOwnership.getOwnedKidOrThrow(body.kidId, req.authUserData.userId);
+      await this.kidOwnership.getOwnedKidOrThrow(
+        body.kidId,
+        req.authUserData.userId,
+      );
       return this.storyService.generateStoryForKid(
         body.kidId,
         body.themes,

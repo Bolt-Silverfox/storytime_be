@@ -192,11 +192,16 @@ describe('AdminController', () => {
       const result = (await systemController.getSubscriptions('active')) as any;
 
       expect(result.data).toEqual(mockSubs);
-      expect(adminSystemService.getSubscriptions).toHaveBeenCalledWith('active');
+      expect(adminSystemService.getSubscriptions).toHaveBeenCalledWith(
+        'active',
+      );
     });
 
     it('createBackup: should delegate to the system service', () => {
-      const mockBackup = { message: 'Backup created successfully', timestamp: new Date() };
+      const mockBackup = {
+        message: 'Backup created successfully',
+        timestamp: new Date(),
+      };
       adminSystemService.createBackup.mockReturnValue(mockBackup);
 
       const result = systemController.createBackup() as any;

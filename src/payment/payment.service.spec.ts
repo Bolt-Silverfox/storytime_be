@@ -423,9 +423,9 @@ describe('PaymentService', () => {
         currency: 'USD',
       });
       expect(mockSubscriptionRepo.findFirstByUser).toHaveBeenCalledWith('u1');
-      expect(
-        mockPaymentTxRepo.findLatestSuccessfulByUser,
-      ).toHaveBeenCalledWith('u1');
+      expect(mockPaymentTxRepo.findLatestSuccessfulByUser).toHaveBeenCalledWith(
+        'u1',
+      );
     });
 
     it('should return null if no subscription exists', async () => {

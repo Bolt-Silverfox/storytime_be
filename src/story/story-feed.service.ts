@@ -448,12 +448,11 @@ export class StoryFeedService {
         readStatus: null as 'done' | 'reading' | null,
       }));
 
-    const readProgress = await this.storyRepository.findManyUserStoryProgressRaw(
-      {
+    const readProgress =
+      await this.storyRepository.findManyUserStoryProgressRaw({
         where: { userId, storyId: { in: storyIds }, isDeleted: false },
         select: { storyId: true, completed: true },
-      },
-    );
+      });
     const progressMap = new Map(
       readProgress.map((p) => [p.storyId, p.completed]),
     );

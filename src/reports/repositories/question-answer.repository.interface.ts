@@ -13,10 +13,7 @@ export interface IQuestionAnswerRepository {
   ): Promise<CreatedQuestionAnswer>;
 
   // Find all answers for a kid answered on/after the given date
-  findAnswersByKidSince(
-    kidId: string,
-    since: Date,
-  ): Promise<QuestionAnswer[]>;
+  findAnswersByKidSince(kidId: string, since: Date): Promise<QuestionAnswer[]>;
 }
 
 export const QUESTION_ANSWER_REPOSITORY = Symbol('QUESTION_ANSWER_REPOSITORY');

@@ -73,10 +73,12 @@ describe('StoryController', () => {
       .compile();
 
     coreController = module.get<StoryCoreController>(StoryCoreController);
-    generateController =
-      module.get<StoryGenerateController>(StoryGenerateController);
-    libraryController =
-      module.get<StoryLibraryController>(StoryLibraryController);
+    generateController = module.get<StoryGenerateController>(
+      StoryGenerateController,
+    );
+    libraryController = module.get<StoryLibraryController>(
+      StoryLibraryController,
+    );
     recommendationController = module.get<StoryRecommendationController>(
       StoryRecommendationController,
     );
@@ -95,7 +97,12 @@ describe('StoryController', () => {
       const theme = 'Space';
       const category = 'Adventure';
 
-      await generateController.generateStoryForKid(mockReq, kidId, theme, category);
+      await generateController.generateStoryForKid(
+        mockReq,
+        kidId,
+        theme,
+        category,
+      );
 
       // Verify the controller converts single strings to arrays for the service
       expect(service.generateStoryForKid).toHaveBeenCalledWith(
@@ -204,13 +211,15 @@ describe('StoryController', () => {
   describe('IDOR protection', () => {
     it('should throw NotFoundException when kid does not belong to parent', async () => {
       mockStoryRepository.findKidByIdAndParent.mockResolvedValue(null);
-      await expect(libraryController.getCreated(mockReq, 'kid-999')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        libraryController.getCreated(mockReq, 'kid-999'),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw NotFoundException when story does not exist', async () => {
-      mockStoryRepository.findStoryByIdWithCreatorParent.mockResolvedValue(null);
+      mockStoryRepository.findStoryByIdWithCreatorParent.mockResolvedValue(
+        null,
+      );
       await expect(
         coreController.updateStory(
           mockReq,

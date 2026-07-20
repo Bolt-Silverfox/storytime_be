@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, Logger, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  Logger,
+  Inject,
+} from '@nestjs/common';
 import { AiProviders } from '@/shared/constants/ai-providers.constants';
 import {
   SubscriptionAnalyticsDto,

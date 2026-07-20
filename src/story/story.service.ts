@@ -29,10 +29,7 @@ import {
 } from './dto/story.dto';
 
 import { UploadService } from '../upload/upload.service';
-import {
-  DailyChallengeAssignment,
-  DailyChallenge,
-} from '@prisma/client';
+import { DailyChallengeAssignment, DailyChallenge } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import {

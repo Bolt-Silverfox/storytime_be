@@ -70,7 +70,10 @@ export class StoryDailyChallengeController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: AssignDailyChallengeDto,
   ) {
-    await this.kidOwnership.getOwnedKidOrThrow(dto.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(
+      dto.kidId,
+      req.authUserData.userId,
+    );
     return this.storyService.assignDailyChallenge(dto);
   }
 
@@ -88,7 +91,10 @@ export class StoryDailyChallengeController {
     if (!assignment) {
       throw new NotFoundException('Assignment not found');
     }
-    await this.kidOwnership.getOwnedKidOrThrow(assignment.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(
+      assignment.kidId,
+      req.authUserData.userId,
+    );
     return this.storyService.completeDailyChallenge(dto);
   }
 
@@ -116,7 +122,10 @@ export class StoryDailyChallengeController {
     if (!assignment) {
       throw new NotFoundException('Assignment not found');
     }
-    await this.kidOwnership.getOwnedKidOrThrow(assignment.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(
+      assignment.kidId,
+      req.authUserData.userId,
+    );
     return assignment;
   }
 
