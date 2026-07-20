@@ -119,12 +119,16 @@ blue **overwrites** green on a device — switch by reinstalling or use a 2nd de
 
 ## Promote blue → green
 
-Once `blue.dev.*` is validated end-to-end:
-1. Merge/fast-forward `develop-v1.3.0` → `develop-v1.2.0` (backend), and the
-   matching FE/mobile branches.
-2. Re-run the **green** deploy from that branch (green now serves v1.3.0).
-3. Blue is free for the next candidate. `storytime_db_blue` holds throwaway
-   validation data; green data lives in `storytime_dev`.
+**`develop-v1.3.0` *becomes* the new stable line — there is NO merge-down into
+`develop-v1.2.0`.** Once `blue.dev.*` is validated end-to-end:
+1. Point the **green** deploy at `develop-v1.3.0` (backend), and the matching
+   FE/mobile blue branches, then re-run the green deploy so green now serves
+   v1.3.0. `develop-v1.2.0` (and the old FE/mobile v1.2.0 branches) are retired,
+   not updated.
+2. Green keeps its own data — the green deploy continues to run against
+   `storytime_dev`; only the code/branch it deploys from changes.
+3. Blue (`:3601` / `:3010` / `storytime_db_blue`) is then free for the next
+   candidate. `storytime_db_blue` holds throwaway validation data.
 
 ## Verify
 
