@@ -1,6 +1,12 @@
 generator client {
   provider      = "prisma-client-js"
-  engineType    = "binary"
+  // Use the in-process library (Node-API) engine, not the binary engine.
+  // The binary engine spawns a separate `query-engine` subprocess that owns
+  // the DB connection pool; on a non-graceful shutdown (SIGKILL / crash /
+  // Ctrl-C) that subprocess is orphaned to init and keeps its connections
+  // open, exhausting the shared RDS. The library engine runs in-process, so
+  // connections always die with the Node process — nothing to orphan.
+  engineType    = "library"
   binaryTargets = ["native"]
 }
 
