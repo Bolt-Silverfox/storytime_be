@@ -24,8 +24,12 @@ export class BroadcastNotificationDto {
   body: string;
 
   @ApiPropertyOptional({
-    example: 'all_users',
-    description: 'FCM topic to broadcast to (defaults to all_users)',
+    example: 'all_users_production',
+    description:
+      'FCM topic to broadcast to. Defaults to the environment-scoped topic ' +
+      '`all_users_<NODE_ENV>` (e.g. all_users_production) so broadcasts never ' +
+      'bleed across environments that share a Firebase project. Provide a value ' +
+      'only to override the default.',
   })
   @IsOptional()
   @IsString()

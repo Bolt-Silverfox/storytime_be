@@ -2748,7 +2748,10 @@ export class AdminService {
   async broadcastNotification(
     dto: BroadcastNotificationDto,
   ): Promise<{ sent: boolean; topic: string; inAppDelivered: number }> {
-    const topic = dto.topic ?? 'all_users';
+    // Default to the env-scoped broadcast topic (all_users_<NODE_ENV>) resolved
+    // by NotificationService, so we never fan out to the global `all_users`
+    // topic that would bleed across dev/staging/prod (shared Firebase project).
+    const topic = dto.topic ?? this.notificationService.getBroadcastTopic();
 
     await this.eventEmitter.emitAsync('notification.broadcast', {
       topic,
@@ -2822,10 +2825,12 @@ export class AdminService {
 
   /**
    * Seed all existing device tokens to a topic.
+   * Defaults to the env-scoped broadcast topic (all_users_<NODE_ENV>) so that,
+   * after deploy, existing devices re-subscribe to their environment's topic.
    * Emits a 'notification.seed-topic' event.
    */
   async seedTopicSubscriptions(
-    topic: string = 'all_users',
+    topic: string = this.notificationService.getBroadcastTopic(),
   ): Promise<{ emitted: boolean }> {
     if (!/^[a-zA-Z0-9\-_.~%]+$/.test(topic)) {
       throw new BadRequestException(

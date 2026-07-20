@@ -80,6 +80,19 @@ export class NotificationService {
   private transporter: nodemailer.Transporter;
   private providers: Map<string, INotificationProvider>;
 
+  /**
+   * Single source of truth for the environment-scoped FCM broadcast topic.
+   *
+   * dev/staging/prod share ONE Firebase project, and FCM topics are global to
+   * the project. A hardcoded `all_users` topic therefore bleeds broadcasts
+   * across environments (a dev broadcast reaches prod-subscribed devices).
+   * Scoping the topic per environment (`all_users_<NODE_ENV>`) guarantees each
+   * backend only ever subscribes/broadcasts to its OWN environment's topic.
+   * `all_users_<env>` stays within the valid FCM topic charset
+   * (`[a-zA-Z0-9-_.~%]+`).
+   */
+  private readonly broadcastTopic: string;
+
   constructor(
     private readonly configService: ConfigService<EnvConfig, true>,
     private readonly prisma: PrismaService,
@@ -108,6 +121,21 @@ export class NotificationService {
     this.providers.set('email', this.emailProvider);
     this.providers.set('in_app', this.inAppProvider);
     this.providers.set('push', this.pushProvider);
+
+    // Compute the environment-scoped broadcast topic once. Fall back to
+    // 'development' when NODE_ENV is unset/empty, matching the env-validation
+    // default so the topic is never `all_users_` (an invalid, unscoped value).
+    const nodeEnv = this.configService.get('NODE_ENV') || 'development';
+    this.broadcastTopic = `all_users_${nodeEnv}`;
+  }
+
+  /**
+   * The environment-scoped FCM topic this backend broadcasts to and subscribes
+   * devices to (e.g. `all_users_production`). Exposed so other modules (e.g.
+   * AdminService) can default to it without duplicating the topic string.
+   */
+  getBroadcastTopic(): string {
+    return this.broadcastTopic;
   }
 
   /**
@@ -982,12 +1010,12 @@ export class NotificationService {
           },
         });
         this.logger.log(`Updated device token for user ${userId}`);
-        // Re-subscribe to all_users topic (best-effort; don't fail token save on FCM side effects)
+        // Re-subscribe to the env-scoped broadcast topic (best-effort; don't fail token save on FCM side effects)
         this.pushProvider
-          .subscribeToTopic([token], 'all_users')
+          .subscribeToTopic([token], this.broadcastTopic)
           .catch((err) =>
             this.logger.warn(
-              `Failed to subscribe updated token to all_users: ${(err as Error).message}`,
+              `Failed to subscribe updated token to ${this.broadcastTopic}: ${(err as Error).message}`,
             ),
           );
         return this.toDeviceTokenResponse(updated);
@@ -1008,12 +1036,12 @@ export class NotificationService {
       this.logger.log(
         `Reassigned device token from user ${existingToken.userId} to ${userId}`,
       );
-      // Subscribe reassigned token to all_users topic (best-effort)
+      // Subscribe reassigned token to the env-scoped broadcast topic (best-effort)
       this.pushProvider
-        .subscribeToTopic([token], 'all_users')
+        .subscribeToTopic([token], this.broadcastTopic)
         .catch((err) =>
           this.logger.warn(
-            `Failed to subscribe reassigned token to all_users: ${(err as Error).message}`,
+            `Failed to subscribe reassigned token to ${this.broadcastTopic}: ${(err as Error).message}`,
           ),
         );
       return this.toDeviceTokenResponse(updated);
@@ -1063,20 +1091,20 @@ export class NotificationService {
     // Best-effort unsubscribe old tokens from broadcast topic
     if (oldTokenStrings.length > 0) {
       this.pushProvider
-        .unsubscribeFromTopic(oldTokenStrings, 'all_users')
+        .unsubscribeFromTopic(oldTokenStrings, this.broadcastTopic)
         .catch((err) =>
           this.logger.warn(
-            `Failed to unsubscribe old tokens from all_users: ${(err as Error).message}`,
+            `Failed to unsubscribe old tokens from ${this.broadcastTopic}: ${(err as Error).message}`,
           ),
         );
     }
 
-    // Subscribe the new token to the all_users topic (best-effort; don't fail registration on FCM side effects)
+    // Subscribe the new token to the env-scoped broadcast topic (best-effort; don't fail registration on FCM side effects)
     this.pushProvider
-      .subscribeToTopic([token], 'all_users')
+      .subscribeToTopic([token], this.broadcastTopic)
       .catch((err) =>
         this.logger.warn(
-          `Failed to subscribe new token to all_users: ${(err as Error).message}`,
+          `Failed to subscribe new token to ${this.broadcastTopic}: ${(err as Error).message}`,
         ),
       );
 
@@ -1129,10 +1157,10 @@ export class NotificationService {
 
     // Best-effort unsubscribe from broadcast topic
     this.pushProvider
-      .unsubscribeFromTopic([token], 'all_users')
+      .unsubscribeFromTopic([token], this.broadcastTopic)
       .catch((err) =>
         this.logger.warn(
-          `Failed to unsubscribe token from all_users: ${(err as Error).message}`,
+          `Failed to unsubscribe token from ${this.broadcastTopic}: ${(err as Error).message}`,
         ),
       );
 
@@ -1202,11 +1230,12 @@ export class NotificationService {
   }
 
   /**
-   * Subscribe all existing active device tokens to the all_users topic.
+   * Subscribe all existing active device tokens to the broadcast topic.
+   * Defaults to the env-scoped topic (`all_users_<NODE_ENV>`); overridable.
    * Run once to seed existing devices. Processes in batches of 1000 (Firebase limit).
    */
   async subscribeAllExistingDevicesToTopic(
-    topic: string = 'all_users',
+    topic: string = this.broadcastTopic,
   ): Promise<{ total: number; batches: number }> {
     const BATCH_SIZE = 1000;
     let cursor: string | undefined;
