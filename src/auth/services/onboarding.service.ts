@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -14,6 +15,7 @@ import {
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
+import { EmailVerificationService } from './email-verification.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Role, OnboardingStatus } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
@@ -25,6 +27,8 @@ import { AppEvents, UserRegisteredEvent } from '@/shared/events';
 
 @Injectable()
 export class OnboardingService {
+  private readonly logger = new Logger(OnboardingService.name);
+
   constructor(
     @Inject(AUTH_REPOSITORY)
     private readonly authRepository: IAuthRepository,
@@ -32,6 +36,7 @@ export class OnboardingService {
     private readonly tokenService: TokenService,
     private readonly eventEmitter: EventEmitter2,
     private readonly configService: ConfigService,
+    private readonly emailVerificationService: EmailVerificationService,
   ) {}
 
   async register(data: RegisterDto): Promise<LoginResponseDto | null> {
@@ -62,6 +67,21 @@ export class OnboardingService {
     });
 
     // side-effects (notification preferences, etc.) are handled by activity-log and notification-preference listeners
+
+    // Send the email-verification code (creates the verification token + dispatches
+    // the email). This mirrors the monolith's authService.register behavior; the
+    // refactor previously dropped it and left the USER_REGISTERED listener a stub,
+    // so no code was ever sent on signup. Non-fatal: a mail hiccup must not fail an
+    // otherwise-successful registration — the user can still use "Resend".
+    try {
+      await this.emailVerificationService.sendEmailVerification(user.email);
+    } catch (err) {
+      this.logger.error(
+        `Failed to send verification email for user ${user.id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
 
     // Emit user registration event
     this.eventEmitter.emit(AppEvents.USER_REGISTERED, {

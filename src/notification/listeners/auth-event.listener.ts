@@ -19,19 +19,17 @@ export class AuthEventListener {
   constructor(private readonly notificationService: NotificationService) {}
 
   /**
-   * Send welcome email when user registers.
-   * Triggered by: AuthService.register()
+   * Observe user registration.
+   * Triggered by: OnboardingService.register().
+   *
+   * NOTE: the verification email is sent by OnboardingService.register itself
+   * (via EmailVerificationService.sendEmailVerification, which owns the token),
+   * not here — this listener only needs the token to build the email and does
+   * not have it. Kept for future welcome-notification wiring / observability.
    */
   @OnEvent(AppEvents.USER_REGISTERED)
   handleUserRegistered(payload: UserRegisteredEvent) {
-    this.logger.log(
-      `Handling user.registered event for user ${payload.userId}`,
-    );
-
-    // Send email verification notification
-    // Note: This should include the verification token in the actual implementation
-    // For now, we'll just log it since we need to refactor how tokens are passed
-    this.logger.log(`Would send email verification to ${payload.email}`);
+    this.logger.log(`user.registered: ${payload.userId}`);
   }
 
   /**
