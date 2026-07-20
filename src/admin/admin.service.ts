@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
   Logger,
   Inject,
 } from '@nestjs/common';
@@ -56,7 +57,11 @@ import {
 } from '@/shared/constants/cache-keys.constants';
 import { DashboardUtil } from './utils/dashboard.util';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
-import { NotificationService } from '../notification/notification.service';
+import {
+  NotificationService,
+  BatchedBroadcastSummary,
+} from '../notification/notification.service';
+import { BatchedBroadcastNotificationDto } from './dto/batched-broadcast-notification.dto';
 import { CreateAdminTicketDto } from './dto/create-admin-ticket.dto';
 import { ResetQuotaDto } from './dto/reset-quota.dto';
 import { GuestStatsDto, GuestActivityFilterDto } from './dto/guest-stats.dto';
@@ -2772,6 +2777,47 @@ export class AdminService {
     }
 
     return { sent: true, topic, inAppDelivered };
+  }
+
+  /**
+   * Broadcast a push notification to all users by fanning out to every active
+   * device token in staggered batches (<= 500 tokens per FCM multicast call),
+   * instead of a single topic push. Emits a 'notification.broadcast-batched'
+   * event handled by the notification module and returns its summary.
+   */
+  async broadcastNotificationBatched(
+    dto: BatchedBroadcastNotificationDto,
+  ): Promise<BatchedBroadcastSummary> {
+    const results = await this.eventEmitter.emitAsync(
+      'notification.broadcast-batched',
+      {
+        title: dto.title,
+        body: dto.body,
+        data: dto.data,
+        batchSize: dto.batchSize,
+        intervalSeconds: dto.intervalSeconds,
+      },
+    );
+
+    const summary = results.find(
+      (r): r is BatchedBroadcastSummary =>
+        !!r && typeof r === 'object' && 'batches' in r,
+    );
+
+    // The notification module registers exactly one listener for this event; a
+    // missing summary means the listener didn't run (misconfiguration), so fail
+    // loudly rather than reporting a false "0 devices" success.
+    if (!summary) {
+      throw new InternalServerErrorException(
+        'Batched broadcast produced no summary; notification listener may not be registered',
+      );
+    }
+
+    this.logger.log(
+      `Batched broadcast emitted: "${dto.title}" -> ${summary.totalDevices} device(s) in ${summary.batches} batch(es)`,
+    );
+
+    return summary;
   }
 
   /**

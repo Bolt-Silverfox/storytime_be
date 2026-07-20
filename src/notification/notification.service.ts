@@ -53,6 +53,18 @@ const USER_CONFIGURABLE_CATEGORIES: PrismaCategory[] = [
   PrismaCategory.SUBSCRIPTION_REMINDER,
 ];
 
+/** Summary returned by a batched (staggered) broadcast run. */
+export interface BatchedBroadcastSummary {
+  /** Total de-duplicated active device tokens targeted. */
+  totalDevices: number;
+  /** Number of push jobs enqueued (one per chunk of <= batchSize tokens). */
+  batches: number;
+  /** Effective chunk size after clamping to [1, 500]. */
+  batchSize: number;
+  /** Delay (seconds) before the final batch fires: (batches - 1) * intervalSeconds. */
+  estimatedDurationSeconds: number;
+}
+
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
@@ -1227,9 +1239,146 @@ export class NotificationService {
     return { total, batches };
   }
 
+  /**
+   * Broadcast a push to ALL active device tokens in staggered batches of
+   * <= 500 tokens (the FCM multicast hard limit), instead of a single topic
+   * fan-out. Batch i is delayed by `i * intervalSeconds` so users don't all
+   * receive the push (and open the app) simultaneously — this protects the
+   * connection-capped production RDS instance.
+   *
+   * Token reads reuse the exact same cursor pagination and active-token filter
+   * (`isActive: true, isDeleted: false`) as `subscribeAllExistingDevicesToTopic`.
+   * Tokens are de-duplicated before chunking so a token never gets two pushes.
+   */
+  async broadcastBatchedToAllDevices(payload: {
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+    batchSize?: number;
+    intervalSeconds?: number;
+  }): Promise<BatchedBroadcastSummary> {
+    // Clamp to safe bounds; fall back to defaults for non-finite inputs (NaN /
+    // Infinity) so a direct programmatic call can't produce NaN chunk sizes.
+    const batchSize = Number.isFinite(payload.batchSize)
+      ? Math.min(Math.max(payload.batchSize as number, 1), 500)
+      : 500;
+    const intervalSeconds = Number.isFinite(payload.intervalSeconds)
+      ? Math.max(payload.intervalSeconds as number, 0)
+      : 120;
+
+    // Page ALL active device tokens using the same batching approach as
+    // subscribeAllExistingDevicesToTopic (DB page size of 1000).
+    const DB_PAGE_SIZE = 1000;
+    let cursor: string | undefined;
+    const uniqueTokens = new Set<string>();
+
+    while (true) {
+      const devices = await this.prisma.deviceToken.findMany({
+        where: { isActive: true, isDeleted: false },
+        select: { id: true, token: true },
+        take: DB_PAGE_SIZE,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        orderBy: { id: 'asc' },
+      });
+
+      if (devices.length === 0) break;
+
+      // De-duplicate tokens across pages so a token appearing twice (e.g. shared
+      // across rows) is only pushed once.
+      for (const device of devices) {
+        uniqueTokens.add(device.token);
+      }
+      cursor = devices[devices.length - 1].id;
+
+      if (devices.length < DB_PAGE_SIZE) break;
+    }
+
+    const tokens = Array.from(uniqueTokens);
+    const totalDevices = tokens.length;
+
+    if (totalDevices === 0) {
+      this.logger.warn(
+        'Batched broadcast requested but no active device tokens were found; nothing queued',
+      );
+      return {
+        totalDevices: 0,
+        batches: 0,
+        batchSize,
+        estimatedDurationSeconds: 0,
+      };
+    }
+
+    // Split tokens into chunks of <= batchSize.
+    const chunks: string[][] = [];
+    for (let i = 0; i < tokens.length; i += batchSize) {
+      chunks.push(tokens.slice(i, i + batchSize));
+    }
+
+    // The last batch fires after (batches - 1) intervals.
+    const estimatedDurationSeconds = (chunks.length - 1) * intervalSeconds;
+
+    this.logger.log(
+      `Batched broadcast: ${totalDevices} device(s) -> ${chunks.length} batch(es) of <= ${batchSize} ` +
+        `at ${intervalSeconds}s intervals (estimated duration ${estimatedDurationSeconds}s)`,
+    );
+
+    // One job per chunk, staggered: batch i is delayed by i * intervalSeconds.
+    const enqueueResults = await Promise.all(
+      chunks.map((chunk, index) =>
+        this.pushQueueService.queueTokenBatch(
+          chunk,
+          payload.title,
+          payload.body,
+          payload.data,
+          index * intervalSeconds * 1000,
+        ),
+      ),
+    );
+
+    // Surface enqueue failures so the caller (and emitAsync) can detect them,
+    // mirroring how the topic broadcast handler propagates queue failures.
+    const failed = enqueueResults.filter((r) => !r.queued);
+    if (failed.length > 0) {
+      throw new Error(
+        `Batched broadcast failed to enqueue ${failed.length}/${enqueueResults.length} batch(es): ` +
+          failed.map((f) => f.error ?? 'unknown error').join('; '),
+      );
+    }
+
+    return {
+      totalDevices,
+      batches: chunks.length,
+      batchSize,
+      estimatedDurationSeconds,
+    };
+  }
+
   // ============================================
   // Event Listeners (cross-module communication)
   // ============================================
+
+  @OnEvent('notification.broadcast-batched')
+  async handleBatchedBroadcastNotification(payload: {
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+    batchSize?: number;
+    intervalSeconds?: number;
+  }): Promise<BatchedBroadcastSummary> {
+    this.logger.log(
+      `Handling batched broadcast event: "${payload.title}"`,
+    );
+    try {
+      return await this.broadcastBatchedToAllDevices(payload);
+    } catch (err) {
+      this.logger.error(
+        `Failed to run batched broadcast for "${payload.title}": ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      // Re-throw so emitAsync in the admin service can detect failure.
+      throw err;
+    }
+  }
 
   @OnEvent('notification.broadcast')
   async handleBroadcastNotification(payload: {
