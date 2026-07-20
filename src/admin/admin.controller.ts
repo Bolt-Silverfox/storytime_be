@@ -2573,10 +2573,11 @@ export class AdminController {
   @ApiQuery({
     name: 'topic',
     required: false,
-    example: 'all_users_production',
     description:
-      'Defaults to the environment-scoped topic all_users_<NODE_ENV>. Omit ' +
-      'after a deploy to re-seed existing devices onto this environment topic.',
+      "Normally omitted: defaults to this deployment's environment-scoped topic " +
+      '(all_users_<NODE_ENV>) to re-seed existing devices after a deploy. If ' +
+      'supplied it must exactly match the current environment topic; legacy ' +
+      '`all_users` and other environments’ topics are rejected (400).',
   })
   @ApiCreatedResponse({ description: 'Topic seed initiated' })
   @HttpCode(HttpStatus.CREATED)
