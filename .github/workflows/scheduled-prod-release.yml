@@ -1,0 +1,171 @@
+name: Scheduled Production Release
+
+# One-off scheduled production deploy of release-v1.2.0.
+# Runs the same steps as deploy-prod.yml's deploy job, but on a wall-clock
+# schedule instead of a PR merge — so the deploy happens unattended and does
+# NOT depend on any interactive session staying alive.
+#
+# NOTE: scheduled workflows only run from the default branch (main), which is
+# why this file lives on main. Cron is UTC. GitHub's scheduler is best-effort
+# and may fire a few minutes late under load.
+#
+# After tonight's run this workflow can be deleted (the cron would otherwise
+# also match 2026-07-20 23:03 UTC again next year).
+
+on:
+  schedule:
+    # 23:03 UTC 2026-07-20  ==  00:03 WAT 2026-07-21  (just past midnight WAT)
+    - cron: '3 23 20 7 *'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch/ref to deploy to production'
+        required: false
+        default: 'release-v1.2.0'
+
+concurrency:
+  group: scheduled-prod-release
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  DEPLOY_REF: ${{ github.event.inputs.ref || 'release-v1.2.0' }}
+
+jobs:
+  deploy:
+    name: Deploy to Production (scheduled)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    environment:
+      name: production
+      url: ${{ vars.PROD_APP_URL }}
+    steps:
+      - name: Checkout release ref
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.DEPLOY_REF }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm store
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Create .env file
+        run: |
+          cat > .env << 'EOF'
+          ${{ secrets.ENV_FILE }}
+          EOF
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build application
+        run: pnpm db:generate && pnpm build
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+        run: pnpm db:migrate:deploy
+
+      - name: Seed database
+        env:
+          NODE_ENV: production
+          DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+        run: pnpm db:seed
+
+      - name: Setup SSH key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
+          chmod 600 /tmp/ssh_key
+
+      - name: Add server host key
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          ssh-keyscan -H "$EC2_HOST" > /tmp/known_hosts
+          chmod 600 /tmp/known_hosts
+
+      - name: Prepare deployment directory
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            mkdir -p /home/ubuntu/storytime/production/storytime-api
+
+      - name: Sync files to server
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='.env.local' \
+            --exclude='coverage' \
+            --exclude='.turbo' \
+            -e "ssh -i /tmp/ssh_key -o UserKnownHostsFile=/tmp/known_hosts -o StrictHostKeyChecking=yes" \
+            ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/production/storytime-api/
+
+      - name: Install dependencies and restart application
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            source ~/.nvm/nvm.sh
+            cd /home/ubuntu/storytime/production/storytime-api
+            [ -f .env ] && chmod 600 .env
+
+            # Install Node dependencies
+            pnpm install --frozen-lockfile
+
+            # Ensure python3-venv is available (required for venv creation)
+            sudo apt-get update -qq && sudo apt-get install -y -qq python3-venv > /dev/null 2>&1 || true
+
+            # Setup Python virtual environment for scripts
+            cd scripts
+            python3 -m venv .venv
+            .venv/bin/pip install -q -r requirements.txt
+            cd ..
+
+            # Restart application (pm2)
+            pnpm deploy:prod
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Wait for app to start
+            sleep 10
+            # Health check
+            curl -sf http://localhost:3500/api/v1/health || exit 1
+            echo "Scheduled production deployment verified successfully"
+
+      - name: Cleanup sensitive files
+        if: always()
+        run: |
+          rm -f /tmp/ssh_key /tmp/known_hosts
+          rm -f .env
