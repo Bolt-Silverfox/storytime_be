@@ -144,6 +144,62 @@ export class PushQueueService {
   }
 
   /**
+   * Queue a single push job targeting a specific chunk of device tokens.
+   *
+   * Reuses the existing SEND_PUSH job path, which sends via
+   * `sendToTokens`/`sendEachForMulticast` when a `tokens[]` array is present
+   * (bypassing the per-user lookup). Used by the batched broadcast to stagger
+   * delivery over time via the BullMQ `delay` option.
+   *
+   * @param tokens Device tokens for this chunk (must be <= 500 for FCM multicast)
+   * @param delay Delay in milliseconds before this job becomes active
+   */
+  async queueTokenBatch(
+    tokens: string[],
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+    delay?: number,
+    category: NotificationCategory = NotificationCategory.SYSTEM_ALERT,
+  ): Promise<QueuedPushResult> {
+    const jobId = randomUUID();
+
+    try {
+      const jobData: PushJobData = {
+        jobId,
+        // Sentinel user id: this job targets explicit tokens, not a user lookup.
+        userId: 'broadcast-batched',
+        category,
+        title,
+        body,
+        data,
+        tokens,
+      };
+
+      await this.pushQueue.add(PUSH_JOB_NAMES.SEND_PUSH, jobData, {
+        ...PUSH_QUEUE_DEFAULT_OPTIONS,
+        priority: PushPriority.NORMAL,
+        delay,
+        jobId,
+      });
+
+      this.logger.log(
+        `Token batch push queued: ${jobId} (${tokens.length} token(s), delay ${delay ?? 0}ms)`,
+      );
+
+      return { queued: true, jobId };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `Failed to queue token batch ${jobId}: ${errorMessage}`,
+      );
+
+      return { queued: false, jobId, error: errorMessage };
+    }
+  }
+
+  /**
    * Queue multiple push notifications (batch)
    */
   async queueBatch(
