@@ -196,8 +196,7 @@ export class PaymentService {
   ): Promise<void> {
     if (!linkedToken || linkedToken === newToken) return;
 
-    const existing =
-      await this.subscriptionRepository.findFirstByUser(userId);
+    const existing = await this.subscriptionRepository.findFirstByUser(userId);
     if (
       !existing ||
       existing.purchaseToken === newToken ||
@@ -372,7 +371,9 @@ export class PaymentService {
     if (!subscription) return null;
 
     const latestTransaction =
-      await this.paymentTransactionRepository.findLatestSuccessfulByUser(userId);
+      await this.paymentTransactionRepository.findLatestSuccessfulByUser(
+        userId,
+      );
 
     const planDef = PLANS[subscription.plan];
     const price = latestTransaction?.amount ?? planDef?.amount ?? 0;
@@ -391,8 +392,7 @@ export class PaymentService {
   }
 
   async cancelSubscription(userId: string) {
-    const existing =
-      await this.subscriptionRepository.findFirstByUser(userId);
+    const existing = await this.subscriptionRepository.findFirstByUser(userId);
     if (!existing) throw new NotFoundException('No subscription to cancel');
 
     // Cancel on Google Play if this is a Google subscription with stored tokens

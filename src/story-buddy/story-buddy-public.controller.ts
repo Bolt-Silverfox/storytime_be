@@ -1,10 +1,5 @@
 import { Controller, Get, Param, UseGuards } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { StoryBuddyService } from './story-buddy.service';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { Public } from '@/shared/decorators/public.decorator';

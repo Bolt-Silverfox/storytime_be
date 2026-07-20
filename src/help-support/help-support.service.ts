@@ -1,9 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { ConfigService } from '@nestjs/config';
 import { render } from '@react-email/render';

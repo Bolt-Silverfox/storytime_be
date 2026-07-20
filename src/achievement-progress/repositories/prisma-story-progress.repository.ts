@@ -3,9 +3,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import type { IStoryProgressRepository } from './story-progress.repository.interface';
 
 @Injectable()
-export class PrismaStoryProgressRepository
-  implements IStoryProgressRepository
-{
+export class PrismaStoryProgressRepository implements IStoryProgressRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async countCompletedForKids(kidIds: string[]): Promise<number> {

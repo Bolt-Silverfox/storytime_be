@@ -166,9 +166,7 @@ describe('UserDeletionService', () => {
 
       it('should log failure if session termination fails but continue with deletion', async () => {
         mockRepo.findUserById.mockResolvedValue(mockUser);
-        mockRepo.deleteAllUserSessions.mockRejectedValue(
-          new Error('DB error'),
-        );
+        mockRepo.deleteAllUserSessions.mockRejectedValue(new Error('DB error'));
         mockRepo.createActivityLog.mockResolvedValue({});
         mockRepo.deleteUserPermanently.mockResolvedValue(mockUser);
 

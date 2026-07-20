@@ -56,11 +56,12 @@ export class StoryFavoriteService {
     const useCursor = cursor !== undefined || limit !== undefined;
     const take = limit ?? DEFAULT_CURSOR_LIMIT;
 
-    const records: FavoriteWithStory[] = await this.withCursorErrorHandling(() =>
-      this.favoriteRepository.findFavoritesByKidId(kidId, {
-        take: useCursor ? take + 1 : undefined,
-        cursor,
-      }),
+    const records: FavoriteWithStory[] = await this.withCursorErrorHandling(
+      () =>
+        this.favoriteRepository.findFavoritesByKidId(kidId, {
+          take: useCursor ? take + 1 : undefined,
+          cursor,
+        }),
     );
 
     if (!useCursor) {

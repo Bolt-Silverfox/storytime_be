@@ -82,7 +82,10 @@ export class StoryRecommendationController {
     @Req() req: AuthenticatedRequest,
     @Body() body: ParentRecommendationDto,
   ) {
-    await this.kidOwnership.getOwnedKidOrThrow(body.kidId, req.authUserData.userId);
+    await this.kidOwnership.getOwnedKidOrThrow(
+      body.kidId,
+      req.authUserData.userId,
+    );
     return this.storyService.recommendStoryToKid(req.authUserData.userId, body);
   }
 
