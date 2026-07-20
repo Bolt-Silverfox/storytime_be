@@ -80,10 +80,15 @@ def verify_purchase(package_name, product_id, purchase_token):
 
         if response.status_code == 200:
             data = response.json()
+            # Surface linkedPurchaseToken so the backend can follow the token
+            # chain to the prior subscription on upgrade/downgrade/re-subscribe.
+            # Google issues a NEW purchase token for these transitions and links
+            # it to the previous token via this field.
             return {
                 "success": True,
                 "isSubscription": True,
-                "data": data
+                "data": data,
+                "linkedPurchaseToken": data.get("linkedPurchaseToken")
             }
         elif response.status_code == 404:
             # Try one-time product instead

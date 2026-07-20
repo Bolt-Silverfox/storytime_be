@@ -219,12 +219,13 @@ export const NotificationRegistry: Record<
     validate: (data) => {
       if (data.amount === undefined || data.amount === null)
         return 'Amount is required';
+      if (!data.currency) return 'Currency is required';
       if (!data.plan) return 'Plan is required';
       return null;
     },
     getTemplate: (data) => {
       return Promise.resolve(
-        `Your payment of ${data.amount} for the ${data.plan} plan was successful.`,
+        `Your payment of ${data.currency} ${data.amount} for the ${data.plan} plan was successful.`,
       );
     },
   },
