@@ -25,6 +25,13 @@ const mockElevenLabsProvider = {
 // Mock EventEmitter2
 const mockEventEmitter = {
   emit: jest.fn(),
+  emitAsync: jest.fn().mockResolvedValue([]),
+};
+
+// Mock NotificationService (env-scoped broadcast topic + in-app fan-out)
+const mockNotificationService = {
+  getBroadcastTopic: jest.fn().mockReturnValue('all_users_production'),
+  broadcastInAppToAllUsers: jest.fn().mockResolvedValue({ delivered: 0 }),
 };
 
 // Mock CouponService
@@ -131,7 +138,7 @@ describe('AdminService', () => {
         },
         {
           provide: NotificationService,
-          useValue: { broadcastInAppToAllUsers: jest.fn() },
+          useValue: mockNotificationService,
         },
       ],
     }).compile();
@@ -143,6 +150,55 @@ describe('AdminService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('broadcastNotification', () => {
+    it('defaults to the env-scoped topic from NotificationService when no topic is provided', async () => {
+      const result = await service.broadcastNotification({
+        title: 'Hello',
+        body: 'World',
+      });
+
+      expect(mockNotificationService.getBroadcastTopic).toHaveBeenCalled();
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith(
+        'notification.broadcast',
+        expect.objectContaining({ topic: 'all_users_production' }),
+      );
+      expect(result.topic).toBe('all_users_production');
+      // Must never fan out to the unscoped global topic.
+      expect(mockEventEmitter.emitAsync).not.toHaveBeenCalledWith(
+        'notification.broadcast',
+        expect.objectContaining({ topic: 'all_users' }),
+      );
+    });
+
+    it('rejects a cross-environment / legacy topic override', async () => {
+      // getBroadcastTopic() is mocked to 'all_users_production'; any other topic
+      // (legacy all_users, another env's topic, or an arbitrary one) is blocked.
+      await expect(
+        service.broadcastNotification({
+          title: 'Hello',
+          body: 'World',
+          topic: 'all_users',
+        }),
+      ).rejects.toThrow(/not allowed/i);
+
+      expect(mockEventEmitter.emitAsync).not.toHaveBeenCalled();
+    });
+
+    it('accepts an explicit topic equal to this environment topic', async () => {
+      const result = await service.broadcastNotification({
+        title: 'Hello',
+        body: 'World',
+        topic: 'all_users_production',
+      });
+
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith(
+        'notification.broadcast',
+        expect.objectContaining({ topic: 'all_users_production' }),
+      );
+      expect(result.topic).toBe('all_users_production');
+    });
   });
 
   describe('getDashboardStats', () => {
