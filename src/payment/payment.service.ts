@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -86,7 +87,8 @@ export class PaymentService {
     } catch (error) {
       if (
         error instanceof BadRequestException ||
-        error instanceof NotFoundException
+        error instanceof NotFoundException ||
+        error instanceof ConflictException
       ) {
         throw error;
       }
@@ -112,6 +114,16 @@ export class PaymentService {
       );
       throw new BadRequestException('Google Play purchase verification failed');
     }
+
+    // Google issues a NEW purchase token on upgrade/downgrade/re-subscribe and
+    // links it to the prior token via `linkedPurchaseToken`. If the user's
+    // stored token is that linked (old) token, migrate it forward to the new
+    // token so webhook events for the new token still resolve to this user.
+    await this.migrateGoogleLinkedToken(
+      userId,
+      dto.purchaseToken,
+      result.linkedPurchaseToken ?? null,
+    );
 
     // Acknowledge the purchase to prevent auto-refund after 3 days
     const acknowledgementState = result.metadata?.acknowledgementState;
@@ -190,6 +202,78 @@ export class PaymentService {
     }
 
     return this.upsertSubscription(userId, plan, tx, googleDetails);
+  }
+
+  /**
+   * Migrate a user's stored Google purchase token forward to a new token when
+   * the verified purchase links back to it via `linkedPurchaseToken`.
+   *
+   * No-op unless the user already has a Subscription whose stored token is the
+   * linked (old) token and differs from the incoming new token. The subsequent
+   * subscription upsert also writes the new token, so this is idempotent — it
+   * exists so the migration is explicit and happens even if the stored token is
+   * the linked one on a distinct Subscription row.
+   *
+   * Concurrency: the swap is a DB-level compare-and-swap. When it affects zero
+   * rows we re-read to distinguish an idempotent repeat (row already holds
+   * `newToken` — safe to continue) from a lost race where a concurrent delivery
+   * installed a DIFFERENT token. In the latter case we throw so the caller's
+   * subsequent upsert never overwrites (clobbers) the concurrent winner.
+   */
+  private async migrateGoogleLinkedToken(
+    userId: string,
+    newToken: string,
+    linkedToken: string | null,
+  ): Promise<void> {
+    if (!linkedToken || linkedToken === newToken) return;
+
+    const existing = await this.prisma.subscription.findFirst({
+      where: { userId },
+    });
+    if (
+      !existing ||
+      existing.purchaseToken === newToken ||
+      existing.purchaseToken !== linkedToken
+    ) {
+      return;
+    }
+
+    // Compare-and-swap: fold the token match into the write so a concurrent
+    // replacement cannot also pass the in-memory check above and leave the row
+    // mapped to the wrong token. Guarding on `purchaseToken: linkedToken` means
+    // only the delivery that still sees the old token wins.
+    const res = await this.prisma.subscription.updateMany({
+      where: { id: existing.id, purchaseToken: linkedToken },
+      data: { purchaseToken: newToken },
+    });
+    if (res.count === 0) {
+      // `count === 0` is NOT unconditionally benign: the guard missed either
+      // because we (or an idempotent retry) already installed `newToken`, OR
+      // because a concurrent delivery installed a DIFFERENT token. Re-read to
+      // tell these apart. Only continue when the row already holds `newToken`
+      // (our write / an idempotent repeat). If some other token won the race we
+      // must NOT let the caller's subsequent upsert clobber it — abort this
+      // delivery so the concurrent winner is preserved.
+      const current = await this.prisma.subscription.findFirst({
+        where: { id: existing.id },
+      });
+      if (current?.purchaseToken === newToken) {
+        this.logger.log(
+          `Skipped Google purchaseToken migration for user ${userId.substring(0, 8)} (already migrated to this token)`,
+        );
+        return;
+      }
+      this.logger.warn(
+        `Aborting Google purchaseToken migration for user ${userId.substring(0, 8)}: ` +
+          `a concurrent delivery installed a different token; preserving the winner`,
+      );
+      throw new ConflictException(
+        'Purchase token changed concurrently; please retry',
+      );
+    }
+    this.logger.log(
+      `Migrated Google purchaseToken (linked) for user ${userId.substring(0, 8)}`,
+    );
   }
 
   private async verifyApplePurchase(userId: string, dto: VerifyPurchaseDto) {
@@ -322,17 +406,36 @@ export class PaymentService {
       purchaseToken: platformDetails?.purchaseToken ?? null,
     };
 
-    const subscription = existingSub
-      ? await this.prisma.subscription.update({
-          where: { id: existingSub.id },
-          data,
-        })
-      : await this.prisma.subscription.create({
-          data: {
-            userId,
-            ...data,
-          },
-        });
+    let subscription;
+    if (existingSub) {
+      // Token-guarded write (defense-in-depth CAS): only mutate the row while its
+      // purchaseToken is still the value we just read. If a concurrent
+      // verification installed a different token between the read above and this
+      // write, the guard misses (count === 0) and we must NOT overwrite the
+      // concurrent winner — re-read and return the current row unchanged so a
+      // later unconditional update-by-id can never clobber the winning token.
+      const guardToken = existingSub.purchaseToken ?? null;
+      const res = await this.prisma.subscription.updateMany({
+        where: { id: existingSub.id, purchaseToken: guardToken },
+        data: data as Prisma.SubscriptionUpdateManyMutationInput,
+      });
+      if (res.count === 0) {
+        this.logger.warn(
+          `Skipped subscription token write for user ${userId.substring(0, 8)}: ` +
+            `a concurrent verification changed the purchase token; preserving the winner`,
+        );
+      }
+      subscription = (await this.prisma.subscription.findFirst({
+        where: { id: existingSub.id },
+      })) ?? { userId, ...data };
+    } else {
+      subscription = await this.prisma.subscription.create({
+        data: {
+          userId,
+          ...data,
+        },
+      });
+    }
 
     this.eventEmitter.emit('admin.sse.activity', {
       type: 'SUBSCRIPTION',
@@ -348,6 +451,7 @@ export class PaymentService {
       'PaymentSuccess',
       {
         amount: transaction.amount,
+        currency: transaction.currency ?? 'USD',
         plan: PLANS[plan]?.display ?? plan,
       },
       userId,

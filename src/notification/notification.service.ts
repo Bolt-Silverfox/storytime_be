@@ -153,6 +153,9 @@ export class NotificationService {
     data?: Record<string, unknown>,
   ): Promise<{ delivered: number; failed: number }> {
     const BATCH = 500;
+    // Max concurrent in-app sends per sub-chunk — keeps fan-out fast without
+    // exhausting the DB connection pool.
+    const BROADCAST_CONCURRENCY = 50;
     let cursor: string | undefined;
     let delivered = 0;
     let failed = 0;
@@ -167,27 +170,38 @@ export class NotificationService {
       if (users.length === 0) {
         break;
       }
-      for (const user of users) {
-        try {
-          const result = await this.inAppProvider.send({
-            userId: user.id,
-            category: PrismaCategory.SYSTEM_ALERT,
-            title,
-            body,
-            data,
-          });
-          if (result.success) {
+      // Fan out sends concurrently, but in bounded sub-chunks so a large page
+      // can't open thousands of simultaneous DB/provider calls and exhaust the
+      // connection pool.
+      for (let i = 0; i < users.length; i += BROADCAST_CONCURRENCY) {
+        const slice = users.slice(i, i + BROADCAST_CONCURRENCY);
+        const results = await Promise.all(
+          slice.map(async (user) => {
+            try {
+              const result = await this.inAppProvider.send({
+                userId: user.id,
+                category: PrismaCategory.SYSTEM_ALERT,
+                title,
+                body,
+                data,
+              });
+              return result.success;
+            } catch (error) {
+              this.logger.warn(
+                `In-app broadcast failed for user ${user.id.substring(0, 8)}: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+              return false;
+            }
+          }),
+        );
+        for (const success of results) {
+          if (success) {
             delivered++;
           } else {
             failed++;
           }
-        } catch (error) {
-          failed++;
-          this.logger.warn(
-            `In-app broadcast failed for user ${user.id.substring(0, 8)}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
         }
       }
       cursor = users[users.length - 1].id;
