@@ -172,19 +172,32 @@ describe('AdminService', () => {
       );
     });
 
-    it('respects an explicit topic override', async () => {
+    it('rejects a cross-environment / legacy topic override', async () => {
+      // getBroadcastTopic() is mocked to 'all_users_production'; any other topic
+      // (legacy all_users, another env's topic, or an arbitrary one) is blocked.
+      await expect(
+        service.broadcastNotification({
+          title: 'Hello',
+          body: 'World',
+          topic: 'all_users',
+        }),
+      ).rejects.toThrow(/not allowed/i);
+
+      expect(mockEventEmitter.emitAsync).not.toHaveBeenCalled();
+    });
+
+    it('accepts an explicit topic equal to this environment topic', async () => {
       const result = await service.broadcastNotification({
         title: 'Hello',
         body: 'World',
-        topic: 'custom_topic',
+        topic: 'all_users_production',
       });
 
-      expect(mockNotificationService.getBroadcastTopic).not.toHaveBeenCalled();
       expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith(
         'notification.broadcast',
-        expect.objectContaining({ topic: 'custom_topic' }),
+        expect.objectContaining({ topic: 'all_users_production' }),
       );
-      expect(result.topic).toBe('custom_topic');
+      expect(result.topic).toBe('all_users_production');
     });
   });
 
