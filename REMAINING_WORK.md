@@ -1,6 +1,6 @@
 # Remaining Work Summary
 
-**Last Updated:** 2026-07-19
+**Last Updated:** 2026-07-21
 
 This document provides an accurate, up-to-date summary of remaining work after verifying the actual codebase state.
 
@@ -104,14 +104,27 @@ This document provides an accurate, up-to-date summary of remaining work after v
 ### Priority 3 (Low — Optional)
 
 **Infrastructure**
-- [ ] Custom Grafana dashboards (community dashboards already available)
-- [ ] Coverage badges in README (requires Codecov CI integration)
+- [x] **Coverage badges in README** — Codecov upload wired into the `develop-v*`
+      Test job (gated on `CODECOV_TOKEN`, no-ops until set) + README badges (CI,
+      coverage, tech stack, license, tooling). One-time Codecov account/token
+      setup still required to light the coverage badge (steps in README).
+- [ ] Custom Grafana dashboards — blocked on the Grafana Cloud connection (needs
+      account sign-in). Dashboard JSON can be authored ahead of time.
 
 **Security (from SECURITY_AUDIT.md)**
-- [ ] CSP nonce for inline scripts (~2h)
-- [ ] Request signing for webhooks (~4h)
-- [ ] CAPTCHA for registration (~2h)
-- [ ] GDPR data portability export (~4h)
+- [x] **CSP hardening** — explicit strict global CSP with an `'unsafe-inline'`
+      relaxation scoped to `/docs` only. (Honest form of "CSP nonce": the API
+      renders no HTML of its own, so a per-request nonce would be dead config;
+      the real gain is a strict CSP + a minimal scoped exception for Swagger UI.)
+- [x] **Webhook authenticity** — the Google Pub/Sub verifier now **fails closed
+      in production** (rejects when `GOOGLE_PUBSUB_AUDIENCE` is unset). Both
+      webhooks already verify with platform-native crypto (Apple ASSN v2 JWS,
+      Google OIDC) stronger than HMAC, so the real gap was this fail-open, not
+      missing signing.
+- [x] **GDPR data-portability export** — `GET /user/me/export` streams all
+      user + kids data as a JSON download (secrets stripped; audit logs and
+      payment tokens excluded).
+- [ ] CAPTCHA for registration (~2h) — deferred (no free provider).
 
 ---
 
