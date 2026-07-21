@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit configuration.
+# Without this, CodeRabbit auto-reviews ONLY PRs into the default branch (main)
+# and SKIPS everything targeting develop-* — which is where all v1.3.0 work
+# happens. Enable auto-review for the develop-* line (and main) so blue PRs are
+# reviewed like everything else.
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+      - "develop-.*"
