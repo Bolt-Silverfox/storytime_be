@@ -7,12 +7,14 @@ import { PrismaModule } from '@/prisma/prisma.module';
 import { UploadModule } from '@/upload/upload.module';
 import { USER_REPOSITORY } from './repositories';
 import { PrismaUserRepository } from './repositories/prisma-user.repository';
+import { UserDataExportService } from './services/user-data-export.service';
 
 @Module({
   imports: [AuthModule, NotificationModule, PrismaModule, UploadModule],
   controllers: [UserController],
   providers: [
     UserService,
+    UserDataExportService,
     {
       provide: USER_REPOSITORY,
       useClass: PrismaUserRepository,

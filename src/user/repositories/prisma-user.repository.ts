@@ -16,6 +16,8 @@ import {
   UserWithProfileAndAvatar,
   UserWithProfileAvatarAndCategories,
   UserWithAvatar,
+  UserDataExport,
+  USER_EXPORT_INCLUDE,
 } from './user.repository.interface';
 
 @Injectable()
@@ -42,6 +44,13 @@ export class PrismaUserRepository implements IUserRepository {
         avatar: true,
         subscription: true,
       },
+    });
+  }
+
+  async findUserForExport(id: string): Promise<UserDataExport | null> {
+    return this.prisma.user.findUnique({
+      where: { id, isDeleted: false },
+      include: USER_EXPORT_INCLUDE,
     });
   }
 
