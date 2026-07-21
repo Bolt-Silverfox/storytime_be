@@ -17,7 +17,9 @@ import {
   Logger,
   UploadedFile,
   UseInterceptors,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -51,6 +53,7 @@ import {
   ResetPinWithOtpDto,
   ValidatePinResetOtpDto,
 } from './dto/pin-reset-otp.dto';
+import { UserDataExportService } from './services/user-data-export.service';
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -70,6 +73,7 @@ export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly uploadService: UploadService,
+    private readonly userDataExportService: UserDataExportService,
   ) {}
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
@@ -327,6 +331,37 @@ export class UserController {
       body.otp,
       body.newPin,
     );
+  }
+
+  @Get('me/export')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Export all of my personal data (GDPR data portability)',
+    description:
+      'Returns a downloadable JSON document containing the authenticated ' +
+      "user's account, profile, subscription, payments, and their kids' data. " +
+      'Secrets and internal audit logs are excluded.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'A JSON file download (application/json) of the user data.',
+  })
+  async exportMyData(
+    @Req() req: AuthenticatedRequest,
+    @Res() res: Response,
+  ): Promise<void> {
+    const exportedAt = new Date().toISOString();
+    const data = await this.userDataExportService.exportUserData(
+      req.authUserData.userId,
+      exportedAt,
+    );
+    const filename = `storytime-data-export-${exportedAt.slice(0, 10)}.json`;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    // @Res() opts out of the global SuccessResponseInterceptor, so the body is
+    // the raw export document (not the standard { statusCode, data } envelope).
+    res.send(JSON.stringify(data, null, 2));
   }
 
   @Delete('me')
