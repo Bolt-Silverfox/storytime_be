@@ -221,11 +221,11 @@ Logger configured to exclude:
 
 ### 9.2 Future Improvements
 
-| Priority | Recommendation | Effort |
-|----------|---------------|--------|
-| Low | Add CSP nonce for inline scripts | 2h |
-| Low | Implement request signing for webhooks | 4h |
-| Low | Add CAPTCHA for registration | 2h |
+| Priority | Recommendation | Effort | Status |
+|----------|---------------|--------|--------|
+| Low | ~~Add CSP nonce for inline scripts~~ → explicit strict CSP + `/docs`-scoped relaxation | 2h | ✅ Done (API renders no HTML; a nonce would be dead config — strict CSP + scoped Swagger exception shipped instead) |
+| Low | ~~Implement request signing for webhooks~~ → Google Pub/Sub verifier fails closed in prod | 4h | ✅ Done (both webhooks already verify with platform-native crypto stronger than HMAC; closed the fail-open gap) |
+| Low | Add CAPTCHA for registration | 2h | ⏸️ Deferred (no free provider) |
 
 ---
 
@@ -244,7 +244,7 @@ Logger configured to exclude:
 | Requirement | Status |
 |-------------|--------|
 | Right to erasure | ✅ Account deletion |
-| Data portability | ⚠️ Not implemented |
+| Data portability | ✅ `GET /user/me/export` (JSON download of all user + kids data) |
 | Consent management | ✅ Notification preferences |
 
 ---
