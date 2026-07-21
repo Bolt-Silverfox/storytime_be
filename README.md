@@ -1,15 +1,7 @@
 # Storytime Backend API
 
-<!--
-  Coverage badge. One-time setup to make it live:
-    1. Enable this repo on https://app.codecov.io (org: Bolt-Silverfox).
-    2. Add repo secret CODECOV_TOKEN (Codecov → repo → Settings → General).
-    3. Copy the graph token from Codecov → Settings → Badges & Graphs and
-       replace CODECOV_GRAPH_TOKEN below with it.
-  Until then the CI upload step no-ops and the badge shows "unknown".
--->
 [![Dev CI/CD](https://github.com/Bolt-Silverfox/storytime_be/actions/workflows/dev-deploy.yml/badge.svg?branch=develop-v1.3.0)](https://github.com/Bolt-Silverfox/storytime_be/actions/workflows/dev-deploy.yml)
-[![codecov](https://codecov.io/gh/Bolt-Silverfox/storytime_be/branch/develop-v1.3.0/graph/badge.svg?token=CODECOV_GRAPH_TOKEN)](https://codecov.io/gh/Bolt-Silverfox/storytime_be)
+[![codecov](https://codecov.io/gh/Bolt-Silverfox/storytime_be/branch/develop-v1.3.0/graph/badge.svg?token=RXX71BBC0S)](https://codecov.io/gh/Bolt-Silverfox/storytime_be)
 [![License](https://img.shields.io/badge/license-Proprietary-red.svg)](#license)
 
 [![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
