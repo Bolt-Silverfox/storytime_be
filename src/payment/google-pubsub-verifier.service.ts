@@ -15,9 +15,12 @@ import { OAuth2Client, TokenPayload } from 'google-auth-library';
  * Posture:
  *  - When `GOOGLE_PUBSUB_AUDIENCE` is set, verification is ENFORCED: an
  *    invalid/missing token is rejected (401).
- *  - When it is NOT set, verification is skipped and a warning is logged so
- *    dev/unconfigured setups keep working while production is nudged to
- *    configure it.
+ *  - When it is NOT set:
+ *      - in production (`NODE_ENV=production`): FAIL CLOSED — the request is
+ *        rejected (401). An unconfigured production must never silently accept
+ *        forged RTDN webhooks (the previous behaviour was fail-open).
+ *      - otherwise (dev/test): verification is skipped with a warning so local
+ *        and unconfigured setups keep working.
  *
  * Required Pub/Sub push-subscription settings (Google Cloud console / gcloud):
  *  - Enable "Enable authentication" on the push subscription.
@@ -30,6 +33,7 @@ export class GooglePubSubVerifierService {
   private readonly logger = new Logger(GooglePubSubVerifierService.name);
   private readonly audience: string;
   private readonly saEmail: string;
+  private readonly isProduction: boolean;
   private readonly oauthClient: OAuth2Client;
   private warnedUnconfigured = false;
 
@@ -40,6 +44,9 @@ export class GooglePubSubVerifierService {
     this.saEmail = (
       this.configService.get<string>('GOOGLE_PUBSUB_SA_EMAIL') || ''
     ).trim();
+    this.isProduction =
+      (this.configService.get<string>('NODE_ENV') || '').trim() ===
+      'production';
     // OAuth2Client.verifyIdToken fetches and caches Google's public signing
     // certs (JWKS) and validates the signature, `iss`, `aud` and `exp`.
     this.oauthClient = new OAuth2Client();
@@ -53,6 +60,19 @@ export class GooglePubSubVerifierService {
    */
   async verifyPushRequest(authorizationHeader?: string): Promise<void> {
     if (!this.audience) {
+      if (this.isProduction) {
+        // Fail CLOSED in production: never accept an unauthenticated RTDN
+        // webhook just because the audience wasn't configured.
+        this.logger.error(
+          'GOOGLE_PUBSUB_AUDIENCE is not set in production - rejecting the ' +
+            'Pub/Sub webhook. Configure GOOGLE_PUBSUB_AUDIENCE (and ' +
+            'GOOGLE_PUBSUB_SA_EMAIL) on the push subscription so ' +
+            '/payment/webhooks/google can authenticate callers.',
+        );
+        throw new UnauthorizedException(
+          'Pub/Sub OIDC verification is not configured',
+        );
+      }
       if (!this.warnedUnconfigured) {
         this.logger.warn(
           'GOOGLE_PUBSUB_AUDIENCE is not set - skipping Pub/Sub OIDC ' +
