@@ -1,5 +1,15 @@
 # Storytime Backend API
 
+<!--
+  Coverage badge. One-time setup to make it live:
+    1. Enable this repo on https://app.codecov.io (org: Bolt-Silverfox).
+    2. Add repo secret CODECOV_TOKEN (Codecov → repo → Settings → General).
+    3. Copy the graph token from Codecov → Settings → Badges & Graphs and
+       replace CODECOV_GRAPH_TOKEN below with it.
+  Until then the CI upload step no-ops and the badge shows "unknown".
+-->
+[![codecov](https://codecov.io/gh/Bolt-Silverfox/storytime_be/branch/develop-v1.3.0/graph/badge.svg?token=CODECOV_GRAPH_TOKEN)](https://codecov.io/gh/Bolt-Silverfox/storytime_be)
+
 A NestJS-based backend API for the Storytime application, providing interactive storytelling experiences for children with AI-powered story generation, user management, and content delivery.
 
 ## Features
