@@ -8,7 +8,15 @@
        replace CODECOV_GRAPH_TOKEN below with it.
   Until then the CI upload step no-ops and the badge shows "unknown".
 -->
+[![Dev CI/CD](https://github.com/Bolt-Silverfox/storytime_be/actions/workflows/dev-deploy.yml/badge.svg?branch=develop-v1.3.0)](https://github.com/Bolt-Silverfox/storytime_be/actions/workflows/dev-deploy.yml)
 [![codecov](https://codecov.io/gh/Bolt-Silverfox/storytime_be/branch/develop-v1.3.0/graph/badge.svg?token=CODECOV_GRAPH_TOKEN)](https://codecov.io/gh/Bolt-Silverfox/storytime_be)
+[![License](https://img.shields.io/badge/license-Proprietary-red.svg)](#license)
+
+[![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Node](https://img.shields.io/badge/Node-%E2%89%A520-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 
 A NestJS-based backend API for the Storytime application, providing interactive storytelling experiences for children with AI-powered story generation, user management, and content delivery.
 
