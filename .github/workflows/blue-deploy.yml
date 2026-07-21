@@ -46,6 +46,11 @@ jobs:
           cache: 'pnpm'
 
       - name: Build blue .env from green env (isolation overrides)
+        env:
+          # Grafana Cloud write token (OTLP) — kept out of ENV_FILE so it can
+          # rotate independently; injected here so blue keeps pushing telemetry
+          # after a redeploy (green's ENV_FILE carries no Grafana vars).
+          GRAFANA_CLOUD_API_TOKEN: ${{ secrets.GRAFANA_CLOUD_API_TOKEN }}
         run: |
           # Reuse green's env (API keys etc.) and override only the vars that
           # must differ so blue can't touch green's data on the shared host.
@@ -60,7 +65,21 @@ jobs:
           sed -i -E 's#(^REDIS_URL="?[^/]*//[^/]*:[0-9]+)(/[0-9]+)?#\1/3#' .env
           # cap the Prisma pool so blue can't starve the shared RDS (green + others)
           sed -i -E 's/connection_limit=[0-9]+/connection_limit=10/' .env
-          echo "Blue env overrides applied:"; grep -E '^(PORT|DATABASE_URL|REDIS_URL)=' .env | sed -E 's/(:)[^:@]*(@)/\1***\2/'
+          # Grafana Cloud OTLP push (BLUE ONLY — green/dev intentionally omits it).
+          # Strip any inherited OTEL/Grafana lines, then append blue's config so a
+          # redeploy re-establishes the push instead of silently dropping telemetry.
+          sed -i -E '/^(OTEL_EXPORTER_OTLP_ENDPOINT|OTEL_EXPORTER_LOGS_ENDPOINT|OTEL_EXPORTER_METRICS_ENDPOINT|OTEL_METRICS_EXPORTER|OTEL_SERVICE_NAME|GRAFANA_CLOUD_INSTANCE_ID|GRAFANA_CLOUD_API_TOKEN)=/d' .env
+          cat >> .env << 'EOF'
+          OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-prod-gb-south-1.grafana.net/otlp/v1/traces
+          OTEL_EXPORTER_LOGS_ENDPOINT=https://otlp-gateway-prod-gb-south-1.grafana.net/otlp/v1/logs
+          OTEL_EXPORTER_METRICS_ENDPOINT=https://otlp-gateway-prod-gb-south-1.grafana.net/otlp/v1/metrics
+          OTEL_METRICS_EXPORTER=otlp
+          OTEL_SERVICE_NAME=storytime-api-blue
+          GRAFANA_CLOUD_INSTANCE_ID=1730856
+          EOF
+          # token comes from the step env (never a workflow literal)
+          printf 'GRAFANA_CLOUD_API_TOKEN=%s\n' "$GRAFANA_CLOUD_API_TOKEN" >> .env
+          echo "Blue env overrides applied:"; grep -E '^(PORT|DATABASE_URL|REDIS_URL|OTEL_SERVICE_NAME|GRAFANA_CLOUD_INSTANCE_ID)=' .env | sed -E 's/(:)[^:@]*(@)/\1***\2/'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
