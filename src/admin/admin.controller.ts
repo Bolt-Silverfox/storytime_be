@@ -2570,7 +2570,15 @@ export class AdminController {
   @ApiOperation({
     summary: 'Subscribe all existing devices to a topic (one-time seed)',
   })
-  @ApiQuery({ name: 'topic', required: false, example: 'all_users' })
+  @ApiQuery({
+    name: 'topic',
+    required: false,
+    description:
+      "Normally omitted: defaults to this deployment's environment-scoped topic " +
+      '(all_users_<NODE_ENV>) to re-seed existing devices after a deploy. If ' +
+      'supplied it must exactly match the current environment topic; legacy ' +
+      '`all_users` and other environments’ topics are rejected (400).',
+  })
   @ApiCreatedResponse({ description: 'Topic seed initiated' })
   @HttpCode(HttpStatus.CREATED)
   async seedTopicSubscriptions(@Query('topic') topic?: string) {
