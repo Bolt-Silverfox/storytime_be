@@ -18,6 +18,13 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A520-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 
+[![Redis](https://img.shields.io/badge/Redis-cache-DC382D?logo=redis&logoColor=white)](https://redis.io/)
+[![BullMQ](https://img.shields.io/badge/BullMQ-queues-E10098)](https://docs.bullmq.io/)
+[![API docs: Swagger](https://img.shields.io/badge/API_docs-Swagger-85EA2D?logo=swagger&logoColor=black)](https://swagger.io/)
+[![Tests: Jest](https://img.shields.io/badge/tests-Jest-C21325?logo=jest&logoColor=white)](https://jestjs.io/)
+[![Code style: Prettier](https://img.shields.io/badge/code_style-Prettier-F7B93E?logo=prettier&logoColor=white)](https://prettier.io/)
+[![Conventional Commits](https://img.shields.io/badge/Conventional_Commits-1.0.0-FE5196?logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
+
 A NestJS-based backend API for the Storytime application, providing interactive storytelling experiences for children with AI-powered story generation, user management, and content delivery.
 
 ## Features
