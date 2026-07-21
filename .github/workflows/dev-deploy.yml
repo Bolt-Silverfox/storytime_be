@@ -144,9 +144,6 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storytime_test
       REDIS_URL: redis://localhost:6379
-      # Mapped from the secret so the upload step can gate on its presence
-      # (secrets aren't allowed directly in step-level `if:`). Unset => no-op.
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     services:
       postgres:
@@ -217,13 +214,23 @@ jobs:
         continue-on-error: true
         run: pnpm test --coverage
 
+      # Detect the secret's presence WITHOUT exposing its value to the job env
+      # (which would leak it to install/test/dependency steps). This step only
+      # emits a boolean; the token itself is passed solely to the upload step.
+      - name: Check for Codecov token
+        id: codecov_token
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: echo "present=${CODECOV_TOKEN:+true}" >> "$GITHUB_OUTPUT"
+
       - name: Upload coverage to Codecov
         # No-op until CODECOV_TOKEN is set (see repo secrets); never fails CI.
-        if: ${{ env.CODECOV_TOKEN != '' }}
+        if: steps.codecov_token.outputs.present == 'true'
         uses: codecov/codecov-action@v5
         with:
-          token: ${{ env.CODECOV_TOKEN }}
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
+          disable_search: true
           flags: unittests
           fail_ci_if_error: false
 

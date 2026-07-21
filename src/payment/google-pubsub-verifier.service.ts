@@ -13,14 +13,15 @@ import { OAuth2Client, TokenPayload } from 'google-auth-library';
  * configured push service account.
  *
  * Posture:
- *  - When `GOOGLE_PUBSUB_AUDIENCE` is set, verification is ENFORCED: an
- *    invalid/missing token is rejected (401).
- *  - When it is NOT set:
- *      - in production (`NODE_ENV=production`): FAIL CLOSED — the request is
- *        rejected (401). An unconfigured production must never silently accept
- *        forged RTDN webhooks (the previous behaviour was fail-open).
- *      - otherwise (dev/test): verification is skipped with a warning so local
- *        and unconfigured setups keep working.
+ *  - In production (`NODE_ENV=production`): BOTH `GOOGLE_PUBSUB_AUDIENCE` and
+ *    `GOOGLE_PUBSUB_SA_EMAIL` are required. Missing either => FAIL CLOSED (401),
+ *    so production never accepts a forged, or a merely audience-scoped, RTDN
+ *    webhook (audience-only would accept any Google-verified service account).
+ *  - Non-production, audience set: ENFORCED — an invalid/missing token is
+ *    rejected (401); a missing SA email only downgrades to "any Google SA for
+ *    this audience" with a warning.
+ *  - Non-production, audience unset: verification is skipped with a warning so
+ *    local and unconfigured setups keep working.
  *
  * Required Pub/Sub push-subscription settings (Google Cloud console / gcloud):
  *  - Enable "Enable authentication" on the push subscription.
@@ -59,20 +60,25 @@ export class GooglePubSubVerifierService {
    * invalid/missing/unauthorized token.
    */
   async verifyPushRequest(authorizationHeader?: string): Promise<void> {
+    // Production must have BOTH the audience AND the service-account email so
+    // the webhook is fully locked to our push subscription. Missing either =>
+    // fail CLOSED (never accept an unauthenticated/partially-verified RTDN
+    // webhook). Audience-only would accept any Google-verified service account.
+    if (this.isProduction && (!this.audience || !this.saEmail)) {
+      this.logger.error(
+        'Pub/Sub OIDC verification is incomplete in production - rejecting the ' +
+          'webhook. Configure GOOGLE_PUBSUB_AUDIENCE and GOOGLE_PUBSUB_SA_EMAIL ' +
+          'on the push subscription so /payment/webhooks/google can authenticate ' +
+          'callers.',
+      );
+      throw new UnauthorizedException(
+        'Pub/Sub OIDC verification is not fully configured',
+      );
+    }
+
     if (!this.audience) {
-      if (this.isProduction) {
-        // Fail CLOSED in production: never accept an unauthenticated RTDN
-        // webhook just because the audience wasn't configured.
-        this.logger.error(
-          'GOOGLE_PUBSUB_AUDIENCE is not set in production - rejecting the ' +
-            'Pub/Sub webhook. Configure GOOGLE_PUBSUB_AUDIENCE (and ' +
-            'GOOGLE_PUBSUB_SA_EMAIL) on the push subscription so ' +
-            '/payment/webhooks/google can authenticate callers.',
-        );
-        throw new UnauthorizedException(
-          'Pub/Sub OIDC verification is not configured',
-        );
-      }
+      // Non-production only (production is handled above): skip with a warning
+      // so local/unconfigured setups keep working.
       if (!this.warnedUnconfigured) {
         this.logger.warn(
           'GOOGLE_PUBSUB_AUDIENCE is not set - skipping Pub/Sub OIDC ' +
