@@ -25,9 +25,9 @@ describe('UserDataExportService', () => {
 
   it('throws NotFoundException when the user does not exist', async () => {
     findUserForExport.mockResolvedValue(null);
-    await expect(service.exportUserData('missing', EXPORTED_AT)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.exportUserData('missing', EXPORTED_AT),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('strips passwordHash and pinHash from the export', async () => {
