@@ -129,9 +129,9 @@ describe('GooglePubSubVerifierService', () => {
   });
 
   // --------------------------------------------------- unconfigured posture --
-  describe('when GOOGLE_PUBSUB_AUDIENCE is NOT configured (skip + warn)', () => {
-    it('skips verification and resolves, even with no token', async () => {
-      const service = await buildService({});
+  describe('when GOOGLE_PUBSUB_AUDIENCE is NOT configured', () => {
+    it('non-production: skips verification and resolves, even with no token', async () => {
+      const service = await buildService({}); // NODE_ENV undefined => not prod
       const warn = jest
         .spyOn(service['logger'], 'warn')
         .mockImplementation(() => undefined);
@@ -142,6 +142,19 @@ describe('GooglePubSubVerifierService', () => {
 
       expect(mockVerifyIdToken).not.toHaveBeenCalled();
       expect(warn).toHaveBeenCalledTimes(1); // production-config warning
+    });
+
+    it('production: FAILS CLOSED — rejects the request (no fail-open)', async () => {
+      const service = await buildService({ NODE_ENV: 'production' });
+      jest
+        .spyOn(service['logger'], 'error')
+        .mockImplementation(() => undefined);
+
+      await expect(
+        service.verifyPushRequest('Bearer anything'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+
+      expect(mockVerifyIdToken).not.toHaveBeenCalled();
     });
   });
 
