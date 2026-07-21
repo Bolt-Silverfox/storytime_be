@@ -17,6 +17,7 @@ import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter';
 import { SentryExceptionFilter } from './shared/filters/sentry-exception.filter';
 import { requestLogger } from './shared/middleware/request-logger.middleware';
+import { swaggerCspDirectives } from './shared/config/security.config';
 import { WinstonModule } from 'nest-winston';
 import { winstonConfig } from './shared/config/logger.config';
 
@@ -82,7 +83,15 @@ async function bootstrap() {
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ extended: true, limit: '10mb' }));
 
+  // Strict default CSP (script-src 'self', object-src 'none', …) for the whole API.
   app.use(helmet());
+  // Swagger UI (/docs) injects inline scripts/styles the strict CSP would block,
+  // so relax the CSP ONLY for /docs. Registered AFTER the global helmet so it
+  // overwrites the CSP header for /docs requests; all other routes stay strict.
+  app.use(
+    '/docs',
+    helmet({ contentSecurityPolicy: { directives: swaggerCspDirectives } }),
+  );
   app.use(requestLogger);
   app.enableCors({
     origin: (
