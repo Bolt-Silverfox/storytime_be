@@ -144,6 +144,9 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storytime_test
       REDIS_URL: redis://localhost:6379
+      # Mapped from the secret so the upload step can gate on its presence
+      # (secrets aren't allowed directly in step-level `if:`). Unset => no-op.
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     services:
       postgres:
@@ -213,6 +216,16 @@ jobs:
       - name: Run tests with coverage
         continue-on-error: true
         run: pnpm test --coverage
+
+      - name: Upload coverage to Codecov
+        # No-op until CODECOV_TOKEN is set (see repo secrets); never fails CI.
+        if: ${{ env.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: unittests
+          fail_ci_if_error: false
 
       - name: Cleanup sensitive files
         if: always()
