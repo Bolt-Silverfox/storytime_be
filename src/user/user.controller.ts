@@ -359,6 +359,8 @@ export class UserController {
     const filename = `storytime-data-export-${exportedAt.slice(0, 10)}.json`;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    // Sensitive personal data — never cache in the browser or intermediaries.
+    res.setHeader('Cache-Control', 'no-store');
     // @Res() opts out of the global SuccessResponseInterceptor, so the body is
     // the raw export document (not the standard { statusCode, data } envelope).
     res.send(JSON.stringify(data, null, 2));

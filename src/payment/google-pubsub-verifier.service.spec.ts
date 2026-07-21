@@ -158,6 +158,25 @@ describe('GooglePubSubVerifierService', () => {
     });
   });
 
+  // ------------------ production requires BOTH audience and SA email ---------
+  describe('production with audience set but GOOGLE_PUBSUB_SA_EMAIL missing', () => {
+    it('FAILS CLOSED (audience-only would accept any Google SA)', async () => {
+      const service = await buildService({
+        NODE_ENV: 'production',
+        GOOGLE_PUBSUB_AUDIENCE: AUDIENCE,
+      });
+      jest
+        .spyOn(service['logger'], 'error')
+        .mockImplementation(() => undefined);
+
+      await expect(
+        service.verifyPushRequest('Bearer anything'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+
+      expect(mockVerifyIdToken).not.toHaveBeenCalled();
+    });
+  });
+
   // --------------------------------- audience set but SA email unconfigured --
   describe('when audience is set but GOOGLE_PUBSUB_SA_EMAIL is not', () => {
     it('accepts any Google-verified account for the audience (with a warning)', async () => {
