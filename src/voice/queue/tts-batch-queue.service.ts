@@ -101,11 +101,15 @@ export class TtsBatchQueueService implements OnModuleDestroy {
       retryGeneration: generation,
     };
 
-    await this.batchQueue.add(TTS_BATCH_JOB_NAMES.GENERATE_PARAGRAPHS, jobData, {
-      ...TTS_BATCH_QUEUE_OPTIONS,
-      jobId: `${batchJobId}:retry:${generation}`,
-      delay: TTS_BATCH_RETRY_DELAY_MS,
-    });
+    await this.batchQueue.add(
+      TTS_BATCH_JOB_NAMES.GENERATE_PARAGRAPHS,
+      jobData,
+      {
+        ...TTS_BATCH_QUEUE_OPTIONS,
+        jobId: `${batchJobId}:retry:${generation}`,
+        delay: TTS_BATCH_RETRY_DELAY_MS,
+      },
+    );
 
     const metaKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:meta`;
     const completedKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:completed`;

@@ -14,7 +14,10 @@ import { NotificationDispatchService } from './services/notification-dispatch.se
 import { NotificationSettingsService } from './services/notification-settings.service';
 import { NotificationDeviceService } from './services/notification-device.service';
 import { InAppNotificationService } from './services/in-app-notification.service';
-import { NOTIFICATION_PREFERENCE_REPOSITORY, USER_REPOSITORY } from './repositories';
+import {
+  NOTIFICATION_PREFERENCE_REPOSITORY,
+  USER_REPOSITORY,
+} from './repositories';
 
 // Mock nodemailer
 jest.mock('nodemailer', () => ({

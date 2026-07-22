@@ -22,9 +22,7 @@ export class PrismaUserRepository implements IUserRepository {
       select: { id: true },
       orderBy: { id: 'asc' },
       take: params.take,
-      ...(params.cursor
-        ? { skip: 1, cursor: { id: params.cursor } }
-        : {}),
+      ...(params.cursor ? { skip: 1, cursor: { id: params.cursor } } : {}),
     });
   }
 }

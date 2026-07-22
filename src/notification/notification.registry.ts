@@ -261,7 +261,7 @@ export const NotificationRegistry: Record<
     },
     getTemplate: (data) => {
       return Promise.resolve(
-        `Your payment of ${data.currency} ${data.amount} for the ${data.plan} plan was successful.`,
+        `Your payment of ${String(data.currency)} ${String(data.amount)} for the ${String(data.plan)} plan was successful.`,
       );
     },
   },
@@ -309,7 +309,7 @@ export const NotificationRegistry: Record<
     },
     getTemplate: (data) => {
       return Promise.resolve(
-        `Your ${data.plan} plan renews in ${data.daysLeft} day(s).`,
+        `Your ${String(data.plan)} plan renews in ${String(data.daysLeft)} day(s).`,
       );
     },
   },
@@ -323,7 +323,7 @@ export const NotificationRegistry: Record<
     },
     getTemplate: (data) => {
       return Promise.resolve(
-        `We miss you, ${data.name}! Come back for a new story.`,
+        `We miss you, ${String(data.name)}! Come back for a new story.`,
       );
     },
   },
@@ -337,7 +337,7 @@ export const NotificationRegistry: Record<
     },
     getTemplate: (data) => {
       return Promise.resolve(
-        `You still have "${data.storyTitle}" waiting to be finished!`,
+        `You still have "${String(data.storyTitle)}" waiting to be finished!`,
       );
     },
   },
@@ -350,7 +350,9 @@ export const NotificationRegistry: Record<
       return null;
     },
     getTemplate: (data) => {
-      return Promise.resolve(`Hi ${data.name}, ready for today's story time?`);
+      return Promise.resolve(
+        `Hi ${String(data.name)}, ready for today's story time?`,
+      );
     },
   },
 };
