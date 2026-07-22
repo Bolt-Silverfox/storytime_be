@@ -76,7 +76,9 @@ import { BullBoardConfigModule } from './admin/bull-board.module';
         });
         redisStore.client.on('error', (err: unknown) => {
           const message = err instanceof Error ? err.message : String(err);
-          logger.warn(`Redis cache connection error (reconnecting): ${message}`);
+          logger.warn(
+            `Redis cache connection error (reconnecting): ${message}`,
+          );
         });
         const redisKeyv = new Keyv({ store: redisStore });
         redisKeyv.on('error', (err: unknown) => {
