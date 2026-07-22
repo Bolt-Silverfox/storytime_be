@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bullmq';
 import { NotificationService } from './notification.service';
@@ -31,6 +31,8 @@ import { PushProcessor } from './queue/push.processor';
 import { AuthEventListener } from './listeners/auth-event.listener';
 import { PasswordEventListener } from './listeners/password-event.listener';
 import { NotificationPreferenceEventListener } from './listeners/notification-preference-event.listener';
+import { EngagementEventListener } from './listeners/engagement-event.listener';
+import { SubscriptionEventListener } from './listeners/subscription-event.listener';
 import { HttpLatencyInterceptor } from '@/shared/interceptors/http-latency.interceptor';
 import {
   NOTIFICATION_PREFERENCE_REPOSITORY,
@@ -43,6 +45,7 @@ import {
   PrismaUserRepository,
 } from './repositories';
 
+@Global()
 @Module({
   imports: [
     HttpModule,
@@ -93,6 +96,9 @@ import {
     AuthEventListener,
     PasswordEventListener,
     NotificationPreferenceEventListener,
+    // Engagement + subscription notifications from real domain events
+    EngagementEventListener,
+    SubscriptionEventListener,
     // Repository Pattern (testability, decoupling)
     {
       provide: NOTIFICATION_PREFERENCE_REPOSITORY,

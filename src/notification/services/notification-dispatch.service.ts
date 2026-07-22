@@ -6,6 +6,8 @@ import {
 import {
   NOTIFICATION_PREFERENCE_REPOSITORY,
   INotificationPreferenceRepository,
+  USER_REPOSITORY,
+  IUserRepository,
 } from '../repositories';
 import { NotificationRegistry, Notifications } from '../notification.registry';
 import { InAppProvider } from '../providers/in-app.provider';
@@ -33,6 +35,8 @@ export class NotificationDispatchService {
   constructor(
     @Inject(NOTIFICATION_PREFERENCE_REPOSITORY)
     private readonly notificationPreferenceRepository: INotificationPreferenceRepository,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: IUserRepository,
     private readonly inAppProvider: InAppProvider,
     private readonly emailProvider: EmailProvider,
     private readonly pushProvider: PushProvider,
@@ -42,6 +46,56 @@ export class NotificationDispatchService {
     this.providers.set('email', this.emailProvider);
     this.providers.set('in_app', this.inAppProvider);
     this.providers.set('push', this.pushProvider);
+  }
+
+  /**
+   * Fan out a NewStory notification to every active user, batched by id cursor.
+   * Each send goes through sendNotification so it respects the user's NEW_STORY
+   * preference (opt-out) and writes both the in-app record and push. Best-effort:
+   * one failure never aborts the batch. Meant to be fire-and-forget from the
+   * story-create path.
+   */
+  async broadcastNewStoryToUsers(
+    storyId: string,
+    storyTitle: string,
+  ): Promise<void> {
+    const BATCH = 500;
+    let cursor: string | undefined;
+    let sent = 0;
+    let failed = 0;
+    for (;;) {
+      const users = await this.userRepository.findActiveUsersBatch({
+        take: BATCH,
+        cursor,
+      });
+      if (users.length === 0) {
+        break;
+      }
+      for (const user of users) {
+        try {
+          await this.sendNotification(
+            'NewStory',
+            { storyTitle, storyId },
+            user.id,
+          );
+          sent++;
+        } catch (error) {
+          failed++;
+          this.logger.warn(
+            `NewStory send failed for user ${user.id.substring(0, 8)}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
+      cursor = users[users.length - 1].id;
+      if (users.length < BATCH) {
+        break;
+      }
+    }
+    this.logger.log(
+      `NewStory broadcast for story ${storyId}: ${sent} sent, ${failed} failed`,
+    );
   }
 
   async sendNotification(

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
   Logger,
   Inject,
 } from '@nestjs/common';
@@ -39,6 +40,11 @@ import {
   STORY_INVALIDATION_KEYS,
 } from '@/shared/constants/cache-keys.constants';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
+import { BatchedBroadcastNotificationDto } from './dto/batched-broadcast-notification.dto';
+import {
+  NotificationService,
+  BatchedBroadcastSummary,
+} from '../notification/notification.service';
 import { ResetQuotaDto } from './dto/reset-quota.dto';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
 import { GuestStatsDto, GuestActivityFilterDto } from './dto/guest-stats.dto';
@@ -74,6 +80,8 @@ export class AdminService {
     private readonly couponService: AdminCouponService,
     private readonly exportService: AdminExportService,
     private readonly subscriptionOpsService: AdminSubscriptionOpsService,
+    // NotificationModule is @Global, so no admin.module import change is needed.
+    private readonly notificationService: NotificationService,
     @Inject(ADMIN_STORY_REPOSITORY)
     private readonly storyRepo: IAdminStoryRepository,
     @Inject(ADMIN_CONTENT_REPOSITORY)
@@ -390,8 +398,23 @@ export class AdminService {
    */
   async broadcastNotification(
     dto: BroadcastNotificationDto,
-  ): Promise<{ sent: boolean; topic: string }> {
-    const topic = dto.topic ?? 'all_users';
+  ): Promise<{ sent: boolean; topic: string; inAppDelivered: number }> {
+    // The env-scoped broadcast topic (all_users_<NODE_ENV>) for THIS backend.
+    const scopedTopic = this.notificationService.getBroadcastTopic();
+
+    // Isolation guard: an admin may omit `topic` (uses the env-scoped default),
+    // but may NOT target the legacy global `all_users` or another environment's
+    // `all_users_<env>` topic — the Firebase project is shared, so that would
+    // bleed the broadcast across dev/staging/prod. Only this env's topic is
+    // permitted; anything else is rejected rather than silently coerced.
+    if (dto.topic && dto.topic !== scopedTopic) {
+      throw new BadRequestException(
+        `Broadcast topic "${dto.topic}" is not allowed. Omit "topic" to use this ` +
+          `environment's topic ("${scopedTopic}"); cross-environment and legacy ` +
+          `topics are blocked to prevent cross-environment push bleed.`,
+      );
+    }
+    const topic = scopedTopic;
 
     await this.eventEmitter.emitAsync('notification.broadcast', {
       topic,
@@ -402,7 +425,65 @@ export class AdminService {
     this.logger.log(
       `Broadcast notification emitted to topic "${topic}": "${dto.title}"`,
     );
-    return { sent: true, topic };
+
+    // Also write an in-app inbox entry for every user so the broadcast shows in
+    // the app's notification list, not just as an ephemeral push.
+    let inAppDelivered = 0;
+    try {
+      const inApp = await this.notificationService.broadcastInAppToAllUsers(
+        dto.title,
+        dto.body,
+        dto.data,
+      );
+      inAppDelivered = inApp.delivered;
+    } catch (error) {
+      this.logger.error(
+        `In-app broadcast failed for "${dto.title}": ${(error as Error).message}`,
+      );
+    }
+
+    return { sent: true, topic, inAppDelivered };
+  }
+
+  /**
+   * Broadcast a push notification to all users by fanning out to every active
+   * device token in staggered batches (<= 500 tokens per FCM multicast call),
+   * instead of a single topic push. Emits a 'notification.broadcast-batched'
+   * event handled by the notification module and returns its summary.
+   */
+  async broadcastNotificationBatched(
+    dto: BatchedBroadcastNotificationDto,
+  ): Promise<BatchedBroadcastSummary> {
+    const results = await this.eventEmitter.emitAsync(
+      'notification.broadcast-batched',
+      {
+        title: dto.title,
+        body: dto.body,
+        data: dto.data,
+        batchSize: dto.batchSize,
+        intervalSeconds: dto.intervalSeconds,
+      },
+    );
+
+    const summary = results.find(
+      (r): r is BatchedBroadcastSummary =>
+        !!r && typeof r === 'object' && 'batches' in r,
+    );
+
+    // The notification module registers exactly one listener for this event; a
+    // missing summary means the listener didn't run (misconfiguration), so fail
+    // loudly rather than reporting a false "0 devices" success.
+    if (!summary) {
+      throw new InternalServerErrorException(
+        'Batched broadcast produced no summary; notification listener may not be registered',
+      );
+    }
+
+    this.logger.log(
+      `Batched broadcast emitted: "${dto.title}" -> ${summary.totalDevices} device(s) in ${summary.batches} batch(es)`,
+    );
+
+    return summary;
   }
 
   /**
@@ -410,11 +491,22 @@ export class AdminService {
    * Emits a 'notification.seed-topic' event.
    */
   async seedTopicSubscriptions(
-    topic: string = 'all_users',
+    topic: string = this.notificationService.getBroadcastTopic(),
   ): Promise<{ emitted: boolean }> {
     if (!/^[a-zA-Z0-9\-_.~%]+$/.test(topic)) {
       throw new BadRequestException(
         'Invalid topic name: must contain only valid FCM topic characters',
+      );
+    }
+    // Isolation guard (mirrors broadcast): only this environment's topic may be
+    // seeded, so an admin can't re-subscribe every device back onto the legacy
+    // global `all_users` (or another env's topic) and re-open the bleed.
+    const scopedTopic = this.notificationService.getBroadcastTopic();
+    if (topic !== scopedTopic) {
+      throw new BadRequestException(
+        `Seed topic "${topic}" is not allowed. Omit "topic" to seed this ` +
+          `environment's topic ("${scopedTopic}"); cross-environment and legacy ` +
+          `topics are blocked.`,
       );
     }
     try {

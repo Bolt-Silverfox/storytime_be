@@ -12,4 +12,19 @@ export class PrismaUserRepository implements IUserRepository {
       select: { email: true, name: true },
     });
   }
+
+  async findActiveUsersBatch(params: {
+    take: number;
+    cursor?: string;
+  }): Promise<{ id: string }[]> {
+    return this.prisma.user.findMany({
+      where: { isDeleted: false, isSuspended: false },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+      take: params.take,
+      ...(params.cursor
+        ? { skip: 1, cursor: { id: params.cursor } }
+        : {}),
+    });
+  }
 }

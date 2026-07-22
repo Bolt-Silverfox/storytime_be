@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { NotificationService } from '../notification/notification.service';
 import { Prisma } from '@prisma/client';
 import {
   SUBSCRIPTION_REPOSITORY,
@@ -97,6 +98,12 @@ describe('PaymentService', () => {
         },
         { provide: AppleVerificationService, useValue: mockAppleVerification },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+        {
+          provide: NotificationService,
+          useValue: {
+            sendNotification: jest.fn().mockResolvedValue({ success: true }),
+          },
+        },
       ],
     }).compile();
 

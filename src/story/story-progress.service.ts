@@ -21,6 +21,7 @@ import {
   DEFAULT_CURSOR_LIMIT,
   PaginationUtil,
 } from '@/shared/utils/pagination.util';
+import { NotificationService } from '../notification/notification.service';
 
 /** Max session time in seconds (24 h), matching the DTO contract. */
 const MAX_SESSION_TIME = 86_400;
@@ -40,6 +41,8 @@ export class StoryProgressService {
   constructor(
     @Inject(STORY_PROGRESS_REPOSITORY)
     private readonly progressRepository: IStoryProgressRepository,
+    // NotificationModule is @Global; StoryModule already imports it too.
+    private readonly notificationService: NotificationService,
   ) {}
 
   /** Wraps a query to handle invalid cursor IDs gracefully */
@@ -116,6 +119,20 @@ export class StoryProgressService {
         const msg = e instanceof Error ? e.message : String(e);
         this.logger.error(`Failed to adjust reading level: ${msg}`);
       });
+
+      // Best-effort StoryFinished notification to the kid's parent. Emitted only
+      // on the false->true completion transition. Must never break the progress
+      // flow, so failures are logged and swallowed.
+      try {
+        await this.notificationService.sendNotification(
+          'StoryFinished',
+          { kidName: kid.name ?? 'Your child', storyTitle: story.title },
+          kid.parentId,
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.warn(`Failed to send StoryFinished notification: ${msg}`);
+      }
     }
     return result;
   }
@@ -244,6 +261,25 @@ export class StoryProgressService {
         updateTotalTimeSpent: totalTimeSpentUpdate,
       },
     );
+
+    // Best-effort StoryFinished notification on the user (web) completion path —
+    // mirrors the kid setProgress path. Only on the true false->true transition;
+    // never breaks progress recording.
+    if (dto.completed && (!existing || !existing.completed)) {
+      try {
+        await this.notificationService.sendNotification(
+          'StoryFinished',
+          { kidName: user.name ?? 'You', storyTitle: story.title },
+          userId,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to send StoryFinished (user path): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
 
     return {
       id: result.id,

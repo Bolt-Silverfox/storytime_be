@@ -17,6 +17,7 @@ import {
   PRODUCT_ID_TO_PLAN,
 } from '@/subscription/subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { NotificationService } from '../notification/notification.service';
 import {
   SUBSCRIPTION_REPOSITORY,
   ISubscriptionRepository,
@@ -47,7 +48,33 @@ export class PaymentService {
     private readonly googleVerificationService: GoogleVerificationService,
     private readonly appleVerificationService: AppleVerificationService,
     private readonly eventEmitter: EventEmitter2,
+    // NotificationModule is @Global, so no payment.module import change is needed.
+    private readonly notificationService: NotificationService,
   ) {}
+
+  /**
+   * Emit a notification, swallowing any error so notification failures never
+   * break the payment/subscription flow.
+   */
+  private async emitNotification(
+    type: 'PaymentSuccess' | 'SubscriptionAlert',
+    data: Record<string, unknown>,
+    userId: string,
+  ): Promise<void> {
+    try {
+      await this.notificationService.sendNotification(type, data, userId);
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit ${type} notification for user ${userId.substring(0, 8)}: ${this.getErrorMessage(error)}`,
+      );
+    }
+  }
+
+  /** Resolve a human-friendly plan name from a product ID, without throwing. */
+  private resolvePlanDisplay(productId: string): string {
+    const planKey = PRODUCT_ID_TO_PLAN[productId];
+    return (planKey && PLANS[planKey]?.display) || productId;
+  }
 
   /**
    * Verify an In-App Purchase from Google Play or App Store
@@ -412,6 +439,18 @@ export class PaymentService {
       trigger: existingSub ? 'subscription_renewed' : 'subscription_created',
     });
 
+    // Payment has succeeded and the subscription is now active/renewed.
+    // Best-effort in-app + push PaymentSuccess (opt-out respected downstream).
+    await this.emitNotification(
+      'PaymentSuccess',
+      {
+        amount: transaction.amount,
+        currency: transaction.currency ?? 'USD',
+        plan: PLANS[plan]?.display ?? plan,
+      },
+      userId,
+    );
+
     return {
       success: true,
       alreadyProcessed: false,
@@ -526,6 +565,16 @@ export class PaymentService {
     const subscription = await this.subscriptionRepository.updateById(
       existing.id,
       { status: 'cancelled', endsAt },
+    );
+
+    // Best-effort SubscriptionAlert on the store-side (app-initiated) cancel.
+    const cancelledPlan = existing.productId
+      ? this.resolvePlanDisplay(existing.productId)
+      : existing.plan;
+    await this.emitNotification(
+      'SubscriptionAlert',
+      { message: `Your ${cancelledPlan} subscription was cancelled.` },
+      userId,
     );
 
     if (appleAutoRenewWarning) {
