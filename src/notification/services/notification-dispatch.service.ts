@@ -73,12 +73,19 @@ export class NotificationDispatchService {
       }
       for (const user of users) {
         try {
-          await this.sendNotification(
+          // sendNotification returns { success:false } on a caught
+          // provider/validation failure (it does not throw), so count by the
+          // result rather than assuming success after the await.
+          const result = await this.sendNotification(
             'NewStory',
             { storyTitle, storyId },
             user.id,
           );
-          sent++;
+          if (result.success) {
+            sent++;
+          } else {
+            failed++;
+          }
         } catch (error) {
           failed++;
           this.logger.warn(

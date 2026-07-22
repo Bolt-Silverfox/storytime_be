@@ -164,6 +164,14 @@ export class PushQueueService {
   ): Promise<QueuedPushResult> {
     const jobId = randomUUID();
 
+    // Enforce the documented per-batch cap up front so an oversized caller
+    // fails fast here rather than in the worker/provider path.
+    if (tokens.length === 0 || tokens.length > 500) {
+      const error = 'Token batch must contain between 1 and 500 tokens';
+      this.logger.warn(`Rejected token batch ${jobId}: ${error}`);
+      return { queued: false, jobId, error };
+    }
+
     try {
       const jobData: PushJobData = {
         jobId,

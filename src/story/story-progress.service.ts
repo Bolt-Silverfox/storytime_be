@@ -264,8 +264,9 @@ export class StoryProgressService {
 
     // Best-effort StoryFinished notification on the user (web) completion path —
     // mirrors the kid setProgress path. Only on the true false->true transition;
-    // never breaks progress recording.
-    if (dto.completed && (!existing || !existing.completed)) {
+    // uses shouldComplete (not dto.completed) so an auto-derived 100% completion
+    // also notifies. Never breaks progress recording.
+    if (shouldComplete && (!existing || !existing.completed)) {
       try {
         await this.notificationService.sendNotification(
           'StoryFinished',
