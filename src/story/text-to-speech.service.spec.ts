@@ -16,6 +16,7 @@ import { MAX_TTS_TEXT_LENGTH } from '../voice/voice.config';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 import { TTS_CIRCUIT_BREAKER_CONFIG } from '@/shared/constants/circuit-breaker.constants';
 import { VOICE_CONFIG } from '../voice/voice.constants';
+import { QuotaExhaustedError } from '../voice/errors/quota-exhausted.error';
 
 describe('TextToSpeechService', () => {
   let service: TextToSpeechService;
@@ -1062,6 +1063,26 @@ describe('TextToSpeechService', () => {
         );
 
         expect(result.providerStatus).toBeUndefined();
+      });
+
+      it('should throw QuotaExhaustedError for overridden ElevenLabs when quota is denied', async () => {
+        mockPrisma.paragraphAudioCache.findFirst.mockResolvedValue(null);
+        mockIsPremiumUser.mockResolvedValue(false);
+        mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
+
+        await expect(
+          service.generateSingleParagraphTTS(
+            storyId,
+            'A single paragraph for retry fallback.',
+            VoiceType.MILO,
+            userId,
+            { isPremium: false, providerOverride: 'elevenlabs' },
+          ),
+        ).rejects.toBeInstanceOf(QuotaExhaustedError);
+
+        expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
+        expect(mockDeepgramGenerate).not.toHaveBeenCalled();
+        expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
       });
     });
   });

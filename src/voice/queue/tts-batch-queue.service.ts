@@ -9,6 +9,7 @@ import {
   TTS_BATCH_QUEUE_OPTIONS,
   TTS_BATCH_REDIS_PREFIX,
   TTS_BATCH_REDIS_TTL,
+  TTS_BATCH_RETRY_DELAY_MS,
 } from './tts-batch-queue.constants';
 import {
   TtsBatchJobData,
@@ -78,6 +79,48 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     return batchJobId;
   }
 
+  /**
+   * Queue a delayed self-heal round for paragraphs that exhausted the whole
+   * provider chain. Re-uses the ORIGINAL batchJobId (so recovered paragraphs
+   * land in the same completed/failed tracking sets and the client polling the
+   * batch sees them heal), but with a distinct BullMQ jobId per generation and
+   * a delay so a transient outage has time to recover. The tracking keys are
+   * left intact — only their TTL is refreshed so they survive until the retry
+   * runs.
+   */
+  async queueRetryBatch(
+    original: TtsBatchJobData,
+    failedParagraphs: TtsBatchJobData['paragraphs'],
+    generation: number,
+  ): Promise<void> {
+    const { batchJobId } = original;
+
+    const jobData: TtsBatchJobData = {
+      ...original,
+      paragraphs: failedParagraphs,
+      retryGeneration: generation,
+    };
+
+    await this.batchQueue.add(TTS_BATCH_JOB_NAMES.GENERATE_PARAGRAPHS, jobData, {
+      ...TTS_BATCH_QUEUE_OPTIONS,
+      jobId: `${batchJobId}:retry:${generation}`,
+      delay: TTS_BATCH_RETRY_DELAY_MS,
+    });
+
+    const metaKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:meta`;
+    const completedKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:completed`;
+    const failedKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:failed`;
+    const pipeline = this.redis.pipeline();
+    pipeline.expire(metaKey, TTS_BATCH_REDIS_TTL);
+    pipeline.expire(completedKey, TTS_BATCH_REDIS_TTL);
+    pipeline.expire(failedKey, TTS_BATCH_REDIS_TTL);
+    await pipeline.exec();
+
+    this.logger.log(
+      `TTS batch retry queued: ${batchJobId} (generation ${generation}) — ${failedParagraphs.length} paragraph(s), delay ${TTS_BATCH_RETRY_DELAY_MS}ms`,
+    );
+  }
+
   async getBatchStatus(
     batchJobId: string,
     userId?: string,
@@ -123,10 +166,15 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     audioUrl: string,
   ): Promise<void> {
     const completedKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:completed`;
+    const failedKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:failed`;
     const metaKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:meta`;
     const pipeline = this.redis.pipeline();
     pipeline.hset(completedKey, String(index), audioUrl);
+    // A self-heal retry can complete a paragraph that a previous run marked
+    // failed — clear it from the failed set so it isn't reported in both.
+    pipeline.srem(failedKey, String(index));
     pipeline.expire(completedKey, TTS_BATCH_REDIS_TTL);
+    pipeline.expire(failedKey, TTS_BATCH_REDIS_TTL);
     pipeline.expire(metaKey, TTS_BATCH_REDIS_TTL);
     await pipeline.exec();
   }

@@ -25,6 +25,8 @@ describe('TtsBatchProcessor', () => {
     markParagraphCompleted: jest.Mock;
     markParagraphFailed: jest.Mock;
     updateBatchMeta: jest.Mock;
+    getBatchStatus: jest.Mock;
+    queueRetryBatch: jest.Mock;
   };
   let ttsService: { generateSingleParagraphTTS: jest.Mock };
 
@@ -33,6 +35,9 @@ describe('TtsBatchProcessor', () => {
       markParagraphCompleted: jest.fn().mockResolvedValue(undefined),
       markParagraphFailed: jest.fn().mockResolvedValue(undefined),
       updateBatchMeta: jest.fn().mockResolvedValue(undefined),
+      // Null snapshot → final status falls back to this run's local counts.
+      getBatchStatus: jest.fn().mockResolvedValue(null),
+      queueRetryBatch: jest.fn().mockResolvedValue(undefined),
     };
     ttsService = { generateSingleParagraphTTS: jest.fn() };
 
@@ -64,8 +69,8 @@ describe('TtsBatchProcessor', () => {
     });
 
     it('counts every duplicate index on failure', async () => {
-      // A non-quota (non-402) error is marked failed immediately, without
-      // cascading through the provider fallback chain.
+      // The error rejects on every provider, so the paragraph exhausts the whole
+      // fallback chain and is marked failed on all its duplicate positions.
       ttsService.generateSingleParagraphTTS.mockRejectedValue({ status: 400 });
 
       const result = await processor.process(
