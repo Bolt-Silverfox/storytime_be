@@ -62,7 +62,9 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
       where: { kidId_storyId: { kidId, storyId } },
       update: {
         progress: data.progress,
-        completed: data.completed,
+        // Monotonic completion: only ever flip to true, never downgrade an
+        // already-completed record (mirrors the guest progress repository).
+        ...(data.completed ? { completed: true } : {}),
         lastAccessed: new Date(),
         totalTimeSpent: { increment: data.sessionTime },
       },
@@ -145,7 +147,9 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
       where: { userId_storyId: { userId, storyId } },
       update: {
         progress: data.progress,
-        completed: data.completed,
+        // Monotonic completion: only ever flip to true, never downgrade an
+        // already-completed record (mirrors the guest progress repository).
+        ...(data.completed ? { completed: true } : {}),
         lastAccessed: new Date(),
         totalTimeSpent: data.updateTotalTimeSpent,
         isDeleted: false,

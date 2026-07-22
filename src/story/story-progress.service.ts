@@ -78,23 +78,36 @@ export class StoryProgressService {
     if (!story) throw new NotFoundException('Story not found');
 
     const sessionTime = normalizeSessionTime(dto.sessionTime);
+    // Clamp incoming progress to a valid [0, 100] percentage.
+    const clampedProgress = Math.max(0, Math.min(100, dto.progress));
 
     const existing = await this.progressRepository.findStoryProgress(
       dto.kidId,
       dto.storyId,
     );
 
+    // Completion is monotonic and auto-derived (mirrors the guest path): once a
+    // story is completed it stays completed, and reaching 100% marks it done
+    // even without an explicit flag — so a later partial-progress ping can no
+    // longer silently un-complete the story.
+    const shouldComplete =
+      existing?.completed === true ||
+      dto.completed === true ||
+      clampedProgress >= 100;
+
     const result = await this.progressRepository.upsertKidProgress(
       dto.kidId,
       dto.storyId,
       {
-        progress: dto.progress,
-        completed: dto.completed ?? false,
+        progress: clampedProgress,
+        completed: shouldComplete,
         sessionTime,
       },
     );
 
-    if (dto.completed && (!existing || !existing.completed)) {
+    // Fire the (non-idempotent) reading-level adjustment only on the transition
+    // from not-completed to completed, now including the auto-derived 100% case.
+    if (shouldComplete && !existing?.completed) {
       this.adjustReadingLevel(
         dto.kidId,
         dto.storyId,
@@ -204,6 +217,8 @@ export class StoryProgressService {
     );
 
     const sessionTime = normalizeSessionTime(dto.sessionTime);
+    // Clamp incoming progress to a valid [0, 100] percentage.
+    const clampedProgress = Math.max(0, Math.min(100, dto.progress));
 
     // If restoring a soft-deleted record, reset totalTimeSpent instead of
     // accumulating stale time from before the removal.
@@ -211,12 +226,20 @@ export class StoryProgressService {
       ? sessionTime
       : { increment: sessionTime };
 
+    // Completion is monotonic and auto-derived at 100% (mirrors the guest path):
+    // once completed the story stays completed until removeFromUserLibrary
+    // resets it, so a later partial-progress ping can no longer un-complete it.
+    const shouldComplete =
+      existing?.completed === true ||
+      dto.completed === true ||
+      clampedProgress >= 100;
+
     const result = await this.progressRepository.upsertUserProgress(
       userId,
       dto.storyId,
       {
-        progress: dto.progress,
-        completed: dto.completed ?? false,
+        progress: clampedProgress,
+        completed: shouldComplete,
         createTotalTimeSpent: sessionTime,
         updateTotalTimeSpent: totalTimeSpentUpdate,
       },
