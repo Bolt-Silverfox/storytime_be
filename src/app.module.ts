@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/require-await */
-import { Logger, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -17,7 +17,8 @@ import { ReportsModule } from './reports/reports.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import Keyv from 'keyv';
 import { CacheableMemory } from 'cacheable';
-import KeyvRedis from '@keyv/redis';
+import { RedisModule } from './redis/redis.module';
+import { KEYV_STORE } from './redis/redis.constants';
 
 import { RewardModule } from './reward/reward.module';
 import { SettingsModule } from './settings/settings.module';
@@ -50,56 +51,33 @@ import { BullBoardConfigModule } from './admin/bull-board.module';
       envFilePath: '.env',
       validate: validateEnv,
     }),
+    // Global shared Redis connection (ioredis) with reconnect + keepalive +
+    // categorized error handling. Cache, health checks, etc. reuse this one
+    // resilient connection instead of each opening its own raw client.
+    RedisModule,
     CacheModule.registerAsync({
       isGlobal: true,
-      useFactory: async () => {
-        const logger = new Logger('RedisCache');
-        // Build a resilient Redis store. node-redis (@redis/client) does NOT
-        // attach a default 'error' listener, so a dropped socket
-        // ("Socket closed unexpectedly") is emitted as an unhandled 'error'
-        // event and crashes the whole process (observed on the dev box:
-        // hundreds of PM2 restarts). Three defenses:
-        //   1. pingInterval keeps the connection alive so idle sockets aren't
-        //      closed under us.
-        //   2. reconnectStrategy reconnects forever with capped backoff.
-        //   3. an 'error' handler turns a transient drop into a log line
-        //      instead of a fatal unhandled event; cache-manager still falls
-        //      through to the in-memory store while Redis reconnects.
-        const redisStore = new KeyvRedis({
-          url: process.env.REDIS_URL || 'redis://localhost:6379',
-          pingInterval: 30_000,
-          socket: {
-            connectTimeout: 10_000,
-            reconnectStrategy: (retries: number) =>
-              Math.min(retries * 200, 5_000),
-          },
-        });
-        redisStore.client.on('error', (err: unknown) => {
-          const message = err instanceof Error ? err.message : String(err);
-          logger.warn(
-            `Redis cache connection error (reconnecting): ${message}`,
-          );
-        });
-        const redisKeyv = new Keyv({ store: redisStore });
-        redisKeyv.on('error', (err: unknown) => {
-          const message = err instanceof Error ? err.message : String(err);
-          logger.warn(`Redis cache keyv error: ${message}`);
-        });
-        return {
-          ttl: 4 * 60 * 60 * 1000, // 4 hours in milliseconds (for categories)
-          stores: [
-            // Primary: In-memory cache (fastest)
-            new Keyv({
-              store: new CacheableMemory({
-                ttl: 4 * 60 * 60 * 1000,
-                lruSize: 5000,
-              }),
+      // Reuse the shared ioredis connection (via KEYV_STORE) for the Redis
+      // cache tier. A dropped socket is handled by the provider's 'error'
+      // handler + retryStrategy (warn + reconnect) rather than crashing the
+      // process; cache-manager falls through to the in-memory tier meanwhile.
+      inject: [KEYV_STORE],
+      useFactory: async (keyvStore: Map<string, unknown>) => ({
+        ttl: 4 * 60 * 60 * 1000, // 4 hours in milliseconds (for categories)
+        stores: [
+          // Primary: In-memory cache (fastest)
+          new Keyv({
+            store: new CacheableMemory({
+              ttl: 4 * 60 * 60 * 1000,
+              lruSize: 5000,
             }),
-            // Secondary: Redis cache (persistent, resilient to socket drops)
-            redisKeyv,
-          ],
-        };
-      },
+          }),
+          // Secondary: Redis cache (persistent) - using shared Redis connection
+          new Keyv({
+            store: keyvStore,
+          }),
+        ],
+      }),
     }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
