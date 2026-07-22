@@ -1,6 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentService } from './payment.service';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
@@ -25,7 +29,11 @@ type MockPaymentTransactionRepository = Record<
 
 const createMockSubscriptionRepository = (): MockSubscriptionRepository => ({
   findFirstByUser: jest.fn(),
+  findById: jest.fn(),
   updateById: jest.fn(),
+  // CAS write defaults to a matched row (applied). Conflict/lost-race tests
+  // override this to resolve 0.
+  updateByIdIfToken: jest.fn().mockResolvedValue(1),
   create: jest.fn(),
 });
 
@@ -343,6 +351,130 @@ describe('PaymentService', () => {
       );
     });
 
+    it('does NOT clobber a concurrently-installed DIFFERENT token (CAS conflict)', async () => {
+      const userId = 'user-1';
+      const dto = {
+        platform: 'google' as const,
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'new-google-token',
+      };
+      const now = new Date();
+
+      mockGoogleVerification.verify.mockResolvedValue({
+        success: true,
+        isSubscription: true,
+        platformTxId: 'GPA.5678',
+        amount: 4.99,
+        currency: 'USD',
+        expirationTime: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+        linkedPurchaseToken: 'old-google-token',
+        metadata: { acknowledgementState: 1 },
+      });
+
+      // The migration reads the row (still the linked/old token). The CAS
+      // affects zero rows because a concurrent delivery already swapped the row
+      // to a DIFFERENT token; the re-read reveals that winning token.
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
+        id: 'sub-1',
+        userId,
+        plan: 'monthly',
+        status: 'active',
+        purchaseToken: 'old-google-token',
+      });
+      mockSubscriptionRepo.updateByIdIfToken.mockResolvedValue(0);
+      mockSubscriptionRepo.findById.mockResolvedValue({
+        id: 'sub-1',
+        userId,
+        plan: 'monthly',
+        status: 'active',
+        purchaseToken: 'concurrent-winner-token',
+      });
+
+      // The delivery must abort so the concurrent winner is preserved.
+      await expect(service.verifyPurchase(userId, dto)).rejects.toThrow(
+        ConflictException,
+      );
+
+      // Only the migration CAS was attempted (0). The flow never reached the
+      // subscription upsert, so the winning token is never overwritten.
+      expect(mockSubscriptionRepo.updateByIdIfToken).toHaveBeenCalledTimes(1);
+      expect(mockSubscriptionRepo.updateByIdIfToken).toHaveBeenCalledWith(
+        'sub-1',
+        'old-google-token',
+        { purchaseToken: 'new-google-token' },
+      );
+      expect(mockSubscriptionRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('treats a zero-row CAS as success when the row already holds OUR token (idempotent repeat)', async () => {
+      const userId = 'user-1';
+      const dto = {
+        platform: 'google' as const,
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'new-google-token',
+      };
+      const now = new Date();
+
+      mockGoogleVerification.verify.mockResolvedValue({
+        success: true,
+        isSubscription: true,
+        platformTxId: 'GPA.5678',
+        amount: 4.99,
+        currency: 'USD',
+        expirationTime: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+        linkedPurchaseToken: 'old-google-token',
+        metadata: { acknowledgementState: 1 },
+      });
+
+      // Migration read sees the old token; the CAS misses because an identical
+      // concurrent delivery already migrated the row to OUR new token. The
+      // re-read confirms it holds newToken, so this is an idempotent repeat and
+      // the flow proceeds to a successful result.
+      mockSubscriptionRepo.findFirstByUser
+        .mockResolvedValueOnce({
+          id: 'sub-1',
+          userId,
+          plan: 'monthly',
+          status: 'active',
+          purchaseToken: 'old-google-token',
+        })
+        .mockResolvedValue({
+          id: 'sub-1',
+          userId,
+          plan: 'monthly',
+          status: 'active',
+          startedAt: now,
+          endsAt: now,
+          purchaseToken: 'new-google-token',
+        });
+      // Migration CAS misses (0); the subsequent upsert guard matches (1).
+      mockSubscriptionRepo.updateByIdIfToken
+        .mockResolvedValueOnce(0)
+        .mockResolvedValue(1);
+      mockSubscriptionRepo.findById.mockResolvedValue({
+        id: 'sub-1',
+        userId,
+        plan: 'monthly',
+        status: 'active',
+        startedAt: now,
+        endsAt: now,
+        purchaseToken: 'new-google-token',
+      });
+      mockPaymentTxRepo.create.mockResolvedValue({
+        id: 'tx-idem',
+        userId,
+        amount: 4.99,
+        currency: 'USD',
+        status: 'success',
+        reference: 'hash-idem',
+      });
+
+      const result = await service.verifyPurchase(userId, dto);
+
+      expect(result.success).toBe(true);
+      expect(mockSubscriptionRepo.create).not.toHaveBeenCalled();
+    });
+
     it('should update existing subscription for returning user', async () => {
       const userId = 'user-1';
       const dto = {
@@ -370,25 +502,39 @@ describe('PaymentService', () => {
         reference: 'hash-789',
       });
 
+      // Initial read sees the old row; the guarded re-read after the write
+      // returns the upgraded row.
       mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
         id: 'existing-sub',
         userId,
         plan: 'monthly',
         status: 'active',
+        purchaseToken: null,
       });
-
-      mockSubscriptionRepo.updateById.mockResolvedValue({
+      mockSubscriptionRepo.findById.mockResolvedValue({
         id: 'existing-sub',
         userId,
         plan: 'yearly',
         status: 'active',
         startedAt: now,
         endsAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
+        purchaseToken: 'new-token',
       });
 
       const result = await service.verifyPurchase(userId, dto);
 
-      expect(mockSubscriptionRepo.updateById).toHaveBeenCalled();
+      // Existing-row writes go through the token-guarded CAS (updateByIdIfToken),
+      // not an unconditional update-by-id, so a concurrent token cannot be
+      // clobbered.
+      expect(mockSubscriptionRepo.updateByIdIfToken).toHaveBeenCalledWith(
+        'existing-sub',
+        null,
+        expect.objectContaining({
+          plan: 'yearly',
+          purchaseToken: 'new-token',
+        }),
+      );
+      expect(mockSubscriptionRepo.updateById).not.toHaveBeenCalled();
       expect(mockSubscriptionRepo.create).not.toHaveBeenCalled();
       expect(result.subscription?.plan).toBe('yearly');
     });

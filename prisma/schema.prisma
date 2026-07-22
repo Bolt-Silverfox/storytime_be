@@ -500,9 +500,15 @@ model Subscription {
   purchaseToken String? // token from the platform
   // Out-of-order delivery protection: the authoritative timestamp of the most
   // recent store webhook applied to this row (Apple signedDate / Google
-  // eventTimeMillis). A later event whose timestamp is <= this is stale and is
-  // skipped so it cannot clobber newer state (e.g. a delayed EXPIRED after a
-  // DID_RENEW). Nullable so pre-existing rows and untimestamped events work.
+  // eventTimeMillis). A later event is stale ONLY when its timestamp is strictly
+  // less than this watermark; it is then skipped so it cannot clobber newer state
+  // (e.g. a delayed EXPIRED after a DID_RENEW). Equal timestamps APPLY, not skip:
+  // two DISTINCT notifications can share a millisecond, and genuine duplicates are
+  // already handled by the WebhookEvent (platform, externalEventId) idempotency
+  // layer, so a same-instant event reaching the watermark is a distinct one that
+  // must be processed in arrival order. The guard is enforced as a compare-and-swap
+  // inside the update (WHERE lastEventAt IS NULL OR lastEventAt <= eventAt), never a
+  // read-then-write. Nullable so pre-existing rows and untimestamped events work.
   lastEventAt   DateTime?
   // SOFT DELETE FIELDS
   isDeleted     Boolean   @default(false)
