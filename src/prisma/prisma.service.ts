@@ -10,6 +10,45 @@ import IHealth, { HealthResponse } from '@/health/Ihealth.interfaces';
 // Threshold for slow query warnings (milliseconds)
 const SLOW_QUERY_THRESHOLD_MS = 100;
 
+const FALLBACK_DATABASE_CONNECTION_LIMIT = 3;
+
+export const parseConnectionLimit = (value: string | undefined): number => {
+  if (value === undefined || value.trim() === '') {
+    return FALLBACK_DATABASE_CONNECTION_LIMIT;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : FALLBACK_DATABASE_CONNECTION_LIMIT;
+};
+
+const DEFAULT_DATABASE_CONNECTION_LIMIT = parseConnectionLimit(
+  process.env.DATABASE_CONNECTION_LIMIT,
+);
+
+export const resolvePrismaDatasourceUrl = (
+  databaseUrl: string | undefined,
+  connectionLimit = DEFAULT_DATABASE_CONNECTION_LIMIT,
+): string | undefined => {
+  if (!databaseUrl || databaseUrl.startsWith('prisma://')) {
+    return databaseUrl;
+  }
+
+  try {
+    const url = new URL(databaseUrl);
+    const isPostgresUrl =
+      url.protocol === 'postgres:' || url.protocol === 'postgresql:';
+
+    if (isPostgresUrl && !url.searchParams.has('connection_limit')) {
+      url.searchParams.set('connection_limit', String(connectionLimit));
+    }
+    return url.toString();
+  } catch {
+    return databaseUrl;
+  }
+};
+
 @Injectable()
 export class PrismaService
   extends PrismaClient
@@ -18,12 +57,15 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    // Configure connection pool via datasource URL parameters
-    // These can be overridden in DATABASE_URL: ?connection_limit=10&pool_timeout=10
+    // Configure connection pool via datasource URL parameters. A bounded
+    // connection_limit is auto-appended to direct (postgresql://) URLs so a
+    // single instance can't exhaust the shared database pool; Prisma Accelerate
+    // (prisma://) URLs are passed through untouched. Any of these can be
+    // overridden in DATABASE_URL: ?connection_limit=10&pool_timeout=10
     super({
       datasources: {
         db: {
-          url: process.env.DATABASE_URL,
+          url: resolvePrismaDatasourceUrl(process.env.DATABASE_URL),
         },
       },
       log:

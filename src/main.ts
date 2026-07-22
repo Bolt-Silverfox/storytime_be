@@ -7,7 +7,7 @@ import { json, urlencoded } from 'express';
 
 import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
@@ -24,10 +24,39 @@ import { winstonConfig } from './shared/config/logger.config';
 const bootstrapLogger = new Logger('Bootstrap');
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Populated once bootstrap() creates the Nest app, so the process-signal and
+// error handlers below can close it before the process exits.
+let app: INestApplication | undefined;
+let shuttingDown = false;
+
+// Close the Nest app (which runs onModuleDestroy on every provider — e.g.
+// PrismaService.$disconnect() and BullMQ teardown) BEFORE the process exits.
+// A bare process.exit() bypasses enableShutdownHooks and orphans the open
+// database connections; in dev's restart-on-save loop those leaked connections
+// pile up until Postgres refuses new ones. A short unref'd timeout guarantees
+// we still exit even if close() hangs.
+const shutdown = async (code: number, reason: string): Promise<void> => {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
+  bootstrapLogger.log(`Shutting down (${reason})`);
+  const force = setTimeout(() => process.exit(code), 8000);
+  force.unref();
+  try {
+    await app?.close();
+  } catch (err) {
+    bootstrapLogger.error('Error during graceful shutdown', err as Error);
+  } finally {
+    clearTimeout(force);
+    process.exit(code);
+  }
+};
+
 process.on('uncaughtException', (error: Error) => {
   captureException(error);
   bootstrapLogger.error(`Uncaught Exception: ${error.message}`, error.stack);
-  setTimeout(() => process.exit(1), 1000);
+  void shutdown(1, 'uncaughtException');
 });
 
 process.on('unhandledRejection', (reason: unknown) => {
@@ -37,25 +66,29 @@ process.on('unhandledRejection', (reason: unknown) => {
     reason instanceof Error ? reason.stack : undefined,
   );
   if (isProduction) {
-    setTimeout(() => process.exit(1), 1000);
+    void shutdown(1, 'unhandledRejection');
   }
 });
 
 process.on('SIGTERM', () => {
   bootstrapLogger.log('SIGTERM received. Graceful shutdown initiated...');
-  process.exit(0);
+  void shutdown(0, 'SIGTERM');
 });
 
 process.on('SIGINT', () => {
   bootstrapLogger.log('SIGINT received. Graceful shutdown initiated...');
-  process.exit(0);
+  void shutdown(0, 'SIGINT');
 });
 
 async function bootstrap() {
   const logger = new Logger('Main');
-  const app = await NestFactory.create(AppModule, {
+  app = await NestFactory.create(AppModule, {
     logger: WinstonModule.createLogger(winstonConfig),
   });
+
+  // Run every provider's onModuleDestroy (PrismaService.$disconnect(), BullMQ
+  // teardown, …) on SIGTERM/SIGINT and on the explicit app.close() in shutdown().
+  app.enableShutdownHooks();
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);
