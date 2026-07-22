@@ -103,9 +103,9 @@ This document provides an accurate, up-to-date summary of remaining work after v
 ### Priority 1 (Blue-green validation & promotion)
 
 - [~] **Validate `blue.dev.*` end-to-end** — backend API smoke test PASSED
-      2026-07-22 (see "Blue smoke-test results" below). Remaining: FE/mobile
-      client validation against blue, and re-test after the TTS fix + a blue
-      redeploy.
+      2026-07-22 (see "Blue smoke-test results" below); blue redeployed to the
+      develop-v1.3.0 tip (GDPR export now live). Remaining: seed blue's catalog,
+      FE/mobile client validation against blue, and a TTS re-test.
 - [ ] Register mobile blue OAuth clients (Google iOS/Android, Firebase apps,
       Apple App ID for `net.emerj.storytime.blue`) and confirm blue backend trusts
       them — see the OAuth checklist in `docs/DEPLOYMENT_BLUE_GREEN.md`. **This is
@@ -133,20 +133,38 @@ This document provides an accurate, up-to-date summary of remaining work after v
 - **SSE** (`GET /events/jobs`) → `text/event-stream` 200, stream held open.
 
 **Issues found:**
-- ⚠️ **TTS/audio generation fails** — generated story has `audioUrl` empty.
-  Logs: Deepgram TTS timeout → Edge TTS timeout → "Voice generation failed on all
-  providers". `ELEVENLABS_API_KEY` is **unset** on blue (the most reliable
-  provider is missing), leaving only Deepgram + Edge TTS, both of which timed out.
-  Needs: add an ElevenLabs key to blue's env and/or investigate the Deepgram/Edge
-  timeouts. Observed once — confirm whether persistent or transient.
-- ⚠️ **`Error: Socket closed unexpectedly` × ~114** in blue's PM2 error log
-  (ioredis/BullMQ disconnect). Appears **stale** (log mtime predates the test; not
-  spewing during it) — likely deploy/restart churn. Monitor; not currently blocking.
-- ℹ️ **Catalog is empty** on blue (`/stories/categories|themes|seasons` → `[]`) —
-  blue DB is unseeded. Run the seed if the FE needs a populated catalog.
-- ℹ️ **`GET /user/me/export` (GDPR export, PR #432) is 404 on blue** — blue's
-  running build predates that merge. A blue redeploy (`blue-deploy.yml`, manual
-  `workflow_dispatch`) will pick it up along with PR #437's Grafana durability.
+- ⚠️ **TTS/audio generation fails for the free-tier path** — generated story has
+  `audioUrl` empty. Logs: Deepgram timeout → Edge TTS timeout → "Voice generation
+  failed on all providers". **Correction:** the ElevenLabs key is NOT missing —
+  the env var is `ELEVEN_LABS_KEY` (present on both green and blue); an earlier
+  note grepped the wrong name. Real cause: the fallback is ElevenLabs → Deepgram
+  → Edge, but ElevenLabs is **premium/trial-gated** (free users get it only for
+  one trial story), so a free-tier story uses Deepgram → Edge — and both timed
+  out. Same box/config as green-dev, so not blue-specific; likely a transient
+  Deepgram+Edge blip. Needs a re-test to confirm persistent vs transient.
+- ⚠️ **`Error: Socket closed unexpectedly` (@redis/client)** recurring in blue's
+  PM2 error log; reappeared after the redeploy. Blue's cumulative PM2 restart
+  count is ~480 (historical crash-loop era, not currently climbing). Monitor.
+- ℹ️ **Catalog empty on blue** = the story taxonomy. Measured 2026-07-22:
+  green-dev **categories=15 / themes=19 / seasons=8** (seeded) vs blue **0 / 1 / 0**
+  (`storytime_db_blue` created fresh, never seeded). Run `pnpm db:seed` against
+  blue for FE browse/filter validation.
+- ✅ **`GET /user/me/export` (GDPR export) now LIVE on blue** — was 404
+  pre-redeploy. After the **2026-07-22 manual redeploy** to the develop-v1.3.0 tip
+  (b8e8e0b), it returns 200 with `Content-Disposition: attachment` +
+  `Cache-Control: no-store` (PR #432 + #435), secrets stripped.
+
+**Deploy mechanism (important):** `blue-deploy.yml` is **not dispatchable** — it
+lives only on `develop-v1.3.0`, not the default branch (`main`), so GitHub Actions
+never registers it and it has **never run**. Green auto-deploys on push; **blue
+does not** — blue is deployed **manually on the box**. That is why merging the GDPR
+PR into develop-v1.3.0 did not deploy blue. Manual redeploy recipe: clean
+`git clone --branch develop-v1.3.0` → `rsync -az --delete` to the blue dir
+excluding `.env .env.local node_modules dist scripts/.venv .git .github` (preserves
+blue's live .env; rebuild `scripts/.venv` afterward — the exclude does not protect
+it from `--delete`) → on the box `pnpm install` → **`pnpm build`** (required:
+`deploy:blue` does NOT build) → `pnpm deploy:blue`. To make blue CI-deployable,
+`blue-deploy.yml` must exist on `main`.
 - 🧹 Two throwaway test accounts (`blue-smoke-*@example.com`, `reg-*@example.com`)
   were created in `storytime_db_blue` during the test; purge if desired.
 
@@ -201,8 +219,9 @@ This document provides an accurate, up-to-date summary of remaining work after v
 | **Lint** | ✅ Clean | Zero errors |
 
 **Overall Assessment:** The codebase is in excellent shape. All P0/P1 code items are
-complete. Blue's backend passed an end-to-end API smoke test (2026-07-22) with two
-follow-ups: fix blue TTS/audio (ElevenLabs key unset + Deepgram/Edge timeouts) and
-redeploy blue to pick up the GDPR export + Grafana durability. The remaining true
-blocker for promotion is mobile blue OAuth client registration (console work). Then
-promote by cutting green's deploy target to `develop-v1.3.0` (no merge-down).
+complete. Blue's backend passed an end-to-end API smoke test (2026-07-22) and was
+redeployed to the develop-v1.3.0 tip (GDPR export now live). Open follow-ups: seed
+blue's catalog (`pnpm db:seed`) and re-test blue TTS/audio (free-tier Deepgram/Edge
+both timed out — not an ElevenLabs key issue). The remaining true blocker for
+promotion is mobile blue OAuth client registration (console work). Then promote by
+cutting green's deploy target to `develop-v1.3.0` (no merge-down).
