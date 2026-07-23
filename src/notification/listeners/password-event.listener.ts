@@ -47,19 +47,27 @@ export class PasswordEventListener {
       `Sending password reset security alert to ${payload.email}`,
     );
 
-    const resp = await this.notificationService.sendNotification(
-      'PasswordResetAlert',
-      {
-        email: payload.email,
-        ipAddress: payload.ipAddress,
-        userAgent: payload.userAgent,
-        timestamp: payload.timestamp,
-        userName: payload.userName,
-      },
-    );
+    // Best-effort: emit() is fire-and-forget, so a rejection here would surface
+    // as an unhandled rejection rather than being observable by the emitter.
+    // Catch and log locally so the reset flow stays isolated.
+    try {
+      const resp = await this.notificationService.sendNotification(
+        'PasswordResetAlert',
+        {
+          email: payload.email,
+          ipAddress: payload.ipAddress,
+          userAgent: payload.userAgent,
+          timestamp: payload.timestamp,
+          userName: payload.userName,
+        },
+      );
 
-    if (!resp.success) {
-      this.logger.error(`Failed to send password reset alert: ${resp.error}`);
+      if (!resp.success) {
+        this.logger.error(`Failed to send password reset alert: ${resp.error}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Password reset alert failed: ${message}`);
     }
   }
 

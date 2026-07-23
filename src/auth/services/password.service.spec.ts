@@ -151,11 +151,10 @@ describe('PasswordService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('should alert and record IP when reset requested from an unfamiliar IP', async () => {
+    it('should alert but NOT record IP when reset requested from an unfamiliar IP', async () => {
       // Arrange
       authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
       authRepository.findKnownUserIP.mockResolvedValue(null);
-      authRepository.recordUserIP.mockResolvedValue(undefined);
       authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
       authRepository.createToken.mockResolvedValue({} as any);
 
@@ -179,11 +178,8 @@ describe('PasswordService', () => {
         timestamp: expect.any(String),
         userName: 'Test User',
       });
-      expect(authRepository.recordUserIP).toHaveBeenCalledWith(
-        'user-1',
-        '203.0.113.5',
-        'Mozilla/5.0',
-      );
+      // An unauthenticated request must NOT establish a trusted IP.
+      expect(authRepository.recordUserIP).not.toHaveBeenCalled();
       expect(authRepository.touchUserIP).not.toHaveBeenCalled();
     });
 
@@ -380,6 +376,99 @@ describe('PasswordService', () => {
       expect(authRepository.deleteAllUserSessions).toHaveBeenCalledWith(
         'user-1',
       );
+    });
+
+    it('should record the requesting IP as known on successful completion', async () => {
+      // Arrange
+      authRepository.findTokenByHashedToken.mockResolvedValue(
+        mockResetToken as any,
+      );
+      authRepository.updateUser.mockResolvedValue({} as any);
+      authRepository.deleteToken.mockResolvedValue(undefined);
+      authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
+      authRepository.findKnownUserIP.mockResolvedValue(null);
+      authRepository.recordUserIP.mockResolvedValue(undefined);
+
+      // Act
+      await service.resetPassword(
+        'raw-reset-token',
+        'test@example.com',
+        'NewPassword1#',
+        {
+          token: 'raw-reset-token',
+          email: 'test@example.com',
+          newPassword: 'NewPassword1#',
+        },
+        '203.0.113.5',
+        'Mozilla/5.0',
+      );
+
+      // Assert — the IP becomes known only after the token-authenticated reset
+      expect(authRepository.recordUserIP).toHaveBeenCalledWith(
+        'user-1',
+        '203.0.113.5',
+        'Mozilla/5.0',
+      );
+    });
+
+    it('should touch an already-known IP on completion without duplicating it', async () => {
+      // Arrange
+      authRepository.findTokenByHashedToken.mockResolvedValue(
+        mockResetToken as any,
+      );
+      authRepository.updateUser.mockResolvedValue({} as any);
+      authRepository.deleteToken.mockResolvedValue(undefined);
+      authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
+      authRepository.findKnownUserIP.mockResolvedValue({ id: 'ip-1' } as any);
+      authRepository.touchUserIP.mockResolvedValue(undefined);
+
+      // Act
+      await service.resetPassword(
+        'raw-reset-token',
+        'test@example.com',
+        'NewPassword1#',
+        {
+          token: 'raw-reset-token',
+          email: 'test@example.com',
+          newPassword: 'NewPassword1#',
+        },
+        '203.0.113.5',
+        'Mozilla/5.0',
+      );
+
+      // Assert
+      expect(authRepository.touchUserIP).toHaveBeenCalledWith('ip-1');
+      expect(authRepository.recordUserIP).not.toHaveBeenCalled();
+    });
+
+    it('should still complete the reset when IP recording fails', async () => {
+      // Arrange
+      authRepository.findTokenByHashedToken.mockResolvedValue(
+        mockResetToken as any,
+      );
+      authRepository.updateUser.mockResolvedValue({} as any);
+      authRepository.deleteToken.mockResolvedValue(undefined);
+      authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
+      authRepository.findKnownUserIP.mockRejectedValue(new Error('db down'));
+
+      // Act
+      const result = await service.resetPassword(
+        'raw-reset-token',
+        'test@example.com',
+        'NewPassword1#',
+        {
+          token: 'raw-reset-token',
+          email: 'test@example.com',
+          newPassword: 'NewPassword1#',
+        },
+        '203.0.113.5',
+        'Mozilla/5.0',
+      );
+
+      // Assert — recording is best-effort and must not fail the reset
+      expect(result).toEqual({
+        message: 'Password has been reset successfully',
+      });
     });
 
     it('should throw NotFoundException when token is not found', async () => {

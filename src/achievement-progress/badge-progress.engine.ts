@@ -61,14 +61,24 @@ export class BadgeProgressEngine implements OnModuleInit {
     try {
       // Detect whether this is the kid's first activity today BEFORE logging,
       // so we only evaluate a streak milestone on the day the streak grows.
+      // Best-effort: a failure here must not abort the core activity flow, so
+      // default to `true` (skip the uncertain milestone) and keep going.
       let hadActivityToday = true;
       if (kidId) {
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
-        const lastActivity =
-          await this.streakRepository.findLastKidActivity(kidId);
-        hadActivityToday =
-          lastActivity !== null && lastActivity.createdAt >= startOfToday;
+        try {
+          const startOfToday = new Date();
+          startOfToday.setHours(0, 0, 0, 0);
+          const lastActivity =
+            await this.streakRepository.findLastKidActivity(kidId);
+          hadActivityToday =
+            lastActivity !== null && lastActivity.createdAt >= startOfToday;
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `Failed to check today's activity for kid ${kidId}; skipping streak milestone evaluation: ${message}`,
+          );
+        }
       }
 
       // Log activity
