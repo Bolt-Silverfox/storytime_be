@@ -6,6 +6,7 @@ import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
+import { EmailVerificationService } from './email-verification.service';
 import { Role, OnboardingStatus } from '@prisma/client';
 
 describe('OnboardingService', () => {
@@ -76,6 +77,10 @@ describe('OnboardingService', () => {
       get: jest.fn(),
     };
 
+    const mockEmailVerificationService = {
+      sendEmailVerification: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OnboardingService,
@@ -84,6 +89,10 @@ describe('OnboardingService', () => {
         { provide: TokenService, useValue: mockTokenService },
         { provide: EventEmitter2, useValue: mockEventEmitter },
         { provide: ConfigService, useValue: mockConfigService },
+        {
+          provide: EmailVerificationService,
+          useValue: mockEmailVerificationService,
+        },
       ],
     }).compile();
 
