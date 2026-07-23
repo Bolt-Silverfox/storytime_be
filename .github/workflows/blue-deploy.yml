@@ -172,6 +172,16 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sleep 10
-            curl -sf http://localhost:3601/api/v1/health || exit 1
-            echo "Blue deployment verified on :3601"
+            # Poll health for up to ~60s. A single check after a fixed sleep
+            # false-fails when the app boots slowly (seeding + fresh start can
+            # push first-response past 10s), even though blue comes up fine.
+            for i in $(seq 1 20); do
+              if curl -sf http://localhost:3601/api/v1/health >/dev/null 2>&1; then
+                echo "Blue deployment verified on :3601 (attempt $i)"
+                exit 0
+              fi
+              echo "health not ready yet (attempt $i/20), retrying in 3s..."
+              sleep 3
+            done
+            echo "Blue health check failed after ~60s"
+            exit 1
