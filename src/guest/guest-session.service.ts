@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
@@ -69,44 +70,105 @@ export const GUEST_STORY_LIMIT = 3; // Guests can read 3 unique stories per sess
  * Uses Redis via Keyv for persistence, with in-memory fallback for local development.
  */
 @Injectable()
-export class GuestSessionService {
+export class GuestSessionService implements OnModuleInit {
   private readonly logger = new Logger(GuestSessionService.name);
   private keyv: Keyv;
+  // True once we've fallen back to the in-memory store (Redis unavailable).
+  private usingMemory = false;
 
   constructor(private readonly configService: ConfigService) {
     const redisUrl =
       this.configService.get<string>('REDIS_URL') || 'redis://localhost:6379';
 
-    // Try to use Redis, fall back to in-memory if connection fails
+    // Try to use Redis, fall back to in-memory if it can't be initialised.
     try {
-      this.keyv = new Keyv({
-        store: new KeyvRedis(redisUrl, { throwOnConnectError: true }),
+      // throwOnConnectError:false lets the underlying node-redis client
+      // reconnect on a transient socket close (e.g. Redis' `timeout` idle
+      // disconnect) instead of throwing. A throw here would surface as an
+      // unhandled error and crash the whole process — taking auth/sessions
+      // down with it (this was the cause of an intermittent crash-loop).
+      const store = new KeyvRedis(redisUrl, { throwOnConnectError: false });
+
+      // The node-redis client's own errors MUST always have a listener, or a
+      // socket close is emitted as an unhandled 'error' and crashes the
+      // process. Log it and let node-redis auto-reconnect; do not tear down
+      // the shared store on a transient blip (that permanently downgraded to
+      // a per-worker in-memory store, which isn't shared across the cluster).
+      store.on('error', (err: Error) => {
+        this.logger.warn(
+          `Guest-session Redis store error (auto-reconnecting): ${err?.message ?? err}`,
+        );
       });
 
-      this.keyv.on('error', (err) => {
-        this.logger.error(
-          `Redis connection error, falling back to in-memory store: ${err.message}`,
-        );
-        // Switch to in-memory fallback
-        this.keyv = new Keyv({
-          store: new CacheableMemory({
-            ttl: GUEST_SESSION_TTL_MS,
-            lruSize: 1000,
-          }),
-        });
-        // now using in-memory fallback
-      });
+      this.keyv = new Keyv({ store });
+      this.attachKeyvErrorHandler(this.keyv);
 
       this.logger.log('GuestSessionService using Redis for persistence');
-    } catch {
-      this.logger.warn('Failed to connect to Redis, using in-memory cache');
-      this.keyv = new Keyv({
-        store: new CacheableMemory({
-          ttl: GUEST_SESSION_TTL_MS,
-          lruSize: 1000,
-        }),
-      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to initialise Redis for guest sessions, using in-memory cache: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      this.useInMemoryStore();
     }
+  }
+
+  /**
+   * Verifies Redis is actually reachable at startup. `KeyvRedis` connects
+   * lazily and, with `throwOnConnectError: false`, never throws — so the
+   * constructor's try/catch can't detect a Redis that's simply down. Probe
+   * with a bounded write here; if it can't complete, fall back to the
+   * in-memory store so session ops don't fail silently against a dead Redis.
+   * The probe is fully guarded (timeout + catch) so it can never hang or crash
+   * startup — worst case it keeps the resilient Redis store.
+   */
+  async onModuleInit(): Promise<void> {
+    if (this.usingMemory) {
+      return;
+    }
+    const probeKey = this.getSessionKey('__redis_probe__');
+    try {
+      await Promise.race([
+        (async () => {
+          await this.keyv.set(probeKey, 1, 5000);
+          await this.keyv.delete(probeKey);
+        })(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Redis probe timed out')), 4000),
+        ),
+      ]);
+      this.logger.log('Guest-session Redis connectivity verified');
+    } catch (err) {
+      this.logger.warn(
+        `Redis unavailable at startup, using in-memory guest sessions: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      this.useInMemoryStore();
+    }
+  }
+
+  /** Swap to the in-memory store (with an error handler attached). */
+  private useInMemoryStore(): void {
+    this.usingMemory = true;
+    this.keyv = new Keyv({
+      store: new CacheableMemory({
+        ttl: GUEST_SESSION_TTL_MS,
+        lruSize: 1000,
+      }),
+    });
+    this.attachKeyvErrorHandler(this.keyv);
+  }
+
+  /**
+   * Keyv is an EventEmitter and an 'error' event with no listener throws
+   * (crashing the process). Always attach a handler.
+   */
+  private attachKeyvErrorHandler(keyv: Keyv): void {
+    keyv.on('error', (err: Error) => {
+      this.logger.warn(`Guest-session cache error: ${err?.message ?? err}`);
+    });
   }
 
   /**
