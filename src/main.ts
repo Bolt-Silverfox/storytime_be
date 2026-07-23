@@ -1,4 +1,11 @@
-// CRITICAL: Observability must be initialized BEFORE any other imports.
+// CRITICAL: load .env into process.env BEFORE the observability imports below.
+// otel-setup/sentry-setup read process.env at IMPORT time (before Nest's
+// ConfigModule runs), so the OTLP/Grafana/Sentry vars must already be present
+// or they silently fall back to no-op/console exporters. dotenv.config() does
+// not override vars already set by pm2/the shell, so this is safe everywhere.
+import 'dotenv/config';
+
+// Observability must be initialized BEFORE any other imports.
 // Sentry first so its OTel wiring is available when otel-setup builds the NodeSDK;
 // both are SAFE NO-OPs when SENTRY_DSN / Grafana Cloud env vars are unset.
 import { isSentryEnabled, captureException } from './sentry-setup';
