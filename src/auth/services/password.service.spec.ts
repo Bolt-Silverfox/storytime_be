@@ -449,7 +449,10 @@ describe('PasswordService', () => {
       authRepository.updateUser.mockResolvedValue({} as any);
       authRepository.deleteToken.mockResolvedValue(undefined);
       authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
-      authRepository.findKnownUserIP.mockRejectedValue(new Error('db down'));
+      // Unfamiliar IP, then the persistence itself fails — exercises the
+      // recordUserIP best-effort path (not just the lookup).
+      authRepository.findKnownUserIP.mockResolvedValue(null);
+      authRepository.recordUserIP.mockRejectedValue(new Error('db down'));
 
       // Act
       const result = await service.resetPassword(
