@@ -35,6 +35,7 @@ const mockBadgeService = {
 const mockKidRepository: Record<keyof IKidRepository, jest.Mock> = {
   findIdsByParent: jest.fn(),
   findParentIdById: jest.fn(),
+  findNameById: jest.fn(),
 };
 
 const mockStoryProgressRepository: Record<

@@ -37,13 +37,41 @@ export class PasswordService {
 
   async requestPasswordReset(
     data: RequestResetDto,
-    ip?: string, // eslint-disable-line @typescript-eslint/no-unused-vars
-    userAgent?: string, // eslint-disable-line @typescript-eslint/no-unused-vars
+    ip?: string,
+    userAgent?: string,
   ): Promise<{ message: string }> {
     const { email } = data;
     const user = await this.authRepository.findUserByEmail(email);
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    // Security: alert the user when a reset is requested from an unfamiliar IP.
+    // We deliberately DO NOT record the IP here — an unauthenticated reset
+    // request must not be able to establish a "known" IP (that would let an
+    // attacker silence future alerts for their own address). Known IPs are
+    // only ever recorded after a successful, token-authenticated reset (see
+    // resetPassword). Best-effort — never block the reset if this fails.
+    if (ip) {
+      try {
+        const knownIp = await this.authRepository.findKnownUserIP(user.id, ip);
+        if (!knownIp) {
+          this.eventEmitter.emit('password.reset_alert', {
+            userId: user.id,
+            email: user.email,
+            ipAddress: ip,
+            userAgent: userAgent || 'Unknown Device',
+            timestamp: new Date().toISOString(),
+            userName: user.name || user.email.split('@')[0],
+          });
+        } else {
+          await this.authRepository.touchUserIP(knownIp.id);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`IP check/alert failed: ${message}`);
+        // Continue with the password reset — security alerting must not block it.
+      }
     }
 
     // Delete any existing reset tokens
@@ -112,7 +140,9 @@ export class PasswordService {
     token: string,
     email: string,
     newPassword: string,
-    data: ResetPasswordDto, // eslint-disable-line @typescript-eslint/no-unused-vars
+    data: ResetPasswordDto,
+    ip?: string,
+    userAgent?: string,
   ): Promise<{ message: string }> {
     const hashedToken = this.tokenService.hashToken(token);
     const resetToken = await this.authRepository.findTokenByHashedToken(
@@ -138,6 +168,31 @@ export class PasswordService {
     // Clean up: delete token and invalidate all sessions
     await this.authRepository.deleteToken(resetToken.id);
     await this.authRepository.deleteAllUserSessions(resetToken.userId);
+
+    // The reset succeeded with a token delivered to the account's email, so the
+    // requester has proven control of the account. Only now is it safe to trust
+    // this IP as "known" and suppress future unfamiliar-IP alerts from it.
+    // Best-effort — a failure here must not fail the completed reset.
+    if (ip) {
+      try {
+        const knownIp = await this.authRepository.findKnownUserIP(
+          resetToken.userId,
+          ip,
+        );
+        if (!knownIp) {
+          await this.authRepository.recordUserIP(
+            resetToken.userId,
+            ip,
+            userAgent,
+          );
+        } else {
+          await this.authRepository.touchUserIP(knownIp.id);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Failed to record reset IP: ${message}`);
+      }
+    }
 
     return { message: 'Password has been reset successfully' };
   }

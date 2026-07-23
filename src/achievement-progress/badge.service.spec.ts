@@ -37,6 +37,7 @@ const mockUserBadgeRepository: Record<keyof IUserBadgeRepository, jest.Mock> = {
 const mockKidRepository: Record<keyof IKidRepository, jest.Mock> = {
   findIdsByParent: jest.fn(),
   findParentIdById: jest.fn(),
+  findNameById: jest.fn(),
 };
 
 const mockBadgeConstants = {
