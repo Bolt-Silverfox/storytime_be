@@ -77,36 +77,54 @@ export class GuestSessionService {
     const redisUrl =
       this.configService.get<string>('REDIS_URL') || 'redis://localhost:6379';
 
-    // Try to use Redis, fall back to in-memory if connection fails
+    // Try to use Redis, fall back to in-memory if it can't be initialised.
     try {
-      this.keyv = new Keyv({
-        store: new KeyvRedis(redisUrl, { throwOnConnectError: true }),
+      // throwOnConnectError:false lets the underlying node-redis client
+      // reconnect on a transient socket close (e.g. Redis' `timeout` idle
+      // disconnect) instead of throwing. A throw here would surface as an
+      // unhandled error and crash the whole process — taking auth/sessions
+      // down with it (this was the cause of an intermittent crash-loop).
+      const store = new KeyvRedis(redisUrl, { throwOnConnectError: false });
+
+      // The node-redis client's own errors MUST always have a listener, or a
+      // socket close is emitted as an unhandled 'error' and crashes the
+      // process. Log it and let node-redis auto-reconnect; do not tear down
+      // the shared store on a transient blip (that permanently downgraded to
+      // a per-worker in-memory store, which isn't shared across the cluster).
+      store.on('error', (err: Error) => {
+        this.logger.warn(
+          `Guest-session Redis store error (auto-reconnecting): ${err?.message ?? err}`,
+        );
       });
 
-      this.keyv.on('error', (err) => {
-        this.logger.error(
-          `Redis connection error, falling back to in-memory store: ${err.message}`,
-        );
-        // Switch to in-memory fallback
-        this.keyv = new Keyv({
-          store: new CacheableMemory({
-            ttl: GUEST_SESSION_TTL_MS,
-            lruSize: 1000,
-          }),
-        });
-        // now using in-memory fallback
-      });
+      this.keyv = new Keyv({ store });
+      this.attachKeyvErrorHandler(this.keyv);
 
       this.logger.log('GuestSessionService using Redis for persistence');
-    } catch {
-      this.logger.warn('Failed to connect to Redis, using in-memory cache');
+    } catch (err) {
+      this.logger.warn(
+        `Failed to initialise Redis for guest sessions, using in-memory cache: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
       this.keyv = new Keyv({
         store: new CacheableMemory({
           ttl: GUEST_SESSION_TTL_MS,
           lruSize: 1000,
         }),
       });
+      this.attachKeyvErrorHandler(this.keyv);
     }
+  }
+
+  /**
+   * Keyv is an EventEmitter and an 'error' event with no listener throws
+   * (crashing the process). Always attach a handler.
+   */
+  private attachKeyvErrorHandler(keyv: Keyv): void {
+    keyv.on('error', (err: Error) => {
+      this.logger.warn(`Guest-session cache error: ${err?.message ?? err}`);
+    });
   }
 
   /**
