@@ -252,9 +252,16 @@ describeIf('AppleVerificationService.parseSignedNotification', () => {
       data: { ...notificationPayload.data, bundleId: 'com.evil.other' },
     });
 
-    expect(() => scoped.parseSignedNotification(signedPayload)).toThrow(
-      /bundleId/i,
-    );
+    // Assert both the message AND the HTTP status (400) so this cannot silently
+    // regress to a 500 Internal Server Error.
+    try {
+      scoped.parseSignedNotification(signedPayload);
+      throw new Error('expected parseSignedNotification to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(HttpException);
+      expect((err as HttpException).getStatus()).toBe(400);
+      expect((err as HttpException).message).toMatch(/bundleId/i);
+    }
   });
 });
 
@@ -286,8 +293,15 @@ describe('AppleVerificationService.parseSignedNotification malformed header', ()
     }
   });
 
-  it('rejects a JWS whose header decodes to an array', () => {
+  it('rejects a JWS whose header decodes to an array (400)', () => {
     const jws = `${b64('[]')}.${b64('{}')}.${b64('sig')}`;
-    expect(() => service.parseSignedNotification(jws)).toThrow(HttpException);
+    try {
+      service.parseSignedNotification(jws);
+      throw new Error('expected parseSignedNotification to throw');
+    } catch (err) {
+      // Assert the HTTP status (400) so a regression to 500 is caught.
+      expect(err).toBeInstanceOf(HttpException);
+      expect((err as HttpException).getStatus()).toBe(400);
+    }
   });
 });

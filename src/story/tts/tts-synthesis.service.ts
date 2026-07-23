@@ -17,6 +17,7 @@ import { EdgeTTSProvider } from '../../voice/providers/edge-tts.provider';
 import type { IStoryTtsRepository } from '../repositories/story-tts.repository.interface';
 import { VoiceQuotaService } from '../../voice/voice-quota.service';
 import { SubscriptionService } from '../../subscription/subscription.service';
+import { QuotaExhaustedError } from '../../voice/errors/quota-exhausted.error';
 import {
   CircuitBreakerService,
   CircuitBreaker,
@@ -270,9 +271,10 @@ export class TtsSynthesisService {
     // Honour the quota decision: if ElevenLabs was denied, don't bypass via override.
     if (override) {
       if (override === 'elevenlabs' && !useElevenLabs) {
-        throw new InternalServerErrorException(
-          'ElevenLabs quota exhausted for this request',
-        );
+        // Throw the typed quota error (not a generic 500) so the batch
+        // processor's isQuotaError() recognises it and cascades to the
+        // Deepgram/Edge fallback instead of failing the paragraph outright.
+        throw new QuotaExhaustedError('ElevenLabs');
       }
       return this.attemptSingleProvider(
         override,

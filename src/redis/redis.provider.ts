@@ -230,7 +230,7 @@ export const RedisClientProvider: Provider = {
       if (
         error.name === 'SocketClosedUnexpectedlyError' ||
         error.message.includes('ECONNREFUSED') ||
-        error.message.includes('ETIMEOUT') ||
+        error.message.includes('ETIMEDOUT') ||
         error.message.includes('ENOTFOUND') ||
         error.message.includes('EAI_AGAIN')
       ) {

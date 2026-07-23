@@ -21,6 +21,7 @@ import {
   DEFAULT_CURSOR_LIMIT,
   PaginationUtil,
 } from '@/shared/utils/pagination.util';
+import { NotificationService } from '../notification/notification.service';
 
 /** Max session time in seconds (24 h), matching the DTO contract. */
 const MAX_SESSION_TIME = 86_400;
@@ -40,6 +41,8 @@ export class StoryProgressService {
   constructor(
     @Inject(STORY_PROGRESS_REPOSITORY)
     private readonly progressRepository: IStoryProgressRepository,
+    // NotificationModule is @Global; StoryModule already imports it too.
+    private readonly notificationService: NotificationService,
   ) {}
 
   /** Wraps a query to handle invalid cursor IDs gracefully */
@@ -78,23 +81,36 @@ export class StoryProgressService {
     if (!story) throw new NotFoundException('Story not found');
 
     const sessionTime = normalizeSessionTime(dto.sessionTime);
+    // Clamp incoming progress to a valid [0, 100] percentage.
+    const clampedProgress = Math.max(0, Math.min(100, dto.progress));
 
     const existing = await this.progressRepository.findStoryProgress(
       dto.kidId,
       dto.storyId,
     );
 
+    // Completion is monotonic and auto-derived (mirrors the guest path): once a
+    // story is completed it stays completed, and reaching 100% marks it done
+    // even without an explicit flag — so a later partial-progress ping can no
+    // longer silently un-complete the story.
+    const shouldComplete =
+      existing?.completed === true ||
+      dto.completed === true ||
+      clampedProgress >= 100;
+
     const result = await this.progressRepository.upsertKidProgress(
       dto.kidId,
       dto.storyId,
       {
-        progress: dto.progress,
-        completed: dto.completed ?? false,
+        progress: clampedProgress,
+        completed: shouldComplete,
         sessionTime,
       },
     );
 
-    if (dto.completed && (!existing || !existing.completed)) {
+    // Fire the (non-idempotent) reading-level adjustment only on the transition
+    // from not-completed to completed, now including the auto-derived 100% case.
+    if (shouldComplete && !existing?.completed) {
       this.adjustReadingLevel(
         dto.kidId,
         dto.storyId,
@@ -103,6 +119,20 @@ export class StoryProgressService {
         const msg = e instanceof Error ? e.message : String(e);
         this.logger.error(`Failed to adjust reading level: ${msg}`);
       });
+
+      // Best-effort StoryFinished notification to the kid's parent. Emitted only
+      // on the false->true completion transition. Must never break the progress
+      // flow, so failures are logged and swallowed.
+      try {
+        await this.notificationService.sendNotification(
+          'StoryFinished',
+          { kidName: kid.name ?? 'Your child', storyTitle: story.title },
+          kid.parentId,
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.warn(`Failed to send StoryFinished notification: ${msg}`);
+      }
     }
     return result;
   }
@@ -204,6 +234,8 @@ export class StoryProgressService {
     );
 
     const sessionTime = normalizeSessionTime(dto.sessionTime);
+    // Clamp incoming progress to a valid [0, 100] percentage.
+    const clampedProgress = Math.max(0, Math.min(100, dto.progress));
 
     // If restoring a soft-deleted record, reset totalTimeSpent instead of
     // accumulating stale time from before the removal.
@@ -211,16 +243,44 @@ export class StoryProgressService {
       ? sessionTime
       : { increment: sessionTime };
 
+    // Completion is monotonic and auto-derived at 100% (mirrors the guest path):
+    // once completed the story stays completed until removeFromUserLibrary
+    // resets it, so a later partial-progress ping can no longer un-complete it.
+    const shouldComplete =
+      existing?.completed === true ||
+      dto.completed === true ||
+      clampedProgress >= 100;
+
     const result = await this.progressRepository.upsertUserProgress(
       userId,
       dto.storyId,
       {
-        progress: dto.progress,
-        completed: dto.completed ?? false,
+        progress: clampedProgress,
+        completed: shouldComplete,
         createTotalTimeSpent: sessionTime,
         updateTotalTimeSpent: totalTimeSpentUpdate,
       },
     );
+
+    // Best-effort StoryFinished notification on the user (web) completion path —
+    // mirrors the kid setProgress path. Only on the true false->true transition;
+    // uses shouldComplete (not dto.completed) so an auto-derived 100% completion
+    // also notifies. Never breaks progress recording.
+    if (shouldComplete && (!existing || !existing.completed)) {
+      try {
+        await this.notificationService.sendNotification(
+          'StoryFinished',
+          { kidName: user.name ?? 'You', storyTitle: story.title },
+          userId,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to send StoryFinished (user path): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
 
     return {
       id: result.id,

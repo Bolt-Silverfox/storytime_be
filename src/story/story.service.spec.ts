@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { StoryService } from './story.service';
 import { StoryFeedService } from './story-feed.service';
+import { NotificationService } from '../notification/notification.service';
 import { STORY_REPOSITORY } from './repositories/story.repository.interface';
 import { GeminiService } from './gemini.service';
 import { ElevenLabsService } from './elevenlabs.service';
@@ -99,6 +100,12 @@ describe('StoryService - Library & Generation', () => {
         {
           provide: StoryGenerationService,
           useValue: mockStoryGenerationService,
+        },
+        {
+          provide: NotificationService,
+          useValue: {
+            broadcastNewStoryToUsers: jest.fn().mockResolvedValue(undefined),
+          },
         },
       ],
     }).compile();

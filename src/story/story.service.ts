@@ -55,6 +55,7 @@ import { StoryRecommendationService } from './story-recommendation.service';
 import { DailyChallengeService } from './daily-challenge.service';
 import { StoryFeedService } from './story-feed.service';
 import { StoryGenerationService } from './story-generation.service';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class StoryService {
@@ -103,6 +104,8 @@ export class StoryService {
     private readonly storyRecommendationService: StoryRecommendationService,
     private readonly dailyChallengeService: DailyChallengeService,
     private readonly storyFeedService: StoryFeedService,
+    // NotificationModule is @Global; StoryModule already imports it too.
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -206,6 +209,18 @@ export class StoryService {
       },
       include: { images: true, branches: true },
     });
+
+    // Announce the new catalog story to all users — batched, preference-aware,
+    // and best-effort. Fire-and-forget so story creation isn't blocked.
+    void this.notificationService
+      .broadcastNewStoryToUsers(story.id, story.title)
+      .catch((error) =>
+        this.logger.warn(
+          `NewStory broadcast failed for story ${story.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
 
     await this.invalidateStoryCaches();
     return story;
