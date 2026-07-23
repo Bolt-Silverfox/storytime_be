@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { BadgeService } from './badge.service';
+import { StreakService } from './streak.service';
+import { NotificationService } from '../notification/notification.service';
 import { BadgeMetadata } from './badge.constants';
 import {
   STREAK_REPOSITORY,
@@ -28,9 +30,14 @@ interface BadgeEvent {
 export class BadgeProgressEngine implements OnModuleInit {
   private readonly logger = new Logger(BadgeProgressEngine.name);
 
+  // Streak lengths (in days) that trigger a milestone notification.
+  private readonly STREAK_MILESTONES = [3, 7, 30];
+
   constructor(
     private eventEmitter: EventEmitter2,
     private badgeService: BadgeService,
+    private readonly streakService: StreakService,
+    private readonly notificationService: NotificationService,
     @Inject(STREAK_REPOSITORY)
     private readonly streakRepository: IStreakRepository,
     @Inject(KID_REPOSITORY)
@@ -52,6 +59,18 @@ export class BadgeProgressEngine implements OnModuleInit {
     metadata?: BadgeMetadata,
   ): Promise<void> {
     try {
+      // Detect whether this is the kid's first activity today BEFORE logging,
+      // so we only evaluate a streak milestone on the day the streak grows.
+      let hadActivityToday = true;
+      if (kidId) {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const lastActivity =
+          await this.streakRepository.findLastKidActivity(kidId);
+        hadActivityToday =
+          lastActivity !== null && lastActivity.createdAt >= startOfToday;
+      }
+
       // Log activity
       await this.streakRepository.createActivityLog({
         userId,
@@ -64,6 +83,12 @@ export class BadgeProgressEngine implements OnModuleInit {
 
       // Emit corresponding badge events (pass kidId through)
       await this.handleBadgeEvent(userId, action, kidId, metadata);
+
+      // If the streak just advanced today (first activity of the day),
+      // notify the parent when it lands on a milestone threshold.
+      if (kidId && !hadActivityToday) {
+        await this.maybeEmitStreakMilestone(userId, kidId);
+      }
     } catch (error) {
       this.logger.error(
         `Error recording activity: ${error.message}`,
@@ -114,6 +139,38 @@ export class BadgeProgressEngine implements OnModuleInit {
   handleUserLogin(event: BadgeEvent) {
     this.logger.log(`User login event: ${event.userId}`);
     // Could track login streak badges here
+  }
+
+  /**
+   * Notify the parent when a kid's reading streak reaches a milestone.
+   * `parentUserId` is the parent (owning) user id. Never throws.
+   */
+  private async maybeEmitStreakMilestone(
+    parentUserId: string,
+    kidId: string,
+  ): Promise<void> {
+    try {
+      const { currentStreak } =
+        await this.streakService.getStreakSummaryForKid(kidId);
+
+      if (!this.STREAK_MILESTONES.includes(currentStreak)) {
+        return;
+      }
+
+      const kid = await this.kidRepository.findNameById(kidId);
+      const kidName = kid?.name ?? 'Your child';
+
+      await this.notificationService.sendNotification(
+        'StreakMilestone',
+        { kidName, days: currentStreak },
+        parentUserId,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit streak-milestone notification for user ${parentUserId}, kid ${kidId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   private async handleBadgeEvent(

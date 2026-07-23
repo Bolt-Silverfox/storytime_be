@@ -4,6 +4,7 @@ import type {
   IKidRepository,
   KidId,
   KidParentId,
+  KidName,
 } from './kid.repository.interface';
 
 @Injectable()
@@ -21,6 +22,13 @@ export class PrismaKidRepository implements IKidRepository {
     return this.prisma.kid.findUnique({
       where: { id: kidId },
       select: { parentId: true },
+    });
+  }
+
+  async findNameById(kidId: string): Promise<KidName | null> {
+    return this.prisma.kid.findUnique({
+      where: { id: kidId },
+      select: { name: true },
     });
   }
 }

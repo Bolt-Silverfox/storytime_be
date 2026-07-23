@@ -10,6 +10,7 @@ import { GoogleVerificationService } from './google-verification.service';
 import { AppleVerificationService } from './apple-verification.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotificationService } from '../notification/notification.service';
+import { AppEvents } from '@/shared/events';
 import { Prisma } from '@prisma/client';
 import {
   SUBSCRIPTION_REPOSITORY,
@@ -59,6 +60,8 @@ describe('PaymentService', () => {
     getSubscriptionStatus: jest.Mock;
   };
   let mockConfigService: { get: jest.Mock };
+  let mockNotificationService: { sendNotification: jest.Mock };
+  let mockEventEmitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     mockSubscriptionRepo = createMockSubscriptionRepository();
@@ -80,6 +83,10 @@ describe('PaymentService', () => {
         return config[key];
       }),
     };
+    mockNotificationService = {
+      sendNotification: jest.fn().mockResolvedValue({ success: true }),
+    };
+    mockEventEmitter = { emit: jest.fn() };
 
     jest.clearAllMocks();
 
@@ -97,12 +104,10 @@ describe('PaymentService', () => {
           useValue: mockGoogleVerification,
         },
         { provide: AppleVerificationService, useValue: mockAppleVerification },
-        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+        { provide: EventEmitter2, useValue: mockEventEmitter },
         {
           provide: NotificationService,
-          useValue: {
-            sendNotification: jest.fn().mockResolvedValue({ success: true }),
-          },
+          useValue: mockNotificationService,
         },
       ],
     }).compile();
@@ -322,6 +327,21 @@ describe('PaymentService', () => {
       await expect(service.verifyPurchase(userId, dto)).rejects.toThrow(
         BadRequestException,
       );
+
+      // Best-effort dual PaymentFailed fan-out: in-app notification + typed event.
+      expect(mockNotificationService.sendNotification).toHaveBeenCalledWith(
+        'PaymentFailedInApp',
+        { plan: 'Monthly' },
+        userId,
+      );
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        AppEvents.PAYMENT_FAILED,
+        expect.objectContaining({
+          userId,
+          provider: 'google',
+          errorMessage: 'Google Play purchase verification failed',
+        }),
+      );
     });
 
     it('should throw BadRequestException if Apple verification fails', async () => {
@@ -336,6 +356,21 @@ describe('PaymentService', () => {
 
       await expect(service.verifyPurchase(userId, dto)).rejects.toThrow(
         BadRequestException,
+      );
+
+      // Best-effort dual PaymentFailed fan-out: in-app notification + typed event.
+      expect(mockNotificationService.sendNotification).toHaveBeenCalledWith(
+        'PaymentFailedInApp',
+        { plan: 'Monthly' },
+        userId,
+      );
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        AppEvents.PAYMENT_FAILED,
+        expect.objectContaining({
+          userId,
+          provider: 'apple',
+          errorMessage: 'Apple App Store purchase verification failed',
+        }),
       );
     });
 
