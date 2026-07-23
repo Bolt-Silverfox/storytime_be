@@ -153,7 +153,16 @@ jobs:
             psql "$ADMIN_URL" -tAc "SELECT 1 FROM pg_database WHERE datname='storytime_db_blue'" | grep -q 1 \
               || psql "$ADMIN_URL" -c 'CREATE DATABASE storytime_db_blue'
 
-            # migrate BLUE db (from this dir's .env) + build + (re)start blue PM2 app on :3601
+            # Migrate the schema first, then seed the blue catalog (parity with
+            # green's deploy, which seeds every run). Seeding is idempotent —
+            # stories skip existing titles, categories/themes use skipDuplicates,
+            # the rest upsert — so re-running never duplicates. Seed BEFORE the
+            # app (re)starts so a fresh blue DB serves data from first boot.
+            pnpm db:migrate:deploy
+            pnpm db:seed
+
+            # generate client + (re)start blue PM2 app on :3601. deploy:blue also
+            # runs db:migrate:deploy again — a harmless no-op the second time.
             pnpm deploy:blue
 
       - name: Verify blue deployment
