@@ -37,13 +37,38 @@ export class PasswordService {
 
   async requestPasswordReset(
     data: RequestResetDto,
-    ip?: string, // eslint-disable-line @typescript-eslint/no-unused-vars
-    userAgent?: string, // eslint-disable-line @typescript-eslint/no-unused-vars
+    ip?: string,
+    userAgent?: string,
   ): Promise<{ message: string }> {
     const { email } = data;
     const user = await this.authRepository.findUserByEmail(email);
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    // Security: alert the user when a reset is requested from an unfamiliar IP.
+    // Best-effort — never block the reset if this side-path fails.
+    if (ip) {
+      try {
+        const knownIp = await this.authRepository.findKnownUserIP(user.id, ip);
+        if (!knownIp) {
+          this.eventEmitter.emit('password.reset_alert', {
+            userId: user.id,
+            email: user.email,
+            ipAddress: ip,
+            userAgent: userAgent || 'Unknown Device',
+            timestamp: new Date().toISOString(),
+            userName: user.name || user.email.split('@')[0],
+          });
+          await this.authRepository.recordUserIP(user.id, ip, userAgent);
+        } else {
+          await this.authRepository.touchUserIP(knownIp.id);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`IP check/alert failed: ${message}`);
+        // Continue with the password reset — security alerting must not block it.
+      }
     }
 
     // Delete any existing reset tokens

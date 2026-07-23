@@ -31,6 +31,39 @@ export class PasswordEventListener {
   }
 
   /**
+   * Alert the user that a password reset was requested from an unfamiliar IP.
+   * Emitted by PasswordService only when the requesting IP is not yet known.
+   */
+  @OnEvent('password.reset_alert')
+  async handlePasswordResetAlert(payload: {
+    userId: string;
+    email: string;
+    ipAddress: string;
+    userAgent: string;
+    timestamp: string;
+    userName: string;
+  }) {
+    this.logger.log(
+      `Sending password reset security alert to ${payload.email}`,
+    );
+
+    const resp = await this.notificationService.sendNotification(
+      'PasswordResetAlert',
+      {
+        email: payload.email,
+        ipAddress: payload.ipAddress,
+        userAgent: payload.userAgent,
+        timestamp: payload.timestamp,
+        userName: payload.userName,
+      },
+    );
+
+    if (!resp.success) {
+      this.logger.error(`Failed to send password reset alert: ${resp.error}`);
+    }
+  }
+
+  /**
    * Send email verification with token.
    * This is a custom event emitted by AuthService with the verification token.
    */

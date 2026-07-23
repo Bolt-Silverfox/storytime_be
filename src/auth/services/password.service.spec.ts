@@ -76,6 +76,9 @@ describe('PasswordService', () => {
       updateUser: jest.fn(),
       deleteAllUserSessions: jest.fn(),
       transaction: jest.fn(),
+      findKnownUserIP: jest.fn(),
+      recordUserIP: jest.fn(),
+      touchUserIP: jest.fn(),
     };
 
     const mockTokenService: Partial<jest.Mocked<TokenService>> = {
@@ -146,6 +149,108 @@ describe('PasswordService', () => {
       await expect(
         service.requestPasswordReset({ email: 'nonexistent@example.com' }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should alert and record IP when reset requested from an unfamiliar IP', async () => {
+      // Arrange
+      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
+      authRepository.findKnownUserIP.mockResolvedValue(null);
+      authRepository.recordUserIP.mockResolvedValue(undefined);
+      authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
+      authRepository.createToken.mockResolvedValue({} as any);
+
+      // Act
+      await service.requestPasswordReset(
+        { email: 'test@example.com' },
+        '203.0.113.5',
+        'Mozilla/5.0',
+      );
+
+      // Assert
+      expect(authRepository.findKnownUserIP).toHaveBeenCalledWith(
+        'user-1',
+        '203.0.113.5',
+      );
+      expect(eventEmitter.emit).toHaveBeenCalledWith('password.reset_alert', {
+        userId: 'user-1',
+        email: 'test@example.com',
+        ipAddress: '203.0.113.5',
+        userAgent: 'Mozilla/5.0',
+        timestamp: expect.any(String),
+        userName: 'Test User',
+      });
+      expect(authRepository.recordUserIP).toHaveBeenCalledWith(
+        'user-1',
+        '203.0.113.5',
+        'Mozilla/5.0',
+      );
+      expect(authRepository.touchUserIP).not.toHaveBeenCalled();
+    });
+
+    it('should touch a known IP and not alert on a familiar IP', async () => {
+      // Arrange
+      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
+      authRepository.findKnownUserIP.mockResolvedValue({
+        id: 'ip-1',
+        userId: 'user-1',
+        ipAddress: '203.0.113.5',
+      } as any);
+      authRepository.touchUserIP.mockResolvedValue(undefined);
+      authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
+      authRepository.createToken.mockResolvedValue({} as any);
+
+      // Act
+      await service.requestPasswordReset(
+        { email: 'test@example.com' },
+        '203.0.113.5',
+        'Mozilla/5.0',
+      );
+
+      // Assert
+      expect(authRepository.touchUserIP).toHaveBeenCalledWith('ip-1');
+      expect(authRepository.recordUserIP).not.toHaveBeenCalled();
+      expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+        'password.reset_alert',
+        expect.anything(),
+      );
+    });
+
+    it('should still reset when the IP check throws', async () => {
+      // Arrange
+      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
+      authRepository.findKnownUserIP.mockRejectedValue(new Error('db down'));
+      authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
+      authRepository.createToken.mockResolvedValue({} as any);
+
+      // Act
+      const result = await service.requestPasswordReset(
+        { email: 'test@example.com' },
+        '203.0.113.5',
+        'Mozilla/5.0',
+      );
+
+      // Assert — reset proceeds despite the alert path failing
+      expect(result).toEqual({ message: 'Password reset token sent' });
+      expect(authRepository.createToken).toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'password.reset_requested',
+        expect.objectContaining({ userId: 'user-1' }),
+      );
+    });
+
+    it('should skip the IP check entirely when no IP is provided', async () => {
+      // Arrange
+      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
+      authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
+      authRepository.createToken.mockResolvedValue({} as any);
+
+      // Act
+      await service.requestPasswordReset({ email: 'test@example.com' });
+
+      // Assert
+      expect(authRepository.findKnownUserIP).not.toHaveBeenCalled();
+      expect(authRepository.recordUserIP).not.toHaveBeenCalled();
+      expect(authRepository.touchUserIP).not.toHaveBeenCalled();
     });
 
     it('should delete existing reset tokens before creating new one', async () => {
