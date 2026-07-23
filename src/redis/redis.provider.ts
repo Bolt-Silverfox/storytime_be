@@ -101,10 +101,20 @@ export const RedisClientProvider: Provider = {
   useFactory: async (configService: ConfigService<EnvConfig, true>) => {
     const redisUrl = configService.get('REDIS_URL');
 
+    // Guard up front: a non-string/empty REDIS_URL would make the redaction
+    // (`redisUrl.replace(...)`) in the catch/validation branches below throw a
+    // TypeError and mask the real "Invalid REDIS_URL" diagnostic.
+    if (typeof redisUrl !== 'string' || redisUrl.length === 0) {
+      logger.error('REDIS_URL is not set or is not a string.');
+      throw new Error(
+        'Invalid REDIS_URL: must be a non-empty string. Please check your configuration.',
+      );
+    }
+
     // Parse Redis URL to extract connection details
     let url: URL;
     try {
-      url = new URL(redisUrl as string);
+      url = new URL(redisUrl);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -151,8 +161,15 @@ export const RedisClientProvider: Provider = {
       db = 0;
     }
 
-    const username = url.username || undefined;
-    const password = url.password || undefined;
+    // WHATWG URL exposes username/password percent-encoded; decode so
+    // credentials containing reserved chars (@ : / % ...) authenticate with
+    // their real value rather than the encoded form.
+    const username = url.username
+      ? decodeURIComponent(url.username)
+      : undefined;
+    const password = url.password
+      ? decodeURIComponent(url.password)
+      : undefined;
     const host = url.hostname || 'localhost';
     const port = parseInt(url.port || '6379', 10);
 
@@ -213,7 +230,7 @@ export const RedisClientProvider: Provider = {
       if (
         error.name === 'SocketClosedUnexpectedlyError' ||
         error.message.includes('ECONNREFUSED') ||
-        error.message.includes('ETIMEOUT') ||
+        error.message.includes('ETIMEDOUT') ||
         error.message.includes('ENOTFOUND') ||
         error.message.includes('EAI_AGAIN')
       ) {
