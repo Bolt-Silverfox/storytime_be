@@ -140,7 +140,7 @@ export class PasswordService {
     token: string,
     email: string,
     newPassword: string,
-    data: ResetPasswordDto, // eslint-disable-line @typescript-eslint/no-unused-vars
+    data: ResetPasswordDto,
     ip?: string,
     userAgent?: string,
   ): Promise<{ message: string }> {
