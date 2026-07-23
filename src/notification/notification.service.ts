@@ -21,8 +21,13 @@ import {
 import { NotificationEmailService } from './services/notification-email.service';
 import { NotificationDispatchService } from './services/notification-dispatch.service';
 import { NotificationSettingsService } from './services/notification-settings.service';
-import { NotificationDeviceService } from './services/notification-device.service';
+import {
+  NotificationDeviceService,
+  BatchedBroadcastSummary,
+} from './services/notification-device.service';
 import { InAppNotificationService } from './services/in-app-notification.service';
+
+export type { BatchedBroadcastSummary } from './services/notification-device.service';
 
 /**
  * Thin facade over the notification module's focused services. Other modules
@@ -316,18 +321,82 @@ export class NotificationService {
   }
 
   /**
-   * Subscribe all existing active device tokens to the all_users topic.
+   * The environment-scoped FCM topic this backend broadcasts to and subscribes
+   * devices to (e.g. `all_users_production`). Single source of truth; other
+   * modules default to it instead of hardcoding a topic string.
+   */
+  getBroadcastTopic(): string {
+    return this.deviceService.getBroadcastTopic();
+  }
+
+  /**
+   * Subscribe all existing active device tokens to the broadcast topic.
+   * Defaults to the env-scoped topic (`all_users_<NODE_ENV>`); overridable.
    * Run once to seed existing devices. Processes in batches of 1000 (Firebase limit).
    */
   async subscribeAllExistingDevicesToTopic(
-    topic: string = 'all_users',
+    topic?: string,
   ): Promise<{ total: number; batches: number }> {
-    return this.deviceService.subscribeAllExistingDevicesToTopic(topic);
+    return this.deviceService.subscribeAllExistingDevicesToTopic(
+      topic as string,
+    );
+  }
+
+  /**
+   * Broadcast a push to ALL active device tokens in staggered batches (<= 500
+   * per FCM multicast call). Delegated to the device service.
+   */
+  async broadcastBatchedToAllDevices(payload: {
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+    batchSize?: number;
+    intervalSeconds?: number;
+  }): Promise<BatchedBroadcastSummary> {
+    return this.deviceService.broadcastBatchedToAllDevices(payload);
+  }
+
+  /**
+   * Write an in-app inbox record for every active user (batched). Used by admin
+   * broadcasts so an announcement lands in the in-app inbox, not just push.
+   */
+  async broadcastInAppToAllUsers(
+    title: string,
+    body: string,
+    data?: Record<string, unknown>,
+  ): Promise<{ delivered: number; failed: number }> {
+    return this.inAppNotificationService.broadcastInAppToAllUsers(
+      title,
+      body,
+      data,
+    );
+  }
+
+  /**
+   * Fan out a NewStory notification to every active user (batched, preference-
+   * aware). Meant to be fire-and-forget from the story-create path.
+   */
+  async broadcastNewStoryToUsers(
+    storyId: string,
+    storyTitle: string,
+  ): Promise<void> {
+    return this.dispatchService.broadcastNewStoryToUsers(storyId, storyTitle);
   }
 
   // ============================================
   // Event Listeners (cross-module communication)
   // ============================================
+
+  @OnEvent('notification.broadcast-batched')
+  async handleBatchedBroadcastNotification(payload: {
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+    batchSize?: number;
+    intervalSeconds?: number;
+  }): Promise<BatchedBroadcastSummary> {
+    return this.deviceService.handleBatchedBroadcastNotification(payload);
+  }
 
   @OnEvent('notification.broadcast')
   async handleBroadcastNotification(payload: {

@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +17,7 @@ import {
   PRODUCT_ID_TO_PLAN,
 } from '@/subscription/subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { NotificationService } from '../notification/notification.service';
 import {
   SUBSCRIPTION_REPOSITORY,
   ISubscriptionRepository,
@@ -46,7 +48,33 @@ export class PaymentService {
     private readonly googleVerificationService: GoogleVerificationService,
     private readonly appleVerificationService: AppleVerificationService,
     private readonly eventEmitter: EventEmitter2,
+    // NotificationModule is @Global, so no payment.module import change is needed.
+    private readonly notificationService: NotificationService,
   ) {}
+
+  /**
+   * Emit a notification, swallowing any error so notification failures never
+   * break the payment/subscription flow.
+   */
+  private async emitNotification(
+    type: 'PaymentSuccess' | 'SubscriptionAlert',
+    data: Record<string, unknown>,
+    userId: string,
+  ): Promise<void> {
+    try {
+      await this.notificationService.sendNotification(type, data, userId);
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit ${type} notification for user ${userId.substring(0, 8)}: ${this.getErrorMessage(error)}`,
+      );
+    }
+  }
+
+  /** Resolve a human-friendly plan name from a product ID, without throwing. */
+  private resolvePlanDisplay(productId: string): string {
+    const planKey = PRODUCT_ID_TO_PLAN[productId];
+    return (planKey && PLANS[planKey]?.display) || productId;
+  }
 
   /**
    * Verify an In-App Purchase from Google Play or App Store
@@ -69,7 +97,8 @@ export class PaymentService {
     } catch (error) {
       if (
         error instanceof BadRequestException ||
-        error instanceof NotFoundException
+        error instanceof NotFoundException ||
+        error instanceof ConflictException
       ) {
         throw error;
       }
@@ -188,6 +217,12 @@ export class PaymentService {
    * subscription upsert also writes the new token, so this is idempotent — it
    * exists so the migration is explicit and happens even if the stored token is
    * the linked one on a distinct Subscription row.
+   *
+   * Concurrency: the swap is a DB-level compare-and-swap. When it affects zero
+   * rows we re-read to distinguish an idempotent repeat (row already holds
+   * `newToken` — safe to continue) from a lost race where a concurrent delivery
+   * installed a DIFFERENT token. In the latter case we throw so the caller's
+   * subsequent upsert never overwrites (clobbers) the concurrent winner.
    */
   private async migrateGoogleLinkedToken(
     userId: string,
@@ -205,9 +240,38 @@ export class PaymentService {
       return;
     }
 
-    await this.subscriptionRepository.updateById(existing.id, {
-      purchaseToken: newToken,
-    });
+    // Compare-and-swap: fold the token match into the write so a concurrent
+    // replacement cannot also pass the in-memory check above and leave the row
+    // mapped to the wrong token. Guarding on the still-stored `linkedToken` means
+    // only the delivery that still sees the old token wins.
+    const affected = await this.subscriptionRepository.updateByIdIfToken(
+      existing.id,
+      linkedToken,
+      { purchaseToken: newToken },
+    );
+    if (affected === 0) {
+      // `count === 0` is NOT unconditionally benign: the guard missed either
+      // because we (or an idempotent retry) already installed `newToken`, OR
+      // because a concurrent delivery installed a DIFFERENT token. Re-read to
+      // tell these apart. Only continue when the row already holds `newToken`
+      // (our write / an idempotent repeat). If some other token won the race we
+      // must NOT let the caller's subsequent upsert clobber it — abort this
+      // delivery so the concurrent winner is preserved.
+      const current = await this.subscriptionRepository.findById(existing.id);
+      if (current?.purchaseToken === newToken) {
+        this.logger.log(
+          `Skipped Google purchaseToken migration for user ${userId.substring(0, 8)} (already migrated to this token)`,
+        );
+        return;
+      }
+      this.logger.warn(
+        `Aborting Google purchaseToken migration for user ${userId.substring(0, 8)}: ` +
+          `a concurrent delivery installed a different token; preserving the winner`,
+      );
+      throw new ConflictException(
+        'Purchase token changed concurrently; please retry',
+      );
+    }
     this.logger.log(
       `Migrated Google purchaseToken (linked) for user ${userId.substring(0, 8)}`,
     );
@@ -336,12 +400,35 @@ export class PaymentService {
       purchaseToken: platformDetails?.purchaseToken ?? null,
     };
 
-    const subscription = existingSub
-      ? await this.subscriptionRepository.updateById(existingSub.id, data)
-      : await this.subscriptionRepository.create({
-          userId,
-          ...data,
-        });
+    let subscription;
+    if (existingSub) {
+      // Token-guarded write (defense-in-depth CAS): only mutate the row while its
+      // purchaseToken is still the value we just read. If a concurrent
+      // verification installed a different token between the read above and this
+      // write, the guard misses (count === 0) and we must NOT overwrite the
+      // concurrent winner — re-read and return the current row unchanged so a
+      // later unconditional update-by-id can never clobber the winning token.
+      const guardToken = existingSub.purchaseToken ?? null;
+      const affected = await this.subscriptionRepository.updateByIdIfToken(
+        existingSub.id,
+        guardToken,
+        data,
+      );
+      if (affected === 0) {
+        this.logger.warn(
+          `Skipped subscription token write for user ${userId.substring(0, 8)}: ` +
+            `a concurrent verification changed the purchase token; preserving the winner`,
+        );
+      }
+      subscription = (await this.subscriptionRepository.findById(
+        existingSub.id,
+      )) ?? { userId, ...data };
+    } else {
+      subscription = await this.subscriptionRepository.create({
+        userId,
+        ...data,
+      });
+    }
 
     this.eventEmitter.emit('admin.sse.activity', {
       type: 'SUBSCRIPTION',
@@ -351,6 +438,18 @@ export class PaymentService {
     this.eventEmitter.emit('admin.sse.stats', {
       trigger: existingSub ? 'subscription_renewed' : 'subscription_created',
     });
+
+    // Payment has succeeded and the subscription is now active/renewed.
+    // Best-effort in-app + push PaymentSuccess (opt-out respected downstream).
+    await this.emitNotification(
+      'PaymentSuccess',
+      {
+        amount: transaction.amount,
+        currency: transaction.currency ?? 'USD',
+        plan: PLANS[plan]?.display ?? plan,
+      },
+      userId,
+    );
 
     return {
       success: true,
@@ -466,6 +565,16 @@ export class PaymentService {
     const subscription = await this.subscriptionRepository.updateById(
       existing.id,
       { status: 'cancelled', endsAt },
+    );
+
+    // Best-effort SubscriptionAlert on the store-side (app-initiated) cancel.
+    const cancelledPlan = existing.productId
+      ? this.resolvePlanDisplay(existing.productId)
+      : existing.plan;
+    await this.emitNotification(
+      'SubscriptionAlert',
+      { message: `Your ${cancelledPlan} subscription was cancelled.` },
+      userId,
     );
 
     if (appleAutoRenewWarning) {

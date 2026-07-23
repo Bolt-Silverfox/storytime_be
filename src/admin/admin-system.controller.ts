@@ -11,6 +11,7 @@ import { AdminService } from './admin.service';
 import { AdminSystemService } from './admin-system.service';
 import { Admin } from './decorators/admin.decorator';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
+import { BatchedBroadcastNotificationDto } from './dto/batched-broadcast-notification.dto';
 import { GuestActivityFilterDto } from './dto/guest-stats.dto';
 import { PaginationUtil } from '../shared/utils/pagination.util';
 import {
@@ -269,12 +270,40 @@ export class AdminSystemController {
     };
   }
 
+  @Post('notifications/broadcast/batched')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Broadcast push to all device tokens in staggered batches (<= 500/batch)',
+  })
+  @ApiBody({ type: BatchedBroadcastNotificationDto })
+  @ApiCreatedResponse({ description: 'Batched broadcast queued' })
+  @HttpCode(HttpStatus.CREATED)
+  async broadcastNotificationBatched(
+    @Body() dto: BatchedBroadcastNotificationDto,
+  ) {
+    const data = await this.adminService.broadcastNotificationBatched(dto);
+    return {
+      statusCode: 201,
+      message: 'Batched broadcast notification queued',
+      data,
+    };
+  }
+
   @Post('notifications/seed-topic')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Subscribe all existing devices to a topic (one-time seed)',
   })
-  @ApiQuery({ name: 'topic', required: false, example: 'all_users' })
+  @ApiQuery({
+    name: 'topic',
+    required: false,
+    description:
+      "Normally omitted: defaults to this deployment's environment-scoped topic " +
+      '(all_users_<NODE_ENV>) to re-seed existing devices after a deploy. If ' +
+      'supplied it must exactly match the current environment topic; legacy ' +
+      '`all_users` and other environments topics are rejected (400).',
+  })
   @ApiCreatedResponse({ description: 'Topic seed initiated' })
   @HttpCode(HttpStatus.CREATED)
   async seedTopicSubscriptions(@Query('topic') topic?: string) {
