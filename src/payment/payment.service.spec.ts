@@ -61,7 +61,7 @@ describe('PaymentService', () => {
   };
   let mockConfigService: { get: jest.Mock };
   let mockNotificationService: { sendNotification: jest.Mock };
-  let mockEventEmitter: { emit: jest.Mock };
+  let mockEventEmitter: { emit: jest.Mock; emitAsync: jest.Mock };
 
   beforeEach(async () => {
     mockSubscriptionRepo = createMockSubscriptionRepository();
@@ -86,7 +86,10 @@ describe('PaymentService', () => {
     mockNotificationService = {
       sendNotification: jest.fn().mockResolvedValue({ success: true }),
     };
-    mockEventEmitter = { emit: jest.fn() };
+    mockEventEmitter = {
+      emit: jest.fn(),
+      emitAsync: jest.fn().mockResolvedValue([]),
+    };
 
     jest.clearAllMocks();
 
@@ -334,7 +337,7 @@ describe('PaymentService', () => {
         { plan: 'Monthly' },
         userId,
       );
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith(
         AppEvents.PAYMENT_FAILED,
         expect.objectContaining({
           userId,
@@ -364,7 +367,7 @@ describe('PaymentService', () => {
         { plan: 'Monthly' },
         userId,
       );
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith(
         AppEvents.PAYMENT_FAILED,
         expect.objectContaining({
           userId,

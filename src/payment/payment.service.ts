@@ -103,21 +103,26 @@ export class PaymentService {
     // the user's email/name and sends the `PaymentFailed` email. `amount`/
     // `currency` are unknown for a failed verification, so send neutral
     // defaults (the email listener only uses userId + errorMessage).
-    try {
-      const event: PaymentFailedEvent = {
-        userId,
-        amount: 0,
-        currency: 'USD',
-        provider: dto.platform,
-        errorMessage,
-        failedAt: new Date(),
-      };
-      this.eventEmitter.emit(AppEvents.PAYMENT_FAILED, event);
-    } catch (error) {
-      this.logger.error(
-        `Failed to emit PAYMENT_FAILED event for user ${userId.substring(0, 8)}: ${this.getErrorMessage(error)}`,
-      );
-    }
+    const event: PaymentFailedEvent = {
+      userId,
+      amount: 0,
+      currency: 'USD',
+      provider: dto.platform,
+      errorMessage,
+      failedAt: new Date(),
+    };
+    // Fire-and-forget, but use emitAsync().catch() instead of emit(): two of the
+    // PAYMENT_FAILED listeners are async (email + activity log), and a rejected
+    // listener promise from emit() would escape as an unhandled rejection. We
+    // don't await (no coupling to email/log latency) but do contain + log any
+    // listener failure.
+    void this.eventEmitter
+      .emitAsync(AppEvents.PAYMENT_FAILED, event)
+      .catch((error) => {
+        this.logger.error(
+          `Failed to emit PAYMENT_FAILED event for user ${userId.substring(0, 8)}: ${this.getErrorMessage(error)}`,
+        );
+      });
   }
 
   /**
