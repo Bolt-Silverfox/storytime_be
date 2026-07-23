@@ -23,6 +23,8 @@ export type Notifications =
   | 'SubscriptionWelcome'
   | 'PaymentSuccess'
   | 'PaymentFailed'
+  | 'PaymentFailedInApp'
+  | 'StreakMilestone'
   | 'SubscriptionAlert'
   | 'SubscriptionReminder'
   | 'WeMissYou'
@@ -283,6 +285,36 @@ export const NotificationRegistry: Record<
         }),
       );
       return emailHtml;
+    },
+  },
+  PaymentFailedInApp: {
+    medium: 'in_app',
+    category: NotificationCategory.PAYMENT_FAILED,
+    subject: 'Payment Failed',
+    validate: (data) => {
+      if (!data.plan) return 'Plan is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `We couldn't process your payment for the ${String(data.plan)} plan. Please update your payment details.`,
+      );
+    },
+  },
+  StreakMilestone: {
+    medium: 'in_app',
+    category: NotificationCategory.STREAK_MILESTONE,
+    subject: 'Streak Milestone!',
+    validate: (data) => {
+      if (!data.kidName) return 'Kid name is required';
+      if (data.days === undefined || data.days === null)
+        return 'Days is required';
+      return null;
+    },
+    getTemplate: (data) => {
+      return Promise.resolve(
+        `${String(data.kidName)} is on a ${String(data.days)}-day streak! Keep it up 🔥`,
+      );
     },
   },
   SubscriptionAlert: {

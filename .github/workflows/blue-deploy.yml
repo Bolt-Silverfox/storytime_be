@@ -8,14 +8,15 @@ name: Blue Deploy (develop-v1.3.0)
 # Reuses the existing EC2_* secrets and the green ENV_FILE secret — blue's .env
 # is derived from ENV_FILE with PORT/DATABASE_URL/REDIS_URL overridden below, and
 # the blue database is created on first deploy. No extra secret required.
-# NOTE: starts as manual-only (workflow_dispatch) so it doesn't auto-run before
-# the blue infra is ready. Once you've added the BLUE_ENV_FILE secret, created
-# the blue database, and installed the nginx block, uncomment the `push` trigger
-# below to auto-deploy blue on every push to develop-v1.3.0.
+# Auto-deploys blue on every push/merge to develop-v1.3.0. Blue infra (derived
+# .env, storytime_db_blue, nginx block, PM2 app on :3601) is in place, so the
+# push trigger is enabled. workflow_dispatch is kept for manual re-runs (note:
+# it only registers on GitHub once this file reaches the default branch; the
+# push trigger works from develop-v1.3.0 directly).
 on:
   workflow_dispatch:
-  # push:
-  #   branches: ['develop-v1.3.0']
+  push:
+    branches: ['develop-v1.3.0']
 
 concurrency:
   group: blue-deploy

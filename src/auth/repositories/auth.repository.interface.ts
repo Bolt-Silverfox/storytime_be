@@ -5,6 +5,7 @@ import type {
   Session,
   Token,
   LearningExpectation,
+  UserIP,
 } from '@prisma/client';
 import { TokenType } from '../dto/auth.dto';
 
@@ -128,6 +129,15 @@ export interface IAuthRepository {
   deleteSession(id: string): Promise<void>;
   deleteAllUserSessions(userId: string): Promise<void>;
   deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void>;
+
+  // Security / IP tracking operations
+  findKnownUserIP(userId: string, ipAddress: string): Promise<UserIP | null>;
+  recordUserIP(
+    userId: string,
+    ipAddress: string,
+    userAgent?: string,
+  ): Promise<void>;
+  touchUserIP(id: string): Promise<void>;
 
   // Token operations
   createToken(data: {

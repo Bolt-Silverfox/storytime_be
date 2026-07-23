@@ -7,6 +7,7 @@ import type {
   Session,
   Token,
   LearningExpectation,
+  UserIP,
 } from '@prisma/client';
 import { TokenType } from '../dto/auth.dto';
 import {
@@ -280,6 +281,34 @@ export class PrismaAuthRepository implements IAuthRepository {
   async deleteUserTokensByType(userId: string, type: TokenType): Promise<void> {
     await this.prisma.token.deleteMany({
       where: { userId, type },
+    });
+  }
+
+  // ==================== Security / IP Tracking Operations ====================
+
+  async findKnownUserIP(
+    userId: string,
+    ipAddress: string,
+  ): Promise<UserIP | null> {
+    return this.prisma.userIP.findFirst({
+      where: { userId, ipAddress, isDeleted: false },
+    });
+  }
+
+  async recordUserIP(
+    userId: string,
+    ipAddress: string,
+    userAgent?: string,
+  ): Promise<void> {
+    await this.prisma.userIP.create({
+      data: { userId, ipAddress, userAgent },
+    });
+  }
+
+  async touchUserIP(id: string): Promise<void> {
+    await this.prisma.userIP.update({
+      where: { id },
+      data: { lastUsed: new Date() },
     });
   }
 

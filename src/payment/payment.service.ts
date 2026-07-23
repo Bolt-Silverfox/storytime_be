@@ -17,6 +17,7 @@ import {
   PRODUCT_ID_TO_PLAN,
 } from '@/subscription/subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppEvents, PaymentFailedEvent } from '@/shared/events';
 import { NotificationService } from '../notification/notification.service';
 import {
   SUBSCRIPTION_REPOSITORY,
@@ -57,7 +58,7 @@ export class PaymentService {
    * break the payment/subscription flow.
    */
   private async emitNotification(
-    type: 'PaymentSuccess' | 'SubscriptionAlert',
+    type: 'PaymentSuccess' | 'SubscriptionAlert' | 'PaymentFailedInApp',
     data: Record<string, unknown>,
     userId: string,
   ): Promise<void> {
@@ -74,6 +75,54 @@ export class PaymentService {
   private resolvePlanDisplay(productId: string): string {
     const planKey = PRODUCT_ID_TO_PLAN[productId];
     return (planKey && PLANS[planKey]?.display) || productId;
+  }
+
+  /**
+   * Best-effort fan-out on a payment/verification failure. Sends BOTH:
+   *  - an in-app `PaymentFailedInApp` (rendered from the plan display), and
+   *  - the typed `PAYMENT_FAILED` event, which EventNotificationService turns
+   *    into the `PaymentFailed` email (it looks up the user's email/name via
+   *    the user repository). Emitting the event keeps PaymentService decoupled
+   *    from user-contact fetching and reuses blue's existing listener.
+   *
+   * Never throws: notification/analytics failures must not break payment flow.
+   */
+  private async emitPaymentFailed(
+    userId: string,
+    dto: VerifyPurchaseDto,
+    errorMessage: string,
+  ): Promise<void> {
+    // In-app notification (error-swallowing lives inside emitNotification).
+    await this.emitNotification(
+      'PaymentFailedInApp',
+      { plan: this.resolvePlanDisplay(dto.productId) },
+      userId,
+    );
+
+    // Email variant: emit the typed event; the notification listener resolves
+    // the user's email/name and sends the `PaymentFailed` email. `amount`/
+    // `currency` are unknown for a failed verification, so send neutral
+    // defaults (the email listener only uses userId + errorMessage).
+    const event: PaymentFailedEvent = {
+      userId,
+      amount: 0,
+      currency: 'USD',
+      provider: dto.platform,
+      errorMessage,
+      failedAt: new Date(),
+    };
+    // Fire-and-forget, but use emitAsync().catch() instead of emit(): two of the
+    // PAYMENT_FAILED listeners are async (email + activity log), and a rejected
+    // listener promise from emit() would escape as an unhandled rejection. We
+    // don't await (no coupling to email/log latency) but do contain + log any
+    // listener failure.
+    void this.eventEmitter
+      .emitAsync(AppEvents.PAYMENT_FAILED, event)
+      .catch((error) => {
+        this.logger.error(
+          `Failed to emit PAYMENT_FAILED event for user ${userId.substring(0, 8)}: ${this.getErrorMessage(error)}`,
+        );
+      });
   }
 
   /**
@@ -117,6 +166,11 @@ export class PaymentService {
     });
 
     if (!result.success) {
+      await this.emitPaymentFailed(
+        userId,
+        dto,
+        'Google Play purchase verification failed',
+      );
       throw new BadRequestException('Google Play purchase verification failed');
     }
 
@@ -284,6 +338,11 @@ export class PaymentService {
     });
 
     if (!result.success) {
+      await this.emitPaymentFailed(
+        userId,
+        dto,
+        'Apple App Store purchase verification failed',
+      );
       throw new BadRequestException(
         'Apple App Store purchase verification failed',
       );

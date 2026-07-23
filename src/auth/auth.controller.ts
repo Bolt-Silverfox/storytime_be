@@ -316,12 +316,19 @@ export class AuthController {
   @ApiOperation({ summary: 'Reset password with token' })
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful.' })
-  async resetPassword(@Body() body: ResetPasswordDto) {
+  async resetPassword(@Body() body: ResetPasswordDto, @Req() req: Request) {
+    // Extract IP and user agent so a successful reset can record this address
+    // as a known/trusted IP for future unfamiliar-IP alerting.
+    const ip =
+      req.ip || req.headers['x-forwarded-for']?.toString().split(',')[0].trim();
+    const userAgent = req.headers['user-agent'];
     return this.passwordService.resetPassword(
       body.token,
       body.email,
       body.newPassword,
       body,
+      ip,
+      userAgent,
     );
   }
 
