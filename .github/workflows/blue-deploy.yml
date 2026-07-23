@@ -30,6 +30,12 @@ jobs:
     name: Deploy Blue
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The EC2_HOST/EC2_USERNAME/EC2_SSH_KEY (and green's ENV_FILE) secrets live
+    # at the `development` environment level, not the repo level — same as green's
+    # deploy job. Without this, those secrets resolve empty and the SSH steps fail.
+    environment:
+      name: development
+      url: https://blue.dev.api.storytimeapp.me
     permissions:
       contents: read
 
