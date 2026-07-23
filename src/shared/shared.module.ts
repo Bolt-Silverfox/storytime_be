@@ -6,6 +6,7 @@ import { AdminGuard } from './guards/admin.guard';
 import { EventsModule } from './events';
 import { CacheMetricsService } from './services/cache-metrics.service';
 import { CircuitBreakerService } from './services/circuit-breaker.service';
+import { InfraMetricsService } from './services/infra-metrics.service';
 
 @Global()
 @Module({
@@ -26,6 +27,7 @@ import { CircuitBreakerService } from './services/circuit-breaker.service';
     AdminGuard,
     CacheMetricsService,
     CircuitBreakerService,
+    InfraMetricsService,
   ],
   exports: [
     AuthSessionGuard,

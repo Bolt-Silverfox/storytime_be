@@ -8,6 +8,9 @@ generator client {
   // connections always die with the Node process — nothing to orphan.
   engineType    = "library"
   binaryTargets = ["native"]
+  // Enables prisma.$metrics.* (connection-pool + query counters/gauges),
+  // bridged into OTLP by InfraMetricsService for the DB dashboard.
+  previewFeatures = ["metrics"]
 }
 
 datasource db {
