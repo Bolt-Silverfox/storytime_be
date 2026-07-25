@@ -17,6 +17,15 @@ on:
   workflow_dispatch:
   push:
     branches: ['develop-v1.3.0']
+    # Skip a blue redeploy when a push touches ONLY non-runtime files (docs,
+    # Grafana dashboard JSON, prometheus config). If a push also changes any
+    # other file, the deploy still runs. Use workflow_dispatch to force a deploy
+    # for a docs-only change if ever needed.
+    paths-ignore:
+      - '**/*.md'
+      - 'monitoring/**'
+      - 'docs/**'
+      - 'LICENSE'
 
 concurrency:
   group: blue-deploy
