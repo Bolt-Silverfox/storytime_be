@@ -517,6 +517,16 @@ export class SubmitQuestionAnswerDto {
   @ApiProperty()
   @IsInt()
   selectedOption: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Attribute the answer to a specific kid (drives that kid’s badge ' +
+      'progress). Omit for user-scoped clients (e.g. mobile) that read as the ' +
+      'logged-in user without a kid context.',
+  })
+  @IsOptional()
+  @IsString()
+  kidId?: string;
 }
 
 export class PaginationMetaDto {
