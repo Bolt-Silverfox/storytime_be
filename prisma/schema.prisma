@@ -106,6 +106,7 @@ model User {
   kids                    Kid[]
   parentFavorites         ParentFavorite[]
   userStoryProgress       UserStoryProgress[]
+  questionAnswers         QuestionAnswer[]
   voices                  Voice[]
   preferredVoiceId        String?
   preferredVoice          Voice?                   @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
@@ -907,8 +908,13 @@ model ScreenTimeSession {
 
 model QuestionAnswer {
   id             String        @id @default(uuid())
-  kidId          String
-  kid            Kid           @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  // Attribution is EITHER kid-scoped (kidId) OR user-scoped (userId). Kid-scoped
+  // answers drive per-kid badge progress; user-scoped answers come from clients
+  // that read as the logged-in user without a kid context (e.g. mobile).
+  kidId          String?
+  kid            Kid?          @relation(fields: [kidId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   questionId     String
   question       StoryQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
   storyId        String
@@ -920,6 +926,7 @@ model QuestionAnswer {
   deletedAt      DateTime?
 
   @@index([kidId])
+  @@index([userId])
   @@index([questionId])
   @@index([storyId])
   @@index([kidId, answeredAt])

@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Req, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
   ApiBody,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
 import { ScreenTimeService } from './services/screen-time.service';
@@ -15,7 +16,12 @@ import {
   EndScreenTimeSessionDto,
   DailyLimitDto,
 } from './dto/reports.dto';
-import { QuestionAnswerDto } from '../story/dto/story.dto';
+import { SubmitQuestionAnswerDto } from '../story/dto/story.dto';
+import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
+import {
+  AuthSessionGuard,
+  OptionalAuthRequest,
+} from '@/shared/guards/auth.guard';
 
 @ApiTags('reports')
 @Controller('reports')
@@ -70,10 +76,23 @@ export class ReportsController {
 
   // ============== QUIZ TRACKING ==============
   @Post('answer')
-  @ApiOperation({ summary: 'Record a question answer' })
-  @ApiBody({ type: QuestionAnswerDto })
+  @OptionalAuth()
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Record a question answer',
+    description:
+      'Attribution: pass kidId for kid-scoped answers (drives that kid’s ' +
+      'badge progress), or omit it and authenticate to record a user-scoped ' +
+      'answer. Guests (no auth, no kidId) get the correctness result back but ' +
+      'nothing is persisted.',
+  })
+  @ApiBody({ type: SubmitQuestionAnswerDto })
   @ApiResponse({ status: 201, description: 'Returns if answer is correct' })
-  async recordAnswer(@Body() dto: QuestionAnswerDto) {
-    return this.reportsService.recordAnswer(dto);
+  async recordAnswer(
+    @Req() req: OptionalAuthRequest,
+    @Body() dto: SubmitQuestionAnswerDto,
+  ) {
+    return this.reportsService.recordAnswer(dto, req.authUserData?.userId);
   }
 }
