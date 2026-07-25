@@ -34,6 +34,17 @@ const serviceName = process.env.OTEL_SERVICE_NAME || 'storytime-api';
 const serviceVersion = process.env.npm_package_version || '1.0.0';
 const environment = process.env.NODE_ENV || 'development';
 
+// Deployment environment (development | staging | production) for telemetry.
+// Deliberately DECOUPLED from NODE_ENV via a dedicated var: the blue candidate
+// runs NODE_ENV=development on dev infra but should be able to declare itself
+// `production` at promotion without flipping NODE_ENV (which changes unrelated
+// app behavior). Falls back to NODE_ENV when unset, so nothing changes until a
+// deploy explicitly sets DEPLOYMENT_ENV.
+const deploymentEnvironment =
+  process.env.DEPLOYMENT_ENV ||
+  process.env.DEPLOYMENT_ENVIRONMENT ||
+  environment;
+
 // Grafana Cloud / Tempo endpoint (OTLP)
 const tempoEndpoint =
   process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces';
@@ -162,7 +173,15 @@ const sdkConfig: Partial<NodeSDKConfiguration> = {
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: serviceName,
     [ATTR_SERVICE_VERSION]: serviceVersion,
-    environment,
+    // Semantic-convention deployment environment. Surfaces in Grafana Cloud as
+    // the `deployment_environment` label on `target_info` (and on every metric
+    // if OTLP resource-attribute promotion is enabled for the stack), so alerts
+    // can scope to `production` and stay dormant on dev. Using the string key
+    // avoids importing the incubating semconv entrypoint; the value of
+    // ATTR_DEPLOYMENT_ENVIRONMENT is exactly this string.
+    'deployment.environment': deploymentEnvironment,
+    // Legacy custom attribute kept for back-compat; aligned to the same value.
+    environment: deploymentEnvironment,
   }),
   metricReader: createMetricReader(),
   logRecordProcessor: new BatchLogRecordProcessor(
