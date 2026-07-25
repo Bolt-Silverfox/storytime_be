@@ -3,6 +3,7 @@ import { EventListenersService } from './event-listeners.service';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { SubscriptionModule } from '@/subscription/subscription.module';
 import { AnalyticsEventListener } from '../listeners/analytics-event.listener';
+import { BusinessMetricsListener } from '../listeners/business-metrics.listener';
 import { ActivityLogEventListener } from '../listeners/activity-log-event.listener';
 import { SubscriptionCacheListener } from '../listeners/subscription-cache.listener';
 import { KidCacheListener } from '../listeners/kid-cache.listener';
@@ -32,6 +33,7 @@ import { PrismaUserCleanupRepository } from '../repositories/prisma-user-cleanup
   providers: [
     EventListenersService,
     AnalyticsEventListener,
+    BusinessMetricsListener,
     ActivityLogEventListener,
     SubscriptionCacheListener,
     KidCacheListener,
@@ -48,6 +50,7 @@ import { PrismaUserCleanupRepository } from '../repositories/prisma-user-cleanup
   exports: [
     EventListenersService,
     AnalyticsEventListener,
+    BusinessMetricsListener,
     ActivityLogEventListener,
     SubscriptionCacheListener,
     KidCacheListener,

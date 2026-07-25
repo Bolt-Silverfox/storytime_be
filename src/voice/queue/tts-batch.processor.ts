@@ -11,6 +11,7 @@ import {
   TtsBatchStatus,
 } from './tts-batch-job.interface';
 import { TtsBatchQueueService } from './tts-batch-queue.service';
+import { TtsMetricsService } from './tts-metrics.service';
 import { TextToSpeechService } from '../../story/text-to-speech.service';
 import { QuotaExhaustedError } from '../errors/quota-exhausted.error';
 
@@ -41,6 +42,7 @@ export class TtsBatchProcessor extends WorkerHost {
   constructor(
     private readonly queueService: TtsBatchQueueService,
     private readonly ttsService: TextToSpeechService,
+    private readonly metrics: TtsMetricsService,
   ) {
     super();
   }
@@ -141,11 +143,13 @@ export class TtsBatchProcessor extends WorkerHost {
               userId,
               { isPremium, providerOverride: activeProvider },
             );
+            this.metrics.recordAttempt(activeProvider, 'success');
             return { index, audioUrl: result.audioUrl };
           } catch (err) {
             lastError = err;
 
             if (this.isQuotaError(err)) {
+              this.metrics.recordAttempt(activeProvider, 'quota_error');
               // Quota exhausted — retrying the same provider is pointless.
               this.logger.warn(
                 `TTS batch ${batchJobId}: ${activeProvider} quota exhausted for paragraph ${index}, cascading to fallback`,
@@ -154,6 +158,7 @@ export class TtsBatchProcessor extends WorkerHost {
               break; // move to the next provider in the chain
             }
 
+            this.metrics.recordAttempt(activeProvider, 'transient_error');
             const errorMessage =
               err instanceof Error ? err.message : String(err);
             if (attempt < MAX_ATTEMPTS_PER_PROVIDER) {
@@ -198,6 +203,7 @@ export class TtsBatchProcessor extends WorkerHost {
             // count each persisted index — otherwise the counters disagree with
             // the completed/failed sets in Redis whenever duplicates exist.
             completedCount += allIndices.length;
+            this.metrics.recordParagraph('completed');
           } catch (redisErr) {
             this.logger.error(
               `TTS batch ${batchJobId}: Redis write failed for completed paragraph ${paragraphIndex}`,
@@ -229,6 +235,7 @@ export class TtsBatchProcessor extends WorkerHost {
           // mirroring the completed path so the counters stay consistent with
           // the failed set in Redis.
           failedCount += allIndices.length;
+          this.metrics.recordParagraph('failed');
           failedThisRun.push(chunk[j]);
         }
       }
