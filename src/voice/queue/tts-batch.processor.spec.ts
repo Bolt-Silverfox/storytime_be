@@ -44,6 +44,7 @@ describe('TtsBatchProcessor', () => {
     processor = new TtsBatchProcessor(
       queueService as never,
       ttsService as never,
+      { recordAttempt: jest.fn(), recordParagraph: jest.fn() } as never,
     );
   });
 

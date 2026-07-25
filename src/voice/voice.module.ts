@@ -27,6 +27,7 @@ import { VoiceIdResolverService } from './services/voice-id-resolver.service';
 import { TTS_BATCH_QUEUE_NAME } from './queue/tts-batch-queue.constants';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
 import { TtsBatchProcessor } from './queue/tts-batch.processor';
+import { TtsMetricsService } from './queue/tts-metrics.service';
 import { TtsBatchRedisProvider } from './queue/tts-batch-redis.provider';
 import {
   VOICE_REPOSITORY,
@@ -73,6 +74,7 @@ import {
     TtsBatchRedisProvider,
     TtsBatchQueueService,
     TtsBatchProcessor,
+    TtsMetricsService,
     // Repository Pattern (testability, decoupling)
     {
       provide: VOICE_REPOSITORY,
