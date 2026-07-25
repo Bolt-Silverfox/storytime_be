@@ -4,7 +4,7 @@ import {
   KidDetailedReportDto,
   WeeklyReportDto,
 } from './dto/reports.dto';
-import { QuestionAnswerDto } from '../story/dto/story.dto';
+import { SubmitQuestionAnswerDto } from '../story/dto/story.dto';
 import { BadgeProgressEngine } from '../achievement-progress/badge-progress.engine';
 import { ScreenTimeService } from './services/screen-time.service';
 import {
@@ -46,9 +46,15 @@ export class ReportsService {
   ) {}
 
   /**
-   * Record a question answer
+   * Record a question answer.
+   *
+   * Attribution is EITHER kid-scoped (dto.kidId) OR user-scoped (userId):
+   * - kidId present  -> persist against the kid and advance that kid's badges.
+   * - no kidId, user authenticated -> persist against the user (no badges;
+   *   badges are kid-scoped).
+   * - neither (guest) -> return the correctness result without persisting.
    */
-  async recordAnswer(dto: QuestionAnswerDto) {
+  async recordAnswer(dto: SubmitQuestionAnswerDto, userId?: string) {
     const question = await this.storyQuestionRepository.findQuestionForAnswer(
       dto.questionId,
     );
@@ -66,29 +72,41 @@ export class ReportsService {
 
     const isCorrect = question.correctOption === dto.selectedOption;
 
+    // Guest with no kid context: nothing to attribute the answer to. Return the
+    // correctness result so the client can still render feedback.
+    if (!dto.kidId && !userId) {
+      return { answerId: null, isCorrect, persisted: false };
+    }
+
     const answer = await this.questionAnswerRepository.createAnswer({
-      kidId: dto.kidId,
+      // Prefer kid attribution when a kidId is supplied; otherwise attribute to
+      // the authenticated user.
+      kidId: dto.kidId ?? null,
+      userId: dto.kidId ? null : userId,
       questionId: dto.questionId,
       storyId: dto.storyId,
       selectedOption: dto.selectedOption,
       isCorrect,
     });
 
-    // Trigger badge progress for quiz answered
-    const kid = await this.kidRepository.findParentIdByKidId(dto.kidId);
+    // Badge progress is kid-scoped — only advance it for kid-attributed answers.
+    if (dto.kidId) {
+      const kid = await this.kidRepository.findParentIdByKidId(dto.kidId);
 
-    if (kid?.parentId) {
-      await this.badgeProgressEngine.recordActivity(
-        kid.parentId,
-        'quiz_answered',
-        dto.kidId,
-        { questionId: dto.questionId, isCorrect },
-      );
+      if (kid?.parentId) {
+        await this.badgeProgressEngine.recordActivity(
+          kid.parentId,
+          'quiz_answered',
+          dto.kidId,
+          { questionId: dto.questionId, isCorrect },
+        );
+      }
     }
 
     return {
       answerId: answer.id,
       isCorrect,
+      persisted: true,
     };
   }
 
