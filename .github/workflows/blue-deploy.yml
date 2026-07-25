@@ -84,7 +84,7 @@ jobs:
           # Grafana Cloud OTLP push (BLUE ONLY — green/dev intentionally omits it).
           # Strip any inherited OTEL/Grafana lines, then append blue's config so a
           # redeploy re-establishes the push instead of silently dropping telemetry.
-          sed -i -E '/^(OTEL_EXPORTER_OTLP_ENDPOINT|OTEL_EXPORTER_LOGS_ENDPOINT|OTEL_EXPORTER_METRICS_ENDPOINT|OTEL_METRICS_EXPORTER|OTEL_SERVICE_NAME|GRAFANA_CLOUD_INSTANCE_ID|GRAFANA_CLOUD_API_TOKEN)=/d' .env
+          sed -i -E '/^(OTEL_EXPORTER_OTLP_ENDPOINT|OTEL_EXPORTER_LOGS_ENDPOINT|OTEL_EXPORTER_METRICS_ENDPOINT|OTEL_METRICS_EXPORTER|OTEL_SERVICE_NAME|GRAFANA_CLOUD_INSTANCE_ID|GRAFANA_CLOUD_API_TOKEN|DEPLOYMENT_ENV)=/d' .env
           cat >> .env << 'EOF'
           OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-prod-gb-south-1.grafana.net/otlp/v1/traces
           OTEL_EXPORTER_LOGS_ENDPOINT=https://otlp-gateway-prod-gb-south-1.grafana.net/otlp/v1/logs
@@ -92,6 +92,13 @@ jobs:
           OTEL_METRICS_EXPORTER=otlp
           OTEL_SERVICE_NAME=storytime-api-blue
           GRAFANA_CLOUD_INSTANCE_ID=1730856
+          # Telemetry deployment environment (drives the `deployment.environment`
+          # OTel resource attr → Grafana `deployment_environment` label). Blue runs
+          # on DEV infra today, so it declares `development` and alerting stays
+          # dormant. AT PROMOTION (blue becomes the stable/prod deployment): change
+          # this single line to `DEPLOYMENT_ENV=production` and un-pause the alert
+          # rules — no NODE_ENV change needed.
+          DEPLOYMENT_ENV=development
           EOF
           # token comes from the step env (never a workflow literal)
           printf 'GRAFANA_CLOUD_API_TOKEN=%s\n' "$GRAFANA_CLOUD_API_TOKEN" >> .env
