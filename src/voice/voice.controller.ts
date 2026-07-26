@@ -295,6 +295,20 @@ export class VoiceController {
           },
         },
         totalParagraphs: { type: 'number' },
+        outline: {
+          type: 'array',
+          description:
+            'Every paragraph in reading order (ready AND pending), so a reader ' +
+            'can render per-paragraph text up-front and sync it to audio that ' +
+            'arrives later over SSE. Audio is NOT included here.',
+          items: {
+            type: 'object',
+            properties: {
+              index: { type: 'number' },
+              text: { type: 'string' },
+            },
+          },
+        },
         wasTruncated: { type: 'boolean' },
         voiceId: { type: 'string' },
         usedProvider: {
@@ -383,10 +397,25 @@ export class VoiceController {
       }
     }
 
+    // Full reading-order outline (ready + pending), deduped by index. Lets a
+    // reader lay out every paragraph's text immediately and light up audio per
+    // index as it streams in over SSE, keeping text and narration in sync.
+    const textByIndex = new Map<number, string>();
+    for (const p of paragraphs) {
+      if (typeof p.text === 'string') textByIndex.set(p.index, p.text);
+    }
+    for (const p of remainingUncached) {
+      if (!textByIndex.has(p.index)) textByIndex.set(p.index, p.text);
+    }
+    const outline = [...textByIndex.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([index, text]) => ({ index, text }));
+
     return {
       message: 'Batch audio generated successfully',
       paragraphs,
       totalParagraphs,
+      outline,
       wasTruncated,
       voiceId: resolvedVoice,
       usedProvider,

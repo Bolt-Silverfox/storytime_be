@@ -24,6 +24,12 @@ export interface JobEvent {
     storyId?: string;
     title?: string;
     audioUrl?: string;
+    // Voice batch fields: which paragraph became ready, and (on completion) the
+    // batch tally so a reader knows whether every position was narrated.
+    paragraphIndex?: number;
+    totalParagraphs?: number;
+    completedParagraphs?: number;
+    failedParagraphs?: number;
   };
   error?: string;
   timestamp: Date;
@@ -110,6 +116,61 @@ export class JobEventsService {
       jobType: 'voice',
       progress: 100,
       result: { audioUrl },
+      timestamp: new Date(),
+    });
+  }
+
+  /**
+   * Emit a per-paragraph readiness event for a voice batch.
+   *
+   * The reader consumes these to append playable audio to its playlist as each
+   * paragraph finishes, rather than waiting for the whole batch. `progress` is
+   * the batch-level percentage so a progress bar can advance alongside.
+   */
+  emitVoiceParagraphReady(
+    jobId: string,
+    userId: string,
+    paragraphIndex: number,
+    audioUrl: string,
+    progress: number,
+  ): void {
+    this.emit({
+      type: JobEventType.PROGRESS,
+      jobId,
+      userId,
+      jobType: 'voice',
+      progress,
+      result: { paragraphIndex, audioUrl },
+      timestamp: new Date(),
+    });
+  }
+
+  /**
+   * Emit the terminal completion event for a voice batch. Carries the tally so
+   * the reader can tell full narration from a partial one (some paragraphs may
+   * have exhausted every provider). Emit ONLY when no self-heal retry remains,
+   * otherwise the reader would stop listening before healed paragraphs arrive.
+   */
+  emitVoiceBatchCompleted(
+    jobId: string,
+    userId: string,
+    summary: {
+      totalParagraphs: number;
+      completedParagraphs: number;
+      failedParagraphs: number;
+    },
+  ): void {
+    this.emit({
+      type: JobEventType.COMPLETED,
+      jobId,
+      userId,
+      jobType: 'voice',
+      progress: 100,
+      result: {
+        totalParagraphs: summary.totalParagraphs,
+        completedParagraphs: summary.completedParagraphs,
+        failedParagraphs: summary.failedParagraphs,
+      },
       timestamp: new Date(),
     });
   }

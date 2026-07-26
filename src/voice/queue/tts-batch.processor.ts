@@ -14,6 +14,7 @@ import { TtsBatchQueueService } from './tts-batch-queue.service';
 import { TtsMetricsService } from './tts-metrics.service';
 import { TextToSpeechService } from '../../story/text-to-speech.service';
 import { QuotaExhaustedError } from '../errors/quota-exhausted.error';
+import { JobEventsService } from '@/notification/services/job-events.service';
 
 const MAX_CONCURRENT_PER_JOB = 5;
 
@@ -43,8 +44,36 @@ export class TtsBatchProcessor extends WorkerHost {
     private readonly queueService: TtsBatchQueueService,
     private readonly ttsService: TextToSpeechService,
     private readonly metrics: TtsMetricsService,
+    private readonly jobEvents: JobEventsService,
   ) {
     super();
+  }
+
+  /**
+   * Push a paragraph-ready event onto the user's SSE stream. Best-effort: a
+   * broadcast failure must never abort the batch, so we only log.
+   */
+  private emitParagraphReady(
+    batchJobId: string,
+    userId: string,
+    index: number,
+    audioUrl: string,
+    progress: number,
+  ): void {
+    try {
+      this.jobEvents.emitVoiceParagraphReady(
+        batchJobId,
+        userId,
+        index,
+        audioUrl,
+        progress,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `TTS batch ${batchJobId}: failed to emit SSE paragraph-ready for ${index}`,
+        err,
+      );
+    }
   }
 
   /** Check if a rejection reason indicates quota/payment exhaustion */
@@ -204,6 +233,30 @@ export class TtsBatchProcessor extends WorkerHost {
             // the completed/failed sets in Redis whenever duplicates exist.
             completedCount += allIndices.length;
             this.metrics.recordParagraph('completed');
+            // Announce each ready position so a live reader can append it to its
+            // playlist immediately. Base progress on paragraphs PROCESSED
+            // (completed + failed), not just completed — a failed paragraph
+            // still advances the batch, so excluding it would stall the bar on
+            // a high-failure run. Cap at 99 so the bar never reads 100 before
+            // the terminal `completed` event fires.
+            const progress =
+              totalParagraphs > 0
+                ? Math.min(
+                    99,
+                    Math.round(
+                      ((completedCount + failedCount) / totalParagraphs) * 100,
+                    ),
+                  )
+                : 0;
+            for (const idx of allIndices) {
+              this.emitParagraphReady(
+                batchJobId,
+                userId,
+                idx,
+                result.value.audioUrl,
+                progress,
+              );
+            }
           } catch (redisErr) {
             this.logger.error(
               `TTS batch ${batchJobId}: Redis write failed for completed paragraph ${paragraphIndex}`,
@@ -245,6 +298,7 @@ export class TtsBatchProcessor extends WorkerHost {
     // whole provider chain this run, bounded by MAX_RETRY_GENERATIONS so it can
     // never loop. The retry re-uses this batchJobId, so recovered paragraphs
     // heal in place for anyone still polling the batch.
+    let retryScheduled = false;
     if (failedThisRun.length > 0 && generation < MAX_RETRY_GENERATIONS) {
       try {
         await this.queueService.queueRetryBatch(
@@ -252,6 +306,7 @@ export class TtsBatchProcessor extends WorkerHost {
           failedThisRun,
           generation + 1,
         );
+        retryScheduled = true;
         this.logger.log(
           `TTS batch ${batchJobId}: scheduled self-heal (generation ${generation + 1}) for ${failedThisRun.length} paragraph(s)`,
         );
@@ -286,6 +341,34 @@ export class TtsBatchProcessor extends WorkerHost {
           : '',
     });
 
+    // Terminal SSE, emitted ONLY when no self-heal retry is still pending —
+    // otherwise the reader would stop listening before the healed paragraphs
+    // arrive in the next generation. The final generation always fires this,
+    // so a reader is never left waiting forever.
+    if (!retryScheduled) {
+      try {
+        if (aggregateCompleted > 0) {
+          this.jobEvents.emitVoiceBatchCompleted(batchJobId, userId, {
+            totalParagraphs: totalQueued,
+            completedParagraphs: aggregateCompleted,
+            failedParagraphs: aggregateFailed,
+          });
+        } else {
+          this.jobEvents.emitFailed(
+            batchJobId,
+            userId,
+            'voice',
+            `All ${totalQueued} paragraphs failed to synthesize`,
+          );
+        }
+      } catch (err) {
+        this.logger.warn(
+          `TTS batch ${batchJobId}: failed to emit terminal SSE`,
+          err,
+        );
+      }
+    }
+
     this.logger.log(
       `TTS batch ${batchJobId} finished (generation ${generation}): ${completedCount} completed / ${failedCount} failed this run; aggregate ${aggregateCompleted} completed / ${aggregateFailed} failed`,
     );
@@ -300,7 +383,7 @@ export class TtsBatchProcessor extends WorkerHost {
       return;
     }
 
-    const { batchJobId } = job.data;
+    const { batchJobId, userId } = job.data;
     this.logger.error(
       `TTS batch ${batchJobId} permanently failed: ${error.message}`,
       error.stack,
@@ -314,6 +397,17 @@ export class TtsBatchProcessor extends WorkerHost {
       .catch((err) =>
         this.logger.error(`Failed to update batch meta for ${batchJobId}`, err),
       );
+
+    // Close out any live reader — otherwise it waits on a stream that will
+    // never deliver another paragraph.
+    try {
+      this.jobEvents.emitFailed(batchJobId, userId, 'voice', error.message);
+    } catch (err) {
+      this.logger.warn(
+        `TTS batch ${batchJobId}: failed to emit terminal failure SSE`,
+        err,
+      );
+    }
   }
 
   @OnWorkerEvent('error')
