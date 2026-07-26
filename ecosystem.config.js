@@ -3,6 +3,12 @@ const os = require('os');
 const cpus = os.cpus().length;
 const prodInstances = Math.max(2, cpus - 1);
 
+// Dev and staging are single-instance (see the app entries below): fork mode
+// avoids a wasteful cluster master+worker pair and halves Prisma connections
+// into the shared RDS. Overridable if we ever need to scale a lower env.
+const devInstances = 1;
+const stagingInstances = 1;
+
 // Blue: single-instance v1.3.0 candidate (see the app entry below).
 const blueInstances = 1;
 
@@ -31,6 +37,8 @@ module.exports = {
     {
       ...baseConfig,
       name: 'storytime-api-development',
+      instances: devInstances,
+      exec_mode: execModeFor(devInstances),
       env: {
         NODE_ENV: 'development',
       },
@@ -38,6 +46,8 @@ module.exports = {
     {
       ...baseConfig,
       name: 'storytime-api-staging',
+      instances: stagingInstances,
+      exec_mode: execModeFor(stagingInstances),
       env: {
         NODE_ENV: 'staging',
       },
