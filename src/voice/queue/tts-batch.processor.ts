@@ -234,13 +234,18 @@ export class TtsBatchProcessor extends WorkerHost {
             completedCount += allIndices.length;
             this.metrics.recordParagraph('completed');
             // Announce each ready position so a live reader can append it to its
-            // playlist immediately. Cap at 99 so the bar never reads 100 before
+            // playlist immediately. Base progress on paragraphs PROCESSED
+            // (completed + failed), not just completed — a failed paragraph
+            // still advances the batch, so excluding it would stall the bar on
+            // a high-failure run. Cap at 99 so the bar never reads 100 before
             // the terminal `completed` event fires.
             const progress =
               totalParagraphs > 0
                 ? Math.min(
                     99,
-                    Math.round((completedCount / totalParagraphs) * 100),
+                    Math.round(
+                      ((completedCount + failedCount) / totalParagraphs) * 100,
+                    ),
                   )
                 : 0;
             for (const idx of allIndices) {
