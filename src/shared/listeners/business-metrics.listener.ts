@@ -58,9 +58,12 @@ export class BusinessMetricsListener {
   constructor() {
     const meter = metrics.getMeter('storytime-api');
 
-    this.usersRegistered = meter.createCounter('business_users_registered_total', {
-      description: 'New user registrations',
-    });
+    this.usersRegistered = meter.createCounter(
+      'business_users_registered_total',
+      {
+        description: 'New user registrations',
+      },
+    );
     this.usersDeleted = meter.createCounter('business_users_deleted_total', {
       description: 'User account deletions',
     });
@@ -73,9 +76,12 @@ export class BusinessMetricsListener {
     this.kidsDeleted = meter.createCounter('business_kids_deleted_total', {
       description: 'Kid profiles deleted',
     });
-    this.storiesCreated = meter.createCounter('business_stories_created_total', {
-      description: 'Stories created (labelled by ai_generated)',
-    });
+    this.storiesCreated = meter.createCounter(
+      'business_stories_created_total',
+      {
+        description: 'Stories created (labelled by ai_generated)',
+      },
+    );
     this.storiesCompleted = meter.createCounter(
       'business_stories_completed_total',
       { description: 'Stories completed (engagement)' },
@@ -83,10 +89,13 @@ export class BusinessMetricsListener {
     this.payments = meter.createCounter('business_payments_total', {
       description: 'Payment attempts (labelled by result + provider)',
     });
-    this.paymentRevenue = meter.createCounter('business_payment_revenue_total', {
-      description:
-        'Sum of successful payment amounts (labelled by currency + provider)',
-    });
+    this.paymentRevenue = meter.createCounter(
+      'business_payment_revenue_total',
+      {
+        description:
+          'Sum of successful payment amounts (labelled by currency + provider)',
+      },
+    );
     this.subscriptionsCreated = meter.createCounter(
       'business_subscriptions_created_total',
       { description: 'New subscriptions (labelled by provider)' },
@@ -168,7 +177,10 @@ export class BusinessMetricsListener {
         result: 'completed',
         provider: payload.provider ?? 'unknown',
       });
-      if (typeof payload.amount === 'number' && Number.isFinite(payload.amount)) {
+      if (
+        typeof payload.amount === 'number' &&
+        Number.isFinite(payload.amount)
+      ) {
         this.paymentRevenue.add(payload.amount, {
           currency: payload.currency ?? 'unknown',
           provider: payload.provider ?? 'unknown',
