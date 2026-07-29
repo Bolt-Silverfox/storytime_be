@@ -97,6 +97,9 @@ model User {
   // SUSPENSION FIELDS
   isSuspended             Boolean                  @default(false)
   suspendedAt             DateTime?
+  // APP RATING FIELDS
+  hasRatedApp             Boolean                  @default(false)
+  rateAppDismissedAt      DateTime?
   profile                 Profile?
   auth                    Session[]
   Token                   Token[]

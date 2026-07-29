@@ -141,6 +141,30 @@ export class UserController {
     return this.userService.updateParentProfile(req.authUserData.userId, body);
   }
 
+  @Patch('me/rate-app')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Mark that the current user has rated the app',
+    description:
+      'Called when the user taps "Rate Us" and is sent to the store. Sets hasRatedApp so the rate-us prompt and profile card stop showing.',
+  })
+  async markAppRated(@Req() req: AuthenticatedRequest) {
+    return this.userService.markAppRated(req.authUserData.userId);
+  }
+
+  @Patch('me/rate-app/dismiss')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Dismiss the rate-us prompt for the current user',
+    description:
+      'Called when the user cancels the rate-us popup. Records rateAppDismissedAt so the popup stops but the profile "Rate Us" card is shown instead.',
+  })
+  async dismissAppRating(@Req() req: AuthenticatedRequest) {
+    return this.userService.dismissAppRating(req.authUserData.userId);
+  }
+
   @Post('me/avatar')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
