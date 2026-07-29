@@ -524,6 +524,24 @@ export class UserService {
     });
   }
 
+  async markAppRated(userId: string) {
+    const user = await this.prisma.user.update({
+      where: { id: userId, isDeleted: false },
+      data: { hasRatedApp: true },
+      select: { hasRatedApp: true, rateAppDismissedAt: true },
+    });
+    return { success: true, ...user };
+  }
+
+  async dismissAppRating(userId: string) {
+    const user = await this.prisma.user.update({
+      where: { id: userId, isDeleted: false },
+      data: { rateAppDismissedAt: new Date() },
+      select: { hasRatedApp: true, rateAppDismissedAt: true },
+    });
+    return { success: true, ...user };
+  }
+
   async updateAvatarForParent(userId: string, body: UpdateAvatarDto) {
     return this.prisma.user.update({
       where: {
