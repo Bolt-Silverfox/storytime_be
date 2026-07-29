@@ -21,6 +21,8 @@ export interface UserWithRelations {
   kids?: { id: string }[];
   pinHash?: string | null;
   biometricsEnabled?: boolean;
+  hasRatedApp?: boolean;
+  rateAppDismissedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
   subscription?: Subscription | null;
@@ -53,6 +55,8 @@ export function mapParentProfile(user: UserWithRelations | null) {
     numberOfKids: Array.isArray(user.kids) ? user.kids.length : 0,
     pinSet: !!user.pinHash,
     biometricsEnabled: !!user.biometricsEnabled,
+    hasRatedApp: !!user.hasRatedApp,
+    rateAppDismissedAt: user.rateAppDismissedAt ?? null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
     subscriptionStatus: getSubscriptionStatus(

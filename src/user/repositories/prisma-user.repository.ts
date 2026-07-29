@@ -100,6 +100,8 @@ export class PrismaUserRepository implements IUserRepository {
       avatarId: string | null;
       pinHash: string;
       onboardingStatus: string;
+      hasRatedApp: boolean;
+      rateAppDismissedAt: Date | null;
     }>,
   ): Promise<User> {
     return this.prisma.user.update({

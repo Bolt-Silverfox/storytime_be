@@ -421,6 +421,41 @@ export class UserService {
     );
   }
 
+  async markAppRated(userId: string) {
+    // Rating supersedes any prior dismissal — clear the dismissal timestamp so
+    // the two fields can't disagree (rated with a stale dismissedAt).
+    const user = await this.userRepository.updateActiveUserSimple(userId, {
+      hasRatedApp: true,
+      rateAppDismissedAt: null,
+    });
+    return {
+      success: true,
+      hasRatedApp: user.hasRatedApp,
+      rateAppDismissedAt: user.rateAppDismissedAt,
+    };
+  }
+
+  async dismissAppRating(userId: string) {
+    // Once rated, dismissal is a no-op — never record a dismissal timestamp on
+    // an already-rated account.
+    const existing = await this.getUser(userId);
+    if (existing?.hasRatedApp) {
+      return {
+        success: true,
+        hasRatedApp: true,
+        rateAppDismissedAt: existing.rateAppDismissedAt ?? null,
+      };
+    }
+    const user = await this.userRepository.updateActiveUserSimple(userId, {
+      rateAppDismissedAt: new Date(),
+    });
+    return {
+      success: true,
+      hasRatedApp: user.hasRatedApp,
+      rateAppDismissedAt: user.rateAppDismissedAt,
+    };
+  }
+
   async updateAvatarForParent(userId: string, body: UpdateAvatarDto) {
     return this.userRepository.updateParentAvatar(userId, body.avatarId);
   }
