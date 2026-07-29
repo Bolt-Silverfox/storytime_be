@@ -525,15 +525,26 @@ export class UserService {
   }
 
   async markAppRated(userId: string) {
+    // Rating supersedes any prior dismissal — clear the dismissal timestamp so
+    // the two fields can't disagree (rated with a stale dismissedAt).
     const user = await this.prisma.user.update({
       where: { id: userId, isDeleted: false },
-      data: { hasRatedApp: true },
+      data: { hasRatedApp: true, rateAppDismissedAt: null },
       select: { hasRatedApp: true, rateAppDismissedAt: true },
     });
     return { success: true, ...user };
   }
 
   async dismissAppRating(userId: string) {
+    // Once rated, dismissal is a no-op — never record a dismissal timestamp on
+    // an already-rated account.
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId, isDeleted: false },
+      select: { hasRatedApp: true, rateAppDismissedAt: true },
+    });
+    if (existing?.hasRatedApp) {
+      return { success: true, ...existing };
+    }
     const user = await this.prisma.user.update({
       where: { id: userId, isDeleted: false },
       data: { rateAppDismissedAt: new Date() },
