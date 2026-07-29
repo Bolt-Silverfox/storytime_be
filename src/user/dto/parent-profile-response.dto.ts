@@ -53,6 +53,21 @@ export class ParentProfileResponseDto {
   @ApiProperty({ example: true })
   enableBiometrics?: boolean;
 
+  @ApiProperty({
+    example: false,
+    description:
+      'Whether the user has rated the app (stops the rate-us prompt)',
+  })
+  hasRatedApp?: boolean;
+
+  @ApiProperty({
+    example: null,
+    nullable: true,
+    description:
+      'When the user dismissed the rate-us popup; drives the profile "Rate Us" card',
+  })
+  rateAppDismissedAt?: Date | null;
+
   @ApiProperty({ example: '2023-10-01T12:00:00Z' })
   createdAt: Date;
 
