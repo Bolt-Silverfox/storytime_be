@@ -421,6 +421,28 @@ export class UserService {
     );
   }
 
+  async markAppRated(userId: string) {
+    const user = await this.userRepository.updateActiveUserSimple(userId, {
+      hasRatedApp: true,
+    });
+    return {
+      success: true,
+      hasRatedApp: user.hasRatedApp,
+      rateAppDismissedAt: user.rateAppDismissedAt,
+    };
+  }
+
+  async dismissAppRating(userId: string) {
+    const user = await this.userRepository.updateActiveUserSimple(userId, {
+      rateAppDismissedAt: new Date(),
+    });
+    return {
+      success: true,
+      hasRatedApp: user.hasRatedApp,
+      rateAppDismissedAt: user.rateAppDismissedAt,
+    };
+  }
+
   async updateAvatarForParent(userId: string, body: UpdateAvatarDto) {
     return this.userRepository.updateParentAvatar(userId, body.avatarId);
   }
