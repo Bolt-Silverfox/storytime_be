@@ -27,6 +27,7 @@ import { DailyChallengeService } from './daily-challenge.service';
 import { StoryGenerationService } from './story-generation.service';
 import { StoryQuotaService } from './story-quota.service';
 import { VoiceModule } from '../voice/voice.module';
+import { GuestModule } from '../guest/guest.module';
 import { StoryAccessGuard } from '@/shared/guards/story-access.guard';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
 import { STORY_QUEUE_NAME, StoryQueueService, StoryProcessor } from './queue';
@@ -69,6 +70,7 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
     NotificationModule,
     PrismaModule,
     forwardRef(() => VoiceModule),
+    forwardRef(() => GuestModule),
     // Register story generation queue
     BullModule.registerQueue({
       name: STORY_QUEUE_NAME,

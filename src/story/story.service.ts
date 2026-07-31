@@ -124,7 +124,8 @@ export class StoryService {
   }
 
   async getStories(filter: {
-    userId: string;
+    userId?: string;
+    guestSessionId?: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -144,7 +145,8 @@ export class StoryService {
   }
 
   async getStoriesCursor(filter: {
-    userId: string;
+    userId?: string;
+    guestSessionId?: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -160,7 +162,7 @@ export class StoryService {
   }
 
   async getHomePageStories(
-    userId: string,
+    userId: string | undefined,
     limitRecommended: number = 5,
     limitSeasonal: number = 5,
     limitTopLiked: number = 5,

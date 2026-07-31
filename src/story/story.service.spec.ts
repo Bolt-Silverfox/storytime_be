@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { StoryService } from './story.service';
 import { StoryFeedService } from './story-feed.service';
+import { GuestSessionService } from '@/guest/guest-session.service';
 import { NotificationService } from '../notification/notification.service';
 import { STORY_REPOSITORY } from './repositories/story.repository.interface';
 import { GeminiService } from './gemini.service';
@@ -20,6 +21,10 @@ import { StoryGenerationService } from './story-generation.service';
 
 // Mock dependencies — StoryService now routes all DB access through
 // STORY_REPOSITORY, so we mock the repository methods it calls.
+const mockGuestSessionService = {
+  getGuestSession: jest.fn(),
+};
+
 const mockStoryRepository = {
   findUniqueKidRaw: jest.fn(),
   findManyKidsRaw: jest.fn(),
@@ -68,6 +73,10 @@ describe('StoryService - Library & Generation', () => {
       providers: [
         StoryService,
         StoryFeedService,
+        {
+          provide: GuestSessionService,
+          useValue: mockGuestSessionService,
+        },
         { provide: STORY_REPOSITORY, useValue: mockStoryRepository },
         { provide: GeminiService, useValue: mockGeminiService },
         {
@@ -114,6 +123,9 @@ describe('StoryService - Library & Generation', () => {
     prisma = module.get(STORY_REPOSITORY);
     generation = module.get(StoryGenerationService);
     jest.clearAllMocks();
+    // Unknown/expired guest sessions resolve to null by default; individual
+    // tests override this to simulate a populated guest reading history.
+    mockGuestSessionService.getGuestSession.mockResolvedValue(null);
   });
 
   // --- 1. GENERATION TESTS (The Fix): delegate to canonical service ---
@@ -376,6 +388,141 @@ describe('StoryService - Library & Generation', () => {
 
       // Verify only 1 DB call for progress (not 1 per section)
       expect(prisma.findManyUserStoryProgressRaw).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // --- 3b. GUEST & ANONYMOUS ACCESS (OptionalAuth browse routes) ---
+  describe('Guest & anonymous access', () => {
+    const stories = [
+      { id: 'story-1', title: 'Finished Story' },
+      { id: 'story-2', title: 'Partially Read Story' },
+      { id: 'story-3', title: 'Unseen Story' },
+    ];
+
+    describe('getStories', () => {
+      it('should enrich readStatus from the guest reading history when only guestSessionId is given', async () => {
+        prisma.countStoriesRaw.mockResolvedValue(3);
+        prisma.findManyStoriesRaw.mockResolvedValue(stories);
+        mockGuestSessionService.getGuestSession.mockResolvedValue({
+          readingHistory: {
+            'story-1': { progress: 100, completed: true },
+            'story-2': { progress: 40 },
+          },
+        });
+
+        const result = await service.getStories({ guestSessionId: 'guest-1' });
+
+        expect(mockGuestSessionService.getGuestSession).toHaveBeenCalledWith(
+          'guest-1',
+        );
+        // sortByReadStatus orders: null (unseen) first, then reading, then done
+        expect(result.data[0]).toEqual(
+          expect.objectContaining({ id: 'story-3', readStatus: null }),
+        );
+        expect(result.data[1]).toEqual(
+          expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+        );
+        expect(result.data[2]).toEqual(
+          expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
+        );
+        // Guest enrichment must not query user progress
+        expect(prisma.findManyUserStoryProgressRaw).not.toHaveBeenCalled();
+      });
+
+      it('should fall back to null readStatus when the guest session is unknown/expired', async () => {
+        prisma.countStoriesRaw.mockResolvedValue(3);
+        prisma.findManyStoriesRaw.mockResolvedValue(stories);
+        // default mock: getGuestSession resolves null
+
+        const result = await service.getStories({ guestSessionId: 'stale' });
+
+        expect(result.data).toHaveLength(3);
+        for (const story of result.data) {
+          expect(story).toEqual(expect.objectContaining({ readStatus: null }));
+        }
+      });
+
+      it('should return null readStatus for fully anonymous requests (no userId, no guestSessionId)', async () => {
+        prisma.countStoriesRaw.mockResolvedValue(3);
+        prisma.findManyStoriesRaw.mockResolvedValue(stories);
+
+        const result = await service.getStories({});
+
+        expect(mockGuestSessionService.getGuestSession).not.toHaveBeenCalled();
+        expect(prisma.findManyUserStoryProgressRaw).not.toHaveBeenCalled();
+        expect(result.data).toHaveLength(3);
+        for (const story of result.data) {
+          expect(story).toEqual(expect.objectContaining({ readStatus: null }));
+        }
+      });
+    });
+
+    describe('getStoriesCursor', () => {
+      it('should enrich cursor pages from the guest reading history', async () => {
+        prisma.findManyStoriesRaw.mockResolvedValue(stories);
+        mockGuestSessionService.getGuestSession.mockResolvedValue({
+          readingHistory: {
+            'story-1': { progress: 100, completed: true },
+            'story-2': { progress: 40 },
+          },
+        });
+
+        const result = await service.getStoriesCursor({
+          guestSessionId: 'guest-1',
+        });
+
+        expect(mockGuestSessionService.getGuestSession).toHaveBeenCalledWith(
+          'guest-1',
+        );
+        expect(result.data[0]).toEqual(
+          expect.objectContaining({ id: 'story-3', readStatus: null }),
+        );
+        expect(result.data[1]).toEqual(
+          expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
+        );
+        expect(result.data[2]).toEqual(
+          expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
+        );
+        expect(prisma.findManyUserStoryProgressRaw).not.toHaveBeenCalled();
+      });
+
+      it('should return null readStatus on anonymous cursor pages', async () => {
+        prisma.findManyStoriesRaw.mockResolvedValue(stories);
+
+        const result = await service.getStoriesCursor({});
+
+        expect(mockGuestSessionService.getGuestSession).not.toHaveBeenCalled();
+        expect(result.data).toHaveLength(3);
+        for (const story of result.data) {
+          expect(story).toEqual(expect.objectContaining({ readStatus: null }));
+        }
+      });
+    });
+
+    describe('getHomePageStories', () => {
+      it('should serve guests without a user lookup and with null readStatus', async () => {
+        const recommended = [{ id: 'story-1', title: 'Fresh' }];
+        const topLiked = [{ id: 'story-2', title: 'Liked' }];
+        // 1st call = recommended fallback (no preferences), 2nd = topLiked
+        // (no seasonal call since findManySeasonsRaw returns [])
+        prisma.findManyStoriesRaw
+          .mockResolvedValueOnce(recommended)
+          .mockResolvedValueOnce(topLiked);
+        prisma.findManySeasonsRaw.mockResolvedValue([]);
+
+        const result = await service.getHomePageStories(undefined);
+
+        // No user lookup, no NotFoundException, no progress query for guests
+        expect(prisma.findUniqueUserRaw).not.toHaveBeenCalled();
+        expect(prisma.findManyUserStoryProgressRaw).not.toHaveBeenCalled();
+        expect(result.recommended[0]).toEqual(
+          expect.objectContaining({ id: 'story-1', readStatus: null }),
+        );
+        expect(result.seasonal).toEqual([]);
+        expect(result.topLiked[0]).toEqual(
+          expect.objectContaining({ id: 'story-2', readStatus: null }),
+        );
+      });
     });
   });
 
