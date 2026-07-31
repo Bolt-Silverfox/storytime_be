@@ -19,6 +19,8 @@ import {
   DEFAULT_CURSOR_LIMIT,
   PaginationUtil,
 } from '@/shared/utils/pagination.util';
+import { GuestSessionService } from '@/guest/guest-session.service';
+import { deriveReadStatus } from '@/shared/utils/read-status.util';
 
 @Injectable()
 export class StoryFeedService {
@@ -26,6 +28,7 @@ export class StoryFeedService {
     @Inject(STORY_REPOSITORY)
     private readonly storyRepository: IStoryRepository,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly guestSessionService: GuestSessionService,
   ) {}
 
   /** Wraps a Prisma query to handle invalid cursor IDs gracefully */
@@ -198,7 +201,8 @@ export class StoryFeedService {
   }
 
   async getStories(filter: {
-    userId: string;
+    userId?: string;
+    guestSessionId?: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -288,10 +292,22 @@ export class StoryFeedService {
     ]);
 
     const totalPages = Math.ceil(totalCount / limit);
-    const enrichedStories = await this.enrichWithReadStatus(
-      filter.userId,
-      stories,
-    );
+
+    // Enrich with read status based on user or guest session
+    let enrichedStories;
+    if (filter.userId) {
+      enrichedStories = await this.enrichWithReadStatus(filter.userId, stories);
+    } else if (filter.guestSessionId) {
+      enrichedStories = await this.enrichWithGuestReadStatus(
+        filter.guestSessionId,
+        stories,
+      );
+    } else {
+      enrichedStories = stories.map((s) => ({
+        ...s,
+        readStatus: null as 'done' | 'reading' | null,
+      }));
+    }
 
     let sortedStories = this.sortByReadStatus(enrichedStories, {
       shuffleUnseen: shouldShuffle,
@@ -337,7 +353,8 @@ export class StoryFeedService {
   }
 
   async getStoriesCursor(filter: {
-    userId: string;
+    userId?: string;
+    guestSessionId?: string;
     theme?: string;
     category?: string;
     season?: string;
@@ -375,7 +392,22 @@ export class StoryFeedService {
       stories,
       limit,
     );
-    const enriched = await this.enrichWithReadStatus(filter.userId, data);
+
+    // Enrich with read status based on user or guest session
+    let enriched;
+    if (filter.userId) {
+      enriched = await this.enrichWithReadStatus(filter.userId, data);
+    } else if (filter.guestSessionId) {
+      enriched = await this.enrichWithGuestReadStatus(
+        filter.guestSessionId,
+        data,
+      );
+    } else {
+      enriched = data.map((s) => ({
+        ...s,
+        readStatus: null as 'done' | 'reading' | null,
+      }));
+    }
 
     return {
       data: this.sortByReadStatus(enriched),
@@ -467,6 +499,39 @@ export class StoryFeedService {
     });
   }
 
+  /**
+   * Enrich stories with readStatus from guest session
+   */
+  private async enrichWithGuestReadStatus<T extends { id: string }>(
+    guestSessionId: string,
+    stories: T[],
+  ): Promise<(T & { readStatus: 'done' | 'reading' | null })[]> {
+    const storyIds = [...new Set(stories.map((s) => s.id))];
+    if (storyIds.length === 0)
+      return stories.map((s) => ({
+        ...s,
+        readStatus: null as 'done' | 'reading' | null,
+      }));
+
+    const session =
+      await this.guestSessionService.getGuestSession(guestSessionId);
+    if (!session) {
+      return stories.map((s) => ({
+        ...s,
+        readStatus: null as 'done' | 'reading' | null,
+      }));
+    }
+
+    const readingHistory = session.readingHistory;
+    return stories.map((story) => {
+      const progress = readingHistory[story.id];
+      return {
+        ...story,
+        readStatus: deriveReadStatus(progress?.progress, progress?.completed),
+      };
+    });
+  }
+
   // Threshold in days to consider a past season as "recent" for backfill
   private readonly RECENT_SEASON_THRESHOLD_DAYS = 45;
 
@@ -531,29 +596,32 @@ export class StoryFeedService {
   }
 
   async getHomePageStories(
-    userId: string,
+    userId: string | undefined,
     limitRecommended: number = 5,
     limitSeasonal: number = 5,
     limitTopLiked: number = 5,
   ) {
-    const user = await this.storyRepository.findUniqueUserRaw({
-      where: { id: userId, isDeleted: false },
-      include: { preferredCategories: true },
-    });
+    const user = userId
+      ? await this.storyRepository.findUniqueUserRaw({
+          where: { id: userId, isDeleted: false },
+          include: { preferredCategories: true },
+        })
+      : null;
 
-    if (!user) {
+    if (userId && !user) {
       throw new NotFoundException('User not found');
     }
 
     // 1. Recommended Stories (based on preferred categories)
     let recommended: Story[] = [];
-    if (user.preferredCategories.length > 0) {
+    const preferredCategories = user?.preferredCategories ?? [];
+    if (preferredCategories.length > 0) {
       recommended = await this.storyRepository.findManyStoriesRaw({
         where: {
           isDeleted: false,
           categories: {
             some: {
-              id: { in: user.preferredCategories.map((c: Category) => c.id) },
+              id: { in: preferredCategories.map((c: Category) => c.id) },
             },
           },
         },
@@ -630,7 +698,12 @@ export class StoryFeedService {
 
     // Enrich all stories with readStatus in a single DB query
     const allStories = [...recommended, ...seasonal, ...topLiked];
-    const enriched = await this.enrichWithReadStatus(userId, allStories);
+    const enriched = userId
+      ? await this.enrichWithReadStatus(userId, allStories)
+      : allStories.map((s) => ({
+          ...s,
+          readStatus: null as 'done' | 'reading' | null,
+        }));
 
     const recLen = recommended.length;
     const seaLen = seasonal.length;
