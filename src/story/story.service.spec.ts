@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { StoryService } from './story.service';
 import { StoryFeedService } from './story-feed.service';
+import { GuestSessionService } from '@/guest/guest-session.service';
 import { NotificationService } from '../notification/notification.service';
 import { STORY_REPOSITORY } from './repositories/story.repository.interface';
 import { GeminiService } from './gemini.service';
@@ -68,6 +69,10 @@ describe('StoryService - Library & Generation', () => {
       providers: [
         StoryService,
         StoryFeedService,
+        {
+          provide: GuestSessionService,
+          useValue: { getGuestSession: jest.fn().mockResolvedValue(null) },
+        },
         { provide: STORY_REPOSITORY, useValue: mockStoryRepository },
         { provide: GeminiService, useValue: mockGeminiService },
         {

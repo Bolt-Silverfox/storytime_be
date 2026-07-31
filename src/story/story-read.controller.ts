@@ -8,6 +8,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 
 import { CreateStoryDto, ErrorResponseDto } from './dto/story.dto';
 import { StoryService } from './story.service';
@@ -30,6 +31,7 @@ export class StoryReadController {
   ) {}
 
   @Get(':id')
+  @OptionalAuth()
   @UseGuards(StoryAccessGuard)
   @CheckStoryQuota()
   @ApiOperation({ summary: 'Get a story by id' })

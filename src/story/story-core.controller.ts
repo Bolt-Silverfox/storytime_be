@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   BadRequestException,
+  Headers,
   Logger,
   Param,
   Patch,
@@ -29,6 +30,8 @@ import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
+import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
+import { Public } from '@/shared/decorators/public.decorator';
 
 import {
   CategoryDto,
@@ -61,6 +64,7 @@ export class StoryCoreController {
   ) {}
 
   @Get()
+  @OptionalAuth()
   @ApiOperation({
     summary:
       'Get stories (optionally filtered by theme, category, recommended, kidId, and age)',
@@ -124,6 +128,7 @@ export class StoryCoreController {
   }) // 100 per minute
   async getStories(
     @Req() req: AuthenticatedRequest,
+    @Headers('x-guest-session-id') guestSessionId?: string,
     @Query('theme') theme?: string,
     @Query('category') category?: string,
     @Query('season') season?: string,
@@ -166,20 +171,24 @@ export class StoryCoreController {
       throw new BadRequestException('maxAge must be a non-negative number');
     }
 
-    if (kidId) {
+    const authenticatedUserId = req.authUserData?.userId;
+    // kidId is only meaningful for authenticated users; guests can't own kids.
+    const resolvedKidId = kidId && authenticatedUserId ? kidId : undefined;
+
+    if (resolvedKidId && authenticatedUserId) {
       await this.kidOwnership.getOwnedKidOrThrow(
-        kidId,
-        req.authUserData.userId,
+        resolvedKidId,
+        authenticatedUserId,
       );
     }
 
     const baseFilter = {
-      userId: req.authUserData.userId,
+      userId: authenticatedUserId,
       theme,
       category,
       season,
       isSeasonal: isSeasonal === 'true',
-      kidId,
+      kidId: resolvedKidId,
       age: parsedAge,
       minAge: parsedMinAge,
       maxAge: parsedMaxAge,
@@ -209,6 +218,7 @@ export class StoryCoreController {
     if (useCursorMode) {
       return this.storyService.getStoriesCursor({
         ...baseFilter,
+        guestSessionId,
         cursor: safeCursor,
         limit: safeLimit,
       });
@@ -219,6 +229,7 @@ export class StoryCoreController {
 
     return this.storyService.getStories({
       ...baseFilter,
+      guestSessionId,
       recommended: recommended === 'true',
       isMostLiked: isMostLiked === 'true',
       topPicksFromUs: topPicksFromUs === 'true',
@@ -229,6 +240,7 @@ export class StoryCoreController {
   }
 
   @Get('homepage/parent')
+  @OptionalAuth()
   @ApiOperation({
     summary: 'Get parent homepage stories (Recommended, Seasonal, Top Liked)',
   })
@@ -252,7 +264,7 @@ export class StoryCoreController {
     const safeLimitSeasonal = Math.max(1, Math.min(limitSeasonal, 50));
     const safeLimitTopLiked = Math.max(1, Math.min(limitTopLiked, 50));
     return this.storyService.getHomePageStories(
-      req.authUserData.userId,
+      req.authUserData?.userId,
       safeLimitRecommended,
       safeLimitSeasonal,
       safeLimitTopLiked,
@@ -260,6 +272,7 @@ export class StoryCoreController {
   }
 
   @Get('categories')
+  @Public()
   @UseInterceptors(CacheInterceptor)
   @CacheKey('categories:all')
   @CacheTTL(4 * 60 * 60 * 1000)
@@ -289,6 +302,7 @@ export class StoryCoreController {
   }
 
   @Get('themes')
+  @Public()
   @ApiOperation({ summary: 'Get all themes' })
   @ApiOkResponse({
     description: 'List of themes',
@@ -315,6 +329,7 @@ export class StoryCoreController {
   }
 
   @Get('seasons')
+  @Public()
   @ApiOperation({ summary: 'Get all seasons' })
   @ApiOkResponse({
     description: 'List of seasons',
