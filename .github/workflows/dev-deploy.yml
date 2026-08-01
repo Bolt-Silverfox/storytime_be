@@ -406,13 +406,18 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Wait for app to start
-            sleep 10
-
-            # Health check
-            curl -sf http://localhost:3500/api/v1/health || exit 1
-
-            echo "Deployment verified successfully"
+            # Health check with retry: cold start regularly exceeds a fixed
+            # 10s wait, which false-failed otherwise-successful deploys.
+            for i in $(seq 1 12); do
+              if curl -sf http://localhost:3500/api/v1/health; then
+                echo "Deployment verified successfully"
+                exit 0
+              fi
+              echo "Health check attempt $i/12 failed; retrying in 10s..."
+              sleep 10
+            done
+            echo "App did not become healthy within 120s"
+            exit 1
 
       - name: Comment deployment status
         if: success()
