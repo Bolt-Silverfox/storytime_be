@@ -394,13 +394,26 @@ jobs:
             # probe would pass a crash-loop that happens to be up at second 60, so
             # require a sustained healthy streak (>=3 = ~15s) at the end of a ~60s
             # window; a crash-loop keeps resetting the streak and fails the gate.
+            start_time=$(date +%s)
+            deadline=$((start_time + 60))
             streak=0
             for i in $(seq 1 12); do
-              sleep 5
-              if curl -sf http://localhost:3500/api/v1/health > /dev/null 2>&1; then
+              now=$(date +%s)
+              remaining=$((deadline - now))
+              [ "$remaining" -gt 0 ] || break
+
+              if curl -fsS --connect-timeout 5 --max-time "$remaining" \
+                http://localhost:3500/api/v1/health > /dev/null; then
                 streak=$((streak + 1))
               else
                 streak=0
+              fi
+
+              if [ "$i" -lt 12 ]; then
+                next_probe=$((start_time + i * 5))
+                now=$(date +%s)
+                delay=$((next_probe - now))
+                [ "$delay" -le 0 ] || sleep "$delay"
               fi
             done
             if [ "$streak" -lt 3 ]; then
