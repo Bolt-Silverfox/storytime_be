@@ -285,7 +285,12 @@ jobs:
   deploy:
     name: Deploy to Dev
     needs: [build, test]
-    if: success() && github.event.action == 'closed' && github.event.pull_request.merged == true
+    # Base-branch gate: the CI jobs above run for PRs to any develop-v* branch,
+    # but only merges into green (develop-v1.2.0) may deploy the shared dev
+    # environment (dev.api / storytime_dev). Blue merges are deployed to their
+    # own environment by blue-deploy.yml; without this gate they also
+    # overwrote green dev and applied blue migrations to storytime_dev.
+    if: success() && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'develop-v1.2.0'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -406,18 +411,25 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Health check with retry: cold start regularly exceeds a fixed
-            # 10s wait, which false-failed otherwise-successful deploys.
+            # Verify the app starts AND *stays* healthy. A single probe 10s
+            # after restart false-failed successful deploys (cold start takes
+            # ~16s), and checking only a final probe would pass a crash-loop
+            # that happens to be up at second 60 — so require a sustained
+            # healthy streak (>=3 = ~15s) at the end of a ~60s window.
+            streak=0
             for i in $(seq 1 12); do
-              if curl -sf http://localhost:3500/api/v1/health; then
-                echo "Deployment verified successfully"
-                exit 0
+              sleep 5
+              if curl -sf http://localhost:3500/api/v1/health > /dev/null 2>&1; then
+                streak=$((streak + 1))
+              else
+                streak=0
               fi
-              echo "Health check attempt $i/12 failed; retrying in 10s..."
-              sleep 10
             done
-            echo "App did not become healthy within 120s"
-            exit 1
+            if [ "$streak" -lt 3 ]; then
+              echo "App not consistently healthy at end of 60s window (streak=$streak) - possible crash-loop"; exit 1
+            fi
+
+            echo "Deployment verified successfully"
 
       - name: Comment deployment status
         if: success()
