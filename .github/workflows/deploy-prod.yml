@@ -390,11 +390,35 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Wait for app to start
-            sleep 10
+            # Verify the app starts AND *stays* healthy. Checking only the final
+            # probe would pass a crash-loop that happens to be up at second 60, so
+            # require a sustained healthy streak (>=3 = ~15s) at the end of a ~60s
+            # window; a crash-loop keeps resetting the streak and fails the gate.
+            start_time=$(date +%s)
+            deadline=$((start_time + 60))
+            streak=0
+            for i in $(seq 1 12); do
+              now=$(date +%s)
+              remaining=$((deadline - now))
+              [ "$remaining" -gt 0 ] || break
 
-            # Health check
-            curl -sf http://localhost:3500/api/v1/health || exit 1
+              if curl -fsS --connect-timeout 5 --max-time "$remaining" \
+                http://localhost:3500/api/v1/health > /dev/null; then
+                streak=$((streak + 1))
+              else
+                streak=0
+              fi
+
+              if [ "$i" -lt 12 ]; then
+                next_probe=$((start_time + i * 5))
+                now=$(date +%s)
+                delay=$((next_probe - now))
+                [ "$delay" -le 0 ] || sleep "$delay"
+              fi
+            done
+            if [ "$streak" -lt 3 ]; then
+              echo "App not consistently healthy at end of 60s window (streak=$streak) - possible crash-loop"; exit 1
+            fi
 
             echo "Production deployment verified successfully"
 
