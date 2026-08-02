@@ -23,6 +23,8 @@ import {
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
 import { DeviceTokenService } from './services/device-token.service';
+import { NotificationService } from './notification.service';
+import { TestPushNotificationDto } from './dto/device-token.dto';
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
@@ -44,7 +46,10 @@ class RegisterDeviceDto {
 @ApiTags('Devices')
 @Controller('devices')
 export class DeviceController {
-  constructor(private readonly deviceTokenService: DeviceTokenService) {}
+  constructor(
+    private readonly deviceTokenService: DeviceTokenService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
   @Post('register')
   @UseGuards(AuthSessionGuard)
@@ -160,5 +165,34 @@ export class DeviceController {
     return this.deviceTokenService.unregisterAllUserTokens(
       req.authUserData.userId,
     );
+  }
+
+  @Post('test')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Send a test push notification',
+    description:
+      "Sends a test push notification to the authenticated user's devices. " +
+      'Useful for verifying that push notifications are configured correctly.',
+  })
+  @ApiResponse({ status: 200, description: 'Test notification sent' })
+  async sendTestPush(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: TestPushNotificationDto,
+  ): Promise<{ success: boolean; message: string }> {
+    const userId = req.authUserData.userId;
+    const result = await this.notificationService.sendTestPush(
+      userId,
+      dto.title,
+      dto.body,
+      dto.token,
+    );
+    return {
+      success: result.success,
+      message: result.success
+        ? 'Test notification sent successfully'
+        : result.error || 'Failed to send test notification',
+    };
   }
 }
