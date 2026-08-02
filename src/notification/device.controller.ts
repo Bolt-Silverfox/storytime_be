@@ -168,6 +168,7 @@ export class DeviceController {
   }
 
   @Post('test')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
