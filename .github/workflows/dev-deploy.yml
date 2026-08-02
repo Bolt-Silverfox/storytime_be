@@ -401,22 +401,24 @@ jobs:
             deadline=$((start_time + 60))
             streak=0
             for i in $(seq 1 12); do
+              # Wait-then-probe so probes land at t=5..60: the END of the
+              # window is observed, and a crash in the final seconds resets
+              # the streak instead of slipping through unprobed.
+              target=$((start_time + i * 5))
+              now=$(date +%s)
+              delay=$((target - now))
+              [ "$delay" -le 0 ] || sleep "$delay"
+
               now=$(date +%s)
               remaining=$((deadline - now))
-              [ "$remaining" -gt 0 ] || break
-
+              # The final probe lands at the deadline; keep it bounded
+              # (>=5s budget) rather than skipping it.
+              [ "$remaining" -ge 5 ] || remaining=5
               if curl -fsS --connect-timeout 5 --max-time "$remaining" \
                 http://localhost:3500/api/v1/health > /dev/null; then
                 streak=$((streak + 1))
               else
                 streak=0
-              fi
-
-              if [ "$i" -lt 12 ]; then
-                next_probe=$((start_time + i * 5))
-                now=$(date +%s)
-                delay=$((next_probe - now))
-                [ "$delay" -le 0 ] || sleep "$delay"
               fi
             done
             if [ "$streak" -lt 3 ]; then
