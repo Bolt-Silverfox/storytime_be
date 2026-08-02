@@ -1,10 +1,12 @@
 import { ThrottlerModuleOptions } from '@nestjs/throttler';
 
 export const THROTTLE_LIMITS = {
-  // Authentication - strict
-  AUTH_LOGIN: { ttl: 60000, limit: 10 },
+  // Authentication - strict (green parity: login 3/min, register 3/hour —
+  // the looser 10/min + 5/min values undermined multi-account/trial-farming
+  // abuse controls)
+  AUTH_LOGIN: { ttl: 60000, limit: 3 },
   AUTH_OTP: { ttl: 60000, limit: 5 },
-  AUTH_REGISTER: { ttl: 60000, limit: 5 },
+  AUTH_REGISTER: { ttl: 3600000, limit: 3 },
   AUTH_PASSWORD_RESET: { ttl: 60000, limit: 3 },
 
   // Resource creation - moderate

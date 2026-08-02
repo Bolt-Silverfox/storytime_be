@@ -1,14 +1,17 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
   Get,
+  Headers,
   NotFoundException,
   Param,
   Patch,
   Post,
   Query,
   Req,
+  UnauthorizedException,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -32,6 +35,10 @@ import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
+import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
+import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
+import { GuestSessionService } from '@/guest/guest-session.service';
+import { StoryQuotaService } from '../story/story-quota.service';
 import { StoryService } from '../story/story.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
@@ -54,14 +61,45 @@ import { EAGER_PARAGRAPH_COUNT } from './queue/tts-batch-queue.constants';
 export class VoiceController {
   private readonly logger = new Logger(VoiceController.name);
 
+  /**
+   * Resolves the user ID from the request, preferring authenticated users
+   * and falling back to guest session ID.
+   * @throws BadRequestException if required credentials are missing
+   */
+  private resolveRequesterUserId(
+    req: AuthenticatedRequest,
+    guestSessionId?: string,
+  ): { userId: string; isGuest: boolean } {
+    const isGuest = !req.authUserData;
+    let userId: string;
+
+    if (isGuest) {
+      if (!guestSessionId) {
+        throw new BadRequestException(
+          'x-guest-session-id header is required for guest requests',
+        );
+      }
+      userId = guestSessionId;
+    } else {
+      if (!req.authUserData?.userId) {
+        throw new BadRequestException('Authenticated user missing userId');
+      }
+      userId = req.authUserData.userId;
+    }
+
+    return { userId, isGuest };
+  }
+
   constructor(
     private readonly voiceService: VoiceService,
     private readonly storyService: StoryService,
+    private readonly storyQuotaService: StoryQuotaService,
     private readonly uploadService: UploadService,
     private readonly textToSpeechService: TextToSpeechService,
     private readonly speechToTextService: SpeechToTextService,
     private readonly voiceQuotaService: VoiceQuotaService,
     private readonly ttsBatchQueueService: TtsBatchQueueService,
+    private readonly guestSessionService: GuestSessionService,
   ) {}
 
   @Post('upload')
@@ -206,6 +244,7 @@ export class VoiceController {
 
   // --- Get voice access status ---
   @Get('access')
+  @OptionalAuth()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({
@@ -248,20 +287,34 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Query('storyId') storyId?: string,
   ) {
+    const userId = req.authUserData?.userId;
+
+    // For guests, return default access info before any DB lookups
+    if (!userId) {
+      return {
+        isPremium: false,
+        unlimited: false,
+        defaultVoice: FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE,
+        maxVoices: 1,
+        lockedVoiceId: FREE_TIER_LIMITS.VOICES.DEFAULT_VOICE,
+        elevenLabsTrialStoryId: null,
+        usedVoicesForStory: [],
+        maxVoicesPerStory: 1,
+      };
+    }
+
     if (storyId) {
       const story = await this.storyService.getStoryById(storyId);
       if (!story) {
         throw new NotFoundException(`Story ${storyId} not found`);
       }
     }
-    return this.voiceQuotaService.getVoiceAccess(
-      req.authUserData.userId,
-      storyId,
-    );
+    return this.voiceQuotaService.getVoiceAccess(userId, storyId);
   }
 
   // --- List available ElevenLabs voices ---
   @Get('available')
+  @OptionalAuth()
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List all available ElevenLabs voices' })
@@ -272,8 +325,9 @@ export class VoiceController {
   // --- Text to Speech ---
 
   @Post('story/audio/batch')
+  @OptionalAuth()
   @UseGuards(AuthSessionGuard)
-  @Throttle({ short: { limit: 3, ttl: 60_000 } })
+  @Throttle({ short: { limit: 10, ttl: 60_000 } })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate audio for all paragraphs of a story' })
   @ApiResponse({
@@ -338,21 +392,92 @@ export class VoiceController {
   async batchTextToSpeech(
     @Body() dto: BatchStoryAudioDto,
     @Req() req: AuthenticatedRequest,
+    @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
-    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
-    const canUse = await this.voiceQuotaService.canUseVoice(
-      req.authUserData.userId,
-      resolvedVoice,
+    const { userId, isGuest } = this.resolveRequesterUserId(
+      req,
+      guestSessionId,
     );
-    if (!canUse) {
-      throw new ForbiddenException(
-        'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+
+    const resolvedVoice = dto.voiceId ?? DEFAULT_VOICE;
+
+    if (isGuest) {
+      // Guests may only use the default voice; compare canonical IDs so
+      // aliases of the default voice are accepted.
+      const defaultCanonical =
+        await this.voiceQuotaService.resolveCanonicalVoiceId(DEFAULT_VOICE);
+      const requestedCanonical = dto.voiceId
+        ? await this.voiceQuotaService.resolveCanonicalVoiceId(dto.voiceId)
+        : defaultCanonical;
+
+      if (requestedCanonical !== defaultCanonical) {
+        this.logger.warn(
+          `Guest user tried to use voice: ${dto.voiceId} (canonical: ${requestedCanonical}), only ${DEFAULT_VOICE} allowed`,
+        );
+        throw new ForbiddenException(
+          'Guest users can only use the default voice. Sign in to access all voices.',
+        );
+      }
+
+      // Validate guest session existence before loading the story
+      const session = await this.guestSessionService.getGuestSession(userId);
+      if (!session) {
+        throw new UnauthorizedException('Invalid or expired guest session');
+      }
+    } else {
+      const canUse = await this.voiceQuotaService.canUseVoice(
+        userId,
+        resolvedVoice,
       );
+      if (!canUse) {
+        throw new ForbiddenException(
+          'You do not have access to this voice. Upgrade to premium to unlock all voices.',
+        );
+      }
     }
 
     const story = await this.storyService.getStoryById(dto.storyId);
     if (!story || !story.textContent) {
       throw new NotFoundException('Story not found or has no content.');
+    }
+
+    // Story quota check for authenticated users
+    if (!isGuest) {
+      const storyAccess = await this.storyQuotaService.checkStoryAccess(
+        userId,
+        dto.storyId,
+      );
+      if (!storyAccess.canAccess) {
+        throw new ForbiddenException(
+          'You have reached your story limit. Upgrade to premium for unlimited stories!',
+        );
+      }
+      if (
+        storyAccess.reason !== 'already_read' &&
+        storyAccess.reason !== 'premium' &&
+        storyAccess.reason !== 'kid_created'
+      ) {
+        await this.storyQuotaService.recordNewStoryAccess(userId, dto.storyId);
+      }
+    }
+
+    // Guest access validation: check session, story, and quota atomically
+    if (isGuest) {
+      const accessResult = await this.guestSessionService.recordNewStoryAccess(
+        userId,
+        dto.storyId,
+      );
+      if (!accessResult.recorded) {
+        if (accessResult.reason === 'session_not_found') {
+          throw new UnauthorizedException('Invalid or expired guest session');
+        }
+        if (accessResult.reason === 'quota_exceeded') {
+          throw new ForbiddenException(
+            'You have reached your story limit. Sign up to continue reading!',
+          );
+        }
+        // 'already_read' → proceed
+      }
     }
 
     const {
@@ -369,7 +494,7 @@ export class VoiceController {
       dto.storyId,
       story.textContent,
       resolvedVoice,
-      req.authUserData.userId,
+      isGuest ? undefined : userId,
       EAGER_PARAGRAPH_COUNT,
     );
 
@@ -382,8 +507,8 @@ export class VoiceController {
         batchJobId = await this.ttsBatchQueueService.queueBatch({
           storyId: dto.storyId,
           voiceId: resolvedVoice,
-          userId: req.authUserData.userId,
-          isPremium,
+          userId,
+          isPremium: isGuest ? false : isPremium,
           provider: batchProvider,
           paragraphs: remainingUncached,
           totalParagraphs,
@@ -428,6 +553,7 @@ export class VoiceController {
   }
 
   @Get('story/audio/batch/status/:batchJobId')
+  @OptionalAuth()
   @UseGuards(AuthSessionGuard)
   @Throttle({ short: { limit: 30, ttl: 60_000 } })
   @ApiBearerAuth()
@@ -440,10 +566,13 @@ export class VoiceController {
   async getBatchStatus(
     @Param('batchJobId', ParseUUIDPipe) batchJobId: string,
     @Req() req: AuthenticatedRequest,
+    @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
+    const { userId } = this.resolveRequesterUserId(req, guestSessionId);
+
     const status = await this.ttsBatchQueueService.getBatchStatus(
       batchJobId,
-      req.authUserData.userId,
+      userId,
     );
 
     if (!status) {
