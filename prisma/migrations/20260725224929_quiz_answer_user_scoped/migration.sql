@@ -17,6 +17,7 @@ DO $$ BEGIN
     SELECT 1 FROM pg_constraint
     WHERE conname = 'question_answers_userId_fkey'
       AND conrelid = '"question_answers"'::regclass
+      AND contype = 'f'
   ) THEN
     ALTER TABLE "question_answers" ADD CONSTRAINT "question_answers_userId_fkey"
       FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
