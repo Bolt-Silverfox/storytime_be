@@ -1,4 +1,10 @@
-import { Injectable, BadRequestException, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  UnauthorizedException,
+} from '@nestjs/common';
 import {
   KidOverviewStatsDto,
   KidDetailedReportDto,
@@ -63,6 +69,10 @@ export class ReportsService {
       throw new BadRequestException('Question not found');
     }
 
+    if (question.storyId !== dto.storyId) {
+      throw new BadRequestException('Question does not belong to this story');
+    }
+
     if (
       dto.selectedOption < 0 ||
       dto.selectedOption >= question.options.length
@@ -76,6 +86,21 @@ export class ReportsService {
     // correctness result so the client can still render feedback.
     if (!dto.kidId && !userId) {
       return { answerId: null, isCorrect, persisted: false };
+    }
+
+    // Kid attribution requires an authenticated parent who owns the kid —
+    // otherwise anyone could persist answers (and advance badge progress)
+    // against an arbitrary kidId.
+    if (dto.kidId) {
+      if (!userId) {
+        throw new UnauthorizedException(
+          'Authentication required to record kid-scoped answers',
+        );
+      }
+      const kid = await this.kidRepository.findParentIdByKidId(dto.kidId);
+      if (!kid || kid.parentId !== userId) {
+        throw new ForbiddenException('Kid does not belong to this user');
+      }
     }
 
     const answer = await this.questionAnswerRepository.createAnswer({

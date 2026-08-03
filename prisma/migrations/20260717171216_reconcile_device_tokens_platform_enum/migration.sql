@@ -7,12 +7,36 @@
 -- 'web', which match the enum labels. (Prisma's auto-generated DROP/ADD would
 -- have destroyed data and failed on a non-empty table.)
 
--- CreateEnum
-CREATE TYPE "DevicePlatform" AS ENUM ('ios', 'android', 'web');
+-- CreateEnum (guarded: idempotent on DBs where the type already exists).
+-- Scoped to the current schema and to enum types so a same-named object in
+-- another schema on a shared server cannot satisfy the guard.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'DevicePlatform'
+      AND t.typtype = 'e'
+      AND n.nspname = current_schema()
+  ) THEN
+    CREATE TYPE "DevicePlatform" AS ENUM ('ios', 'android', 'web');
+  END IF;
+END $$;
 
--- AlterTable: convert platform TEXT -> DevicePlatform without dropping data
-ALTER TABLE "device_tokens"
-  ALTER COLUMN "platform" TYPE "DevicePlatform" USING ("platform"::"DevicePlatform");
+-- AlterTable: convert platform TEXT -> DevicePlatform without dropping data.
+-- Guarded so re-runs (or DBs already converted) are a no-op; scoped to the
+-- current schema so a device_tokens table elsewhere cannot be touched.
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'device_tokens'
+      AND column_name = 'platform'
+      AND udt_name <> 'DevicePlatform'
+  ) THEN
+    ALTER TABLE "device_tokens"
+      ALTER COLUMN "platform" TYPE "DevicePlatform" USING ("platform"::"DevicePlatform");
+  END IF;
+END $$;
 
 -- AlterTable: add the missing lastUsed column
 ALTER TABLE "device_tokens"

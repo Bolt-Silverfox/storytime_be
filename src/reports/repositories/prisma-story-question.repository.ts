@@ -16,6 +16,7 @@ export class PrismaStoryQuestionRepository implements IStoryQuestionRepository {
       where: { id },
       select: {
         id: true,
+        storyId: true,
         options: true,
         correctOption: true,
       },
