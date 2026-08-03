@@ -12,6 +12,8 @@ import { TextToSpeechService } from '../story/text-to-speech.service';
 import { SpeechToTextService } from './speech-to-text.service';
 import { VoiceQuotaService } from './voice-quota.service';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
+import { StoryQuotaService } from '../story/story-quota.service';
+import { GuestSessionService } from '@/guest/guest-session.service';
 
 const mockVoiceService = {
   listVoices: jest.fn(),
@@ -29,10 +31,21 @@ const mockSpeechToTextService = {};
 const mockVoiceQuotaService = {
   canUseVoice: jest.fn().mockResolvedValue(true),
   getVoiceAccess: jest.fn(),
+  resolveCanonicalVoiceId: jest.fn((v: string) => Promise.resolve(v)),
 };
 const mockTtsBatchQueueService = {
   queueBatch: jest.fn(),
   getBatchStatus: jest.fn(),
+};
+const mockStoryQuotaService = {
+  checkStoryAccess: jest
+    .fn()
+    .mockResolvedValue({ canAccess: true, reason: 'premium' }),
+  recordNewStoryAccess: jest.fn(),
+};
+const mockGuestSessionService = {
+  getGuestSession: jest.fn(),
+  recordNewStoryAccess: jest.fn(),
 };
 
 describe('VoiceController', () => {
@@ -57,6 +70,8 @@ describe('VoiceController', () => {
           provide: TtsBatchQueueService,
           useValue: mockTtsBatchQueueService,
         },
+        { provide: StoryQuotaService, useValue: mockStoryQuotaService },
+        { provide: GuestSessionService, useValue: mockGuestSessionService },
       ],
     })
       .overrideGuard(AuthSessionGuard)
