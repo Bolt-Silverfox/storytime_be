@@ -6,6 +6,7 @@ import { StoryModule } from '../story/story.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { UploadModule } from '../upload/upload.module';
 import { NotificationModule } from '../notification/notification.module';
+import { GuestModule } from '../guest/guest.module';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
@@ -51,6 +52,7 @@ import {
     UploadModule,
     NotificationModule,
     forwardRef(() => StoryModule),
+    forwardRef(() => GuestModule),
     BullModule.registerQueue({ name: TTS_BATCH_QUEUE_NAME }),
   ],
   controllers: [VoiceController],
