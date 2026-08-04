@@ -509,20 +509,19 @@ export class AdminService {
       },
     });
 
-    const groupedByDate = users.reduce(
-      (acc, user) => {
-        const date = user.createdAt.toISOString().split('T')[0];
-        if (!acc[date]) {
-          acc[date] = { total: 0, paid: 0 };
-        }
-        acc[date].total += 1;
-        if (user.subscription?.status === 'active') {
-          acc[date].paid += 1;
-        }
-        return acc;
-      },
-      {} as Record<string, { total: number; paid: number }>,
-    );
+    const groupedByDate = users.reduce<
+      Record<string, { total: number; paid: number }>
+    >((acc, user) => {
+      const date = user.createdAt.toISOString().split('T')[0];
+      if (!acc[date]) {
+        acc[date] = { total: 0, paid: 0 };
+      }
+      acc[date].total += 1;
+      if (user.subscription?.status === 'active') {
+        acc[date].paid += 1;
+      }
+      return acc;
+    }, {});
 
     let totalUsers = await this.prisma.user.count({
       where: {
@@ -649,14 +648,11 @@ export class AdminService {
       select: { ageMin: true, ageMax: true },
     });
 
-    const ageGroups = stories.reduce(
-      (acc, story) => {
-        const range = `${story.ageMin}-${story.ageMax}`;
-        acc[range] = (acc[range] || 0) + 1;
-        return acc;
-      },
-      {} as Record<string, number>,
-    );
+    const ageGroups = stories.reduce<Record<string, number>>((acc, story) => {
+      const range = `${story.ageMin}-${story.ageMax}`;
+      acc[range] = (acc[range] || 0) + 1;
+      return acc;
+    }, {});
 
     const result: ContentBreakdownDto = {
       byLanguage: languageStats.map((stat) => ({
@@ -1822,11 +1818,7 @@ export class AdminService {
 
   async getAiCreditAnalytics(
     duration:
-      | 'yearly'
-      | 'quarterly'
-      | 'monthly'
-      | 'weekly'
-      | 'daily' = 'yearly',
+      'yearly' | 'quarterly' | 'monthly' | 'weekly' | 'daily' = 'yearly',
   ): Promise<AiCreditAnalyticsDto> {
     const now = new Date();
     let startDate: Date;
