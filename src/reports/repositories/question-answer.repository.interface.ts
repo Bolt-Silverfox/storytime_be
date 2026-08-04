@@ -14,6 +14,9 @@ export interface IQuestionAnswerRepository {
 
   // Find all answers for a kid answered on/after the given date
   findAnswersByKidSince(kidId: string, since: Date): Promise<QuestionAnswer[]>;
+
+  // Whether the kid has already answered this question (any attempt)
+  hasKidAnswered(kidId: string, questionId: string): Promise<boolean>;
 }
 
 export const QUESTION_ANSWER_REPOSITORY = Symbol('QUESTION_ANSWER_REPOSITORY');

@@ -76,18 +76,44 @@ export class TtsBatchProcessor extends WorkerHost {
     }
   }
 
+  /** Extract an HTTP status code from a provider error, if present. */
+  private extractHttpStatus(reason: unknown): number | undefined {
+    if (!reason || typeof reason !== 'object') return undefined;
+    const err = reason as Record<string, unknown>;
+    if (typeof err.status === 'number') return err.status;
+    if (typeof err.statusCode === 'number') return err.statusCode;
+    // Axios errors store status on response.status
+    const response = err.response as Record<string, unknown> | undefined;
+    if (response && typeof response.status === 'number') return response.status;
+    return undefined;
+  }
+
   /** Check if a rejection reason indicates quota/payment exhaustion */
   private isQuotaError(reason: unknown): boolean {
     if (reason instanceof QuotaExhaustedError) return true;
-    if (reason && typeof reason === 'object') {
-      const err = reason as Record<string, unknown>;
-      // Raw HTTP 402 from providers that don't wrap in QuotaExhaustedError
-      if (err.status === 402 || err.statusCode === 402) return true;
-      // Axios errors store status on response.status
-      const response = err.response as Record<string, unknown> | undefined;
-      if (response?.status === 402) return true;
+    return this.extractHttpStatus(reason) === 402;
+  }
+
+  /**
+   * Decide whether an error is worth a same-provider retry. Permanent client
+   * errors — bad auth, invalid/unsupported input, etc. (HTTP 4xx other than
+   * rate-limiting) — will fail identically on retry, so we cascade immediately.
+   * Everything else (network blips, timeouts, 5xx, 429 rate limits, and
+   * unclassified provider errors) is treated as potentially transient. Quota
+   * errors are handled separately by isQuotaError and are never "transient".
+   */
+  private isTransientError(reason: unknown): boolean {
+    if (this.isQuotaError(reason)) return false;
+    const status = this.extractHttpStatus(reason);
+    if (
+      status !== undefined &&
+      status >= 400 &&
+      status < 500 &&
+      status !== 429
+    ) {
+      return false;
     }
-    return false;
+    return true;
   }
 
   /** Resolve duplicate indices for a paragraph from the original job data */
@@ -187,9 +213,21 @@ export class TtsBatchProcessor extends WorkerHost {
               break; // move to the next provider in the chain
             }
 
-            this.metrics.recordAttempt(activeProvider, 'transient_error');
             const errorMessage =
               err instanceof Error ? err.message : String(err);
+
+            if (!this.isTransientError(err)) {
+              // Permanent failure (auth/validation/unsupported input) — a
+              // same-provider retry would fail identically, so skip the backoff
+              // and cascade straight to the next provider.
+              this.metrics.recordAttempt(activeProvider, 'permanent_error');
+              this.logger.warn(
+                `TTS batch ${batchJobId}: non-transient failure on ${activeProvider} for paragraph ${index} — ${errorMessage}; cascading to fallback without retry`,
+              );
+              break; // move to the next provider in the chain
+            }
+
+            this.metrics.recordAttempt(activeProvider, 'transient_error');
             if (attempt < MAX_ATTEMPTS_PER_PROVIDER) {
               this.logger.warn(
                 `TTS batch ${batchJobId}: transient failure on ${activeProvider} for paragraph ${index} (attempt ${attempt}/${MAX_ATTEMPTS_PER_PROVIDER}) — ${errorMessage}; retrying`,
@@ -311,10 +349,15 @@ export class TtsBatchProcessor extends WorkerHost {
           `TTS batch ${batchJobId}: scheduled self-heal (generation ${generation + 1}) for ${failedThisRun.length} paragraph(s)`,
         );
       } catch (retryErr) {
+        // queueRetryBatch performs Redis TTL writes; if it fails the retry was
+        // NOT safely scheduled. Rethrow so the batch fails loudly instead of
+        // appearing finalized (with a "completed" SSE emit) while paragraphs
+        // silently never self-heal.
         this.logger.error(
           `TTS batch ${batchJobId}: failed to schedule self-heal retry`,
           retryErr,
         );
+        throw retryErr;
       }
     }
 

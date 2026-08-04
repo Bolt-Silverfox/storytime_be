@@ -106,7 +106,10 @@ export class TtsBatchQueueService implements OnModuleDestroy {
       jobData,
       {
         ...TTS_BATCH_QUEUE_OPTIONS,
-        jobId: `${batchJobId}:retry:${generation}`,
+        // BullMQ (>=5.61) rejects ':' in custom job IDs — it is the reserved
+        // internal key separator — so use hyphens or the enqueue throws and the
+        // retry is never scheduled.
+        jobId: `${batchJobId}-retry-${generation}`,
         delay: TTS_BATCH_RETRY_DELAY_MS,
       },
     );

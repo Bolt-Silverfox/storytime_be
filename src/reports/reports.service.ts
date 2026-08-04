@@ -91,6 +91,7 @@ export class ReportsService {
     // Kid attribution requires an authenticated parent who owns the kid —
     // otherwise anyone could persist answers (and advance badge progress)
     // against an arbitrary kidId.
+    let isFirstKidAnswer = false;
     if (dto.kidId) {
       if (!userId) {
         throw new UnauthorizedException(
@@ -101,6 +102,13 @@ export class ReportsService {
       if (!kid || kid.parentId !== userId) {
         throw new ForbiddenException('Kid does not belong to this user');
       }
+      // Checked BEFORE persisting the new row: re-answers are allowed (every
+      // attempt is stored) but only the first answer to a question may advance
+      // badge progress — otherwise badges can be farmed by re-answering.
+      isFirstKidAnswer = !(await this.questionAnswerRepository.hasKidAnswered(
+        dto.kidId,
+        dto.questionId,
+      ));
     }
 
     const answer = await this.questionAnswerRepository.createAnswer({
@@ -114,18 +122,16 @@ export class ReportsService {
       isCorrect,
     });
 
-    // Badge progress is kid-scoped — only advance it for kid-attributed answers.
-    if (dto.kidId) {
-      const kid = await this.kidRepository.findParentIdByKidId(dto.kidId);
-
-      if (kid?.parentId) {
-        await this.badgeProgressEngine.recordActivity(
-          kid.parentId,
-          'quiz_answered',
-          dto.kidId,
-          { questionId: dto.questionId, isCorrect },
-        );
-      }
+    // Badge progress is kid-scoped — only advance it for kid-attributed
+    // answers, and only for the kid's FIRST answer to this question.
+    // Ownership was validated above, so the parent is the authenticated user.
+    if (dto.kidId && userId && isFirstKidAnswer) {
+      await this.badgeProgressEngine.recordActivity(
+        userId,
+        'quiz_answered',
+        dto.kidId,
+        { questionId: dto.questionId, isCorrect },
+      );
     }
 
     return {

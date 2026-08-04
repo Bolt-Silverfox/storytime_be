@@ -1,5 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { VOICE_CONFIG } from '../voice.constants';
+import {
+  ELEVEN_LABS_TO_VOICE_TYPE,
+  VOICE_CONFIG,
+} from '../voice.constants';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../dto/voice.dto';
 import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
 
@@ -56,12 +59,11 @@ export class VoiceIdResolverService {
     if (voice) return voice.id;
 
     // Auto-seed from VOICE_CONFIG if this is a known system voice
-    const configEntry = Object.entries(VOICE_CONFIG).find(
-      ([, config]) => config.elevenLabsId === elevenLabsVoiceId,
-    );
-    if (!configEntry) return null;
+    const voiceTypeKey = ELEVEN_LABS_TO_VOICE_TYPE.get(elevenLabsVoiceId);
+    if (!voiceTypeKey) return null;
 
-    const [key, config] = configEntry;
+    const key = voiceTypeKey;
+    const config = VOICE_CONFIG[voiceTypeKey];
     const created = await this.voiceRepository.createVoiceReturningId({
       elevenLabsVoiceId: config.elevenLabsId,
       name: key,

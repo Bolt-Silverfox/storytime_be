@@ -2,7 +2,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
-import { VOICE_CONFIG } from './voice.constants';
+import {
+  ELEVEN_LABS_TO_VOICE_TYPE,
+  VOICE_CONFIG,
+} from './voice.constants';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from './dto/voice.dto';
 import { VoiceUsageService } from './services/voice-usage.service';
 import { VoiceIdResolverService } from './services/voice-id-resolver.service';
@@ -127,11 +130,8 @@ export class VoiceQuotaService {
 
       // UUID or elevenLabsId → look up the elevenLabsId, then find VoiceType key
       const elevenLabsId = uuidToElevenLabs.get(v.voiceId) ?? v.voiceId;
-      const entry = Object.entries(VOICE_CONFIG).find(
-        ([, config]) => config.elevenLabsId === elevenLabsId,
-      );
       // Keep non-system voices in canonical form for downstream comparison
-      return entry ? entry[0] : elevenLabsId;
+      return ELEVEN_LABS_TO_VOICE_TYPE.get(elevenLabsId) ?? elevenLabsId;
     });
 
     return [...new Set(voiceTypeKeys)];
@@ -421,9 +421,7 @@ export class VoiceQuotaService {
       const elevenLabsId = lockedVoice?.elevenLabsVoiceId;
       // Find the VoiceType key whose config matches this elevenLabsId
       const voiceTypeKey = elevenLabsId
-        ? (Object.entries(VOICE_CONFIG).find(
-            ([, config]) => config.elevenLabsId === elevenLabsId,
-          )?.[0] ?? null)
+        ? (ELEVEN_LABS_TO_VOICE_TYPE.get(elevenLabsId) ?? null)
         : null;
 
       // Report the locked voice — free users get ONE voice total
