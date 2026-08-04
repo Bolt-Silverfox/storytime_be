@@ -107,6 +107,34 @@ export class BadgeProgressEngine implements OnModuleInit {
     }
   }
 
+  /**
+   * Whether badge progress for this kid's answer to `questionId` was already
+   * recorded. `recordActivity` swallows its own failures, so callers cannot
+   * detect a badge write that died after the answer was persisted; this reads
+   * the activity log it writes, letting a later attempt re-run the badge path
+   * instead of skipping it forever.
+   */
+  async hasRecordedQuizAnswer(
+    kidId: string,
+    questionId: string,
+  ): Promise<boolean> {
+    try {
+      return await this.streakRepository.hasKidActivityForQuestion(
+        kidId,
+        'quiz_answered',
+        questionId,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to check recorded quiz activity for kid ${kidId}, question ${questionId}; assuming already recorded: ${message}`,
+      );
+      // Fail closed: on an unreadable marker prefer skipping the badge over
+      // awarding it repeatedly, which is the farming risk this guards.
+      return true;
+    }
+  }
+
   @OnEvent('story.completed')
   async handleStoryCompleted(event: BadgeEvent) {
     this.logger.log(`Story completed event: ${event.userId}`);

@@ -69,4 +69,23 @@ export class PrismaStreakRepository implements IStreakRepository {
       select: { createdAt: true },
     });
   }
+
+  async hasKidActivityForQuestion(
+    kidId: string,
+    action: string,
+    questionId: string,
+  ): Promise<boolean> {
+    // `details` stores JSON.stringify(metadata), so match the questionId field
+    // inside it. questionId is a UUID, so a substring match cannot collide with
+    // another id, and `contains` is order-independent across metadata keys.
+    const existing = await this.prisma.activityLog.findFirst({
+      where: {
+        kidId,
+        action,
+        details: { contains: `"questionId":"${questionId}"` },
+      },
+      select: { id: true },
+    });
+    return existing !== null;
+  }
 }

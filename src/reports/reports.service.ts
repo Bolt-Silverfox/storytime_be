@@ -105,10 +105,25 @@ export class ReportsService {
       // Checked BEFORE persisting the new row: re-answers are allowed (every
       // attempt is stored) but only the first answer to a question may advance
       // badge progress — otherwise badges can be farmed by re-answering.
+      // This indexed lookup is the fast path for the common first-answer case.
       isFirstKidAnswer = !(await this.questionAnswerRepository.hasKidAnswered(
         dto.kidId,
         dto.questionId,
       ));
+
+      // An answer row alone is not proof the badge was recorded: recordActivity
+      // below swallows its failures, so a previous attempt could have persisted
+      // the answer and then lost the badge write. Fall back to the durable
+      // badge marker so that attempt self-heals instead of being skipped
+      // forever. Only runs on re-answers, and once the marker exists the badge
+      // is never advanced again, so re-answer farming stays blocked.
+      if (!isFirstKidAnswer) {
+        isFirstKidAnswer =
+          !(await this.badgeProgressEngine.hasRecordedQuizAnswer(
+            dto.kidId,
+            dto.questionId,
+          ));
+      }
     }
 
     const answer = await this.questionAnswerRepository.createAnswer({
