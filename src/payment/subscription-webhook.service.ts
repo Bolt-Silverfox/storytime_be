@@ -278,7 +278,7 @@ export class SubscriptionWebhookService {
         'Pub/Sub message data must be a JSON object',
       );
     }
-    return parsed as GoogleRtdnPayload;
+    return parsed;
   }
 
   private googleEventType(payload: GoogleRtdnPayload): string {
