@@ -1,8 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import {
-  ELEVEN_LABS_TO_VOICE_TYPE,
-  VOICE_CONFIG,
-} from '../voice.constants';
+import { ELEVEN_LABS_TO_VOICE_TYPE, VOICE_CONFIG } from '../voice.constants';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../dto/voice.dto';
 import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
 

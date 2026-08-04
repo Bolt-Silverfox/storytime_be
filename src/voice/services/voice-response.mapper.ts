@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Voice } from '@prisma/client';
 import { VoiceResponseDto, VoiceSourceType } from '../dto/voice.dto';
-import {
-  ELEVEN_LABS_TO_VOICE_TYPE,
-  VOICE_CONFIG,
-} from '../voice.constants';
+import { ELEVEN_LABS_TO_VOICE_TYPE, VOICE_CONFIG } from '../voice.constants';
 
 /**
  * Maps persisted {@link Voice} records to the API-facing {@link VoiceResponseDto}.

@@ -2,10 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { VOICE_CONFIG_SETTINGS } from './voice.config';
 import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
-import {
-  ELEVEN_LABS_TO_VOICE_TYPE,
-  VOICE_CONFIG,
-} from './voice.constants';
+import { ELEVEN_LABS_TO_VOICE_TYPE, VOICE_CONFIG } from './voice.constants';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from './dto/voice.dto';
 import { VoiceUsageService } from './services/voice-usage.service';
 import { VoiceIdResolverService } from './services/voice-id-resolver.service';
