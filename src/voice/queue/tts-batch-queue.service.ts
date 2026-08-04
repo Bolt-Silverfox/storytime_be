@@ -128,7 +128,12 @@ export class TtsBatchQueueService implements OnModuleDestroy {
       pipeline.expire(metaKey, TTS_BATCH_REDIS_TTL);
       pipeline.expire(completedKey, TTS_BATCH_REDIS_TTL);
       pipeline.expire(failedKey, TTS_BATCH_REDIS_TTL);
-      await pipeline.exec();
+      // ioredis resolves exec() with one [error, result] tuple per command, so
+      // an EXPIRE that failed does NOT reject — surface the first command error
+      // to the catch below rather than silently reporting success.
+      const results = await pipeline.exec();
+      const commandError = results?.find(([error]) => error)?.[0];
+      if (commandError) throw commandError;
     } catch (ttlErr) {
       this.logger.warn(
         `TTS batch retry ${batchJobId} (generation ${generation}) was enqueued, but refreshing Redis TTLs failed: ${
