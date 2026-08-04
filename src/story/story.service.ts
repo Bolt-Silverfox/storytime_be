@@ -161,6 +161,13 @@ export class StoryService {
     return this.storyFeedService.getStoriesCursor(filter);
   }
 
+  async usesSeasonalOrdering(filter: {
+    category?: string;
+    isSeasonal?: boolean;
+  }): Promise<boolean> {
+    return this.storyFeedService.usesSeasonalOrdering(filter);
+  }
+
   async getHomePageStories(
     userId: string | undefined,
     limitRecommended: number = 5,

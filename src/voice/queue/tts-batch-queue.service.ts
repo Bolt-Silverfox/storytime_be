@@ -117,11 +117,25 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     const metaKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:meta`;
     const completedKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:completed`;
     const failedKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:failed`;
-    const pipeline = this.redis.pipeline();
-    pipeline.expire(metaKey, TTS_BATCH_REDIS_TTL);
-    pipeline.expire(completedKey, TTS_BATCH_REDIS_TTL);
-    pipeline.expire(failedKey, TTS_BATCH_REDIS_TTL);
-    await pipeline.exec();
+    // The retry job is durably enqueued above, so a TTL-refresh failure must NOT
+    // propagate: the caller treats a throw from this method as "retry was never
+    // scheduled" and fails the batch terminally (emitting a failure SSE) even
+    // though the delayed job would still run. Worst case the status keys expire
+    // on their original TTL and polling clients lose the snapshot, which the
+    // aggregate-state read already tolerates.
+    try {
+      const pipeline = this.redis.pipeline();
+      pipeline.expire(metaKey, TTS_BATCH_REDIS_TTL);
+      pipeline.expire(completedKey, TTS_BATCH_REDIS_TTL);
+      pipeline.expire(failedKey, TTS_BATCH_REDIS_TTL);
+      await pipeline.exec();
+    } catch (ttlErr) {
+      this.logger.warn(
+        `TTS batch retry ${batchJobId} (generation ${generation}) was enqueued, but refreshing Redis TTLs failed: ${
+          ttlErr instanceof Error ? ttlErr.message : String(ttlErr)
+        }`,
+      );
+    }
 
     this.logger.log(
       `TTS batch retry queued: ${batchJobId} (generation ${generation}) — ${failedParagraphs.length} paragraph(s), delay ${TTS_BATCH_RETRY_DELAY_MS}ms`,

@@ -349,10 +349,11 @@ export class TtsBatchProcessor extends WorkerHost {
           `TTS batch ${batchJobId}: scheduled self-heal (generation ${generation + 1}) for ${failedThisRun.length} paragraph(s)`,
         );
       } catch (retryErr) {
-        // queueRetryBatch performs Redis TTL writes; if it fails the retry was
-        // NOT safely scheduled. Rethrow so the batch fails loudly instead of
-        // appearing finalized (with a "completed" SSE emit) while paragraphs
-        // silently never self-heal.
+        // queueRetryBatch only throws when the enqueue itself failed (its
+        // best-effort Redis TTL refresh is caught internally), so reaching here
+        // means the retry was NOT scheduled. Rethrow so the batch fails loudly
+        // instead of appearing finalized (with a "completed" SSE emit) while
+        // paragraphs silently never self-heal.
         this.logger.error(
           `TTS batch ${batchJobId}: failed to schedule self-heal retry`,
           retryErr,

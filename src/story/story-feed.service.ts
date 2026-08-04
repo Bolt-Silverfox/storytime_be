@@ -200,6 +200,27 @@ export class StoryFeedService {
     return { where, recommendedStoryIds };
   }
 
+  /**
+   * Whether a request is ordered by season recency (active seasons first, then
+   * most recently ended) rather than the default `createdAt`/`id` ordering. The
+   * Holiday/Seasonal category behaves like `isSeasonal` for ordering purposes.
+   *
+   * Cursor pagination orders only by `createdAt`/`id`, so callers must route
+   * seasonal requests through offset pagination to keep page boundaries stable.
+   */
+  async usesSeasonalOrdering(filter: {
+    category?: string;
+    isSeasonal?: boolean;
+  }): Promise<boolean> {
+    if (filter.isSeasonal) return true;
+    if (!filter.category) return false;
+
+    const [category] = await this.storyRepository.findCategoriesByIds([
+      filter.category,
+    ]);
+    return category?.name === this.CATEGORY_HOLIDAY_SEASONAL;
+  }
+
   async getStories(filter: {
     userId?: string;
     guestSessionId?: string;
@@ -224,18 +245,7 @@ export class StoryFeedService {
 
     const { where } = await this.buildStoryWhereClause(filter);
 
-    // Seasonal requests are ordered by season recency (active seasons first,
-    // then most recently ended). The Holiday/Seasonal category behaves like
-    // isSeasonal for ordering purposes.
-    let shouldSortBySeason = !!filter.isSeasonal;
-    if (filter.category && !shouldSortBySeason) {
-      const [category] = await this.storyRepository.findCategoriesByIds([
-        filter.category,
-      ]);
-      if (category?.name === this.CATEGORY_HOLIDAY_SEASONAL) {
-        shouldSortBySeason = true;
-      }
-    }
+    const shouldSortBySeason = await this.usesSeasonalOrdering(filter);
 
     // Shuffle only applies on page 1 (home screen carousels).
     // Beyond page 1 (paginated "See All"), disable shuffle to avoid overlapping pages.
@@ -583,7 +593,7 @@ export class StoryFeedService {
       } else {
         isActive = currentDateStr >= s.startDate && currentDateStr <= s.endDate;
       }
-      if (isActive) return -1;
+      if (s.isActive && isActive) return -1;
 
       const [endMonth, endDay] = s.endDate.split('-').map(Number);
       const thisYearEnd = new Date(today.getFullYear(), endMonth - 1, endDay);
@@ -603,17 +613,18 @@ export class StoryFeedService {
       return diffDays;
     };
 
-    allSeasons.sort((a, b) => getScore(a) - getScore(b));
-    const rankMap = new Map(allSeasons.map((s, idx) => [s.id, idx]));
+    const scoreMap = new Map<string, number>(
+      allSeasons.map((s): [string, number] => [s.id, getScore(s)]),
+    );
 
     stories.sort((a, b) => {
-      const rankA = a.seasons?.length
-        ? Math.min(...a.seasons.map((s) => rankMap.get(s.id) ?? Infinity))
+      const scoreA = a.seasons?.length
+        ? Math.min(...a.seasons.map((s) => scoreMap.get(s.id) ?? Infinity))
         : Infinity;
-      const rankB = b.seasons?.length
-        ? Math.min(...b.seasons.map((s) => rankMap.get(s.id) ?? Infinity))
+      const scoreB = b.seasons?.length
+        ? Math.min(...b.seasons.map((s) => scoreMap.get(s.id) ?? Infinity))
         : Infinity;
-      return rankA - rankB;
+      return scoreA === scoreB ? 0 : scoreA - scoreB;
     });
   }
 
