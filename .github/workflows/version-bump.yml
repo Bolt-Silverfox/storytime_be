@@ -1,0 +1,73 @@
+name: Version Bump
+
+on:
+  create:
+
+jobs:
+  bump-version:
+    if: github.event.ref_type == 'branch' && (startsWith(github.event.ref, 'develop-v') || startsWith(github.event.ref, 'hotfix/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.ref }}
+
+      - name: Extract version from branch name
+        id: version
+        env:
+          BRANCH_REF: ${{ github.event.ref }}
+        run: |
+          VERSION=$(echo "$BRANCH_REF" | grep -oP 'v\K\d+\.\d+\.\d+')
+          if [ -z "$VERSION" ]; then
+            echo "No version found in branch name: $BRANCH_REF"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Extracted version: $VERSION"
+
+      - name: Check if bump is needed
+        id: check
+        env:
+          TARGET_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          if [ "$CURRENT" = "$TARGET_VERSION" ]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "Version already at $CURRENT — skipping"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "Bumping from $CURRENT to $TARGET_VERSION"
+          fi
+
+      - name: Bump package.json version
+        if: steps.check.outputs.needed == 'true'
+        env:
+          TARGET_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm version "$TARGET_VERSION" --no-git-tag-version
+
+      - name: Create version bump PR
+        if: steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_REF: ${{ github.event.ref }}
+          TARGET_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Include sanitized source branch to avoid collisions between develop-v* and hotfix/v*
+          SAFE_REF=$(echo "$BRANCH_REF" | tr '/' '-')
+          BUMP_BRANCH="chore/bump-v${TARGET_VERSION}-${SAFE_REF}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BUMP_BRANCH"
+          git add package.json
+          git commit -m "chore: bump version to ${TARGET_VERSION}"
+          git push origin "$BUMP_BRANCH"
+          gh pr create \
+            --base "$BRANCH_REF" \
+            --head "$BUMP_BRANCH" \
+            --title "chore: bump version to ${TARGET_VERSION}" \
+            --body "Automated version bump for \`${BRANCH_REF}\` branch."
