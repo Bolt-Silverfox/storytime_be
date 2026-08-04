@@ -509,7 +509,9 @@ export class AdminService {
       },
     });
 
-    const groupedByDate = users.reduce((acc, user) => {
+    const groupedByDate = users.reduce<
+      Record<string, { total: number; paid: number }>
+    >((acc, user) => {
       const date = user.createdAt.toISOString().split('T')[0];
       if (!acc[date]) {
         acc[date] = { total: 0, paid: 0 };
@@ -646,7 +648,7 @@ export class AdminService {
       select: { ageMin: true, ageMax: true },
     });
 
-    const ageGroups = stories.reduce((acc, story) => {
+    const ageGroups = stories.reduce<Record<string, number>>((acc, story) => {
       const range = `${story.ageMin}-${story.ageMax}`;
       acc[range] = (acc[range] || 0) + 1;
       return acc;

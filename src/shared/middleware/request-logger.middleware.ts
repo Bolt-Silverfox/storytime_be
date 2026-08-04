@@ -36,7 +36,7 @@ declare global {
   }
 }
 
-// Type for authenticated user from auth guard
+// Type for authenticated user from auth guard (populated by the auth guard).
 interface AuthenticatedUser {
   id?: string;
   userId?: string;
@@ -99,7 +99,7 @@ export class RequestLoggerMiddleware implements NestMiddleware {
       const contentLength = res.get('content-length') || '0';
 
       // Get user ID if authenticated (set by auth guard)
-      const user = req.user;
+      const user: AuthenticatedUser | undefined = req.user;
       const userId = user?.userId || user?.id;
 
       this.logResponse({
@@ -208,7 +208,7 @@ export function requestLogger(
   res.on('finish', () => {
     const duration = Date.now() - startTime;
     const { statusCode } = res;
-    const user = req.user;
+    const user: AuthenticatedUser | undefined = req.user;
     const userId = user?.userId || user?.id;
     const userInfo = userId ? ` user:${userId.slice(0, 8)}` : '';
 
