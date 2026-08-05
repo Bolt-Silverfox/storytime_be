@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtPayload } from '../../shared/guards/auth.guard';
 
 @Injectable()
 export class SseAuthGuard implements CanActivate {
@@ -24,9 +25,23 @@ export class SseAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync(token);
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+
+      if (!payload.authSessionId) {
+        throw new UnauthorizedException('Invalid or expired token');
+      }
+
+      // Ensure the session is still active (not revoked or expired)
+      const session = await this.prisma.session.findUnique({
+        where: { id: payload.authSessionId },
+      });
+
+      if (!session || session.isDeleted || session.expiresAt < new Date()) {
+        throw new UnauthorizedException('Session invalid or expired');
+      }
+
       const user = await this.prisma.user.findFirst({
-        where: { id: payload.sub, isDeleted: false },
+        where: { id: payload.userId, isDeleted: false },
       });
 
       if (!user || user.role !== Role.admin) {
