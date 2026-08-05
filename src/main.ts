@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import { SuccessResponseInterceptor } from './shared/interceptors/success-response.interceptor';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter';
+import { ThrottlerExceptionFilter } from './shared/filters/throttler-exception.filter';
 import { requestLogger } from './shared/middleware/request-logger.middleware';
 
 async function bootstrap() {
@@ -120,6 +121,10 @@ async function bootstrap() {
 
   // Catch standard NestJS HttpExceptions (handles validation errors, 404s, etc.)
   app.useGlobalFilters(new HttpExceptionFilter());
+  // Registered after HttpExceptionFilter so it takes precedence for
+  // ThrottlerException (429) and returns a clean, premium-aware message
+  // instead of the raw "ThrottlerException: Too Many Requests".
+  app.useGlobalFilters(new ThrottlerExceptionFilter());
 
   // Catch Prisma-specific exceptions and map them to appropriate HTTP responses
   app.useGlobalFilters(new PrismaExceptionFilter(httpAdapter));
