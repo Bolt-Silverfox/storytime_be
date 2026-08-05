@@ -202,16 +202,24 @@ export class StoryCoreController {
     const { cursor: safeCursor, limit: safeLimit } =
       PaginationUtil.sanitizeCursorParams(cursor, limitParam);
 
+    // Seasonal requests are ordered by season recency, which cursor pagination
+    // (createdAt/id only) cannot reproduce, so they fall back to offset mode.
+    const seasonalOrdering =
+      cursor !== undefined
+        ? await this.storyService.usesSeasonalOrdering(baseFilter)
+        : false;
+
     const useCursorMode =
       cursor !== undefined &&
       topPicksFromUs !== 'true' &&
       isMostLiked !== 'true' &&
       recommended !== 'true' &&
-      shuffle !== 'true';
+      shuffle !== 'true' &&
+      !seasonalOrdering;
 
     if (cursor !== undefined && !useCursorMode) {
       this.logger.warn(
-        `Cursor pagination ignored: cursor="${cursor}" bypassed because topPicksFromUs=${topPicksFromUs}, isMostLiked=${isMostLiked}, recommended=${recommended}, shuffle=${shuffle}. Falling back to offset pagination.`,
+        `Cursor pagination ignored: cursor="${cursor}" bypassed because topPicksFromUs=${topPicksFromUs}, isMostLiked=${isMostLiked}, recommended=${recommended}, shuffle=${shuffle}, seasonalOrdering=${seasonalOrdering}. Falling back to offset pagination.`,
       );
     }
 

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Voice } from '@prisma/client';
 import { VoiceResponseDto, VoiceSourceType } from '../dto/voice.dto';
-import { VOICE_CONFIG } from '../voice.constants';
+import { ELEVEN_LABS_TO_VOICE_TYPE, VOICE_CONFIG } from '../voice.constants';
 
 /**
  * Maps persisted {@link Voice} records to the API-facing {@link VoiceResponseDto}.
@@ -14,10 +14,8 @@ export class VoiceResponseMapper {
   // Find the VOICE_CONFIG entry and VoiceType key for a given elevenLabsId.
   findVoiceConfig(elevenLabsId: string | null) {
     if (!elevenLabsId) return undefined;
-    const entry = Object.entries(VOICE_CONFIG).find(
-      ([, config]) => config.elevenLabsId === elevenLabsId,
-    );
-    return entry ? { key: entry[0], config: entry[1] } : undefined;
+    const key = ELEVEN_LABS_TO_VOICE_TYPE.get(elevenLabsId);
+    return key ? { key, config: VOICE_CONFIG[key] } : undefined;
   }
 
   // Resolve DB UUID to VoiceType key so mobile can match against available voices.

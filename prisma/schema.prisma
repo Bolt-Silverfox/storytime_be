@@ -934,6 +934,9 @@ model QuestionAnswer {
   @@index([questionId])
   @@index([storyId])
   @@index([kidId, answeredAt])
+  // Non-unique on purpose: blue allows a kid to re-answer a question, so this
+  // only serves the hasKidAnswered(kidId, questionId) lookup.
+  @@index([kidId, questionId])
   @@index([isDeleted])
   @@map("question_answers")
 }

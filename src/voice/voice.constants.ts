@@ -196,3 +196,10 @@ export const VOICE_CONFIG: Record<VoiceType, VoiceConfigEntry> = {
     },
   }),
 };
+
+/** Reverse lookup: elevenLabsId → VoiceType key (built once at module load). */
+export const ELEVEN_LABS_TO_VOICE_TYPE = new Map<string, VoiceType>(
+  (Object.entries(VOICE_CONFIG) as [VoiceType, VoiceConfigEntry][]).map(
+    ([key, config]) => [config.elevenLabsId, key],
+  ),
+);

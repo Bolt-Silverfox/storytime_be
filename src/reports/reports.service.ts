@@ -91,6 +91,7 @@ export class ReportsService {
     // Kid attribution requires an authenticated parent who owns the kid —
     // otherwise anyone could persist answers (and advance badge progress)
     // against an arbitrary kidId.
+    let isFirstKidAnswer = false;
     if (dto.kidId) {
       if (!userId) {
         throw new UnauthorizedException(
@@ -100,6 +101,28 @@ export class ReportsService {
       const kid = await this.kidRepository.findParentIdByKidId(dto.kidId);
       if (!kid || kid.parentId !== userId) {
         throw new ForbiddenException('Kid does not belong to this user');
+      }
+      // Checked BEFORE persisting the new row: re-answers are allowed (every
+      // attempt is stored) but only the first answer to a question may advance
+      // badge progress — otherwise badges can be farmed by re-answering.
+      // This indexed lookup is the fast path for the common first-answer case.
+      isFirstKidAnswer = !(await this.questionAnswerRepository.hasKidAnswered(
+        dto.kidId,
+        dto.questionId,
+      ));
+
+      // An answer row alone is not proof the badge was recorded: recordActivity
+      // below swallows its failures, so a previous attempt could have persisted
+      // the answer and then lost the badge write. Fall back to the durable
+      // badge marker so that attempt self-heals instead of being skipped
+      // forever. Only runs on re-answers, and once the marker exists the badge
+      // is never advanced again, so re-answer farming stays blocked.
+      if (!isFirstKidAnswer) {
+        isFirstKidAnswer =
+          !(await this.badgeProgressEngine.hasRecordedQuizAnswer(
+            dto.kidId,
+            dto.questionId,
+          ));
       }
     }
 
@@ -114,18 +137,16 @@ export class ReportsService {
       isCorrect,
     });
 
-    // Badge progress is kid-scoped — only advance it for kid-attributed answers.
-    if (dto.kidId) {
-      const kid = await this.kidRepository.findParentIdByKidId(dto.kidId);
-
-      if (kid?.parentId) {
-        await this.badgeProgressEngine.recordActivity(
-          kid.parentId,
-          'quiz_answered',
-          dto.kidId,
-          { questionId: dto.questionId, isCorrect },
-        );
-      }
+    // Badge progress is kid-scoped — only advance it for kid-attributed
+    // answers, and only for the kid's FIRST answer to this question.
+    // Ownership was validated above, so the parent is the authenticated user.
+    if (dto.kidId && userId && isFirstKidAnswer) {
+      await this.badgeProgressEngine.recordActivity(
+        userId,
+        'quiz_answered',
+        dto.kidId,
+        { questionId: dto.questionId, isCorrect },
+      );
     }
 
     return {

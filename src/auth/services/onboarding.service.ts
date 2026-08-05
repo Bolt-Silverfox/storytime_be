@@ -92,6 +92,17 @@ export class OnboardingService {
       registeredAt: user.createdAt,
     } satisfies UserRegisteredEvent);
 
+    // Feed the superadmin live dashboard (green parity: the LOGIN emitter
+    // survived the refactor but the SIGNUP one was dropped, so new-user
+    // activity and stats never reached the admin SSE stream).
+    this.eventEmitter.emit('admin.sse.activity', {
+      type: 'SIGNUP',
+      userId: user.id,
+      email: user.email,
+      timestamp: new Date().toISOString(),
+    });
+    this.eventEmitter.emit('admin.sse.stats', { trigger: 'user_created' });
+
     const tokenData = await this.tokenService.createTokenPair(user);
 
     return {
