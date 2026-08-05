@@ -23,6 +23,7 @@ import { SuccessResponseInterceptor } from './shared/interceptors/success-respon
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter';
 import { SentryExceptionFilter } from './shared/filters/sentry-exception.filter';
+import { ThrottlerExceptionFilter } from './shared/filters/throttler-exception.filter';
 import { requestLogger } from './shared/middleware/request-logger.middleware';
 import { swaggerCspDirectives } from './shared/config/security.config';
 import { WinstonModule } from 'nest-winston';
@@ -196,6 +197,10 @@ async function bootstrap() {
 
   // Catch standard NestJS HttpExceptions (handles validation errors, 404s, etc.)
   app.useGlobalFilters(new HttpExceptionFilter());
+  // Registered after HttpExceptionFilter so it takes precedence for
+  // ThrottlerException (429) and returns a clean, premium-aware message
+  // instead of the raw "ThrottlerException: Too Many Requests".
+  app.useGlobalFilters(new ThrottlerExceptionFilter());
 
   // Catch Prisma-specific exceptions and map them to appropriate HTTP responses
   app.useGlobalFilters(new PrismaExceptionFilter(httpAdapter));
