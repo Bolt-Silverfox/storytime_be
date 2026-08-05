@@ -67,6 +67,26 @@ export class HttpExceptionFilter implements ExceptionFilter {
       error = HttpStatus[statusCode];
     }
 
+    // Never leak a raw framework exception class name to the client, e.g.
+    // "ThrottlerException: Too Many Requests" — strip the "SomeException:"
+    // prefix so users see a plain message.
+    const stripExceptionPrefix = (m: string): string =>
+      m.replace(/^[A-Z][A-Za-z0-9]*Exception:\s*/, '');
+    if (typeof message === 'string') {
+      message = stripExceptionPrefix(message);
+    } else if (Array.isArray(message)) {
+      message = message.map((m) =>
+        typeof m === 'string' ? stripExceptionPrefix(m) : m,
+      );
+    }
+
+    // Friendly, actionable copy for rate limiting (the dedicated
+    // ThrottlerExceptionFilter provides a premium-aware variant when it wins;
+    // this is the safety net so a 429 is never a raw framework string).
+    if (statusCode === HttpStatus.TOO_MANY_REQUESTS) {
+      message = 'Too many requests. Please wait a moment and try again.';
+    }
+
     // Log the error for debugging purposes (excluding 400s/404s which are expected client errors)
     if (statusCode >= 500) {
       // Report server-side failures to Sentry (no-op when Sentry is disabled).
