@@ -6,7 +6,7 @@ import {
   PaginatedStoriesDto,
   CursorPaginatedStoriesDto,
 } from './dto/story.dto';
-import { Category, Story } from '@prisma/client';
+import { Category, Season, Story } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import {
   BadRequestException,
@@ -200,6 +200,27 @@ export class StoryFeedService {
     return { where, recommendedStoryIds };
   }
 
+  /**
+   * Whether a request is ordered by season recency (active seasons first, then
+   * most recently ended) rather than the default `createdAt`/`id` ordering. The
+   * Holiday/Seasonal category behaves like `isSeasonal` for ordering purposes.
+   *
+   * Cursor pagination orders only by `createdAt`/`id`, so callers must route
+   * seasonal requests through offset pagination to keep page boundaries stable.
+   */
+  async usesSeasonalOrdering(filter: {
+    category?: string;
+    isSeasonal?: boolean;
+  }): Promise<boolean> {
+    if (filter.isSeasonal) return true;
+    if (!filter.category) return false;
+
+    const [category] = await this.storyRepository.findCategoriesByIds([
+      filter.category,
+    ]);
+    return category?.name === this.CATEGORY_HOLIDAY_SEASONAL;
+  }
+
   async getStories(filter: {
     userId?: string;
     guestSessionId?: string;
@@ -223,6 +244,8 @@ export class StoryFeedService {
     const skip = (page - 1) * limit;
 
     const { where } = await this.buildStoryWhereClause(filter);
+
+    const shouldSortBySeason = await this.usesSeasonalOrdering(filter);
 
     // Shuffle only applies on page 1 (home screen carousels).
     // Beyond page 1 (paginated "See All"), disable shuffle to avoid overlapping pages.
@@ -261,13 +284,16 @@ export class StoryFeedService {
 
     // Run count and findMany in parallel to reduce latency by ~50%
     // For topPicksFromUs, pagination is handled in the raw SQL query
-    const [totalCount, stories] = await Promise.all([
+    const [totalCount, queriedStories] = await Promise.all([
       filter.topPicksFromUs
         ? this.storyRepository.countStoriesRaw({ isDeleted: false })
         : this.storyRepository.countStoriesRaw(where),
       this.storyRepository.findManyStoriesRaw({
         where,
-        ...(filter.topPicksFromUs
+        // Season-recency ordering must rank the full result set before
+        // paginating, so skip/take are applied after the sort (as with
+        // topPicksFromUs, whose pagination happens in the raw id query).
+        ...(filter.topPicksFromUs || shouldSortBySeason
           ? {}
           : {
               skip,
@@ -290,6 +316,12 @@ export class StoryFeedService {
         },
       }),
     ]);
+
+    let stories = queriedStories;
+    if (shouldSortBySeason) {
+      await this.sortStoriesBySeasonRecency(stories);
+      stories = stories.slice(skip, skip + limit);
+    }
 
     const totalPages = Math.ceil(totalCount / limit);
 
@@ -529,6 +561,70 @@ export class StoryFeedService {
         ...story,
         readStatus: deriveReadStatus(progress?.progress, progress?.completed),
       };
+    });
+  }
+
+  private readonly CATEGORY_HOLIDAY_SEASONAL = 'Holiday/Seasonal';
+
+  /**
+   * Order stories in place by season recency: stories in currently-active
+   * seasons first, then by how recently their season ended (most recent
+   * first). Stories with no season rank last.
+   */
+  private async sortStoriesBySeasonRecency(
+    stories: Array<{ seasons?: Array<{ id: string }>; [key: string]: unknown }>,
+  ) {
+    const allSeasons = await this.storyRepository.findManySeasonsRaw({
+      where: { isDeleted: false },
+    });
+
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    const currentDay = today.getDate(); // 1-31
+    const currentDateStr = `${currentMonth
+      .toString()
+      .padStart(2, '0')}-${currentDay.toString().padStart(2, '0')}`;
+
+    const getScore = (s: Season) => {
+      if (!s.startDate || !s.endDate) return Infinity;
+      let isActive = false;
+      if (s.startDate > s.endDate) {
+        isActive = currentDateStr >= s.startDate || currentDateStr <= s.endDate;
+      } else {
+        isActive = currentDateStr >= s.startDate && currentDateStr <= s.endDate;
+      }
+      if (s.isActive && isActive) return -1;
+
+      const [endMonth, endDay] = s.endDate.split('-').map(Number);
+      const thisYearEnd = new Date(today.getFullYear(), endMonth - 1, endDay);
+      const diffTime = today.getTime() - thisYearEnd.getTime();
+      let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays < 0) {
+        const lastYearEnd = new Date(
+          today.getFullYear() - 1,
+          endMonth - 1,
+          endDay,
+        );
+        diffDays = Math.ceil(
+          (today.getTime() - lastYearEnd.getTime()) / (1000 * 60 * 60 * 24),
+        );
+      }
+      return diffDays;
+    };
+
+    const scoreMap = new Map<string, number>(
+      allSeasons.map((s): [string, number] => [s.id, getScore(s)]),
+    );
+
+    stories.sort((a, b) => {
+      const scoreA = a.seasons?.length
+        ? Math.min(...a.seasons.map((s) => scoreMap.get(s.id) ?? Infinity))
+        : Infinity;
+      const scoreB = b.seasons?.length
+        ? Math.min(...b.seasons.map((s) => scoreMap.get(s.id) ?? Infinity))
+        : Infinity;
+      return scoreA === scoreB ? 0 : scoreA - scoreB;
     });
   }
 

@@ -106,16 +106,27 @@ export class GuestSessionService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     let redisKeyv: Keyv | undefined;
     try {
-      redisKeyv = new Keyv({
-        store: new KeyvRedis(this.redisUrl, { throwOnConnectError: true }),
+      // throwOnConnectError:false lets the underlying node-redis client
+      // reconnect on a transient socket close (e.g. Redis' `timeout` idle
+      // disconnect) instead of throwing. A throw here would surface as an
+      // unhandled error and crash the whole process (this was the cause of an
+      // intermittent crash-loop on green).
+      const store = new KeyvRedis(this.redisUrl, {
+        throwOnConnectError: false,
       });
-      // Keep an 'error' listener so redis client errors never become an
-      // unhandled 'error' event (which would crash the process).
-      redisKeyv.on('error', (err) => {
-        this.logger.error(
-          `Guest session Redis error: ${(err as Error)?.message ?? err}`,
+
+      // The node-redis client's own errors MUST always have a listener, or a
+      // socket close is emitted as an unhandled 'error' and crashes the
+      // process. Log it and let node-redis auto-reconnect; do not tear down
+      // the shared store on a transient blip.
+      store.on('error', (err: Error) => {
+        this.logger.warn(
+          `Guest-session Redis store error (auto-reconnecting): ${err?.message ?? err}`,
         );
       });
+
+      redisKeyv = new Keyv({ store });
+      this.attachKeyvErrorHandler(redisKeyv);
 
       const probeKey = `${GUEST_SESSION_PREFIX}__healthcheck__`;
       await redisKeyv.set(probeKey, '1', 10_000);
@@ -147,11 +158,23 @@ export class GuestSessionService implements OnModuleInit {
   }
 
   private createMemoryKeyv(): Keyv {
-    return new Keyv({
+    const keyv = new Keyv({
       store: new CacheableMemory({
         ttl: GUEST_SESSION_TTL_MS,
         lruSize: 1000,
       }),
+    });
+    this.attachKeyvErrorHandler(keyv);
+    return keyv;
+  }
+
+  /**
+   * Keyv is an EventEmitter and an 'error' event with no listener throws
+   * (crashing the process). Always attach a handler.
+   */
+  private attachKeyvErrorHandler(keyv: Keyv): void {
+    keyv.on('error', (err: Error) => {
+      this.logger.warn(`Guest-session cache error: ${err?.message ?? err}`);
     });
   }
 

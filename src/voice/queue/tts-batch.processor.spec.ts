@@ -174,4 +174,38 @@ describe('TtsBatchProcessor', () => {
       expect(jobEvents.emitFailed).not.toHaveBeenCalled();
     });
   });
+
+  describe('transient-only retry', () => {
+    it('does NOT retry the same provider on a non-transient (4xx) error', async () => {
+      ttsService.generateSingleParagraphTTS.mockRejectedValue({ status: 400 });
+
+      const result = await processor.process(makeJob({ totalParagraphs: 1 }));
+
+      // 3 providers in the chain, one attempt each — no same-provider retries.
+      expect(ttsService.generateSingleParagraphTTS).toHaveBeenCalledTimes(3);
+      expect(result.failedCount).toBe(1);
+    });
+
+    it('retries the same provider on a transient (5xx) error', async () => {
+      ttsService.generateSingleParagraphTTS.mockRejectedValue({ status: 503 });
+
+      await processor.process(makeJob({ totalParagraphs: 1 }));
+
+      // 3 providers x 2 attempts each = 6 calls.
+      expect(ttsService.generateSingleParagraphTTS).toHaveBeenCalledTimes(6);
+    });
+  });
+
+  describe('self-heal scheduling failures', () => {
+    it('propagates a queueRetryBatch failure instead of swallowing it', async () => {
+      ttsService.generateSingleParagraphTTS.mockRejectedValue({ status: 503 });
+      queueService.queueRetryBatch.mockRejectedValue(
+        new Error('redis TTL write failed'),
+      );
+
+      await expect(
+        processor.process(makeJob({ totalParagraphs: 1, retryGeneration: 0 })),
+      ).rejects.toThrow('redis TTL write failed');
+    });
+  });
 });

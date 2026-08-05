@@ -31,6 +31,15 @@ export interface IStreakRepository {
 
   // Find the most recent activity log for a kid
   findLastKidActivity(kidId: string): Promise<ActivityLogCreatedAt | null>;
+
+  // Whether an activity log already records `action` for this kid and question.
+  // Used as the durable marker that badge progress was actually recorded, so a
+  // run that died after persisting the answer can self-heal on a later attempt.
+  hasKidActivityForQuestion(
+    kidId: string,
+    action: string,
+    questionId: string,
+  ): Promise<boolean>;
 }
 
 export const STREAK_REPOSITORY = Symbol('STREAK_REPOSITORY');

@@ -8,7 +8,11 @@ import {
 import { Role } from '@prisma/client';
 import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { AppEvents, SubscriptionCancelledEvent } from '@/shared/events';
+import {
+  AppEvents,
+  SubscriptionCancelledEvent,
+  SubscriptionCreatedEvent,
+} from '@/shared/events';
 import { CACHE_KEYS } from '@/shared/constants/cache-keys.constants';
 import { CacheMetricsService } from '@/shared/services/cache-metrics.service';
 import {
@@ -107,6 +111,21 @@ export class SubscriptionService {
 
     // Invalidate cache after subscription change
     await this.invalidateCache(userId);
+
+    // Tell the user their subscription is active (green parity: green emitted
+    // a SubscriptionAlert here; blue routes activation through the
+    // SUBSCRIPTION_CREATED -> SubscriptionWelcome pipeline instead). The paid
+    // path notifies from PaymentService.verifyPurchase; this covers the free
+    // plan path, which was silent.
+    const createdEvent: SubscriptionCreatedEvent = {
+      subscriptionId: subscription.id,
+      userId,
+      planId: planKey,
+      planName: plan.display,
+      provider: 'internal',
+      createdAt: now,
+    };
+    this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CREATED, createdEvent);
 
     return { subscription };
   }

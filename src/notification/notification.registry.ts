@@ -152,6 +152,7 @@ export const NotificationRegistry: Record<
     subject: 'New Story Available!',
     validate: (data) => {
       if (!data.storyTitle) return 'Story title is required';
+      if (!data.storyId) return 'Story id is required';
       return null;
     },
     getTemplate: (data) => {

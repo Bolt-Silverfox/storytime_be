@@ -35,4 +35,12 @@ export class PrismaQuestionAnswerRepository
       },
     });
   }
+
+  async hasKidAnswered(kidId: string, questionId: string): Promise<boolean> {
+    const existing = await this.prisma.questionAnswer.findFirst({
+      where: { kidId, questionId },
+      select: { id: true },
+    });
+    return existing !== null;
+  }
 }
