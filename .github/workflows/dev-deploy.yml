@@ -1,6 +1,9 @@
 name: Dev CI/CD Pipeline
 
 on:
+  # Manual trigger for a controlled first cutover deploy (run it after taking
+  # the storytime_dev RDS snapshot) and for ad-hoc redeploys.
+  workflow_dispatch:
   pull_request:
     branches: ['develop-v*']
     types: [opened, synchronize, closed]
@@ -245,7 +248,9 @@ jobs:
     name: Auto-fix Formatting
     runs-on: ubuntu-latest
     needs: [quality]
-    if: github.event.action != 'closed'
+    # PRs only: relies on head_ref to check out and push the fix commit, which is
+    # empty on workflow_dispatch (would try to commit to an empty branch).
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
     timeout-minutes: 5
     permissions:
       contents: write
@@ -285,12 +290,18 @@ jobs:
   deploy:
     name: Deploy to Dev
     needs: [build, test]
-    # Base-branch gate: the CI jobs above run for PRs to any develop-v* branch,
-    # but only merges into green (develop-v1.2.0) may deploy the shared dev
-    # environment (dev.api / storytime_dev). Blue merges are deployed to their
-    # own environment by blue-deploy.yml; without this gate they also
-    # overwrote green dev and applied blue migrations to storytime_dev.
-    if: success() && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'develop-v1.2.0'
+    # Base-branch gate: CI jobs above run for PRs to any develop-v* branch, but
+    # only merges into develop-v1.3.0 (now the default/primary line) deploy the
+    # shared dev environment (dev.api / storytime_dev). Green (develop-v1.2.0) is
+    # being retired and no longer deploys dev, so storytime_dev keeps a SINGLE
+    # writer. workflow_dispatch allows a controlled first cutover deploy (run it
+    # after taking the storytime_dev RDS snapshot).
+    if: >-
+      success() &&
+      ( github.event_name == 'workflow_dispatch' ||
+        ( github.event.action == 'closed' &&
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.base.ref == 'develop-v1.3.0' ) )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -447,7 +458,7 @@ jobs:
             echo "Deployment verified successfully"
 
       - name: Comment deployment status
-        if: success()
+        if: success() && github.event_name == 'pull_request'
         continue-on-error: true
         uses: actions/github-script@v7
         with:
@@ -460,7 +471,7 @@ jobs:
             });
 
       - name: Comment deployment failure
-        if: failure()
+        if: failure() && github.event_name == 'pull_request'
         continue-on-error: true
         uses: actions/github-script@v7
         with:
