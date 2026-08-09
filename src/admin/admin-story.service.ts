@@ -64,12 +64,32 @@ export class AdminStoryService {
     if (maxAge) where.ageMax = { lte: maxAge };
     if (categoryId) where.categories = { some: { id: categoryId } };
 
+    // Whitelist sort fields — an arbitrary `sortBy` reaches Prisma's orderBy as
+    // an unknown key and raises a runtime error (500, admin-triggerable DoS).
+    // Mirrors the whitelist in AdminUserService.getAllUsers.
+    const VALID_STORY_SORT_FIELDS = [
+      'createdAt',
+      'updatedAt',
+      'title',
+      'language',
+      'ageMin',
+      'ageMax',
+      'recommended',
+      'aiGenerated',
+    ] as const;
+    const orderBy: Prisma.StoryOrderByWithRelationInput =
+      VALID_STORY_SORT_FIELDS.includes(
+        sortBy as (typeof VALID_STORY_SORT_FIELDS)[number],
+      )
+        ? { [sortBy]: sortOrder }
+        : { createdAt: sortOrder };
+
     const [stories, total] = await Promise.all([
       this.adminStoryRepository.findStories({
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy,
       }),
       this.adminStoryRepository.countStories(where),
     ]);

@@ -86,9 +86,16 @@ export class AdminUserService {
       if (wantsActiveSubscription) {
         where.subscription = activeSubscriptionCriteria;
       } else {
-        where.OR = [
-          { subscription: null },
-          { subscription: { NOT: activeSubscriptionCriteria } },
+        // AND (not OR) so a concurrent `search` — which already set where.OR —
+        // is preserved. Assigning where.OR here previously clobbered the search
+        // filter, so /admin/users/unpaid?search=... silently ignored the search.
+        where.AND = [
+          {
+            OR: [
+              { subscription: null },
+              { subscription: { NOT: activeSubscriptionCriteria } },
+            ],
+          },
         ];
       }
     }
