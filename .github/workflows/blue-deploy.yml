@@ -8,24 +8,15 @@ name: Blue Deploy (develop-v1.3.0)
 # Reuses the existing EC2_* secrets and the green ENV_FILE secret — blue's .env
 # is derived from ENV_FILE with PORT/DATABASE_URL/REDIS_URL overridden below, and
 # the blue database is created on first deploy. No extra secret required.
-# Auto-deploys blue on every push/merge to develop-v1.3.0. Blue infra (derived
-# .env, storytime_db_blue, nginx block, PM2 app on :3601) is in place, so the
-# push trigger is enabled. workflow_dispatch is kept for manual re-runs (note:
-# it only registers on GitHub once this file reaches the default branch; the
-# push trigger works from develop-v1.3.0 directly).
+#
+# PROMOTION (2026-08): develop-v1.3.0 is now the default/primary line and
+# deploys to dev.api / storytime_dev via dev-deploy.yml. The separate blue env
+# (:3601 / storytime_db_blue) is being retired, so the automatic push trigger is
+# REMOVED to keep a single writer on storytime_dev. This workflow is kept as
+# workflow_dispatch-only for manual re-runs during the transition; delete it
+# once the :3601 footprint is torn down (Phase D).
 on:
   workflow_dispatch:
-  push:
-    branches: ['develop-v1.3.0']
-    # Skip a blue redeploy when a push touches ONLY non-runtime files (docs,
-    # Grafana dashboard JSON, prometheus config). If a push also changes any
-    # other file, the deploy still runs. Use workflow_dispatch to force a deploy
-    # for a docs-only change if ever needed.
-    paths-ignore:
-      - '**/*.md'
-      - 'monitoring/**'
-      - 'docs/**'
-      - 'LICENSE'
 
 concurrency:
   group: blue-deploy
