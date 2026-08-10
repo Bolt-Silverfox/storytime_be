@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Global, INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import request from 'supertest';
 import { Server } from 'http';
@@ -24,6 +24,23 @@ import { PushQueueService } from '../src/notification/queue/push-queue.service';
 import { PushProcessor } from '../src/notification/queue/push.processor';
 import { EmailProvider } from '../src/notification/providers/email.provider';
 import { AuthThrottleGuard } from '../src/shared/guards/auth-throttle.guard';
+import { REDIS_CLIENT } from '../src/redis/redis.constants';
+
+// SharedModule's InfraMetricsService injects REDIS_CLIENT, which the app gets
+// from the @Global RedisModule. Tests don't have a Redis server, so provide an
+// inert client the same way — via a global module — so it resolves inside
+// SharedModule's context.
+@Global()
+@Module({
+  providers: [
+    {
+      provide: REDIS_CLIENT,
+      useValue: { status: 'end', info: jest.fn(), on: jest.fn() },
+    },
+  ],
+  exports: [REDIS_CLIENT],
+})
+class MockRedisModule {}
 
 /**
  * E2E Tests for Authentication Flows
@@ -98,6 +115,7 @@ describe('Authentication (e2e)', () => {
           }),
         }),
         EventEmitterModule.forRoot(),
+        MockRedisModule,
         SharedModule,
         PrismaModule,
         AuthModule,

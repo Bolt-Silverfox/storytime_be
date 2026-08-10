@@ -21,6 +21,7 @@ import { GoogleVerificationService } from '../src/payment/google-verification.se
 import { AppleVerificationService } from '../src/payment/apple-verification.service';
 import { SubscriptionService } from '../src/subscription/subscription.service';
 import { CacheMetricsService } from '../src/shared/services/cache-metrics.service';
+import { NotificationService } from '../src/notification/notification.service';
 import {
   SUBSCRIPTION_REPOSITORY,
   PrismaSubscriptionRepository,
@@ -110,6 +111,12 @@ describe('Payment (e2e)', () => {
         {
           provide: PAYMENT_TRANSACTION_REPOSITORY,
           useClass: PrismaPaymentTransactionRepository,
+        },
+        // PaymentService resolves NotificationService from the app's @Global
+        // NotificationModule; provide an inert stand-in here.
+        {
+          provide: NotificationService,
+          useValue: { sendNotification: jest.fn().mockResolvedValue(undefined) },
         },
         {
           provide: GoogleVerificationService,
