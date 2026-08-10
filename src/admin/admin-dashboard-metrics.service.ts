@@ -97,6 +97,7 @@ export class AdminDashboardMetricsService {
       activeUsers7d,
       activeUsers30d,
       newUsersToday,
+      newUsersThisWeek,
       newUsersThisMonth,
       totalStoryProgress,
       totalFavorites,
@@ -127,6 +128,7 @@ export class AdminDashboardMetricsService {
 
       // New Users
       countBetween(rangeToday.start, rangeToday.end),
+      countBetween(range7d.start, range7d.end),
       countBetween(rangeThisMonth.start, rangeThisMonth.end),
 
       // Engagement
@@ -265,7 +267,7 @@ export class AdminDashboardMetricsService {
       activeUsers24h,
       activeUsers7d,
       newUsersToday,
-      newUsersThisWeek: 0,
+      newUsersThisWeek,
       newUsersThisMonth,
       totalStoryViews: totalStoryProgress,
       totalFavorites,
