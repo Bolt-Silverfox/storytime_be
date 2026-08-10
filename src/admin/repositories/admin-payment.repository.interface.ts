@@ -19,6 +19,12 @@ export interface DatedPaymentAmount {
   createdAt: Date;
 }
 
+export interface RevenueByPlan {
+  plan: string | null;
+  _sum: { amount: number | null };
+  _count: number;
+}
+
 export interface IAdminPaymentRepository {
   // Aggregate successful revenue for an arbitrary where clause
   sumRevenue(where: Prisma.PaymentTransactionWhereInput): Promise<RevenueSum>;
@@ -43,6 +49,11 @@ export interface IAdminPaymentRepository {
     startDate: Date,
     endDate: Date,
   ): Promise<DatedPaymentAmount[]>;
+
+  // Successful revenue + transaction count grouped by the plan each payment was
+  // for (top-plans analytics). Attributes each payment to its own plan rather
+  // than to the payer's current subscription.
+  groupRevenueByPlan(): Promise<RevenueByPlan[]>;
 }
 
 export const ADMIN_PAYMENT_REPOSITORY = Symbol('ADMIN_PAYMENT_REPOSITORY');

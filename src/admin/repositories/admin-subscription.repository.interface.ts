@@ -10,19 +10,6 @@ export interface SubscriptionStartedAtCount {
   _count: number;
 }
 
-// Active subscriptions joined with each owner's successful payments (revenue)
-export type SubscriptionWithUserRevenue = Prisma.SubscriptionGetPayload<{
-  include: {
-    user: {
-      include: {
-        paymentTransactions: {
-          select: { amount: true };
-        };
-      };
-    };
-  };
-}>;
-
 export type SubscriptionWithUser = Prisma.SubscriptionGetPayload<{
   include: {
     user: { select: { id: true; email: true; name: true } };
@@ -40,9 +27,6 @@ export interface IAdminSubscriptionRepository {
     startDate: Date,
     endDate: Date,
   ): Promise<SubscriptionStartedAtCount[]>;
-
-  // All active subscriptions with owner revenue (top plans)
-  findActiveWithUserRevenue(): Promise<SubscriptionWithUserRevenue[]>;
 
   findByUserId(userId: string): Promise<Subscription | null>;
 
