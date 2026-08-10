@@ -31,21 +31,32 @@ export class PrismaAdminSubscriptionRepository
     return result as SubscriptionPlanCount[];
   }
 
+  // Count new subscriptions per CALENDAR DAY. groupBy on `startedAt` buckets by
+  // the full timestamp, so the caller (which maps startedAt -> YYYY-MM-DD) would
+  // emit one point per subscription instead of a daily count. Fetch in range and
+  // bucket by UTC day.
   async groupByStartedAt(
     startDate: Date,
     endDate: Date,
   ): Promise<SubscriptionStartedAtCount[]> {
-    const result = await this.prisma.subscription.groupBy({
-      by: ['startedAt'],
+    const rows = await this.prisma.subscription.findMany({
       where: {
-        startedAt: {
-          gte: startDate,
-          lte: endDate,
-        },
+        startedAt: { gte: startDate, lte: endDate },
       },
-      _count: true,
+      select: { startedAt: true },
     });
-    return result as SubscriptionStartedAtCount[];
+
+    const byDay = new Map<string, number>();
+    for (const row of rows) {
+      const day = row.startedAt.toISOString().slice(0, 10);
+      byDay.set(day, (byDay.get(day) ?? 0) + 1);
+    }
+    return Array.from(byDay.entries())
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([day, count]) => ({
+        startedAt: new Date(`${day}T00:00:00.000Z`),
+        _count: count,
+      }));
   }
 
   findActiveWithUserRevenue(): Promise<SubscriptionWithUserRevenue[]> {
