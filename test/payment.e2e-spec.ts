@@ -116,7 +116,9 @@ describe('Payment (e2e)', () => {
         // NotificationModule; provide an inert stand-in here.
         {
           provide: NotificationService,
-          useValue: { sendNotification: jest.fn().mockResolvedValue(undefined) },
+          useValue: {
+            sendNotification: jest.fn().mockResolvedValue(undefined),
+          },
         },
         {
           provide: GoogleVerificationService,
