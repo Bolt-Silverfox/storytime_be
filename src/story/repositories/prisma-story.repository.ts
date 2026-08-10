@@ -1122,6 +1122,14 @@ export class PrismaStoryRepository implements IStoryRepository {
     return this.prisma.userStoryProgress.findMany(args);
   }
 
+  async findFirstUserStoryProgressRaw<
+    T extends Prisma.UserStoryProgressFindFirstArgs,
+  >(
+    args: Prisma.SelectSubset<T, Prisma.UserStoryProgressFindFirstArgs>,
+  ): Promise<Prisma.UserStoryProgressGetPayload<T> | null> {
+    return this.prisma.userStoryProgress.findFirst(args);
+  }
+
   async findManyDailyChallengeAssignmentsRaw<
     T extends Prisma.DailyChallengeAssignmentFindManyArgs,
   >(

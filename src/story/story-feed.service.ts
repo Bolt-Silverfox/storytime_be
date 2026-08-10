@@ -31,6 +31,15 @@ export class StoryFeedService {
     private readonly guestSessionService: GuestSessionService,
   ) {}
 
+  private readonly storyListInclude: Prisma.StoryInclude = {
+    images: true,
+    branches: true,
+    categories: true,
+    themes: true,
+    seasons: true,
+    questions: true,
+  };
+
   /** Wraps a Prisma query to handle invalid cursor IDs gracefully */
   private async withCursorErrorHandling<T>(fn: () => Promise<T>): Promise<T> {
     try {
@@ -282,6 +291,13 @@ export class StoryFeedService {
         ]
       : [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
+    // Fresh-first: authenticated users fetch FRESH stories only here (no
+    // non-deleted progress row). Read stories are added afterwards as backfill.
+    // Guests get `where` unchanged (byte-for-byte identical responses).
+    // totalCount is still counted on the unfiltered `where` so it reflects the
+    // full result set (fresh + read) and pagination metadata stays correct.
+    const freshWhere = this.withUserReadFilter(where, filter.userId, 'fresh');
+
     // Run count and findMany in parallel to reduce latency by ~50%
     // For topPicksFromUs, pagination is handled in the raw SQL query
     const [totalCount, queriedStories] = await Promise.all([
@@ -289,7 +305,7 @@ export class StoryFeedService {
         ? this.storyRepository.countStoriesRaw({ isDeleted: false })
         : this.storyRepository.countStoriesRaw(where),
       this.storyRepository.findManyStoriesRaw({
-        where,
+        where: freshWhere,
         // Season-recency ordering must rank the full result set before
         // paginating, so skip/take are applied after the sort (as with
         // topPicksFromUs, whose pagination happens in the raw id query).
@@ -373,8 +389,49 @@ export class StoryFeedService {
           }) as typeof sortedStories)
         : sortedStories;
 
+    // Fresh-first backfill (authenticated users only): the page above is drawn
+    // from FRESH stories only. If the fresh pool cannot fill the requested
+    // limit, top up with already-read stories ranked last (most recently
+    // accessed first). For page 1 (and the page-1 carousels) readSkip is 0; for
+    // deeper offset pages we compute how many read rows earlier pages already
+    // consumed via `skip - freshCount` so there is no overlap or gap.
+    let pageData = cleanedStories as unknown as Record<string, unknown>[];
+    if (filter.userId) {
+      const deficit = limit - pageData.length;
+      if (deficit > 0) {
+        // For topPicksFromUs the page is already scoped by a per-page id window
+        // (where.id in randomStoryIds), so applying the global read offset would
+        // skip inside that small window and leave the page short — backfill from
+        // the start of the window instead.
+        const freshCount =
+          !filter.topPicksFromUs && skip > 0
+            ? await this.storyRepository.countStoriesRaw(freshWhere)
+            : 0;
+        const readSkip = filter.topPicksFromUs
+          ? 0
+          : Math.max(0, skip - freshCount);
+        const backfill = await this.fetchReadBackfill(
+          where,
+          filter.userId,
+          readSkip,
+          deficit,
+          this.storyListInclude,
+        );
+        if (backfill.length > 0) {
+          const enrichedBackfill = await this.enrichWithReadStatus(
+            filter.userId,
+            backfill,
+          );
+          pageData = [
+            ...pageData,
+            ...(enrichedBackfill as unknown as Record<string, unknown>[]),
+          ];
+        }
+      }
+    }
+
     return {
-      data: cleanedStories,
+      data: pageData as PaginatedStoriesDto['data'],
       pagination: {
         currentPage: page,
         totalPages,
@@ -403,53 +460,277 @@ export class StoryFeedService {
 
     const orderBy = [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
 
-    const stories = await this.withCursorErrorHandling(() =>
-      this.storyRepository.findManyStoriesRaw({
-        where,
-        take: limit + 1,
-        ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
-        orderBy,
-        include: {
-          images: true,
-          branches: true,
-          categories: true,
-          themes: true,
-          seasons: true,
-          questions: true,
+    // GUEST / PUBLIC PATH — unchanged behaviour (byte-for-byte identical).
+    if (!filter.userId) {
+      const stories = await this.withCursorErrorHandling(() =>
+        this.storyRepository.findManyStoriesRaw({
+          where,
+          take: limit + 1,
+          ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
+          orderBy,
+          include: this.storyListInclude,
+        }),
+      );
+
+      const { data, pagination } = PaginationUtil.buildCursorResponse(
+        stories,
+        limit,
+      );
+
+      const enriched = filter.guestSessionId
+        ? await this.enrichWithGuestReadStatus(filter.guestSessionId, data)
+        : data.map((s) => ({
+            ...s,
+            readStatus: null as 'done' | 'reading' | null,
+          }));
+
+      return {
+        data: this.sortByReadStatus(enriched),
+        pagination: {
+          ...pagination,
+          previousCursor: null,
+          hasPreviousPage: !!filter.cursor,
+          limit,
         },
+      };
+    }
+
+    // AUTHENTICATED PATH — fresh-first with read backfill across a composite
+    // cursor. Format: `r:<progressId>` continues the READ stream; anything else
+    // (a bare story id or `f:<storyId>`, incl. legacy raw cursors) continues the
+    // FRESH stream. Fresh stories are served first; once the fresh pool is
+    // exhausted we backfill with read stories ordered by lastAccessed desc.
+    // NOTE: the cursor stays a single opaque string for the client.
+    const userId = filter.userId;
+    const rawCursor = filter.cursor;
+
+    // READ stream continuation.
+    if (rawCursor?.startsWith('r:')) {
+      const progressCursor = rawCursor.slice(2) || undefined;
+      return this.fetchReadStreamPage(userId, where, progressCursor, limit);
+    }
+
+    // FRESH stream (default / start). Tolerate legacy bare story-id cursors.
+    const freshCursor = rawCursor?.startsWith('f:')
+      ? rawCursor.slice(2) || undefined
+      : rawCursor;
+    const freshWhere = this.withUserReadFilter(where, userId, 'fresh');
+
+    const freshRows = await this.withCursorErrorHandling(() =>
+      this.storyRepository.findManyStoriesRaw({
+        where: freshWhere,
+        take: limit + 1,
+        ...(freshCursor ? { cursor: { id: freshCursor }, skip: 1 } : {}),
+        orderBy,
+        include: this.storyListInclude,
       }),
     );
 
-    const { data, pagination } = PaginationUtil.buildCursorResponse(
-      stories,
-      limit,
-    );
+    const freshHasNext = freshRows.length > limit;
+    const freshPage = freshHasNext ? freshRows.slice(0, limit) : freshRows;
+    const freshEnriched = freshPage.map((s) => ({
+      ...s,
+      readStatus: null as 'done' | 'reading' | null,
+    }));
 
-    // Enrich with read status based on user or guest session
-    let enriched;
-    if (filter.userId) {
-      enriched = await this.enrichWithReadStatus(filter.userId, data);
-    } else if (filter.guestSessionId) {
-      enriched = await this.enrichWithGuestReadStatus(
-        filter.guestSessionId,
-        data,
-      );
-    } else {
-      enriched = data.map((s) => ({
-        ...s,
-        readStatus: null as 'done' | 'reading' | null,
-      }));
+    // Fresh stories still remain — keep serving fresh first.
+    if (freshHasNext) {
+      return {
+        data: freshEnriched,
+        pagination: {
+          nextCursor: `f:${freshPage[freshPage.length - 1].id}`,
+          hasNextPage: true,
+          previousCursor: null,
+          hasPreviousPage: !!filter.cursor,
+          limit,
+        },
+      };
     }
 
+    // Fresh pool exhausted on this page. Backfill the remainder of the page from
+    // the start of the READ stream; if the page is already full, signal that the
+    // read stream begins on the next request via the `r:` sentinel cursor.
+    const deficit = limit - freshPage.length;
+    if (deficit <= 0) {
+      const readProbe =
+        await this.storyRepository.findFirstUserStoryProgressRaw({
+          where: { userId, isDeleted: false, story: { ...where } },
+          orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+          select: { id: true },
+        });
+      return {
+        data: freshEnriched,
+        pagination: {
+          nextCursor: readProbe ? 'r:' : null,
+          hasNextPage: !!readProbe,
+          previousCursor: null,
+          hasPreviousPage: !!filter.cursor,
+          limit,
+        },
+      };
+    }
+
+    const readRows = await this.storyRepository.findManyUserStoryProgressRaw({
+      where: { userId, isDeleted: false, story: { ...where } },
+      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+      take: deficit + 1,
+      include: { story: { include: this.storyListInclude } },
+    });
+    const readHasNext = readRows.length > deficit;
+    const readPage = readHasNext ? readRows.slice(0, deficit) : readRows;
+    const readEnriched = await this.enrichWithReadStatus(
+      userId,
+      readPage.map((r) => r.story as unknown as { id: string }),
+    );
+
     return {
-      data: this.sortByReadStatus(enriched),
+      data: [
+        ...(freshEnriched as unknown as Record<string, unknown>[]),
+        ...(readEnriched as unknown as Record<string, unknown>[]),
+      ] as CursorPaginatedStoriesDto['data'],
       pagination: {
-        ...pagination,
+        nextCursor: readHasNext
+          ? `r:${readPage[readPage.length - 1].id}`
+          : null,
+        hasNextPage: readHasNext,
         previousCursor: null,
         hasPreviousPage: !!filter.cursor,
         limit,
       },
     };
+  }
+
+  /**
+   * Serves a page of the READ stream for the fresh-first cursor pagination.
+   * Records come from the progress join table ordered by lastAccessed desc, so
+   * the cursor is the UserStoryProgress id (prefixed `r:` by the caller).
+   * Only reached with an `r:` cursor, so hasPreviousPage is always true.
+   */
+  private async fetchReadStreamPage(
+    userId: string,
+    baseWhere: Prisma.StoryWhereInput,
+    progressCursor: string | undefined,
+    limit: number,
+  ): Promise<CursorPaginatedStoriesDto> {
+    const rows = await this.withCursorErrorHandling(() =>
+      this.storyRepository.findManyUserStoryProgressRaw({
+        where: { userId, isDeleted: false, story: { ...baseWhere } },
+        orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+        take: limit + 1,
+        ...(progressCursor ? { cursor: { id: progressCursor }, skip: 1 } : {}),
+        include: { story: { include: this.storyListInclude } },
+      }),
+    );
+
+    const hasNextPage = rows.length > limit;
+    const page = hasNextPage ? rows.slice(0, limit) : rows;
+    const enriched = await this.enrichWithReadStatus(
+      userId,
+      page.map((r) => r.story as unknown as { id: string }),
+    );
+
+    return {
+      data: enriched as unknown as CursorPaginatedStoriesDto['data'],
+      pagination: {
+        nextCursor: hasNextPage ? `r:${page[page.length - 1].id}` : null,
+        hasNextPage,
+        previousCursor: null,
+        hasPreviousPage: true,
+        limit,
+      },
+    };
+  }
+
+  /**
+   * Wraps a story `where` clause with a user read/fresh filter at the TOP LEVEL
+   * (AND), so it is never bypassed by the recommended-OR rewrite or the
+   * topPicks `id.in` / restricted `id.notIn` rewrites inside
+   * buildStoryWhereClause. A story counts as "read" when the user has any
+   * non-deleted UserStoryProgress row for it (in-progress OR done); "fresh"
+   * means no such row.
+   *
+   * - mode 'fresh' -> stories the user has NOT read (userProgress none)
+   * - mode 'read'  -> stories the user HAS read (userProgress some)
+   *
+   * Guests / unauthenticated callers (no userId) get the clause back unchanged,
+   * so their responses stay byte-for-byte identical.
+   */
+  private withUserReadFilter(
+    where: Prisma.StoryWhereInput,
+    userId: string | undefined,
+    mode: 'fresh' | 'read',
+  ): Prisma.StoryWhereInput {
+    if (!userId) return where;
+    const relation: Prisma.StoryWhereInput =
+      mode === 'fresh'
+        ? { userProgress: { none: { userId, isDeleted: false } } }
+        : { userProgress: { some: { userId, isDeleted: false } } };
+    return { AND: [where, relation] };
+  }
+
+  /**
+   * Fetches already-read stories for the fresh-first backfill, ranked
+   * most-recently-accessed first. Reads the progress join table so we can order
+   * by `lastAccessed` (not orderable as a Story to-many relation) and returns
+   * the underlying Story rows. `baseWhere` is the catalog filter WITHOUT any
+   * user read filter applied.
+   */
+  private async fetchReadBackfill(
+    baseWhere: Prisma.StoryWhereInput,
+    userId: string,
+    skip: number,
+    take: number,
+    include: Prisma.StoryInclude,
+  ): Promise<Array<{ id: string }>> {
+    if (take <= 0) return [];
+    const rows = await this.storyRepository.findManyUserStoryProgressRaw({
+      where: { userId, isDeleted: false, story: { ...baseWhere } },
+      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+      ...(skip > 0 ? { skip } : {}),
+      take,
+      include: { story: { include } },
+    });
+    return rows.map((r) => r.story as unknown as { id: string });
+  }
+
+  /**
+   * Tops a fresh section list up to `take` items with already-read stories
+   * (recent first) when there aren't enough fresh ones. Used by the home-page
+   * carousels. Guests (no userId) get the fresh list back unchanged.
+   */
+  private async topUpWithRead<T extends { id: string }>(
+    fresh: T[],
+    baseWhere: Prisma.StoryWhereInput,
+    userId: string | undefined,
+    take: number,
+    include: Prisma.StoryInclude,
+    storyOrderBy?:
+      | Prisma.StoryOrderByWithRelationInput
+      | Prisma.StoryOrderByWithRelationInput[],
+  ): Promise<T[]> {
+    if (!userId) return fresh;
+    const deficit = take - fresh.length;
+    if (deficit <= 0) return fresh;
+    // When the section has a story-level ranking (e.g. most-liked), backfill by
+    // querying read stories with that same ordering so the section's ranking
+    // contract is preserved. Otherwise backfill most-recently-read (ordered via
+    // the progress row, which is where lastAccessed lives).
+    if (storyOrderBy) {
+      const stories = await this.storyRepository.findManyStoriesRaw({
+        where: this.withUserReadFilter(baseWhere, userId, 'read'),
+        orderBy: storyOrderBy,
+        take: deficit,
+        include,
+      });
+      return [...fresh, ...(stories as unknown as T[])];
+    }
+    const rows = await this.storyRepository.findManyUserStoryProgressRaw({
+      where: { userId, isDeleted: false, story: { ...baseWhere } },
+      orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+      take: deficit,
+      include: { story: { include } },
+    });
+    return [...fresh, ...rows.map((r) => r.story as unknown as T)];
   }
 
   // Sort stories so unread appear first, then reading, then done.
@@ -711,86 +992,134 @@ export class StoryFeedService {
     // 1. Recommended Stories (based on preferred categories)
     let recommended: Story[] = [];
     const preferredCategories = user?.preferredCategories ?? [];
-    if (preferredCategories.length > 0) {
-      recommended = await this.storyRepository.findManyStoriesRaw({
-        where: {
-          isDeleted: false,
-          categories: {
-            some: {
-              id: { in: preferredCategories.map((c: Category) => c.id) },
+    const recInclude: Prisma.StoryInclude = { images: true, categories: true };
+    const recBaseWhere: Prisma.StoryWhereInput =
+      preferredCategories.length > 0
+        ? {
+            isDeleted: false,
+            categories: {
+              some: {
+                id: { in: preferredCategories.map((c: Category) => c.id) },
+              },
             },
-          },
-        },
-        take: limitRecommended,
-        include: { images: true, categories: true },
-        orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
-      });
-    } else {
-      // Fallback if no preferences: just fresh stories
-      recommended = await this.storyRepository.findManyStoriesRaw({
-        where: { isDeleted: false },
-        orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
-        take: limitRecommended,
-        include: { images: true, categories: true },
-      });
-    }
+          }
+        : { isDeleted: false };
+    // Fresh-first: fetch unread recommendations, then top up with read ones.
+    recommended = await this.storyRepository.findManyStoriesRaw({
+      where: this.withUserReadFilter(recBaseWhere, userId, 'fresh'),
+      take: limitRecommended,
+      include: recInclude,
+      orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
+    });
+    recommended = await this.topUpWithRead(
+      recommended,
+      recBaseWhere,
+      userId,
+      limitRecommended,
+      recInclude,
+    );
 
     // 2. Seasonal Stories (Logic: find active season based on today's date)
     const { activeSeasons, backfillSeasons } = await this.getRelevantSeasons();
 
     let seasonal: Story[] = [];
     let seasonalCount = 0;
+    const seasonalInclude: Prisma.StoryInclude = {
+      images: true,
+      themes: true,
+      seasons: true,
+    };
 
     if (activeSeasons.length > 0) {
+      // Fresh-first: only unread seasonal stories in the primary fetch.
       seasonal = await this.storyRepository.findManyStoriesRaw({
-        where: {
-          isDeleted: false,
-          seasons: {
-            some: {
-              id: { in: activeSeasons.map((s) => s.id) },
+        where: this.withUserReadFilter(
+          {
+            isDeleted: false,
+            seasons: {
+              some: {
+                id: { in: activeSeasons.map((s) => s.id) },
+              },
             },
           },
-        },
+          userId,
+          'fresh',
+        ),
         take: limitSeasonal,
-        include: { images: true, themes: true, seasons: true },
+        include: seasonalInclude,
       });
       seasonalCount = seasonal.length;
     }
 
-    // Backfill if needed
+    // Backfill with other (recent) seasons' fresh stories if needed
     if (seasonalCount < limitSeasonal && backfillSeasons.length > 0) {
       const needed = limitSeasonal - seasonalCount;
       const existingIds = new Set(seasonal.map((s) => s.id));
 
       const backfillStories = await this.storyRepository.findManyStoriesRaw({
-        where: {
-          isDeleted: false,
-          seasons: {
-            some: {
-              id: { in: backfillSeasons.map((s) => s.id) },
+        where: this.withUserReadFilter(
+          {
+            isDeleted: false,
+            seasons: {
+              some: {
+                id: { in: backfillSeasons.map((s) => s.id) },
+              },
             },
+            id: { notIn: Array.from(existingIds) },
           },
-          id: { notIn: Array.from(existingIds) },
-        },
+          userId,
+          'fresh',
+        ),
         take: needed,
-        include: { images: true, themes: true, seasons: true },
+        include: seasonalInclude,
         orderBy: { createdAt: 'desc' },
       });
 
       seasonal = [...seasonal, ...backfillStories];
     }
 
-    // 3. Top Liked by Parents
-    const topLiked = await this.storyRepository.findManyStoriesRaw({
-      where: { isDeleted: false },
+    // Final fresh-first top-up: if still short on fresh seasonal stories, fill
+    // with already-read seasonal stories (active or recent seasons).
+    seasonal = await this.topUpWithRead(
+      seasonal,
+      {
+        isDeleted: false,
+        seasons: {
+          some: {
+            id: {
+              in: [
+                ...activeSeasons.map((s) => s.id),
+                ...backfillSeasons.map((s) => s.id),
+              ],
+            },
+          },
+        },
+      },
+      userId,
+      limitSeasonal,
+      seasonalInclude,
+    );
+
+    // 3. Top Liked by Parents (fresh-first, then top up with read)
+    const topLikedInclude: Prisma.StoryInclude = { images: true };
+    let topLiked = await this.storyRepository.findManyStoriesRaw({
+      where: this.withUserReadFilter({ isDeleted: false }, userId, 'fresh'),
       orderBy: {
         parentFavorites: {
           _count: 'desc',
         },
       },
       take: limitTopLiked,
-      include: { images: true },
+      include: topLikedInclude,
     });
+    topLiked = await this.topUpWithRead(
+      topLiked,
+      { isDeleted: false },
+      userId,
+      limitTopLiked,
+      topLikedInclude,
+      { parentFavorites: { _count: 'desc' } },
+    );
 
     // Enrich all stories with readStatus in a single DB query
     const allStories = [...recommended, ...seasonal, ...topLiked];
