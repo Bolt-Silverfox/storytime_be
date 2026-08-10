@@ -72,26 +72,38 @@ export class AdminRevenueAnalyticsService {
     };
   }
 
+  // Period-scoped churn: of the subscribers who had access at the START of the
+  // window, what fraction lost it DURING the window.
+  //
+  // The previous version counted EVERY cancelled subscription ever (unscoped) in
+  // the numerator while the denominator only counted currently-active subs, so
+  // the ratio routinely exceeded 100%. Both terms are now scoped to the window
+  // via `endsAt`, and the numerator is a strict subset of the denominator (both
+  // require startedAt < startDate; the numerator additionally requires endsAt in
+  // [start, end], which satisfies the denominator's endsAt >= start), so the
+  // result is always in [0, 100].
   private async calculateChurnRate(
     startDate: Date,
     endDate: Date,
   ): Promise<number> {
+    // Base: had access at the start of the window (started before it and either
+    // never ended or ended on/after the window start).
     const totalSubscriptionsAtStart = await this.subscriptionRepo.count({
       startedAt: { lt: startDate },
-      status: 'active',
+      OR: [{ endsAt: null }, { endsAt: { gte: startDate } }],
     });
 
+    // Churned within the window: from that base, cancelled subs whose access
+    // actually ended inside [startDate, endDate]. Requiring status 'cancelled'
+    // avoids miscounting active auto-renewing subs whose endsAt (current period
+    // boundary) happens to fall in the window.
     const churnedSubscriptions = await this.subscriptionRepo.count({
-      OR: [
-        { status: 'cancelled' },
-        {
-          status: 'active',
-          endsAt: {
-            gte: startDate,
-            lte: endDate,
-          },
-        },
-      ],
+      startedAt: { lt: startDate },
+      status: 'cancelled',
+      endsAt: {
+        gte: startDate,
+        lte: endDate,
+      },
     });
 
     return totalSubscriptionsAtStart > 0
