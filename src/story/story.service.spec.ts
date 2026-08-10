@@ -39,6 +39,7 @@ const mockStoryRepository = {
   findManyCategoriesRaw: jest.fn(),
   findManySeasonsRaw: jest.fn(),
   findManyUserStoryProgressRaw: jest.fn(),
+  findFirstUserStoryProgressRaw: jest.fn(),
   findManyDailyChallengeAssignmentsRaw: jest.fn(),
   findFirstDailyChallengeAssignmentRaw: jest.fn(),
   createDailyChallengeAssignmentRaw: jest.fn(),
@@ -196,14 +197,25 @@ describe('StoryService - Library & Generation', () => {
 
         await service.getStories({ userId: 'user-1', minAge: 3, maxAge: 5 });
 
+        // Authenticated users fetch FRESH stories only: the catalog where is
+        // wrapped at the top level with the read anti-join.
         expect(prisma.findManyStoriesRaw).toHaveBeenCalledWith(
           expect.objectContaining({
-            where: expect.objectContaining({
-              isDeleted: false,
-              // Check overlap logic: story.ageMin <= 5 AND story.ageMax >= 3
-              ageMin: { lte: 5 },
-              ageMax: { gte: 3 },
-            }),
+            where: {
+              AND: [
+                expect.objectContaining({
+                  isDeleted: false,
+                  // Check overlap logic: story.ageMin <= 5 AND story.ageMax >= 3
+                  ageMin: { lte: 5 },
+                  ageMax: { gte: 3 },
+                }),
+                {
+                  userProgress: {
+                    none: { userId: 'user-1', isDeleted: false },
+                  },
+                },
+              ],
+            },
           }),
         );
       });
@@ -217,10 +229,19 @@ describe('StoryService - Library & Generation', () => {
 
         expect(prisma.findManyStoriesRaw).toHaveBeenCalledWith(
           expect.objectContaining({
-            where: expect.objectContaining({
-              isDeleted: false,
-              ageMax: { gte: 4 },
-            }),
+            where: {
+              AND: [
+                expect.objectContaining({
+                  isDeleted: false,
+                  ageMax: { gte: 4 },
+                }),
+                {
+                  userProgress: {
+                    none: { userId: 'user-1', isDeleted: false },
+                  },
+                },
+              ],
+            },
           }),
         );
       });
@@ -234,10 +255,19 @@ describe('StoryService - Library & Generation', () => {
 
         expect(prisma.findManyStoriesRaw).toHaveBeenCalledWith(
           expect.objectContaining({
-            where: expect.objectContaining({
-              isDeleted: false,
-              ageMin: { lte: 8 },
-            }),
+            where: {
+              AND: [
+                expect.objectContaining({
+                  isDeleted: false,
+                  ageMin: { lte: 8 },
+                }),
+                {
+                  userProgress: {
+                    none: { userId: 'user-1', isDeleted: false },
+                  },
+                },
+              ],
+            },
           }),
         );
       });
@@ -250,10 +280,18 @@ describe('StoryService - Library & Generation', () => {
         ];
         prisma.countStoriesRaw.mockResolvedValue(3);
         prisma.findManyStoriesRaw.mockResolvedValue(stories);
-        prisma.findManyUserStoryProgressRaw.mockResolvedValue([
-          { storyId: 'story-1', completed: true },
-          { storyId: 'story-2', completed: false },
-        ]);
+        // The read-status enrich query uses `select`; the fresh-first backfill
+        // query uses `include`. Return progress for the former, nothing for the
+        // latter.
+        prisma.findManyUserStoryProgressRaw.mockImplementation(
+          (args: { select?: unknown }) =>
+            args?.select
+              ? Promise.resolve([
+                  { storyId: 'story-1', completed: true },
+                  { storyId: 'story-2', completed: false },
+                ])
+              : Promise.resolve([]),
+        );
 
         const result = await service.getStories({ userId: 'user-1' });
 
@@ -267,7 +305,12 @@ describe('StoryService - Library & Generation', () => {
         expect(result.data[2]).toEqual(
           expect.objectContaining({ id: 'story-1', readStatus: 'done' }),
         );
-        expect(prisma.findManyUserStoryProgressRaw).toHaveBeenCalledTimes(1);
+        // Exactly one read-status enrich query (uses `select`).
+        const selectCalls =
+          prisma.findManyUserStoryProgressRaw.mock.calls.filter(
+            (c) => c[0]?.select,
+          );
+        expect(selectCalls).toHaveLength(1);
         expect(prisma.findManyUserStoryProgressRaw).toHaveBeenCalledWith({
           where: {
             userId: 'user-1',
@@ -358,19 +401,29 @@ describe('StoryService - Library & Generation', () => {
         { id: 'story-3', title: 'Top Liked Unread' },
       ];
 
-      // story.findMany: 1st call = recommended, 2nd call = topLiked
-      // (no seasonal call since season.findMany returns [])
+      // findManyStoriesRaw: 1st = recommended (fresh), 2nd = topLiked (fresh),
+      // 3rd = topLiked read-backfill (ranked by likes; returns [] here since the
+      // fresh stories already fill the section). No seasonal call since
+      // findManySeasonsRaw returns [].
       prisma.findManyStoriesRaw
         .mockResolvedValueOnce(recommended)
-        .mockResolvedValueOnce(topLiked);
+        .mockResolvedValueOnce(topLiked)
+        .mockResolvedValueOnce([]);
 
       prisma.findManySeasonsRaw.mockResolvedValue([]);
 
-      prisma.findManyUserStoryProgressRaw.mockResolvedValue([
-        { storyId: 'story-1', completed: true },
-        { storyId: 'story-2', completed: false },
-        // story-3 has no progress (unread)
-      ]);
+      // Read-status enrich uses `select`; per-section fresh-first top-up uses
+      // `include`. Return progress for enrich, nothing for the top-ups.
+      prisma.findManyUserStoryProgressRaw.mockImplementation(
+        (args: { select?: unknown }) =>
+          args?.select
+            ? Promise.resolve([
+                { storyId: 'story-1', completed: true },
+                { storyId: 'story-2', completed: false },
+                // story-3 has no progress (unread)
+              ])
+            : Promise.resolve([]),
+      );
 
       const result = await service.getHomePageStories(userId);
 
@@ -386,8 +439,12 @@ describe('StoryService - Library & Generation', () => {
         expect.objectContaining({ id: 'story-2', readStatus: 'reading' }),
       );
 
-      // Verify only 1 DB call for progress (not 1 per section)
-      expect(prisma.findManyUserStoryProgressRaw).toHaveBeenCalledTimes(1);
+      // Verify only 1 read-status enrich query for all sections (not 1 per
+      // section); the fresh-first top-ups use separate `include` queries.
+      const selectCalls = prisma.findManyUserStoryProgressRaw.mock.calls.filter(
+        (c) => c[0]?.select,
+      );
+      expect(selectCalls).toHaveLength(1);
     });
   });
 
@@ -521,6 +578,294 @@ describe('StoryService - Library & Generation', () => {
         expect(result.seasonal).toEqual([]);
         expect(result.topLiked[0]).toEqual(
           expect.objectContaining({ id: 'story-2', readStatus: null }),
+        );
+      });
+    });
+  });
+
+  // --- 3c. FRESH-FIRST FEED (authenticated users) ---
+  describe('Fresh-first feed (authenticated)', () => {
+    const userId = 'user-1';
+
+    describe('getStories (offset) read backfill', () => {
+      it('should top up a short fresh page with read stories ordered by lastAccessed desc', async () => {
+        prisma.countStoriesRaw.mockResolvedValue(3);
+        // Fresh pool only has one unread story for a limit-3 page.
+        prisma.findManyStoriesRaw.mockResolvedValue([
+          { id: 'fresh-1', title: 'Fresh' },
+        ]);
+        prisma.findManyUserStoryProgressRaw.mockImplementation(
+          (args: { select?: unknown }) =>
+            args?.select
+              ? Promise.resolve([
+                  { storyId: 'read-1', completed: true },
+                  { storyId: 'read-2', completed: false },
+                ])
+              : Promise.resolve([
+                  { id: 'prog-1', story: { id: 'read-1', title: 'Read 1' } },
+                  { id: 'prog-2', story: { id: 'read-2', title: 'Read 2' } },
+                ]),
+        );
+
+        const result = await service.getStories({ userId, limit: 3 });
+
+        // Fresh story first, then the read backfill in lastAccessed order.
+        expect(result.data.map((s) => s.id)).toEqual([
+          'fresh-1',
+          'read-1',
+          'read-2',
+        ]);
+        expect(result.data[1]).toEqual(
+          expect.objectContaining({ id: 'read-1', readStatus: 'done' }),
+        );
+        expect(result.data[2]).toEqual(
+          expect.objectContaining({ id: 'read-2', readStatus: 'reading' }),
+        );
+        // totalCount still reflects the unfiltered catalog (fresh + read).
+        expect(result.pagination.totalCount).toBe(3);
+        // Backfill reads the progress join table, recent-first.
+        expect(prisma.findManyUserStoryProgressRaw).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: {
+              userId,
+              isDeleted: false,
+              story: { isDeleted: false },
+            },
+            orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+            take: 2,
+          }),
+        );
+      });
+
+      it('should compute readSkip as skip - freshCount on deeper pages', async () => {
+        // 1st count = totalCount (unfiltered), 2nd count = fresh pool size.
+        prisma.countStoriesRaw
+          .mockResolvedValueOnce(10)
+          .mockResolvedValueOnce(1);
+        prisma.findManyStoriesRaw.mockResolvedValue([]);
+        prisma.findManyUserStoryProgressRaw.mockResolvedValue([]);
+
+        await service.getStories({ userId, page: 2, limit: 3 });
+
+        // skip=3, freshCount=1 -> readSkip = 2 so page 2 continues the read
+        // stream where page 1's backfill left off (no overlap, no gap).
+        expect(prisma.findManyUserStoryProgressRaw).toHaveBeenCalledWith(
+          expect.objectContaining({ skip: 2, take: 3 }),
+        );
+      });
+    });
+
+    describe('getStoriesCursor composite cursor', () => {
+      it('should serve fresh stories and emit an f: cursor while fresh remain', async () => {
+        prisma.findManyStoriesRaw.mockResolvedValue([
+          { id: 'story-1', title: 'S1' },
+          { id: 'story-2', title: 'S2' },
+          { id: 'story-3', title: 'S3' },
+        ]);
+
+        const result = await service.getStoriesCursor({ userId, limit: 2 });
+
+        // Fresh query is scoped by the top-level read anti-join.
+        expect(prisma.findManyStoriesRaw).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: {
+              AND: [
+                expect.objectContaining({ isDeleted: false }),
+                { userProgress: { none: { userId, isDeleted: false } } },
+              ],
+            },
+            take: 3,
+          }),
+        );
+        expect(result.data.map((s) => s.id)).toEqual(['story-1', 'story-2']);
+        for (const story of result.data) {
+          expect(story).toEqual(expect.objectContaining({ readStatus: null }));
+        }
+        expect(result.pagination).toEqual(
+          expect.objectContaining({
+            nextCursor: 'f:story-2',
+            hasNextPage: true,
+          }),
+        );
+      });
+
+      it('should accept legacy bare story-id cursors as fresh-stream cursors', async () => {
+        prisma.findManyStoriesRaw.mockResolvedValue([]);
+        prisma.findManyUserStoryProgressRaw.mockResolvedValue([]);
+
+        const result = await service.getStoriesCursor({
+          userId,
+          cursor: 'story-5',
+          limit: 2,
+        });
+
+        expect(prisma.findManyStoriesRaw).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cursor: { id: 'story-5' },
+            skip: 1,
+          }),
+        );
+        expect(result.pagination).toEqual(
+          expect.objectContaining({ nextCursor: null, hasNextPage: false }),
+        );
+      });
+
+      it('should accept f:-prefixed cursors for the fresh stream', async () => {
+        prisma.findManyStoriesRaw.mockResolvedValue([]);
+        prisma.findManyUserStoryProgressRaw.mockResolvedValue([]);
+
+        await service.getStoriesCursor({
+          userId,
+          cursor: 'f:story-5',
+          limit: 2,
+        });
+
+        expect(prisma.findManyStoriesRaw).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cursor: { id: 'story-5' },
+            skip: 1,
+          }),
+        );
+      });
+
+      it('should backfill from the read stream when fresh exhausts mid-page and emit an r:<progressId> cursor', async () => {
+        // Fresh returns 1 row for a limit-2 page -> deficit of 1.
+        prisma.findManyStoriesRaw.mockResolvedValue([
+          { id: 'fresh-1', title: 'Fresh' },
+        ]);
+        prisma.findManyUserStoryProgressRaw.mockImplementation(
+          (args: { select?: unknown }) =>
+            args?.select
+              ? Promise.resolve([{ storyId: 'read-1', completed: true }])
+              : Promise.resolve([
+                  { id: 'prog-1', story: { id: 'read-1', title: 'Read 1' } },
+                  { id: 'prog-2', story: { id: 'read-2', title: 'Read 2' } },
+                ]),
+        );
+
+        const result = await service.getStoriesCursor({ userId, limit: 2 });
+
+        expect(result.data.map((s) => s.id)).toEqual(['fresh-1', 'read-1']);
+        expect(result.data[0]).toEqual(
+          expect.objectContaining({ readStatus: null }),
+        );
+        expect(result.data[1]).toEqual(
+          expect.objectContaining({ id: 'read-1', readStatus: 'done' }),
+        );
+        // Cursor continues the READ stream from the progress row id.
+        expect(result.pagination).toEqual(
+          expect.objectContaining({
+            nextCursor: 'r:prog-1',
+            hasNextPage: true,
+          }),
+        );
+      });
+
+      it('should emit the r: sentinel when fresh exhausts exactly at page end and read stories exist', async () => {
+        // Fresh returns exactly `limit` rows (no limit+1 lookahead row).
+        prisma.findManyStoriesRaw.mockResolvedValue([
+          { id: 'story-1', title: 'S1' },
+          { id: 'story-2', title: 'S2' },
+        ]);
+        prisma.findFirstUserStoryProgressRaw.mockResolvedValue({
+          id: 'prog-1',
+        });
+
+        const result = await service.getStoriesCursor({ userId, limit: 2 });
+
+        expect(result.data.map((s) => s.id)).toEqual(['story-1', 'story-2']);
+        expect(result.pagination).toEqual(
+          expect.objectContaining({ nextCursor: 'r:', hasNextPage: true }),
+        );
+      });
+
+      it('should end pagination when fresh exhausts at page end and no read stories exist', async () => {
+        prisma.findManyStoriesRaw.mockResolvedValue([
+          { id: 'story-1', title: 'S1' },
+          { id: 'story-2', title: 'S2' },
+        ]);
+        prisma.findFirstUserStoryProgressRaw.mockResolvedValue(null);
+
+        const result = await service.getStoriesCursor({ userId, limit: 2 });
+
+        expect(result.pagination).toEqual(
+          expect.objectContaining({ nextCursor: null, hasNextPage: false }),
+        );
+      });
+
+      it('should continue the read stream from an r:<progressId> cursor', async () => {
+        prisma.findManyUserStoryProgressRaw.mockImplementation(
+          (args: { select?: unknown }) =>
+            args?.select
+              ? Promise.resolve([
+                  { storyId: 'read-2', completed: true },
+                  { storyId: 'read-3', completed: false },
+                ])
+              : Promise.resolve([
+                  { id: 'prog-2', story: { id: 'read-2', title: 'Read 2' } },
+                  { id: 'prog-3', story: { id: 'read-3', title: 'Read 3' } },
+                  { id: 'prog-4', story: { id: 'read-4', title: 'Read 4' } },
+                ]),
+        );
+
+        const result = await service.getStoriesCursor({
+          userId,
+          cursor: 'r:prog-1',
+          limit: 2,
+        });
+
+        // Pages the progress join table by lastAccessed desc from the cursor.
+        expect(prisma.findManyUserStoryProgressRaw).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: {
+              userId,
+              isDeleted: false,
+              story: { isDeleted: false },
+            },
+            orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
+            take: 3,
+            cursor: { id: 'prog-1' },
+            skip: 1,
+          }),
+        );
+        // The fresh stream must NOT be queried on an r: continuation.
+        expect(prisma.findManyStoriesRaw).not.toHaveBeenCalled();
+        expect(result.data.map((s) => s.id)).toEqual(['read-2', 'read-3']);
+        expect(result.data[0]).toEqual(
+          expect.objectContaining({ readStatus: 'done' }),
+        );
+        expect(result.pagination).toEqual(
+          expect.objectContaining({
+            nextCursor: 'r:prog-3',
+            hasNextPage: true,
+          }),
+        );
+      });
+
+      it('should start the read stream from the beginning on the bare r: sentinel', async () => {
+        prisma.findManyUserStoryProgressRaw.mockImplementation(
+          (args: { select?: unknown }) =>
+            args?.select
+              ? Promise.resolve([{ storyId: 'read-1', completed: false }])
+              : Promise.resolve([
+                  { id: 'prog-1', story: { id: 'read-1', title: 'Read 1' } },
+                ]),
+        );
+
+        const result = await service.getStoriesCursor({
+          userId,
+          cursor: 'r:',
+          limit: 2,
+        });
+
+        // No progress cursor -> read stream starts from the top.
+        const includeCall = prisma.findManyUserStoryProgressRaw.mock.calls.find(
+          (c) => !c[0]?.select,
+        );
+        expect(includeCall[0]).not.toHaveProperty('cursor');
+        expect(result.data.map((s) => s.id)).toEqual(['read-1']);
+        expect(result.pagination).toEqual(
+          expect.objectContaining({ nextCursor: null, hasNextPage: false }),
         );
       });
     });

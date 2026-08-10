@@ -517,6 +517,12 @@ export interface IStoryRepository {
     args: Prisma.SelectSubset<T, Prisma.UserStoryProgressFindManyArgs>,
   ): Promise<Prisma.UserStoryProgressGetPayload<T>[]>;
 
+  findFirstUserStoryProgressRaw<
+    T extends Prisma.UserStoryProgressFindFirstArgs,
+  >(
+    args: Prisma.SelectSubset<T, Prisma.UserStoryProgressFindFirstArgs>,
+  ): Promise<Prisma.UserStoryProgressGetPayload<T> | null>;
+
   findManyDailyChallengeAssignmentsRaw<
     T extends Prisma.DailyChallengeAssignmentFindManyArgs,
   >(
