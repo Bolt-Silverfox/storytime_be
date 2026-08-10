@@ -58,12 +58,27 @@ describe('AdminRevenueAnalyticsService — churn rate', () => {
     // Churned: cancelled subs from that base whose access ended inside the window.
     expect(churnedWhere.startedAt).toEqual({ lt: new Date(range.startDate) });
     expect(churnedWhere.status).toBe('cancelled');
+    // Date-only endDate is inclusive through the whole day, not just midnight.
     expect(churnedWhere.endsAt).toEqual({
       gte: new Date(range.startDate),
-      lte: new Date(range.endDate),
+      lte: new Date(`${range.endDate}T23:59:59.999Z`),
     });
 
     expect(result.churnRate).toBe(5); // 10 / 200 * 100
+  });
+
+  it('keeps an explicit endDate timestamp unchanged', async () => {
+    subscriptionRepo.count.mockResolvedValueOnce(200);
+    subscriptionRepo.count.mockResolvedValueOnce(10);
+
+    const explicitEnd = '2026-07-31T12:30:00.000Z';
+    await service.getSubscriptionAnalytics({
+      startDate: range.startDate,
+      endDate: explicitEnd,
+    });
+
+    const [churnedWhere] = subscriptionRepo.count.mock.calls[1];
+    expect(churnedWhere.endsAt.lte).toEqual(new Date(explicitEnd));
   });
 
   it('never exceeds 100% even when every base subscriber churned', async () => {

@@ -33,6 +33,18 @@ export class AdminRevenueAnalyticsService {
     private readonly activityRepo: IAdminActivityRepository,
   ) {}
 
+  // A date-only endDate ('2026-07-31') parses to midnight UTC, which would
+  // silently exclude everything that happened later that day from `lte`
+  // filters. Treat day-level input as inclusive through the end of that day
+  // (.999 is the max millisecond Prisma DateTime can store); explicit
+  // timestamps pass through unchanged.
+  private static parseInclusiveEndDate(value: string): Date {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return new Date(`${value}T23:59:59.999Z`);
+    }
+    return new Date(value);
+  }
+
   async getSubscriptionAnalytics(
     dateRange?: DateRangeDto,
   ): Promise<SubscriptionAnalyticsDto> {
@@ -40,7 +52,7 @@ export class AdminRevenueAnalyticsService {
       ? new Date(dateRange.startDate)
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = dateRange?.endDate
-      ? new Date(dateRange.endDate)
+      ? AdminRevenueAnalyticsService.parseInclusiveEndDate(dateRange.endDate)
       : new Date();
 
     const [subscriptions, revenue, planBreakdown] = await Promise.all([
@@ -118,7 +130,7 @@ export class AdminRevenueAnalyticsService {
       ? new Date(dateRange.startDate)
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = dateRange?.endDate
-      ? new Date(dateRange.endDate)
+      ? AdminRevenueAnalyticsService.parseInclusiveEndDate(dateRange.endDate)
       : new Date();
 
     try {
