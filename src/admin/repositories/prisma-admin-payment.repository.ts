@@ -5,6 +5,7 @@ import type {
   IAdminPaymentRepository,
   RevenueSum,
   RevenueByDate,
+  RevenueByPlan,
   UserPaymentAmount,
   DatedPaymentAmount,
 } from './admin-payment.repository.interface';
@@ -68,6 +69,23 @@ export class PrismaAdminPaymentRepository implements IAdminPaymentRepository {
         createdAt: new Date(`${day}T00:00:00.000Z`),
         _sum: { amount },
       }));
+  }
+
+  // Sum revenue and count transactions per plan, in the DB. Replaces loading
+  // every active subscriber's entire transaction history into memory and
+  // charging their lifetime spend to their current plan.
+  async groupRevenueByPlan(): Promise<RevenueByPlan[]> {
+    const rows = await this.prisma.paymentTransaction.groupBy({
+      by: ['plan'],
+      where: { status: 'success', deletedAt: null },
+      _sum: { amount: true },
+      _count: true,
+    });
+    return rows.map((row) => ({
+      plan: row.plan,
+      _sum: { amount: row._sum.amount },
+      _count: row._count,
+    }));
   }
 
   findSuccessfulInRange(

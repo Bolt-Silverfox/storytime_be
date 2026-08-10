@@ -222,6 +222,7 @@ export class PaymentService {
       receiptHash,
       result.amount ?? planDef.amount,
       result.currency ?? 'USD',
+      plan,
     );
 
     if (alreadyProcessed) {
@@ -358,6 +359,7 @@ export class PaymentService {
       receiptHash,
       result.amount ?? planDef.amount,
       result.currency ?? 'USD',
+      plan,
     );
 
     if (alreadyProcessed) {
@@ -661,6 +663,7 @@ export class PaymentService {
     reference: string,
     amount: number,
     currency: string,
+    plan: string,
   ): Promise<{ tx: TransactionRecord; alreadyProcessed: boolean }> {
     try {
       const tx = await this.paymentTransactionRepository.create({
@@ -670,6 +673,7 @@ export class PaymentService {
         currency,
         status: 'success',
         reference,
+        plan,
       });
       return { tx, alreadyProcessed: false };
     } catch (error) {

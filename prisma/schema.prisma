@@ -599,6 +599,12 @@ model PaymentTransaction {
   reference       String?
   amount          Float
   status          String
+  // Plan this payment was for (weekly/monthly/yearly/free), resolved from the
+  // store productId at purchase time. Nullable: pre-existing rows predate this
+  // column, and it stays null when the productId can't be mapped. Enables
+  // per-plan revenue attribution instead of charging a user's whole payment
+  // history to whatever plan they happen to be on now.
+  plan            String?
   createdAt       DateTime       @default(now())
   // SOFT DELETE FIELDS
   isDeleted       Boolean        @default(false)
