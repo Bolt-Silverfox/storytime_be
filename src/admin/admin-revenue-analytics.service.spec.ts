@@ -6,14 +6,19 @@ import {
   ADMIN_ACTIVITY_REPOSITORY,
 } from './repositories';
 
-describe('AdminRevenueAnalyticsService — churn rate', () => {
+describe('AdminRevenueAnalyticsService', () => {
   let service: AdminRevenueAnalyticsService;
   let subscriptionRepo: {
     count: jest.Mock;
     groupByStartedAt: jest.Mock;
     groupByActivePlan: jest.Mock;
   };
-  let paymentRepo: { groupRevenueByCreatedAt: jest.Mock };
+  let paymentRepo: {
+    groupRevenueByCreatedAt: jest.Mock;
+    groupRevenueByCreatedAtOrdered: jest.Mock;
+    findSuccessfulInRange: jest.Mock;
+    groupRevenueByPlan: jest.Mock;
+  };
 
   const range = { startDate: '2026-07-01', endDate: '2026-07-31' };
 
@@ -23,7 +28,12 @@ describe('AdminRevenueAnalyticsService — churn rate', () => {
       groupByStartedAt: jest.fn().mockResolvedValue([]),
       groupByActivePlan: jest.fn().mockResolvedValue([]),
     };
-    paymentRepo = { groupRevenueByCreatedAt: jest.fn().mockResolvedValue([]) };
+    paymentRepo = {
+      groupRevenueByCreatedAt: jest.fn().mockResolvedValue([]),
+      groupRevenueByCreatedAtOrdered: jest.fn().mockResolvedValue([]),
+      findSuccessfulInRange: jest.fn().mockResolvedValue([]),
+      groupRevenueByPlan: jest.fn().mockResolvedValue([]),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -84,5 +94,55 @@ describe('AdminRevenueAnalyticsService — churn rate', () => {
     const result = await service.getSubscriptionAnalytics(range);
 
     expect(result.churnRate).toBe(0);
+  });
+
+  describe('topPlans revenue attribution', () => {
+    it('attributes revenue to the plan each payment was for, not the payer current plan', async () => {
+      paymentRepo.groupRevenueByPlan.mockResolvedValue([
+        { plan: 'monthly', _sum: { amount: 100 }, _count: 20 },
+        { plan: 'yearly', _sum: { amount: 480 }, _count: 10 },
+      ]);
+      subscriptionRepo.groupByActivePlan.mockResolvedValue([
+        { plan: 'monthly', _count: 5 },
+        { plan: 'yearly', _count: 8 },
+      ]);
+
+      const result = await service.getRevenueAnalytics(range);
+
+      // Sorted by revenue desc: yearly (480) before monthly (100).
+      expect(result.topPlans).toEqual([
+        { plan: 'yearly', subscription_count: 8, total_revenue: 480 },
+        { plan: 'monthly', subscription_count: 5, total_revenue: 100 },
+      ]);
+    });
+
+    it('keeps plans with revenue but no active subscribers, and buckets unattributed revenue as "unknown"', async () => {
+      paymentRepo.groupRevenueByPlan.mockResolvedValue([
+        { plan: 'weekly', _sum: { amount: 30 }, _count: 20 },
+        { plan: null, _sum: { amount: 12 }, _count: 4 }, // historical, unmapped
+      ]);
+      // weekly has no currently-active subs; that plan must still appear.
+      subscriptionRepo.groupByActivePlan.mockResolvedValue([]);
+
+      const result = await service.getRevenueAnalytics(range);
+
+      expect(result.topPlans).toEqual([
+        { plan: 'weekly', subscription_count: 0, total_revenue: 30 },
+        { plan: 'unknown', subscription_count: 0, total_revenue: 12 },
+      ]);
+    });
+
+    it('includes active-subscription counts for plans that have no attributed revenue yet', async () => {
+      paymentRepo.groupRevenueByPlan.mockResolvedValue([]);
+      subscriptionRepo.groupByActivePlan.mockResolvedValue([
+        { plan: 'monthly', _count: 3 },
+      ]);
+
+      const result = await service.getRevenueAnalytics(range);
+
+      expect(result.topPlans).toEqual([
+        { plan: 'monthly', subscription_count: 3, total_revenue: 0 },
+      ]);
+    });
   });
 });

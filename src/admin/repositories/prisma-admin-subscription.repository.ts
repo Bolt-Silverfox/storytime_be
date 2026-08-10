@@ -5,7 +5,6 @@ import type {
   IAdminSubscriptionRepository,
   SubscriptionPlanCount,
   SubscriptionStartedAtCount,
-  SubscriptionWithUserRevenue,
   SubscriptionWithUser,
 } from './admin-subscription.repository.interface';
 
@@ -57,29 +56,6 @@ export class PrismaAdminSubscriptionRepository
         startedAt: new Date(`${day}T00:00:00.000Z`),
         _count: count,
       }));
-  }
-
-  findActiveWithUserRevenue(): Promise<SubscriptionWithUserRevenue[]> {
-    return this.prisma.subscription.findMany({
-      where: {
-        status: 'active',
-      },
-      include: {
-        user: {
-          include: {
-            paymentTransactions: {
-              where: {
-                status: 'success',
-                deletedAt: null,
-              },
-              select: {
-                amount: true,
-              },
-            },
-          },
-        },
-      },
-    });
   }
 
   findByUserId(userId: string): Promise<Subscription | null> {

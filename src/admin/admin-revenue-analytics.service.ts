@@ -168,30 +168,45 @@ export class AdminRevenueAnalyticsService {
         }),
       );
 
-      // Get top plans
-      const subscriptionsWithRevenue =
-        await this.subscriptionRepo.findActiveWithUserRevenue();
+      // Top plans: attribute each payment to the plan it was actually for
+      // (summed DB-side), and pair it with the number of currently-active
+      // subscriptions on that plan. The old version summed every active
+      // subscriber's entire lifetime spend and charged it all to their current
+      // plan — so an upgrader's past-plan revenue was misattributed, and the
+      // whole payment history was loaded into memory.
+      const [revenueByPlan, activePlanCounts] = await Promise.all([
+        this.paymentRepo.groupRevenueByPlan(),
+        this.subscriptionRepo.groupByActivePlan(new Date()),
+      ]);
 
       const planRevenueMap = new Map<
         string,
         { subscription_count: number; total_revenue: number }
       >();
-
-      subscriptionsWithRevenue.forEach((sub) => {
-        const current = planRevenueMap.get(sub.plan) || {
+      const bumpPlan = (
+        plan: string,
+        revenue: number,
+        subscriptions: number,
+      ) => {
+        const current = planRevenueMap.get(plan) || {
           subscription_count: 0,
           total_revenue: 0,
         };
-        const userRevenue = sub.user.paymentTransactions.reduce(
-          (sum, t) => sum + t.amount,
-          0,
-        );
-
-        planRevenueMap.set(sub.plan, {
-          subscription_count: current.subscription_count + 1,
-          total_revenue: current.total_revenue + userRevenue,
+        planRevenueMap.set(plan, {
+          subscription_count: current.subscription_count + subscriptions,
+          total_revenue: current.total_revenue + revenue,
         });
-      });
+      };
+
+      // Revenue per plan; historical rows we couldn't attribute land in 'unknown'.
+      for (const row of revenueByPlan) {
+        bumpPlan(row.plan ?? 'unknown', row._sum.amount ?? 0, 0);
+      }
+      // Active-subscription counts per plan (plans may have revenue but no
+      // active subs left, or vice versa, so this is a union).
+      for (const row of activePlanCounts) {
+        bumpPlan(row.plan, 0, row._count);
+      }
 
       const topPlans = Array.from(planRevenueMap.entries())
         .map(([plan, stats]) => ({
