@@ -552,13 +552,12 @@ export class StoryFeedService {
     // read stream begins on the next request via the `r:` sentinel cursor.
     const deficit = limit - freshPage.length;
     if (deficit <= 0) {
-      const readProbe = await this.storyRepository.findFirstUserStoryProgressRaw(
-        {
+      const readProbe =
+        await this.storyRepository.findFirstUserStoryProgressRaw({
           where: { userId, isDeleted: false, story: { ...where } },
           orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
           select: { id: true },
-        },
-      );
+        });
       return {
         data: freshEnriched,
         pagination: {
@@ -590,7 +589,9 @@ export class StoryFeedService {
         ...(readEnriched as unknown as Record<string, unknown>[]),
       ] as CursorPaginatedStoriesDto['data'],
       pagination: {
-        nextCursor: readHasNext ? `r:${readPage[readPage.length - 1].id}` : null,
+        nextCursor: readHasNext
+          ? `r:${readPage[readPage.length - 1].id}`
+          : null,
         hasNextPage: readHasNext,
         previousCursor: null,
         hasPreviousPage: !!filter.cursor,
