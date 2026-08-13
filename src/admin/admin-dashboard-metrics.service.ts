@@ -488,6 +488,7 @@ export class AdminDashboardMetricsService {
     const [
       totalStories,
       publishedStories,
+      draftStories,
       aiGeneratedStories,
       recommendedStories,
       deletedStories,
@@ -495,7 +496,8 @@ export class AdminDashboardMetricsService {
       totalFavorites,
     ] = await Promise.all([
       this.storyRepo.countStories({ isDeleted: false }),
-      this.storyRepo.countStories({ isDeleted: false }),
+      this.storyRepo.countStories({ isDeleted: false, isPublished: true }), // publishedStories
+      this.storyRepo.countStories({ isDeleted: false, isPublished: false }), // draftStories
       this.storyRepo.countStories({
         aiGenerated: true,
         isDeleted: false,
@@ -512,7 +514,7 @@ export class AdminDashboardMetricsService {
     const result: StoryStatsDto = {
       totalStories,
       publishedStories,
-      draftStories: 0,
+      draftStories,
       aiGeneratedStories,
       recommendedStories,
       deletedStories,
