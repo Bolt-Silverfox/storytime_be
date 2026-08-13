@@ -165,6 +165,29 @@ export class AdminStoryService {
     return result;
   }
 
+  async toggleStoryPublish(storyId: string): Promise<Story> {
+    const storyExists = await this.adminStoryRepository.storyExists(storyId);
+    if (!storyExists) {
+      throw new ResourceNotFoundException('Story', storyId);
+    }
+    const story = await this.adminStoryRepository.findStoryById(storyId);
+    if (!story) {
+      throw new ResourceNotFoundException('Story', storyId);
+    }
+    const result = await this.adminStoryRepository.updateStoryPublished({
+      storyId,
+      isPublished: !story.isPublished,
+    });
+    try {
+      await this.cacheManager.del(CACHE_KEYS.STORY_STATS);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to invalidate story stats cache: ${error.message}`,
+      );
+    }
+    return result;
+  }
+
   async deleteStory(
     storyId: string,
     permanent: boolean = false,
