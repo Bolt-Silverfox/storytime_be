@@ -114,7 +114,9 @@ export class DailyChallengeService {
     // Batch fetch all required data upfront
     const [kids, allStories, allPastAssignments] = await Promise.all([
       this.storyRepository.findAllKids(),
-      this.storyRepository.findStories({ where: { isDeleted: false } }),
+      this.storyRepository.findStories({
+        where: { isDeleted: false, isPublished: true },
+      }),
       this.storyRepository.findAllDailyChallengeAssignments(),
     ]);
 
