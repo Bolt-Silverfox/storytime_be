@@ -226,6 +226,10 @@ model Session {
   token     String    @unique
   expiresAt DateTime
   createdAt DateTime  @default(now())
+  // Last time an authenticated request used this session (bumped, throttled, by
+  // AuthSessionGuard). Nullable: pre-existing sessions predate it. Enables
+  // avg session duration = lastActivityAt - createdAt.
+  lastActivityAt DateTime?
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
