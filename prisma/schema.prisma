@@ -332,6 +332,10 @@ model Story {
   backgroundColor       String                 @default("#5E3A54")
   recommended           Boolean                @default(false)
   aiGenerated           Boolean                @default(false)
+  // Draft/published state. Default true = every existing + newly generated
+  // story is published (no behavior change). Admins can unpublish to make a
+  // story a draft; public read paths filter isPublished: true.
+  isPublished           Boolean                @default(true)
   difficultyLevel       Int                    @default(1)
   wordCount             Int                    @default(0)
   durationSeconds       Int? // Estimated reading time in seconds
