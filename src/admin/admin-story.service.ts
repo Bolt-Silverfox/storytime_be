@@ -38,6 +38,7 @@ export class AdminStoryService {
       search,
       recommended,
       aiGenerated,
+      isPublished,
       isDeleted,
       language,
       minAge,
@@ -58,6 +59,7 @@ export class AdminStoryService {
 
     if (typeof recommended === 'boolean') where.recommended = recommended;
     if (typeof aiGenerated === 'boolean') where.aiGenerated = aiGenerated;
+    if (typeof isPublished === 'boolean') where.isPublished = isPublished;
     if (typeof isDeleted === 'boolean') where.isDeleted = isDeleted;
     if (language) where.language = language;
     if (minAge) where.ageMin = { gte: minAge };

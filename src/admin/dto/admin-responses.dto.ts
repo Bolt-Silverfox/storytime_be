@@ -1254,6 +1254,9 @@ export class StoryListItemDto {
   @ApiProperty({ example: false })
   aiGenerated: boolean;
 
+  @ApiProperty({ example: true })
+  isPublished: boolean;
+
   @ApiProperty({ example: 2 })
   difficultyLevel: number;
 
