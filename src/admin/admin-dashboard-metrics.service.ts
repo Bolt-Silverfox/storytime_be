@@ -250,7 +250,10 @@ export class AdminDashboardMetricsService {
     const subscriptionPlans =
       await this.subscriptionRepo.groupByActivePlan(now);
 
-    const avgSessionTime = 0; // Placeholder
+    const avgSessionTime = await this.engagementRepo.getAverageSessionSeconds(
+      range30d.start,
+      range30d.end,
+    );
     const paidUsers = activeSubscriptionsCount;
     const unpaidUsers = totalUsersCount - paidUsers;
     const prevPaidUsers = prevActiveSubscriptionsCount;
