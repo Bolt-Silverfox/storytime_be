@@ -86,6 +86,12 @@ export interface IAdminStoryRepository {
     recommended: boolean;
   }): Promise<Story>;
 
+  // Update story published status
+  updateStoryPublished(params: {
+    storyId: string;
+    isPublished: boolean;
+  }): Promise<Story>;
+
   // Soft delete story
   softDeleteStory(storyId: string): Promise<Story>;
 

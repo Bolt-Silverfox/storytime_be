@@ -111,6 +111,10 @@ export class StoryFilterDto extends PaginationDto {
 
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
+  isPublished?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
   isDeleted?: boolean;
 
   @IsOptional()

@@ -299,6 +299,25 @@ export class AdminStoryAdminController {
     };
   }
 
+  @Patch('stories/:storyId/publish')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Toggle story published state',
+    description:
+      'Toggles the isPublished flag for a story (publish/unpublish).',
+  })
+  @ApiParam({ name: 'storyId', type: String, description: 'Story ID' })
+  @ApiOkResponse({ description: 'Story published state toggled successfully' })
+  @ApiResponse({ status: 404, description: 'Story not found' })
+  async toggleStoryPublish(@Param('storyId') storyId: string) {
+    const data = await this.adminStoryService.toggleStoryPublish(storyId);
+    return {
+      statusCode: 200,
+      message: 'Story published state toggled successfully',
+      data,
+    };
+  }
+
   @Delete('stories/:storyId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
