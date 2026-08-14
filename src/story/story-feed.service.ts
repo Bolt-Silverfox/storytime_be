@@ -72,6 +72,7 @@ export class StoryFeedService {
   }> {
     const where: Prisma.StoryWhereInput = {
       isDeleted: false,
+      isPublished: true,
     };
 
     if (filter.theme) where.themes = { some: { id: filter.theme } };
@@ -302,7 +303,10 @@ export class StoryFeedService {
     // For topPicksFromUs, pagination is handled in the raw SQL query
     const [totalCount, queriedStories] = await Promise.all([
       filter.topPicksFromUs
-        ? this.storyRepository.countStoriesRaw({ isDeleted: false })
+        ? this.storyRepository.countStoriesRaw({
+            isDeleted: false,
+            isPublished: true,
+          })
         : this.storyRepository.countStoriesRaw(where),
       this.storyRepository.findManyStoriesRaw({
         where: freshWhere,
@@ -997,13 +1001,14 @@ export class StoryFeedService {
       preferredCategories.length > 0
         ? {
             isDeleted: false,
+            isPublished: true,
             categories: {
               some: {
                 id: { in: preferredCategories.map((c: Category) => c.id) },
               },
             },
           }
-        : { isDeleted: false };
+        : { isDeleted: false, isPublished: true };
     // Fresh-first: fetch unread recommendations, then top up with read ones.
     recommended = await this.storyRepository.findManyStoriesRaw({
       where: this.withUserReadFilter(recBaseWhere, userId, 'fresh'),
@@ -1036,6 +1041,7 @@ export class StoryFeedService {
         where: this.withUserReadFilter(
           {
             isDeleted: false,
+            isPublished: true,
             seasons: {
               some: {
                 id: { in: activeSeasons.map((s) => s.id) },
@@ -1060,6 +1066,7 @@ export class StoryFeedService {
         where: this.withUserReadFilter(
           {
             isDeleted: false,
+            isPublished: true,
             seasons: {
               some: {
                 id: { in: backfillSeasons.map((s) => s.id) },
@@ -1084,6 +1091,7 @@ export class StoryFeedService {
       seasonal,
       {
         isDeleted: false,
+        isPublished: true,
         seasons: {
           some: {
             id: {
@@ -1103,7 +1111,11 @@ export class StoryFeedService {
     // 3. Top Liked by Parents (fresh-first, then top up with read)
     const topLikedInclude: Prisma.StoryInclude = { images: true };
     let topLiked = await this.storyRepository.findManyStoriesRaw({
-      where: this.withUserReadFilter({ isDeleted: false }, userId, 'fresh'),
+      where: this.withUserReadFilter(
+        { isDeleted: false, isPublished: true },
+        userId,
+        'fresh',
+      ),
       orderBy: {
         parentFavorites: {
           _count: 'desc',
@@ -1114,7 +1126,7 @@ export class StoryFeedService {
     });
     topLiked = await this.topUpWithRead(
       topLiked,
-      { isDeleted: false },
+      { isDeleted: false, isPublished: true },
       userId,
       limitTopLiked,
       topLikedInclude,

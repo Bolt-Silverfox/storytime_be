@@ -38,6 +38,7 @@ export class AdminStoryService {
       search,
       recommended,
       aiGenerated,
+      isPublished,
       isDeleted,
       language,
       minAge,
@@ -58,6 +59,7 @@ export class AdminStoryService {
 
     if (typeof recommended === 'boolean') where.recommended = recommended;
     if (typeof aiGenerated === 'boolean') where.aiGenerated = aiGenerated;
+    if (typeof isPublished === 'boolean') where.isPublished = isPublished;
     if (typeof isDeleted === 'boolean') where.isDeleted = isDeleted;
     if (language) where.language = language;
     if (minAge) where.ageMin = { gte: minAge };
@@ -160,6 +162,29 @@ export class AdminStoryService {
       );
     }
 
+    return result;
+  }
+
+  async toggleStoryPublish(storyId: string): Promise<Story> {
+    const storyExists = await this.adminStoryRepository.storyExists(storyId);
+    if (!storyExists) {
+      throw new ResourceNotFoundException('Story', storyId);
+    }
+    const story = await this.adminStoryRepository.findStoryById(storyId);
+    if (!story) {
+      throw new ResourceNotFoundException('Story', storyId);
+    }
+    const result = await this.adminStoryRepository.updateStoryPublished({
+      storyId,
+      isPublished: !story.isPublished,
+    });
+    try {
+      await this.cacheManager.del(CACHE_KEYS.STORY_STATS);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to invalidate story stats cache: ${error.message}`,
+      );
+    }
     return result;
   }
 

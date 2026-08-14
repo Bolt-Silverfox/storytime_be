@@ -20,4 +20,20 @@ export class PrismaAdminEngagementRepository
   countFavorites(where?: Prisma.FavoriteWhereInput): Promise<number> {
     return this.prisma.favorite.count({ where });
   }
+
+  async getAverageSessionSeconds(start: Date, end: Date): Promise<number> {
+    const rows = await this.prisma.session.findMany({
+      where: {
+        isDeleted: false,
+        lastActivityAt: { not: null, gte: start, lte: end },
+      },
+      select: { createdAt: true, lastActivityAt: true },
+    });
+    if (rows.length === 0) return 0;
+    const totalSeconds = rows.reduce((sum, r) => {
+      const lastActivity = r.lastActivityAt as Date;
+      return sum + (lastActivity.getTime() - r.createdAt.getTime()) / 1000;
+    }, 0);
+    return totalSeconds / rows.length;
+  }
 }

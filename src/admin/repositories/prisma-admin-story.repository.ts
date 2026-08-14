@@ -98,6 +98,16 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
     });
   }
 
+  async updateStoryPublished(params: {
+    storyId: string;
+    isPublished: boolean;
+  }): Promise<Story> {
+    return this.prisma.story.update({
+      where: { id: params.storyId },
+      data: { isPublished: params.isPublished },
+    });
+  }
+
   async softDeleteStory(storyId: string): Promise<Story> {
     return this.prisma.story.update({
       where: { id: storyId },
