@@ -13,8 +13,14 @@ describe('AdminStoryService.getAllStories isPublished filter', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdminStoryService,
-        { provide: ADMIN_STORY_REPOSITORY, useValue: { findStories, countStories } },
-        { provide: CACHE_MANAGER, useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() } },
+        {
+          provide: ADMIN_STORY_REPOSITORY,
+          useValue: { findStories, countStories },
+        },
+        {
+          provide: CACHE_MANAGER,
+          useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(AdminStoryService);
@@ -23,7 +29,9 @@ describe('AdminStoryService.getAllStories isPublished filter', () => {
   it('passes isPublished:false through to the where clause', async () => {
     await service.getAllStories({ isPublished: false } as never);
     expect(findStories).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ isPublished: false }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({ isPublished: false }),
+      }),
     );
   });
 

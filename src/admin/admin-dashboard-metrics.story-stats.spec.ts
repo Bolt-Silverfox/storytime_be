@@ -42,7 +42,10 @@ describe('AdminDashboardMetricsService.getStoryStats', () => {
             countFavorites: jest.fn().mockResolvedValue(0),
           },
         },
-        { provide: CACHE_MANAGER, useValue: { get: jest.fn().mockResolvedValue(null), set: jest.fn() } },
+        {
+          provide: CACHE_MANAGER,
+          useValue: { get: jest.fn().mockResolvedValue(null), set: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -52,8 +55,14 @@ describe('AdminDashboardMetricsService.getStoryStats', () => {
   it('counts published and draft stories by isPublished', async () => {
     const result = await service.getStoryStats();
 
-    expect(countStories).toHaveBeenCalledWith({ isDeleted: false, isPublished: true });
-    expect(countStories).toHaveBeenCalledWith({ isDeleted: false, isPublished: false });
+    expect(countStories).toHaveBeenCalledWith({
+      isDeleted: false,
+      isPublished: true,
+    });
+    expect(countStories).toHaveBeenCalledWith({
+      isDeleted: false,
+      isPublished: false,
+    });
     expect(result.publishedStories).toBe(300);
     expect(result.draftStories).toBe(12);
   });

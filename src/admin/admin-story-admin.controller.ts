@@ -303,7 +303,8 @@ export class AdminStoryAdminController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Toggle story published state',
-    description: 'Toggles the isPublished flag for a story (publish/unpublish).',
+    description:
+      'Toggles the isPublished flag for a story (publish/unpublish).',
   })
   @ApiParam({ name: 'storyId', type: String, description: 'Story ID' })
   @ApiOkResponse({ description: 'Story published state toggled successfully' })

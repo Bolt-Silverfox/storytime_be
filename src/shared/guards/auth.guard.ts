@@ -121,7 +121,10 @@ export class AuthSessionGuard implements CanActivate {
       const last = session.lastActivityAt?.getTime() ?? 0;
       if (Date.now() - last > ACTIVITY_THROTTLE_MS) {
         void this.prisma.session
-          .update({ where: { id: session.id }, data: { lastActivityAt: new Date() } })
+          .update({
+            where: { id: session.id },
+            data: { lastActivityAt: new Date() },
+          })
           .catch(() => undefined);
       }
 

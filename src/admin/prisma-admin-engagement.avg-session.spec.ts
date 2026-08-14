@@ -2,7 +2,9 @@ import { PrismaAdminEngagementRepository } from './repositories/prisma-admin-eng
 
 describe('getAverageSessionSeconds', () => {
   function repoWith(rows: { createdAt: Date; lastActivityAt: Date | null }[]) {
-    const prisma = { session: { findMany: jest.fn().mockResolvedValue(rows) } } as never;
+    const prisma = {
+      session: { findMany: jest.fn().mockResolvedValue(rows) },
+    } as never;
     return new PrismaAdminEngagementRepository(prisma);
   }
 
@@ -12,7 +14,10 @@ describe('getAverageSessionSeconds', () => {
       { createdAt: new Date(base), lastActivityAt: new Date(base + 100_000) }, // 100s
       { createdAt: new Date(base), lastActivityAt: new Date(base + 300_000) }, // 300s
     ]);
-    const avg = await repo.getAverageSessionSeconds(new Date(base - 1000), new Date(base + 1_000_000));
+    const avg = await repo.getAverageSessionSeconds(
+      new Date(base - 1000),
+      new Date(base + 1_000_000),
+    );
     expect(avg).toBe(200);
   });
 
