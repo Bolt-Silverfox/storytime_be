@@ -114,6 +114,17 @@ export class AuthSessionGuard implements CanActivate {
         throw new UnauthorizedException('Session has expired');
       }
 
+      // Track last activity for avg-session-time analytics. Throttled to at most
+      // one write per 60s per session; fire-and-forget so it never adds latency
+      // or fails an otherwise-valid request.
+      const ACTIVITY_THROTTLE_MS = 60_000;
+      const last = session.lastActivityAt?.getTime() ?? 0;
+      if (Date.now() - last > ACTIVITY_THROTTLE_MS) {
+        void this.prisma.session
+          .update({ where: { id: session.id }, data: { lastActivityAt: new Date() } })
+          .catch(() => undefined);
+      }
+
       this.logger.debug(
         `Auth success [userId=${payload.userId.substring(0, 8)}...]`,
       );
