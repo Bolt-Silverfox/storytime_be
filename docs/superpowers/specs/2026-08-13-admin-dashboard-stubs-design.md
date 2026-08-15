@@ -58,12 +58,15 @@ shows up hot).
 
 ### Public surface (correctness-critical)
 
-Drafts must never reach kids/parents. The public-facing story **list/feed**
-queries get `isPublished: true` added to their `where`; single-story lookups
-used by public read paths are gated too. **Admin** repository queries stay
-unfiltered (admins see drafts). The exact query sites (across
-`src/story/repositories/*`) are enumerated in the implementation plan; the rule
-is: public read path → filter `isPublished: true`; admin path → no filter.
+Drafts must never surface to kids/parents through **discovery**. The
+public-facing story **list/feed** queries get `isPublished: true` added to their
+`where`; single-story lookups used by public read paths are gated too. **Admin**
+repository queries stay unfiltered (admins see drafts). The exact query sites
+(across `src/story/repositories/*`) are enumerated in the implementation plan;
+the rule is: public read path → filter `isPublished: true`; admin path → no
+filter. **Exception (see Non-goals):** progress/continue-reading/library joins —
+content a user already related to — are not strict-hidden in this pass, so a
+story unpublished *after* the fact can still appear there.
 
 ## Feature 2 — avgSessionTime via `Session.lastActivityAt`
 
