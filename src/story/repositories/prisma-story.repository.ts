@@ -275,6 +275,8 @@ export class PrismaStoryRepository implements IStoryRepository {
         completed: false,
         progress: { gt: 0 },
         isDeleted: false,
+        // Hide progress rows whose story has since been unpublished (draft).
+        story: { isPublished: true },
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
@@ -289,6 +291,7 @@ export class PrismaStoryRepository implements IStoryRepository {
         kidId,
         completed: true,
         isDeleted: false,
+        story: { isPublished: true },
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
@@ -355,6 +358,8 @@ export class PrismaStoryRepository implements IStoryRepository {
         completed: false,
         progress: { gt: 0 },
         isDeleted: false,
+        // Hide progress rows whose story has since been unpublished (draft).
+        story: { isPublished: true },
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
@@ -369,6 +374,7 @@ export class PrismaStoryRepository implements IStoryRepository {
         userId,
         completed: true,
         isDeleted: false,
+        story: { isPublished: true },
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
