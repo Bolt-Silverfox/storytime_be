@@ -63,7 +63,7 @@ export class PrismaGuestRepository implements IGuestRepository {
     });
   }
 
-  async findUserReadingHistory(userId: string): Promise<GuestUserHistoryRow[]> {
+  findUserReadingHistory(userId: string): Promise<GuestUserHistoryRow[]> {
     return this.prisma.userStoryProgress.findMany({
       // Hide history rows whose story has since been unpublished (draft).
       where: { userId, isDeleted: false, story: { isPublished: true } },
