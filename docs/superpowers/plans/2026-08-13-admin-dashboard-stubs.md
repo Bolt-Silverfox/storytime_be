@@ -4,7 +4,7 @@
 
 **Goal:** Replace two hardcoded admin-dashboard stubs with real data: `draftStories` (via a new `Story.isPublished` flag) and `averageSessionTime` (via a new `Session.lastActivityAt` timestamp).
 
-**Architecture:** Two independent, additive features. Feature 1 adds a boolean `Story.isPublished` (default `true`), surfaces it to admins (filter + toggle + counts), and filters it out of every public read path so drafts never reach kids/parents. Feature 2 adds `Session.lastActivityAt`, bumped throttled in the auth guard, and averages `lastActivityAt − createdAt` over a 30-day window for the dashboard.
+**Architecture:** Two independent, additive features. Feature 1 adds a boolean `Story.isPublished` (default `true`), surfaces it to admins (filter + toggle + counts), and filters it out of every public **discovery/read** path so drafts never surface to kids/parents (the one exception — progress/library joins for content a user already related to — is called out as a known limitation in Task 5). Feature 2 adds `Session.lastActivityAt`, bumped throttled in the auth guard, and averages `lastActivityAt − createdAt` over a 30-day window for the dashboard.
 
 **Tech Stack:** NestJS 11, Prisma 6 (PostgreSQL), Jest, pnpm.
 
@@ -17,7 +17,7 @@
 - **Branch:** `feat/admin-dashboard-stubs`; PR base `develop-v1.3.0`.
 - **Build:** `pnpm build`. If `nest build`/eslint hits a transient `Segmentation fault (core dumped)`, retry once.
 - **Lint** (avoid the segfaulting wrapper): `node ./node_modules/eslint/bin/eslint.js <files>`.
-- **Test:** `npx jest <path> --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src` (the `--roots`/ignore flags suppress stale `.claude/worktrees` haste-map collisions; ignore any `jest-haste-map` warnings).
+- **Test:** `npx jest <path> --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src` (the `--roots`/ignore flags suppress stale `.claude/worktrees` haste-map collisions; ignore any `jest-haste-map` warnings).
 
 ---
 
@@ -32,7 +32,7 @@
 - `src/admin/admin-story.service.ts` — filter wiring + `toggleStoryPublish`
 - `src/admin/repositories/admin-story.repository.interface.ts` + `prisma-admin-story.repository.ts` — `updateStoryPublished`
 - `src/admin/admin-story-admin.controller.ts` — `PATCH stories/:storyId/publish`
-- `src/story/story-feed.service.ts`, `src/story/story.service.ts`, `src/story/services/daily-challenge.service.ts`, `src/story/repositories/prisma-story.repository.ts` — public draft-hiding
+- `src/story/story-feed.service.ts`, `src/story/story.service.ts`, `src/story/daily-challenge.service.ts`, `src/story/repositories/prisma-story.repository.ts` — public draft-hiding
 
 **Feature 2 — avgSessionTime:**
 - `prisma/schema.prisma` — add `Session.lastActivityAt`
@@ -172,7 +172,7 @@ describe('AdminDashboardMetricsService.getStoryStats', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest src/admin/admin-dashboard-metrics.story-stats.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src`
+Run: `npx jest src/admin/admin-dashboard-metrics.story-stats.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src`
 Expected: FAIL — `publishedStories` is 312 (total) and `draftStories` is 0.
 
 - [ ] **Step 3: Implement the counts**
@@ -188,7 +188,7 @@ Then in the returned `StoryStatsDto`, replace `draftStories: 0,` with `draftStor
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx jest src/admin/admin-dashboard-metrics.story-stats.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src`
+Run: `npx jest src/admin/admin-dashboard-metrics.story-stats.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src`
 Expected: PASS.
 
 - [ ] **Step 5: Build + commit**
@@ -256,7 +256,7 @@ describe('AdminStoryService.getAllStories isPublished filter', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest src/admin/admin-story.filter.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src`
+Run: `npx jest src/admin/admin-story.filter.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src`
 Expected: FAIL — `isPublished` not in where.
 
 - [ ] **Step 3: Add the filter field to `StoryFilterDto`**
@@ -290,7 +290,7 @@ In `src/admin/dto/admin-responses.dto.ts`, in `StoryListItemDto`, after the `aiG
 
 - [ ] **Step 6: Run test + build**
 
-Run: `npx jest src/admin/admin-story.filter.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src && pnpm build`
+Run: `npx jest src/admin/admin-story.filter.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src && pnpm build`
 Expected: PASS + build succeeds.
 
 - [ ] **Step 7: Commit**
@@ -353,7 +353,7 @@ describe('AdminStoryService.toggleStoryPublish', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest src/admin/admin-story.toggle-publish.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src`
+Run: `npx jest src/admin/admin-story.toggle-publish.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src`
 Expected: FAIL — `toggleStoryPublish` / `updateStoryPublished` don't exist.
 
 - [ ] **Step 3: Add repo interface method**
@@ -438,7 +438,7 @@ In `src/admin/admin-story-admin.controller.ts`, mirror the `stories/:storyId/rec
 
 - [ ] **Step 7: Run test + build**
 
-Run: `npx jest src/admin/admin-story.toggle-publish.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src && pnpm build`
+Run: `npx jest src/admin/admin-story.toggle-publish.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src && pnpm build`
 Expected: PASS + build.
 
 - [ ] **Step 8: Commit**
@@ -455,7 +455,7 @@ git commit -m "feat(admin): add publish/unpublish toggle endpoint for stories"
 **Files:**
 - Modify: `src/story/story-feed.service.ts` (base where + home carousels + topPicks count)
 - Modify: `src/story/story.service.ts` (`getStoryById`, `getTopPicksFromParents`, `getTopPicksFromUs`, daily-challenge pool)
-- Modify: `src/story/services/daily-challenge.service.ts` (assignment pool)
+- Modify: `src/story/daily-challenge.service.ts` (assignment pool)
 - Modify: `src/story/repositories/prisma-story.repository.ts` (raw-SQL id generators)
 - Test: `src/story/story-feed.draft-hiding.spec.ts` (create) — chokepoint coverage
 
@@ -504,7 +504,7 @@ it('getStoryById filters isPublished: true', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest src/story/story-feed.draft-hiding.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src`
+Run: `npx jest src/story/story-feed.draft-hiding.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src`
 Expected: FAIL — where has no `isPublished`.
 
 - [ ] **Step 3: Edit `story-feed.service.ts`**
@@ -532,18 +532,18 @@ Expected: FAIL — where has no `isPublished`.
 
 - [ ] **Step 7: Run test + build**
 
-Run: `npx jest src/story/story-feed.draft-hiding.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src && pnpm build`
+Run: `npx jest src/story/story-feed.draft-hiding.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src && pnpm build`
 Expected: PASS + build.
 
 - [ ] **Step 8: Regression-run the story test suite**
 
-Run: `npx jest src/story --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src`
+Run: `npx jest src/story --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src`
 Expected: existing story tests still pass.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/story/story-feed.service.ts src/story/story.service.ts src/story/services/daily-challenge.service.ts src/story/repositories/prisma-story.repository.ts src/story/story-feed.draft-hiding.spec.ts
+git add src/story/story-feed.service.ts src/story/story.service.ts src/story/daily-challenge.service.ts src/story/repositories/prisma-story.repository.ts src/story/story-feed.draft-hiding.spec.ts
 git commit -m "feat(story): hide unpublished (draft) stories from public read paths"
 ```
 
@@ -661,7 +661,7 @@ it('does NOT bump when lastActivityAt is fresh (< 60s)', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest src/shared/guards/auth.guard.last-activity.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src`
+Run: `npx jest src/shared/guards/auth.guard.last-activity.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src`
 Expected: FAIL — no update call.
 
 - [ ] **Step 3: Implement the throttled bump**
@@ -683,7 +683,7 @@ In `src/shared/guards/auth.guard.ts`, inside `validateRequest`, after the `sessi
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx jest src/shared/guards/auth.guard.last-activity.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src`
+Run: `npx jest src/shared/guards/auth.guard.last-activity.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src`
 Expected: PASS (all 3).
 
 - [ ] **Step 5: Build + commit**
@@ -739,7 +739,7 @@ describe('getAverageSessionSeconds', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest src/admin/prisma-admin-engagement.avg-session.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src`
+Run: `npx jest src/admin/prisma-admin-engagement.avg-session.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src`
 Expected: FAIL — method missing.
 
 - [ ] **Step 3: Add the interface method**
@@ -789,7 +789,7 @@ In `src/admin/admin-dashboard-metrics.service.ts`, replace `const avgSessionTime
 
 - [ ] **Step 6: Run test + build**
 
-Run: `npx jest src/admin/prisma-admin-engagement.avg-session.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=/home/williams/Documents/storytime/storytime_be/src && pnpm build`
+Run: `npx jest src/admin/prisma-admin-engagement.avg-session.spec.ts --modulePathIgnorePatterns='/.claude/worktrees/' --roots=src && pnpm build`
 Expected: PASS + build.
 
 - [ ] **Step 7: Commit**
