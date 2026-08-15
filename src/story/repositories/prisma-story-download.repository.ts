@@ -48,7 +48,8 @@ export class PrismaStoryDownloadRepository implements IStoryDownloadRepository {
     opts?: { take?: number; cursor?: string },
   ): Promise<DownloadedStoryWithStory[]> {
     return await this.prisma.downloadedStory.findMany({
-      where: { kidId },
+      // Hide downloaded stories that have since been unpublished (draft).
+      where: { kidId, story: { isPublished: true } },
       include: { story: true },
       orderBy: [{ downloadedAt: 'desc' }, { id: 'asc' }],
       ...(opts?.take !== undefined ? { take: opts.take } : {}),

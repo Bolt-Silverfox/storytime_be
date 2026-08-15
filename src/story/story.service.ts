@@ -631,7 +631,8 @@ export class StoryService {
 
   async addDownload(kidId: string, storyId: string) {
     const story = await this.storyRepository.findUniqueStoryRaw({
-      where: { id: storyId, isDeleted: false },
+      // Reject a known draft id: a draft can't be added to a kid's library.
+      where: { id: storyId, isDeleted: false, isPublished: true },
     });
     if (!story) throw new NotFoundException('Story not found');
     return await this.storyRepository.upsertDownload(kidId, storyId);
