@@ -475,6 +475,7 @@ export class StoryService {
           ageMin: { lte: kidAge },
           ageMax: { gte: kidAge },
           isDeleted: false,
+          isPublished: true,
         },
       });
       if (stories.length === 0) continue;
@@ -551,7 +552,7 @@ export class StoryService {
 
   async getStoryById(id: string) {
     const story = await this.storyRepository.findUniqueStoryRaw({
-      where: { id, isDeleted: false },
+      where: { id, isDeleted: false, isPublished: true },
       include: {
         images: true,
         branches: true,
@@ -630,7 +631,8 @@ export class StoryService {
 
   async addDownload(kidId: string, storyId: string) {
     const story = await this.storyRepository.findUniqueStoryRaw({
-      where: { id: storyId, isDeleted: false },
+      // Reject a known draft id: a draft can't be added to a kid's library.
+      where: { id: storyId, isDeleted: false, isPublished: true },
     });
     if (!story) throw new NotFoundException('Story not found');
     return await this.storyRepository.upsertDownload(kidId, storyId);
@@ -693,7 +695,7 @@ export class StoryService {
 
     const storyIds = topStories.map((s) => s.storyId);
     const stories = await this.storyRepository.findManyStoriesRaw({
-      where: { id: { in: storyIds }, isDeleted: false },
+      where: { id: { in: storyIds }, isDeleted: false, isPublished: true },
       include: {
         themes: true,
         categories: true,
@@ -742,7 +744,7 @@ export class StoryService {
 
     // Fetch full story objects with relations
     return this.storyRepository.findManyStoriesRaw({
-      where: { id: { in: randomIds } },
+      where: { id: { in: randomIds }, isPublished: true },
       include: {
         themes: true,
         categories: true,

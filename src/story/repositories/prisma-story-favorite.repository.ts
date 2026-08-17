@@ -33,7 +33,11 @@ export class PrismaStoryFavoriteRepository implements IStoryFavoriteRepository {
     opts?: { take?: number; cursor?: string },
   ): Promise<FavoriteWithStory[]> {
     return await this.prisma.favorite.findMany({
-      where: { kidId, isDeleted: false, story: { isDeleted: false } },
+      where: {
+        kidId,
+        isDeleted: false,
+        story: { isDeleted: false, isPublished: true },
+      },
       include: { story: true },
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       ...(opts?.take !== undefined ? { take: opts.take } : {}),
