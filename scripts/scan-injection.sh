@@ -80,15 +80,22 @@ for f in "${files[@]}"; do
   is_scan_target "$f" || continue
   is_allowed "$f" && continue        # reviewed known-good minified/vendored file
 
-  # (1) Obfuscated blob: a single absurdly long line — executable code only
-  # (JSON/data is legitimately one long line and is inert).
-  if is_executable_code "$f" && ! awk -v m="$MAX_LINE" 'length($0) > m { exit 1 }' "$f"; then
-    bad+="${f}: overlong line (>${MAX_LINE} chars) — obfuscated code blob\n"
+  # (1) Obfuscated CODE blob: an overlong line that ALSO carries obfuscation /
+  # dynamic-exec hallmarks. Overlong ALONE is legit in real source (SVG path
+  # data in icon components, long className strings, data URIs), so we require a
+  # malicious signature ON the long line. The worm's payload line is packed with
+  # _0x… hex identifiers and =require(, so it is caught; a shadcn icon's long
+  # SVG line is not. JSON/data is inert and excluded from this rule entirely.
+  if is_executable_code "$f" \
+     && awk -v m="$MAX_LINE" 'length($0) > m' "$f" \
+        | grep -qaE "_0x[0-9a-fA-F]{4,}|=[[:space:]]*require\(|String\.fromCharCode\(|eval\(|atob\(|Function\("; then
+    bad+="${f}: overlong obfuscated code line (blob payload)\n"
     continue
   fi
 
-  # (2) Require-hijack / dynamic-exec / obfuscation hallmarks of the stager.
-  if grep -qE "global\[[^]]+\][[:space:]]*=[[:space:]]*require|global\.[A-Za-z_\$][A-Za-z0-9_\$]*[[:space:]]*=[[:space:]]*require|String\.fromCharCode\(|(_0x[0-9a-fA-F]{4,}[^_]*){3,}" "$f"; then
+  # (2) Require-hijack / char-code obfuscation hallmarks anywhere (line length
+  # independent — the stager's require shim/hijack may sit on short lines too).
+  if grep -qE "global\[[^]]+\][[:space:]]*=[[:space:]]*require|global\.[A-Za-z_\$][A-Za-z0-9_\$]*[[:space:]]*=[[:space:]]*require|String\.fromCharCode\([^)]*,[^)]*,[^)]*,|(_0x[0-9a-fA-F]{4,}[^_]*){4,}" "$f"; then
     bad+="${f}: require-hijack / char-code / hex-identifier obfuscation\n"
     continue
   fi
