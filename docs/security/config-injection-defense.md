@@ -74,8 +74,9 @@ For each repo, for each protected/deploy branch (`dev`, `develop-v1.3.0`,
 1. **Settings → Branches → Branch protection rules → Add/Edit** for the branch
    (or branch pattern).
 2. Enable **Require status checks to pass before merging**.
-3. Search and require the check named **`config-injection + disguised-font scan`**
-   (the job name from the reusable workflow).
+3. Search and require the check by name. **The name differs by repo:**
+   - in **storytime_be** (runs the workflow directly): `config-injection + disguised-font scan`
+   - in **every other repo** (thin caller job named `scan`): `scan / config-injection + disguised-font scan`
 4. Recommended: also enable **Require branches to be up to date before merging**
    and protect `.github/` + `scripts/scan-injection.sh` with a CODEOWNERS review
    so the gate itself can't be quietly weakened.
