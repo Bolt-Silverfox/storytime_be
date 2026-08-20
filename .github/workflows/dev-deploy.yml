@@ -120,9 +120,6 @@ jobs:
             52.18.195.224:22
             emerj-shared-db.cvq22s4q62o3.eu-west-1.rds.amazonaws.com:5432
 
-      - name: Egress canary (expected to be BLOCKED)
-        run: curl -m 10 -sSf https://example.com >/dev/null && echo "NOT BLOCKED — policy failed" || echo "blocked as expected"
-
       - name: Checkout
         uses: actions/checkout@v4
 
