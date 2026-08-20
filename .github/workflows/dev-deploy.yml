@@ -144,12 +144,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
-      - name: Create .env file
-        run: |
-          cat > .env << 'EOF'
-          ${{ secrets.ENV_FILE }}
-          EOF
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
@@ -167,10 +161,6 @@ jobs:
             dist/
             node_modules/.prisma/
           retention-days: 1
-
-      - name: Cleanup sensitive files
-        if: always()
-        run: rm -f .env
 
   # ===================
   # Test (runs on all events)
