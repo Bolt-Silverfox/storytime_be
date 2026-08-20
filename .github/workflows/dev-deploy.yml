@@ -496,7 +496,7 @@ jobs:
             cd /home/ubuntu/storytime/development/storytime-api
 
             # Install Node dependencies
-            pnpm install --frozen-lockfile --ignore-scripts
+            pnpm install --frozen-lockfile
 
             # Ensure python3-venv is available (required for venv creation)
             sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv
