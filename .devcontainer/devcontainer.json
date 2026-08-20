@@ -1,0 +1,10 @@
+{
+  "name": "storytime_be (sandboxed)",
+  "build": { "dockerfile": "Dockerfile" },
+  "workspaceFolder": "/workspace",
+  "runArgs": ["--init"],
+  "mounts": [],
+  "remoteEnv": { "GIT_CONFIG_GLOBAL": "/dev/null" },
+  "postCreateCommand": "pnpm install --frozen-lockfile --ignore-scripts",
+  "customizations": { "vscode": { "extensions": ["dbaeumer.vscode-eslint"] } }
+}
