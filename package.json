@@ -42,7 +42,7 @@
     "@bull-board/api": "^6.18.0",
     "@bull-board/express": "^6.18.0",
     "@bull-board/nestjs": "^6.18.0",
-    "@deepgram/sdk": "^4.11.3",
+    "@deepgram/sdk": "^5.8.0",
     "@google/genai": "^1.42.0",
     "@google/generative-ai": "^0.24.1",
     "@gradio/client": "^2.0.4",
