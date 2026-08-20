@@ -26,10 +26,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Harden runner (audit)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          egress-policy: audit
+      - name: Harden runner
+        uses: ./.github/actions/harden
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,10 +85,11 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Harden runner (audit)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          egress-policy: audit
+      - name: Harden runner
+        uses: ./.github/actions/harden
+
+      - name: Egress canary (expected to be BLOCKED)
+        run: curl -m 10 -sSf https://example.com >/dev/null && echo "NOT BLOCKED — policy failed" || echo "blocked as expected"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -184,10 +183,8 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Harden runner (audit)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          egress-policy: audit
+      - name: Harden runner
+        uses: ./.github/actions/harden
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -270,10 +267,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Harden runner (audit)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          egress-policy: audit
+      - name: Harden runner
+        uses: ./.github/actions/harden
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -334,10 +329,8 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
     steps:
-      - name: Harden runner (audit)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          egress-policy: audit
+      - name: Harden runner
+        uses: ./.github/actions/harden
 
       - name: Checkout
         uses: actions/checkout@v4
