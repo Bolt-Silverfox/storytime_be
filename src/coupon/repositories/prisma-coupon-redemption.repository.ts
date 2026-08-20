@@ -4,9 +4,7 @@ import type { ICouponRedemptionRepository } from './coupon-redemption.repository
 import type { CouponRedemption, Prisma } from '@prisma/client';
 
 @Injectable()
-export class PrismaCouponRedemptionRepository
-  implements ICouponRedemptionRepository
-{
+export class PrismaCouponRedemptionRepository implements ICouponRedemptionRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findUniqueByCouponAndUser(

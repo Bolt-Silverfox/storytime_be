@@ -9,9 +9,7 @@ import type {
 } from './admin-subscription.repository.interface';
 
 @Injectable()
-export class PrismaAdminSubscriptionRepository
-  implements IAdminSubscriptionRepository
-{
+export class PrismaAdminSubscriptionRepository implements IAdminSubscriptionRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   count(where: Prisma.SubscriptionWhereInput): Promise<number> {

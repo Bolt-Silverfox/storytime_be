@@ -155,9 +155,7 @@ describe('EmailVerificationService', () => {
   describe('verifyEmail', () => {
     it('should verify email successfully with valid token', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockTokenRecord as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockTokenRecord);
       authRepository.updateUser.mockResolvedValue({} as any);
       authRepository.deleteToken.mockResolvedValue(undefined);
 
@@ -182,9 +180,7 @@ describe('EmailVerificationService', () => {
 
     it('should emit USER_EMAIL_VERIFIED event on success', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockTokenRecord as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockTokenRecord);
       authRepository.updateUser.mockResolvedValue({} as any);
       authRepository.deleteToken.mockResolvedValue(undefined);
 
@@ -218,9 +214,7 @@ describe('EmailVerificationService', () => {
         ...mockTokenRecord,
         expiresAt: new Date('2020-01-01'),
       };
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        expiredToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
       authRepository.deleteToken.mockResolvedValue(undefined);
 
       // Act & Assert
@@ -236,9 +230,7 @@ describe('EmailVerificationService', () => {
         ...mockTokenRecord,
         expiresAt: new Date('2020-01-01'),
       };
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        expiredToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
       authRepository.deleteToken.mockResolvedValue(undefined);
 
       // Act & Assert

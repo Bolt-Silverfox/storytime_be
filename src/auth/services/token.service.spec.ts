@@ -302,9 +302,7 @@ describe('TokenService', () => {
   describe('findSessionByRefreshToken', () => {
     it('should find session by hashed refresh token', async () => {
       // Arrange
-      authRepository.findSessionByToken.mockResolvedValue(
-        mockSessionWithUser as any,
-      );
+      authRepository.findSessionByToken.mockResolvedValue(mockSessionWithUser);
 
       // Act
       const result =

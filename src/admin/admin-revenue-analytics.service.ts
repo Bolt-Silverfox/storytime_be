@@ -246,11 +246,7 @@ export class AdminRevenueAnalyticsService {
 
   async getAiCreditAnalytics(
     duration:
-      | 'yearly'
-      | 'quarterly'
-      | 'monthly'
-      | 'weekly'
-      | 'daily' = 'yearly',
+      'yearly' | 'quarterly' | 'monthly' | 'weekly' | 'daily' = 'yearly',
   ): Promise<AiCreditAnalyticsDto> {
     const now = new Date();
     let startDate: Date;

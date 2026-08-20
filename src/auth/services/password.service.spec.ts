@@ -273,9 +273,7 @@ describe('PasswordService', () => {
   describe('validateResetToken', () => {
     it('should return success for a valid token', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
 
       // Act
       const result = await service.validateResetToken(
@@ -312,9 +310,7 @@ describe('PasswordService', () => {
         ...mockResetToken,
         expiresAt: new Date('2020-01-01'),
       };
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        expiredToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
       authRepository.deleteToken.mockResolvedValue(undefined);
 
       // Act & Assert
@@ -329,9 +325,7 @@ describe('PasswordService', () => {
 
     it('should throw UnauthorizedException when email does not match token user', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
 
       // Act & Assert
       await expect(
@@ -346,9 +340,7 @@ describe('PasswordService', () => {
   describe('resetPassword', () => {
     it('should reset password successfully with valid token', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
       authRepository.updateUser.mockResolvedValue({} as any);
       authRepository.deleteToken.mockResolvedValue(undefined);
       authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
@@ -380,9 +372,7 @@ describe('PasswordService', () => {
 
     it('should record the requesting IP as known on successful completion', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
       authRepository.updateUser.mockResolvedValue({} as any);
       authRepository.deleteToken.mockResolvedValue(undefined);
       authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
@@ -413,9 +403,7 @@ describe('PasswordService', () => {
 
     it('should touch an already-known IP on completion without duplicating it', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
       authRepository.updateUser.mockResolvedValue({} as any);
       authRepository.deleteToken.mockResolvedValue(undefined);
       authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
@@ -443,9 +431,7 @@ describe('PasswordService', () => {
 
     it('should still complete the reset when IP recording fails', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
       authRepository.updateUser.mockResolvedValue({} as any);
       authRepository.deleteToken.mockResolvedValue(undefined);
       authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
@@ -499,9 +485,7 @@ describe('PasswordService', () => {
         ...mockResetToken,
         expiresAt: new Date('2020-01-01'),
       };
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        expiredToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
       authRepository.deleteToken.mockResolvedValue(undefined);
 
       // Act & Assert
@@ -522,9 +506,7 @@ describe('PasswordService', () => {
 
     it('should invalidate all user sessions after password reset', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
       authRepository.updateUser.mockResolvedValue({} as any);
       authRepository.deleteToken.mockResolvedValue(undefined);
       authRepository.deleteAllUserSessions.mockResolvedValue(undefined);

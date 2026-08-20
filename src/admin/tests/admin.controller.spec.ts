@@ -156,7 +156,7 @@ describe('AdminController', () => {
       const mockResult = { data: [{ id: 'story-1' }], meta: { total: 1 } };
       adminStoryService.getAllStories.mockResolvedValue(mockResult);
 
-      const result = (await storyController.getAllStories({} as any)) as any;
+      const result = (await storyController.getAllStories({})) as any;
 
       expect(result.data).toEqual(mockResult.data);
       expect(result.meta).toEqual(mockResult.meta);

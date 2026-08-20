@@ -68,9 +68,7 @@ export class QueueHealthIndicator extends HealthIndicator {
 
       const result: QueueHealthResult = {
         duration: `${duration}ms`,
-        queues: Object.fromEntries(
-          queueStats.map((q) => [q.name, q]),
-        ) as Record<string, QueueStats>,
+        queues: Object.fromEntries(queueStats.map((q) => [q.name, q])),
         totalWaiting: queueStats.reduce((sum, q) => sum + q.waiting, 0),
         totalActive: queueStats.reduce((sum, q) => sum + q.active, 0),
         totalFailed: queueStats.reduce((sum, q) => sum + q.failed, 0),

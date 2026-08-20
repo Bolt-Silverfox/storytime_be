@@ -4,9 +4,7 @@ import { Prisma } from '@prisma/client';
 import type { IAdminEngagementRepository } from './admin-engagement.repository.interface';
 
 @Injectable()
-export class PrismaAdminEngagementRepository
-  implements IAdminEngagementRepository
-{
+export class PrismaAdminEngagementRepository implements IAdminEngagementRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   countKids(where: Prisma.KidWhereInput): Promise<number> {

@@ -66,11 +66,7 @@ export class AdminAnalyticsService {
 
   async getAiCreditAnalytics(
     duration:
-      | 'yearly'
-      | 'quarterly'
-      | 'monthly'
-      | 'weekly'
-      | 'daily' = 'yearly',
+      'yearly' | 'quarterly' | 'monthly' | 'weekly' | 'daily' = 'yearly',
   ): Promise<AiCreditAnalyticsDto> {
     return this.revenueAnalyticsService.getAiCreditAnalytics(duration);
   }

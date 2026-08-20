@@ -7,9 +7,7 @@ import type {
 import type { QuestionAnswer, Prisma } from '@prisma/client';
 
 @Injectable()
-export class PrismaQuestionAnswerRepository
-  implements IQuestionAnswerRepository
-{
+export class PrismaQuestionAnswerRepository implements IQuestionAnswerRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async createAnswer(
