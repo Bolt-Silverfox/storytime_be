@@ -27,7 +27,7 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        uses: ./.github/actions/harden
+        uses: Bolt-Silverfox/storytime_be/.github/actions/harden@abf15975333de44e5f5ea47707786d6fc7e23f96
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -86,7 +86,7 @@ jobs:
 
     steps:
       - name: Harden runner
-        uses: ./.github/actions/harden
+        uses: Bolt-Silverfox/storytime_be/.github/actions/harden@abf15975333de44e5f5ea47707786d6fc7e23f96
 
       - name: Egress canary (expected to be BLOCKED)
         run: curl -m 10 -sSf https://example.com >/dev/null && echo "NOT BLOCKED — policy failed" || echo "blocked as expected"
@@ -184,7 +184,7 @@ jobs:
 
     steps:
       - name: Harden runner
-        uses: ./.github/actions/harden
+        uses: Bolt-Silverfox/storytime_be/.github/actions/harden@abf15975333de44e5f5ea47707786d6fc7e23f96
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -268,7 +268,7 @@ jobs:
       contents: write
     steps:
       - name: Harden runner
-        uses: ./.github/actions/harden
+        uses: Bolt-Silverfox/storytime_be/.github/actions/harden@abf15975333de44e5f5ea47707786d6fc7e23f96
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -330,7 +330,7 @@ jobs:
 
     steps:
       - name: Harden runner
-        uses: ./.github/actions/harden
+        uses: Bolt-Silverfox/storytime_be/.github/actions/harden@abf15975333de44e5f5ea47707786d6fc7e23f96
 
       - name: Checkout
         uses: actions/checkout@v4
