@@ -84,7 +84,7 @@ export class PrismaStoryCoreRepository implements IStoryCoreRepository {
 
     // When excludeContent is true, use select to exclude textContent
     if (params.excludeContent) {
-      return (await this.prisma.story.findMany({
+      return await this.prisma.story.findMany({
         where: params.where,
         ...(params.cursor ? { cursor: { id: params.cursor.id } } : {}),
         skip: skipValue,
@@ -99,7 +99,7 @@ export class PrismaStoryCoreRepository implements IStoryCoreRepository {
           seasons: true,
           ...params.include,
         },
-      })) as unknown as StoryWithRelations[];
+      });
     }
 
     return await this.prisma.story.findMany({

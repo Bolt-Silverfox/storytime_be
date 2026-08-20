@@ -221,11 +221,7 @@ describe('StoryController', () => {
         null,
       );
       await expect(
-        coreController.updateStory(
-          mockReq,
-          'non-existent-story',
-          {} as UpdateStoryDto,
-        ),
+        coreController.updateStory(mockReq, 'non-existent-story', {}),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -237,7 +233,7 @@ describe('StoryController', () => {
         creatorKid: { parentId: 'other-user' },
       });
       await expect(
-        coreController.updateStory(mockReq, 'story-123', {} as UpdateStoryDto),
+        coreController.updateStory(mockReq, 'story-123', {}),
       ).rejects.toThrow(ForbiddenException);
       expect(mockStoryService.updateStory).not.toHaveBeenCalled();
     });

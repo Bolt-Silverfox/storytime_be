@@ -337,9 +337,7 @@ export class NotificationService {
   async subscribeAllExistingDevicesToTopic(
     topic?: string,
   ): Promise<{ total: number; batches: number }> {
-    return this.deviceService.subscribeAllExistingDevicesToTopic(
-      topic as string,
-    );
+    return this.deviceService.subscribeAllExistingDevicesToTopic(topic);
   }
 
   /**

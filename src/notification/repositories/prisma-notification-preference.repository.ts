@@ -11,9 +11,7 @@ import type {
 } from '@prisma/client';
 
 @Injectable()
-export class PrismaNotificationPreferenceRepository
-  implements INotificationPreferenceRepository
-{
+export class PrismaNotificationPreferenceRepository implements INotificationPreferenceRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findUser(userId: string): Promise<User | null> {

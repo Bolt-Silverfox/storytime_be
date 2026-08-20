@@ -4,9 +4,7 @@ import type { IPaymentTransactionRepository } from './payment-transaction.reposi
 import type { PaymentTransaction } from '@prisma/client';
 
 @Injectable()
-export class PrismaPaymentTransactionRepository
-  implements IPaymentTransactionRepository
-{
+export class PrismaPaymentTransactionRepository implements IPaymentTransactionRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findManyByUser(userId: string): Promise<PaymentTransaction[]> {

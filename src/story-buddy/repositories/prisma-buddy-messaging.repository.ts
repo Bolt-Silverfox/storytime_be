@@ -8,9 +8,7 @@ import type {
 import type { BuddyInteraction } from '@prisma/client';
 
 @Injectable()
-export class PrismaBuddyMessagingRepository
-  implements IBuddyMessagingRepository
-{
+export class PrismaBuddyMessagingRepository implements IBuddyMessagingRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findChallengeContext(

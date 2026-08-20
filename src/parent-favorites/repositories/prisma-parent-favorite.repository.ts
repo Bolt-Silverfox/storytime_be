@@ -7,9 +7,7 @@ import type {
 import type { ParentFavorite } from '@prisma/client';
 
 @Injectable()
-export class PrismaParentFavoriteRepository
-  implements IParentFavoriteRepository
-{
+export class PrismaParentFavoriteRepository implements IParentFavoriteRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async createParentFavorite(

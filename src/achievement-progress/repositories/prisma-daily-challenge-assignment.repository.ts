@@ -4,9 +4,7 @@ import type { IDailyChallengeAssignmentRepository } from './daily-challenge-assi
 import type { DailyChallengeAssignment } from '@prisma/client';
 
 @Injectable()
-export class PrismaDailyChallengeAssignmentRepository
-  implements IDailyChallengeAssignmentRepository
-{
+export class PrismaDailyChallengeAssignmentRepository implements IDailyChallengeAssignmentRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async countCompletedForKids(kidIds: string[]): Promise<number> {

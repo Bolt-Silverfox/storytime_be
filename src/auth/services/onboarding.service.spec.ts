@@ -107,7 +107,7 @@ describe('OnboardingService', () => {
     it('should register a new user successfully', async () => {
       authRepository.findUserByEmail.mockResolvedValue(null);
       passwordService.hashPassword.mockResolvedValue('hashed_password');
-      authRepository.createUser.mockResolvedValue(mockUser as any);
+      authRepository.createUser.mockResolvedValue(mockUser);
       tokenService.createTokenPair.mockResolvedValue({
         jwt: 'jwt-token',
         refreshToken: 'refresh-token',
@@ -127,10 +127,10 @@ describe('OnboardingService', () => {
 
   describe('completeProfile', () => {
     it('should complete profile successfully', async () => {
-      authRepository.findUserByIdWithProfile.mockResolvedValue(mockUser as any);
+      authRepository.findUserByIdWithProfile.mockResolvedValue(mockUser);
       authRepository.updateProfile.mockResolvedValue(mockProfile as any);
       authRepository.findUserByIdWithLearningExpectations.mockResolvedValue(
-        mockUser as any,
+        mockUser,
       );
       authRepository.countKidsByParentId.mockResolvedValue(2);
 
@@ -154,10 +154,10 @@ describe('OnboardingService', () => {
 
   describe('updateProfile', () => {
     it('should update profile successfully', async () => {
-      authRepository.findUserByIdWithProfile.mockResolvedValue(mockUser as any);
+      authRepository.findUserByIdWithProfile.mockResolvedValue(mockUser);
       authRepository.upsertProfile.mockResolvedValue(mockProfile as any);
       authRepository.findUserByIdWithLearningExpectations.mockResolvedValue(
-        mockUser as any,
+        mockUser,
       );
       authRepository.countKidsByParentId.mockResolvedValue(2);
 

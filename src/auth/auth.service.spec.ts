@@ -73,7 +73,7 @@ describe('AuthService', () => {
       tokenService.createTokenPair.mockResolvedValue({
         jwt: 'jwt-token',
         refreshToken: 'refresh-token',
-      } as any);
+      });
 
       const result = await service.login({
         email: 'test@example.com',
@@ -126,7 +126,7 @@ describe('AuthService', () => {
         id: 'session-1',
         user: { ...mockUser },
       };
-      tokenService.findSessionByRefreshToken.mockResolvedValue(session as any);
+      tokenService.findSessionByRefreshToken.mockResolvedValue(session);
       tokenService.generateJwt.mockReturnValue('new-jwt-token');
 
       const result = await service.refresh('valid-refresh-token');

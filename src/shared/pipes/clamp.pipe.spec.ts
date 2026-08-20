@@ -70,19 +70,19 @@ describe('ClampPipe', () => {
     });
 
     it('should handle invalid min option', () => {
-      const pipe = new ClampPipe({ min: NaN } as ClampPipeOptions);
+      const pipe = new ClampPipe({ min: NaN });
       // Should fall back to default min of 1
       expect(pipe.transform(0, mockMetadata)).toBe(1);
     });
 
     it('should handle invalid max option', () => {
-      const pipe = new ClampPipe({ max: Infinity } as ClampPipeOptions);
+      const pipe = new ClampPipe({ max: Infinity });
       // Should fall back to default max of 100
       expect(pipe.transform(150, mockMetadata)).toBe(100);
     });
 
     it('should handle invalid default option', () => {
-      const pipe = new ClampPipe({ default: NaN } as ClampPipeOptions);
+      const pipe = new ClampPipe({ default: NaN });
       // Should fall back to default value of 10
       expect(pipe.transform(undefined, mockMetadata)).toBe(10);
     });

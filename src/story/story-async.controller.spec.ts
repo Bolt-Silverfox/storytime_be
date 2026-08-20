@@ -65,10 +65,7 @@ describe('StoryAsyncController', () => {
         estimatedWaitTime: 35,
       });
 
-      const result = await controller.enqueueStoryGeneration(
-        mockReq,
-        {} as GenerateStoryDto,
-      );
+      const result = await controller.enqueueStoryGeneration(mockReq, {});
 
       expect(mockStoryQueueService.queueStoryGeneration).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -152,7 +149,7 @@ describe('StoryAsyncController', () => {
       await expect(
         controller.enqueueStoryGeneration(mockReq, {
           kidId: 'kid-999',
-        } as GenerateStoryDto),
+        }),
       ).rejects.toThrow(NotFoundException);
       expect(mockStoryQueueService.queueStoryForKid).not.toHaveBeenCalled();
     });
@@ -165,7 +162,7 @@ describe('StoryAsyncController', () => {
       });
 
       await expect(
-        controller.enqueueStoryGeneration(mockReq, {} as GenerateStoryDto),
+        controller.enqueueStoryGeneration(mockReq, {}),
       ).rejects.toThrow(ServiceUnavailableException);
     });
   });

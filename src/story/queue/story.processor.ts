@@ -224,9 +224,7 @@ export class StoryProcessor extends WorkerHost {
     if (error instanceof DomainException) {
       const status = error.getStatus();
       return (
-        status >= 400 &&
-        status < 500 &&
-        status !== (HttpStatus.TOO_MANY_REQUESTS as number)
+        status >= 400 && status < 500 && status !== HttpStatus.TOO_MANY_REQUESTS
       );
     }
 

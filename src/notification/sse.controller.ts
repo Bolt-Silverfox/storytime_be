@@ -75,28 +75,22 @@ export class SseController {
 
     // Heartbeat every 30 seconds to keep connection alive
     const heartbeat$ = interval(30000).pipe(
-      map(
-        () =>
-          ({
-            data: JSON.stringify({
-              type: 'heartbeat',
-              timestamp: new Date().toISOString(),
-            }),
-            type: 'heartbeat',
-          }) as MessageEvent,
-      ),
+      map(() => ({
+        data: JSON.stringify({
+          type: 'heartbeat',
+          timestamp: new Date().toISOString(),
+        }),
+        type: 'heartbeat',
+      })),
     );
 
     // User job events
     const events$ = this.jobEventsService.subscribeToUserEvents(userId).pipe(
-      map(
-        (event) =>
-          ({
-            data: event.data,
-            id: event.id,
-            type: event.type,
-          }) as MessageEvent,
-      ),
+      map((event) => ({
+        data: event.data,
+        id: event.id,
+        type: event.type,
+      })),
     );
 
     // Merge heartbeat with actual events
@@ -137,16 +131,13 @@ export class SseController {
     // Heartbeat every 15 seconds for single job tracking
     const heartbeat$ = interval(15000).pipe(
       takeWhile(() => !isFinished),
-      map(
-        () =>
-          ({
-            data: JSON.stringify({
-              type: 'heartbeat',
-              timestamp: new Date().toISOString(),
-            }),
-            type: 'heartbeat',
-          }) as MessageEvent,
-      ),
+      map(() => ({
+        data: JSON.stringify({
+          type: 'heartbeat',
+          timestamp: new Date().toISOString(),
+        }),
+        type: 'heartbeat',
+      })),
     );
 
     // Job-specific events
@@ -165,7 +156,7 @@ export class SseController {
             data: event.data,
             id: event.id,
             type: event.type,
-          } as MessageEvent;
+          };
         }),
       );
 

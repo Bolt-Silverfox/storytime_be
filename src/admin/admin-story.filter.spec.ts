@@ -27,7 +27,7 @@ describe('AdminStoryService.getAllStories isPublished filter', () => {
   });
 
   it('passes isPublished:false through to the where clause', async () => {
-    await service.getAllStories({ isPublished: false } as never);
+    await service.getAllStories({ isPublished: false });
     expect(findStories).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ isPublished: false }),
@@ -36,7 +36,7 @@ describe('AdminStoryService.getAllStories isPublished filter', () => {
   });
 
   it('omits isPublished from where when not provided', async () => {
-    await service.getAllStories({} as never);
+    await service.getAllStories({});
     const arg = findStories.mock.calls[0][0];
     expect(arg.where).not.toHaveProperty('isPublished');
   });

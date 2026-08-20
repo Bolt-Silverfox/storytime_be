@@ -3,9 +3,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import type { IRewardRedemptionRepository } from './reward-redemption.repository.interface';
 
 @Injectable()
-export class PrismaRewardRedemptionRepository
-  implements IRewardRedemptionRepository
-{
+export class PrismaRewardRedemptionRepository implements IRewardRedemptionRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async countInRange(kidId: string, gte: Date, lt: Date): Promise<number> {

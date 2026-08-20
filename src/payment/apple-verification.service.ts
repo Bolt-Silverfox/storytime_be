@@ -243,7 +243,7 @@ export class AppleVerificationService {
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new Error('JWS header must be a JSON object');
       }
-      header = parsed as { alg?: string; x5c?: string[] };
+      header = parsed;
     } catch {
       throw new HttpException('Invalid JWS header', HttpStatus.BAD_REQUEST);
     }
