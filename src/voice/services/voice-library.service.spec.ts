@@ -75,7 +75,9 @@ describe('VoiceLibraryService', () => {
 
     beforeEach(() => {
       // No local match → force the ElevenLabs HTTP fetch path.
-      mockVoiceRepository.findFirstByUserAndElevenLabsId.mockResolvedValue(null);
+      mockVoiceRepository.findFirstByUserAndElevenLabsId.mockResolvedValue(
+        null,
+      );
       mockVoiceRepository.createVoice.mockResolvedValue({ id: 'new-voice-id' });
       mockConfigService.get.mockReturnValue('fake-key');
     });
