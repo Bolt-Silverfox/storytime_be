@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AppleVerificationService } from './apple-verification.service';
+import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 
 /**
  * Exercises the ASSN v2 JWS signature verification + decoding in
@@ -161,6 +162,7 @@ describeIf('AppleVerificationService.parseSignedNotification', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AppleVerificationService,
+        CircuitBreakerService,
         {
           provide: ConfigService,
           useValue: {
@@ -232,6 +234,7 @@ describeIf('AppleVerificationService.parseSignedNotification', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AppleVerificationService,
+        CircuitBreakerService,
         {
           provide: ConfigService,
           useValue: {
@@ -274,6 +277,7 @@ describe('AppleVerificationService.parseSignedNotification malformed header', ()
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AppleVerificationService,
+        CircuitBreakerService,
         { provide: ConfigService, useValue: { get: () => undefined } },
       ],
     }).compile();

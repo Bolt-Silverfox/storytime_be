@@ -17,6 +17,8 @@ import { VOICE_CONFIG } from '../voice.constants';
 import { ElevenLabsTTSProvider } from '../providers/eleven-labs-tts.provider';
 import { VoiceResponseMapper } from './voice-response.mapper';
 import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
+import { withResilience } from '@/shared/resilience';
+import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 
 /**
  * Owns a user's personal voice library: uploaded clones, registered ElevenLabs
@@ -35,6 +37,7 @@ export class VoiceLibraryService {
     private readonly httpService: HttpService,
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
     private readonly mapper: VoiceResponseMapper,
+    private readonly cbService: CircuitBreakerService,
   ) {}
 
   // --- Upload a new voice file ---
@@ -114,15 +117,20 @@ export class VoiceLibraryService {
 
     try {
       const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
-      const response = await firstValueFrom(
-        this.httpService.get(
-          `https://api.elevenlabs.io/v1/voices/${elevenLabsId}`,
-          {
-            headers: {
-              'xi-api-key': apiKey ?? '',
-            },
-          },
-        ),
+      const response = await withResilience(
+        this.cbService.getBreaker('voice-library'),
+        () =>
+          firstValueFrom(
+            this.httpService.get(
+              `https://api.elevenlabs.io/v1/voices/${elevenLabsId}`,
+              {
+                headers: {
+                  'xi-api-key': apiKey ?? '',
+                },
+              },
+            ),
+          ),
+        { retries: 2 },
       );
 
       if (response.status === 200) {

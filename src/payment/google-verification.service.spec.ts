@@ -2,6 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { HttpException } from '@nestjs/common';
 import { GoogleVerificationService } from './google-verification.service';
+import {
+  CircuitBreakerService,
+  CircuitState,
+} from '@/shared/services/circuit-breaker.service';
 
 // Create a mock function that will be set up in beforeEach
 let mockExecAsync: jest.Mock;
@@ -19,6 +23,7 @@ jest.mock('util', () => {
 
 describe('GoogleVerificationService', () => {
   let service: GoogleVerificationService;
+  let cbService: CircuitBreakerService;
 
   const mockConfigService = {
     get: jest.fn((key: string): string | undefined => {
@@ -37,11 +42,13 @@ describe('GoogleVerificationService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GoogleVerificationService,
+        CircuitBreakerService,
         { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
     service = module.get<GoogleVerificationService>(GoogleVerificationService);
+    cbService = module.get<CircuitBreakerService>(CircuitBreakerService);
   });
 
   describe('verify', () => {
@@ -186,6 +193,7 @@ describe('GoogleVerificationService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           GoogleVerificationService,
+          CircuitBreakerService,
           { provide: ConfigService, useValue: emptyConfigService },
         ],
       }).compile();
@@ -258,6 +266,92 @@ describe('GoogleVerificationService', () => {
       const result = await service.verify(validParams);
 
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('circuit breaker (payment-google)', () => {
+    const validParams = {
+      purchaseToken: 'valid-token-123',
+      productId: 'com.storytime.monthly',
+    };
+
+    // A transient network-style failure the default isTransientError classifies
+    // as breaker-worthy (message includes "socket hang up").
+    const transientError = () =>
+      Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+
+    it('opens the payment-google breaker after repeated transient egress failures and fast-fails WITHOUT re-invoking execFile (no retry)', async () => {
+      mockExecAsync.mockRejectedValue(transientError());
+
+      const breaker = cbService.getBreaker('payment-google');
+      // Default failureThreshold is 5.
+      for (let i = 0; i < 5; i++) {
+        await expect(service.verify(validParams)).rejects.toThrow(
+          HttpException,
+        );
+      }
+
+      // Exactly one execFile invocation per logical call — retries:0 means the
+      // non-idempotent gateway call is never auto-retried.
+      expect(mockExecAsync).toHaveBeenCalledTimes(5);
+      expect(breaker.getSnapshot().state).toBe(CircuitState.OPEN);
+
+      // Subsequent call must fast-fail via the OPEN breaker without touching
+      // the gateway at all.
+      const callsBefore = mockExecAsync.mock.calls.length;
+      await expect(service.verify(validParams)).rejects.toThrow(HttpException);
+      expect(mockExecAsync).toHaveBeenCalledTimes(callsBefore);
+      expect(mockExecAsync).toHaveBeenCalledTimes(5);
+    });
+
+    it('does not open the breaker on a non-transient failure (e.g. invalid-token 400)', async () => {
+      // Python script RESOLVES with a structured 400 failure — the gateway
+      // responded, so this must count as a breaker success, not a failure.
+      mockExecAsync.mockResolvedValue({
+        stdout: JSON.stringify({
+          success: false,
+          error: 'Invalid purchase token',
+          statusCode: 400,
+        }),
+        stderr: '',
+      });
+
+      const breaker = cbService.getBreaker('payment-google');
+      for (let i = 0; i < 8; i++) {
+        await expect(service.verify(validParams)).rejects.toThrow(
+          HttpException,
+        );
+      }
+
+      expect(breaker.getSnapshot().state).toBe(CircuitState.CLOSED);
+      expect(mockExecAsync).toHaveBeenCalledTimes(8);
+    });
+
+    it('cancelSubscription returns a structured failure (not CircuitOpenError) when the breaker is OPEN', async () => {
+      mockExecAsync.mockRejectedValue(transientError());
+
+      // Trip the breaker via verify().
+      for (let i = 0; i < 5; i++) {
+        await expect(service.verify(validParams)).rejects.toThrow(
+          HttpException,
+        );
+      }
+      expect(cbService.getBreaker('payment-google').getSnapshot().state).toBe(
+        CircuitState.OPEN,
+      );
+
+      const callsBefore = mockExecAsync.mock.calls.length;
+      const result = await service.cancelSubscription({
+        packageName: 'com.storytime.app',
+        productId: 'com.storytime.monthly',
+        purchaseToken: 'valid-token-123',
+      });
+
+      // Existing failure shape preserved; CircuitOpenError never escapes raw.
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('payment-google');
+      // Fast-fail: no gateway invocation while OPEN.
+      expect(mockExecAsync).toHaveBeenCalledTimes(callsBefore);
     });
   });
 });
