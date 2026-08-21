@@ -9,6 +9,7 @@ import {
   SmtpHealthIndicator,
   QueueHealthIndicator,
   TTSCircuitBreakerHealthIndicator,
+  CircuitBreakerHealthIndicator,
 } from './indicators';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { EMAIL_QUEUE_NAME } from '@/notification/queue/email-queue.constants';
@@ -31,6 +32,7 @@ import { STORY_QUEUE_NAME } from '@/story/queue/story-queue.constants';
     SmtpHealthIndicator,
     QueueHealthIndicator,
     TTSCircuitBreakerHealthIndicator,
+    CircuitBreakerHealthIndicator,
   ],
 })
 export class HealthModule {}
