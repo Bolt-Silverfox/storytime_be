@@ -406,9 +406,22 @@ git commit -am "feat(resilience): wrap request-path callers (voice-library, HF i
 
 ---
 
-### Task 5: Wrap queue-path callers (ElevenLabs, Deepgram provider)
+### Task 5: Wrap queue-path callers (ElevenLabs, Deepgram provider) — CANCELLED
 
-**Files:**
+> **CANCELLED (2026-08-21) after grounding in the code.** The live TTS HTTP
+> clients (`ElevenLabsTTSProvider`, `DeepgramTTSProvider`) are ALREADY
+> breaker-gated at the orchestration layer: `tts-synthesis.service.ts` and
+> `text-to-speech.service.ts` call `<provider>Breaker.canExecute()` +
+> `recordSuccess()`/`recordFailure()` around each provider call, with a
+> fallback chain ElevenLabs → Deepgram → Edge. Wrapping the providers
+> internally with the same-named breaker would DOUBLE-record every logical
+> call (orchestration records once, provider records again) and double-consume
+> the half-open budget. `src/story/elevenlabs.service.ts` (`ElevenLabsService`)
+> has no caller in `src` — it is not the live path. The transient case is
+> already covered by breaker + provider fallback, which is preferable to
+> retry-then-fallback for TTS latency. No code change; the TTS path stays as-is.
+
+**Files (original, not implemented):**
 - Modify: `src/story/elevenlabs.service.ts`, `src/voice/providers/deepgram-tts.provider.ts`
 - Test: focused cases in the respective `.spec.ts`
 
