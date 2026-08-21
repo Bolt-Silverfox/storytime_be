@@ -584,8 +584,11 @@ export class AppleVerificationService {
                   resolve(null);
                 } else {
                   reject(
-                    new Error(
-                      `Apple subscription status API returned ${res.statusCode} from ${hostname}`,
+                    Object.assign(
+                      new Error(
+                        `Apple subscription status API returned ${res.statusCode} from ${hostname}`,
+                      ),
+                      { status: res.statusCode },
                     ),
                   );
                 }
@@ -695,11 +698,19 @@ export class AppleVerificationService {
                     reject(new Error('Failed to parse Apple response'));
                   }
                 } else if (res.statusCode === 404) {
-                  reject(new Error(`Apple API returned 404 from ${hostname}`));
+                  reject(
+                    Object.assign(
+                      new Error(`Apple API returned 404 from ${hostname}`),
+                      { status: 404 },
+                    ),
+                  );
                 } else {
                   reject(
-                    new Error(
-                      `Apple API returned ${res.statusCode} from ${hostname}`,
+                    Object.assign(
+                      new Error(
+                        `Apple API returned ${res.statusCode} from ${hostname}`,
+                      ),
+                      { status: res.statusCode },
                     ),
                   );
                 }

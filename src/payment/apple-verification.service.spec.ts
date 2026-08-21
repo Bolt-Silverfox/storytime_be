@@ -354,5 +354,45 @@ describe('AppleVerificationService', () => {
       expect(result.error).toContain('payment-apple');
       expect(requestMock).toHaveBeenCalledTimes(callsBefore);
     });
+
+    // Fake ClientRequest that fires the response callback with a given HTTP
+    // status (non-200) and an empty body — mimics an Apple REST 5xx.
+    const makeStatusRequest =
+      (statusCode: number) =>
+      (_options: unknown, cb: (res: EventEmitter) => void) => {
+        const res = new EventEmitter() as EventEmitter & {
+          statusCode: number;
+        };
+        res.statusCode = statusCode;
+        const req = new EventEmitter() as unknown as {
+          setTimeout: () => unknown;
+          destroy: () => void;
+          end: () => void;
+        };
+        req.setTimeout = () => req;
+        req.destroy = () => {};
+        req.end = () => {
+          process.nextTick(() => {
+            cb(res);
+            res.emit('data', Buffer.from('{}'));
+            res.emit('end');
+          });
+        };
+        return req;
+      };
+
+    it('classifies an Apple 5xx response as transient and opens the breaker', async () => {
+      // Before status was attached to the thrown error, a 5xx body was NOT
+      // classified transient, so the breaker never opened on Apple 5xx.
+      requestMock.mockReset();
+      requestMock.mockImplementation(makeStatusRequest(500));
+
+      const breaker = breakerCb.getBreaker('payment-apple');
+      for (let i = 0; i < 5; i++) {
+        await appleService.getSubscriptionStatus(`tx5xx-${i}`);
+        if (breaker.getSnapshot().state === CircuitState.OPEN) break;
+      }
+      expect(breaker.getSnapshot().state).toBe(CircuitState.OPEN);
+    });
   });
 });
