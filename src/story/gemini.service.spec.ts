@@ -171,9 +171,9 @@ describe('GeminiService', () => {
       );
 
       // Now the breaker is OPEN: the call should fast-fail as unavailable.
-      await expect(
-        service.generateStoryImage('Title', 'Desc'),
-      ).rejects.toThrow(ServiceUnavailableException);
+      await expect(service.generateStoryImage('Title', 'Desc')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
     }, 20000);
 
     it('maps a non-transient HF failure to InternalServerErrorException', async () => {
