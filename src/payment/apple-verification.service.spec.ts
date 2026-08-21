@@ -1,10 +1,22 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { HttpException } from '@nestjs/common';
+import * as https from 'https';
+import * as crypto from 'crypto';
+import { EventEmitter } from 'events';
 import { AppleVerificationService } from './apple-verification.service';
+import {
+  CircuitBreakerService,
+  CircuitState,
+} from '@/shared/services/circuit-breaker.service';
+
+// Mock only the https module so we can drive the outbound egress; crypto stays
+// real so generateJWT() signs with a genuine EC key in the breaker tests.
+jest.mock('https', () => ({ request: jest.fn() }));
 
 describe('AppleVerificationService', () => {
   let service: AppleVerificationService;
+  let cbService: CircuitBreakerService;
 
   const mockConfigService = {
     get: jest.fn((key: string): string | undefined => {
@@ -25,11 +37,13 @@ describe('AppleVerificationService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AppleVerificationService,
+        CircuitBreakerService,
         { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
     service = module.get<AppleVerificationService>(AppleVerificationService);
+    cbService = module.get<CircuitBreakerService>(CircuitBreakerService);
   });
 
   describe('verify', () => {
@@ -64,6 +78,7 @@ describe('AppleVerificationService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           AppleVerificationService,
+          CircuitBreakerService,
           { provide: ConfigService, useValue: emptyConfigService },
         ],
       }).compile();
@@ -95,6 +110,7 @@ describe('AppleVerificationService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           AppleVerificationService,
+          CircuitBreakerService,
           { provide: ConfigService, useValue: configWithKey },
         ],
       }).compile();
@@ -126,6 +142,7 @@ describe('AppleVerificationService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           AppleVerificationService,
+          CircuitBreakerService,
           { provide: ConfigService, useValue: prodConfigService },
         ],
       }).compile();
@@ -153,6 +170,7 @@ describe('AppleVerificationService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           AppleVerificationService,
+          CircuitBreakerService,
           { provide: ConfigService, useValue: configMissingKeyId },
         ],
       }).compile();
@@ -177,6 +195,7 @@ describe('AppleVerificationService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           AppleVerificationService,
+          CircuitBreakerService,
           { provide: ConfigService, useValue: configMissingIssuerId },
         ],
       }).compile();
@@ -201,6 +220,7 @@ describe('AppleVerificationService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           AppleVerificationService,
+          CircuitBreakerService,
           { provide: ConfigService, useValue: configMissingBundleId },
         ],
       }).compile();
@@ -225,6 +245,7 @@ describe('AppleVerificationService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           AppleVerificationService,
+          CircuitBreakerService,
           { provide: ConfigService, useValue: configMissingPrivateKey },
         ],
       }).compile();
@@ -236,6 +257,142 @@ describe('AppleVerificationService', () => {
       await expect(
         svc.verify({ transactionId: 'test', productId: 'test' }),
       ).rejects.toThrow('Apple App Store verification not configured');
+    });
+  });
+
+  describe('circuit breaker (payment-apple)', () => {
+    // A real EC P-256 key so generateJWT() succeeds and execution reaches the
+    // https egress we want to exercise.
+    const { privateKey } = crypto.generateKeyPairSync('ec', {
+      namedCurve: 'P-256',
+    });
+    const pkcs8 = privateKey
+      .export({ type: 'pkcs8', format: 'pem' })
+      .toString();
+
+    const breakerConfig = {
+      get: jest.fn((key: string): string | undefined => {
+        const config: Record<string, string> = {
+          APPLE_KEY_ID: 'TESTKEY123',
+          APPLE_ISSUER_ID: 'test-issuer-id',
+          APPLE_BUNDLE_ID: 'com.storytime.app',
+          APPLE_PRIVATE_KEY: pkcs8,
+          NODE_ENV: 'development',
+        };
+        return config[key];
+      }),
+    };
+
+    let appleService: AppleVerificationService;
+    let breakerCb: CircuitBreakerService;
+    const requestMock = https.request as unknown as jest.Mock;
+
+    // Fake ClientRequest that asynchronously emits a transient network error
+    // ("socket hang up") once .end() is called — no response callback fires,
+    // mimicking a dropped connection. isTransientError() classifies this as
+    // breaker-worthy.
+    const makeFailingRequest = () => {
+      const req = new EventEmitter() as unknown as {
+        setTimeout: () => unknown;
+        destroy: () => void;
+        end: () => void;
+        emit: (e: string, ...a: unknown[]) => boolean;
+      };
+      req.setTimeout = () => req;
+      req.destroy = () => {};
+      req.end = () => {
+        process.nextTick(() => req.emit('error', new Error('socket hang up')));
+      };
+      return req;
+    };
+
+    beforeEach(async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AppleVerificationService,
+          CircuitBreakerService,
+          { provide: ConfigService, useValue: breakerConfig },
+        ],
+      }).compile();
+      appleService = module.get<AppleVerificationService>(
+        AppleVerificationService,
+      );
+      breakerCb = module.get<CircuitBreakerService>(CircuitBreakerService);
+
+      requestMock.mockReset();
+      requestMock.mockImplementation(() => makeFailingRequest());
+    });
+
+    it('does not auto-retry a failing egress call (exactly one https.request per logical fetch)', async () => {
+      // getSubscriptionStatus's primary fetch rejects transiently; retries:0
+      // means that single logical call maps to exactly one https.request — a
+      // retry would have produced 2+.
+      const result = await appleService.getSubscriptionStatus('orig-tx-1');
+
+      // Existing structured failure shape is preserved (never throws raw).
+      expect(result.autoRenewActive).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(requestMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens the payment-apple breaker after repeated transient failures, then fast-fails without opening a socket', async () => {
+      const breaker = breakerCb.getBreaker('payment-apple');
+
+      // Default failureThreshold is 5; each call records one transient failure.
+      for (let i = 0; i < 5; i++) {
+        await appleService.getSubscriptionStatus(`orig-tx-${i}`);
+        if (breaker.getSnapshot().state === CircuitState.OPEN) break;
+      }
+      expect(breaker.getSnapshot().state).toBe(CircuitState.OPEN);
+
+      const callsBefore = requestMock.mock.calls.length;
+      const result = await appleService.getSubscriptionStatus('orig-tx-after');
+
+      // CircuitOpenError is translated to the existing failure shape, and no
+      // new gateway request is made while OPEN.
+      expect(result.autoRenewActive).toBe(false);
+      expect(result.error).toContain('payment-apple');
+      expect(requestMock).toHaveBeenCalledTimes(callsBefore);
+    });
+
+    // Fake ClientRequest that fires the response callback with a given HTTP
+    // status (non-200) and an empty body — mimics an Apple REST 5xx.
+    const makeStatusRequest =
+      (statusCode: number) =>
+      (_options: unknown, cb: (res: EventEmitter) => void) => {
+        const res = new EventEmitter() as EventEmitter & {
+          statusCode: number;
+        };
+        res.statusCode = statusCode;
+        const req = new EventEmitter() as unknown as {
+          setTimeout: () => unknown;
+          destroy: () => void;
+          end: () => void;
+        };
+        req.setTimeout = () => req;
+        req.destroy = () => {};
+        req.end = () => {
+          process.nextTick(() => {
+            cb(res);
+            res.emit('data', Buffer.from('{}'));
+            res.emit('end');
+          });
+        };
+        return req;
+      };
+
+    it('classifies an Apple 5xx response as transient and opens the breaker', async () => {
+      // Before status was attached to the thrown error, a 5xx body was NOT
+      // classified transient, so the breaker never opened on Apple 5xx.
+      requestMock.mockReset();
+      requestMock.mockImplementation(makeStatusRequest(500));
+
+      const breaker = breakerCb.getBreaker('payment-apple');
+      for (let i = 0; i < 5; i++) {
+        await appleService.getSubscriptionStatus(`tx5xx-${i}`);
+        if (breaker.getSnapshot().state === CircuitState.OPEN) break;
+      }
+      expect(breaker.getSnapshot().state).toBe(CircuitState.OPEN);
     });
   });
 });
