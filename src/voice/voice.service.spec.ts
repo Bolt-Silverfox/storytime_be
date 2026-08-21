@@ -14,6 +14,7 @@ import {
   VOICE_USER_REPOSITORY,
   IVoiceUserRepository,
 } from './repositories';
+import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 
 const mockCacheManager = {
   get: jest.fn(),
@@ -72,6 +73,17 @@ describe('VoiceService', () => {
         { provide: HttpService, useValue: mockHttpService },
         { provide: ElevenLabsTTSProvider, useValue: mockElevenLabsProvider },
         { provide: CACHE_MANAGER, useValue: mockCacheManager },
+        {
+          provide: CircuitBreakerService,
+          useValue: {
+            getBreaker: jest.fn().mockReturnValue({
+              name: 'voice-library',
+              canExecute: jest.fn().mockReturnValue(true),
+              recordSuccess: jest.fn(),
+              recordFailure: jest.fn(),
+            }),
+          },
+        },
       ],
     }).compile();
 
