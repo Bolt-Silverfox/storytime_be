@@ -12,24 +12,12 @@ import { firstValueFrom } from 'rxjs';
 import { VoiceType } from '../voice/dto/voice.dto';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { UploadService } from '../upload/upload.service';
+import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
+import { withResilience, CircuitOpenError } from '@/shared/resilience';
 
 /** Hugging Face Inference API endpoint for cover image generation */
 const HF_IMAGE_API_URL =
   'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell';
-
-/** Circuit breaker states */
-enum CircuitState {
-  CLOSED = 'CLOSED', // Normal operation
-  OPEN = 'OPEN', // Failing fast, not calling API
-  HALF_OPEN = 'HALF_OPEN', // Testing if service recovered
-}
-
-/** Circuit breaker configuration */
-const CIRCUIT_CONFIG = {
-  failureThreshold: 5, // Open circuit after 5 consecutive failures
-  resetTimeoutMs: 60000, // Try again after 1 minute
-  halfOpenMaxAttempts: 1, // Allow 1 test request in half-open state
-};
 
 export interface GenerateStoryOptions {
   theme: string[];
@@ -71,17 +59,12 @@ export class GeminiService {
   private readonly genAI: GoogleGenAI;
   private readonly hfToken: string;
 
-  // Circuit breaker state
-  private circuitState: CircuitState = CircuitState.CLOSED;
-  private failureCount = 0;
-  private lastFailureTime = 0;
-  private halfOpenAttempts = 0;
-
   constructor(
     private readonly configService: ConfigService<EnvConfig, true>,
     private readonly httpService: HttpService,
     private readonly voiceQuotaService: VoiceQuotaService,
     private readonly uploadService: UploadService,
+    private readonly cbService: CircuitBreakerService,
   ) {
     this.genAI = new GoogleGenAI({
       apiKey: this.configService.get<string>('GEMINI_API_KEY'),
@@ -89,74 +72,15 @@ export class GeminiService {
     this.hfToken = this.configService.get<string>('HF_TOKEN');
   }
 
-  /**
-   * Check if circuit allows requests
-   * Returns true if request should proceed, false if should fail fast
-   */
-  private canMakeRequest(): boolean {
-    const now = Date.now();
-
-    switch (this.circuitState) {
-      case CircuitState.CLOSED:
-        return true;
-
-      case CircuitState.OPEN:
-        // Check if enough time has passed to try again
-        if (now - this.lastFailureTime >= CIRCUIT_CONFIG.resetTimeoutMs) {
-          this.circuitState = CircuitState.HALF_OPEN;
-          this.halfOpenAttempts = 0;
-          this.logger.log('Circuit breaker transitioning to HALF_OPEN state');
-          return true;
-        }
-        return false;
-
-      case CircuitState.HALF_OPEN:
-        // Allow limited test requests
-        if (this.halfOpenAttempts < CIRCUIT_CONFIG.halfOpenMaxAttempts) {
-          this.halfOpenAttempts++;
-          return true;
-        }
-        return false;
-
-      default:
-        return true;
-    }
-  }
-
-  /**
-   * Record a successful request - reset circuit breaker
-   */
-  private recordSuccess(): void {
-    if (this.circuitState === CircuitState.HALF_OPEN) {
-      this.logger.log('Circuit breaker closing after successful request');
-    }
-    this.failureCount = 0;
-    this.circuitState = CircuitState.CLOSED;
-  }
-
-  /**
-   * Record a failed request - potentially open circuit
-   */
-  private recordFailure(): void {
-    this.failureCount++;
-    this.lastFailureTime = Date.now();
-
-    if (this.circuitState === CircuitState.HALF_OPEN) {
-      // Failed during test, go back to open
-      this.circuitState = CircuitState.OPEN;
-      this.logger.warn('Circuit breaker re-opening after failed test request');
-    } else if (this.failureCount >= CIRCUIT_CONFIG.failureThreshold) {
-      this.circuitState = CircuitState.OPEN;
-      this.logger.warn(
-        `Circuit breaker OPEN after ${this.failureCount} consecutive failures. ` +
-          `Will retry in ${CIRCUIT_CONFIG.resetTimeoutMs / 1000}s`,
-      );
-    }
-  }
-
   async generateStory(options: GenerateStoryOptions): Promise<GeneratedStory> {
+    const breaker = this.cbService.getBreaker('gemini', {
+      failureThreshold: 5,
+      resetTimeoutMs: 60_000,
+      halfOpenMaxAttempts: 1,
+    });
+
     // Circuit breaker check - fail fast if circuit is open
-    if (!this.canMakeRequest()) {
+    if (!breaker.canExecute()) {
       this.logger.warn('Circuit breaker is OPEN - failing fast');
       throw new ServiceUnavailableException(
         'The AI storyteller is temporarily unavailable. Please try again in a minute.',
@@ -198,7 +122,7 @@ export class GeminiService {
       }
 
       // Record success for circuit breaker
-      this.recordSuccess();
+      breaker.recordSuccess();
 
       return {
         ...story,
@@ -212,8 +136,13 @@ export class GeminiService {
     } catch (error) {
       this.logger.error('Failed to generate story with Gemini:', error);
 
-      // Only count transient API errors toward circuit breaker
-      // Parse errors and validation errors are not API instability
+      // Record the failure on the shared breaker. The breaker filters
+      // non-transient errors (parse/validation/4xx) internally via
+      // isTransientError, so only genuine API instability trips it.
+      breaker.recordFailure(error);
+
+      // The following status/message-based classification chooses WHICH
+      // user-facing exception to throw and is independent of the breaker.
       const errorObj =
         error != null && typeof error === 'object'
           ? (error as Record<string, unknown>)
@@ -221,15 +150,6 @@ export class GeminiService {
       const httpStatus = Number(errorObj.status ?? errorObj.code);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      const isTransientError =
-        httpStatus === 429 ||
-        httpStatus === 503 ||
-        errorMessage.includes('fetch failed') ||
-        errorMessage.includes('ETIMEDOUT');
-
-      if (isTransientError) {
-        this.recordFailure();
-      }
 
       // 1. Check for Network/Fetch errors
       if (
@@ -345,19 +265,24 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     );
 
     try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          HF_IMAGE_API_URL,
-          { inputs: imagePrompt },
-          {
-            headers: {
-              Authorization: `Bearer ${this.hfToken}`,
-              Accept: 'image/png',
-            },
-            responseType: 'arraybuffer',
-            timeout: 60000,
-          },
-        ),
+      const response = await withResilience(
+        this.cbService.getBreaker('hf-image'),
+        () =>
+          firstValueFrom(
+            this.httpService.post(
+              HF_IMAGE_API_URL,
+              { inputs: imagePrompt },
+              {
+                headers: {
+                  Authorization: `Bearer ${this.hfToken}`,
+                  Accept: 'image/png',
+                },
+                responseType: 'arraybuffer',
+                timeout: 60000,
+              },
+            ),
+          ),
+        { retries: 2 },
       );
 
       const buffer = Buffer.from(response.data as ArrayBuffer);
@@ -390,6 +315,14 @@ Important: Return ONLY the JSON object, no additional text or markdown formattin
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error(`Cover image generation failed for "${title}": ${msg}`);
+
+      // Breaker OPEN: fast-fail with a "temporarily unavailable" message.
+      if (error instanceof CircuitOpenError) {
+        throw new ServiceUnavailableException(
+          'Cover image generation is temporarily unavailable. Please try again in a minute.',
+        );
+      }
+
       throw new InternalServerErrorException(
         'Failed to generate cover image. Please try again.',
       );

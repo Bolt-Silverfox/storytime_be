@@ -12,9 +12,11 @@ import {
   SmtpHealthIndicator,
   QueueHealthIndicator,
   TTSCircuitBreakerHealthIndicator,
+  CircuitBreakerHealthIndicator,
 } from './indicators';
 
 const TTS_HEALTH_KEY = 'tts-providers';
+const CIRCUIT_BREAKER_HEALTH_KEY = 'circuit_breakers';
 
 @ApiTags('Health')
 @Controller('health')
@@ -28,6 +30,7 @@ export class HealthController {
     private readonly memory: MemoryHealthIndicator,
     private readonly disk: DiskHealthIndicator,
     private readonly ttsHealth: TTSCircuitBreakerHealthIndicator,
+    private readonly circuitBreakerHealth: CircuitBreakerHealthIndicator,
   ) {}
 
   /**
@@ -60,6 +63,7 @@ export class HealthController {
       () => this.redisHealth.isHealthy('redis'),
       () => this.queueHealth.isHealthy('email-queue'),
       () => this.ttsHealth.isHealthy(TTS_HEALTH_KEY),
+      () => this.circuitBreakerHealth.isHealthy(CIRCUIT_BREAKER_HEALTH_KEY),
     ]);
   }
 
@@ -157,6 +161,7 @@ export class HealthController {
           thresholdPercent: 0.9,
         }),
       () => this.ttsHealth.isHealthy(TTS_HEALTH_KEY),
+      () => this.circuitBreakerHealth.isHealthy(CIRCUIT_BREAKER_HEALTH_KEY),
     ]);
   }
 
