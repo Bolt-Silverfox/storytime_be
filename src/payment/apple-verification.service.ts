@@ -2,6 +2,15 @@ import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import * as https from 'https';
+import { withResilience } from '@/shared/resilience';
+import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
+
+/**
+ * Breaker name for all outbound Apple App Store Server API egress (transaction
+ * lookups + subscription-status). Payment gateway calls are NOT idempotent, so
+ * we gate with the breaker only and NEVER auto-retry ({ retries: 0 }).
+ */
+const PAYMENT_APPLE_BREAKER = 'payment-apple';
 
 /** Result from Apple verification */
 export interface AppleVerificationResult {
@@ -119,7 +128,11 @@ export class AppleVerificationService {
   private readonly environment: 'sandbox' | 'production';
   private readonly rootCaFingerprint: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    // SharedModule is @Global(), so no payment.module wiring is needed.
+    private readonly cbService: CircuitBreakerService,
+  ) {
     this.keyId = this.configService.get<string>('APPLE_KEY_ID') || '';
     this.issuerId = this.configService.get<string>('APPLE_ISSUER_ID') || '';
     this.bundleId = this.configService.get<string>('APPLE_BUNDLE_ID') || '';
@@ -498,85 +511,101 @@ export class AppleVerificationService {
   ): Promise<AppleSubscriptionStatus | null> {
     const requestPath = `/inApps/v1/subscriptions/${originalTransactionId}`;
 
-    return new Promise((resolve, reject) => {
-      const req = https.request(
-        {
-          hostname,
-          path: requestPath,
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        },
-        (res) => {
-          let data = '';
-          res.on('data', (chunk: string) => (data += chunk));
-          res.on('end', () => {
-            if (res.statusCode === 200) {
-              try {
-                const response = JSON.parse(data) as {
-                  data: Array<{
-                    lastTransactions: Array<{
-                      signedRenewalInfo: string;
-                      signedTransactionInfo: string;
-                    }>;
-                  }>;
-                };
-
-                // Find the transaction with the latest expiration across all groups
-                let latest: AppleSubscriptionStatus | null = null;
-                let latestExpMs = -1;
-
-                for (const group of response.data) {
-                  for (const tx of group.lastTransactions) {
-                    const renewalInfo = this.decodeJWS(
-                      tx.signedRenewalInfo,
-                    ) as { autoRenewStatus: number };
-                    const txInfo = this.decodeJWS(tx.signedTransactionInfo) as {
-                      expiresDate?: number;
+    // Breaker-only protection (retries:0): gate the non-idempotent Apple egress
+    // on the 'payment-apple' breaker, never auto-retry. When OPEN this throws
+    // CircuitOpenError before opening a socket; getSubscriptionStatus()'s catch
+    // translates it into the existing { autoRenewActive:false, error } shape so
+    // CircuitOpenError never escapes raw to PaymentService.
+    return withResilience(
+      this.cbService.getBreaker(PAYMENT_APPLE_BREAKER),
+      () =>
+        new Promise<AppleSubscriptionStatus | null>((resolve, reject) => {
+          const req = https.request(
+            {
+              hostname,
+              path: requestPath,
+              method: 'GET',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+            (res) => {
+              let data = '';
+              res.on('data', (chunk: string) => (data += chunk));
+              res.on('end', () => {
+                if (res.statusCode === 200) {
+                  try {
+                    const response = JSON.parse(data) as {
+                      data: Array<{
+                        lastTransactions: Array<{
+                          signedRenewalInfo: string;
+                          signedTransactionInfo: string;
+                        }>;
+                      }>;
                     };
 
-                    const expMs = txInfo.expiresDate ?? -1;
+                    // Find the transaction with the latest expiration across all groups
+                    let latest: AppleSubscriptionStatus | null = null;
+                    let latestExpMs = -1;
 
-                    if (expMs > latestExpMs || !latest) {
-                      latestExpMs = expMs;
-                      latest = {
-                        autoRenewActive: renewalInfo.autoRenewStatus === 1,
-                        expirationTime: txInfo.expiresDate
-                          ? new Date(txInfo.expiresDate)
-                          : null,
-                      };
+                    for (const group of response.data) {
+                      for (const tx of group.lastTransactions) {
+                        const renewalInfo = this.decodeJWS(
+                          tx.signedRenewalInfo,
+                        ) as { autoRenewStatus: number };
+                        const txInfo = this.decodeJWS(
+                          tx.signedTransactionInfo,
+                        ) as {
+                          expiresDate?: number;
+                        };
+
+                        const expMs = txInfo.expiresDate ?? -1;
+
+                        if (expMs > latestExpMs || !latest) {
+                          latestExpMs = expMs;
+                          latest = {
+                            autoRenewActive: renewalInfo.autoRenewStatus === 1,
+                            expirationTime: txInfo.expiresDate
+                              ? new Date(txInfo.expiresDate)
+                              : null,
+                          };
+                        }
+                      }
                     }
+
+                    resolve(latest);
+                  } catch {
+                    reject(
+                      new Error('Failed to parse Apple subscription status'),
+                    );
                   }
+                } else if (res.statusCode === 404) {
+                  resolve(null);
+                } else {
+                  reject(
+                    new Error(
+                      `Apple subscription status API returned ${res.statusCode} from ${hostname}`,
+                    ),
+                  );
                 }
+              });
+            },
+          );
 
-                resolve(latest);
-              } catch {
-                reject(new Error('Failed to parse Apple subscription status'));
-              }
-            } else if (res.statusCode === 404) {
-              resolve(null);
-            } else {
-              reject(
-                new Error(
-                  `Apple subscription status API returned ${res.statusCode} from ${hostname}`,
-                ),
-              );
-            }
+          req.on('error', reject);
+          req.setTimeout(15000, () => {
+            req.destroy();
+            reject(
+              new Error(
+                `Apple subscription status request timeout on ${hostname}`,
+              ),
+            );
           });
-        },
-      );
-
-      req.on('error', reject);
-      req.setTimeout(15000, () => {
-        req.destroy();
-        reject(
-          new Error(`Apple subscription status request timeout on ${hostname}`),
-        );
-      });
-      req.end();
-    });
+          req.end();
+        }),
+      { retries: 0 },
+    );
   }
 
   private generateJWT(): string {
@@ -629,51 +658,64 @@ export class AppleVerificationService {
   ): Promise<AppleTransactionInfo | null> {
     const path = `/inApps/v1/transactions/${transactionId}`;
 
-    return new Promise((resolve, reject) => {
-      const req = https.request(
-        {
-          hostname,
-          path,
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        },
-        (res) => {
-          let data = '';
-          res.on('data', (chunk) => (data += chunk));
-          res.on('end', () => {
-            if (res.statusCode === 200) {
-              try {
-                const response = JSON.parse(data) as {
-                  signedTransactionInfo: string;
-                };
-                const decoded = this.decodeJWS(response.signedTransactionInfo);
-                resolve(decoded as AppleTransactionInfo);
-              } catch {
-                reject(new Error('Failed to parse Apple response'));
-              }
-            } else if (res.statusCode === 404) {
-              reject(new Error(`Apple API returned 404 from ${hostname}`));
-            } else {
-              reject(
-                new Error(
-                  `Apple API returned ${res.statusCode} from ${hostname}`,
-                ),
-              );
-            }
-          });
-        },
-      );
+    // Breaker-only protection (retries:0): gate the non-idempotent Apple egress
+    // on the 'payment-apple' breaker, never auto-retry. When OPEN this throws
+    // CircuitOpenError before opening a socket; getTransactionInfo()/verify()
+    // map it to the existing HttpException failure path (verify never returns a
+    // structured "success:false" for gateway outages — it throws — so this
+    // preserves the current behavior).
+    return withResilience(
+      this.cbService.getBreaker(PAYMENT_APPLE_BREAKER),
+      () =>
+        new Promise<AppleTransactionInfo | null>((resolve, reject) => {
+          const req = https.request(
+            {
+              hostname,
+              path,
+              method: 'GET',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+            (res) => {
+              let data = '';
+              res.on('data', (chunk) => (data += chunk));
+              res.on('end', () => {
+                if (res.statusCode === 200) {
+                  try {
+                    const response = JSON.parse(data) as {
+                      signedTransactionInfo: string;
+                    };
+                    const decoded = this.decodeJWS(
+                      response.signedTransactionInfo,
+                    );
+                    resolve(decoded as AppleTransactionInfo);
+                  } catch {
+                    reject(new Error('Failed to parse Apple response'));
+                  }
+                } else if (res.statusCode === 404) {
+                  reject(new Error(`Apple API returned 404 from ${hostname}`));
+                } else {
+                  reject(
+                    new Error(
+                      `Apple API returned ${res.statusCode} from ${hostname}`,
+                    ),
+                  );
+                }
+              });
+            },
+          );
 
-      req.on('error', reject);
-      req.setTimeout(15000, () => {
-        req.destroy();
-        reject(new Error(`Apple API request timeout on ${hostname}`));
-      });
-      req.end();
-    });
+          req.on('error', reject);
+          req.setTimeout(15000, () => {
+            req.destroy();
+            reject(new Error(`Apple API request timeout on ${hostname}`));
+          });
+          req.end();
+        }),
+      { retries: 0 },
+    );
   }
 
   /**

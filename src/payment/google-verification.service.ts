@@ -3,6 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import { promisify } from 'util';
 import { execFile, type ExecFileOptions } from 'child_process';
 import * as path from 'path';
+import { withResilience } from '@/shared/resilience';
+import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
+
+/**
+ * Breaker name for all outbound Google Play Developer API egress (verify,
+ * cancel, acknowledge). Payment gateway calls are NOT idempotent, so we gate
+ * with the breaker only and NEVER auto-retry ({ retries: 0 }).
+ */
+const PAYMENT_GOOGLE_BREAKER = 'payment-google';
 
 /** Result from Google verification */
 export interface GoogleVerificationResult {
@@ -113,7 +122,11 @@ export class GoogleVerificationService {
   private readonly pythonPath: string;
   private readonly scriptPath: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    // SharedModule is @Global(), so no payment.module wiring is needed.
+    private readonly cbService: CircuitBreakerService,
+  ) {
     // Use process.cwd() for robustness - works regardless of dist/ structure
     const scriptsDir = path.join(process.cwd(), 'scripts');
 
@@ -155,13 +168,22 @@ export class GoogleVerificationService {
       // Call Python script to verify purchase using WIF
       // Using execFile with array arguments prevents command injection
       this.logger.debug('Executing Python verification script');
-      const { stdout, stderr } = await execFileAsync(
-        this.pythonPath,
-        [this.scriptPath, 'verify', packageName, productId, purchaseToken],
-        {
-          timeout: 10000, // 10 second timeout (reduced from 30s)
-          encoding: 'utf8',
-        },
+      // Breaker-only protection (retries:0): gate the non-idempotent gateway
+      // egress on the 'payment-google' breaker, never auto-retry. A CircuitOpen
+      // fast-fail throws here and is handled by the catch below like any other
+      // egress failure (mapped to HttpException).
+      const { stdout, stderr } = await withResilience(
+        this.cbService.getBreaker(PAYMENT_GOOGLE_BREAKER),
+        () =>
+          execFileAsync(
+            this.pythonPath,
+            [this.scriptPath, 'verify', packageName, productId, purchaseToken],
+            {
+              timeout: 10000, // 10 second timeout (reduced from 30s)
+              encoding: 'utf8',
+            },
+          ),
+        { retries: 0 },
       );
 
       if (stderr) {
@@ -271,13 +293,21 @@ export class GoogleVerificationService {
     );
 
     try {
-      const { stdout, stderr } = await execFileAsync(
-        this.pythonPath,
-        [this.scriptPath, 'cancel', packageName, productId, purchaseToken],
-        {
-          timeout: 10000,
-          encoding: 'utf8',
-        },
+      // Breaker-only protection (retries:0). A CircuitOpen fast-fail throws and
+      // is converted to the existing structured failure by the catch below, so
+      // CircuitOpenError never escapes raw to PaymentService.
+      const { stdout, stderr } = await withResilience(
+        this.cbService.getBreaker(PAYMENT_GOOGLE_BREAKER),
+        () =>
+          execFileAsync(
+            this.pythonPath,
+            [this.scriptPath, 'cancel', packageName, productId, purchaseToken],
+            {
+              timeout: 10000,
+              encoding: 'utf8',
+            },
+          ),
+        { retries: 0 },
       );
 
       if (stderr) {
@@ -321,20 +351,27 @@ export class GoogleVerificationService {
     );
 
     try {
-      const { stdout, stderr } = await execFileAsync(
-        this.pythonPath,
-        [
-          this.scriptPath,
-          'acknowledge',
-          ackType,
-          packageName,
-          productId,
-          purchaseToken,
-        ],
-        {
-          timeout: 10000,
-          encoding: 'utf8',
-        },
+      // Breaker-only protection (retries:0). CircuitOpen fast-fail is converted
+      // to the existing structured failure by the catch below.
+      const { stdout, stderr } = await withResilience(
+        this.cbService.getBreaker(PAYMENT_GOOGLE_BREAKER),
+        () =>
+          execFileAsync(
+            this.pythonPath,
+            [
+              this.scriptPath,
+              'acknowledge',
+              ackType,
+              packageName,
+              productId,
+              purchaseToken,
+            ],
+            {
+              timeout: 10000,
+              encoding: 'utf8',
+            },
+          ),
+        { retries: 0 },
       );
 
       if (stderr) {
