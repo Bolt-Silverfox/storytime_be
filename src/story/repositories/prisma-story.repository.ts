@@ -275,6 +275,8 @@ export class PrismaStoryRepository implements IStoryRepository {
         completed: false,
         progress: { gt: 0 },
         isDeleted: false,
+        // Hide progress rows whose story has since been unpublished (draft).
+        story: { isPublished: true },
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
@@ -289,6 +291,7 @@ export class PrismaStoryRepository implements IStoryRepository {
         kidId,
         completed: true,
         isDeleted: false,
+        story: { isPublished: true },
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
@@ -355,6 +358,8 @@ export class PrismaStoryRepository implements IStoryRepository {
         completed: false,
         progress: { gt: 0 },
         isDeleted: false,
+        // Hide progress rows whose story has since been unpublished (draft).
+        story: { isPublished: true },
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
@@ -369,6 +374,7 @@ export class PrismaStoryRepository implements IStoryRepository {
         userId,
         completed: true,
         isDeleted: false,
+        story: { isPublished: true },
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
@@ -1182,7 +1188,7 @@ export class PrismaStoryRepository implements IStoryRepository {
   async getRandomStoryIdsFromStories(limit: number): Promise<string[]> {
     const randomIds = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT id FROM "stories"
-      WHERE "isDeleted" = false
+      WHERE "isDeleted" = false AND "isPublished" = true
       ORDER BY RANDOM()
       LIMIT ${limit}
     `;
@@ -1196,7 +1202,7 @@ export class PrismaStoryRepository implements IStoryRepository {
   ): Promise<string[]> {
     const ids = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT id FROM "stories"
-      WHERE "isDeleted" = false
+      WHERE "isDeleted" = false AND "isPublished" = true
       ORDER BY "createdAt" DESC, id ASC
       LIMIT ${limit}
       OFFSET ${offset}

@@ -5,6 +5,7 @@ import type {
   IAdminPaymentRepository,
   RevenueSum,
   RevenueByDate,
+  RevenueByPlan,
   UserPaymentAmount,
   DatedPaymentAmount,
 } from './admin-payment.repository.interface';
@@ -27,49 +28,64 @@ export class PrismaAdminPaymentRepository implements IAdminPaymentRepository {
     });
   }
 
+  // Aggregate revenue per CALENDAR DAY. A Prisma groupBy on `createdAt` groups
+  // by the full timestamp, so every transaction becomes its own bucket and the
+  // caller (which maps createdAt -> YYYY-MM-DD) emits per-transaction points
+  // instead of a daily total. Fetch the rows in range and bucket by UTC day.
   async groupRevenueByCreatedAt(
     startDate: Date,
     endDate: Date,
   ): Promise<RevenueByDate[]> {
-    const result = await this.prisma.paymentTransaction.groupBy({
-      by: ['createdAt'],
+    const rows = await this.prisma.paymentTransaction.findMany({
       where: {
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
+        createdAt: { gte: startDate, lte: endDate },
         status: 'success',
         deletedAt: null,
       },
-      _sum: {
-        amount: true,
-      },
+      select: { createdAt: true, amount: true },
     });
-    return result as RevenueByDate[];
+    return this.bucketRevenueByDay(rows);
   }
 
-  async groupRevenueByCreatedAtOrdered(
+  // Same daily aggregation; result is already day-ascending.
+  groupRevenueByCreatedAtOrdered(
     startDate: Date,
     endDate: Date,
   ): Promise<RevenueByDate[]> {
-    const result = await this.prisma.paymentTransaction.groupBy({
-      by: ['createdAt'],
-      where: {
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
-        status: 'success',
-        deletedAt: null,
-      },
-      _sum: {
-        amount: true,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
+    return this.groupRevenueByCreatedAt(startDate, endDate);
+  }
+
+  private bucketRevenueByDay(
+    rows: { createdAt: Date; amount: number }[],
+  ): RevenueByDate[] {
+    const byDay = new Map<string, number>();
+    for (const row of rows) {
+      const day = row.createdAt.toISOString().slice(0, 10);
+      byDay.set(day, (byDay.get(day) ?? 0) + row.amount);
+    }
+    return Array.from(byDay.entries())
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([day, amount]) => ({
+        createdAt: new Date(`${day}T00:00:00.000Z`),
+        _sum: { amount },
+      }));
+  }
+
+  // Sum revenue and count transactions per plan, in the DB. Replaces loading
+  // every active subscriber's entire transaction history into memory and
+  // charging their lifetime spend to their current plan.
+  async groupRevenueByPlan(): Promise<RevenueByPlan[]> {
+    const rows = await this.prisma.paymentTransaction.groupBy({
+      by: ['plan'],
+      where: { status: 'success', deletedAt: null },
+      _sum: { amount: true },
+      _count: true,
     });
-    return result as RevenueByDate[];
+    return rows.map((row) => ({
+      plan: row.plan,
+      _sum: { amount: row._sum.amount },
+      _count: row._count,
+    }));
   }
 
   findSuccessfulInRange(

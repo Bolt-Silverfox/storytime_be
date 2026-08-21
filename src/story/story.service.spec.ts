@@ -629,7 +629,7 @@ describe('StoryService - Library & Generation', () => {
             where: {
               userId,
               isDeleted: false,
-              story: { isDeleted: false },
+              story: { isDeleted: false, isPublished: true },
             },
             orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
             take: 2,
@@ -820,7 +820,7 @@ describe('StoryService - Library & Generation', () => {
             where: {
               userId,
               isDeleted: false,
-              story: { isDeleted: false },
+              story: { isDeleted: false, isPublished: true },
             },
             orderBy: [{ lastAccessed: 'desc' }, { id: 'asc' }],
             take: 3,

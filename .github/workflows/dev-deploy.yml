@@ -26,6 +26,25 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            codeload.github.com:443
+            productionresultssa1.blob.core.windows.net:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            binaries.prisma.sh:443
+            checkpoint.prisma.io:443
+            codecov.io:443
+            cli.codecov.io:443
+            52.18.195.224:22
+            emerj-shared-db.cvq22s4q62o3.eu-west-1.rds.amazonaws.com:5432
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -39,7 +58,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Format check
         continue-on-error: true
@@ -82,6 +101,25 @@ jobs:
           --health-retries 5
 
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            codeload.github.com:443
+            productionresultssa1.blob.core.windows.net:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            binaries.prisma.sh:443
+            checkpoint.prisma.io:443
+            codecov.io:443
+            cli.codecov.io:443
+            52.18.195.224:22
+            emerj-shared-db.cvq22s4q62o3.eu-west-1.rds.amazonaws.com:5432
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -106,14 +144,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
-      - name: Create .env file
-        run: |
-          cat > .env << 'EOF'
-          ${{ secrets.ENV_FILE }}
-          EOF
-
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Generate Prisma client
         run: pnpm db:generate
@@ -129,10 +161,6 @@ jobs:
             dist/
             node_modules/.prisma/
           retention-days: 1
-
-      - name: Cleanup sensitive files
-        if: always()
-        run: rm -f .env
 
   # ===================
   # Test (runs on all events)
@@ -174,6 +202,25 @@ jobs:
           --health-retries 5
 
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            codeload.github.com:443
+            productionresultssa1.blob.core.windows.net:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            binaries.prisma.sh:443
+            checkpoint.prisma.io:443
+            codecov.io:443
+            cli.codecov.io:443
+            52.18.195.224:22
+            emerj-shared-db.cvq22s4q62o3.eu-west-1.rds.amazonaws.com:5432
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -205,7 +252,7 @@ jobs:
           EOF
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Generate Prisma client
         run: pnpm db:generate
@@ -255,6 +302,25 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            codeload.github.com:443
+            productionresultssa1.blob.core.windows.net:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            binaries.prisma.sh:443
+            checkpoint.prisma.io:443
+            codecov.io:443
+            cli.codecov.io:443
+            52.18.195.224:22
+            emerj-shared-db.cvq22s4q62o3.eu-west-1.rds.amazonaws.com:5432
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -271,7 +337,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Auto-fix formatting
         run: |
@@ -314,6 +380,25 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            codeload.github.com:443
+            productionresultssa1.blob.core.windows.net:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            binaries.prisma.sh:443
+            checkpoint.prisma.io:443
+            codecov.io:443
+            cli.codecov.io:443
+            52.18.195.224:22
+            emerj-shared-db.cvq22s4q62o3.eu-west-1.rds.amazonaws.com:5432
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -345,7 +430,7 @@ jobs:
           EOF
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build application
         run: pnpm db:generate && pnpm build
