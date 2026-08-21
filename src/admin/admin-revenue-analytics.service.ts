@@ -33,6 +33,18 @@ export class AdminRevenueAnalyticsService {
     private readonly activityRepo: IAdminActivityRepository,
   ) {}
 
+  // A date-only endDate ('2026-07-31') parses to midnight UTC, which would
+  // silently exclude everything that happened later that day from `lte`
+  // filters. Treat day-level input as inclusive through the end of that day
+  // (.999 is the max millisecond Prisma DateTime can store); explicit
+  // timestamps pass through unchanged.
+  private static parseInclusiveEndDate(value: string): Date {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return new Date(`${value}T23:59:59.999Z`);
+    }
+    return new Date(value);
+  }
+
   async getSubscriptionAnalytics(
     dateRange?: DateRangeDto,
   ): Promise<SubscriptionAnalyticsDto> {
@@ -40,7 +52,7 @@ export class AdminRevenueAnalyticsService {
       ? new Date(dateRange.startDate)
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = dateRange?.endDate
-      ? new Date(dateRange.endDate)
+      ? AdminRevenueAnalyticsService.parseInclusiveEndDate(dateRange.endDate)
       : new Date();
 
     const [subscriptions, revenue, planBreakdown] = await Promise.all([
@@ -72,26 +84,38 @@ export class AdminRevenueAnalyticsService {
     };
   }
 
+  // Period-scoped churn: of the subscribers who had access at the START of the
+  // window, what fraction lost it DURING the window.
+  //
+  // The previous version counted EVERY cancelled subscription ever (unscoped) in
+  // the numerator while the denominator only counted currently-active subs, so
+  // the ratio routinely exceeded 100%. Both terms are now scoped to the window
+  // via `endsAt`, and the numerator is a strict subset of the denominator (both
+  // require startedAt < startDate; the numerator additionally requires endsAt in
+  // [start, end], which satisfies the denominator's endsAt >= start), so the
+  // result is always in [0, 100].
   private async calculateChurnRate(
     startDate: Date,
     endDate: Date,
   ): Promise<number> {
+    // Base: had access at the start of the window (started before it and either
+    // never ended or ended on/after the window start).
     const totalSubscriptionsAtStart = await this.subscriptionRepo.count({
       startedAt: { lt: startDate },
-      status: 'active',
+      OR: [{ endsAt: null }, { endsAt: { gte: startDate } }],
     });
 
+    // Churned within the window: from that base, cancelled subs whose access
+    // actually ended inside [startDate, endDate]. Requiring status 'cancelled'
+    // avoids miscounting active auto-renewing subs whose endsAt (current period
+    // boundary) happens to fall in the window.
     const churnedSubscriptions = await this.subscriptionRepo.count({
-      OR: [
-        { status: 'cancelled' },
-        {
-          status: 'active',
-          endsAt: {
-            gte: startDate,
-            lte: endDate,
-          },
-        },
-      ],
+      startedAt: { lt: startDate },
+      status: 'cancelled',
+      endsAt: {
+        gte: startDate,
+        lte: endDate,
+      },
     });
 
     return totalSubscriptionsAtStart > 0
@@ -106,7 +130,7 @@ export class AdminRevenueAnalyticsService {
       ? new Date(dateRange.startDate)
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = dateRange?.endDate
-      ? new Date(dateRange.endDate)
+      ? AdminRevenueAnalyticsService.parseInclusiveEndDate(dateRange.endDate)
       : new Date();
 
     try {
@@ -156,30 +180,45 @@ export class AdminRevenueAnalyticsService {
         }),
       );
 
-      // Get top plans
-      const subscriptionsWithRevenue =
-        await this.subscriptionRepo.findActiveWithUserRevenue();
+      // Top plans: attribute each payment to the plan it was actually for
+      // (summed DB-side), and pair it with the number of currently-active
+      // subscriptions on that plan. The old version summed every active
+      // subscriber's entire lifetime spend and charged it all to their current
+      // plan — so an upgrader's past-plan revenue was misattributed, and the
+      // whole payment history was loaded into memory.
+      const [revenueByPlan, activePlanCounts] = await Promise.all([
+        this.paymentRepo.groupRevenueByPlan(),
+        this.subscriptionRepo.groupByActivePlan(new Date()),
+      ]);
 
       const planRevenueMap = new Map<
         string,
         { subscription_count: number; total_revenue: number }
       >();
-
-      subscriptionsWithRevenue.forEach((sub) => {
-        const current = planRevenueMap.get(sub.plan) || {
+      const bumpPlan = (
+        plan: string,
+        revenue: number,
+        subscriptions: number,
+      ) => {
+        const current = planRevenueMap.get(plan) || {
           subscription_count: 0,
           total_revenue: 0,
         };
-        const userRevenue = sub.user.paymentTransactions.reduce(
-          (sum, t) => sum + t.amount,
-          0,
-        );
-
-        planRevenueMap.set(sub.plan, {
-          subscription_count: current.subscription_count + 1,
-          total_revenue: current.total_revenue + userRevenue,
+        planRevenueMap.set(plan, {
+          subscription_count: current.subscription_count + subscriptions,
+          total_revenue: current.total_revenue + revenue,
         });
-      });
+      };
+
+      // Revenue per plan; historical rows we couldn't attribute land in 'unknown'.
+      for (const row of revenueByPlan) {
+        bumpPlan(row.plan ?? 'unknown', row._sum.amount ?? 0, 0);
+      }
+      // Active-subscription counts per plan (plans may have revenue but no
+      // active subs left, or vice versa, so this is a union).
+      for (const row of activePlanCounts) {
+        bumpPlan(row.plan, 0, row._count);
+      }
 
       const topPlans = Array.from(planRevenueMap.entries())
         .map(([plan, stats]) => ({

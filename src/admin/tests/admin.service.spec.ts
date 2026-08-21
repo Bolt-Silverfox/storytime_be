@@ -122,6 +122,9 @@ const mockPrismaService = {
   screenTimeSession: {
     findMany: jest.fn(),
   },
+  session: {
+    findMany: jest.fn(),
+  },
   $queryRaw: jest.fn(),
 };
 
@@ -303,6 +306,8 @@ describe('AdminService', () => {
         { duration: 10 },
         { duration: 20 },
       ]);
+      // No sessions with lastActivityAt in the window → averageSessionTime = 0.
+      prisma.session.findMany.mockResolvedValue([]);
       prisma.subscription.groupBy.mockResolvedValue([
         { plan: 'monthly', _count: 10 },
         { plan: 'yearly', _count: 5 },
@@ -320,7 +325,7 @@ describe('AdminService', () => {
       expect(result.unpaidUsers).toBe(85); // totalUsers - paidUsers = 100 - 15
       expect(result.totalKids).toBe(5);
       expect(result.totalRevenue).toBe(5000);
-      expect(result.averageSessionTime).toBe(0); // Placeholder in service
+      expect(result.averageSessionTime).toBe(0); // No sessions with lastActivityAt in window
       expect(result.subscriptionPlans).toHaveLength(2);
     });
   });

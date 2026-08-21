@@ -107,7 +107,12 @@ export class StoryRecommendationService {
     );
     if (!kid) throw new NotFoundException('Kid not found or access denied');
     const story = await this.storyCoreRepository.findStoryById(dto.storyId);
-    if (!story) throw new NotFoundException('Story not found');
+    // Reject a known draft id: an unpublished story can't be recommended to a
+    // kid. findStoryById is shared with existence checks, so gate here, not in
+    // the repository.
+    if (!story || !story.isPublished) {
+      throw new NotFoundException('Story not found');
+    }
 
     const isRestricted = await this.storyCoreRepository.findRestrictedStory(
       dto.kidId,

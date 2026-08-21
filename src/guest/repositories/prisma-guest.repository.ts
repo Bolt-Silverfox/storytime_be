@@ -58,14 +58,15 @@ export class PrismaGuestRepository implements IGuestRepository {
 
   async findStoryDetail(storyId: string): Promise<GuestStoryDetail | null> {
     return this.prisma.story.findFirst({
-      where: { id: storyId, isDeleted: false },
+      where: { id: storyId, isDeleted: false, isPublished: true },
       select: GUEST_STORY_DETAIL_SELECT,
     });
   }
 
-  async findUserReadingHistory(userId: string): Promise<GuestUserHistoryRow[]> {
+  findUserReadingHistory(userId: string): Promise<GuestUserHistoryRow[]> {
     return this.prisma.userStoryProgress.findMany({
-      where: { userId, isDeleted: false },
+      // Hide history rows whose story has since been unpublished (draft).
+      where: { userId, isDeleted: false, story: { isPublished: true } },
       select: {
         storyId: true,
         progress: true,
@@ -84,6 +85,7 @@ export class PrismaGuestRepository implements IGuestRepository {
       where: {
         id: { in: storyIds },
         isDeleted: false,
+        isPublished: true,
       },
       select: GUEST_STORY_DETAIL_SELECT,
     });

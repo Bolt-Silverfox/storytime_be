@@ -226,6 +226,10 @@ model Session {
   token     String    @unique
   expiresAt DateTime
   createdAt DateTime  @default(now())
+  // Last time an authenticated request used this session (bumped, throttled, by
+  // AuthSessionGuard). Nullable: pre-existing sessions predate it. Enables
+  // avg session duration = lastActivityAt - createdAt.
+  lastActivityAt DateTime?
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
@@ -332,6 +336,10 @@ model Story {
   backgroundColor       String                 @default("#5E3A54")
   recommended           Boolean                @default(false)
   aiGenerated           Boolean                @default(false)
+  // Draft/published state. Default true = every existing + newly generated
+  // story is published (no behavior change). Admins can unpublish to make a
+  // story a draft; public read paths filter isPublished: true.
+  isPublished           Boolean                @default(true)
   difficultyLevel       Int                    @default(1)
   wordCount             Int                    @default(0)
   durationSeconds       Int? // Estimated reading time in seconds
@@ -599,6 +607,12 @@ model PaymentTransaction {
   reference       String?
   amount          Float
   status          String
+  // Plan this payment was for (weekly/monthly/yearly/free), resolved from the
+  // store productId at purchase time. Nullable: pre-existing rows predate this
+  // column, and it stays null when the productId can't be mapped. Enables
+  // per-plan revenue attribution instead of charging a user's whole payment
+  // history to whatever plan they happen to be on now.
+  plan            String?
   createdAt       DateTime       @default(now())
   // SOFT DELETE FIELDS
   isDeleted       Boolean        @default(false)
