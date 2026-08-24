@@ -1,0 +1,70 @@
+# Sandboxed local development (credential-free devcontainer)
+
+A `.devcontainer/` that runs `build` / `lint` / `test` **without any host
+credentials**. It is the local counterpart to the sandboxed CI egress audit
+(#537) and a direct mitigation for the 2026-08 config-injection worm.
+
+## Why this exists
+
+The config-injection worm executes when a poisoned config file is loaded during
+a build (`eslint.config.mjs` on `pnpm lint`, `postcss.config.mjs` on `next
+build`, etc.). When it runs, it harvests whatever the build environment can
+reach: `~/.npmrc` npm tokens, `~/.ssh` keys, `~/.aws`, the host git identity,
+and any exported secrets — then exfiltrates and/or re-injects.
+
+This devcontainer removes that reservoir. Builds run inside a container that
+**cannot see any of those**, so even if a dependency or config is compromised,
+there is nothing local for it to steal.
+
+## The one rule: the host holds credentials, the container does not
+
+- **Inside the container:** `build`, `lint`, `test`, `db:generate` — anything
+  that only needs the source tree.
+- **On the host (outside the container):** `git push`, `pnpm publish`, `gh`,
+  `eas`, deploys, `git commit` signing — anything that needs a credential or
+  identity.
+
+Never mount `~/.npmrc`, `~/.ssh`, `~/.aws`, `~/.gitconfig`, or a token into the
+container "for convenience." That defeats the entire point.
+
+## What the sandbox enforces
+
+- `mounts: []` — no host directories mounted except the workspace itself.
+- `GIT_CONFIG_GLOBAL=/dev/null` — no host git identity/signing key is visible.
+- `NPM_CONFIG_USERCONFIG=/dev/null` — no npm auth from inside.
+- `pnpm install --frozen-lockfile --ignore-scripts` — dependency **lifecycle
+  scripts do not run** on install (the classic supply-chain execution vector).
+- `remoteUser: node` — non-root.
+- pnpm pinned to `10.15.1` via Corepack (no arbitrary package-manager download).
+
+## Opening it
+
+1. Install Docker + the VS Code "Dev Containers" extension (or any devcontainer
+   CLI). The container build needs Docker.
+2. VS Code → "Dev Containers: Reopen in Container". First run builds the image
+   and runs `pnpm install --ignore-scripts`.
+
+## First-run: verifying the container is actually credential-free
+
+Run these **inside** the container; each should show nothing/empty:
+
+```sh
+ls -la ~/.npmrc ~/.ssh ~/.aws ~/.gitconfig 2>&1   # → No such file or directory
+git config --global --list                         # → (empty)
+env | grep -iE 'token|secret|npm_config__auth|aws_' # → (empty)
+```
+
+If any of those return real data, a credential is leaking in — stop and fix the
+mount/env before building.
+
+## Caveats
+
+- **Native rebuilds:** some packages need lifecycle scripts (`--ignore-scripts`
+  skips them). If a build genuinely needs them, run
+  `pnpm rebuild <pkg>` explicitly for the specific package after reviewing it —
+  do not drop `--ignore-scripts` globally.
+- **Workspace mount:** the source tree IS mounted (that's unavoidable), so the
+  container can read/modify repo files. It cannot reach anything outside the
+  workspace. Push from the host so a poisoned build can't push on your behalf.
+- **This is opt-in** and does not change CI. CI has its own protections (the
+  required config-injection scan and the shai-hulud deep scan).
