@@ -1,0 +1,35 @@
+{
+  "name": "storytime-be sandboxed build",
+  "build": { "dockerfile": "Dockerfile" },
+
+  // SECURITY: no host credential mounts. The container never sees the host's
+  // ~/.npmrc, ~/.ssh, ~/.aws, ~/.gitconfig, gh/keyring tokens, or any secret.
+  // Builds/lint/test run here; push, deploy, and auth stay on the HOST.
+  // This removes the credential reservoir that the 2026-08 config-injection
+  // worm harvested during builds (see docs/security/sandbox-dev.md).
+  "mounts": [],
+  "runArgs": ["--network=bridge"],
+
+  "containerEnv": {
+    // No host git identity leaks in — the container has no global git config,
+    // so a malicious build step can't read your name/email/signing key.
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    // npm/pnpm never authenticate from inside the container.
+    "NPM_CONFIG_USERCONFIG": "/dev/null",
+    "CI": "true"
+  },
+
+  // Install WITHOUT lifecycle scripts — postinstall is the classic
+  // supply-chain execution vector (Shai-Hulud family). Run it explicitly and
+  // audited only when you actually need native rebuilds.
+  "onCreateCommand": "corepack enable && pnpm install --frozen-lockfile --ignore-scripts",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+    }
+  },
+
+  // Least privilege: run as the non-root 'node' user.
+  "remoteUser": "node"
+}
