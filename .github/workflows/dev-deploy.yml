@@ -276,7 +276,7 @@ jobs:
       - name: Upload coverage to Codecov
         # No-op until CODECOV_TOKEN is set (see repo secrets); never fails CI.
         if: steps.codecov_token.outputs.present == 'true'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
