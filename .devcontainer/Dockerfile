@@ -11,3 +11,8 @@ RUN corepack enable && corepack prepare pnpm@10.15.1 --activate
 # The base image already ships a non-root 'node' user; devcontainer.json runs
 # as that user. Nothing here writes host credentials into the image.
 WORKDIR /workspaces/storytime-be
+
+# Make 'node' the image default user (not just remoteUser), so any entrypoint
+# other than the Dev Container lifecycle also runs unprivileged. Corepack was
+# already enabled above as root, so its shims in /usr/local/bin stay usable.
+USER node

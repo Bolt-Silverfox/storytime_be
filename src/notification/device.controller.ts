@@ -47,7 +47,12 @@ class UnregisterDeviceDto {
   // Optional: when present, DELETE /devices unregisters only this device
   // (the v1.2.0 logout contract, which sends { token } in the body). When
   // absent, DELETE /devices unregisters all of the user's devices.
+  // @IsNotEmpty rejects an explicit empty string ("") so a malformed
+  // { token: "" } body is a 400 rather than silently falling through to the
+  // "unregister ALL devices" branch. @IsOptional still allows the token to be
+  // omitted entirely (the unregister-all contract).
   @IsString()
+  @IsNotEmpty()
   @IsOptional()
   token?: string;
 }
