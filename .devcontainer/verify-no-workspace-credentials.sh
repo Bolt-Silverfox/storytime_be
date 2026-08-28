@@ -22,8 +22,10 @@ while IFS= read -r -d '' f; do
 done < <(find . -name '.npmrc' -not -path './node_modules/*' -print0 2>/dev/null)
 
 # 2) Credentials embedded in a git remote URL (https://user:token@host/...).
+#    Git config keys are case-insensitive (url/URL/Url), so scan with -i so a
+#    differently-cased key can't slip a credential past the check.
 if [ -f .git/config ] && \
-   grep -Eq '^[[:space:]]*url[[:space:]]*=[[:space:]]*https?://[^/@[:space:]]+:[^/@[:space:]]+@' .git/config; then
+   grep -Eiq '^[[:space:]]*url[[:space:]]*=[[:space:]]*https?://[^/@[:space:]]+:[^/@[:space:]]+@' .git/config; then
   echo "::error:: credentials embedded in a .git/config remote URL" >&2
   fail=1
 fi
