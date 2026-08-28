@@ -43,6 +43,15 @@ class RegisterDeviceDto {
   deviceName?: string;
 }
 
+class UnregisterDeviceDto {
+  // Optional: when present, DELETE /devices unregisters only this device
+  // (the v1.2.0 logout contract, which sends { token } in the body). When
+  // absent, DELETE /devices unregisters all of the user's devices.
+  @IsString()
+  @IsOptional()
+  token?: string;
+}
+
 @ApiTags('Devices')
 @Controller('devices')
 export class DeviceController {
@@ -147,21 +156,33 @@ export class DeviceController {
   @UseGuards(AuthSessionGuard)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Unregister all devices (logout from all devices)' })
+  @ApiOperation({
+    summary: 'Unregister devices',
+    description:
+      'With a { token } body, unregisters only that device (the v1.2.0 logout ' +
+      'contract). With no body, unregisters all devices for the user.',
+  })
+  @ApiBody({ type: UnregisterDeviceDto, required: false })
   @ApiResponse({
     status: 200,
-    description: 'All devices unregistered',
-    schema: {
-      type: 'object',
-      properties: {
-        count: {
-          type: 'number',
-          description: 'Number of devices unregistered',
-        },
-      },
-    },
+    description:
+      'Device(s) unregistered. Returns { success } for a single token, ' +
+      '{ count } when unregistering all.',
   })
-  async unregisterAllDevices(@Req() req: AuthenticatedRequest) {
+  async unregisterDevices(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UnregisterDeviceDto,
+  ) {
+    // Preserve the v1.2.0 logout semantics: DELETE /devices with a { token }
+    // body removes just that one device. Older clients (app 1.2.0) rely on
+    // this to unregister only the device logging out; treating it as
+    // "unregister all" silently killed push on the user's other devices.
+    if (dto?.token) {
+      return this.deviceTokenService.unregisterDeviceToken(
+        req.authUserData.userId,
+        dto.token,
+      );
+    }
     return this.deviceTokenService.unregisterAllUserTokens(
       req.authUserData.userId,
     );
