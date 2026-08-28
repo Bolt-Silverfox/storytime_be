@@ -110,6 +110,13 @@ import { BullBoardConfigModule } from './admin/bull-board.module';
           url: config.get('REDIS_URL'),
           maxRetriesPerRequest: null,
         },
+        // Namespace every queue by environment. dev and staging share one
+        // Redis instance/DB, so without a per-env prefix their workers consume
+        // from the same `bull:<queue>` keyspace — one env's worker steals the
+        // other's jobs and the originating env's in-process completion SSE
+        // never fires (the client waits forever for audio). The prefix keeps
+        // each environment on its own `bull:<env>:<queue>` keyspace.
+        prefix: `bull:${config.get('NODE_ENV')}`,
         defaultJobOptions: {
           removeOnComplete: { age: 24 * 3600, count: 1000 },
           removeOnFail: { age: 7 * 24 * 3600 },
