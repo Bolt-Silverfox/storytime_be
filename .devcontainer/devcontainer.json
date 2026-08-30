@@ -19,10 +19,18 @@
     "CI": "true"
   },
 
-  // Install WITHOUT lifecycle scripts — postinstall is the classic
-  // supply-chain execution vector (Shai-Hulud family). Run it explicitly and
-  // audited only when you actually need native rebuilds.
-  "onCreateCommand": "corepack enable && pnpm install --frozen-lockfile --ignore-scripts",
+  // First reject any credentials living in the mounted workspace (project
+  // .npmrc / .git/config) — GIT_CONFIG_GLOBAL and NPM_CONFIG_USERCONFIG above
+  // only neutralise the user/global configs, not repo-local ones. The guard is
+  // the copy BAKED INTO THE IMAGE (on PATH), not the one in the mutable
+  // workspace, so a poisoned checkout can't tamper with its own gatekeeper.
+  // Then install WITHOUT lifecycle scripts — postinstall is the classic
+  // supply-chain execution vector (Shai-Hulud family); run it explicitly and
+  // audited only when you actually need native rebuilds. Corepack is already
+  // enabled at image build time (see Dockerfile), so it is intentionally NOT
+  // re-enabled here — `corepack enable` as the non-root remoteUser EACCES's
+  // writing shims into root-owned /usr/local/bin.
+  "onCreateCommand": "verify-no-workspace-credentials.sh && pnpm install --frozen-lockfile --ignore-scripts",
 
   "customizations": {
     "vscode": {

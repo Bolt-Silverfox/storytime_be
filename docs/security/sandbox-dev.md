@@ -57,6 +57,16 @@ env | grep -iE 'token|secret|npm_config__auth|aws_' # → (empty)
 If any of those return real data, a credential is leaking in — stop and fix the
 mount/env before building.
 
+The checks above cover the user/global configs. Because the source tree is
+mounted, a **repository-local** `.npmrc` (with `_authToken`/`_auth`/`_password`)
+or a `.git/config` remote URL with embedded credentials is also visible inside
+the container, and `NPM_CONFIG_USERCONFIG` / `GIT_CONFIG_GLOBAL` do **not**
+neutralise those. Before installing, `onCreateCommand` runs the **image-baked**
+`verify-no-workspace-credentials.sh` (copied into the image at build time and
+run from `PATH`, so a poisoned workspace can't tamper with its own gatekeeper),
+which fails the build if it finds any — so keep secrets out of the workspace
+(or use a clean worktree) rather than relying on the env vars alone.
+
 ## Caveats
 
 - **Native rebuilds:** some packages need lifecycle scripts (`--ignore-scripts`
