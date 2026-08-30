@@ -78,3 +78,26 @@ which fails the build if it finds any — so keep secrets out of the workspace
   workspace. Push from the host so a poisoned build can't push on your behalf.
 - **This is opt-in** and does not change CI. CI has its own protections (the
   required config-injection scan and the shai-hulud deep scan).
+
+## Editors: never auto-lint on the host
+
+The sandbox stops **installs and builds** from running on the host, but an
+editor's ESLint/PostCSS integration is a separate execution path: it loads a
+project's **flat config as Node code the moment you open a file** — outside the
+container, with your host credentials. The Aug-2026 config-injection worm hid
+its payload *inside* `eslint.config.mjs` / `postcss.config.mjs`, so an editor
+auto-lint would execute it even though you never ran a command. "Deps only in a
+sandbox" does not cover this; treat it as a distinct rule.
+
+For these repos:
+
+- **Disable editor ESLint/PostCSS on the host.**
+  - **VS Code / Cursor** (user `settings.json` — `.vscode/` is gitignored here,
+    so it must be set at the user level):
+    `"eslint.enable": false`, `"eslint.run": "off"`, `"stylelint.enable": false`.
+  - **WebStorm / IntelliJ**: Settings → Languages & Frameworks → JavaScript →
+    Code Quality Tools → **ESLint → "Disable ESLint"** (stored per project).
+- **Run lint — and any build — only inside the devcontainer**, where the config
+  executes in the isolated, credential-free environment.
+- PostCSS has no editor auto-exec: it only runs during a Next.js build
+  (`next build` / `next dev`), which also stays in the container.
