@@ -15,6 +15,9 @@ concurrency:
 env:
   NODE_VERSION: '22'
 
+permissions:
+  contents: read
+
 jobs:
   # ===================
   # Quality Checks (runs on all events)
@@ -245,10 +248,36 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
-      - name: Create .env file
+      - name: Create synthetic .env (no real secrets in pre-merge CI)
         run: |
           cat > .env << 'EOF'
-          ${{ secrets.ENV_FILE }}
+          NODE_ENV=development
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/storytime_test
+          REDIS_URL=redis://localhost:6379
+          ELEVEN_LABS_KEY=ci-dummy
+          CLOUDINARY_CLOUD_NAME=ci-dummy
+          CLOUDINARY_API_KEY=ci-dummy
+          CLOUDINARY_API_SECRET=ci-dummy
+          DEFAULT_SENDER_EMAIL=ci@example.com
+          DEFAULT_SENDER_NAME=CI
+          SMTP_HOST=localhost
+          SMTP_USER=ci@example.com
+          SMTP_PASS=ci-dummy
+          JWT_SECRET=ci-dummy-not-a-secret
+          ADMIN_SECRET=ci-dummy-not-a-secret
+          SECRET=ci-dummy-not-a-secret
+          WEB_APP_BASE_URL=http://localhost:3000
+          GOOGLE_CLIENT_ID=ci-dummy
+          GOOGLE_CLIENT_SECRET=ci-dummy
+          GOOGLE_WEB_CLIENT_ID=ci-dummy
+          GOOGLE_ANDROID_CLIENT_ID=ci-dummy
+          GOOGLE_IOS_CLIENT_ID=ci-dummy
+          BACKEND_BASE_URL=http://localhost:3000
+          DEEPGRAM_API_KEY=ci-dummy
+          APPLE_CLIENT_ID=ci-dummy
+          APPLE_SERVICE_ID=ci-dummy
+          GEMINI_API_KEY=ci-dummy
+          HF_TOKEN=ci-dummy
           EOF
 
       - name: Install dependencies
