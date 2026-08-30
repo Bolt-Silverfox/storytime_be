@@ -25,7 +25,13 @@ import {
 import { DeviceTokenService } from './services/device-token.service';
 import { NotificationService } from './notification.service';
 import { TestPushNotificationDto } from './dto/device-token.dto';
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  ValidateIf,
+} from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 import { DevicePlatform } from '@prisma/client';
@@ -47,8 +53,16 @@ class UnregisterDeviceDto {
   // Optional: when present, DELETE /devices unregisters only this device
   // (the v1.2.0 logout contract, which sends { token } in the body). When
   // absent, DELETE /devices unregisters all of the user's devices.
+  //
+  // @ValidateIf runs validation whenever `token` is anything other than
+  // undefined — so an OMITTED token stays valid (the unregister-all contract),
+  // but an explicit `null` or `""` is validated and rejected (400) by
+  // @IsString/@IsNotEmpty. Plain @IsOptional would skip BOTH null and
+  // undefined, letting { token: null } / { token: "" } fall through the falsy
+  // `dto?.token` check into the "unregister ALL devices" branch.
+  @ValidateIf((o: UnregisterDeviceDto) => o.token !== undefined)
   @IsString()
-  @IsOptional()
+  @IsNotEmpty()
   token?: string;
 }
 
