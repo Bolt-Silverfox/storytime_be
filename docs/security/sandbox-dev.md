@@ -81,10 +81,12 @@ which fails the build if it finds any — so keep secrets out of the workspace
 
 ## Editors: never auto-lint on the host
 
-The sandbox stops **installs and builds** from running on the host, but an
-editor's ESLint/PostCSS integration is a separate execution path: it loads a
-project's **flat config as Node code the moment you open a file** — outside the
-container, with your host credentials. The Aug-2026 config-injection worm hid
+The devcontainer gives installs and builds an **isolated path** off the host —
+but it does not *prevent* you from running `pnpm install`/lint/build directly on
+the host — always run those in the container, never on the host. And an editor's
+ESLint/PostCSS/File-Watcher integration is a separate auto-execution path: it
+loads a project's **flat config as Node code the moment you open or save a
+file** — outside the container, with your host credentials. The Aug-2026 config-injection worm hid
 its payload *inside* `eslint.config.mjs` / `postcss.config.mjs`, so an editor
 auto-lint would execute it even though you never ran a command. "Deps only in a
 sandbox" does not cover this; treat it as a distinct rule.
@@ -96,7 +98,11 @@ For these repos:
     so it must be set at the user level):
     `"eslint.enable": false`, `"stylelint.enable": false`.
   - **WebStorm / IntelliJ**: Settings → Languages & Frameworks → JavaScript →
-    Code Quality Tools → **ESLint → "Disable ESLint"** (stored per project).
+    Code Quality Tools → **ESLint → "Disable ESLint"** (stored per project); and
+    Settings → Tools → **File Watchers** — disable any project-level *and*
+    global watchers. File Watchers run configured Node/ESLint/Prettier/PostCSS
+    commands on the host on save/change, which disabling ESLint alone does not
+    stop.
 - **Run lint — and any build — only inside the devcontainer**, where the config
   executes in the isolated, credential-free environment.
 - PostCSS has no editor auto-exec: it only runs during a Next.js build
