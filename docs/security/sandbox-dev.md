@@ -94,7 +94,7 @@ For these repos:
 - **Disable editor ESLint/PostCSS on the host.**
   - **VS Code / Cursor** (user `settings.json` — `.vscode/` is gitignored here,
     so it must be set at the user level):
-    `"eslint.enable": false`, `"eslint.run": "off"`, `"stylelint.enable": false`.
+    `"eslint.enable": false`, `"stylelint.enable": false`.
   - **WebStorm / IntelliJ**: Settings → Languages & Frameworks → JavaScript →
     Code Quality Tools → **ESLint → "Disable ESLint"** (stored per project).
 - **Run lint — and any build — only inside the devcontainer**, where the config
