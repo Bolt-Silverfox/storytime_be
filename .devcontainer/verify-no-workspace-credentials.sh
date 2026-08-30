@@ -35,7 +35,14 @@ if [ -f .git/config ]; then
     echo "::error:: credentials embedded in a .git/config remote URL" >&2
     fail=1
   fi
-  if grep -Eiq '^[[:space:]]*extraheader[[:space:]]*=.*authorization[[:space:]]*:' .git/config; then
+  # `extraheader` is only meaningful under an [http] / [http "<url>"] section,
+  # so only treat an Authorization-bearing extraheader as a credential there —
+  # track the current section header and flag the pair only inside [http...].
+  if awk '
+      /^[[:space:]]*\[/ { in_http = (tolower($0) ~ /^[[:space:]]*\[http([[:space:]]|\]|")/) ; next }
+      in_http && tolower($0) ~ /^[[:space:]]*extraheader[[:space:]]*=.*authorization[[:space:]]*:/ { found = 1 }
+      END { exit(found ? 0 : 1) }
+    ' .git/config; then
     echo "::error:: Authorization header embedded in .git/config (http.extraheader)" >&2
     fail=1
   fi
