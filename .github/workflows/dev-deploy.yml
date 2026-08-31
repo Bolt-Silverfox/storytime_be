@@ -15,6 +15,9 @@ concurrency:
 env:
   NODE_VERSION: '22'
 
+permissions:
+  contents: read
+
 jobs:
   # ===================
   # Quality Checks (runs on all events)
@@ -40,8 +43,6 @@ jobs:
             nodejs.org:443
             binaries.prisma.sh:443
             checkpoint.prisma.io:443
-            codecov.io:443
-            cli.codecov.io:443
             52.18.195.224:22
             emerj-shared-db.cvq22s4q62o3.eu-west-1.rds.amazonaws.com:5432
 
@@ -115,8 +116,6 @@ jobs:
             nodejs.org:443
             binaries.prisma.sh:443
             checkpoint.prisma.io:443
-            codecov.io:443
-            cli.codecov.io:443
             52.18.195.224:22
             emerj-shared-db.cvq22s4q62o3.eu-west-1.rds.amazonaws.com:5432
 
@@ -216,8 +215,6 @@ jobs:
             nodejs.org:443
             binaries.prisma.sh:443
             checkpoint.prisma.io:443
-            codecov.io:443
-            cli.codecov.io:443
             52.18.195.224:22
             emerj-shared-db.cvq22s4q62o3.eu-west-1.rds.amazonaws.com:5432
 
@@ -245,10 +242,36 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
-      - name: Create .env file
+      - name: Create synthetic .env (no real secrets in pre-merge CI)
         run: |
           cat > .env << 'EOF'
-          ${{ secrets.ENV_FILE }}
+          NODE_ENV=development
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/storytime_test
+          REDIS_URL=redis://localhost:6379
+          ELEVEN_LABS_KEY=ci-dummy
+          CLOUDINARY_CLOUD_NAME=ci-dummy
+          CLOUDINARY_API_KEY=ci-dummy
+          CLOUDINARY_API_SECRET=ci-dummy
+          DEFAULT_SENDER_EMAIL=ci@example.com
+          DEFAULT_SENDER_NAME=CI
+          SMTP_HOST=localhost
+          SMTP_USER=ci@example.com
+          SMTP_PASS=ci-dummy
+          JWT_SECRET=ci-dummy-not-a-secret
+          ADMIN_SECRET=ci-dummy-not-a-secret
+          SECRET=ci-dummy-not-a-secret
+          WEB_APP_BASE_URL=http://localhost:3000
+          GOOGLE_CLIENT_ID=ci-dummy
+          GOOGLE_CLIENT_SECRET=ci-dummy
+          GOOGLE_WEB_CLIENT_ID=ci-dummy
+          GOOGLE_ANDROID_CLIENT_ID=ci-dummy
+          GOOGLE_IOS_CLIENT_ID=ci-dummy
+          BACKEND_BASE_URL=http://localhost:3000
+          DEEPGRAM_API_KEY=ci-dummy
+          APPLE_CLIENT_ID=ci-dummy
+          APPLE_SERVICE_ID=ci-dummy
+          GEMINI_API_KEY=ci-dummy
+          HF_TOKEN=ci-dummy
           EOF
 
       - name: Install dependencies
@@ -264,25 +287,11 @@ jobs:
         continue-on-error: true
         run: pnpm test --coverage
 
-      # Detect the secret's presence WITHOUT exposing its value to the job env
-      # (which would leak it to install/test/dependency steps). This step only
-      # emits a boolean; the token itself is passed solely to the upload step.
-      - name: Check for Codecov token
-        id: codecov_token
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        run: echo "present=${CODECOV_TOKEN:+true}" >> "$GITHUB_OUTPUT"
-
-      - name: Upload coverage to Codecov
-        # No-op until CODECOV_TOKEN is set (see repo secrets); never fails CI.
-        if: steps.codecov_token.outputs.present == 'true'
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/lcov.info
-          disable_search: true
-          flags: unittests
-          fail_ci_if_error: false
+      # No Codecov upload here on purpose: this job runs untrusted pull-request
+      # test code, so CODECOV_TOKEN must not be present on the runner (a test
+      # could persist a process and read a later step's env — CWE-522). If
+      # coverage reporting is wanted, add a SEPARATE post-merge job that runs
+      # tests and uploads with the token, isolated from PR code.
 
       - name: Cleanup sensitive files
         if: always()
@@ -331,8 +340,6 @@ jobs:
             nodejs.org:443
             binaries.prisma.sh:443
             checkpoint.prisma.io:443
-            codecov.io:443
-            cli.codecov.io:443
             52.18.195.224:22
             emerj-shared-db.cvq22s4q62o3.eu-west-1.rds.amazonaws.com:5432
 
