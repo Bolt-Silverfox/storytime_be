@@ -25,7 +25,13 @@ import {
 import { DeviceTokenService } from './services/device-token.service';
 import { NotificationService } from './notification.service';
 import { TestPushNotificationDto } from './dto/device-token.dto';
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  ValidateIf,
+} from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 import { DevicePlatform } from '@prisma/client';
@@ -41,6 +47,23 @@ class RegisterDeviceDto {
   @IsString()
   @IsOptional()
   deviceName?: string;
+}
+
+class UnregisterDeviceDto {
+  // Optional: when present, DELETE /devices unregisters only this device
+  // (the v1.2.0 logout contract, which sends { token } in the body). When
+  // absent, DELETE /devices unregisters all of the user's devices.
+  //
+  // @ValidateIf runs validation whenever `token` is anything other than
+  // undefined — so an OMITTED token stays valid (the unregister-all contract),
+  // but an explicit `null` or `""` is validated and rejected (400) by
+  // @IsString/@IsNotEmpty. Plain @IsOptional would skip BOTH null and
+  // undefined, letting { token: null } / { token: "" } fall through the falsy
+  // `dto?.token` check into the "unregister ALL devices" branch.
+  @ValidateIf((o: UnregisterDeviceDto) => o.token !== undefined)
+  @IsString()
+  @IsNotEmpty()
+  token?: string;
 }
 
 @ApiTags('Devices')
@@ -147,21 +170,33 @@ export class DeviceController {
   @UseGuards(AuthSessionGuard)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Unregister all devices (logout from all devices)' })
+  @ApiOperation({
+    summary: 'Unregister devices',
+    description:
+      'With a { token } body, unregisters only that device (the v1.2.0 logout ' +
+      'contract). With no body, unregisters all devices for the user.',
+  })
+  @ApiBody({ type: UnregisterDeviceDto, required: false })
   @ApiResponse({
     status: 200,
-    description: 'All devices unregistered',
-    schema: {
-      type: 'object',
-      properties: {
-        count: {
-          type: 'number',
-          description: 'Number of devices unregistered',
-        },
-      },
-    },
+    description:
+      'Device(s) unregistered. Returns { success } for a single token, ' +
+      '{ count } when unregistering all.',
   })
-  async unregisterAllDevices(@Req() req: AuthenticatedRequest) {
+  async unregisterDevices(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UnregisterDeviceDto,
+  ) {
+    // Preserve the v1.2.0 logout semantics: DELETE /devices with a { token }
+    // body removes just that one device. Older clients (app 1.2.0) rely on
+    // this to unregister only the device logging out; treating it as
+    // "unregister all" silently killed push on the user's other devices.
+    if (dto?.token) {
+      return this.deviceTokenService.unregisterDeviceToken(
+        req.authUserData.userId,
+        dto.token,
+      );
+    }
     return this.deviceTokenService.unregisterAllUserTokens(
       req.authUserData.userId,
     );

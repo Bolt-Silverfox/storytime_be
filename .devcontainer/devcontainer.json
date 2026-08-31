@@ -1,0 +1,43 @@
+{
+  "name": "storytime-be sandboxed build",
+  "build": { "dockerfile": "Dockerfile" },
+
+  // SECURITY: no host credential mounts. The container never sees the host's
+  // ~/.npmrc, ~/.ssh, ~/.aws, ~/.gitconfig, gh/keyring tokens, or any secret.
+  // Builds/lint/test run here; push, deploy, and auth stay on the HOST.
+  // This removes the credential reservoir that the 2026-08 config-injection
+  // worm harvested during builds (see docs/security/sandbox-dev.md).
+  "mounts": [],
+  "runArgs": ["--network=bridge"],
+
+  "containerEnv": {
+    // No host git identity leaks in — the container has no global git config,
+    // so a malicious build step can't read your name/email/signing key.
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    // npm/pnpm never authenticate from inside the container.
+    "NPM_CONFIG_USERCONFIG": "/dev/null",
+    "CI": "true"
+  },
+
+  // First reject any credentials living in the mounted workspace (project
+  // .npmrc / .git/config) — GIT_CONFIG_GLOBAL and NPM_CONFIG_USERCONFIG above
+  // only neutralise the user/global configs, not repo-local ones. The guard is
+  // the copy BAKED INTO THE IMAGE (on PATH), not the one in the mutable
+  // workspace, so a poisoned checkout can't tamper with its own gatekeeper.
+  // Then install WITHOUT lifecycle scripts — postinstall is the classic
+  // supply-chain execution vector (Shai-Hulud family); run it explicitly and
+  // audited only when you actually need native rebuilds. Corepack is already
+  // enabled at image build time (see Dockerfile), so it is intentionally NOT
+  // re-enabled here — `corepack enable` as the non-root remoteUser EACCES's
+  // writing shims into root-owned /usr/local/bin.
+  "onCreateCommand": "verify-no-workspace-credentials.sh && pnpm install --frozen-lockfile --ignore-scripts",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+    }
+  },
+
+  // Least privilege: run as the non-root 'node' user.
+  "remoteUser": "node"
+}
