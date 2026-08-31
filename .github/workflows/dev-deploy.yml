@@ -293,25 +293,11 @@ jobs:
         continue-on-error: true
         run: pnpm test --coverage
 
-      # Detect the secret's presence WITHOUT exposing its value to the job env
-      # (which would leak it to install/test/dependency steps). This step only
-      # emits a boolean; the token itself is passed solely to the upload step.
-      - name: Check for Codecov token
-        id: codecov_token
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        run: echo "present=${CODECOV_TOKEN:+true}" >> "$GITHUB_OUTPUT"
-
-      - name: Upload coverage to Codecov
-        # No-op until CODECOV_TOKEN is set (see repo secrets); never fails CI.
-        if: steps.codecov_token.outputs.present == 'true'
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/lcov.info
-          disable_search: true
-          flags: unittests
-          fail_ci_if_error: false
+      # No Codecov upload here on purpose: this job runs untrusted pull-request
+      # test code, so CODECOV_TOKEN must not be present on the runner (a test
+      # could persist a process and read a later step's env — CWE-522). If
+      # coverage reporting is wanted, add a SEPARATE post-merge job that runs
+      # tests and uploads with the token, isolated from PR code.
 
       - name: Cleanup sensitive files
         if: always()
