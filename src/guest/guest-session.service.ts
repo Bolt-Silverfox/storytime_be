@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  ServiceUnavailableException,
   type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -82,6 +83,13 @@ export class GuestSessionService implements OnModuleInit {
   private readonly logger = new Logger(GuestSessionService.name);
   private keyv: Keyv;
   private readonly redisUrl: string;
+  /**
+   * The Redis store backing `this.keyv`, set only when onModuleInit's health
+   * probe succeeded. Undefined while on the in-memory fallback. Its presence is
+   * what lets us tell a genuine cache miss (in-memory, or Redis up but key
+   * absent) apart from a storage outage (Redis down) — see isStorageUnavailable.
+   */
+  private redisStore?: KeyvRedis<unknown>;
 
   constructor(
     private readonly configService: ConfigService,
@@ -134,6 +142,7 @@ export class GuestSessionService implements OnModuleInit {
       if (ok === '1') {
         await redisKeyv.delete(probeKey);
         this.keyv = redisKeyv;
+        this.redisStore = store;
         this.logger.log('GuestSessionService using Redis for persistence');
         return;
       }
@@ -154,6 +163,41 @@ export class GuestSessionService implements OnModuleInit {
       } catch {
         /* best-effort cleanup */
       }
+    }
+  }
+
+  /**
+   * True when we are Redis-backed AND the node-redis client is currently not
+   * ready (socket down / reconnecting). In that state a lookup returning empty
+   * or a write we cannot confirm is a storage outage, not a genuine miss — the
+   * caller must surface 503, not a misleading 401/500. On the in-memory
+   * fallback (`redisStore` undefined) this is always false: that store cannot
+   * have a connectivity outage, so misses there are real.
+   */
+  private isStorageUnavailable(): boolean {
+    // `.client` is typed as a client|cluster union; only the standalone client
+    // exposes `isReady`. Read it structurally so either shape compiles, and
+    // treat "explicitly not ready" as the only outage signal (undefined ->
+    // don't know -> not an outage).
+    const client = this.redisStore?.client as
+      | { isReady?: boolean }
+      | undefined;
+    return client?.isReady === false;
+  }
+
+  /**
+   * Guard for write paths (update/record): if Redis went down around the
+   * `set`, the write is not durable and we cannot silently report success —
+   * surface 503 so the client retries rather than losing progress/quota state.
+   */
+  private assertWritePersisted(sessionId: string): void {
+    if (this.isStorageUnavailable()) {
+      this.logger.error(
+        `Guest-session store unavailable while persisting ${this.maskSessionId(sessionId)}; returning 503`,
+      );
+      throw new ServiceUnavailableException(
+        'Guest session storage is temporarily unavailable. Please try again.',
+      );
     }
   }
 
@@ -203,6 +247,16 @@ export class GuestSessionService implements OnModuleInit {
     // Verify the session was stored
     const stored = await this.keyv.get<GuestSession>(key);
     if (!stored) {
+      // A failed read-back on a down Redis is a storage outage (503), not an
+      // application error (500): the write likely never reached Redis.
+      if (this.isStorageUnavailable()) {
+        this.logger.error(
+          `Guest-session store unavailable while creating ${this.maskSessionId(sessionId)}; returning 503`,
+        );
+        throw new ServiceUnavailableException(
+          'Guest session storage is temporarily unavailable. Please try again.',
+        );
+      }
       this.logger.error(
         `Failed to store guest session with sessionId: ${this.maskSessionId(sessionId)}`,
       );
@@ -254,6 +308,17 @@ export class GuestSessionService implements OnModuleInit {
     }
 
     if (!session) {
+      // Distinguish a genuine miss from a storage outage: if Redis is down,
+      // the empty read tells us nothing about whether the session exists, so
+      // reporting "not found" (-> 401 "session expired") would be misleading.
+      if (this.isStorageUnavailable()) {
+        this.logger.error(
+          `Guest-session store unavailable while looking up ${this.maskSessionId(sessionId)}; returning 503`,
+        );
+        throw new ServiceUnavailableException(
+          'Guest session storage is temporarily unavailable. Please try again.',
+        );
+      }
       this.logger.warn(
         `Guest session not found for sessionId: ${this.maskSessionId(sessionId)}`,
       );
@@ -324,6 +389,7 @@ export class GuestSessionService implements OnModuleInit {
     // Save back to cache with TTL refresh
     const key = this.getSessionKey(sessionId);
     await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
+    this.assertWritePersisted(sessionId);
 
     this.logger.debug(
       `Updated progress for session ${this.maskSessionId(sessionId)}, story ${storyId}: ${clampedProgress}%`,
@@ -427,6 +493,7 @@ export class GuestSessionService implements OnModuleInit {
     // Save back to cache with TTL refresh
     const key = this.getSessionKey(sessionId);
     await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
+    this.assertWritePersisted(sessionId);
 
     this.logger.debug(
       `Recorded new story access for session ${this.maskSessionId(sessionId)}, story ${storyId}. Total: ${session.uniqueStoriesRead}`,

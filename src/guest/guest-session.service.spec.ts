@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GuestSessionService } from './guest-session.service';
 import type { IGuestRepository } from './repositories/guest.repository.interface';
@@ -28,5 +29,88 @@ describe('GuestSessionService — in-memory fallback', () => {
     const fetched = await service.getGuestSession(session.sessionId);
     expect(fetched).not.toBeNull();
     expect(fetched?.sessionId).toBe(session.sessionId);
+  });
+
+  it('genuine cache miss (in-memory, no Redis) returns null, not 503', async () => {
+    const service = new GuestSessionService(configService, guestRepository);
+    // No redisStore set -> storage is the healthy in-memory store; an absent
+    // key is a real miss and must surface as null (-> 401 upstream).
+    await expect(
+      service.getGuestSession('does-not-exist'),
+    ).resolves.toBeNull();
+  });
+});
+
+/**
+ * #453: when the guest-session store is Redis-backed and Redis is unhealthy,
+ * a lookup/write that comes back empty must NOT be reported as a genuine miss
+ * (which surfaces as a misleading 401 "session expired"). It must throw
+ * ServiceUnavailableException (503) so the caller can distinguish a storage
+ * outage from an actually-absent session.
+ */
+describe('GuestSessionService — Redis outage surfaces 503, not 401', () => {
+  const configService = {
+    get: jest.fn().mockReturnValue('redis://127.0.0.1:6390'),
+  } as unknown as ConfigService;
+  const guestRepository = {} as unknown as IGuestRepository;
+
+  // Build a service pinned to a Redis-backed store whose node-redis client
+  // reports the given readiness, and whose get/set behave as stubbed.
+  function redisBackedService(opts: {
+    isReady: boolean;
+    get?: () => Promise<unknown>;
+    set?: () => Promise<unknown>;
+  }): GuestSessionService {
+    const service = new GuestSessionService(configService, guestRepository);
+    const keyvStub = {
+      get: opts.get ?? (async () => undefined),
+      set: opts.set ?? (async () => true),
+      delete: async () => true,
+      on: () => keyvStub,
+    };
+    // Simulate the Redis-backed state onModuleInit would have established.
+    (service as unknown as { keyv: unknown }).keyv = keyvStub;
+    (service as unknown as { redisStore: unknown }).redisStore = {
+      client: { isReady: opts.isReady },
+    };
+    return service;
+  }
+
+  it('read failure while Redis is down throws 503', async () => {
+    const service = redisBackedService({ isReady: false });
+    await expect(service.getGuestSession('sid')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('write failure while Redis is down throws 503 (not 500)', async () => {
+    const service = redisBackedService({ isReady: false });
+    await expect(service.createGuestSession()).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('write path: session read succeeds but Redis drops during set -> 503', async () => {
+    // get returns a real session (read ok), but the client is not ready, so
+    // the post-set durability guard must reject with 503.
+    const existing = {
+      sessionId: 'sid',
+      createdAt: new Date(),
+      lastActiveAt: new Date(),
+      readingHistory: {},
+      uniqueStoriesRead: 0,
+    };
+    const service = redisBackedService({
+      isReady: false,
+      get: async () => existing,
+    });
+    await expect(
+      service.updateGuestProgress('sid', 'story-1', 50),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('recovered Redis: an absent key is a genuine miss -> null', async () => {
+    const service = redisBackedService({ isReady: true });
+    await expect(service.getGuestSession('sid')).resolves.toBeNull();
   });
 });
