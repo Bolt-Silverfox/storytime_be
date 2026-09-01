@@ -485,7 +485,15 @@ export class GuestSessionService implements OnModuleInit {
    */
   async deleteGuestSession(sessionId: string): Promise<void> {
     const key = this.getSessionKey(sessionId);
-    await this.keyv.delete(key);
+    try {
+      await this.keyv.delete(key);
+    } catch (err) {
+      // With throwOnErrors, a Redis-backed delete rejects on outage. Surface it
+      // as 503 (consistent with persistSession) rather than a raw 500: the
+      // session was not removed, so we must not report success silently.
+      if (this.redisStore) throw this.storageOutage(sessionId, 'deleting', err);
+      throw err;
+    }
     this.logger.debug(
       `Deleted guest session: ${this.maskSessionId(sessionId)}`,
     );
