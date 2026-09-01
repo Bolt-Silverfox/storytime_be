@@ -119,8 +119,15 @@ export class GuestSessionService implements OnModuleInit {
       // disconnect) instead of throwing. A throw here would surface as an
       // unhandled error and crash the whole process (this was the cause of an
       // intermittent crash-loop on green).
+      // throwOnErrors:true makes get/set reject on an operation-level failure
+      // (error reply, command timeout) instead of Keyv's default of swallowing
+      // it and returning undefined/false. That reject is what lets the callers
+      // below tell a real storage outage from a genuine miss even when the
+      // node-redis client still reports `isReady` (isReady only flips once the
+      // socket is known-down, so it alone misses in-flight command failures).
       const store = new KeyvRedis(this.redisUrl, {
         throwOnConnectError: false,
+        throwOnErrors: true,
       });
 
       // The node-redis client's own errors MUST always have a listener, or a
@@ -133,7 +140,7 @@ export class GuestSessionService implements OnModuleInit {
         );
       });
 
-      redisKeyv = new Keyv({ store });
+      redisKeyv = new Keyv({ store, throwOnErrors: true });
       this.attachKeyvErrorHandler(redisKeyv);
 
       const probeKey = `${GUEST_SESSION_PREFIX}__healthcheck__`;
@@ -179,10 +186,27 @@ export class GuestSessionService implements OnModuleInit {
     // exposes `isReady`. Read it structurally so either shape compiles, and
     // treat "explicitly not ready" as the only outage signal (undefined ->
     // don't know -> not an outage).
-    const client = this.redisStore?.client as
-      | { isReady?: boolean }
-      | undefined;
+    const client = this.redisStore?.client as { isReady?: boolean } | undefined;
     return client?.isReady === false;
+  }
+
+  /**
+   * Build the 503 for a storage outage and log it. `err` is the underlying
+   * cache error when a get/set rejected (throwOnErrors); omit it for the
+   * silent-empty case detected via isStorageUnavailable.
+   */
+  private storageOutage(
+    sessionId: string,
+    phase: string,
+    err?: unknown,
+  ): ServiceUnavailableException {
+    const detail = err ? `: ${(err as Error)?.message ?? err}` : '';
+    this.logger.error(
+      `Guest-session store unavailable while ${phase} ${this.maskSessionId(sessionId)}; returning 503${detail}`,
+    );
+    return new ServiceUnavailableException(
+      'Guest session storage is temporarily unavailable. Please try again.',
+    );
   }
 
   /**
@@ -192,13 +216,28 @@ export class GuestSessionService implements OnModuleInit {
    */
   private assertWritePersisted(sessionId: string): void {
     if (this.isStorageUnavailable()) {
-      this.logger.error(
-        `Guest-session store unavailable while persisting ${this.maskSessionId(sessionId)}; returning 503`,
-      );
-      throw new ServiceUnavailableException(
-        'Guest session storage is temporarily unavailable. Please try again.',
-      );
+      throw this.storageOutage(sessionId, 'persisting');
     }
+  }
+
+  /**
+   * Persist a session, mapping any storage failure to 503 when Redis-backed: a
+   * rejected `set` (throwOnErrors) OR a `set` that resolved while the client
+   * has since gone unready (silent loss). Callers must never report success on
+   * a write we cannot confirm reached storage.
+   */
+  private async persistSession(
+    key: string,
+    session: GuestSession,
+    sessionId: string,
+  ): Promise<void> {
+    try {
+      await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
+    } catch (err) {
+      if (this.redisStore) throw this.storageOutage(sessionId, 'persisting', err);
+      throw err;
+    }
+    this.assertWritePersisted(sessionId);
   }
 
   private createMemoryKeyv(): Keyv {
@@ -242,20 +281,23 @@ export class GuestSessionService implements OnModuleInit {
     this.logger.debug(
       `Creating guest session with sessionId: ${this.maskSessionId(sessionId)}`,
     );
-    await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
-
-    // Verify the session was stored
-    const stored = await this.keyv.get<GuestSession>(key);
+    let stored: GuestSession | undefined;
+    try {
+      await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
+      // Verify the session was stored
+      stored = await this.keyv.get<GuestSession>(key);
+    } catch (err) {
+      // A rejected set/get on the Redis path is a storage outage (503), not an
+      // application error (500).
+      if (this.redisStore) throw this.storageOutage(sessionId, 'creating', err);
+      throw err;
+    }
     if (!stored) {
-      // A failed read-back on a down Redis is a storage outage (503), not an
-      // application error (500): the write likely never reached Redis.
+      // A silent-empty read-back while the client has gone unready is a storage
+      // outage (503), not an application error (500): the write likely never
+      // reached Redis. (A rejected set/get was already mapped to 503 above.)
       if (this.isStorageUnavailable()) {
-        this.logger.error(
-          `Guest-session store unavailable while creating ${this.maskSessionId(sessionId)}; returning 503`,
-        );
-        throw new ServiceUnavailableException(
-          'Guest session storage is temporarily unavailable. Please try again.',
-        );
+        throw this.storageOutage(sessionId, 'creating');
       }
       this.logger.error(
         `Failed to store guest session with sessionId: ${this.maskSessionId(sessionId)}`,
@@ -288,23 +330,32 @@ export class GuestSessionService implements OnModuleInit {
     this.logger.debug(
       `Looking for guest session with sessionId: ${this.maskSessionId(sessionId)}`,
     );
-    let session = await this.keyv.get<GuestSession>(key);
+    let session: GuestSession | undefined;
+    try {
+      session = await this.keyv.get<GuestSession>(key);
 
-    // Fallback: check for old key format (before namespace fix)
-    if (!session) {
-      const oldKey = `guest:guest:session:${sessionId}`;
-      this.logger.debug(
-        `Trying old key format for sessionId: ${this.maskSessionId(sessionId)}`,
-      );
-      session = await this.keyv.get<GuestSession>(oldKey);
-      if (session) {
+      // Fallback: check for old key format (before namespace fix)
+      if (!session) {
+        const oldKey = `guest:guest:session:${sessionId}`;
         this.logger.debug(
-          `Found session with old key format, migrating to new key`,
+          `Trying old key format for sessionId: ${this.maskSessionId(sessionId)}`,
         );
-        // Migrate to new key format
-        await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
-        await this.keyv.delete(oldKey);
+        session = await this.keyv.get<GuestSession>(oldKey);
+        if (session) {
+          this.logger.debug(
+            `Found session with old key format, migrating to new key`,
+          );
+          // Migrate to new key format
+          await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
+          await this.keyv.delete(oldKey);
+        }
       }
+    } catch (err) {
+      // A rejected read on the Redis path (throwOnErrors) is a storage outage,
+      // not a miss — surface 503 rather than letting it fall through to a
+      // misleading 401. isReady may still be true here (in-flight failure).
+      if (this.redisStore) throw this.storageOutage(sessionId, 'looking up', err);
+      throw err;
     }
 
     if (!session) {
@@ -312,12 +363,7 @@ export class GuestSessionService implements OnModuleInit {
       // the empty read tells us nothing about whether the session exists, so
       // reporting "not found" (-> 401 "session expired") would be misleading.
       if (this.isStorageUnavailable()) {
-        this.logger.error(
-          `Guest-session store unavailable while looking up ${this.maskSessionId(sessionId)}; returning 503`,
-        );
-        throw new ServiceUnavailableException(
-          'Guest session storage is temporarily unavailable. Please try again.',
-        );
+        throw this.storageOutage(sessionId, 'looking up');
       }
       this.logger.warn(
         `Guest session not found for sessionId: ${this.maskSessionId(sessionId)}`,
@@ -388,8 +434,7 @@ export class GuestSessionService implements OnModuleInit {
 
     // Save back to cache with TTL refresh
     const key = this.getSessionKey(sessionId);
-    await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
-    this.assertWritePersisted(sessionId);
+    await this.persistSession(key, session, sessionId);
 
     this.logger.debug(
       `Updated progress for session ${this.maskSessionId(sessionId)}, story ${storyId}: ${clampedProgress}%`,
@@ -492,8 +537,7 @@ export class GuestSessionService implements OnModuleInit {
 
     // Save back to cache with TTL refresh
     const key = this.getSessionKey(sessionId);
-    await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
-    this.assertWritePersisted(sessionId);
+    await this.persistSession(key, session, sessionId);
 
     this.logger.debug(
       `Recorded new story access for session ${this.maskSessionId(sessionId)}, story ${storyId}. Total: ${session.uniqueStoriesRead}`,

@@ -35,9 +35,7 @@ describe('GuestSessionService — in-memory fallback', () => {
     const service = new GuestSessionService(configService, guestRepository);
     // No redisStore set -> storage is the healthy in-memory store; an absent
     // key is a real miss and must surface as null (-> 401 upstream).
-    await expect(
-      service.getGuestSession('does-not-exist'),
-    ).resolves.toBeNull();
+    await expect(service.getGuestSession('does-not-exist')).resolves.toBeNull();
   });
 });
 
@@ -112,5 +110,40 @@ describe('GuestSessionService — Redis outage surfaces 503, not 401', () => {
   it('recovered Redis: an absent key is a genuine miss -> null', async () => {
     const service = redisBackedService({ isReady: true });
     await expect(service.getGuestSession('sid')).resolves.toBeNull();
+  });
+
+  // isReady only flips once the socket is known-down. An in-flight command can
+  // still reject (error reply, timeout) while isReady is true — throwOnErrors
+  // makes get/set reject, and that reject must map to 503, not a miss/success.
+  it('read that rejects while client still reports ready -> 503', async () => {
+    const service = redisBackedService({
+      isReady: true,
+      get: async () => {
+        throw new Error('READONLY You can-t write against a read only replica.');
+      },
+    });
+    await expect(service.getGuestSession('sid')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('write that rejects while client still reports ready -> 503', async () => {
+    const existing = {
+      sessionId: 'sid',
+      createdAt: new Date(),
+      lastActiveAt: new Date(),
+      readingHistory: {},
+      uniqueStoriesRead: 0,
+    };
+    const service = redisBackedService({
+      isReady: true,
+      get: async () => existing,
+      set: async () => {
+        throw new Error('Connection timeout');
+      },
+    });
+    await expect(
+      service.updateGuestProgress('sid', 'story-1', 50),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 });
