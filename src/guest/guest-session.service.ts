@@ -125,10 +125,22 @@ export class GuestSessionService implements OnModuleInit {
       // below tell a real storage outage from a genuine miss even when the
       // node-redis client still reports `isReady` (isReady only flips once the
       // socket is known-down, so it alone misses in-flight command failures).
-      const store = new KeyvRedis(this.redisUrl, {
-        throwOnConnectError: false,
-        throwOnErrors: true,
-      });
+      //
+      // Passing a client-options object (not the bare URL string) so we can set
+      // disableOfflineQueue:true. Without it, node-redis *queues* an awaited
+      // get/set/delete while the socket is down and only settles it on
+      // reconnect — so during an outage a request hangs instead of failing
+      // fast. With it, the command rejects immediately (ClientOfflineError);
+      // throwOnErrors:true propagates that reject, and the callers below map it
+      // to a 503. Reconnection is unaffected (throwOnConnectError:false + the
+      // node-redis default reconnect strategy still auto-reconnect the socket).
+      const store = new KeyvRedis(
+        { url: this.redisUrl, disableOfflineQueue: true },
+        {
+          throwOnConnectError: false,
+          throwOnErrors: true,
+        },
+      );
 
       // The node-redis client's own errors MUST always have a listener, or a
       // socket close is emitted as an unhandled 'error' and crashes the

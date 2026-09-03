@@ -146,4 +146,19 @@ describe('GuestSessionService — Redis outage surfaces 503, not 401', () => {
       service.updateGuestProgress('sid', 'story-1', 50),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
+
+  // disableOfflineQueue:true makes node-redis reject a command issued while the
+  // socket is down (ClientOfflineError) instead of queuing it until reconnect.
+  // That reject must surface as a fast 503 rather than a hang or a false miss.
+  it('read rejected as offline (client not ready) -> 503, not a hang', async () => {
+    const service = redisBackedService({
+      isReady: false,
+      get: async () => {
+        throw new Error('The client is offline');
+      },
+    });
+    await expect(service.getGuestSession('sid')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
 });
