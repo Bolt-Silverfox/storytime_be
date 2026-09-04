@@ -13,8 +13,8 @@ marker-agnostic** — it detects the injection *structurally*.
 |---|---|---|
 | `scripts/scan-injection.sh` | every repo (identical, hash-pinned) | The detector. Scans git-tracked files. |
 | `.githooks/pre-commit` | every repo | Local early-warning (scans staged files). Bypassable. |
-| `.github/workflows/malware-scan.yml` | `storytime_be` (canonical, reusable) | CI gate + weekly deep scan. Other repos call it. |
-| thin caller workflow | every other repo | 5 lines; invokes the reusable workflow. |
+| `.github/workflows/malware-scan.yml` | `Bolt-Silverfox/storytime-ci` (canonical, reusable; dedicated repo, history never rewritten) | CI gate + weekly deep scan. Every repo, including `storytime_be`, calls it via a thin caller. |
+| thin caller workflow | every repo (`storytime_be` included) | Invokes the reusable workflow pinned to a `storytime-ci` commit/tag; the weekly deep scan runs in each caller on its own schedule. |
 | branch protection | GitHub settings (owner) | Makes the CI scan **required** → merge-blocking. |
 
 ## How detection works (no filename list, no single marker)
@@ -52,7 +52,7 @@ repo before.
 
 ### Updating the detector
 
-1. Edit `scripts/scan-injection.sh` in `storytime_be`.
+1. Edit `scripts/scan-injection.sh` in `Bolt-Silverfox/storytime-ci` (bump `SCAN_SCRIPT_SHA256` in its workflow in the same PR, tag a new `malware-scan-vN`).
 2. In the **same PR**, bump `SCAN_SCRIPT_SHA256` in
    `.github/workflows/malware-scan.yml` to the new
    `sha256sum scripts/scan-injection.sh`.
@@ -75,7 +75,7 @@ For each repo, for each protected/deploy branch (`dev`, `develop-v1.3.0`,
    (or branch pattern).
 2. Enable **Require status checks to pass before merging**.
 3. Search and require the check by name. **The name differs by repo:**
-   - in **storytime_be** (runs the workflow directly): `config-injection + disguised-font scan`
+   - in **storytime-ci** (self-scan of the canonical repo): `config-injection + disguised-font scan`
    - in **every other repo** (thin caller job named `scan`): `scan / config-injection + disguised-font scan`
 4. Recommended: also enable **Require branches to be up to date before merging**
    and protect `.github/` + `scripts/scan-injection.sh` with a CODEOWNERS review
