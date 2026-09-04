@@ -1,7 +1,36 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { EventEmitter } from 'node:events';
+import { Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GuestSessionService } from './guest-session.service';
 import type { IGuestRepository } from './repositories/guest.repository.interface';
+
+// Replace KeyvRedis with an in-memory EventEmitter-backed store that also
+// exposes a raw `client` EventEmitter (mirroring node-redis). Only the tests
+// that call onModuleInit construct it; the others never touch this module.
+jest.mock('@keyv/redis', () => {
+  class FakeKeyvRedis extends EventEmitter {
+    readonly client = new EventEmitter();
+    private readonly data = new Map<string, unknown>();
+    get(key: string): Promise<unknown> {
+      return Promise.resolve(this.data.get(key));
+    }
+    set(key: string, value: unknown): Promise<boolean> {
+      this.data.set(key, value);
+      return Promise.resolve(true);
+    }
+    delete(key: string): Promise<boolean> {
+      return Promise.resolve(this.data.delete(key));
+    }
+    clear(): Promise<void> {
+      this.data.clear();
+      return Promise.resolve();
+    }
+    disconnect(): Promise<void> {
+      return Promise.resolve();
+    }
+  }
+  return { __esModule: true, default: FakeKeyvRedis, KeyvRedis: FakeKeyvRedis };
+});
 
 /**
  * Regression test for the guest-session keyv fallback.
@@ -119,7 +148,9 @@ describe('GuestSessionService — Redis outage surfaces 503, not 401', () => {
     const service = redisBackedService({
       isReady: true,
       get: async () => {
-        throw new Error('READONLY You can-t write against a read only replica.');
+        throw new Error(
+          'READONLY You can-t write against a read only replica.',
+        );
       },
     });
     await expect(service.getGuestSession('sid')).rejects.toBeInstanceOf(
@@ -160,5 +191,52 @@ describe('GuestSessionService — Redis outage surfaces 503, not 401', () => {
     await expect(service.getGuestSession('sid')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
+  });
+});
+
+/**
+ * Sentry STORYTIME-BE-2: `SocketClosedUnexpectedlyError` from node-redis was
+ * an *unhandled* 'error' event -> uncaught exception -> process crash / PM2
+ * restart. @keyv/redis does not forward the raw client's 'error' event, so the
+ * service must attach its own listener on `store.client`.
+ */
+describe('GuestSessionService — raw node-redis client errors are handled', () => {
+  const configService = {
+    get: jest.fn().mockReturnValue('redis://127.0.0.1:6390'),
+  } as unknown as ConfigService;
+  const guestRepository = {} as unknown as IGuestRepository;
+
+  it("'error' on store.client is logged at warn and does not throw", async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const service = new GuestSessionService(configService, guestRepository);
+      await service.onModuleInit();
+
+      const store = (
+        service as unknown as {
+          redisStore?: EventEmitter & {
+            client: EventEmitter;
+          };
+        }
+      ).redisStore;
+      // Health-check round-tripped against the fake store -> Redis-backed.
+      expect(store).toBeDefined();
+      expect(store!.client.listenerCount('error')).toBeGreaterThan(0);
+
+      const socketErr = new Error('Socket closed unexpectedly');
+      // With no listener EventEmitter#emit('error') throws synchronously —
+      // exactly what surfaced as the fatal uncaught exception in Sentry.
+      expect(() => store!.client.emit('error', socketErr)).not.toThrow();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('Socket closed unexpectedly'),
+      );
+
+      // Store-level errors keep their own listener too.
+      expect(() => store!.emit('error', new Error('op failed'))).not.toThrow();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
