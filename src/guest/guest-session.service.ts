@@ -142,13 +142,25 @@ export class GuestSessionService implements OnModuleInit {
         },
       );
 
-      // The node-redis client's own errors MUST always have a listener, or a
-      // socket close is emitted as an unhandled 'error' and crashes the
-      // process. Log it and let node-redis auto-reconnect; do not tear down
-      // the shared store on a transient blip.
+      // KeyvRedis emits 'error' only from its own method catch blocks
+      // (operation-level failures: get/set/delete/clear). Listen so those are
+      // logged rather than raised as unhandled EventEmitter errors.
       store.on('error', (err: Error) => {
         this.logger.warn(
           `Guest-session Redis store error (auto-reconnecting): ${err?.message ?? err}`,
+        );
+      });
+
+      // @keyv/redis only forwards connect/disconnect/reconnecting from the
+      // underlying node-redis client — NOT 'error'. A socket close
+      // (SocketClosedUnexpectedlyError, e.g. Redis' idle `timeout`) is emitted
+      // on the raw client, and with no listener Node treats it as an uncaught
+      // exception and kills the process (Sentry STORYTIME-BE-2). Attach one
+      // here; node-redis's reconnectStrategy keeps reconnecting in the
+      // background, so this is log-and-continue.
+      store.client.on('error', (err: Error) => {
+        this.logger.warn(
+          `Guest-session Redis client error (auto-reconnecting): ${err?.message ?? err}`,
         );
       });
 
@@ -246,7 +258,8 @@ export class GuestSessionService implements OnModuleInit {
     try {
       await this.keyv.set(key, session, GUEST_SESSION_TTL_MS);
     } catch (err) {
-      if (this.redisStore) throw this.storageOutage(sessionId, 'persisting', err);
+      if (this.redisStore)
+        throw this.storageOutage(sessionId, 'persisting', err);
       throw err;
     }
     this.assertWritePersisted(sessionId);
@@ -366,7 +379,8 @@ export class GuestSessionService implements OnModuleInit {
       // A rejected read on the Redis path (throwOnErrors) is a storage outage,
       // not a miss — surface 503 rather than letting it fall through to a
       // misleading 401. isReady may still be true here (in-flight failure).
-      if (this.redisStore) throw this.storageOutage(sessionId, 'looking up', err);
+      if (this.redisStore)
+        throw this.storageOutage(sessionId, 'looking up', err);
       throw err;
     }
 
