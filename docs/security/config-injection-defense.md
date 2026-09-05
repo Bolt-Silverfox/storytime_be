@@ -5,17 +5,17 @@ obfuscated RCE payload to auto-run config files (postcss/eslint/jest/next/…) a
 executes it on every lint/build. It has hit this org three times, each time
 evading the previous gate by picking an **unlisted config filename** and
 **mutating its marker**. This gate is therefore **filename-agnostic and
-marker-agnostic** — it detects the injection *structurally*.
+marker-agnostic** — it detects the injection _structurally_.
 
 ## Components
 
-| Piece | Where | Role |
-|---|---|---|
-| `scripts/scan-injection.sh` | every repo (identical, hash-pinned) | The detector. Scans git-tracked files. |
-| `.githooks/pre-commit` | every repo | Local early-warning (scans staged files). Bypassable. |
-| `.github/workflows/malware-scan.yml` | `Bolt-Silverfox/storytime-ci` (canonical, reusable; dedicated repo, history never rewritten) | CI gate + weekly deep scan. Every repo, including `storytime_be`, calls it via a thin caller. |
-| thin caller workflow | every repo (`storytime_be` included) | Invokes the reusable workflow pinned to a `storytime-ci` commit/tag; the weekly deep scan runs in each caller on its own schedule. |
-| branch protection | GitHub settings (owner) | Makes the CI scan **required** → merge-blocking. |
+| Piece                                | Where                                                                                        | Role                                                                                                                                                                                                                                         |
+| ------------------------------------ | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/scan-injection.sh`          | every repo (identical, hash-pinned)                                                          | The detector. Scans git-tracked files.                                                                                                                                                                                                       |
+| `.githooks/pre-commit`               | every repo                                                                                   | Local early-warning (scans staged files). Bypassable.                                                                                                                                                                                        |
+| `.github/workflows/malware-scan.yml` | `Bolt-Silverfox/storytime-ci` (canonical, reusable; dedicated repo, history never rewritten) | CI gate + weekly deep scan. Every repo, including `storytime_be`, calls it via a thin caller.                                                                                                                                                |
+| thin caller workflow                 | every repo (`storytime_be` included)                                                         | Invokes the reusable workflow pinned to a full 40-char `storytime-ci` commit SHA (a `# malware-scan-vN` comment may annotate it, but the pin itself must never be a bare tag); the weekly deep scan runs in each caller on its own schedule. |
+| branch protection                    | GitHub settings (owner)                                                                      | Makes the CI scan **required** → merge-blocking.                                                                                                                                                                                             |
 
 ## How detection works (no filename list, no single marker)
 
@@ -30,7 +30,7 @@ excluded automatically) and flags a file on **any** of:
    Grepped in **all** scanned files (code + json + vue/svelte).
 3. **Known marker families** — `global['!']`, `A8-2503` (cheap fast-path).
 
-False positives (a genuinely minified/vendored *tracked* file) are cleared by
+False positives (a genuinely minified/vendored _tracked_ file) are cleared by
 adding its `sha256␠␠path` to `.ci-scan-allow.txt` **after review**.
 
 ## Enable the local hook (one-time, per clone)
@@ -47,7 +47,7 @@ The **CI required check is the real gate**.
 The logic lives only in `scripts/scan-injection.sh`. Every repo vendors an
 **identical** copy; the reusable workflow pins its `sha256`
 (`SCAN_SCRIPT_SHA256`) and fails the build if a repo's copy is missing, stale, or
-tampered. This is exactly the drift that let the scanner arrive *infected* in one
+tampered. This is exactly the drift that let the scanner arrive _infected_ in one
 repo before.
 
 ### Updating the detector
@@ -56,8 +56,12 @@ repo before.
 2. In the **same PR**, bump `SCAN_SCRIPT_SHA256` in
    `.github/workflows/malware-scan.yml` to the new
    `sha256sum scripts/scan-injection.sh`.
-3. Re-vendor the identical script to every other repo (a small PR each). Until a
-   repo is re-vendored, its scan fails closed (drift) — intended.
+3. Re-vendor the identical script to every other repo (a small PR each), **and in
+   the same PR advance that repo's thin-caller `uses:` pin to the new
+   `storytime-ci` commit** (the one carrying the bumped `SCAN_SCRIPT_SHA256`).
+   Script and pin must move together: a new script with an old pin (or vice
+   versa) fails the integrity check and blocks merges. Until a repo is updated,
+   its scan fails closed (drift) — intended.
 
 ## Rollout to another repo
 
