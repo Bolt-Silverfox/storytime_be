@@ -9,8 +9,16 @@ import type { IGuestRepository } from './repositories/guest.repository.interface
 // that call onModuleInit construct it; the others never touch this module.
 jest.mock('@keyv/redis', () => {
   class FakeKeyvRedis extends EventEmitter {
+    // Captured so tests can assert the production options (offline queue,
+    // throwOnErrors) are actually passed — the outage-to-503 behaviour and the
+    // fail-fast semantics depend on them.
+    static lastArgs: unknown[] = [];
     readonly client = new EventEmitter();
     private readonly data = new Map<string, unknown>();
+    constructor(...args: unknown[]) {
+      super();
+      FakeKeyvRedis.lastArgs = args;
+    }
     get(key: string): Promise<unknown> {
       return Promise.resolve(this.data.get(key));
     }
@@ -224,6 +232,20 @@ describe('GuestSessionService — raw node-redis client errors are handled', () 
       // Health-check round-tripped against the fake store -> Redis-backed.
       expect(store).toBeDefined();
       expect(store!.client.listenerCount('error')).toBeGreaterThan(0);
+
+      // The store must be constructed with the fail-fast options the 503
+      // mapping relies on (see the comments in guest-session.service.ts).
+      const { lastArgs } = jest.requireMock<{
+        default: { lastArgs: unknown[] };
+      }>('@keyv/redis').default;
+      expect(lastArgs[0]).toEqual({
+        url: 'redis://127.0.0.1:6390',
+        disableOfflineQueue: true,
+      });
+      expect(lastArgs[1]).toEqual({
+        throwOnConnectError: false,
+        throwOnErrors: true,
+      });
 
       const socketErr = new Error('Socket closed unexpectedly');
       // With no listener EventEmitter#emit('error') throws synchronously —
