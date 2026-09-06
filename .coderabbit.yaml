@@ -1,16 +1,26 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 # CodeRabbit configuration.
-# Without this, CodeRabbit auto-reviews ONLY PRs into the default branch (main)
-# and SKIPS everything targeting develop-* — which is where all v1.3.0 work
-# happens. Enable auto-review for the develop-* line (and main) so blue PRs are
-# reviewed like everything else.
+#
+# Auto-review is OFF deliberately. Reviews are a limited quota shared across the
+# org, and auto-reviewing every push burned it on trivial commits — we hit the
+# cap mid-release on 2026-09-06, and a rate-limited run still reports a green
+# "CodeRabbit" status check, so a review that never happened looks like a pass.
+#
+# Review locally first (`coderabbit --agent`, or just read and run the change),
+# then ask for a hosted review deliberately by commenting:
+#
+#     @coderabbitai review
+#
+# base_branches is kept so that when a review IS requested on a develop-* PR it
+# is still in scope rather than being skipped for targeting a non-default branch.
 language: en-US
 reviews:
   profile: chill
   request_changes_workflow: false
   auto_review:
-    enabled: true
+    enabled: false
     drafts: false
     base_branches:
       - main
       - "develop-.*"
+      - "release-.*"
