@@ -134,24 +134,49 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+          # `gh release view` exits non-zero for BOTH "not found" and transient
+          # API/auth failures. Treating the latter as absence would call
+          # `gh release create` against an existing release and fail the job for
+          # the wrong reason, so match the not-found text and let anything else
+          # surface as a real error.
+          if OUT=$(gh release view "v${VERSION}" 2>&1); then
             echo "created=false" >> "$GITHUB_OUTPUT"
             echo "Release v${VERSION} already exists — nothing to do."
             exit 0
           fi
-          gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes
+          if ! printf '%s' "$OUT" | grep -qi 'release not found'; then
+            # Collapse newlines: this text reaches an ::error annotation, where
+            # a newline would start a new workflow command.
+            SAFE=$(printf '%s' "$OUT" | tr '\n\r' '  ' | head -c 200)
+            echo "::error::Could not determine whether release v${VERSION} exists: ${SAFE}"
+            exit 1
+          fi
+          # --verify-tag: without it, gh creates the tag from the default branch
+          # when it is missing, so a tag deleted between the push above and this
+          # step would produce a Release pointing at the wrong commit.
+          gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes --verify-tag
           echo "created=true" >> "$GITHUB_OUTPUT"
 
-      # Gated on "this run created the release", not on "the tag did not exist".
-      # Those differ on a retry: if the tag push succeeded but `gh release
-      # create` failed, a re-run has exists=true / conflict=false, so the
-      # release is created here but the old condition skipped this reminder.
-      # Keying on the release step also avoids repeating the comment when the
-      # release was already present.
+      # Gated on "this commit is the released one" plus an explicit check that
+      # the comment is absent — not on the release step's output. Those differ
+      # when EITHER step fails: if `gh pr comment` fails after the release is
+      # created, a re-run has created=false while the comment is still missing,
+      # and gating on the output would skip the reminder permanently.
       - name: Comment backport reminder for hotfixes
-        if: steps.release.outputs.created == 'true' && startsWith(github.event.pull_request.head.ref, 'hotfix/')
+        if: steps.check_tag.outputs.conflict == 'false' && startsWith(github.event.pull_request.head.ref, 'hotfix/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} \
-            --body "**Hotfix released as v${{ steps.version.outputs.version }}.** Remember to backport this to the active \`develop-v*\` branch."
+          set -euo pipefail
+          MARKER="Hotfix released as v${VERSION}."
+          # Capture first, then grep. `gh ... | grep -q` is wrong here: grep
+          # exits early on a match, gh takes SIGPIPE, and pipefail then reports
+          # failure for the success case — inverting the condition.
+          BODIES=$(gh pr view "$PR" --json comments --jq '.comments[].body' || true)
+          if printf '%s' "$BODIES" | grep -qF "$MARKER"; then
+            echo "Backport reminder already present — nothing to do."
+            exit 0
+          fi
+          gh pr comment "$PR" --body "**${MARKER}** Remember to backport this to the active \`develop-v*\` branch."
