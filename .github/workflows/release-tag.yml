@@ -127,6 +127,7 @@ jobs:
       # operations, so if the push succeeds and this fails, a re-run must still
       # be able to finish rather than skipping forever.
       - name: Create GitHub Release
+        id: release
         if: steps.check_tag.outputs.conflict == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -134,13 +135,21 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "created=false" >> "$GITHUB_OUTPUT"
             echo "Release v${VERSION} already exists — nothing to do."
             exit 0
           fi
           gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes
+          echo "created=true" >> "$GITHUB_OUTPUT"
 
+      # Gated on "this run created the release", not on "the tag did not exist".
+      # Those differ on a retry: if the tag push succeeded but `gh release
+      # create` failed, a re-run has exists=true / conflict=false, so the
+      # release is created here but the old condition skipped this reminder.
+      # Keying on the release step also avoids repeating the comment when the
+      # release was already present.
       - name: Comment backport reminder for hotfixes
-        if: steps.check_tag.outputs.exists == 'false' && startsWith(github.event.pull_request.head.ref, 'hotfix/')
+        if: steps.release.outputs.created == 'true' && startsWith(github.event.pull_request.head.ref, 'hotfix/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
