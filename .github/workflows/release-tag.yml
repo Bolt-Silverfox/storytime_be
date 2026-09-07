@@ -29,6 +29,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history. checkout defaults to depth 1, and `git push origin
+          # <tag>` from a shallow clone can be rejected ("shallow update not
+          # allowed"). The tag push is the whole point of this job, so the
+          # failure would be both silent-ish and late.
+          fetch-depth: 0
 
       - name: Read version from package.json
         id: version
