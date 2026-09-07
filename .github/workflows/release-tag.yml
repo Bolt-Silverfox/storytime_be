@@ -5,6 +5,20 @@ on:
     branches: [main]
     types: [closed]
 
+concurrency:
+  # Serialise tag creation. Two runs on the same version can both observe the
+  # tag as missing, then race on `git push`; the loser fails and never creates
+  # its GitHub Release. cancel-in-progress is false on purpose — a run that has
+  # already pushed a tag must be allowed to finish creating the release.
+  group: release-tag-${{ github.repository }}
+  cancel-in-progress: false
+  # Default queueing is `single`: only one run may sit pending, and a newer run
+  # replaces it. For release tagging that means a merged release can be dropped
+  # and never tagged. `max` keeps up to 100 pending runs in FIFO order. Allowed
+  # only because cancel-in-progress is false — GitHub rejects `queue: max`
+  # together with `cancel-in-progress: true`.
+  queue: max
+
 jobs:
   tag-release:
     if: github.event.pull_request.merged == true
@@ -14,24 +28,83 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Read version from package.json
         id: version
+        shell: bash
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          set -euo pipefail
+          # Validate INSIDE jq, against the raw JSON, before any value reaches a
+          # shell variable. Three separate traps live on this boundary:
+          #
+          #   * `$(jq ...; printf x)` returns printf's status, so a jq failure
+          #     is masked even under `set -e`.
+          #   * Command substitution silently drops NUL bytes and trailing
+          #     newlines, so a doctored value arrives looking pristine.
+          #   * jq reads a *stream*, so {"version":"1.2"} {"version":".3"}
+          #     concatenates to a valid "1.2.3" that neither document declares.
+          #
+          # `-s` with `length == 1` requires exactly one document and makes a
+          # parse failure a rejection rather than an empty string. \A and \z,
+          # not ^ and $, because Oniguruma lets $ match before a trailing
+          # newline.
+          SEMVER='\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?\z'
+          if ! jq -s -e --arg re "$SEMVER" \
+                'length == 1 and ((.[0].version // "") | test($re))' \
+                package.json >/dev/null 2>&1; then
+            # tojson, not the raw value: this reports a manifest already judged
+            # malformed, and a CR/LF inside an ::error annotation would start a
+            # new workflow command (`::add-mask::` and friends).
+            FOUND=$(jq -s -r 'if length == 1 then ((.[0].version // "<missing>") | tojson) else "<\(length) JSON documents>" end' package.json 2>/dev/null | tr -d '\000' | head -c 60 || true)
+            echo "::error file=package.json::version is missing, malformed, or not valid SemVer 2.0.0 (saw: ${FOUND:-<unparseable>}) — refusing to tag."
+            exit 1
+          fi
+
+          # Safe by construction: anything passing the check above is a
+          # single-line SemVer string drawn from [0-9A-Za-z.+-].
+          VERSION=$(jq -r '.version' package.json)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Release version: $VERSION"
 
       - name: Check if tag already exists
         id: check_tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if git ls-remote --tags origin "refs/tags/v${{ steps.version.outputs.version }}" | grep -q .; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Tag v${{ steps.version.outputs.version }} already exists — skipping"
-          else
+          set -euo pipefail
+          TAG="v${VERSION}"
+          # An annotated tag exposes refs/tags/X (the tag object) and
+          # refs/tags/X^{} (the commit). Query the peeled ref FIRST — reading
+          # refs/tags/X yields the tag object SHA, which never equals
+          # GITHUB_SHA, so every correctly tagged release would be reported as
+          # untagged. Lightweight tags have no peeled ref, hence the fallback.
+          PEELED=$(git ls-remote --tags origin "refs/tags/${TAG}^{}" | awk 'NR==1{print $1}')
+          PLAIN=$(git ls-remote --tags origin "refs/tags/${TAG}" | awk 'NR==1{print $1}')
+          REMOTE="${PEELED:-$PLAIN}"
+          if [ -z "$REMOTE" ]; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+            echo "No ${TAG} yet — will tag ${GITHUB_SHA}."
+            exit 0
           fi
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+          if [ "$REMOTE" = "$GITHUB_SHA" ]; then
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+            echo "${TAG} already points at ${GITHUB_SHA} — tag is correct."
+            exit 0
+          fi
+          echo "conflict=true" >> "$GITHUB_OUTPUT"
+          # Dangerous case: main advanced but the version did not, so whatever
+          # just merged is a release that no tag describes.
+          echo "::warning::${TAG} already exists at ${REMOTE:0:8}, but this merge is ${GITHUB_SHA:0:8}. This commit is being released UNTAGGED. If it is a real release, bump the version (package.json and app.json together) and merge again."
+          {
+            echo "### :warning: Release is untagged"
+            echo ""
+            echo "\`${TAG}\` already points at \`${REMOTE:0:8}\`, but this merge is \`${GITHUB_SHA:0:8}\`."
+            echo ""
+            echo "The version was not bumped, so no tag describes what just shipped."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create git tag
         if: steps.check_tag.outputs.exists == 'false'
@@ -41,14 +114,21 @@ jobs:
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
 
+      # Gated on conflict, not on exists: tag push and release creation are two
+      # operations, so if the push succeeds and this fails, a re-run must still
+      # be able to finish rather than skipping forever.
       - name: Create GitHub Release
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.check_tag.outputs.conflict == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh release create "v${{ steps.version.outputs.version }}" \
-            --title "v${{ steps.version.outputs.version }}" \
-            --generate-notes
+          set -euo pipefail
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "Release v${VERSION} already exists — nothing to do."
+            exit 0
+          fi
+          gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes
 
       - name: Comment backport reminder for hotfixes
         if: steps.check_tag.outputs.exists == 'false' && startsWith(github.event.pull_request.head.ref, 'hotfix/')
