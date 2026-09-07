@@ -174,7 +174,11 @@ jobs:
           # Capture first, then grep. `gh ... | grep -q` is wrong here: grep
           # exits early on a match, gh takes SIGPIPE, and pipefail then reports
           # failure for the success case — inverting the condition.
-          BODIES=$(gh pr view "$PR" --json comments --jq '.comments[].body' || true)
+          # No `|| true`: a failed lookup would leave BODIES empty, the marker
+          # would not match, and the step would post a duplicate reminder —
+          # precisely what this check exists to prevent. Let it fail instead;
+          # the step is idempotent, so a re-run is safe.
+          BODIES=$(gh pr view "$PR" --json comments --jq '.comments[].body')
           if printf '%s' "$BODIES" | grep -qF "$MARKER"; then
             echo "Backport reminder already present — nothing to do."
             exit 0
