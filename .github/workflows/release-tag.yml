@@ -144,10 +144,18 @@ jobs:
             echo "Release v${VERSION} already exists — nothing to do."
             exit 0
           fi
-          if ! printf '%s' "$OUT" | grep -qi 'release not found'; then
+          # Here-strings and parameter expansion, never `printf ... | grep -q`
+          # or `... | head -c`: those consumers exit as soon as they are
+          # satisfied, the upstream printf/tr then takes SIGPIPE, and pipefail
+          # turns that into a nonzero status. Here that would flip a real
+          # "not found" into the error branch, or abort the step under `set -e`
+          # before the ::error below ever prints. No pipeline, no race.
+          if ! grep -qi 'release not found' <<< "$OUT"; then
             # Collapse newlines: this text reaches an ::error annotation, where
             # a newline would start a new workflow command.
-            SAFE=$(printf '%s' "$OUT" | tr '\n\r' '  ' | head -c 200)
+            SAFE=${OUT//$'\n'/ }
+            SAFE=${SAFE//$'\r'/ }
+            SAFE=${SAFE:0:200}
             echo "::error::Could not determine whether release v${VERSION} exists: ${SAFE}"
             exit 1
           fi
@@ -179,7 +187,12 @@ jobs:
           # precisely what this check exists to prevent. Let it fail instead;
           # the step is idempotent, so a re-run is safe.
           BODIES=$(gh pr view "$PR" --json comments --jq '.comments[].body')
-          if printf '%s' "$BODIES" | grep -qF "$MARKER"; then
+          # Here-string, not `printf ... | grep`: the same SIGPIPE/pipefail trap
+          # applies to the replay too. Once BODIES exceeds the 64 KiB pipe buffer
+          # — routine on a PR carrying CodeRabbit reviews — grep exits at the
+          # match, printf dies with SIGPIPE, and pipefail makes the *success*
+          # case read as "marker absent", posting the duplicate this guards.
+          if grep -qF "$MARKER" <<< "$BODIES"; then
             echo "Backport reminder already present — nothing to do."
             exit 0
           fi
