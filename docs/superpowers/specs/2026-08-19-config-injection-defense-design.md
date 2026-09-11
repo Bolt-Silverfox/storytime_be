@@ -1,7 +1,18 @@
 # Design: org-wide config-injection defense
 
-**Status:** approved, implementing.
-**Repos:** all 7 (canonical in `storytime_be`).
+**Status:** approved, implemented — **section 3 superseded, see the note below.**
+**Repos:** all 7 (canonical in `storytime-ci`; was `storytime_be` when this was written).
+
+> **Superseded in part (2026-09-11).** This is a dated design record and is kept
+> as written. One decision in it no longer holds: section 3 ("One source, no
+> drift") specifies that every repo vendors an identical `scan-injection.sh`
+> verified by `SCAN_SCRIPT_SHA256`. Since `Bolt-Silverfox/storytime-ci@5f4e23d`
+> the reusable workflow fetches the detector at its own pinned `SCANNER_REF`
+> instead, so there is no vendored copy to verify and `SCAN_SCRIPT_SHA256` is
+> gone — the trade-off that section accepted ("re-vendoring + a one-line hash
+> bump per repo") is what the change removes. The canonical home is
+> `storytime-ci`, not `storytime_be`. Current contract:
+> `docs/security/config-injection-defense.md`.
 
 ## Problem
 

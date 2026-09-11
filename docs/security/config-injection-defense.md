@@ -11,7 +11,7 @@ marker-agnostic** — it detects the injection _structurally_.
 
 | Piece                                | Where                                                                                        | Role                                                                                                                                                                                                                                         |
 | ------------------------------------ | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/scan-injection.sh`          | every repo (identical, hash-pinned)                                                          | The detector. Scans git-tracked files.                                                                                                                                                                                                       |
+| `scripts/scan-injection.sh`          | `Bolt-Silverfox/storytime-ci` only; fetched at the pinned `SCANNER_REF`                       | The detector. Scans git-tracked files. Consumers vendor no copy — the reusable workflow checks it out and runs it. A local copy may exist for the pre-commit hook only, and is allowed to drift.                                              |
 | `.githooks/pre-commit`               | every repo                                                                                   | Local early-warning (scans staged files). Bypassable.                                                                                                                                                                                        |
 | `.github/workflows/malware-scan.yml` | `Bolt-Silverfox/storytime-ci` (canonical, reusable; dedicated repo, history never rewritten) | CI gate + weekly deep scan. Every repo, including `storytime_be`, calls it via a thin caller.                                                                                                                                                |
 | thin caller workflow                 | every repo (`storytime_be` included)                                                         | Invokes the reusable workflow pinned to a full 40-char `storytime-ci` commit SHA (a `# malware-scan-vN` comment may annotate it, but the pin itself must never be a bare tag); the weekly deep scan runs in each caller on its own schedule. |
@@ -44,30 +44,59 @@ The **CI required check is the real gate**.
 
 ## Single source, no drift
 
-The logic lives only in `scripts/scan-injection.sh`. Every repo vendors an
-**identical** copy; the reusable workflow pins its `sha256`
-(`SCAN_SCRIPT_SHA256`) and fails the build if a repo's copy is missing, stale, or
-tampered. This is exactly the drift that let the scanner arrive _infected_ in one
-repo before.
+The logic lives only in `scripts/scan-injection.sh` in
+`Bolt-Silverfox/storytime-ci`, and since `storytime-ci@5f4e23d` there is nothing
+to keep in sync: the reusable workflow checks that repo out at its own pinned
+`SCANNER_REF` and runs the detector from there. A consumer carries **a pin and
+nothing else**.
+
+> **Changed in `storytime-ci@5f4e23d` (was: vendor + `SCAN_SCRIPT_SHA256`).**
+> Every repo used to vendor an identical copy of the script, with the reusable
+> workflow pinning its `sha256` as `SCAN_SCRIPT_SHA256` and failing closed if a
+> copy was missing, stale or tampered. That gate no longer exists, because the
+> thing it guarded no longer exists — there is no second copy for CI to verify.
+> `SCAN_SCRIPT_SHA256` is gone from the workflow; do not reintroduce it, and do
+> not add a drift check for any local copy.
+
+This repo still keeps `scripts/scan-injection.sh` for the `.githooks/pre-commit`
+early warning. **CI does not read that file.** It is therefore allowed to drift:
+a stale local copy can weaken a local warning, never the merge gate. Refresh it
+when convenient from the SHA this repo's own caller already trusts (not `main`):
+
+```bash
+pin=$(grep -oE 'malware-scan\.yml@[0-9a-f]{40}' .github/workflows/malware-scan.yml | cut -d@ -f2)
+curl -fsSL "https://raw.githubusercontent.com/Bolt-Silverfox/storytime-ci/${pin}/scripts/scan-injection.sh" \
+  -o scripts/scan-injection.sh
+```
 
 ### Updating the detector
 
-1. Edit `scripts/scan-injection.sh` in `Bolt-Silverfox/storytime-ci` (bump `SCAN_SCRIPT_SHA256` in its workflow in the same PR, tag a new `malware-scan-vN`).
-2. In the **same PR**, bump `SCAN_SCRIPT_SHA256` in
-   `.github/workflows/malware-scan.yml` to the new
-   `sha256sum scripts/scan-injection.sh`.
-3. Re-vendor the identical script to every other repo (a small PR each), **and in
-   the same PR advance that repo's thin-caller `uses:` pin to the new
-   `storytime-ci` commit** (the one carrying the bumped `SCAN_SCRIPT_SHA256`).
-   Script and pin must move together: a new script with an old pin (or vice
-   versa) fails the integrity check and blocks merges. Until a repo is updated,
-   its scan fails closed (drift) — intended.
+Both steps happen in `storytime-ci`; consumers are untouched unless you want the
+new detector immediately.
+
+1. Edit `scripts/scan-injection.sh` in `Bolt-Silverfox/storytime-ci`.
+2. In a **second commit in the same PR**, set `SCANNER_REF` to the SHA of commit
+   1, and land the PR with a **merge commit** — squash and rebase both rewrite
+   that SHA and orphan the pin. Two `storytime-ci`-only self-checks enforce this:
+   the script at `HEAD` must be byte-identical to the copy at `SCANNER_REF`, and
+   `SCANNER_REF` must stay reachable from `main`.
+3. Optionally bump each consumer's `uses:` pin to pick the change up. A consumer
+   left on an older pin keeps running the detector that pin names — older, not
+   broken.
+
+The canonical, fuller version of this document lives at
+`docs/config-injection-defense.md` in `Bolt-Silverfox/storytime-ci`.
 
 ## Rollout to another repo
 
-1. Copy `scripts/scan-injection.sh` (identical bytes) and `.githooks/pre-commit`.
-2. Add the thin caller workflow (see `docs/security/malware-scan-caller.example.yml`).
-3. Push; confirm the `malware-scan` check runs green.
+1. Add the thin caller workflow (see `docs/security/malware-scan-caller.example.yml`).
+   There is no script to copy.
+2. Add `.storytime-ci/` to `.gitignore` — the workflow **fails the job** if the
+   caller tracks anything under that path, since `actions/checkout` clears the
+   directory the scanner is fetched into.
+3. Optionally add `.githooks/pre-commit` plus a local copy of the script, for a
+   local early warning only. See the drift note above.
+4. Push; confirm the `malware-scan` check runs green.
 4. **Owner:** add the check to branch protection (below).
 
 ## Make it merge-blocking (owner action — GitHub UI)
