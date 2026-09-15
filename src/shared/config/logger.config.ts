@@ -61,25 +61,21 @@ export const winstonConfig: winston.LoggerOptions = {
   level: logLevel,
   format: nodeEnv === 'production' ? prodFormat : devFormat,
   transports: [
-    // Console transport (always enabled)
+    // Console is the only transport we declare: logs leave the process on
+    // stdout and the supervisor persists them (pm2 -> ~/.pm2/logs, and the
+    // container log driver under the containerised deploy). Do not add File
+    // transports here. The two removed ones were production-only (so they only
+    // ever fired in the container image and the pm2 production app, never in
+    // dev/staging), wrote cwd-relative logs/*.log with no maxsize/maxFiles, and
+    // made a non-root container fail at boot with
+    // `EACCES: permission denied, mkdir 'logs'` against a root-owned /app.
+    // NB: @opentelemetry/instrumentation-winston appends its own transport to
+    // this array at configure() time, but only when
+    // @opentelemetry/winston-transport is installed - it currently is not, so
+    // today it does trace-id correlation only and does not export log records.
     new winston.transports.Console({
       format: nodeEnv === 'production' ? prodFormat : devFormat,
     }),
-
-    // File transport for errors (production only)
-    ...(nodeEnv === 'production'
-      ? [
-          new winston.transports.File({
-            filename: 'logs/error.log',
-            level: 'error',
-            format: prodFormat,
-          }),
-          new winston.transports.File({
-            filename: 'logs/combined.log',
-            format: prodFormat,
-          }),
-        ]
-      : []),
   ],
   // Prevent crashes from logger errors
   exitOnError: false,
