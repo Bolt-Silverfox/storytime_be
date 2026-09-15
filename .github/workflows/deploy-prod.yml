@@ -244,7 +244,46 @@ jobs:
   deploy:
     name: Deploy to Production
     needs: [build, test]
-    if: success() && github.event.action == 'closed' && github.event.pull_request.merged == true
+    # DISABLED (2026-09): this job deploys by rsync + SSH to the production
+    # EC2 host, a different box from the shared dev/staging/blue one and whose
+    # address is not recorded in this repo. We no longer have it: the AWS
+    # account that hosted it, and the emerj-shared-db RDS instance it used,
+    # are out of our control. That RDS is NOT verified as deleted -- its
+    # hostname still resolves in public DNS -- so treat this infrastructure as
+    # unavailable, not as proven destroyed.
+    #
+    # Concretely, EC2_HOST / EC2_USERNAME / EC2_SSH_KEY, DATABASE_URL and
+    # MIGRATION_DATABASE_URL in the `production` environment all name
+    # infrastructure this pipeline can no longer reach. Production now runs
+    # Docker images from ECR on an EC2 box in a different AWS account, and
+    # there is no replacement deploy workflow in this repo yet.
+    #
+    # Leaving it enabled was not merely noise. Every PR merged into `main`
+    # whose build and test passed ran `db:migrate:deploy` and `db:seed` ON THE
+    # RUNNER against MIGRATION_DATABASE_URL -- a credential nobody here can
+    # audit any more -- before ever reaching the unreachable SSH steps.
+    #
+    # The job body is kept, not deleted, as the shape a replacement has to
+    # match. It is not runnable as-is.
+    #
+    # The guard is LEGACY_EC2_DEPLOY_PROD, a REPOSITORY variable, named per
+    # workflow so that re-arming one of these deploy jobs cannot re-arm the
+    # others; every one of them runs `db:migrate:deploy` and `db:seed`, and
+    # this one does so against production.
+    #
+    # A job-level `if:` sees repository and organisation variables only;
+    # environment-scoped variables are not resolved until after the
+    # environment is declared, so setting it on an environment would silently
+    # do nothing. It is deliberately unset, and it is a tripwire, not a
+    # feature flag.
+    #
+    # The quality / build / test jobs above are unaffected: they carry no
+    # `if:` and still run on pull requests targeting `main`, on `opened`,
+    # `synchronize` and `closed` only, per the `types:` filter above.
+    if: >-
+      vars.LEGACY_EC2_DEPLOY_PROD == 'true' &&
+      success() && github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

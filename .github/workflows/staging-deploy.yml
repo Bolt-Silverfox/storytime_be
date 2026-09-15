@@ -235,7 +235,46 @@ jobs:
   deploy:
     name: Deploy to Staging
     needs: [build, test]
-    if: success() && github.event.action == 'closed' && github.event.pull_request.merged == true
+    # DISABLED (2026-09): this job deploys by rsync + SSH to an EC2 host we no
+    # longer have. The AWS account that hosted it, and the emerj-shared-db RDS
+    # instance it used, are out of our control: neither 52.18.195.224:22 nor
+    # that RDS endpoint is reachable from CI, and we cannot administer either.
+    # They are NOT verified as deleted -- the RDS hostname still resolves in
+    # public DNS -- so treat them as unavailable, not as proven destroyed.
+    #
+    # Concretely, EC2_HOST / EC2_USERNAME / EC2_SSH_KEY and DATABASE_URL in
+    # the `staging` environment all name infrastructure this pipeline can no
+    # longer reach. Production now runs Docker images from ECR on an EC2 box
+    # in a different AWS account, and there is no replacement deploy workflow
+    # in this repo yet.
+    #
+    # Leaving it enabled was not merely noise. Every PR merged into a
+    # `release-v*` branch whose build and test passed ran `db:migrate:deploy`
+    # and `db:seed` ON THE RUNNER against the `staging` DATABASE_URL -- a
+    # credential nobody here can audit any more -- before ever reaching the
+    # unreachable SSH steps.
+    #
+    # The job body is kept, not deleted, as the shape a replacement has to
+    # match. It is not runnable as-is.
+    #
+    # The guard is LEGACY_EC2_DEPLOY_STAGING, a REPOSITORY variable, named per
+    # workflow so that re-arming one of these deploy jobs cannot re-arm the
+    # others; every one of them runs `db:migrate:deploy` and `db:seed`.
+    #
+    # A job-level `if:` sees repository and organisation variables only;
+    # environment-scoped variables are not resolved until after the
+    # environment is declared, so setting it on an environment would silently
+    # do nothing. It is deliberately unset, and it is a tripwire, not a
+    # feature flag.
+    #
+    # The quality / build / test jobs above are unaffected: they carry no
+    # `if:` and still run on pull requests targeting a `release-v*` branch, on
+    # `opened`, `synchronize` and `closed` only, per the `types:` filter
+    # above.
+    if: >-
+      vars.LEGACY_EC2_DEPLOY_STAGING == 'true' &&
+      success() && github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
