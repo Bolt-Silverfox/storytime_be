@@ -75,6 +75,7 @@
     "@opentelemetry/sdk-metrics": "^2.5.0",
     "@opentelemetry/sdk-node": "^0.211.0",
     "@opentelemetry/semantic-conventions": "^1.39.0",
+    "@opentelemetry/winston-transport": "^0.21.0",
     "@prisma/client": "6.19.0",
     "@react-email/components": "^1.0.1",
     "@react-email/render": "^2.0.0",

@@ -1,0 +1,97 @@
+# ---------------------------------------------------------------------------
+# Caller for the SSM seeding reusable workflow in Bolt-Silverfox/storytime-devops.
+#
+# This copies this repo's ENV_FILE secret into AWS SSM Parameter Store as
+# SecureStrings at /storytime-<environment>/api/<KEY>, which is where the EC2
+# boot script (infra/templates/user-data.sh.tftpl in storytime-devops) reads the
+# api container's configuration from at start-up. Until these parameters exist,
+# that read returns nothing and the container starts with no configuration.
+#
+# NOBODY READS THE VALUES. Before using them, the reusable workflow registers
+# each line of each parsed value with ::add-mask:: (its parser skips lines of
+# fewer than three characters); it passes values to the AWS CLI via a 0600
+# --cli-input-json file rather than argv, and only ever prints key NAMES. Do not
+# add a step here that echoes, cats, diffs or `set -x`es anything: that defeats
+# the entire design.
+#
+# Three things on this file are load-bearing and must not be "tidied":
+#
+#   1. workflow_dispatch ONLY. This moves production credentials. It is run
+#      deliberately by a human, never on push.
+#
+#   2. The branch `main` on the `uses:` line. The seed role's trust policy pins
+#      the OIDC job_workflow_ref claim to
+#      Bolt-Silverfox/storytime-devops/.github/workflows/seed-ssm-from-envfile.yml@refs/heads/main
+#      so a tag or a SHA gets AccessDenied on assume-role. Write it as `@main`:
+#      GitHub expands a branch name to the fully-qualified ref in the claim
+#      itself, and ref prefixes like `refs/heads/` are not accepted in `uses:`.
+#      To test a change on a branch, change github_ssm_seed_workflow_ref in the
+#      shared Terraform workspace and apply -- do not loosen the condition.
+#
+#   3. This file must live on develop-v1.3.0. The same trust policy pins the
+#      OIDC sub claim to repo:Bolt-Silverfox/storytime_be:ref:refs/heads/develop-v1.3.0,
+#      so a run from any other branch cannot assume the role. That is also this
+#      repo's default branch, which is where a workflow_dispatch workflow has to
+#      live to be dispatchable at all.
+#
+# See storytime-devops docs/seed-ssm-from-envfile.md for the full runbook,
+# including the Terraform collision warning and the post-seed cleanup steps.
+# ---------------------------------------------------------------------------
+name: Seed SSM
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'SSM path segment: /storytime-<environment>/<service>/<KEY>. This repo''s role can only write "api".'
+        required: true
+        type: choice
+        options:
+          - api
+        default: api
+      environment:
+        description: 'Target Terraform stack. Becomes the -<environment> half of /storytime-<environment>/. Pick it deliberately -- a wrong value writes these values into the wrong namespace with a green run and no warning.'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - blue
+          - prod
+          - all
+        default: all
+      dry_run:
+        description: 'List the keys that WOULD be written and stop. Leave true until the key list looks right.'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+# Two seeds writing the same prefix at once would interleave PutParameter calls
+# with no way to tell which run produced the final value. Queue instead, and
+# never cancel a run mid-write.
+concurrency:
+  group: seed-ssm-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    uses: Bolt-Silverfox/storytime-devops/.github/workflows/seed-ssm-from-envfile.yml@main
+    with:
+      # `inputs.` and not `github.event.inputs.`: the latter is always a string,
+      # which would fail the reusable workflow's `type: boolean` on dry_run.
+      service: ${{ inputs.service }}
+      environment: ${{ inputs.environment }}
+      role_arn: arn:aws:iam::772316781095:role/storytime-gha-ssm-seed-api
+      aws_region: eu-west-1
+      dry_run: ${{ inputs.dry_run }}
+    # Passed explicitly rather than `secrets: inherit`: the reusable workflow
+    # declares ENV_FILE as a required named secret, and naming it is the form
+    # the runbook specifies. ENV_FILE is a REPOSITORY secret in this repo, so it
+    # resolves here -- a job with `uses:` cannot carry an `environment:` key, so
+    # an environment-scoped secret would silently resolve to an empty string.
+    secrets:
+      ENV_FILE: ${{ secrets.ENV_FILE }}

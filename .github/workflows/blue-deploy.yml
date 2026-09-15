@@ -9,12 +9,17 @@ name: Blue Deploy (develop-v1.3.0)
 # is derived from ENV_FILE with PORT/DATABASE_URL/REDIS_URL overridden below, and
 # the blue database is created on first deploy. No extra secret required.
 #
-# PROMOTION (2026-08): develop-v1.3.0 is now the default/primary line and
-# deploys to dev.api / storytime_dev via dev-deploy.yml. The separate blue env
-# (:3601 / storytime_db_blue) is being retired, so the automatic push trigger is
-# REMOVED to keep a single writer on storytime_dev. This workflow is kept as
-# workflow_dispatch-only for manual re-runs during the transition; delete it
-# once the :3601 footprint is torn down (Phase D).
+# PROMOTION (2026-08): develop-v1.3.0 became the default/primary line and took
+# over dev.api / storytime_dev via dev-deploy.yml (whose deploy job is now
+# disabled too). The separate blue env (:3601 / storytime_db_blue) was being
+# retired, so the automatic push trigger was REMOVED and this was left
+# workflow_dispatch-only for manual re-runs.
+#
+# SUPERSEDED (2026-09): there are no manual re-runs to make -- the host is no
+# longer reachable (see the job comment below) and the single job is disabled,
+# so a dispatch now executes zero jobs and the run is reported as `skipped`,
+# not `success`. The file is kept pending the Phase D teardown decision; a
+# dispatch that completes here has deployed nothing.
 on:
   workflow_dispatch:
 
@@ -28,6 +33,40 @@ env:
 jobs:
   deploy-blue:
     name: Deploy Blue
+    # DISABLED (2026-09): this job deploys by rsync + SSH to an EC2 host we no
+    # longer have. The AWS account that hosted it, and the emerj-shared-db RDS
+    # instance it used, are out of our control: neither 52.18.195.224:22 nor
+    # that RDS endpoint is reachable from CI, and we cannot administer either.
+    # They are NOT verified as deleted -- the RDS hostname still resolves in
+    # public DNS -- so treat them as unavailable, not as proven destroyed.
+    #
+    # Concretely, EC2_HOST / EC2_USERNAME and EC2_SSH_KEY in the `development`
+    # environment all name infrastructure this pipeline can no longer reach.
+    # Production now runs Docker images from ECR on an EC2 box in a different
+    # AWS account, and there is no replacement deploy workflow in this repo
+    # yet.
+    #
+    # This job never used a DATABASE_URL secret: it derives blue's
+    # DATABASE_URL from the `development` ENV_FILE by `sed` below, and also
+    # reads the repository-level GRAFANA_CLOUD_API_TOKEN. Both secrets still
+    # exist in GitHub; it is the host they were rsynced to that is
+    # unreachable. (Whether ENV_FILE's own values still point anywhere live is
+    # not checked here.)
+    #
+    # The job body is kept, not deleted, as the shape a replacement has to
+    # match. It is not runnable as-is.
+    #
+    # The guard is LEGACY_EC2_DEPLOY_BLUE, a REPOSITORY variable, named per
+    # workflow so that re-arming one of these deploy jobs cannot re-arm the
+    # others; every one of them runs `db:migrate:deploy` and `db:seed`, this
+    # one over SSH on the target host rather than on the runner.
+    #
+    # A job-level `if:` sees repository and organisation variables only;
+    # environment-scoped variables are not resolved until after the
+    # environment is declared, so setting it on an environment would silently
+    # do nothing. It is deliberately unset, and it is a tripwire, not a
+    # feature flag.
+    if: vars.LEGACY_EC2_DEPLOY_BLUE == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The EC2_HOST/EC2_USERNAME/EC2_SSH_KEY (and green's ENV_FILE) secrets live

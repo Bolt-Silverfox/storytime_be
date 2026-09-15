@@ -8,7 +8,7 @@
 # zero downtime) — i.e. green is never taken down until blue is proven healthy.
 #
 # Assumes: `pnpm build` already produced dist/, PM2 + nginx installed, and nginx
-# includes $NGINX_UPSTREAM_FILE (see docs/DEPLOYMENT_BLUE_GREEN.md).
+# includes $NGINX_UPSTREAM_FILE.
 #
 # Usage: scripts/deploy-blue-green.sh [production|staging|development]
 set -euo pipefail

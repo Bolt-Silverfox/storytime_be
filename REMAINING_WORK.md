@@ -25,7 +25,7 @@ This document provides an accurate, up-to-date summary of remaining work after v
 - ✅ **Blue-green dev environment** — v1.3.0 "blue" deployed alongside green on the
   shared host (backend `:3601` / frontend `:3010`, `storytime_db_blue`, Redis `/3`),
   with per-color nginx + TLS and manual-trigger deploy workflows across all three
-  repos. See `docs/DEPLOYMENT_BLUE_GREEN.md`.
+  repos.
 
 ---
 
@@ -108,8 +108,8 @@ This document provides an accurate, up-to-date summary of remaining work after v
       FE/mobile client validation against blue, and a TTS re-test.
 - [ ] Register mobile blue OAuth clients (Google iOS/Android, Firebase apps,
       Apple App ID for `net.emerj.storytime.blue`) and confirm blue backend trusts
-      them — see the OAuth checklist in `docs/DEPLOYMENT_BLUE_GREEN.md`. **This is
-      the one true blocker; requires console access (only the team can do it).**
+      them. **This is the one true blocker; requires console access (only the
+      team can do it).**
 - [ ] Promote blue → stable. **Model (decided):** `develop-v1.3.0` *becomes* the
       new stable branch — there is **NO merge-down** to `develop-v1.2.0`. Cut over
       green's deploy target to `develop-v1.3.0` (+ matching FE/mobile branches) once

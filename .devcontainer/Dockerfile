@@ -1,7 +1,7 @@
 # Sandboxed build environment for storytime-be.
 # Node 22 (project requires >=20) with pnpm pinned to the repo's packageManager.
 # Deliberately minimal: no credentials, no cloud CLIs, no host mounts (see
-# devcontainer.json and docs/security/sandbox-dev.md).
+# devcontainer.json).
 FROM node:22-bookworm-slim
 
 # Shared Corepack home so the pnpm that root prepares below is usable by the
