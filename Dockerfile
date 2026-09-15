@@ -241,14 +241,6 @@ COPY --chown=node:node package.json ./package.json
 # process.cwd()-relative asset, see python-deps.
 COPY --chown=node:node scripts/verify_google_purchase.py ./scripts/verify_google_purchase.py
 
-# winston writes logs/error.log and logs/combined.log RELATIVE TO CWD, but only
-# when NODE_ENV=production (shared/config/logger.config.ts:69-81). /app is owned
-# by root, so without this the very first log line fails with
-# `EACCES: permission denied, mkdir 'logs'` and the process exits before it ever
-# binds a port — a crash that cannot reproduce in dev, because the file
-# transports do not exist there.
-RUN mkdir -p /app/logs && chown node:node /app/logs
-
 # Never run as root. The node images already provide uid/gid 1000 `node`.
 USER node
 
