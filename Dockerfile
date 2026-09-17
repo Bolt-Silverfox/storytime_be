@@ -223,8 +223,14 @@ COPY --from=python-deps --chown=node:node /app/scripts/.venv ./scripts/.venv
 # prisma CLI, prisma/schema.prisma and all of prisma/migrations ship in the
 # image and migrations are applied against the running container:
 #
-#   docker exec -it storytime-api pnpm exec prisma migrate deploy
-#     (or: docker exec -it storytime-api node_modules/.bin/prisma migrate deploy)
+#   docker exec -it api ./node_modules/.bin/prisma migrate deploy
+#
+# NOT `pnpm exec prisma`: this runtime stage starts from a clean node image and
+# never inherits the corepack/pnpm setup from `base`, so pnpm is genuinely
+# absent here (verified: `command -v pnpm` finds nothing). The prisma CLI is a
+# production dependency precisely so node_modules/.bin/prisma exists.
+# The container is named `api`, not `storytime-api` — see the service keys in
+# the Terraform `services` map.
 #
 # This is intentional rather than running migrate on container start: 104
 # migrations against a single shared Postgres must not race N restarting
