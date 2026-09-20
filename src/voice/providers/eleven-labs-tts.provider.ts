@@ -15,6 +15,15 @@ const RETRY_CONFIG = {
   maxDelayMs: 10000,
 };
 
+/**
+ * How long to stop attempting synthesis after the account reports exhausted
+ * credits (HTTP 402). Without this every paragraph in every batch pays a full
+ * failed round-trip to ElevenLabs before cascading to the fallback provider,
+ * which is pure added latency once the balance is gone. Overridable via
+ * ELEVEN_LABS_QUOTA_COOLDOWN_MS.
+ */
+const DEFAULT_QUOTA_COOLDOWN_MS = 15 * 60 * 1000;
+
 @Injectable()
 export class ElevenLabsTTSProvider
   implements ITextToSpeechProvider, IVoiceCloningProvider
@@ -23,10 +32,21 @@ export class ElevenLabsTTSProvider
   private client: ElevenLabsClient;
   public readonly name = 'ElevenLabs';
 
+  /**
+   * Epoch ms until which this provider short-circuits synthesis because the
+   * account reported exhausted credits. 0 means the breaker is closed.
+   */
+  private quotaExhaustedUntil = 0;
+  private readonly quotaCooldownMs: number;
+
   constructor(
     private readonly configService: ConfigService,
     private readonly converter: StreamConverter,
   ) {
+    this.quotaCooldownMs =
+      this.configService.get<number>('ELEVEN_LABS_QUOTA_COOLDOWN_MS') ??
+      DEFAULT_QUOTA_COOLDOWN_MS;
+
     const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
     if (apiKey) {
       try {
@@ -55,6 +75,12 @@ export class ElevenLabsTTSProvider
   ): Promise<Buffer> {
     if (!this.client) {
       throw new Error('ElevenLabs client is not initialized');
+    }
+
+    // Credits were exhausted recently — fail immediately so the caller cascades
+    // to the next provider without waiting on a request we know will 402.
+    if (this.isQuotaCooldownActive()) {
+      throw new QuotaExhaustedError('ElevenLabs');
     }
 
     return this.withRetry(async () => {
@@ -92,15 +118,16 @@ export class ElevenLabsTTSProvider
 
     for (let attempt = 1; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
       try {
-        return await operation();
+        const result = await operation();
+        // A success means credits are available again; close the breaker.
+        this.quotaExhaustedUntil = 0;
+        return result;
       } catch (error) {
         lastError = error as Error;
 
         // 402 = quota/credits exhausted — fail immediately, no retry
         if (this.isQuotaExhaustedError(error)) {
-          this.logger.warn(
-            `ElevenLabs ${operationName}: quota exhausted (402), failing immediately`,
-          );
+          this.openQuotaBreaker(operationName);
           throw new QuotaExhaustedError('ElevenLabs');
         }
 
@@ -124,6 +151,27 @@ export class ElevenLabsTTSProvider
     }
 
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  /** True while synthesis should be skipped after a recent 402. */
+  private isQuotaCooldownActive(): boolean {
+    return Date.now() < this.quotaExhaustedUntil;
+  }
+
+  /**
+   * Trip the breaker. Logs only on the transition so a large batch doesn't
+   * emit one warning per paragraph.
+   */
+  private openQuotaBreaker(operationName: string): void {
+    const wasOpen = this.isQuotaCooldownActive();
+    this.quotaExhaustedUntil = Date.now() + this.quotaCooldownMs;
+    if (!wasOpen) {
+      this.logger.warn(
+        `ElevenLabs ${operationName}: quota exhausted (402). Skipping ElevenLabs for ${Math.round(
+          this.quotaCooldownMs / 1000,
+        )}s and cascading to the fallback provider.`,
+      );
+    }
   }
 
   private isQuotaExhaustedError(error: unknown): boolean {
