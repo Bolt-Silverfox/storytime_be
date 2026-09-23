@@ -10,6 +10,18 @@ export const envSchema = z
     CORS_ORIGIN: z.string().url().default('http://localhost:3000'),
     REDIS_URL: z.string().url().default('redis://localhost:6379'),
     ELEVEN_LABS_KEY: z.string().min(1, 'ELEVEN_LABS_KEY is required'),
+    // Declared here even though it is optional, because ConfigService does NOT
+    // set skipProcessEnv: an undeclared key is served straight from process.env
+    // as a STRING. `configService.get<number>(...)` is a TypeScript assertion,
+    // not a conversion, so the quota circuit breaker would compute
+    // `Date.now() + '900000'` — string concatenation — and then compare it with
+    // `<`, silently never re-opening. z.coerce makes the type real and rejects
+    // a non-numeric value at startup instead of at 03:00.
+    ELEVEN_LABS_QUOTA_COOLDOWN_MS: z.coerce
+      .number()
+      .finite()
+      .positive()
+      .optional(),
     CLOUDINARY_CLOUD_NAME: z
       .string()
       .min(1, 'CLOUDINARY_CLOUD_NAME is required'),
