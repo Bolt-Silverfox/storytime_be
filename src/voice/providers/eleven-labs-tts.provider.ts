@@ -37,6 +37,14 @@ export class ElevenLabsTTSProvider
    * account reported exhausted credits. 0 means the breaker is closed.
    */
   private quotaExhaustedUntil = 0;
+  /**
+   * Bumped every time the breaker trips. A request captures this when it
+   * starts and may only close the breaker if the value is unchanged, so a
+   * slow success cannot clear a cooldown opened after it began. Synthesis is
+   * batched per paragraph, so overlapping calls are the normal case here, not
+   * an edge case.
+   */
+  private quotaBreakerGeneration = 0;
   private readonly quotaCooldownMs: number;
 
   constructor(
@@ -79,6 +87,7 @@ export class ElevenLabsTTSProvider
 
     // Credits were exhausted recently — fail immediately so the caller cascades
     // to the next provider without waiting on a request we know will 402.
+    const breakerGeneration = this.quotaBreakerGeneration;
     if (this.isQuotaCooldownActive()) {
       throw new QuotaExhaustedError('ElevenLabs');
     }
@@ -103,7 +112,7 @@ export class ElevenLabsTTSProvider
       );
 
       return await this.converter.toBuffer(audioStream);
-    }, 'generateAudio');
+    }, 'generateAudio', breakerGeneration);
   }
 
   /**
@@ -113,14 +122,20 @@ export class ElevenLabsTTSProvider
   private async withRetry<T>(
     operation: () => Promise<T>,
     operationName: string,
+    breakerGeneration: number,
   ): Promise<T> {
     let lastError: Error | undefined;
 
     for (let attempt = 1; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
       try {
         const result = await operation();
-        // A success means credits are available again; close the breaker.
-        this.quotaExhaustedUntil = 0;
+        // A success means credits are available again — but only if no 402 has
+        // tripped the breaker since this request started. Without the
+        // generation check, a call that began before a 402 and finished after
+        // it would reopen a provider that is known to be out of credit.
+        if (breakerGeneration === this.quotaBreakerGeneration) {
+          this.quotaExhaustedUntil = 0;
+        }
         return result;
       } catch (error) {
         lastError = error as Error;
@@ -164,6 +179,7 @@ export class ElevenLabsTTSProvider
    */
   private openQuotaBreaker(operationName: string): void {
     const wasOpen = this.isQuotaCooldownActive();
+    this.quotaBreakerGeneration++;
     this.quotaExhaustedUntil = Date.now() + this.quotaCooldownMs;
     if (!wasOpen) {
       this.logger.warn(
