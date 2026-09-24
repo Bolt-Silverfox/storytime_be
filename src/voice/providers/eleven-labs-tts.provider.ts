@@ -51,9 +51,29 @@ export class ElevenLabsTTSProvider
     private readonly configService: ConfigService,
     private readonly converter: StreamConverter,
   ) {
+    // Coerce, do not merely type-check. Two facts make this necessary, both
+    // verified against a real ConfigService rather than inferred:
+    //   1. `get<number>()` is a TypeScript assertion, not a conversion.
+    //   2. ConfigService prefers process.env over the validated config, so even
+    //      a value zod coerced to a number comes back here as the raw STRING.
+    // So a `typeof === 'number'` guard would reject every legitimately
+    // configured value and silently use the default. Coerce instead, and fall
+    // back only when the result is not a usable positive number — which also
+    // covers the blank `KEY=` case, where '' would otherwise make the deadline
+    // a string and close the breaker on the next check.
+    const configured: unknown = this.configService.get(
+      'ELEVEN_LABS_QUOTA_COOLDOWN_MS',
+    );
+    const parsedCooldown =
+      typeof configured === 'number'
+        ? configured
+        : typeof configured === 'string' && configured.trim() !== ''
+          ? Number(configured)
+          : Number.NaN;
     this.quotaCooldownMs =
-      this.configService.get<number>('ELEVEN_LABS_QUOTA_COOLDOWN_MS') ??
-      DEFAULT_QUOTA_COOLDOWN_MS;
+      Number.isFinite(parsedCooldown) && parsedCooldown > 0
+        ? parsedCooldown
+        : DEFAULT_QUOTA_COOLDOWN_MS;
 
     const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
     if (apiKey) {
