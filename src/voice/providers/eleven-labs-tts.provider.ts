@@ -51,16 +51,22 @@ export class ElevenLabsTTSProvider
     private readonly configService: ConfigService,
     private readonly converter: StreamConverter,
   ) {
-    // Coerce, do not merely type-check. Two facts make this necessary, both
-    // verified against a real ConfigService rather than inferred:
-    //   1. `get<number>()` is a TypeScript assertion, not a conversion.
-    //   2. ConfigService prefers process.env over the validated config, so even
-    //      a value zod coerced to a number comes back here as the raw STRING.
-    // So a `typeof === 'number'` guard would reject every legitimately
-    // configured value and silently use the default. Coerce instead, and fall
-    // back only when the result is not a usable positive number — which also
-    // covers the blank `KEY=` case, where '' would otherwise make the deadline
-    // a string and close the breaker on the next check.
+    // ConfigService answers from the VALIDATED config when that holds a value,
+    // and falls back to raw process.env only when it does not. Both halves
+    // matter here, and were verified against a real ConfigModule:
+    //
+    //   ELEVEN_LABS_QUOTA_COOLDOWN_MS=60000  -> get() returns 60000 (number)
+    //   ELEVEN_LABS_QUOTA_COOLDOWN_MS=       -> get() returns ''    (string)
+    //
+    // The blank case is the trap: z.preprocess deliberately normalises it to
+    // undefined so a blank line does not stop the app booting, which means the
+    // validated config has nothing and the raw '' comes through. `'' ?? DEFAULT`
+    // is '' — `??` only catches null and undefined — so the deadline would
+    // become a string and the breaker would close on the next check.
+    //
+    // Coercing rather than type-checking also keeps this correct if the value
+    // ever arrives as a string by another route; `get<number>()` is a
+    // TypeScript assertion, not a conversion, so the generic guarantees nothing.
     const configured: unknown = this.configService.get(
       'ELEVEN_LABS_QUOTA_COOLDOWN_MS',
     );
