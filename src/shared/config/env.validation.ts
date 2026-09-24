@@ -17,11 +17,18 @@ export const envSchema = z
     // `Date.now() + '900000'` — string concatenation — and then compare it with
     // `<`, silently never re-opening. z.coerce makes the type real and rejects
     // a non-numeric value at startup instead of at 03:00.
-    ELEVEN_LABS_QUOTA_COOLDOWN_MS: z.coerce
-      .number()
-      .finite()
-      .positive()
-      .optional(),
+    // z.preprocess, because a BLANK value is not the same as an absent one.
+    // `.env.example` lists keys in the `KEY=` form, so an operator who copies it
+    // and leaves this one unset supplies ''. `z.coerce.number()` turns '' into
+    // 0, `.positive()` rejects 0, and validateEnv throws — so a blank line
+    // stops the app booting. Loud and safe, but wrong: a blank should mean
+    // "use the default", not "refuse to start". Normalising blank and
+    // whitespace to undefined does that, while 'abc', '-5' and '0' are still
+    // rejected at startup.
+    ELEVEN_LABS_QUOTA_COOLDOWN_MS: z.preprocess(
+      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z.coerce.number().finite().positive().optional(),
+    ),
     CLOUDINARY_CLOUD_NAME: z
       .string()
       .min(1, 'CLOUDINARY_CLOUD_NAME is required'),

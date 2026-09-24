@@ -51,9 +51,35 @@ export class ElevenLabsTTSProvider
     private readonly configService: ConfigService,
     private readonly converter: StreamConverter,
   ) {
+    // ConfigService answers from the VALIDATED config when that holds a value,
+    // and falls back to raw process.env only when it does not. Both halves
+    // matter here, and were verified against a real ConfigModule:
+    //
+    //   ELEVEN_LABS_QUOTA_COOLDOWN_MS=60000  -> get() returns 60000 (number)
+    //   ELEVEN_LABS_QUOTA_COOLDOWN_MS=       -> get() returns ''    (string)
+    //
+    // The blank case is the trap: z.preprocess deliberately normalises it to
+    // undefined so a blank line does not stop the app booting, which means the
+    // validated config has nothing and the raw '' comes through. `'' ?? DEFAULT`
+    // is '' — `??` only catches null and undefined — so the deadline would
+    // become a string and the breaker would close on the next check.
+    //
+    // Coercing rather than type-checking also keeps this correct if the value
+    // ever arrives as a string by another route; `get<number>()` is a
+    // TypeScript assertion, not a conversion, so the generic guarantees nothing.
+    const configured: unknown = this.configService.get(
+      'ELEVEN_LABS_QUOTA_COOLDOWN_MS',
+    );
+    const parsedCooldown =
+      typeof configured === 'number'
+        ? configured
+        : typeof configured === 'string' && configured.trim() !== ''
+          ? Number(configured)
+          : Number.NaN;
     this.quotaCooldownMs =
-      this.configService.get<number>('ELEVEN_LABS_QUOTA_COOLDOWN_MS') ??
-      DEFAULT_QUOTA_COOLDOWN_MS;
+      Number.isFinite(parsedCooldown) && parsedCooldown > 0
+        ? parsedCooldown
+        : DEFAULT_QUOTA_COOLDOWN_MS;
 
     const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
     if (apiKey) {
