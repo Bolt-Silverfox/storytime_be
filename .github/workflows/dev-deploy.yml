@@ -315,8 +315,9 @@ jobs:
     # Concretely, EC2_HOST / EC2_USERNAME / EC2_SSH_KEY and DATABASE_URL in
     # the `development` environment all name infrastructure this pipeline can
     # no longer reach. Production now runs Docker images from ECR on an EC2
-    # box in a different AWS account, and there is no replacement deploy
-    # workflow in this repo yet.
+    # box in a different AWS account, and is deployed by `deploy-production.yml`
+    # in this repo -- a manual caller of the shared storytime-devops pipeline.
+    # There is no replacement for THIS job: nothing deploys dev any more.
     #
     # Leaving it enabled was not merely noise. Every PR merged into
     # develop-v1.3.0 whose build and test passed, plus every manual dispatch,
