@@ -1,9 +1,34 @@
-name: Production CI/CD Pipeline
+# Quality, build and test gate for pull requests into `main`.
+#
+# This file used to also deploy production: on a PR merged into `main` it ran
+# Prisma migrate/seed from the runner, rsynced the tree over SSH to
+# `secrets.EC2_HOST` and restarted PM2 there via appleboy/ssh-action. That host
+# no longer serves production — the API now runs as a container on a single EC2
+# box, reconciled over SSM — so the job could only fail. It has been removed,
+# along with the `rsync --delete` that would mirror the repo tree over a live
+# deployment path if `EC2_HOST` were ever repointed at the current box.
+#
+# Production deploys are to be made by `deploy-production.yml`, a manual
+# (`workflow_dispatch`) caller of the shared storytime-devops pipeline. That
+# file is not merged yet — it is open as PR #599 — and it also needs a
+# Dockerfile on `main`, the deploy roles applied, and a copy on the default
+# branch before `workflow_dispatch` will register it. So there is no automated
+# production deploy path in the interim; the running containers are unaffected.
+#
+# NOTE: the shared pipeline does NOT run Prisma. Removing this job therefore
+# removes the only automated production `migrate deploy` and `db:seed`; per
+# storytime-devops `docs/build-and-deploy.md`, migrations are run by hand on
+# the box (`docker exec storytime-api node_modules/.bin/prisma migrate deploy`)
+# and production seeding has no automated owner.
+#
+# The quality, build and test jobs below are unchanged and still run on every
+# pull request into `main` (`Build` is the required status check).
+name: Production CI
 
 on:
   pull_request:
     branches: ['main']
-    types: [opened, synchronize, closed]
+    types: [opened, synchronize, reopened]
 
 concurrency:
   group: prod-${{ github.head_ref || github.ref }}
@@ -61,7 +86,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-    environment: production
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storytime_build
 
@@ -136,7 +160,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-    environment: production
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storytime_test
       REDIS_URL: redis://localhost:6379
@@ -238,240 +261,3 @@ jobs:
       - name: Cleanup sensitive files
         if: always()
         run: rm -f .env
-  # ===================
-  # Deploy to Production (only on merge, requires build/test success)
-  # ===================
-  deploy:
-    name: Deploy to Production
-    needs: [build, test]
-    # DISABLED (2026-09): this job deploys by rsync + SSH to the production
-    # EC2 host, a different box from the shared dev/staging/blue one and whose
-    # address is not recorded in this repo. We no longer have it: the AWS
-    # account that hosted it, and the emerj-shared-db RDS instance it used,
-    # are out of our control. That RDS is NOT verified as deleted -- its
-    # hostname still resolves in public DNS -- so treat this infrastructure as
-    # unavailable, not as proven destroyed.
-    #
-    # Concretely, EC2_HOST / EC2_USERNAME / EC2_SSH_KEY, DATABASE_URL and
-    # MIGRATION_DATABASE_URL in the `production` environment all name
-    # infrastructure this pipeline can no longer reach. Production now runs
-    # Docker images from ECR on an EC2 box in a different AWS account, and
-    # there is no replacement deploy workflow in this repo yet.
-    #
-    # Leaving it enabled was not merely noise. Every PR merged into `main`
-    # whose build and test passed ran `db:migrate:deploy` and `db:seed` ON THE
-    # RUNNER against MIGRATION_DATABASE_URL -- a credential nobody here can
-    # audit any more -- before ever reaching the unreachable SSH steps.
-    #
-    # The job body is kept, not deleted, as the shape a replacement has to
-    # match. It is not runnable as-is.
-    #
-    # The guard is LEGACY_EC2_DEPLOY_PROD, a REPOSITORY variable, named per
-    # workflow so that re-arming one of these deploy jobs cannot re-arm the
-    # others; every one of them runs `db:migrate:deploy` and `db:seed`, and
-    # this one does so against production.
-    #
-    # A job-level `if:` sees repository and organisation variables only;
-    # environment-scoped variables are not resolved until after the
-    # environment is declared, so setting it on an environment would silently
-    # do nothing. It is deliberately unset, and it is a tripwire, not a
-    # feature flag.
-    #
-    # The quality / build / test jobs above are unaffected: they carry no
-    # `if:` and still run on pull requests targeting `main`, on `opened`,
-    # `synchronize` and `closed` only, per the `types:` filter above.
-    if: >-
-      vars.LEGACY_EC2_DEPLOY_PROD == 'true' &&
-      success() && github.event.action == 'closed' &&
-      github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      pull-requests: write
-    environment:
-      name: production
-      url: ${{ vars.PROD_APP_URL }}
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Create .env file
-        run: |
-          cat > .env << 'EOF'
-          ${{ secrets.ENV_FILE }}
-          EOF
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build application
-        run: pnpm db:generate && pnpm build
-
-      - name: Run database migrations
-        env:
-          DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
-        run: pnpm db:migrate:deploy
-
-      - name: Seed database
-        env:
-          NODE_ENV: production
-          DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
-        run: pnpm db:seed
-
-      - name: Prepare deployment directory
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            mkdir -p /home/ubuntu/storytime/production/storytime-api
-
-      - name: Setup SSH key
-        run: |
-          echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ssh_key
-          chmod 600 /tmp/ssh_key
-
-      - name: Add server host key
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-        run: |
-          ssh-keyscan -H "$EC2_HOST" > /tmp/known_hosts
-          chmod 600 /tmp/known_hosts
-
-      - name: Sync files to server
-        run: |
-          rsync -avz --delete \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='node_modules' \
-            --exclude='.env.local' \
-            --exclude='coverage' \
-            --exclude='.turbo' \
-            -e "ssh -i /tmp/ssh_key -o UserKnownHostsFile=/tmp/known_hosts -o StrictHostKeyChecking=yes" \
-            ./ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/ubuntu/storytime/production/storytime-api/
-
-      - name: Install dependencies and restart application
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 10m
-          script: |
-            source ~/.nvm/nvm.sh
-            cd /home/ubuntu/storytime/production/storytime-api
-            [ -f .env ] && chmod 600 .env
-
-            # Install Node dependencies
-            pnpm install --frozen-lockfile
-
-            # Ensure python3-venv is available (required for venv creation)
-            sudo apt-get update -qq && sudo apt-get install -y -qq python3-venv > /dev/null 2>&1 || true
-
-            # Setup Python virtual environment for scripts
-            cd scripts
-            python3 -m venv .venv
-            .venv/bin/pip install -q -r requirements.txt
-            cd ..
-
-            # Restart application
-            pnpm deploy:prod
-
-      - name: Verify deployment
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            # Verify the app starts AND *stays* healthy. Checking only the final
-            # probe would pass a crash-loop that happens to be up at second 60, so
-            # require a sustained healthy streak (>=3 = ~15s) at the end of a ~60s
-            # window; a crash-loop keeps resetting the streak and fails the gate.
-            start_time=$(date +%s)
-            deadline=$((start_time + 60))
-            streak=0
-            for i in $(seq 1 12); do
-              # Wait-then-probe so probes land at t=5..60: the END of the
-              # window is observed, and a crash in the final seconds resets
-              # the streak instead of slipping through unprobed.
-              target=$((start_time + i * 5))
-              now=$(date +%s)
-              delay=$((target - now))
-              [ "$delay" -le 0 ] || sleep "$delay"
-
-              now=$(date +%s)
-              remaining=$((deadline - now))
-              # The final probe lands at the deadline; keep it bounded
-              # (>=5s budget) rather than skipping it.
-              [ "$remaining" -ge 5 ] || remaining=5
-              if curl -fsS --connect-timeout 5 --max-time "$remaining" \
-                http://localhost:3500/api/v1/health > /dev/null; then
-                streak=$((streak + 1))
-              else
-                streak=0
-              fi
-            done
-            if [ "$streak" -lt 3 ]; then
-              echo "App not consistently healthy at end of 60s window (streak=$streak) - possible crash-loop"; exit 1
-            fi
-
-            echo "Production deployment verified successfully"
-
-      - name: Comment deployment status
-        if: success()
-        continue-on-error: true
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.createComment({
-              issue_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `**Deployed to Production**\n\nCommit: \`${context.sha.substring(0, 7)}\`\nTime: ${new Date().toISOString()}`
-            });
-
-      - name: Comment deployment failure
-        if: failure()
-        continue-on-error: true
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.createComment({
-              issue_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `**Production Deployment Failed**\n\nCommit: \`${context.sha.substring(0, 7)}\`\nCheck the [workflow logs](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.`
-            });
-
-      - name: Cleanup sensitive files
-        if: always()
-        run: |
-          rm -f /tmp/ssh_key /tmp/known_hosts
-          rm -f .env
