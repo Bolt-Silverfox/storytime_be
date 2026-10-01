@@ -43,8 +43,9 @@ jobs:
     # Concretely, EC2_HOST / EC2_USERNAME and EC2_SSH_KEY in the `development`
     # environment all name infrastructure this pipeline can no longer reach.
     # Production now runs Docker images from ECR on an EC2 box in a different
-    # AWS account, and there is no replacement deploy workflow in this repo
-    # yet.
+    # AWS account, and is deployed by `deploy-production.yml` in this repo -- a
+    # manual caller of the shared storytime-devops pipeline. There is no
+    # replacement for THIS job: nothing deploys blue any more.
     #
     # This job never used a DATABASE_URL secret: it derives blue's
     # DATABASE_URL from the `development` ENV_FILE by `sed` below, and also

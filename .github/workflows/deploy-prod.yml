@@ -8,12 +8,13 @@
 # along with the `rsync --delete` that would mirror the repo tree over a live
 # deployment path if `EC2_HOST` were ever repointed at the current box.
 #
-# Production deploys are to be made by `deploy-production.yml`, a manual
-# (`workflow_dispatch`) caller of the shared storytime-devops pipeline. That
-# file is not merged yet — it is open as PR #599 — and it also needs a
-# Dockerfile on `main`, the deploy roles applied, and a copy on the default
-# branch before `workflow_dispatch` will register it. So there is no automated
-# production deploy path in the interim; the running containers are unaffected.
+# Production deploys are made by `deploy-production.yml`, a manual
+# (`workflow_dispatch`) caller of the shared storytime-devops pipeline. Two
+# prerequisites remain before it can run: the deploy roles must be applied in
+# storytime-devops (`manage_github_deploy_roles = true`), and `main` must be the
+# default branch, because `workflow_dispatch` only registers a workflow from a
+# repo's default branch. Until both are done there is no production deploy path;
+# the running containers are unaffected either way.
 #
 # NOTE: the shared pipeline does NOT run Prisma. Removing this job therefore
 # removes the only automated production `migrate deploy` and `db:seed`; per
