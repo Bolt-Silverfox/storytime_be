@@ -10,6 +10,25 @@ export const envSchema = z
     CORS_ORIGIN: z.string().url().default('http://localhost:3000'),
     REDIS_URL: z.string().url().default('redis://localhost:6379'),
     ELEVEN_LABS_KEY: z.string().min(1, 'ELEVEN_LABS_KEY is required'),
+    // Declared here even though it is optional, because ConfigService does NOT
+    // set skipProcessEnv: an undeclared key is served straight from process.env
+    // as a STRING. `configService.get<number>(...)` is a TypeScript assertion,
+    // not a conversion, so the quota circuit breaker would compute
+    // `Date.now() + '900000'` — string concatenation — and then compare it with
+    // `<`, silently never re-opening. z.coerce makes the type real and rejects
+    // a non-numeric value at startup instead of at 03:00.
+    // z.preprocess, because a BLANK value is not the same as an absent one.
+    // `.env.example` lists keys in the `KEY=` form, so an operator who copies it
+    // and leaves this one unset supplies ''. `z.coerce.number()` turns '' into
+    // 0, `.positive()` rejects 0, and validateEnv throws — so a blank line
+    // stops the app booting. Loud and safe, but wrong: a blank should mean
+    // "use the default", not "refuse to start". Normalising blank and
+    // whitespace to undefined does that, while 'abc', '-5' and '0' are still
+    // rejected at startup.
+    ELEVEN_LABS_QUOTA_COOLDOWN_MS: z.preprocess(
+      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z.coerce.number().finite().positive().optional(),
+    ),
     CLOUDINARY_CLOUD_NAME: z
       .string()
       .min(1, 'CLOUDINARY_CLOUD_NAME is required'),

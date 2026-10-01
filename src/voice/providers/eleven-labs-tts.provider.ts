@@ -15,6 +15,15 @@ const RETRY_CONFIG = {
   maxDelayMs: 10000,
 };
 
+/**
+ * How long to stop attempting synthesis after the account reports exhausted
+ * credits (HTTP 402). Without this every paragraph in every batch pays a full
+ * failed round-trip to ElevenLabs before cascading to the fallback provider,
+ * which is pure added latency once the balance is gone. Overridable via
+ * ELEVEN_LABS_QUOTA_COOLDOWN_MS.
+ */
+const DEFAULT_QUOTA_COOLDOWN_MS = 15 * 60 * 1000;
+
 @Injectable()
 export class ElevenLabsTTSProvider
   implements ITextToSpeechProvider, IVoiceCloningProvider
@@ -23,10 +32,55 @@ export class ElevenLabsTTSProvider
   private client: ElevenLabsClient;
   public readonly name = 'ElevenLabs';
 
+  /**
+   * Epoch ms until which this provider short-circuits synthesis because the
+   * account reported exhausted credits. 0 means the breaker is closed.
+   */
+  private quotaExhaustedUntil = 0;
+  /**
+   * Bumped every time the breaker trips. A request captures this when it
+   * starts and may only close the breaker if the value is unchanged, so a
+   * slow success cannot clear a cooldown opened after it began. Synthesis is
+   * batched per paragraph, so overlapping calls are the normal case here, not
+   * an edge case.
+   */
+  private quotaBreakerGeneration = 0;
+  private readonly quotaCooldownMs: number;
+
   constructor(
     private readonly configService: ConfigService,
     private readonly converter: StreamConverter,
   ) {
+    // ConfigService answers from the VALIDATED config when that holds a value,
+    // and falls back to raw process.env only when it does not. Both halves
+    // matter here, and were verified against a real ConfigModule:
+    //
+    //   ELEVEN_LABS_QUOTA_COOLDOWN_MS=60000  -> get() returns 60000 (number)
+    //   ELEVEN_LABS_QUOTA_COOLDOWN_MS=       -> get() returns ''    (string)
+    //
+    // The blank case is the trap: z.preprocess deliberately normalises it to
+    // undefined so a blank line does not stop the app booting, which means the
+    // validated config has nothing and the raw '' comes through. `'' ?? DEFAULT`
+    // is '' — `??` only catches null and undefined — so the deadline would
+    // become a string and the breaker would close on the next check.
+    //
+    // Coercing rather than type-checking also keeps this correct if the value
+    // ever arrives as a string by another route; `get<number>()` is a
+    // TypeScript assertion, not a conversion, so the generic guarantees nothing.
+    const configured: unknown = this.configService.get(
+      'ELEVEN_LABS_QUOTA_COOLDOWN_MS',
+    );
+    const parsedCooldown =
+      typeof configured === 'number'
+        ? configured
+        : typeof configured === 'string' && configured.trim() !== ''
+          ? Number(configured)
+          : Number.NaN;
+    this.quotaCooldownMs =
+      Number.isFinite(parsedCooldown) && parsedCooldown > 0
+        ? parsedCooldown
+        : DEFAULT_QUOTA_COOLDOWN_MS;
+
     const apiKey = this.configService.get<string>('ELEVEN_LABS_KEY');
     if (apiKey) {
       try {
@@ -57,6 +111,13 @@ export class ElevenLabsTTSProvider
       throw new Error('ElevenLabs client is not initialized');
     }
 
+    // Credits were exhausted recently — fail immediately so the caller cascades
+    // to the next provider without waiting on a request we know will 402.
+    const breakerGeneration = this.quotaBreakerGeneration;
+    if (this.isQuotaCooldownActive()) {
+      throw new QuotaExhaustedError('ElevenLabs');
+    }
+
     return this.withRetry(async () => {
       this.logger.log(
         `Generating audio with voice ${voiceId} and model ${modelId}`,
@@ -77,7 +138,7 @@ export class ElevenLabsTTSProvider
       );
 
       return await this.converter.toBuffer(audioStream);
-    }, 'generateAudio');
+    }, 'generateAudio', breakerGeneration);
   }
 
   /**
@@ -87,20 +148,27 @@ export class ElevenLabsTTSProvider
   private async withRetry<T>(
     operation: () => Promise<T>,
     operationName: string,
+    breakerGeneration: number,
   ): Promise<T> {
     let lastError: Error | undefined;
 
     for (let attempt = 1; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
       try {
-        return await operation();
+        const result = await operation();
+        // A success means credits are available again — but only if no 402 has
+        // tripped the breaker since this request started. Without the
+        // generation check, a call that began before a 402 and finished after
+        // it would reopen a provider that is known to be out of credit.
+        if (breakerGeneration === this.quotaBreakerGeneration) {
+          this.quotaExhaustedUntil = 0;
+        }
+        return result;
       } catch (error) {
         lastError = error as Error;
 
         // 402 = quota/credits exhausted — fail immediately, no retry
         if (this.isQuotaExhaustedError(error)) {
-          this.logger.warn(
-            `ElevenLabs ${operationName}: quota exhausted (402), failing immediately`,
-          );
+          this.openQuotaBreaker(operationName);
           throw new QuotaExhaustedError('ElevenLabs');
         }
 
@@ -124,6 +192,28 @@ export class ElevenLabsTTSProvider
     }
 
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  /** True while synthesis should be skipped after a recent 402. */
+  private isQuotaCooldownActive(): boolean {
+    return Date.now() < this.quotaExhaustedUntil;
+  }
+
+  /**
+   * Trip the breaker. Logs only on the transition so a large batch doesn't
+   * emit one warning per paragraph.
+   */
+  private openQuotaBreaker(operationName: string): void {
+    const wasOpen = this.isQuotaCooldownActive();
+    this.quotaBreakerGeneration++;
+    this.quotaExhaustedUntil = Date.now() + this.quotaCooldownMs;
+    if (!wasOpen) {
+      this.logger.warn(
+        `ElevenLabs ${operationName}: quota exhausted (402). Skipping ElevenLabs for ${Math.round(
+          this.quotaCooldownMs / 1000,
+        )}s and cascading to the fallback provider.`,
+      );
+    }
   }
 
   private isQuotaExhaustedError(error: unknown): boolean {

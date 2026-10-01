@@ -6,7 +6,7 @@
   // ~/.npmrc, ~/.ssh, ~/.aws, ~/.gitconfig, gh/keyring tokens, or any secret.
   // Builds/lint/test run here; push, deploy, and auth stay on the HOST.
   // This removes the credential reservoir that the 2026-08 config-injection
-  // worm harvested during builds (see docs/security/sandbox-dev.md).
+  // worm harvested during builds.
   "mounts": [],
   "runArgs": ["--network=bridge"],
 

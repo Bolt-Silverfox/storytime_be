@@ -1,0 +1,81 @@
+# Build context exclusions for the production image (see Dockerfile).
+#
+# Three things MUST stay in the context or the build breaks in non-obvious
+# ways, so do not add them here:
+#   * pnpm-workspace.yaml — carries onlyBuiltDependencies; without it pnpm 10
+#     blocks the bcrypt and @prisma/engines postinstall scripts.
+#   * prisma/ — schema.prisma drives `prisma generate`, migrations/ ships so
+#     `prisma migrate deploy` can be exec'd against the running container.
+#   * scripts/ — verify_google_purchase.py + requirements.txt are resolved at
+#     runtime from process.cwd().
+
+# Dependencies and build output — rebuilt inside the image, and a host-built
+# node_modules would be the wrong architecture (amd64 dev box -> arm64 image).
+node_modules
+**/node_modules
+dist
+build
+.pnpm-store
+
+# Secrets. Nothing environment-specific belongs in a layer; config comes from
+# SSM at runtime.
+.env
+.env.*
+*.pem
+*.key
+*.p8
+*.p12
+gcp-*.json
+service-account*.json
+
+# VCS / CI / editor
+.git
+.gitignore
+.gitattributes
+.githooks
+.github
+.gitlab-ci.yml
+.vscode
+.idea
+.devcontainer
+.claude
+.superpowers
+*.swp
+.DS_Store
+
+# Tests, fixtures and coverage — not shipped and not needed to build.
+test
+coverage
+.nyc_output
+**/*.spec.ts
+**/*.e2e-spec.ts
+__mocks__
+jest.config.js
+postman_full_collection.json
+
+# Puppeteer / mermaid-cli junk. @mermaid-js/mermaid-cli is a devDependency
+# used only for generating diagrams; its Chromium cache and rendered output
+# must never enter the context.
+.cache
+.local-chromium
+puppeteer-cache
+.puppeteerrc*
+**/*.mmd
+mermaid.config.json
+
+# Local dev orchestration and the PM2 deployment path this image replaces.
+docker-compose*.yml
+Dockerfile
+.dockerignore
+ecosystem.config.js
+deploy
+monitoring
+
+# Docs and logs
+*.md
+!README.md
+docs
+logs
+*.log
+tmp
+uploads
