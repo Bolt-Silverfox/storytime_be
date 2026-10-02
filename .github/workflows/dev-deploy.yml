@@ -61,14 +61,27 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # BLOCKING, deliberately. These two were `continue-on-error: true`, which
+      # meant they ran, printed their findings, and passed the job anyway -- so
+      # unformatted or lint-failing code reached `develop-v*` unchallenged and
+      # was first caught by `deploy-prod.yml`, whose Format check is blocking,
+      # on a PR into `main`. That turned a one-file formatting slip into a
+      # blocked RELEASE several merges later (it happened: the ElevenLabs
+      # provider in #596/#597, caught by promotion #607).
+      #
+      # Use the repo's pinned prettier, not `prettier@latest`: 3.4.2 reports one
+      # offending file in this tree where 3.6.x reports 27. Raising the pin is a
+      # deliberate repo-wide reformat, not a side effect.
       - name: Format check
-        continue-on-error: true
         run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
 
       - name: Lint
-        continue-on-error: true
         run: pnpm run lint
 
+      # STILL ADVISORY, and that is not an oversight. A newly published CVE in a
+      # transitive dependency would otherwise block every dev branch the moment
+      # it lands, with no change on our side having caused it. `|| true` inside
+      # the step keeps it that way even if `continue-on-error` is removed later.
       - name: Security audit
         continue-on-error: true
         run: pnpm audit --audit-level=high || true
