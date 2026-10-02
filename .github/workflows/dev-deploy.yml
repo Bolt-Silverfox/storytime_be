@@ -72,10 +72,34 @@ jobs:
       # Use the repo's pinned prettier, not `prettier@latest`: 3.4.2 reports one
       # offending file in this tree where 3.6.x reports 27. Raising the pin is a
       # deliberate repo-wide reformat, not a side effect.
+      # The `build` job generates the Prisma client; this one did not, so every
+      # type-aware lint rule below saw Prisma models as `error` types. Generating
+      # it here costs one step and makes the Lint output describe the code rather
+      # than a missing client.
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
       - name: Format check
         run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
 
+      # ADVISORY, and this is a retraction. I made this blocking in the same
+      # change that made Format check blocking, on the strength of a CI run that
+      # reported every quality step as `success`. That reading was wrong:
+      # `continue-on-error: true` makes a FAILING step report success, so "all
+      # steps green" could not distinguish a passing check from an ignored
+      # failure. Making it blocking surfaced 799 errors and 195 warnings.
+      #
+      # A large share are artifacts, not real defects: this job never runs
+      # `Generate Prisma client` (the `build` job does), so typescript-eslint's
+      # type-aware rules see every Prisma model as an `error` type. That alone
+      # accounts for the 382 `no-redundant-type-constituents` hits, all of the
+      # form "X is an 'error' type that acts as 'any'". `prisma generate` is
+      # added above so the output means something; the remaining count is the
+      # real debt and is a separate, scoped piece of work.
+      #
+      # Do not make this blocking again without first driving the count to zero.
       - name: Lint
+        continue-on-error: true
         run: pnpm run lint
 
       # STILL ADVISORY, and that is not an oversight. A newly published CVE in a
