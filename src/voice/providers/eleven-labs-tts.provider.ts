@@ -118,27 +118,31 @@ export class ElevenLabsTTSProvider
       throw new QuotaExhaustedError('ElevenLabs');
     }
 
-    return this.withRetry(async () => {
-      this.logger.log(
-        `Generating audio with voice ${voiceId} and model ${modelId}`,
-      );
+    return this.withRetry(
+      async () => {
+        this.logger.log(
+          `Generating audio with voice ${voiceId} and model ${modelId}`,
+        );
 
-      const convertOptions: Parameters<
-        typeof this.client.textToSpeech.convert
-      >[1] = {
-        text,
-        model_id: modelId,
-        output_format: 'mp3_44100_128',
-        ...(options && { voice_settings: options }),
-      };
+        const convertOptions: Parameters<
+          typeof this.client.textToSpeech.convert
+        >[1] = {
+          text,
+          model_id: modelId,
+          output_format: 'mp3_44100_128',
+          ...(options && { voice_settings: options }),
+        };
 
-      const audioStream = await this.client.textToSpeech.convert(
-        voiceId,
-        convertOptions,
-      );
+        const audioStream = await this.client.textToSpeech.convert(
+          voiceId,
+          convertOptions,
+        );
 
-      return await this.converter.toBuffer(audioStream);
-    }, 'generateAudio', breakerGeneration);
+        return await this.converter.toBuffer(audioStream);
+      },
+      'generateAudio',
+      breakerGeneration,
+    );
   }
 
   /**
