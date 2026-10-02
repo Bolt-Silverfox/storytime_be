@@ -82,22 +82,27 @@ jobs:
       - name: Format check
         run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
 
-      # ADVISORY, and this is a retraction. I made this blocking in the same
-      # change that made Format check blocking, on the strength of a CI run that
-      # reported every quality step as `success`. That reading was wrong:
+      # ADVISORY, deliberately, and this comment is a retraction. This step was
+      # briefly made blocking in this same branch on the strength of a CI run
+      # that reported every quality step as `success`. That reading was invalid:
       # `continue-on-error: true` makes a FAILING step report success, so "all
-      # steps green" could not distinguish a passing check from an ignored
-      # failure. Making it blocking surfaced 799 errors and 195 warnings.
+      # steps green" cannot distinguish a check that passes from a failure being
+      # ignored -- which is the very condition the change was meant to fix.
       #
-      # A large share are artifacts, not real defects: this job never runs
-      # `Generate Prisma client` (the `build` job does), so typescript-eslint's
-      # type-aware rules see every Prisma model as an `error` type. That alone
-      # accounts for the 382 `no-redundant-type-constituents` hits, all of the
-      # form "X is an 'error' type that acts as 'any'". `prisma generate` is
-      # added above so the output means something; the remaining count is the
-      # real debt and is a separate, scoped piece of work.
+      # MEASURED, both runs, same tree:
       #
-      # Do not make this blocking again without first driving the count to zero.
+      #   without `Generate Prisma client`   994 problems (799 errors, 195 warn)
+      #   with it (added above)               89 problems ( 18 errors,  71 warn)
+      #
+      # So ~98% of the errors were artifacts of a missing client, not defects:
+      # with no generated client, typescript-eslint's type-aware rules see every
+      # Prisma model as an `error` type, which produced 382
+      # `no-redundant-type-constituents` hits of the form "X is an 'error' type
+      # that acts as 'any'" and inflated `require-await` and `no-unsafe-argument`
+      # alongside them.
+      #
+      # 18 errors is the real debt. Clear those, then make this blocking -- not
+      # before, and not on the strength of a green step while this flag is set.
       - name: Lint
         continue-on-error: true
         run: pnpm run lint
