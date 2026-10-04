@@ -81,9 +81,20 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     // Friendly, actionable copy for rate limiting (the dedicated
-    // ThrottlerExceptionFilter provides a premium-aware variant when it wins;
-    // this is the safety net so a 429 is never a raw framework string).
-    if (statusCode === HttpStatus.TOO_MANY_REQUESTS) {
+    // ThrottlerExceptionFilter provides a premium-aware variant when it wins).
+    // NOTE: this replaces the message on EVERY 429 that reaches this filter,
+    // not only raw framework strings -- a deliberate domain message such as
+    // QuotaExceededException's would be overwritten too (it has no call sites
+    // today; revisit this branch before giving it one).
+    //
+    // `getStatus()` is typed `number` while the enum member is a literal, so
+    // the member is widened to satisfy no-unsafe-enum-comparison. The
+    // alternative -- annotating `statusCode` as `HttpStatus` and dropping this
+    // cast -- just moves the same error onto the `statusCode >= 500`
+    // comparison below, which compares against a plain number. (Doing both at
+    // once is worse: an `HttpStatus`-typed left side against a `number`-widened
+    // right side re-flags this line too.)
+    if (statusCode === (HttpStatus.TOO_MANY_REQUESTS as number)) {
       message = 'Too many requests. Please wait a moment and try again.';
     }
 
