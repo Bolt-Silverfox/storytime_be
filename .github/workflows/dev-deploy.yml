@@ -101,10 +101,19 @@ jobs:
       # that acts as 'any'" and inflated `require-await` and `no-unsafe-argument`
       # alongside them.
       #
-      # 18 errors is the real debt. Clear those, then make this blocking -- not
-      # before, and not on the strength of a green step while this flag is set.
+      # NOW BLOCKING. The 18 errors are cleared (#610): with the Prisma client
+      # generated above, `pnpm run lint` reports 0 errors and 71 warnings, so
+      # this gate holds the line rather than announcing a backlog.
+      #
+      # The 71 warnings stay warnings. Nearly all are `no-unsafe-argument` on
+      # `jest.fn()` mock returns in specs, where the unsafe argument is the
+      # mock, not the code under test. Promoting them to errors would mean
+      # typing hundreds of mocks for no defect caught.
+      #
+      # Do not re-add `continue-on-error` here. With it set, a FAILING step
+      # reports `success`, which is how the errors accumulated unnoticed in the
+      # first place and how a CI run was misread as evidence they did not exist.
       - name: Lint
-        continue-on-error: true
         run: pnpm run lint
 
       # STILL ADVISORY, and that is not an oversight. A newly published CVE in a
