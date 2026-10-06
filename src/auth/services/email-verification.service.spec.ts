@@ -1,7 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EmailVerificationService } from './email-verification.service';
 import { TokenService } from './token.service';
-import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
+import {
+  AUTH_REPOSITORY,
+  IAuthRepository,
+  TokenWithUser,
+} from '../repositories';
+import { makeToken, makeUser } from '@/shared/testing/prisma-fixtures';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TokenType } from '../dto/auth.dto';
 import {
@@ -25,28 +30,22 @@ describe('EmailVerificationService', () => {
   let tokenService: jest.Mocked<TokenService>;
   let eventEmitter: jest.Mocked<EventEmitter2>;
 
-  const mockUser = {
-    id: 'user-1',
-    email: 'test@example.com',
-    name: 'Test User',
+  const mockUser = makeUser({
     passwordHash: 'hashed_password',
     isEmailVerified: false,
     role: Role.parent,
     onboardingStatus: OnboardingStatus.account_created,
-    googleId: null,
-    appleId: null,
-    avatarId: null,
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
-  };
+  });
 
-  const mockTokenRecord = {
-    id: 'token-1',
-    userId: 'user-1',
-    token: 'hashed-token',
-    type: TokenType.VERIFICATION,
-    expiresAt: new Date(Date.now() + 86400000), // 24 hours from now
-    createdAt: new Date(),
+  const mockTokenRecord: TokenWithUser = {
+    ...makeToken({
+      token: 'hashed-token',
+      type: TokenType.VERIFICATION,
+      expiresAt: new Date(Date.now() + 86400000), // 24 hours from now
+      createdAt: new Date(),
+    }),
     user: mockUser,
   };
 
@@ -86,9 +85,9 @@ describe('EmailVerificationService', () => {
   describe('sendEmailVerification', () => {
     it('should send verification email successfully', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
       authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
-      authRepository.createToken.mockResolvedValue({} as any);
+      authRepository.createToken.mockResolvedValue(makeToken());
 
       // Act
       const result = await service.sendEmailVerification('test@example.com');
@@ -134,14 +133,14 @@ describe('EmailVerificationService', () => {
     it('should delete existing verification tokens before creating new one', async () => {
       // Arrange
       const callOrder: string[] = [];
-      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
       authRepository.deleteUserTokensByType.mockImplementation(() => {
         callOrder.push('deleteTokens');
         return Promise.resolve();
       });
       authRepository.createToken.mockImplementation(() => {
         callOrder.push('createToken');
-        return Promise.resolve({} as any);
+        return Promise.resolve(makeToken());
       });
 
       // Act
@@ -155,10 +154,8 @@ describe('EmailVerificationService', () => {
   describe('verifyEmail', () => {
     it('should verify email successfully with valid token', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockTokenRecord as any,
-      );
-      authRepository.updateUser.mockResolvedValue({} as any);
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockTokenRecord);
+      authRepository.updateUser.mockResolvedValue(makeUser());
       authRepository.deleteToken.mockResolvedValue(undefined);
 
       // Act
@@ -182,10 +179,8 @@ describe('EmailVerificationService', () => {
 
     it('should emit USER_EMAIL_VERIFIED event on success', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockTokenRecord as any,
-      );
-      authRepository.updateUser.mockResolvedValue({} as any);
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockTokenRecord);
+      authRepository.updateUser.mockResolvedValue(makeUser());
       authRepository.deleteToken.mockResolvedValue(undefined);
 
       // Act
@@ -218,9 +213,7 @@ describe('EmailVerificationService', () => {
         ...mockTokenRecord,
         expiresAt: new Date('2020-01-01'),
       };
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        expiredToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
       authRepository.deleteToken.mockResolvedValue(undefined);
 
       // Act & Assert
@@ -236,9 +229,7 @@ describe('EmailVerificationService', () => {
         ...mockTokenRecord,
         expiresAt: new Date('2020-01-01'),
       };
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        expiredToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
       authRepository.deleteToken.mockResolvedValue(undefined);
 
       // Act & Assert

@@ -3,7 +3,8 @@ import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
-import { AUTH_REPOSITORY } from './repositories';
+import { AUTH_REPOSITORY, SessionWithUser } from './repositories';
+import { makeSession, makeUser } from '@/shared/testing/prisma-fixtures';
 import { TokenService } from './services/token.service';
 import { Role } from '@prisma/client';
 
@@ -24,17 +25,13 @@ describe('AuthService', () => {
   >;
 
   const mockUser = {
-    id: 'user-1',
-    email: 'test@example.com',
-    name: 'Test User',
-    passwordHash: 'hashed_password',
-    isEmailVerified: true,
-    role: Role.parent,
+    ...makeUser({
+      passwordHash: 'hashed_password',
+      role: Role.parent,
+    }),
     profile: null,
     avatar: null,
     _count: { kids: 2 },
-    createdAt: new Date(),
-    updatedAt: new Date(),
   };
 
   beforeEach(async () => {
@@ -73,7 +70,7 @@ describe('AuthService', () => {
       tokenService.createTokenPair.mockResolvedValue({
         jwt: 'jwt-token',
         refreshToken: 'refresh-token',
-      } as any);
+      });
 
       const result = await service.login({
         email: 'test@example.com',
@@ -122,11 +119,11 @@ describe('AuthService', () => {
 
   describe('refresh', () => {
     it('should refresh token successfully with valid refresh token', async () => {
-      const session = {
-        id: 'session-1',
+      const session: SessionWithUser = {
+        ...makeSession(),
         user: { ...mockUser },
       };
-      tokenService.findSessionByRefreshToken.mockResolvedValue(session as any);
+      tokenService.findSessionByRefreshToken.mockResolvedValue(session);
       tokenService.generateJwt.mockReturnValue('new-jwt-token');
 
       const result = await service.refresh('valid-refresh-token');

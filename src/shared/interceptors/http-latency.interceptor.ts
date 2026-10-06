@@ -1,6 +1,15 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { metrics, Counter, Histogram } from '@opentelemetry/api';
+import { isAxiosError, type InternalAxiosRequestConfig } from 'axios';
+
+/**
+ * An Axios request config carrying the start-time stamp this interceptor adds
+ * on the way out, so the response side can compute a duration.
+ */
+type TimedRequestConfig = InternalAxiosRequestConfig & {
+  __startTime?: number;
+};
 
 /**
  * Axios-level interceptor that tracks outgoing HTTP request metrics
@@ -55,10 +64,12 @@ export class HttpLatencyInterceptor implements OnModuleInit {
     const axiosInstance = this.httpService.axiosRef;
 
     // Request interceptor — stamp start time
-    axiosInstance.interceptors.request.use((config) => {
-      (config as any).__startTime = Date.now();
-      return config;
-    });
+    axiosInstance.interceptors.request.use(
+      (config: InternalAxiosRequestConfig) => {
+        (config as TimedRequestConfig).__startTime = Date.now();
+        return config;
+      },
+    );
 
     // Response interceptor — record metrics on success and failure
     axiosInstance.interceptors.response.use(
@@ -66,10 +77,16 @@ export class HttpLatencyInterceptor implements OnModuleInit {
         this.recordMetrics(response.config, response.status);
         return response;
       },
-      (error) => {
-        const config = error.config || {};
-        const status = error.response?.status || 0;
-        this.recordMetrics(config, status, true);
+      (error: unknown) => {
+        // A non-Axios rejection (e.g. thrown by another interceptor) has no
+        // config/response, so it is recorded with the same unknown-host,
+        // status-0 defaults as before.
+        const axiosError = isAxiosError(error) ? error : undefined;
+        this.recordMetrics(
+          axiosError?.config,
+          axiosError?.response?.status ?? 0,
+          true,
+        );
         return Promise.reject(
           error instanceof Error ? error : new Error(String(error)),
         );
@@ -77,7 +94,11 @@ export class HttpLatencyInterceptor implements OnModuleInit {
     );
   }
 
-  private recordMetrics(config: any, status: number, isError = false) {
+  private recordMetrics(
+    config: TimedRequestConfig | undefined,
+    status: number,
+    isError = false,
+  ) {
     const startTime = config?.__startTime;
     const host = this.extractHost(config);
     const method = (config?.method || 'GET').toUpperCase();
@@ -96,7 +117,7 @@ export class HttpLatencyInterceptor implements OnModuleInit {
     }
   }
 
-  private extractHost(config: any): string {
+  private extractHost(config: TimedRequestConfig | undefined): string {
     if (!config?.url) {
       return 'unknown';
     }

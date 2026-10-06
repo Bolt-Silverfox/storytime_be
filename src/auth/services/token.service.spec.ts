@@ -2,7 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { InternalServerErrorException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { TokenService, TokenPayload } from './token.service';
-import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
+import {
+  AUTH_REPOSITORY,
+  IAuthRepository,
+  SessionWithUser,
+} from '../repositories';
+import { makeSession, makeUser } from '@/shared/testing/prisma-fixtures';
 import { UserDto } from '../dto/auth.dto';
 import { Role, OnboardingStatus } from '@prisma/client';
 import * as crypto from 'crypto';
@@ -23,29 +28,22 @@ describe('TokenService', () => {
     numberOfKids: 2,
   };
 
-  const mockSession = {
-    id: 'session-1',
-    userId: 'user-1',
+  const mockSession = makeSession({
     token: 'hashed-refresh-token',
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     createdAt: new Date(),
-  };
+  });
 
-  const mockSessionWithUser = {
+  const mockSessionWithUser: SessionWithUser = {
     ...mockSession,
     user: {
-      id: 'user-1',
-      email: 'test@example.com',
-      name: 'Test User',
-      passwordHash: 'hashed_password',
-      isEmailVerified: true,
-      role: Role.parent,
-      onboardingStatus: OnboardingStatus.profile_setup,
-      googleId: null,
-      appleId: null,
-      avatarId: null,
-      createdAt: new Date('2026-01-01'),
-      updatedAt: new Date('2026-01-01'),
+      ...makeUser({
+        passwordHash: 'hashed_password',
+        role: Role.parent,
+        onboardingStatus: OnboardingStatus.profile_setup,
+        createdAt: new Date('2026-01-01'),
+        updatedAt: new Date('2026-01-01'),
+      }),
       _count: { kids: 2 },
     },
   };
@@ -82,7 +80,7 @@ describe('TokenService', () => {
   describe('createTokenPair', () => {
     it('should create a session and return jwt + refresh token pair', async () => {
       // Arrange
-      authRepository.createSession.mockResolvedValue(mockSession as any);
+      authRepository.createSession.mockResolvedValue(mockSession);
 
       // Act
       const result = await service.createTokenPair(mockUser);
@@ -101,7 +99,7 @@ describe('TokenService', () => {
 
     it('should create a session with 7-day expiry', async () => {
       // Arrange
-      authRepository.createSession.mockResolvedValue(mockSession as any);
+      authRepository.createSession.mockResolvedValue(mockSession);
       const now = Date.now();
 
       // Act
@@ -302,9 +300,7 @@ describe('TokenService', () => {
   describe('findSessionByRefreshToken', () => {
     it('should find session by hashed refresh token', async () => {
       // Arrange
-      authRepository.findSessionByToken.mockResolvedValue(
-        mockSessionWithUser as any,
-      );
+      authRepository.findSessionByToken.mockResolvedValue(mockSessionWithUser);
 
       // Act
       const result =
@@ -336,7 +332,7 @@ describe('TokenService', () => {
   describe('deleteSession', () => {
     it('should delete session and return true when session exists', async () => {
       // Arrange
-      authRepository.findSessionById.mockResolvedValue(mockSession as any);
+      authRepository.findSessionById.mockResolvedValue(mockSession);
       authRepository.deleteSession.mockResolvedValue(undefined);
 
       // Act

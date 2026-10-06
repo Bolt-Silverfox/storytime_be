@@ -3,7 +3,12 @@ import { OAuthService } from './oauth.service';
 import { BadRequestException } from '@nestjs/common';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
-import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
+import {
+  AUTH_REPOSITORY,
+  IAuthRepository,
+  UserWithProfileAndAvatar,
+} from '../repositories';
+import { makeUser } from '@/shared/testing/prisma-fixtures';
 import { NotificationPreferenceService } from '@/notification/services/notification-preference.service';
 import { OAuth2Client } from 'google-auth-library';
 import { ConfigService } from '@nestjs/config';
@@ -30,18 +35,14 @@ describe('OAuthService', () => {
   let tokenService: jest.Mocked<TokenService>;
   let googleClient: { verifyIdToken: jest.Mock };
 
-  const mockUser = {
-    id: 'user-1',
-    email: 'test@example.com',
-    name: 'Test User',
-    passwordHash: 'hashed_password',
-    isEmailVerified: true,
-    role: Role.parent,
-    googleId: 'google-123',
-    appleId: null,
-    avatarId: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+  const mockUser: UserWithProfileAndAvatar = {
+    ...makeUser({
+      passwordHash: 'hashed_password',
+      role: Role.parent,
+      googleId: 'google-123',
+    }),
+    profile: null,
+    avatar: null,
   };
 
   beforeEach(async () => {
@@ -117,7 +118,7 @@ describe('OAuthService', () => {
         }),
       });
 
-      authRepository.findUserByGoogleId.mockResolvedValue(mockUser as any);
+      authRepository.findUserByGoogleId.mockResolvedValue(mockUser);
       authRepository.countKidsByParentId.mockResolvedValue(2);
       tokenService.createTokenPair.mockResolvedValue({
         jwt: 'jwt-token',
