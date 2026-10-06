@@ -1,6 +1,12 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as admin from 'firebase-admin';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import {
+  getMessaging,
+  type Message,
+  type MulticastMessage,
+  type SendResponse,
+} from 'firebase-admin/messaging';
 import { EnvConfig } from '@/shared/config/env.validation';
 import {
   DEVICE_TOKEN_REPOSITORY,
@@ -51,9 +57,9 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
 
     try {
       // Check if Firebase is already initialized
-      if (admin.apps.length === 0) {
-        admin.initializeApp({
-          credential: admin.credential.cert({
+      if (getApps().length === 0) {
+        initializeApp({
+          credential: cert({
             projectId,
             clientEmail,
             // Handle newline escaping in private key (common in env vars)
@@ -108,7 +114,7 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
       const tokens = deviceTokens.map((dt) => dt.token);
 
       // Build FCM message
-      const message: admin.messaging.MulticastMessage = {
+      const message: MulticastMessage = {
         tokens,
         notification: {
           title: payload.title,
@@ -132,7 +138,7 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
       };
 
       // Send to all devices
-      const response = await admin.messaging().sendEachForMulticast(message);
+      const response = await getMessaging().sendEachForMulticast(message);
 
       this.logger.log(
         `Push notification sent: ${response.successCount} success, ${response.failureCount} failures`,
@@ -196,7 +202,7 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
     }
 
     try {
-      const message: admin.messaging.MulticastMessage = {
+      const message: MulticastMessage = {
         tokens,
         notification: { title, body },
         data: data || {},
@@ -216,7 +222,7 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
         },
       };
 
-      const response = await admin.messaging().sendEachForMulticast(message);
+      const response = await getMessaging().sendEachForMulticast(message);
 
       this.logger.log(
         `sendToTokens() FCM response: successCount=${response.successCount}, failureCount=${response.failureCount}`,
@@ -273,13 +279,13 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
     }
 
     try {
-      const message: admin.messaging.Message = {
+      const message: Message = {
         topic,
         notification: { title, body },
         data: data || {},
       };
 
-      const messageId = await admin.messaging().send(message);
+      const messageId = await getMessaging().send(message);
 
       return {
         success: true,
@@ -304,7 +310,7 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
     }
 
     try {
-      await admin.messaging().subscribeToTopic(tokens, topic);
+      await getMessaging().subscribeToTopic(tokens, topic);
       this.logger.log(`Subscribed ${tokens.length} tokens to topic: ${topic}`);
     } catch (error) {
       this.logger.error(
@@ -322,7 +328,7 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
     }
 
     try {
-      await admin.messaging().unsubscribeFromTopic(tokens, topic);
+      await getMessaging().unsubscribeFromTopic(tokens, topic);
       this.logger.log(
         `Unsubscribed ${tokens.length} tokens from topic: ${topic}`,
       );
@@ -345,7 +351,7 @@ export class PushProvider implements INotificationProvider, OnModuleInit {
    */
   private async handleFailedTokens(
     deviceTokens: Array<{ id: string; token: string }>,
-    responses: admin.messaging.SendResponse[],
+    responses: SendResponse[],
   ): Promise<void> {
     const invalidTokenIds: string[] = [];
 
