@@ -4,8 +4,16 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { AdminStoryService } from '../admin-story.service';
 import {
   ADMIN_STORY_REPOSITORY,
+  CategoryWithCounts,
   IAdminStoryRepository,
+  StoryDetail,
+  StoryWithCounts,
 } from '../repositories/admin-story.repository.interface';
+import {
+  makeCategory,
+  makeStory,
+  makeTheme,
+} from '@/shared/testing/prisma-fixtures';
 
 describe('AdminStoryService', () => {
   let service: AdminStoryService;
@@ -14,23 +22,14 @@ describe('AdminStoryService', () => {
     del: jest.Mock;
   };
 
-  const mockStory = {
-    id: 'story-123',
-    title: 'Test Story',
-    description: 'A test story description',
-    content: 'Once upon a time...',
-    duration: 300,
-    language: 'en',
-    ageMin: 4,
-    ageMax: 8,
-    recommended: false,
-    aiGenerated: false,
-    isDeleted: false,
-    deletedAt: null,
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-02'),
-    categories: [{ id: 'cat-1', name: 'Adventure' }],
-    themes: [{ id: 'theme-1', name: 'Friendship' }],
+  const mockStory: StoryWithCounts = {
+    ...makeStory({
+      id: 'story-123',
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-02'),
+    }),
+    categories: [makeCategory()],
+    themes: [makeTheme()],
     _count: {
       favorites: 10,
       progresses: 50,
@@ -39,20 +38,15 @@ describe('AdminStoryService', () => {
     },
   };
 
-  const mockStoryWithFullRelations = {
+  const mockStoryWithFullRelations: StoryDetail = {
     ...mockStory,
     images: [{ id: 'img-1', url: 'https://example.com/image.jpg' }],
     branches: [{ id: 'branch-1', content: 'Branch content' }],
     questions: [{ id: 'q-1', question: 'What happened?' }],
   };
 
-  const mockCategory = {
-    id: 'cat-1',
-    name: 'Adventure',
-    image: 'https://example.com/adventure.jpg',
-    description: 'Adventure stories',
-    isDeleted: false,
-    deletedAt: null,
+  const mockCategory: CategoryWithCounts = {
+    ...makeCategory(),
     _count: {
       stories: 15,
       preferredByKids: 8,
@@ -95,7 +89,7 @@ describe('AdminStoryService', () => {
 
   describe('getAllStories', () => {
     it('should return paginated stories', async () => {
-      adminStoryRepository.findStories.mockResolvedValue([mockStory as any]);
+      adminStoryRepository.findStories.mockResolvedValue([mockStory]);
       adminStoryRepository.countStories.mockResolvedValue(1);
 
       const result = await service.getAllStories({ page: 1, limit: 10 });
@@ -109,7 +103,7 @@ describe('AdminStoryService', () => {
   describe('getStoryById', () => {
     it('should return story details', async () => {
       adminStoryRepository.findStoryById.mockResolvedValue(
-        mockStoryWithFullRelations as any,
+        mockStoryWithFullRelations,
       );
 
       const result = await service.getStoryById('story-123');
@@ -129,9 +123,7 @@ describe('AdminStoryService', () => {
 
   describe('getCategories', () => {
     it('should return categories', async () => {
-      adminStoryRepository.findCategories.mockResolvedValue([
-        mockCategory as any,
-      ]);
+      adminStoryRepository.findCategories.mockResolvedValue([mockCategory]);
 
       const result = await service.getCategories();
 
