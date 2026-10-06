@@ -201,15 +201,6 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts
-          path: |
-            dist/
-            node_modules/.prisma/
-          retention-days: 1
-
   # ===================
   # Test (runs on all events)
   # ===================
