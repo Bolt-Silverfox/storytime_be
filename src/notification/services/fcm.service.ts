@@ -1,7 +1,8 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import { ConfigService } from '@nestjs/config';
-import * as admin from 'firebase-admin';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getMessaging, type MulticastMessage } from 'firebase-admin/messaging';
 import {
   DEVICE_TOKEN_REPOSITORY,
   IDeviceTokenRepository,
@@ -51,9 +52,9 @@ export class FcmService implements OnModuleInit {
 
     try {
       // Check if Firebase is already initialized
-      if (admin.apps.length === 0) {
-        admin.initializeApp({
-          credential: admin.credential.cert({
+      if (getApps().length === 0) {
+        initializeApp({
+          credential: cert({
             projectId,
             privateKey: privateKey.replace(/\\n/g, '\n'),
             clientEmail,
@@ -96,7 +97,7 @@ export class FcmService implements OnModuleInit {
       const tokens = deviceTokens.map((dt) => dt.token);
 
       // Build the multicast message
-      const message: admin.messaging.MulticastMessage = {
+      const message: MulticastMessage = {
         notification: {
           title: payload.title,
           body: payload.body,
@@ -126,7 +127,7 @@ export class FcmService implements OnModuleInit {
         },
       };
 
-      const response = await admin.messaging().sendEachForMulticast(message);
+      const response = await getMessaging().sendEachForMulticast(message);
 
       this.logger.log(
         `FCM sent to user ${payload.userId}: ${response.successCount}/${tokens.length} devices successful`,

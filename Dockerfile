@@ -44,7 +44,7 @@ ARG PNPM_VERSION=10.15.1
 #     here, and is why this Dockerfile does not need to edit schema.prisma to
 #     add an explicit binaryTarget.
 # Node 24 (current LTS line) is used here at the deployment owner's direction;
-# engines.node in package.json is ">=20.0.0", so it is in range. Note this is
+# engines.node in package.json is ">=22.0.0", so it is in range. Note this is
 # AHEAD of the NODE_VERSION: '22' pinned in the .github deploy workflows and
 # .devcontainer — those drive the legacy PM2 path, not this image.
 # ---------------------------------------------------------------------------
