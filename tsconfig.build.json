@@ -9,6 +9,7 @@
     "dist",
     "test",
     "**/*.spec.ts",
+    "src/shared/testing",
     "__mocks__",
     "prisma"
   ]

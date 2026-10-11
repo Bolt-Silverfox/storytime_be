@@ -10,6 +10,7 @@ import {
   NotificationType,
   NotificationPreference,
 } from '@prisma/client';
+import { makeKid, makeUser } from '@/shared/testing/prisma-fixtures';
 
 describe('NotificationPreferenceService', () => {
   let service: NotificationPreferenceService;
@@ -28,15 +29,9 @@ describe('NotificationPreferenceService', () => {
     updatedAt: new Date('2026-01-15'),
   };
 
-  const mockUser = {
-    id: 'user-1',
-    email: 'test@example.com',
-  };
+  const mockUser = makeUser();
 
-  const mockKid = {
-    id: 'kid-1',
-    name: 'Test Kid',
-  };
+  const mockKid = makeKid();
 
   beforeEach(async () => {
     const mockRepository: Record<
@@ -78,7 +73,7 @@ describe('NotificationPreferenceService', () => {
 
   describe('create', () => {
     it('should create a notification preference for a user', async () => {
-      repository.findUser.mockResolvedValue(mockUser as any);
+      repository.findUser.mockResolvedValue(mockUser);
       repository.createNotificationPreference.mockResolvedValue(mockPreference);
 
       const result = await service.create({
@@ -101,7 +96,7 @@ describe('NotificationPreferenceService', () => {
     });
 
     it('should create a notification preference for a kid', async () => {
-      repository.findKid.mockResolvedValue(mockKid as any);
+      repository.findKid.mockResolvedValue(mockKid);
       repository.createNotificationPreference.mockResolvedValue({
         ...mockPreference,
         userId: null,
@@ -222,7 +217,7 @@ describe('NotificationPreferenceService', () => {
 
   describe('getForUser', () => {
     it('should return preferences for a user', async () => {
-      repository.findUser.mockResolvedValue(mockUser as any);
+      repository.findUser.mockResolvedValue(mockUser);
       repository.findManyNotificationPreferences.mockResolvedValue([
         mockPreference,
       ]);
@@ -249,7 +244,7 @@ describe('NotificationPreferenceService', () => {
   describe('getForKid', () => {
     it('should return preferences for a kid', async () => {
       const kidPref = { ...mockPreference, userId: null, kidId: 'kid-1' };
-      repository.findKid.mockResolvedValue(mockKid as any);
+      repository.findKid.mockResolvedValue(mockKid);
       repository.findManyNotificationPreferences.mockResolvedValue([kidPref]);
 
       const result = await service.getForKid('kid-1');

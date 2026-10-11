@@ -1,30 +1,47 @@
+import { ConfigService } from '@nestjs/config';
+import { EnvConfig } from '@/shared/config/env.validation';
 import { NotificationDeviceService } from './notification-device.service';
+import { IDeviceTokenRepository } from '../repositories';
+import { PushProvider } from '../providers/push.provider';
+import { PushQueueService } from '../queue/push-queue.service';
 
 /**
  * Focused unit tests for the env-scoped broadcast topic and the batched
  * broadcast, constructed directly with mocked collaborators (no Nest DI).
+ *
+ * Each double is typed against the real collaborator with `Pick`, so the stub
+ * signatures (and therefore the `mock.calls` assertions below) track the
+ * production ones. Only the final widening to the full constructor parameter
+ * needs a cast: these are deliberate partial doubles exercising one code path,
+ * not full implementations of the interfaces.
  */
 function build(nodeEnv: string | undefined) {
-  const deviceTokenRepository = {
+  const deviceTokenRepository: jest.Mocked<
+    Pick<IDeviceTokenRepository, 'findActiveNotDeletedBatch'>
+  > = {
     findActiveNotDeletedBatch: jest.fn(),
-  } as any;
-  const pushProvider = {
+  };
+  const pushProvider: jest.Mocked<
+    Pick<PushProvider, 'subscribeToTopic' | 'unsubscribeFromTopic' | 'isReady'>
+  > = {
     subscribeToTopic: jest.fn().mockResolvedValue(undefined),
     unsubscribeFromTopic: jest.fn().mockResolvedValue(undefined),
     isReady: jest.fn().mockReturnValue(true),
-  } as any;
-  const pushQueueService = {
+  };
+  const pushQueueService: jest.Mocked<
+    Pick<PushQueueService, 'queueTokenBatch'>
+  > = {
     queueTokenBatch: jest.fn().mockResolvedValue({ queued: true, jobId: 'x' }),
-  } as any;
+  };
   const configService = {
     get: jest.fn((key: string) => (key === 'NODE_ENV' ? nodeEnv : undefined)),
-  } as any;
+  };
 
   const service = new NotificationDeviceService(
-    deviceTokenRepository,
-    pushProvider,
-    pushQueueService,
-    configService,
+    deviceTokenRepository as unknown as IDeviceTokenRepository,
+    pushProvider as unknown as PushProvider,
+    pushQueueService as unknown as PushQueueService,
+    configService as unknown as ConfigService<EnvConfig, true>,
   );
   return { service, deviceTokenRepository, pushProvider, pushQueueService };
 }
@@ -113,13 +130,13 @@ describe('NotificationDeviceService - env-scoped broadcast topic', () => {
       expect(summary.batches).toBe(2);
       expect(summary.succeededBatches).toBe(2);
       const delivered = pushQueueService.queueTokenBatch.mock.calls.flatMap(
-        (c: unknown[]) => c[0] as string[],
+        (call) => call[0],
       );
       expect(new Set(delivered).size).toBe(600);
       const delays = pushQueueService.queueTokenBatch.mock.calls.map(
-        (c: unknown[]) => c[4] as number,
+        (call) => call[4],
       );
-      expect(delays.sort((a: number, b: number) => a - b)).toEqual([0, 60_000]);
+      expect(delays.sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([0, 60_000]);
     });
 
     it('returns zero and queues nothing when there are no devices', async () => {

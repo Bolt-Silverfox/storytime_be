@@ -1,7 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OnboardingService } from './onboarding.service';
 import { NotFoundException } from '@nestjs/common';
-import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
+import {
+  AUTH_REPOSITORY,
+  IAuthRepository,
+  UserWithLearningExpectations,
+  UserWithProfileAndAvatar,
+} from '../repositories';
+import { makeProfile, makeUser } from '@/shared/testing/prisma-fixtures';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -16,31 +22,27 @@ describe('OnboardingService', () => {
   let tokenService: jest.Mocked<TokenService>;
   let eventEmitter: jest.Mocked<EventEmitter2>;
 
-  const mockUser = {
-    id: 'user-1',
-    email: 'test@example.com',
-    name: 'Test User',
-    isEmailVerified: true,
-    role: Role.parent,
-    onboardingStatus: OnboardingStatus.email_verified,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    profile: {
-      userId: 'user-1',
+  // Satisfies both shapes the repository mocks return: the profile/avatar
+  // variant and the learning-expectations variant.
+  const mockUser: UserWithProfileAndAvatar & UserWithLearningExpectations = {
+    ...makeUser({
+      role: Role.parent,
+      onboardingStatus: OnboardingStatus.email_verified,
+    }),
+    profile: makeProfile({
       language: null,
       languageCode: null,
       country: 'NG',
-    },
+    }),
     avatar: null,
     learningExpectations: [],
   };
 
-  const mockProfile = {
-    userId: 'user-1',
+  const mockProfile = makeProfile({
     language: 'English',
     languageCode: 'en',
     country: 'NG',
-  };
+  });
 
   beforeEach(async () => {
     const mockAuthRepository = {
@@ -107,7 +109,7 @@ describe('OnboardingService', () => {
     it('should register a new user successfully', async () => {
       authRepository.findUserByEmail.mockResolvedValue(null);
       passwordService.hashPassword.mockResolvedValue('hashed_password');
-      authRepository.createUser.mockResolvedValue(mockUser as any);
+      authRepository.createUser.mockResolvedValue(mockUser);
       tokenService.createTokenPair.mockResolvedValue({
         jwt: 'jwt-token',
         refreshToken: 'refresh-token',
@@ -127,10 +129,10 @@ describe('OnboardingService', () => {
 
   describe('completeProfile', () => {
     it('should complete profile successfully', async () => {
-      authRepository.findUserByIdWithProfile.mockResolvedValue(mockUser as any);
-      authRepository.updateProfile.mockResolvedValue(mockProfile as any);
+      authRepository.findUserByIdWithProfile.mockResolvedValue(mockUser);
+      authRepository.updateProfile.mockResolvedValue(mockProfile);
       authRepository.findUserByIdWithLearningExpectations.mockResolvedValue(
-        mockUser as any,
+        mockUser,
       );
       authRepository.countKidsByParentId.mockResolvedValue(2);
 
@@ -154,10 +156,10 @@ describe('OnboardingService', () => {
 
   describe('updateProfile', () => {
     it('should update profile successfully', async () => {
-      authRepository.findUserByIdWithProfile.mockResolvedValue(mockUser as any);
-      authRepository.upsertProfile.mockResolvedValue(mockProfile as any);
+      authRepository.findUserByIdWithProfile.mockResolvedValue(mockUser);
+      authRepository.upsertProfile.mockResolvedValue(mockProfile);
       authRepository.findUserByIdWithLearningExpectations.mockResolvedValue(
-        mockUser as any,
+        mockUser,
       );
       authRepository.countKidsByParentId.mockResolvedValue(2);
 

@@ -11,6 +11,10 @@ import 'dotenv/config';
 import { isSentryEnabled, captureException } from './sentry-setup';
 import './otel-setup';
 import { json, urlencoded } from 'express';
+import type {
+  Request as ExpressRequest,
+  Response as ExpressResponse,
+} from 'express';
 
 import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -108,7 +112,7 @@ async function bootstrap() {
   // Enable gzip/deflate compression for responses > 1KB
   app.use(
     compression({
-      filter: (req: any, res: any) => {
+      filter: (req: ExpressRequest, res: ExpressResponse) => {
         // Don't compress if client doesn't accept it
         if (req.headers['x-no-compression']) {
           return false;
