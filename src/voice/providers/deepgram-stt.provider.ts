@@ -36,6 +36,7 @@ export class DeepgramSTTProvider implements ISpeechToTextProvider {
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
 
     try {
       this.logger.log('Attempting Deepgram STT transcription');
@@ -48,20 +49,23 @@ export class DeepgramSTTProvider implements ISpeechToTextProvider {
           model: 'nova-2',
           smart_format: true,
         },
+        { abortSignal: controller.signal },
       );
 
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(
-              new Error(
-                `Deepgram transcription timed out after ${
-                  TRANSCRIBE_TIMEOUT_MS / 1000
-                }s`,
-              ),
+        timer = setTimeout(() => {
+          // Promise.race only stops US waiting — it does not stop the SDK,
+          // which would otherwise run on to its own 60s default with the
+          // upload and its connection still held. Cancel it explicitly.
+          controller.abort();
+          reject(
+            new Error(
+              `Deepgram transcription timed out after ${
+                TRANSCRIBE_TIMEOUT_MS / 1000
+              }s`,
             ),
-          TRANSCRIBE_TIMEOUT_MS,
-        );
+          );
+        }, TRANSCRIBE_TIMEOUT_MS);
       });
 
       // v5 resolves with the parsed body and throws on failure, replacing v4's

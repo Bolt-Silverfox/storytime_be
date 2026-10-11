@@ -96,6 +96,9 @@ describe('DeepgramSTTProvider', () => {
     expect(mockTranscribeFile).toHaveBeenCalledWith(
       { data: buffer, contentType: mimetype },
       { model: 'nova-2', smart_format: true },
+      // Third argument is the request options carrying the abort signal; its
+      // behaviour is covered by the timeout tests below.
+      expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
     );
   });
 
@@ -162,6 +165,33 @@ describe('DeepgramSTTProvider', () => {
 
       await jest.advanceTimersByTimeAsync(30_000);
       await assertion;
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('aborts the in-flight SDK request when the timeout fires', async () => {
+    jest.useFakeTimers();
+    try {
+      const provider = buildProvider('test-key');
+      mockTranscribeFile.mockReturnValue(new Promise(() => {}));
+
+      const pending = provider.transcribe(buffer, mimetype);
+      const assertion = expect(pending).rejects.toThrow(/timed out/);
+
+      // The signal is handed to the SDK up front...
+      const requestOptions = mockTranscribeFile.mock.calls[0][2] as {
+        abortSignal: AbortSignal;
+      };
+      expect(requestOptions.abortSignal).toBeInstanceOf(AbortSignal);
+      expect(requestOptions.abortSignal.aborted).toBe(false);
+
+      await jest.advanceTimersByTimeAsync(30_000);
+      await assertion;
+
+      // ...and is actually tripped, so the SDK stops rather than running on to
+      // its own 60s default holding the upload and connection open.
+      expect(requestOptions.abortSignal.aborted).toBe(true);
     } finally {
       jest.useRealTimers();
     }
