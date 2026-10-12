@@ -110,7 +110,12 @@ GET    /stories/generate/queue-stats      - Queue statistics (monitoring)
 ```typescript
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as admin from 'firebase-admin';
+import { cert, initializeApp } from 'firebase-admin/app';
+import {
+  getMessaging,
+  type MulticastMessage,
+  type SendResponse,
+} from 'firebase-admin/messaging';
 
 export interface PushNotificationPayload {
   userId: string;
@@ -126,8 +131,8 @@ export class FcmService {
 
   constructor(private readonly configService: ConfigService) {
     // Initialize Firebase Admin SDK
-    admin.initializeApp({
-      credential: admin.credential.cert({
+    initializeApp({
+      credential: cert({
         projectId: configService.get('FIREBASE_PROJECT_ID'),
         privateKey: configService
           .get('FIREBASE_PRIVATE_KEY')
@@ -150,7 +155,7 @@ export class FcmService {
       }
 
       // Send to all user's devices
-      const message: admin.messaging.MulticastMessage = {
+      const message: MulticastMessage = {
         notification: {
           title: payload.title,
           body: payload.body,
@@ -174,7 +179,7 @@ export class FcmService {
         },
       };
 
-      const response = await admin.messaging().sendEachForMulticast(message);
+      const response = await getMessaging().sendEachForMulticast(message);
 
       this.logger.log(
         `FCM sent: ${response.successCount}/${deviceTokens.length} devices`,
@@ -201,7 +206,7 @@ export class FcmService {
 
   private async handleFailedTokens(
     tokens: string[],
-    responses: admin.messaging.SendResponse[],
+    responses: SendResponse[],
   ): Promise<void> {
     const invalidTokens: string[] = [];
 
