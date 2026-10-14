@@ -9,6 +9,13 @@ module.exports = {
     collectCoverageFrom: ['**/*.(t|j)s'],
     coverageDirectory: './coverage',
     testEnvironment: 'node',
+    // Use V8 coverage rather than babel-plugin-istanbul. Istanbul pulls
+    // test-exclude@6, which calls minimatch's callable default export; the
+    // pnpm.overrides floor of minimatch >=9.0.6 forces v10, where that export
+    // no longer exists, so every suite dies with "minimatch is not a function"
+    // under --coverage. V8 coverage does not go through test-exclude at all,
+    // so this fixes it without lowering the minimatch floor.
+    coverageProvider: 'v8',
     moduleNameMapper: {
       '^@/(.*)$': '<rootDir>/src/$1',
       '^src/(.*)$': '<rootDir>/src/$1',
