@@ -3,9 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { IAdminAnalyticsRepository } from './admin-analytics.repository.interface';
 
 @Injectable()
-export class PrismaAdminAnalyticsRepository
-  implements IAdminAnalyticsRepository
-{
+export class PrismaAdminAnalyticsRepository implements IAdminAnalyticsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async pingDatabase(): Promise<void> {

@@ -6,9 +6,7 @@ import type {
 } from './screen-time-session.repository.interface';
 
 @Injectable()
-export class PrismaScreenTimeSessionRepository
-  implements IScreenTimeSessionRepository
-{
+export class PrismaScreenTimeSessionRepository implements IScreenTimeSessionRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async sumDurationForKids(kidIds: string[]): Promise<DurationSumResult> {

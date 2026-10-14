@@ -3,10 +3,7 @@ import { metrics, Counter } from '@opentelemetry/api';
 
 export type TtsProviderName = 'elevenlabs' | 'deepgram' | 'edgetts';
 export type TtsAttemptResult =
-  | 'success'
-  | 'quota_error'
-  | 'transient_error'
-  | 'permanent_error';
+  'success' | 'quota_error' | 'transient_error' | 'permanent_error';
 export type TtsParagraphResult = 'completed' | 'failed';
 
 /**

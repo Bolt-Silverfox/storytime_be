@@ -5,9 +5,7 @@ import { ParentRecommendation } from '@prisma/client';
 import { ParentRecommendationWithRelations } from './story.repository.interface';
 
 @Injectable()
-export class PrismaStoryRecommendationRepository
-  implements IStoryRecommendationRepository
-{
+export class PrismaStoryRecommendationRepository implements IStoryRecommendationRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findParentRecommendation(
