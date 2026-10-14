@@ -173,13 +173,15 @@ export class StoryFeedService {
       // Overlap logic: story.ageMin <= filter.maxAge AND story.ageMax >= filter.minAge
       if (filter.minAge !== undefined) {
         where.ageMax = {
-          ...(where.ageMax || {}),
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+          ...((where.ageMax as object) || {}),
           gte: filter.minAge,
         };
       }
       if (filter.maxAge !== undefined) {
         where.ageMin = {
-          ...(where.ageMin || {}),
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+          ...((where.ageMin as object) || {}),
           lte: filter.maxAge,
         };
       }
@@ -200,7 +202,8 @@ export class StoryFeedService {
 
     // Exclude restricted stories (already fetched in batch query above)
     if (restrictedStoryIds.length > 0) {
-      where.id = { notIn: restrictedStoryIds, ...(where.id || {}) };
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+      where.id = { notIn: restrictedStoryIds, ...((where.id as object) || {}) };
     }
 
     if (filter.recommended === true && filter.kidId) {
@@ -281,7 +284,8 @@ export class StoryFeedService {
       }
 
       // Apply random IDs to where clause
-      where.id = { in: randomStoryIds, ...(where.id || {}) };
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+      where.id = { in: randomStoryIds, ...((where.id as object) || {}) };
     }
 
     const orderBy = filter.isMostLiked
