@@ -82,7 +82,7 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
     kidId: string,
     opts?: ProgressPageOptions,
   ): Promise<StoryProgressWithStory[]> {
-    return (await this.prisma.storyProgress.findMany({
+    return await this.prisma.storyProgress.findMany({
       where: {
         kidId,
         progress: { gt: 0 },
@@ -94,14 +94,14 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
       include: { story: { include: { categories: true } } },
       ...(opts?.take !== undefined ? { take: opts.take } : {}),
       ...(opts?.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
-    })) as StoryProgressWithStory[];
+    });
   }
 
   async findCompletedProgress(
     kidId: string,
     opts?: ProgressPageOptions,
   ): Promise<StoryProgressWithStory[]> {
-    return (await this.prisma.storyProgress.findMany({
+    return await this.prisma.storyProgress.findMany({
       where: {
         kidId,
         completed: true,
@@ -112,7 +112,7 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
       include: { story: { include: { categories: true } } },
       ...(opts?.take !== undefined ? { take: opts.take } : {}),
       ...(opts?.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
-    })) as StoryProgressWithStory[];
+    });
   }
 
   async findUserStoryProgress(
@@ -169,7 +169,7 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
     userId: string,
     opts?: ProgressPageOptions,
   ): Promise<UserStoryProgressWithStory[]> {
-    return (await this.prisma.userStoryProgress.findMany({
+    return await this.prisma.userStoryProgress.findMany({
       where: {
         userId,
         progress: { gt: 0 },
@@ -181,14 +181,14 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
       include: { story: { include: { categories: true } } },
       ...(opts?.take !== undefined ? { take: opts.take } : {}),
       ...(opts?.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
-    })) as UserStoryProgressWithStory[];
+    });
   }
 
   async findUserCompletedProgress(
     userId: string,
     opts?: ProgressPageOptions,
   ): Promise<UserStoryProgressWithStory[]> {
-    return (await this.prisma.userStoryProgress.findMany({
+    return await this.prisma.userStoryProgress.findMany({
       where: {
         userId,
         completed: true,
@@ -199,7 +199,7 @@ export class PrismaStoryProgressRepository implements IStoryProgressRepository {
       include: { story: { include: { categories: true } } },
       ...(opts?.take !== undefined ? { take: opts.take } : {}),
       ...(opts?.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
-    })) as UserStoryProgressWithStory[];
+    });
   }
 
   async removeFromUserLibrary(

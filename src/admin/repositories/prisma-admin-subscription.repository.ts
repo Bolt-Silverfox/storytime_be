@@ -25,7 +25,7 @@ export class PrismaAdminSubscriptionRepository implements IAdminSubscriptionRepo
       },
       _count: true,
     });
-    return result as SubscriptionPlanCount[];
+    return result;
   }
 
   // Count new subscriptions per CALENDAR DAY. groupBy on `startedAt` buckets by

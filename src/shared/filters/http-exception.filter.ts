@@ -22,7 +22,7 @@ import { captureException } from '../../sentry-setup';
  * last place that can afford to throw.
  */
 function httpStatusName(statusCode: number): string {
-  const name: string | undefined = HttpStatus[statusCode] as string | undefined;
+  const name: string | undefined = HttpStatus[statusCode];
   if (!name) {
     // No enum entry: say what we know rather than inventing a label.
     return `HTTP ${statusCode}`;
@@ -123,7 +123,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // comparison below, which compares against a plain number. (Doing both at
     // once is worse: an `HttpStatus`-typed left side against a `number`-widened
     // right side re-flags this line too.)
-    if (statusCode === (HttpStatus.TOO_MANY_REQUESTS as number)) {
+    if (statusCode === Number(HttpStatus.TOO_MANY_REQUESTS)) {
       message = 'Too many requests. Please wait a moment and try again.';
     }
 

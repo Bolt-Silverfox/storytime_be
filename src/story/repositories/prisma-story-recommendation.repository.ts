@@ -153,9 +153,6 @@ export class PrismaStoryRecommendationRepository implements IStoryRecommendation
       take: limit,
     });
 
-    return results as unknown as Array<{
-      storyId: string;
-      _count: { storyId: number };
-    }>;
+    return results;
   }
 }

@@ -173,13 +173,13 @@ export class StoryFeedService {
       // Overlap logic: story.ageMin <= filter.maxAge AND story.ageMax >= filter.minAge
       if (filter.minAge !== undefined) {
         where.ageMax = {
-          ...((where.ageMax as object) || {}),
+          ...(where.ageMax || {}),
           gte: filter.minAge,
         };
       }
       if (filter.maxAge !== undefined) {
         where.ageMin = {
-          ...((where.ageMin as object) || {}),
+          ...(where.ageMin || {}),
           lte: filter.maxAge,
         };
       }
@@ -200,7 +200,7 @@ export class StoryFeedService {
 
     // Exclude restricted stories (already fetched in batch query above)
     if (restrictedStoryIds.length > 0) {
-      where.id = { notIn: restrictedStoryIds, ...((where.id as object) || {}) };
+      where.id = { notIn: restrictedStoryIds, ...(where.id || {}) };
     }
 
     if (filter.recommended === true && filter.kidId) {
@@ -281,7 +281,7 @@ export class StoryFeedService {
       }
 
       // Apply random IDs to where clause
-      where.id = { in: randomStoryIds, ...((where.id as object) || {}) };
+      where.id = { in: randomStoryIds, ...(where.id || {}) };
     }
 
     const orderBy = filter.isMostLiked

@@ -373,7 +373,7 @@ describe('SubscriptionWebhookService', () => {
       await expect(
         service.handleGoogle({
           message: { data: 'x', messageId: '' },
-        } as never),
+        }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
