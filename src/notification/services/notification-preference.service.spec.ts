@@ -18,8 +18,8 @@ describe('NotificationPreferenceService', () => {
 
   const mockPreference: NotificationPreference = {
     id: 'pref-1',
-    type: 'push' as NotificationType,
-    category: 'NEW_STORY' as NotificationCategory,
+    type: 'push',
+    category: 'NEW_STORY',
     enabled: true,
     userId: 'user-1',
     kidId: null,
@@ -77,8 +77,8 @@ describe('NotificationPreferenceService', () => {
       repository.createNotificationPreference.mockResolvedValue(mockPreference);
 
       const result = await service.create({
-        type: 'push' as NotificationType,
-        category: 'NEW_STORY' as NotificationCategory,
+        type: 'push',
+        category: 'NEW_STORY',
         enabled: true,
         userId: 'user-1',
       });
@@ -104,8 +104,8 @@ describe('NotificationPreferenceService', () => {
       });
 
       const result = await service.create({
-        type: 'push' as NotificationType,
-        category: 'NEW_STORY' as NotificationCategory,
+        type: 'push',
+        category: 'NEW_STORY',
         enabled: true,
         kidId: 'kid-1',
       });
@@ -119,8 +119,8 @@ describe('NotificationPreferenceService', () => {
 
       await expect(
         service.create({
-          type: 'push' as NotificationType,
-          category: 'NEW_STORY' as NotificationCategory,
+          type: 'push',
+          category: 'NEW_STORY',
           enabled: true,
           userId: 'nonexistent-user',
         }),
@@ -132,8 +132,8 @@ describe('NotificationPreferenceService', () => {
 
       await expect(
         service.create({
-          type: 'push' as NotificationType,
-          category: 'NEW_STORY' as NotificationCategory,
+          type: 'push',
+          category: 'NEW_STORY',
           enabled: true,
           kidId: 'nonexistent-kid',
         }),
@@ -305,7 +305,7 @@ describe('NotificationPreferenceService', () => {
 
       const result = await service.toggleCategoryPreference(
         'user-1',
-        'NEW_STORY' as NotificationCategory,
+        'NEW_STORY',
         true,
       );
 

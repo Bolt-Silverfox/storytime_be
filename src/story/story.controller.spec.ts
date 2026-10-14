@@ -10,7 +10,6 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { KidOwnershipService } from './services/kid-ownership.service';
 import { STORY_REPOSITORY } from './repositories/story.repository.interface';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
-import { UpdateStoryDto } from './dto/story.dto';
 
 // Mock the Service so we test the Controller in isolation
 const mockStoryQuotaService = {
@@ -221,11 +220,7 @@ describe('StoryController', () => {
         null,
       );
       await expect(
-        coreController.updateStory(
-          mockReq,
-          'non-existent-story',
-          {} as UpdateStoryDto,
-        ),
+        coreController.updateStory(mockReq, 'non-existent-story', {}),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -237,7 +232,7 @@ describe('StoryController', () => {
         creatorKid: { parentId: 'other-user' },
       });
       await expect(
-        coreController.updateStory(mockReq, 'story-123', {} as UpdateStoryDto),
+        coreController.updateStory(mockReq, 'story-123', {}),
       ).rejects.toThrow(ForbiddenException);
       expect(mockStoryService.updateStory).not.toHaveBeenCalled();
     });

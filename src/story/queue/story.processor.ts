@@ -226,7 +226,7 @@ export class StoryProcessor extends WorkerHost {
       return (
         status >= 400 &&
         status < 500 &&
-        status !== (HttpStatus.TOO_MANY_REQUESTS as number)
+        status !== Number(HttpStatus.TOO_MANY_REQUESTS)
       );
     }
 

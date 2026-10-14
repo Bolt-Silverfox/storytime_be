@@ -141,7 +141,7 @@ export class PrismaAuthRepository implements IAuthRepository {
       where: { id },
       data: data as Parameters<typeof this.prisma.user.update>[0]['data'],
       include: { profile: true, avatar: true },
-    }) as Promise<UserWithProfileAndAvatar>;
+    });
   }
 
   async updateUserPreferredCategories(

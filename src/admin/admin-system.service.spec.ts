@@ -159,9 +159,7 @@ describe('AdminSystemService', () => {
 
   describe('getRecentActivity', () => {
     it('should return recent activity logs with default limit', async () => {
-      systemRepository.findActivityLogs.mockResolvedValue([
-        mockActivityLog as any,
-      ]);
+      systemRepository.findActivityLogs.mockResolvedValue([mockActivityLog]);
 
       const result = await service.getRecentActivity();
 
@@ -186,9 +184,7 @@ describe('AdminSystemService', () => {
     });
 
     it('should filter by userId when provided', async () => {
-      systemRepository.findActivityLogs.mockResolvedValue([
-        mockActivityLog as any,
-      ]);
+      systemRepository.findActivityLogs.mockResolvedValue([mockActivityLog]);
 
       await service.getRecentActivity(50, 'user-123');
 
@@ -214,9 +210,7 @@ describe('AdminSystemService', () => {
 
   describe('getSystemLogs', () => {
     it('should return system logs with default limit', async () => {
-      systemRepository.findActivityLogs.mockResolvedValue([
-        mockActivityLog as any,
-      ]);
+      systemRepository.findActivityLogs.mockResolvedValue([mockActivityLog]);
 
       const result = await service.getSystemLogs();
 

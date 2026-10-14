@@ -40,7 +40,7 @@ export class PrismaSubscriptionRepository implements ISubscriptionRepository {
     // matches no row and `count === 0` — the caller must NOT overwrite the winner.
     const res = await this.prisma.subscription.updateMany({
       where: { id, purchaseToken: expectedToken },
-      data: data as Prisma.SubscriptionUpdateManyMutationInput,
+      data: data,
     });
     return res.count;
   }

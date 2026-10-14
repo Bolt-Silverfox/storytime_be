@@ -15,8 +15,7 @@ export interface UserWithProfileAndAvatar extends User {
   avatar: Avatar | null;
 }
 
-export interface UserWithProfileAvatarAndKidCount
-  extends UserWithProfileAndAvatar {
+export interface UserWithProfileAvatarAndKidCount extends UserWithProfileAndAvatar {
   _count: { kids: number };
 }
 

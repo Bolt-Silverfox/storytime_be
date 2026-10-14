@@ -38,7 +38,7 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
           },
         },
       },
-    }) as Promise<StoryWithCounts[]>;
+    });
   }
 
   async countStories(where: Prisma.StoryWhereInput): Promise<number> {
@@ -63,7 +63,7 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
           },
         },
       },
-    }) as Promise<StoryDetail | null>;
+    });
   }
 
   findStoryBasicById(storyId: string): Promise<Story | null> {
@@ -78,7 +78,7 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
       where: { isDeleted: false },
       _count: true,
     });
-    return result as StoryLanguageCount[];
+    return result;
   }
 
   findAgeRanges(): Promise<StoryAgeRange[]> {
@@ -141,7 +141,7 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
         },
       },
       orderBy: { name: 'asc' },
-    }) as Promise<CategoryWithCounts[]>;
+    });
   }
 
   async findThemes(): Promise<ThemeWithCounts[]> {
@@ -155,6 +155,6 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
         },
       },
       orderBy: { name: 'asc' },
-    }) as Promise<ThemeWithCounts[]>;
+    });
   }
 }

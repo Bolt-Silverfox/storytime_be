@@ -9,9 +9,7 @@ import type {
 } from './admin-subscription.repository.interface';
 
 @Injectable()
-export class PrismaAdminSubscriptionRepository
-  implements IAdminSubscriptionRepository
-{
+export class PrismaAdminSubscriptionRepository implements IAdminSubscriptionRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   count(where: Prisma.SubscriptionWhereInput): Promise<number> {
@@ -27,7 +25,7 @@ export class PrismaAdminSubscriptionRepository
       },
       _count: true,
     });
-    return result as SubscriptionPlanCount[];
+    return result;
   }
 
   // Count new subscriptions per CALENDAR DAY. groupBy on `startedAt` buckets by

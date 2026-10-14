@@ -37,7 +37,7 @@ import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
-import { UserDto, ProfileDto, AvatarDto } from '@/auth/dto/auth.dto';
+import { UserDto } from '@/auth/dto/auth.dto';
 import { UpdateUserDto } from './dto/user.dto';
 
 import { UpdateParentProfileDto } from './dto/update-parent-profile.dto';
@@ -633,13 +633,7 @@ export class UserController {
   async getUser(@Param('id') id: string) {
     const user = await this.userService.getUser(id);
     if (!user) return null;
-    return new UserDto(
-      user as Partial<UserDto> & {
-        profile?: Partial<ProfileDto> | null;
-        avatar?: Partial<AvatarDto> | null;
-        kids?: { id: string }[];
-      },
-    );
+    return new UserDto(user);
   }
 
   @Put(':id')
