@@ -114,7 +114,7 @@
     "passport": "^0.7.0",
     "passport-custom": "^1.2.1",
     "passport-google-oauth20": "^2.0.0",
-    "prisma": "6.19.0",
+    "prisma": "7.10.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "reflect-metadata": "^0.2.2",
