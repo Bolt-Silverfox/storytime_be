@@ -40,7 +40,7 @@
   "dependencies": {
     "@andresaya/edge-tts": "^1.8.1",
     "@bull-board/api": "^6.18.0",
-    "@bull-board/express": "^6.18.0",
+    "@bull-board/express": "^9.10.4",
     "@bull-board/nestjs": "^6.18.0",
     "@deepgram/sdk": "^5.15.0",
     "@google/genai": "^2.28.0",
