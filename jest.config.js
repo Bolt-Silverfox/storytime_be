@@ -14,7 +14,7 @@ module.exports = {
     // cannot require them, so they must be transformed rather than passed
     // through untouched.
     transformIgnorePatterns: [
-      '/node_modules/\\.pnpm/(?!@nestjs\\+(jwt|event-emitter|schedule)@)',
+      '/node_modules/\\.pnpm/(?!@nestjs\\+(jwt|event-emitter|schedule|terminus)@)',
     ],
     // Use V8 coverage rather than babel-plugin-istanbul. Istanbul pulls
     // test-exclude@6, which calls minimatch's callable default export; the

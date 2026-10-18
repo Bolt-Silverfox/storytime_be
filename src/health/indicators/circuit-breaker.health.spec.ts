@@ -1,5 +1,5 @@
 import { CircuitBreakerHealthIndicator } from './circuit-breaker.health';
-import { HealthCheckError } from '@nestjs/terminus';
+import { HealthIndicatorService } from '@nestjs/terminus';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 
 describe('CircuitBreakerHealthIndicator', () => {
@@ -8,7 +8,10 @@ describe('CircuitBreakerHealthIndicator', () => {
 
   beforeEach(() => {
     cbService = new CircuitBreakerService();
-    indicator = new CircuitBreakerHealthIndicator(cbService);
+    indicator = new CircuitBreakerHealthIndicator(
+      new HealthIndicatorService(),
+      cbService,
+    );
   });
 
   it('should report healthy when all breakers are CLOSED', () => {
@@ -38,14 +41,13 @@ describe('CircuitBreakerHealthIndicator', () => {
     breaker.recordFailure({ status: 500 });
     breaker.recordFailure({ status: 500 });
 
-    try {
-      indicator.isHealthy('circuit_breakers');
-    } catch (error) {
-      expect(error).toBeInstanceOf(HealthCheckError);
-      const details = (error as HealthCheckError).causes['circuit_breakers'];
-      expect(details.gemini.state).toBe('OPEN');
-      expect(details.gemini.failureCount).toBe(2);
-      expect(details['hf-image'].state).toBe('CLOSED');
-    }
+    // terminus 12 indicators return a `down` result instead of throwing
+    const details = indicator.isHealthy('circuit_breakers')[
+      'circuit_breakers'
+    ] as Record<string, any>;
+    expect(details.status).toBe('down');
+    expect(details.gemini.state).toBe('OPEN');
+    expect(details.gemini.failureCount).toBe(2);
+    expect(details['hf-image'].state).toBe('CLOSED');
   });
 });
