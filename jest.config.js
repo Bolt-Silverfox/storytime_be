@@ -9,6 +9,13 @@ module.exports = {
     collectCoverageFrom: ['**/*.(t|j)s'],
     coverageDirectory: './coverage',
     testEnvironment: 'node',
+    // @nestjs/jwt 12, @nestjs/event-emitter 12 and @nestjs/schedule 12 ship
+    // ESM only (no `require` condition, no CJS build). Jest's CJS runtime
+    // cannot require them, so they must be transformed rather than passed
+    // through untouched.
+    transformIgnorePatterns: [
+      '/node_modules/\\.pnpm/(?!@nestjs\\+(jwt|event-emitter|schedule)@)',
+    ],
     // Use V8 coverage rather than babel-plugin-istanbul. Istanbul pulls
     // test-exclude@6, which calls minimatch's callable default export; the
     // pnpm.overrides floor of minimatch >=9.0.6 forces v10, where that export
