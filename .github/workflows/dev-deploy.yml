@@ -321,8 +321,13 @@ jobs:
       - name: Run database migrations
         run: pnpm db:migrate:deploy
 
+      # BLOCKING, deliberately -- see the note on the quality steps above.
+      # This step carried `continue-on-error: true` until now, so the Test
+      # check reported success no matter what. That is how three ESM-only
+      # @nestjs 12 bumps (#630, #635, #636) landed on develop-v1.3.1 while
+      # breaking 41 suites, and how a run logging "Test Suites: 85 failed"
+      # was still reported as a passing check.
       - name: Run tests with coverage
-        continue-on-error: true
         run: pnpm test --coverage
 
       # No Codecov upload here on purpose: this job runs untrusted pull-request
