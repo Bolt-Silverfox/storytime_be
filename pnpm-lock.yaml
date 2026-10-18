@@ -25,14 +25,14 @@ importers:
         specifier: ^1.8.1
         version: 1.9.1
       '@bull-board/api':
-        specifier: ^6.18.0
-        version: 6.20.5(@bull-board/ui@6.20.5)
+        specifier: ^9.10.4
+        version: 9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3)
       '@bull-board/express':
-        specifier: ^6.18.0
-        version: 6.20.5
+        specifier: ^9.10.4
+        version: 9.10.4(bullmq@5.76.11)(typescript@5.9.3)
       '@bull-board/nestjs':
-        specifier: ^6.18.0
-        version: 6.20.5(@bull-board/api@6.20.5(@bull-board/ui@6.20.5))(@nestjs/bull-shared@11.0.4(@nestjs/common@11.1.9(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.9))(@nestjs/common@11.1.9(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.9)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+        specifier: ^9.10.4
+        version: 9.10.4(@bull-board/api@9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3))(@nestjs/bull-shared@11.0.4(@nestjs/common@11.1.9(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.9))(@nestjs/common@11.1.9(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.9)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@deepgram/sdk':
         specifier: ^5.15.0
         version: 5.15.0
@@ -748,26 +748,33 @@ packages:
   '@braintree/sanitize-url@7.1.1':
     resolution: {integrity: sha512-i1L7noDNxtFyL5DmZafWy1wRVhGehQmzZaz1HiN5e7iylJMSZR7ekOV7NsIqa5qBldlLrsKv4HbgFUVlQrz8Mw==}
 
-  '@bull-board/api@6.20.5':
-    resolution: {integrity: sha512-tKKwGWtVBL7YL5lAgrBaOGEVtOAOpevhQFKj94cnVHD/yhXRaHr9LSTKbat21kkG2/fl95YWU6Gegzs4QIlImQ==}
+  '@bull-board/api@9.10.4':
+    resolution: {integrity: sha512-DMI4FrNacQRmNsExF4kCXPE01sDiW2o0UgMxRsogFvcLphQIf3TgspiNFURag6CieMneJp2b/ba1TWPJu1Jnpw==}
     peerDependencies:
-      '@bull-board/ui': 6.20.5
+      '@bull-board/ui': 9.10.4
+      bull: ^4.16.5
+      bullmq: ^5.56.0 || ^6.0.0
+    peerDependenciesMeta:
+      bull:
+        optional: true
+      bullmq:
+        optional: true
 
-  '@bull-board/express@6.20.5':
-    resolution: {integrity: sha512-1xOgyAhSZZ/dPe2SVbJadge5tqA1dlzQcDcCUkZlhtXV4LkXeH8Gx+mMoLYTsyGjJhFxckQA/f9zXcxoXP34DQ==}
+  '@bull-board/express@9.10.4':
+    resolution: {integrity: sha512-4vInwCI8x4V/xyxdfw5+vP9HukfYV+s40y/AhvuXyQ/2DJ0DHVDgGj0OuY9PzxTcXgYBQiH9HNYlPYHYpy6+Fg==}
 
-  '@bull-board/nestjs@6.20.5':
-    resolution: {integrity: sha512-bkph2LkrJtp1OTe5FmDqRpzp02Fhetw6wYRAze/FjZkI3mEP0Uv3KhMHmG4pearY5vln5KragJ5qm52+3/KrZQ==}
+  '@bull-board/nestjs@9.10.4':
+    resolution: {integrity: sha512-4ZFe8Cf4KcIBLSnpfaf2lFLpAM40pBCXUWOxeRFpJGHVM44cNVjDQ2acE1n0VfF3jBigEYiI4IJNQeeXT4Oi8A==}
     peerDependencies:
-      '@bull-board/api': ^6.20.5
-      '@nestjs/bull-shared': ^10.0.0 || ^11.0.0
-      '@nestjs/common': ^9.0.0 || ^10.0.0 || ^11.0.0
-      '@nestjs/core': ^9.0.0 || ^10.0.0 || ^11.0.0
+      '@bull-board/api': ^9.10.4
+      '@nestjs/bull-shared': ^10.0.0 || ^11.0.0 || ^12.0.0
+      '@nestjs/common': ^9.0.0 || ^10.0.0 || ^11.0.0 || ^12.0.0
+      '@nestjs/core': ^9.0.0 || ^10.0.0 || ^11.0.0 || ^12.0.0
       reflect-metadata: ^0.1.13 || ^0.2.0
       rxjs: ^7.8.1
 
-  '@bull-board/ui@6.20.5':
-    resolution: {integrity: sha512-JYuMImdQYmEicnwyeV5CIfRW9EP0kiIuKHV1cQu4KIhNl0Y7LX+ivjrVXloVhNGZeTaajrkxzTY9OnZvYnGLOA==}
+  '@bull-board/ui@9.10.4':
+    resolution: {integrity: sha512-eBg7LcIOR1WDZAZBs6l/eclvpnRD0H2PHTLmoMBBTTsbIHh45aCgfKeFMTIbUQ9mmNaHD6rR9vgcylWZ8TFOdg==}
 
   '@cacheable/memory@2.2.0':
     resolution: {integrity: sha512-CTLKqLItRCEixEAewD3/j9DB3/o96gpTPD4eJ1v+DGOlxZRZncRQkGYqqnAGCscYd6RNeXfGeiuCphsPtqyIfQ==}
@@ -4485,6 +4492,11 @@ packages:
     engines: {node: '>=0.10.0'}
     hasBin: true
 
+  ejs@6.0.1:
+    resolution: {integrity: sha512-UaaM14yby8U3k02ihS1Bmj5Kz2d7CCQM1scxpgs4Mhkq8F1wR2gl3+Ts4h5Ne4Mnt7M9m4Dw7jsuMr3+xO4vZA==}
+    engines: {node: '>=0.12.18'}
+    hasBin: true
+
   electron-to-chromium@1.5.258:
     resolution: {integrity: sha512-rHUggNV5jKQ0sSdWwlaRDkFc3/rRJIVnOSe9yR4zrR07m3ZxhP4N27Hlg8VeJGGYgFTxK5NqDmWI4DSH72vIJg==}
 
@@ -7339,6 +7351,14 @@ packages:
     resolution: {integrity: sha512-kiGUalWN+rgBJ/1OHZsBtU4rXZOfj/7rKQxULKlIzwzQSvMJUUNgPwJEEh7gU6xEVxC0ahoOBvN2YI8GH6FNgA==}
     engines: {node: '>=10.12.0'}
 
+  valibot@1.5.0:
+    resolution: {integrity: sha512-nil6AkP2TChWL43Z5uJ6GTxX01CUA+g8LWUM+N/rB9NBbkUMaUsi9PUNzlUPgoKASgmx9f7eGOYpJ04/fSa6FQ==}
+    peerDependencies:
+      typescript: '>=5'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   validator@13.15.23:
     resolution: {integrity: sha512-4yoz1kEWqUjzi5zsPbAS/903QXSYp0UOtHsPpp7p9rHAw/W+dkInskAE386Fat3oKRROwO98d9ZB0G4cObgUyw==}
     engines: {node: '>= 0.10'}
@@ -8212,32 +8232,44 @@ snapshots:
 
   '@braintree/sanitize-url@7.1.1': {}
 
-  '@bull-board/api@6.20.5(@bull-board/ui@6.20.5)':
+  '@bull-board/api@9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3)':
     dependencies:
-      '@bull-board/ui': 6.20.5
+      '@bull-board/ui': 9.10.4(bullmq@5.76.11)(typescript@5.9.3)
       redis-info: 3.1.0
+      valibot: 1.5.0(typescript@5.9.3)
+    optionalDependencies:
+      bullmq: 5.76.11
+    transitivePeerDependencies:
+      - typescript
 
-  '@bull-board/express@6.20.5':
+  '@bull-board/express@9.10.4(bullmq@5.76.11)(typescript@5.9.3)':
     dependencies:
-      '@bull-board/api': 6.20.5(@bull-board/ui@6.20.5)
-      '@bull-board/ui': 6.20.5
-      ejs: 3.1.10
+      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3)
+      '@bull-board/ui': 9.10.4(bullmq@5.76.11)(typescript@5.9.3)
+      ejs: 6.0.1
       express: 5.3.0
     transitivePeerDependencies:
+      - bull
+      - bullmq
       - supports-color
+      - typescript
 
-  '@bull-board/nestjs@6.20.5(@bull-board/api@6.20.5(@bull-board/ui@6.20.5))(@nestjs/bull-shared@11.0.4(@nestjs/common@11.1.9(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.9))(@nestjs/common@11.1.9(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.9)(reflect-metadata@0.2.2)(rxjs@7.8.2)':
+  '@bull-board/nestjs@9.10.4(@bull-board/api@9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3))(@nestjs/bull-shared@11.0.4(@nestjs/common@11.1.9(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.9))(@nestjs/common@11.1.9(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.9)(reflect-metadata@0.2.2)(rxjs@7.8.2)':
     dependencies:
-      '@bull-board/api': 6.20.5(@bull-board/ui@6.20.5)
+      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3)
       '@nestjs/bull-shared': 11.0.4(@nestjs/common@11.1.9(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.9)
       '@nestjs/common': 11.1.9(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 11.1.9(@nestjs/common@11.1.9(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.2.7)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       reflect-metadata: 0.2.2
       rxjs: 7.8.2
 
-  '@bull-board/ui@6.20.5':
+  '@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3)':
     dependencies:
-      '@bull-board/api': 6.20.5(@bull-board/ui@6.20.5)
+      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3)
+    transitivePeerDependencies:
+      - bull
+      - bullmq
+      - typescript
 
   '@cacheable/memory@2.2.0':
     dependencies:
@@ -12530,6 +12562,8 @@ snapshots:
     dependencies:
       jake: 10.9.4
 
+  ejs@6.0.1: {}
+
   electron-to-chromium@1.5.258: {}
 
   electron-to-chromium@1.5.286: {}
@@ -15832,6 +15866,10 @@ snapshots:
       '@jridgewell/trace-mapping': 0.3.31
       '@types/istanbul-lib-coverage': 2.0.6
       convert-source-map: 2.0.0
+
+  valibot@1.5.0(typescript@5.9.3):
+    optionalDependencies:
+      typescript: 5.9.3
 
   validator@13.15.23: {}
 
