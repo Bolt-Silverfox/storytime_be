@@ -50,7 +50,7 @@ export class PrismaAdminEngagementRepository implements IAdminEngagementReposito
         kid_readers: bigint;
         user_readers: bigint;
         completed_count: bigint;
-        avg_time_spent_seconds: number | null;
+        avg_time_spent_seconds: string | number | null;
       }[]
     >(Prisma.sql`
       SELECT
@@ -87,7 +87,7 @@ export class PrismaAdminEngagementRepository implements IAdminEngagementReposito
         kid_readers: bigint;
         user_readers: bigint;
         completed_count: bigint;
-        avg_time_spent_seconds: number | null;
+        avg_time_spent_seconds: string | number | null;
       }[]
     >(Prisma.sql`
       SELECT
@@ -169,12 +169,12 @@ export class PrismaAdminEngagementRepository implements IAdminEngagementReposito
       SELECT sp."kidId" AS reader_id, 'kid' AS reader_type, k.name AS display_name, sp."lastAccessed" AS last_accessed
       FROM story_progress sp
       JOIN kids k ON k.id = sp."kidId"
-      WHERE sp."storyId" = ${storyId} AND sp."isDeleted" = false
+      WHERE sp."storyId" = ${storyId} AND sp."isDeleted" = false AND k."isDeleted" = false
       UNION ALL
       SELECT usp."userId" AS reader_id, 'user' AS reader_type, u.name AS display_name, usp."lastAccessed" AS last_accessed
       FROM user_story_progress usp
       JOIN users u ON u.id = usp."userId"
-      WHERE usp."storyId" = ${storyId} AND usp."isDeleted" = false
+      WHERE usp."storyId" = ${storyId} AND usp."isDeleted" = false AND u."isDeleted" = false
       ORDER BY last_accessed DESC
     `);
 
