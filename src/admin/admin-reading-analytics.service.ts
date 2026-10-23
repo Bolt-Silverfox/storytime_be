@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import {
@@ -59,16 +59,22 @@ export class AdminReadingAnalyticsService {
     const titleById = new Map(titles.map((t) => [t.id, t.title]));
 
     const result: TopStoryDto[] = stats
-      .map((s) => ({
-        storyId: s.storyId,
-        title: titleById.get(s.storyId) ?? 'Unknown story',
-        readerCount:
-          s.distinctReaders >= READER_SUPPRESSION_THRESHOLD
-            ? s.distinctReaders
-            : null,
-        completionRate:
-          s.distinctReaders > 0 ? s.completedCount / s.distinctReaders : 0,
-      }))
+      .map((s) => {
+        const suppressed = s.distinctReaders < READER_SUPPRESSION_THRESHOLD;
+        return {
+          storyId: s.storyId,
+          title: titleById.get(s.storyId) ?? 'Unknown story',
+          readerCount: suppressed ? null : s.distinctReaders,
+          // Suppressed alongside readerCount: with the denominator being the
+          // suppressed count itself, the fraction would narrow the real
+          // reader count down to a small set of candidates.
+          completionRate: suppressed
+            ? null
+            : s.distinctReaders > 0
+              ? s.completedCount / s.distinctReaders
+              : 0,
+        };
+      })
       .sort((a, b) => (b.readerCount ?? 0) - (a.readerCount ?? 0));
 
     await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.DASHBOARD);
@@ -78,13 +84,30 @@ export class AdminReadingAnalyticsService {
   async getStoryDetail(
     storyId: string,
     range: ReadingAnalyticsRangeDto,
-  ): Promise<StoryDetailDto | null> {
+  ): Promise<StoryDetailDto> {
+    const story = await this.storyRepo.findStoryBasicById(storyId);
+    if (!story) {
+      throw new NotFoundException(`Story ${storyId} not found`);
+    }
+
     const stats =
       await this.engagementRepo.getStoryReaderStatsForStory(storyId);
-    if (!stats) return null;
 
-    const titles = await this.storyRepo.findTitlesByIds([storyId]);
-    const title = titles[0]?.title ?? 'Unknown story';
+    // A real story with zero reading activity is distinct from a suppressed
+    // one: there is no one to protect, so it gets explicit zeros rather than
+    // the privacy-suppression treatment.
+    if (!stats) {
+      return {
+        storyId,
+        title: story.title,
+        readerCount: 0,
+        completionRate: 0,
+        avgTimeSpentSeconds: 0,
+        trend: [],
+        readers: [],
+        readersSuppressed: false,
+      };
+    }
 
     const suppressed = stats.distinctReaders < READER_SUPPRESSION_THRESHOLD;
     // Per-day trend counts and reader identities are both per-story reader
@@ -99,13 +122,17 @@ export class AdminReadingAnalyticsService {
 
     return {
       storyId,
-      title,
+      title: story.title,
       readerCount: suppressed ? null : stats.distinctReaders,
-      completionRate:
-        stats.distinctReaders > 0
+      // Suppressed alongside readerCount/readers: with the denominator being
+      // the suppressed count itself, the fraction would narrow the real
+      // reader count down to a small set of candidates.
+      completionRate: suppressed
+        ? null
+        : stats.distinctReaders > 0
           ? stats.completedCount / stats.distinctReaders
           : 0,
-      avgTimeSpentSeconds: stats.avgTimeSpentSeconds,
+      avgTimeSpentSeconds: suppressed ? null : stats.avgTimeSpentSeconds,
       trend,
       readers,
       readersSuppressed: suppressed,

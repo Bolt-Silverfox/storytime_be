@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { AdminReadingAnalyticsService } from './admin-reading-analytics.service';
 import {
@@ -13,9 +14,13 @@ describe('AdminReadingAnalyticsService', () => {
   const getStoryReaderTrend = jest.fn();
   const getStoryReaders = jest.fn();
   const findTitlesByIds = jest.fn();
+  const findStoryBasicById = jest.fn();
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    // Default: story exists, so detail/trend tests that aren't about the
+    // existence check don't each have to stub this individually.
+    findStoryBasicById.mockResolvedValue({ id: 's1', title: 'Story' });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdminReadingAnalyticsService,
@@ -28,7 +33,10 @@ describe('AdminReadingAnalyticsService', () => {
             getStoryReaders,
           },
         },
-        { provide: ADMIN_STORY_REPOSITORY, useValue: { findTitlesByIds } },
+        {
+          provide: ADMIN_STORY_REPOSITORY,
+          useValue: { findTitlesByIds, findStoryBasicById },
+        },
         {
           provide: CACHE_MANAGER,
           useValue: { get: jest.fn().mockResolvedValue(null), set: jest.fn() },
@@ -64,6 +72,22 @@ describe('AdminReadingAnalyticsService', () => {
     const at = result.find((r) => r.storyId === 's2');
     expect(below!.readerCount).toBeNull();
     expect(at!.readerCount).toBe(5);
+  });
+
+  it('suppresses completionRate to null for a below-threshold story on top-stories (does not leak the suppressed count via the fraction)', async () => {
+    getStoryReaderStats.mockResolvedValue([
+      {
+        storyId: 's1',
+        distinctReaders: 4,
+        completedCount: 1,
+        avgTimeSpentSeconds: 10,
+      },
+    ]);
+    findTitlesByIds.mockResolvedValue([{ id: 's1', title: 'Below Threshold' }]);
+
+    const result = await service.getTopStories({ range: 30 });
+
+    expect(result[0].completionRate).toBeNull();
   });
 
   it('sorts suppressed rows to the bottom regardless of their real count', async () => {
@@ -106,16 +130,29 @@ describe('AdminReadingAnalyticsService', () => {
       completedCount: 1,
       avgTimeSpentSeconds: 15,
     });
-    findTitlesByIds.mockResolvedValue([{ id: 's1', title: 'Story' }]);
     getStoryReaderTrend.mockResolvedValue([]);
 
     const detail = await service.getStoryDetail('s1', { range: 30 });
 
-    expect(detail!.readersSuppressed).toBe(true);
-    expect(detail!.readers).toEqual([]);
-    expect(detail!.trend).toEqual([]);
+    expect(detail.readersSuppressed).toBe(true);
+    expect(detail.readers).toEqual([]);
+    expect(detail.trend).toEqual([]);
     expect(getStoryReaders).not.toHaveBeenCalled();
     expect(getStoryReaderTrend).not.toHaveBeenCalled();
+  });
+
+  it('suppresses completionRate and avgTimeSpentSeconds on story detail when under the 5-reader threshold (does not leak the suppressed count via the fraction)', async () => {
+    getStoryReaderStatsForStory.mockResolvedValue({
+      storyId: 's1',
+      distinctReaders: 4,
+      completedCount: 1,
+      avgTimeSpentSeconds: 42,
+    });
+
+    const detail = await service.getStoryDetail('s1', { range: 30 });
+
+    expect(detail.completionRate).toBeNull();
+    expect(detail.avgTimeSpentSeconds).toBeNull();
   });
 
   it('includes the real reader list on story detail at/above the threshold', async () => {
@@ -125,7 +162,6 @@ describe('AdminReadingAnalyticsService', () => {
       completedCount: 1,
       avgTimeSpentSeconds: 15,
     });
-    findTitlesByIds.mockResolvedValue([{ id: 's1', title: 'Story' }]);
     getStoryReaderTrend.mockResolvedValue([]);
     getStoryReaders.mockResolvedValue([
       {
@@ -138,16 +174,37 @@ describe('AdminReadingAnalyticsService', () => {
 
     const detail = await service.getStoryDetail('s1', { range: 30 });
 
-    expect(detail!.readersSuppressed).toBe(false);
-    expect(detail!.readers).toHaveLength(1);
+    expect(detail.readersSuppressed).toBe(false);
+    expect(detail.readers).toHaveLength(1);
+    expect(detail.completionRate).toBe(0.2);
+    expect(detail.avgTimeSpentSeconds).toBe(15);
   });
 
-  it('returns null from getStoryDetail when the story has no reading activity', async () => {
+  it('throws NotFoundException from getStoryDetail when the story does not exist', async () => {
+    findStoryBasicById.mockResolvedValue(null);
+
+    await expect(
+      service.getStoryDetail('missing', { range: 30 }),
+    ).rejects.toThrow(NotFoundException);
+    expect(getStoryReaderStatsForStory).not.toHaveBeenCalled();
+  });
+
+  it('returns explicit zeros (not suppressed) from getStoryDetail for a real story with zero reading activity', async () => {
+    findStoryBasicById.mockResolvedValue({ id: 's1', title: 'Unread Story' });
     getStoryReaderStatsForStory.mockResolvedValue(null);
 
-    const detail = await service.getStoryDetail('missing', { range: 30 });
+    const detail = await service.getStoryDetail('s1', { range: 30 });
 
-    expect(detail).toBeNull();
+    expect(detail).toEqual({
+      storyId: 's1',
+      title: 'Unread Story',
+      readerCount: 0,
+      completionRate: 0,
+      avgTimeSpentSeconds: 0,
+      trend: [],
+      readers: [],
+      readersSuppressed: false,
+    });
   });
 
   it('suppresses the standalone trend endpoint when the story is under the 5-reader threshold', async () => {

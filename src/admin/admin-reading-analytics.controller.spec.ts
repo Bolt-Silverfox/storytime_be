@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { AdminReadingAnalyticsController } from './admin-reading-analytics.controller';
 import { AdminReadingAnalyticsService } from './admin-reading-analytics.service';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
@@ -27,6 +28,12 @@ describe('AdminReadingAnalyticsController', () => {
       .useValue({ canActivate: () => true })
       .compile();
     controller = module.get(AdminReadingAnalyticsController);
+  });
+
+  it('wires AuthSessionGuard and AdminGuard on the controller (@Admin())', () => {
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, AdminReadingAnalyticsController),
+    ).toEqual([AuthSessionGuard, AdminGuard]);
   });
 
   it('getTopStories delegates to the service with the parsed range', async () => {

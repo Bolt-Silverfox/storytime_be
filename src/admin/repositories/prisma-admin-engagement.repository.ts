@@ -62,13 +62,17 @@ export class PrismaAdminEngagementRepository
         SUM(CASE WHEN combined.completed THEN 1 ELSE 0 END) AS completed_count,
         AVG(combined."totalTimeSpent") AS avg_time_spent_seconds
       FROM (
-        SELECT "storyId", "kidId" AS "kidReader", NULL::text AS "userReader", completed, "totalTimeSpent"
-        FROM story_progress
-        WHERE "isDeleted" = false AND "lastAccessed" BETWEEN ${range.start} AND ${range.end}
+        SELECT sp."storyId", sp."kidId" AS "kidReader", NULL::text AS "userReader", sp.completed, sp."totalTimeSpent"
+        FROM story_progress sp
+        JOIN kids k ON k.id = sp."kidId"
+        WHERE sp."isDeleted" = false AND k."isDeleted" = false
+          AND sp."lastAccessed" BETWEEN ${range.start} AND ${range.end}
         UNION ALL
-        SELECT "storyId", NULL::text AS "kidReader", "userId" AS "userReader", completed, "totalTimeSpent"
-        FROM user_story_progress
-        WHERE "isDeleted" = false AND "lastAccessed" BETWEEN ${range.start} AND ${range.end}
+        SELECT usp."storyId", NULL::text AS "kidReader", usp."userId" AS "userReader", usp.completed, usp."totalTimeSpent"
+        FROM user_story_progress usp
+        JOIN users u ON u.id = usp."userId"
+        WHERE usp."isDeleted" = false AND u."isDeleted" = false
+          AND usp."lastAccessed" BETWEEN ${range.start} AND ${range.end}
       ) combined
       GROUP BY combined."storyId"
     `);
@@ -98,13 +102,15 @@ export class PrismaAdminEngagementRepository
         SUM(CASE WHEN combined.completed THEN 1 ELSE 0 END) AS completed_count,
         AVG(combined."totalTimeSpent") AS avg_time_spent_seconds
       FROM (
-        SELECT "kidId" AS "kidReader", NULL::text AS "userReader", completed, "totalTimeSpent"
-        FROM story_progress
-        WHERE "isDeleted" = false AND "storyId" = ${storyId}
+        SELECT sp."kidId" AS "kidReader", NULL::text AS "userReader", sp.completed, sp."totalTimeSpent"
+        FROM story_progress sp
+        JOIN kids k ON k.id = sp."kidId"
+        WHERE sp."isDeleted" = false AND k."isDeleted" = false AND sp."storyId" = ${storyId}
         UNION ALL
-        SELECT NULL::text AS "kidReader", "userId" AS "userReader", completed, "totalTimeSpent"
-        FROM user_story_progress
-        WHERE "isDeleted" = false AND "storyId" = ${storyId}
+        SELECT NULL::text AS "kidReader", usp."userId" AS "userReader", usp.completed, usp."totalTimeSpent"
+        FROM user_story_progress usp
+        JOIN users u ON u.id = usp."userId"
+        WHERE usp."isDeleted" = false AND u."isDeleted" = false AND usp."storyId" = ${storyId}
       ) combined
     `);
 
@@ -138,15 +144,17 @@ export class PrismaAdminEngagementRepository
         COUNT(DISTINCT combined."userReader") AS user_readers,
         SUM(CASE WHEN combined.completed THEN 1 ELSE 0 END) AS completions
       FROM (
-        SELECT "kidId" AS "kidReader", NULL::text AS "userReader", completed, "lastAccessed"
-        FROM story_progress
-        WHERE "isDeleted" = false AND "storyId" = ${storyId}
-          AND "lastAccessed" BETWEEN ${range.start} AND ${range.end}
+        SELECT sp."kidId" AS "kidReader", NULL::text AS "userReader", sp.completed, sp."lastAccessed"
+        FROM story_progress sp
+        JOIN kids k ON k.id = sp."kidId"
+        WHERE sp."isDeleted" = false AND k."isDeleted" = false AND sp."storyId" = ${storyId}
+          AND sp."lastAccessed" BETWEEN ${range.start} AND ${range.end}
         UNION ALL
-        SELECT NULL::text AS "kidReader", "userId" AS "userReader", completed, "lastAccessed"
-        FROM user_story_progress
-        WHERE "isDeleted" = false AND "storyId" = ${storyId}
-          AND "lastAccessed" BETWEEN ${range.start} AND ${range.end}
+        SELECT NULL::text AS "kidReader", usp."userId" AS "userReader", usp.completed, usp."lastAccessed"
+        FROM user_story_progress usp
+        JOIN users u ON u.id = usp."userId"
+        WHERE usp."isDeleted" = false AND u."isDeleted" = false AND usp."storyId" = ${storyId}
+          AND usp."lastAccessed" BETWEEN ${range.start} AND ${range.end}
       ) combined
       GROUP BY day
       ORDER BY day ASC
