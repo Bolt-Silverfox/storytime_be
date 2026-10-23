@@ -86,7 +86,11 @@ export class AdminReadingAnalyticsService {
     range: ReadingAnalyticsRangeDto,
   ): Promise<StoryDetailDto> {
     const story = await this.storyRepo.findStoryBasicById(storyId);
-    if (!story) {
+    // findStoryBasicById is shared with delete/recommendation flows that
+    // deliberately look up already-soft-deleted stories, so it does not
+    // filter isDeleted itself — check it here instead of narrowing the
+    // shared method for every other caller.
+    if (!story || story.isDeleted) {
       throw new NotFoundException(`Story ${storyId} not found`);
     }
 
@@ -109,16 +113,25 @@ export class AdminReadingAnalyticsService {
       };
     }
 
-    const suppressed = stats.distinctReaders < READER_SUPPRESSION_THRESHOLD;
+    const statsSuppressed =
+      stats.distinctReaders < READER_SUPPRESSION_THRESHOLD;
     // Per-day trend counts and reader identities are both per-story reader
     // data covered by the suppression rule, so neither is fetched for a
     // suppressed story.
-    const [trend, readers] = suppressed
+    const [trend, readers] = statsSuppressed
       ? [[], []]
       : await Promise.all([
           this.engagementRepo.getStoryReaderTrend(storyId, rangeToDates(range)),
           this.engagementRepo.getStoryReaders(storyId),
         ]);
+
+    // Defense in depth: the readers query runs after the stats query, so a
+    // deletion in between could drop the real reader count below the
+    // threshold even though `statsSuppressed` was false. Re-derive the final
+    // flag from whichever source is more conservative and use IT — not the
+    // earlier `statsSuppressed` — for every field below.
+    const suppressed =
+      statsSuppressed || readers.length < READER_SUPPRESSION_THRESHOLD;
 
     return {
       storyId,
@@ -133,8 +146,8 @@ export class AdminReadingAnalyticsService {
           ? stats.completedCount / stats.distinctReaders
           : 0,
       avgTimeSpentSeconds: suppressed ? null : stats.avgTimeSpentSeconds,
-      trend,
-      readers,
+      trend: suppressed ? [] : trend,
+      readers: suppressed ? [] : readers,
       readersSuppressed: suppressed,
     };
   }
