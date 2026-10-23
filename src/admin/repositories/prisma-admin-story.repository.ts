@@ -72,6 +72,16 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
     });
   }
 
+  async findTitlesByIds(
+    storyIds: string[],
+  ): Promise<{ id: string; title: string }[]> {
+    if (storyIds.length === 0) return [];
+    return this.prisma.story.findMany({
+      where: { id: { in: storyIds } },
+      select: { id: true, title: true },
+    });
+  }
+
   async groupByLanguage(): Promise<StoryLanguageCount[]> {
     const result = await this.prisma.story.groupBy({
       by: ['language'],

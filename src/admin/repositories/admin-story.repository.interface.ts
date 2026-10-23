@@ -74,6 +74,10 @@ export interface IAdminStoryRepository {
   // Find story by ID without relations (recommendation toggle / delete guard)
   findStoryBasicById(storyId: string): Promise<Story | null>;
 
+  // Lightweight title lookup for cross-referencing story ids returned by
+  // another repository's aggregate query (e.g. reading-analytics stats).
+  findTitlesByIds(storyIds: string[]): Promise<{ id: string; title: string }[]>;
+
   // Story language breakdown (content breakdown)
   groupByLanguage(): Promise<StoryLanguageCount[]>;
 
