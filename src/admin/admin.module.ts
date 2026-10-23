@@ -5,6 +5,7 @@ import { AdminUserModerationController } from './admin-user-moderation.controlle
 import { AdminUserBillingController } from './admin-user-billing.controller';
 import { AdminStoryAdminController } from './admin-story-admin.controller';
 import { AdminSupportController } from './admin-support.controller';
+import { AdminReadingAnalyticsController } from './admin-reading-analytics.controller';
 import { AdminCouponController } from './admin-coupon.controller';
 import { AdminSystemController } from './admin-system.controller';
 import { AdminService } from './admin.service';
@@ -13,6 +14,7 @@ import { AdminDashboardMetricsService } from './admin-dashboard-metrics.service'
 import { AdminRevenueAnalyticsService } from './admin-revenue-analytics.service';
 import { AdminSystemMetricsService } from './admin-system-metrics.service';
 import { AdminGuestAnalyticsService } from './admin-guest-analytics.service';
+import { AdminReadingAnalyticsService } from './admin-reading-analytics.service';
 import { AdminUserService } from './admin-user.service';
 import { AdminCouponService } from './admin-coupon.service';
 import { AdminExportService } from './admin-export.service';
@@ -59,6 +61,7 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     AdminUserBillingController,
     AdminStoryAdminController,
     AdminSupportController,
+    AdminReadingAnalyticsController,
     AdminCouponController,
     AdminSystemController,
     AdminSseController,
@@ -70,6 +73,7 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     AdminRevenueAnalyticsService,
     AdminSystemMetricsService,
     AdminGuestAnalyticsService,
+    AdminReadingAnalyticsService,
     AdminUserService,
     AdminCouponService,
     AdminExportService,
