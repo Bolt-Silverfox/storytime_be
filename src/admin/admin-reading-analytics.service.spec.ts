@@ -164,18 +164,17 @@ describe('AdminReadingAnalyticsService', () => {
     });
     getStoryReaderTrend.mockResolvedValue([]);
     getStoryReaders.mockResolvedValue([
-      {
-        readerId: 'k1',
-        readerType: 'kid',
-        displayName: 'Kid One',
-        lastAccessed: new Date(),
-      },
+      { readerId: 'k1', readerType: 'kid', displayName: 'Kid One', lastAccessed: new Date() },
+      { readerId: 'k2', readerType: 'kid', displayName: 'Kid Two', lastAccessed: new Date() },
+      { readerId: 'k3', readerType: 'kid', displayName: 'Kid Three', lastAccessed: new Date() },
+      { readerId: 'k4', readerType: 'kid', displayName: 'Kid Four', lastAccessed: new Date() },
+      { readerId: 'k5', readerType: 'kid', displayName: 'Kid Five', lastAccessed: new Date() },
     ]);
 
     const detail = await service.getStoryDetail('s1', { range: 30 });
 
     expect(detail.readersSuppressed).toBe(false);
-    expect(detail.readers).toHaveLength(1);
+    expect(detail.readers).toHaveLength(5);
     expect(detail.completionRate).toBe(0.2);
     expect(detail.avgTimeSpentSeconds).toBe(15);
   });
@@ -187,6 +186,48 @@ describe('AdminReadingAnalyticsService', () => {
       service.getStoryDetail('missing', { range: 30 }),
     ).rejects.toThrow(NotFoundException);
     expect(getStoryReaderStatsForStory).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundException from getStoryDetail when the story is soft-deleted', async () => {
+    findStoryBasicById.mockResolvedValue({
+      id: 's1',
+      title: 'Deleted Story',
+      isDeleted: true,
+    });
+
+    await expect(
+      service.getStoryDetail('s1', { range: 30 }),
+    ).rejects.toThrow(NotFoundException);
+    expect(getStoryReaderStatsForStory).not.toHaveBeenCalled();
+  });
+
+  it('re-derives readersSuppressed from the readers list if it comes back smaller than the stats query implied (defense in depth against a deletion racing the two queries)', async () => {
+    getStoryReaderStatsForStory.mockResolvedValue({
+      storyId: 's1',
+      distinctReaders: 5, // stats query said not suppressed...
+      completedCount: 2,
+      avgTimeSpentSeconds: 15,
+    });
+    getStoryReaderTrend.mockResolvedValue([
+      { date: '2026-10-01', distinctReaders: 5, completions: 2 },
+    ]);
+    // ...but the readers query, run moments later, only found 4 — e.g. one
+    // reader was soft-deleted in between.
+    getStoryReaders.mockResolvedValue([
+      { readerId: 'k1', readerType: 'kid', displayName: 'A', lastAccessed: new Date() },
+      { readerId: 'k2', readerType: 'kid', displayName: 'B', lastAccessed: new Date() },
+      { readerId: 'k3', readerType: 'kid', displayName: 'C', lastAccessed: new Date() },
+      { readerId: 'k4', readerType: 'kid', displayName: 'D', lastAccessed: new Date() },
+    ]);
+
+    const detail = await service.getStoryDetail('s1', { range: 30 });
+
+    expect(detail.readersSuppressed).toBe(true);
+    expect(detail.readers).toEqual([]);
+    expect(detail.trend).toEqual([]);
+    expect(detail.readerCount).toBeNull();
+    expect(detail.completionRate).toBeNull();
+    expect(detail.avgTimeSpentSeconds).toBeNull();
   });
 
   it('returns explicit zeros (not suppressed) from getStoryDetail for a real story with zero reading activity', async () => {

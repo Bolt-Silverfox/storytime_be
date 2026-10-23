@@ -380,3 +380,87 @@ describe('PrismaAdminEngagementRepository soft-deleted reader exclusion', () => 
     expect(totalDistinctReaders).toBe(4);
   });
 });
+
+describe('PrismaAdminEngagementRepository soft-deleted story exclusion', () => {
+  let prisma: PrismaService;
+  let repo: PrismaAdminEngagementRepository;
+  let storyId: string;
+  let kidIds: string[];
+  let userIds: string[];
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [PrismaService, PrismaAdminEngagementRepository],
+    }).compile();
+    prisma = module.get(PrismaService);
+    repo = module.get(PrismaAdminEngagementRepository);
+
+    const story = await prisma.story.create({
+      data: {
+        title: 'Soft Deleted Story',
+        description: 'd',
+        language: 'en',
+        coverImageUrl: 'x',
+        audioUrl: 'x',
+        isInteractive: false,
+        ageMin: 3,
+        ageMax: 6,
+        isDeleted: true,
+      },
+    });
+    storyId = story.id;
+
+    const parent = await prisma.user.create({
+      data: { email: `delstory-parent-${Date.now()}@test.dev`, passwordHash: 'x' },
+    });
+    const kids = await Promise.all(
+      [1, 2, 3, 4, 5].map((n) =>
+        prisma.kid.create({ data: { parentId: parent.id, name: `Kid ${n}` } }),
+      ),
+    );
+    kidIds = kids.map((k) => k.id);
+    userIds = [parent.id];
+
+    // 5 active, non-deleted readers — would be well above the suppression
+    // threshold if the story itself weren't soft-deleted.
+    await Promise.all(
+      kids.map((kid) =>
+        prisma.storyProgress.create({
+          data: {
+            kidId: kid.id,
+            storyId,
+            completed: false,
+            totalTimeSpent: 10,
+            lastAccessed: new Date(),
+          },
+        }),
+      ),
+    );
+  });
+
+  afterEach(async () => {
+    await prisma.storyProgress.deleteMany({ where: { storyId } });
+    await prisma.kid.deleteMany({ where: { id: { in: kidIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    await prisma.story.deleteMany({ where: { id: storyId } });
+  });
+
+  it('getStoryReaderStats excludes a soft-deleted story entirely from its results', async () => {
+    const start = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const end = new Date(Date.now() + 1000);
+    const stats = await repo.getStoryReaderStats({ start, end });
+    expect(stats.find((s) => s.storyId === storyId)).toBeUndefined();
+  });
+
+  it('getStoryReaderStatsForStory returns null for a soft-deleted story despite active progress rows', async () => {
+    const stats = await repo.getStoryReaderStatsForStory(storyId);
+    expect(stats).toBeNull();
+  });
+
+  it('getStoryReaderTrend returns no rows for a soft-deleted story', async () => {
+    const start = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const end = new Date(Date.now() + 1000);
+    const trend = await repo.getStoryReaderTrend(storyId, { start, end });
+    expect(trend).toEqual([]);
+  });
+});

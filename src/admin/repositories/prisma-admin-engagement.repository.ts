@@ -63,13 +63,15 @@ export class PrismaAdminEngagementRepository implements IAdminEngagementReposito
         SELECT sp."storyId", sp."kidId" AS "kidReader", NULL::text AS "userReader", sp.completed, sp."totalTimeSpent"
         FROM story_progress sp
         JOIN kids k ON k.id = sp."kidId"
-        WHERE sp."isDeleted" = false AND k."isDeleted" = false
+        JOIN stories s ON s.id = sp."storyId"
+        WHERE sp."isDeleted" = false AND k."isDeleted" = false AND s."isDeleted" = false
           AND sp."lastAccessed" BETWEEN ${range.start} AND ${range.end}
         UNION ALL
         SELECT usp."storyId", NULL::text AS "kidReader", usp."userId" AS "userReader", usp.completed, usp."totalTimeSpent"
         FROM user_story_progress usp
         JOIN users u ON u.id = usp."userId"
-        WHERE usp."isDeleted" = false AND u."isDeleted" = false
+        JOIN stories s ON s.id = usp."storyId"
+        WHERE usp."isDeleted" = false AND u."isDeleted" = false AND s."isDeleted" = false
           AND usp."lastAccessed" BETWEEN ${range.start} AND ${range.end}
       ) combined
       GROUP BY combined."storyId"
@@ -103,12 +105,16 @@ export class PrismaAdminEngagementRepository implements IAdminEngagementReposito
         SELECT sp."kidId" AS "kidReader", NULL::text AS "userReader", sp.completed, sp."totalTimeSpent"
         FROM story_progress sp
         JOIN kids k ON k.id = sp."kidId"
-        WHERE sp."isDeleted" = false AND k."isDeleted" = false AND sp."storyId" = ${storyId}
+        JOIN stories s ON s.id = sp."storyId"
+        WHERE sp."isDeleted" = false AND k."isDeleted" = false AND s."isDeleted" = false
+          AND sp."storyId" = ${storyId}
         UNION ALL
         SELECT NULL::text AS "kidReader", usp."userId" AS "userReader", usp.completed, usp."totalTimeSpent"
         FROM user_story_progress usp
         JOIN users u ON u.id = usp."userId"
-        WHERE usp."isDeleted" = false AND u."isDeleted" = false AND usp."storyId" = ${storyId}
+        JOIN stories s ON s.id = usp."storyId"
+        WHERE usp."isDeleted" = false AND u."isDeleted" = false AND s."isDeleted" = false
+          AND usp."storyId" = ${storyId}
       ) combined
     `);
 
@@ -145,13 +151,17 @@ export class PrismaAdminEngagementRepository implements IAdminEngagementReposito
         SELECT sp."kidId" AS "kidReader", NULL::text AS "userReader", sp.completed, sp."lastAccessed"
         FROM story_progress sp
         JOIN kids k ON k.id = sp."kidId"
-        WHERE sp."isDeleted" = false AND k."isDeleted" = false AND sp."storyId" = ${storyId}
+        JOIN stories s ON s.id = sp."storyId"
+        WHERE sp."isDeleted" = false AND k."isDeleted" = false AND s."isDeleted" = false
+          AND sp."storyId" = ${storyId}
           AND sp."lastAccessed" BETWEEN ${range.start} AND ${range.end}
         UNION ALL
         SELECT NULL::text AS "kidReader", usp."userId" AS "userReader", usp.completed, usp."lastAccessed"
         FROM user_story_progress usp
         JOIN users u ON u.id = usp."userId"
-        WHERE usp."isDeleted" = false AND u."isDeleted" = false AND usp."storyId" = ${storyId}
+        JOIN stories s ON s.id = usp."storyId"
+        WHERE usp."isDeleted" = false AND u."isDeleted" = false AND s."isDeleted" = false
+          AND usp."storyId" = ${storyId}
           AND usp."lastAccessed" BETWEEN ${range.start} AND ${range.end}
       ) combined
       GROUP BY day
