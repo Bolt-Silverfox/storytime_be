@@ -277,3 +277,106 @@ describe('PrismaAdminEngagementRepository.getStoryReaders', () => {
     expect(userReader!.displayName).toBe('Direct Reader');
   });
 });
+
+describe('PrismaAdminEngagementRepository soft-deleted reader exclusion', () => {
+  let prisma: PrismaService;
+  let repo: PrismaAdminEngagementRepository;
+  let storyId: string;
+  let kidIds: string[];
+  let userIds: string[];
+  let activeKidId: string;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [PrismaService, PrismaAdminEngagementRepository],
+    }).compile();
+    prisma = module.get(PrismaService);
+    repo = module.get(PrismaAdminEngagementRepository);
+
+    const story = await prisma.story.create({
+      data: {
+        title: 'Soft Delete Story',
+        description: 'd',
+        language: 'en',
+        coverImageUrl: 'x',
+        audioUrl: 'x',
+        isInteractive: false,
+        ageMin: 3,
+        ageMax: 6,
+      },
+    });
+    storyId = story.id;
+
+    const parent = await prisma.user.create({
+      data: {
+        email: `softdel-parent-${Date.now()}@test.dev`,
+        passwordHash: 'x',
+      },
+    });
+    // 4 active kids + 1 soft-deleted kid = 5 rows in story_progress, but only
+    // 4 real (non-deleted) readers.
+    const activeKids = await Promise.all(
+      [1, 2, 3, 4].map((n) =>
+        prisma.kid.create({
+          data: { parentId: parent.id, name: `Active Kid ${n}` },
+        }),
+      ),
+    );
+    const deletedKid = await prisma.kid.create({
+      data: { parentId: parent.id, name: 'Deleted Kid', isDeleted: true },
+    });
+    kidIds = [...activeKids.map((k) => k.id), deletedKid.id];
+    userIds = [parent.id];
+    activeKidId = activeKids[0].id;
+
+    await Promise.all(
+      [...activeKids, deletedKid].map((kid) =>
+        prisma.storyProgress.create({
+          data: {
+            kidId: kid.id,
+            storyId,
+            completed: false,
+            totalTimeSpent: 10,
+            lastAccessed: new Date(),
+          },
+        }),
+      ),
+    );
+  });
+
+  afterEach(async () => {
+    await prisma.storyProgress.deleteMany({ where: { storyId } });
+    await prisma.kid.deleteMany({ where: { id: { in: kidIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    await prisma.story.deleteMany({ where: { id: storyId } });
+  });
+
+  it('getStoryReaderStatsForStory does not count a soft-deleted kid, so the true count stays below the suppression threshold', async () => {
+    const stats = await repo.getStoryReaderStatsForStory(storyId);
+    expect(stats).not.toBeNull();
+    expect(stats!.distinctReaders).toBe(4); // not 5 — the deleted kid must not count
+  });
+
+  it('getStoryReaderStats (list variant) agrees with getStoryReaders on the same 4 real readers', async () => {
+    const start = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const end = new Date(Date.now() + 1000);
+    const stats = await repo.getStoryReaderStats({ start, end });
+    const row = stats.find((s) => s.storyId === storyId);
+    expect(row!.distinctReaders).toBe(4);
+
+    const readers = await repo.getStoryReaders(storyId);
+    expect(readers).toHaveLength(4);
+    expect(readers.some((r) => r.readerId === activeKidId)).toBe(true);
+  });
+
+  it('getStoryReaderTrend excludes the soft-deleted kid from the per-day count', async () => {
+    const start = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const end = new Date(Date.now() + 1000);
+    const trend = await repo.getStoryReaderTrend(storyId, { start, end });
+    const totalDistinctReaders = trend.reduce(
+      (sum, p) => sum + p.distinctReaders,
+      0,
+    );
+    expect(totalDistinctReaders).toBe(4);
+  });
+});
