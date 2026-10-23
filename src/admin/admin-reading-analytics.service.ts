@@ -85,15 +85,17 @@ export class AdminReadingAnalyticsService {
 
     const titles = await this.storyRepo.findTitlesByIds([storyId]);
     const title = titles[0]?.title ?? 'Unknown story';
-    const trend = await this.engagementRepo.getStoryReaderTrend(
-      storyId,
-      rangeToDates(range),
-    );
 
     const suppressed = stats.distinctReaders < READER_SUPPRESSION_THRESHOLD;
-    const readers = suppressed
-      ? []
-      : await this.engagementRepo.getStoryReaders(storyId);
+    // Per-day trend counts and reader identities are both per-story reader
+    // data covered by the suppression rule, so neither is fetched for a
+    // suppressed story.
+    const [trend, readers] = suppressed
+      ? [[], []]
+      : await Promise.all([
+          this.engagementRepo.getStoryReaderTrend(storyId, rangeToDates(range)),
+          this.engagementRepo.getStoryReaders(storyId),
+        ]);
 
     return {
       storyId,
@@ -114,6 +116,12 @@ export class AdminReadingAnalyticsService {
     storyId: string,
     range: ReadingAnalyticsRangeDto,
   ): Promise<TrendPointDto[]> {
+    const stats =
+      await this.engagementRepo.getStoryReaderStatsForStory(storyId);
+    if (!stats || stats.distinctReaders < READER_SUPPRESSION_THRESHOLD) {
+      return [];
+    }
+
     return this.engagementRepo.getStoryReaderTrend(
       storyId,
       rangeToDates(range),
