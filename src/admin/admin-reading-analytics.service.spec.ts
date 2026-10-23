@@ -164,11 +164,36 @@ describe('AdminReadingAnalyticsService', () => {
     });
     getStoryReaderTrend.mockResolvedValue([]);
     getStoryReaders.mockResolvedValue([
-      { readerId: 'k1', readerType: 'kid', displayName: 'Kid One', lastAccessed: new Date() },
-      { readerId: 'k2', readerType: 'kid', displayName: 'Kid Two', lastAccessed: new Date() },
-      { readerId: 'k3', readerType: 'kid', displayName: 'Kid Three', lastAccessed: new Date() },
-      { readerId: 'k4', readerType: 'kid', displayName: 'Kid Four', lastAccessed: new Date() },
-      { readerId: 'k5', readerType: 'kid', displayName: 'Kid Five', lastAccessed: new Date() },
+      {
+        readerId: 'k1',
+        readerType: 'kid',
+        displayName: 'Kid One',
+        lastAccessed: new Date(),
+      },
+      {
+        readerId: 'k2',
+        readerType: 'kid',
+        displayName: 'Kid Two',
+        lastAccessed: new Date(),
+      },
+      {
+        readerId: 'k3',
+        readerType: 'kid',
+        displayName: 'Kid Three',
+        lastAccessed: new Date(),
+      },
+      {
+        readerId: 'k4',
+        readerType: 'kid',
+        displayName: 'Kid Four',
+        lastAccessed: new Date(),
+      },
+      {
+        readerId: 'k5',
+        readerType: 'kid',
+        displayName: 'Kid Five',
+        lastAccessed: new Date(),
+      },
     ]);
 
     const detail = await service.getStoryDetail('s1', { range: 30 });
@@ -195,9 +220,9 @@ describe('AdminReadingAnalyticsService', () => {
       isDeleted: true,
     });
 
-    await expect(
-      service.getStoryDetail('s1', { range: 30 }),
-    ).rejects.toThrow(NotFoundException);
+    await expect(service.getStoryDetail('s1', { range: 30 })).rejects.toThrow(
+      NotFoundException,
+    );
     expect(getStoryReaderStatsForStory).not.toHaveBeenCalled();
   });
 
@@ -214,10 +239,30 @@ describe('AdminReadingAnalyticsService', () => {
     // ...but the readers query, run moments later, only found 4 — e.g. one
     // reader was soft-deleted in between.
     getStoryReaders.mockResolvedValue([
-      { readerId: 'k1', readerType: 'kid', displayName: 'A', lastAccessed: new Date() },
-      { readerId: 'k2', readerType: 'kid', displayName: 'B', lastAccessed: new Date() },
-      { readerId: 'k3', readerType: 'kid', displayName: 'C', lastAccessed: new Date() },
-      { readerId: 'k4', readerType: 'kid', displayName: 'D', lastAccessed: new Date() },
+      {
+        readerId: 'k1',
+        readerType: 'kid',
+        displayName: 'A',
+        lastAccessed: new Date(),
+      },
+      {
+        readerId: 'k2',
+        readerType: 'kid',
+        displayName: 'B',
+        lastAccessed: new Date(),
+      },
+      {
+        readerId: 'k3',
+        readerType: 'kid',
+        displayName: 'C',
+        lastAccessed: new Date(),
+      },
+      {
+        readerId: 'k4',
+        readerType: 'kid',
+        displayName: 'D',
+        lastAccessed: new Date(),
+      },
     ]);
 
     const detail = await service.getStoryDetail('s1', { range: 30 });
