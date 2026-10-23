@@ -13,11 +13,16 @@ export class AdminReadingAnalyticsController {
 
   @Get('top-stories')
   @ApiOperation({
-    summary: 'Top stories by distinct readers, 5-reader minimum to show a count',
+    summary:
+      'Top stories by distinct readers, 5-reader minimum to show a count',
   })
   async getTopStories(@Query() range: ReadingAnalyticsRangeDto) {
     const data = await this.service.getTopStories(range);
-    return { statusCode: 200, message: 'Top stories retrieved successfully', data };
+    return {
+      statusCode: 200,
+      message: 'Top stories retrieved successfully',
+      data,
+    };
   }
 
   @Get('stories/:storyId')
