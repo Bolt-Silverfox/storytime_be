@@ -411,7 +411,10 @@ describe('PrismaAdminEngagementRepository soft-deleted story exclusion', () => {
     storyId = story.id;
 
     const parent = await prisma.user.create({
-      data: { email: `delstory-parent-${Date.now()}@test.dev`, passwordHash: 'x' },
+      data: {
+        email: `delstory-parent-${Date.now()}@test.dev`,
+        passwordHash: 'x',
+      },
     });
     const kids = await Promise.all(
       [1, 2, 3, 4, 5].map((n) =>
