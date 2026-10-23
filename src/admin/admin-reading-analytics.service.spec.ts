@@ -113,7 +113,9 @@ describe('AdminReadingAnalyticsService', () => {
 
     expect(detail!.readersSuppressed).toBe(true);
     expect(detail!.readers).toEqual([]);
+    expect(detail!.trend).toEqual([]);
     expect(getStoryReaders).not.toHaveBeenCalled();
+    expect(getStoryReaderTrend).not.toHaveBeenCalled();
   });
 
   it('includes the real reader list on story detail at/above the threshold', async () => {
@@ -146,5 +148,45 @@ describe('AdminReadingAnalyticsService', () => {
     const detail = await service.getStoryDetail('missing', { range: 30 });
 
     expect(detail).toBeNull();
+  });
+
+  it('suppresses the standalone trend endpoint when the story is under the 5-reader threshold', async () => {
+    getStoryReaderStatsForStory.mockResolvedValue({
+      storyId: 's1',
+      distinctReaders: 4,
+      completedCount: 1,
+      avgTimeSpentSeconds: 10,
+    });
+
+    const trend = await service.getStoryTrend('s1', { range: 30 });
+
+    expect(trend).toEqual([]);
+    expect(getStoryReaderTrend).not.toHaveBeenCalled();
+  });
+
+  it('suppresses the standalone trend endpoint when the story has no reading activity', async () => {
+    getStoryReaderStatsForStory.mockResolvedValue(null);
+
+    const trend = await service.getStoryTrend('missing', { range: 30 });
+
+    expect(trend).toEqual([]);
+    expect(getStoryReaderTrend).not.toHaveBeenCalled();
+  });
+
+  it('returns the real trend from the standalone endpoint at/above the threshold', async () => {
+    getStoryReaderStatsForStory.mockResolvedValue({
+      storyId: 's1',
+      distinctReaders: 5,
+      completedCount: 1,
+      avgTimeSpentSeconds: 10,
+    });
+    getStoryReaderTrend.mockResolvedValue([
+      { date: '2026-10-01', distinctReaders: 2, completions: 1 },
+    ]);
+
+    const trend = await service.getStoryTrend('s1', { range: 30 });
+
+    expect(trend).toHaveLength(1);
+    expect(getStoryReaderTrend).toHaveBeenCalledWith('s1', expect.anything());
   });
 });
