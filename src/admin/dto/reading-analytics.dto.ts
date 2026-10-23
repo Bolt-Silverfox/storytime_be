@@ -13,9 +13,17 @@ export class ReadingAnalyticsRangeDto {
 export class TopStoryDto {
   @ApiProperty() storyId: string;
   @ApiProperty() title: string;
-  @ApiProperty({ nullable: true, description: 'null when fewer than 5 distinct readers (privacy suppression)' })
+  @ApiProperty({
+    nullable: true,
+    description:
+      'null when fewer than 5 distinct readers (privacy suppression)',
+  })
   readerCount: number | null;
-  @ApiProperty({ nullable: true, description: 'null when fewer than 5 distinct readers (privacy suppression)' })
+  @ApiProperty({
+    nullable: true,
+    description:
+      'null when fewer than 5 distinct readers (privacy suppression)',
+  })
   completionRate: number | null;
 }
 
@@ -36,9 +44,17 @@ export class StoryDetailDto {
   @ApiProperty() storyId: string;
   @ApiProperty() title: string;
   @ApiProperty({ nullable: true }) readerCount: number | null;
-  @ApiProperty({ nullable: true, description: 'null when fewer than 5 distinct readers (privacy suppression)' })
+  @ApiProperty({
+    nullable: true,
+    description:
+      'null when fewer than 5 distinct readers (privacy suppression)',
+  })
   completionRate: number | null;
-  @ApiProperty({ nullable: true, description: 'null when fewer than 5 distinct readers (privacy suppression)' })
+  @ApiProperty({
+    nullable: true,
+    description:
+      'null when fewer than 5 distinct readers (privacy suppression)',
+  })
   avgTimeSpentSeconds: number | null;
   @ApiProperty({ type: [TrendPointDto] }) trend: TrendPointDto[];
   @ApiProperty({ type: [ReaderDto] }) readers: ReaderDto[];
