@@ -1,0 +1,122 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+import {
+  ADMIN_ENGAGEMENT_REPOSITORY,
+  IAdminEngagementRepository,
+  ADMIN_STORY_REPOSITORY,
+  IAdminStoryRepository,
+} from './repositories';
+import {
+  CACHE_KEYS,
+  CACHE_TTL_MS,
+} from '@/shared/constants/cache-keys.constants';
+import {
+  ReadingAnalyticsRangeDto,
+  TopStoryDto,
+  StoryDetailDto,
+  TrendPointDto,
+} from './dto/reading-analytics.dto';
+
+// Stories with fewer than this many distinct readers must never have their
+// real reader count or reader identities exposed in the API response.
+const READER_SUPPRESSION_THRESHOLD = 5;
+
+function rangeToDates(range: ReadingAnalyticsRangeDto): {
+  start: Date;
+  end: Date;
+} {
+  const end = new Date();
+  const start = new Date(
+    end.getTime() - (range.range ?? 30) * 24 * 60 * 60 * 1000,
+  );
+  return { start, end };
+}
+
+@Injectable()
+export class AdminReadingAnalyticsService {
+  constructor(
+    @Inject(ADMIN_ENGAGEMENT_REPOSITORY)
+    private readonly engagementRepo: IAdminEngagementRepository,
+    @Inject(ADMIN_STORY_REPOSITORY)
+    private readonly storyRepo: IAdminStoryRepository,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
+
+  async getTopStories(range: ReadingAnalyticsRangeDto): Promise<TopStoryDto[]> {
+    const cacheKey = CACHE_KEYS.READING_ANALYTICS_TOP_STORIES(
+      range.range ?? 30,
+    );
+    const cached = await this.cacheManager.get<TopStoryDto[]>(cacheKey);
+    if (cached) return cached;
+
+    const stats = await this.engagementRepo.getStoryReaderStats(
+      rangeToDates(range),
+    );
+    const titles = await this.storyRepo.findTitlesByIds(
+      stats.map((s) => s.storyId),
+    );
+    const titleById = new Map(titles.map((t) => [t.id, t.title]));
+
+    const result: TopStoryDto[] = stats
+      .map((s) => ({
+        storyId: s.storyId,
+        title: titleById.get(s.storyId) ?? 'Unknown story',
+        readerCount:
+          s.distinctReaders >= READER_SUPPRESSION_THRESHOLD
+            ? s.distinctReaders
+            : null,
+        completionRate:
+          s.distinctReaders > 0 ? s.completedCount / s.distinctReaders : 0,
+      }))
+      .sort((a, b) => (b.readerCount ?? 0) - (a.readerCount ?? 0));
+
+    await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.DASHBOARD);
+    return result;
+  }
+
+  async getStoryDetail(
+    storyId: string,
+    range: ReadingAnalyticsRangeDto,
+  ): Promise<StoryDetailDto | null> {
+    const stats =
+      await this.engagementRepo.getStoryReaderStatsForStory(storyId);
+    if (!stats) return null;
+
+    const titles = await this.storyRepo.findTitlesByIds([storyId]);
+    const title = titles[0]?.title ?? 'Unknown story';
+    const trend = await this.engagementRepo.getStoryReaderTrend(
+      storyId,
+      rangeToDates(range),
+    );
+
+    const suppressed = stats.distinctReaders < READER_SUPPRESSION_THRESHOLD;
+    const readers = suppressed
+      ? []
+      : await this.engagementRepo.getStoryReaders(storyId);
+
+    return {
+      storyId,
+      title,
+      readerCount: suppressed ? null : stats.distinctReaders,
+      completionRate:
+        stats.distinctReaders > 0
+          ? stats.completedCount / stats.distinctReaders
+          : 0,
+      avgTimeSpentSeconds: stats.avgTimeSpentSeconds,
+      trend,
+      readers,
+      readersSuppressed: suppressed,
+    };
+  }
+
+  async getStoryTrend(
+    storyId: string,
+    range: ReadingAnalyticsRangeDto,
+  ): Promise<TrendPointDto[]> {
+    return this.engagementRepo.getStoryReaderTrend(
+      storyId,
+      rangeToDates(range),
+    );
+  }
+}
