@@ -128,7 +128,9 @@ async getTopStories(range: DateRangeDto): Promise<TopStoryDto[]> {
       storyId: s.storyId,
       title: stories.find(st => st.id === s.storyId)?.title ?? 'Unknown',
       readerCount: s.distinctReaders >= READER_SUPPRESSION_THRESHOLD ? s.distinctReaders : null,
-      completionRate: s.distinctReaders > 0 ? s.completedCount / s.distinctReaders : 0,
+      completionRate: s.distinctReaders >= READER_SUPPRESSION_THRESHOLD
+        ? (s.distinctReaders > 0 ? s.completedCount / s.distinctReaders : 0)
+        : null,
     }))
     .sort((a, b) => (b.readerCount ?? 0) - (a.readerCount ?? 0));
 }
@@ -137,6 +139,20 @@ async getTopStories(range: DateRangeDto): Promise<TopStoryDto[]> {
 Rows with `readerCount: null` still appear in the list (frontend renders
 "< 5 readers") but sort to the bottom — ranking by a number we're
 hiding would leak ordinal information.
+
+**Correction (post-implementation review):** the version above originally
+left `completionRate` unsuppressed. That's a bug, not a stylistic choice —
+`completionRate` is `completedCount / distinctReaders`, and when
+`distinctReaders` is the suppressed value itself (< 5), the rate is a
+fraction with a denominator of at most 4. A story with 1 completion out of
+4 readers returns exactly `0.25`; one of 3 returns `0.333...`. Both values
+narrow the real reader count to a small, often unique set of candidates —
+exactly the identity-narrowing the suppression rule exists to prevent.
+`completionRate` (and `avgTimeSpentSeconds`, same reasoning — a mean over
+a handful of rows) must be suppressed (`null`) alongside `readerCount`
+whenever a story is below threshold. Both `TopStoryDto.completionRate` and
+`StoryDetailDto.completionRate`/`avgTimeSpentSeconds` are `number | null`,
+not `number`.
 
 ### New endpoints
 
