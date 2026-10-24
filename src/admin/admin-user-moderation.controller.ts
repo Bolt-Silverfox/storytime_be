@@ -12,6 +12,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
+import { AdminAuditLogService } from './admin-audit-log.service';
 import { Admin } from './decorators/admin.decorator';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import {
@@ -39,7 +40,10 @@ import {
 @Admin()
 @ApiTags('admin')
 export class AdminUserModerationController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly auditLog: AdminAuditLogService,
+  ) {}
 
   @Post('users')
   @HttpCode(HttpStatus.CREATED)
@@ -181,6 +185,17 @@ export class AdminUserModerationController {
       updateUserDto,
       req.authUserData.userId,
     );
+    // Covers a role change made through this generic update route too — not
+    // just the dedicated PATCH .../role endpoint below — so no path for
+    // changing a user's role goes unaudited.
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: updateUserDto.role ? 'user.role_change' : 'user.update',
+      targetType: 'User',
+      targetId: userId,
+      details: updateUserDto as unknown as Record<string, unknown>,
+    });
     return {
       statusCode: 200,
       message: 'User updated successfully',
@@ -233,6 +248,18 @@ export class AdminUserModerationController {
       permanent,
       req.authUserData.userId,
     );
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'user.delete',
+      targetType: 'User',
+      targetId: userId,
+      // Nest's global ValidationPipe (transform: true) already converts
+      // this `@Query('permanent')` to a real boolean before it reaches here
+      // (see transformPrimitive in @nestjs/common's validation.pipe.ts), so
+      // no extra Boolean() coercion is needed.
+      details: { permanent: permanent ?? false },
+    });
     return {
       statusCode: 204,
       message: permanent ? 'User permanently deleted' : 'User soft deleted',
@@ -279,8 +306,18 @@ export class AdminUserModerationController {
       },
     },
   })
-  async restoreUser(@Param('userId') userId: string) {
+  async restoreUser(
+    @Req() req: AuthenticatedRequest,
+    @Param('userId') userId: string,
+  ) {
     const data = await this.adminService.restoreUser(userId);
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'user.restore',
+      targetType: 'User',
+      targetId: userId,
+    });
     return {
       statusCode: 200,
       message: 'User restored successfully',
@@ -324,8 +361,18 @@ export class AdminUserModerationController {
     description: 'User is already suspended or is an admin',
   })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async suspendUser(@Param('userId') userId: string) {
+  async suspendUser(
+    @Req() req: AuthenticatedRequest,
+    @Param('userId') userId: string,
+  ) {
     const data = await this.adminService.suspendUser(userId);
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'user.suspend',
+      targetType: 'User',
+      targetId: userId,
+    });
     return {
       statusCode: 200,
       message: 'User suspended successfully',
@@ -366,8 +413,18 @@ export class AdminUserModerationController {
   })
   @ApiResponse({ status: 400, description: 'User is not suspended' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async unsuspendUser(@Param('userId') userId: string) {
+  async unsuspendUser(
+    @Req() req: AuthenticatedRequest,
+    @Param('userId') userId: string,
+  ) {
     const data = await this.adminService.unsuspendUser(userId);
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'user.unsuspend',
+      targetType: 'User',
+      targetId: userId,
+    });
     return {
       statusCode: 200,
       message: 'User unsuspended successfully',
@@ -409,10 +466,19 @@ export class AdminUserModerationController {
   })
   @ApiResponse({ status: 404, description: 'User usage record not found' })
   async resetUserQuota(
+    @Req() req: AuthenticatedRequest,
     @Param('userId') userId: string,
     @Body() body: ResetQuotaDto,
   ) {
     const data = await this.adminService.resetUserQuota(userId, body);
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'user.reset_quota',
+      targetType: 'User',
+      targetId: userId,
+      details: body as unknown as Record<string, unknown>,
+    });
     return {
       statusCode: 200,
       message: 'User quotas reset successfully',
@@ -486,6 +552,14 @@ export class AdminUserModerationController {
       { role: updateUserRoleDto.role },
       req.authUserData.userId,
     );
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'user.role_change',
+      targetType: 'User',
+      targetId: userId,
+      details: { newRole: updateUserRoleDto.role },
+    });
     return {
       statusCode: 200,
       message: 'User role updated successfully',
@@ -534,8 +608,22 @@ export class AdminUserModerationController {
       },
     },
   })
-  async bulkUserAction(@Body() bulkActionDto: BulkActionDto) {
+  async bulkUserAction(
+    @Req() req: AuthenticatedRequest,
+    @Body() bulkActionDto: BulkActionDto,
+  ) {
     const result = await this.adminService.bulkUserAction(bulkActionDto);
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'user.bulk_action',
+      targetType: 'User',
+      details: {
+        action: bulkActionDto.action,
+        userIds: bulkActionDto.userIds,
+        count: result.count,
+      },
+    });
     return {
       statusCode: 200,
       message: 'Bulk action completed successfully',

@@ -18,3 +18,5 @@ export * from './admin-activity.repository.interface';
 export * from './prisma-admin-activity.repository';
 export * from './admin-analytics.repository.interface';
 export * from './prisma-admin-analytics.repository';
+export * from './admin-audit-log.repository.interface';
+export * from './prisma-admin-audit-log.repository';

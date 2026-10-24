@@ -476,6 +476,11 @@ model StoryProgress {
   @@index([isDeleted])
   @@index([kidId, completed])
   @@index([kidId, completed, isDeleted, lastAccessed(sort: Desc)])
+  // Covers the admin reading-analytics cross-story scan (getStoryReaderStats),
+  // which filters by isDeleted + a lastAccessed window with no kidId/storyId
+  // predicate — the existing composite indexes above all lead with kidId, so
+  // they don't help this query, and it's the one widened to a 365-day window.
+  @@index([isDeleted, lastAccessed])
   @@map("story_progress")
 }
 
@@ -496,6 +501,8 @@ model UserStoryProgress {
   @@index([storyId])
   @@index([isDeleted])
   @@index([userId, completed, isDeleted, lastAccessed(sort: Desc)])
+  // See matching index on StoryProgress above.
+  @@index([isDeleted, lastAccessed])
   @@map("user_story_progress")
 }
 
@@ -1261,4 +1268,24 @@ model CouponRedemption {
   @@index([couponId])
   @@index([userId])
   @@map("coupon_redemptions")
+}
+
+// -------------------------
+// ADMIN AUDIT LOG
+// -------------------------
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  adminName  String
+  adminEmail String
+  action     String // dot-namespaced, e.g. "user.suspend", "coupon.create"
+  targetType String // e.g. "User", "Coupon", "Subscription"
+  targetId   String?
+  details    String? // JSON-stringified extra context (e.g. the fields changed)
+  createdAt  DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+  @@map("admin_audit_logs")
 }

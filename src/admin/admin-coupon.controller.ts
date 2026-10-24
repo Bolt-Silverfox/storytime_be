@@ -7,11 +7,14 @@ import {
   Body,
   Param,
   Query,
+  Req,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
+import { AdminAuditLogService } from './admin-audit-log.service';
 import { Admin } from './decorators/admin.decorator';
+import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import {
   CreateCouponDto,
   UpdateCouponDto,
@@ -35,7 +38,10 @@ import {
 @Admin()
 @ApiTags('admin')
 export class AdminCouponController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly auditLog: AdminAuditLogService,
+  ) {}
 
   // =====================
   // COUPONS
@@ -47,8 +53,19 @@ export class AdminCouponController {
   @ApiBody({ type: CreateCouponDto })
   @ApiCreatedResponse({ description: 'Coupon created' })
   @HttpCode(HttpStatus.CREATED)
-  async createCoupon(@Body() body: CreateCouponDto) {
+  async createCoupon(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: CreateCouponDto,
+  ) {
     const data = await this.adminService.createCoupon(body);
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'coupon.create',
+      targetType: 'Coupon',
+      targetId: data.id,
+      details: { code: data.code, type: data.type, value: data.value },
+    });
     return { statusCode: 201, message: 'Coupon created', data };
   }
 
@@ -88,8 +105,20 @@ export class AdminCouponController {
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: UpdateCouponDto })
   @ApiOkResponse({ description: 'Coupon updated' })
-  async updateCoupon(@Param('id') id: string, @Body() body: UpdateCouponDto) {
+  async updateCoupon(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateCouponDto,
+  ) {
     const data = await this.adminService.updateCoupon(id, body);
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'coupon.update',
+      targetType: 'Coupon',
+      targetId: id,
+      details: body as unknown as Record<string, unknown>,
+    });
     return { statusCode: 200, message: 'Coupon updated', data };
   }
 
@@ -99,8 +128,18 @@ export class AdminCouponController {
   @ApiParam({ name: 'id', type: String })
   @ApiNoContentResponse({ description: 'Coupon deactivated' })
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteCoupon(@Param('id') id: string) {
+  async deleteCoupon(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
     await this.adminService.deleteCoupon(id);
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'coupon.delete',
+      targetType: 'Coupon',
+      targetId: id,
+    });
   }
 
   @Post('coupons/:code/validate')
