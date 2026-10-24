@@ -9,7 +9,7 @@ import type {
   StoryLanguageCount,
   StoryAgeRange,
 } from './admin-story.repository.interface';
-import type { Prisma, Story } from '@prisma/client';
+import type { Prisma, Story, Category, Theme } from '@prisma/client';
 
 @Injectable()
 export class PrismaAdminStoryRepository implements IAdminStoryRepository {
@@ -166,5 +166,21 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
       },
       orderBy: { name: 'asc' },
     });
+  }
+
+  findCategoryById(id: string): Promise<Category | null> {
+    return this.prisma.category.findUnique({ where: { id } });
+  }
+
+  findThemeById(id: string): Promise<Theme | null> {
+    return this.prisma.theme.findUnique({ where: { id } });
+  }
+
+  updateCategoryImage(id: string, image: string): Promise<Category> {
+    return this.prisma.category.update({ where: { id }, data: { image } });
+  }
+
+  updateThemeImage(id: string, image: string): Promise<Theme> {
+    return this.prisma.theme.update({ where: { id }, data: { image } });
   }
 }

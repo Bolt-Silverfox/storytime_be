@@ -1,19 +1,33 @@
 import {
   Controller,
   Get,
+  Post,
   Delete,
   Patch,
   Param,
   Query,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AdminService } from './admin.service';
 import { AdminStoryService } from './admin-story.service';
+import { AdminContentImageService } from './admin-content-image.service';
 import { Admin } from './decorators/admin.decorator';
 import { StoryFilterDto } from './dto/admin-filters.dto';
 import {
+  ALLOWED_IMAGE_TYPES,
+  MAX_IMAGE_SIZE,
+} from '@/shared/constants/upload.constants';
+import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
@@ -31,6 +45,7 @@ export class AdminStoryAdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly adminStoryService: AdminStoryService,
+    private readonly adminContentImageService: AdminContentImageService,
   ) {}
 
   // =====================
@@ -463,6 +478,127 @@ export class AdminStoryAdminController {
     return {
       statusCode: 200,
       message: 'Themes retrieved successfully',
+      data,
+    };
+  }
+
+  // =====================
+  // CATEGORY & THEME COVER IMAGES
+  // =====================
+
+  @Post('categories/:id/generate-image')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Generate a cover image for a category (AI)',
+    description:
+      'Generates a kid-friendly cover illustration via Hugging Face FLUX.1-schnell, uploads it, and sets it as the category image.',
+  })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ description: 'Category updated with new image' })
+  @ApiResponse({ status: 404, description: 'Category not found' })
+  async generateCategoryImage(@Param('id') id: string) {
+    const data = await this.adminContentImageService.generateCategoryImage(id);
+    return {
+      statusCode: 200,
+      message: 'Category image generated successfully',
+      data,
+    };
+  }
+
+  @Post('categories/:id/image')
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiOperation({
+    summary: 'Upload a cover image for a category (direct, no AI)',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['image'],
+      properties: {
+        image: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiOkResponse({ description: 'Category updated with new image' })
+  @ApiResponse({ status: 404, description: 'Category not found' })
+  async uploadCategoryImage(
+    @Param('id') id: string,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    const data = await this.adminContentImageService.uploadCategoryImage(
+      id,
+      file,
+    );
+    return {
+      statusCode: 200,
+      message: 'Category image uploaded successfully',
+      data,
+    };
+  }
+
+  @Post('themes/:id/generate-image')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Generate a cover image for a theme (AI)',
+    description:
+      'Generates a kid-friendly cover illustration via Hugging Face FLUX.1-schnell, uploads it, and sets it as the theme image.',
+  })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ description: 'Theme updated with new image' })
+  @ApiResponse({ status: 404, description: 'Theme not found' })
+  async generateThemeImage(@Param('id') id: string) {
+    const data = await this.adminContentImageService.generateThemeImage(id);
+    return {
+      statusCode: 200,
+      message: 'Theme image generated successfully',
+      data,
+    };
+  }
+
+  @Post('themes/:id/image')
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiOperation({
+    summary: 'Upload a cover image for a theme (direct, no AI)',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['image'],
+      properties: {
+        image: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiOkResponse({ description: 'Theme updated with new image' })
+  @ApiResponse({ status: 404, description: 'Theme not found' })
+  async uploadThemeImage(
+    @Param('id') id: string,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: MAX_IMAGE_SIZE }),
+          new FileTypeValidator({ fileType: ALLOWED_IMAGE_TYPES }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    const data = await this.adminContentImageService.uploadThemeImage(id, file);
+    return {
+      statusCode: 200,
+      message: 'Theme image uploaded successfully',
       data,
     };
   }
