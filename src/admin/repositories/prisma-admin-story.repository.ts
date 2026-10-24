@@ -169,11 +169,14 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
   }
 
   findCategoryById(id: string): Promise<Category | null> {
-    return this.prisma.category.findUnique({ where: { id } });
+    // findFirst (not findUnique) so isDeleted can be filtered alongside id —
+    // a soft-deleted category must be treated as not-found here, the same
+    // as findCategories() already excludes it from the list.
+    return this.prisma.category.findFirst({ where: { id, isDeleted: false } });
   }
 
   findThemeById(id: string): Promise<Theme | null> {
-    return this.prisma.theme.findUnique({ where: { id } });
+    return this.prisma.theme.findFirst({ where: { id, isDeleted: false } });
   }
 
   updateCategoryImage(id: string, image: string): Promise<Category> {

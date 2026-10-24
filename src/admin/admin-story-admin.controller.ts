@@ -507,7 +507,9 @@ export class AdminStoryAdminController {
 
   @Post('categories/:id/image')
   @ApiBearerAuth()
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(
+    FileInterceptor('image', { limits: { fileSize: MAX_IMAGE_SIZE } }),
+  )
   @ApiOperation({
     summary: 'Upload a cover image for a category (direct, no AI)',
   })
@@ -567,7 +569,9 @@ export class AdminStoryAdminController {
 
   @Post('themes/:id/image')
   @ApiBearerAuth()
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(
+    FileInterceptor('image', { limits: { fileSize: MAX_IMAGE_SIZE } }),
+  )
   @ApiOperation({
     summary: 'Upload a cover image for a theme (direct, no AI)',
   })
