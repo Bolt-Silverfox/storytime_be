@@ -103,6 +103,58 @@ describe('AdminContentImageService', () => {
       expect(result.image).toBe('https://cdn/categories/cat-1.webp');
     });
 
+    it('maps a non-retryable 4xx from the HF provider (e.g. 410 Gone for a deprecated model) to ServiceUnavailableException, not the generic 500', async () => {
+      findCategoryById.mockResolvedValue({
+        id: 'cat-1',
+        name: 'Animal Stories',
+        description: null,
+      });
+      const axiosError = Object.assign(
+        new Error('Request failed with status code 410'),
+        {
+          isAxiosError: true,
+          response: {
+            status: 410,
+            data: {
+              error:
+                'The requested model is deprecated and no longer supported by provider hf-inference',
+            },
+          },
+        },
+      );
+      httpPost.mockReturnValue(throwError(() => axiosError));
+
+      await expect(service.generateCategoryImage('cat-1')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      // Not retried (isTransientError excludes non-429 4xx) and not the
+      // misleading "Please try again" generic message.
+      expect(httpPost).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not treat a 408 as a permanent provider failure', async () => {
+      findCategoryById.mockResolvedValue({
+        id: 'cat-1',
+        name: 'Animal Stories',
+        description: null,
+      });
+      const axiosError = Object.assign(
+        new Error('Request failed with status code 408'),
+        {
+          isAxiosError: true,
+          response: { status: 408, data: { error: 'Request timeout' } },
+        },
+      );
+      httpPost.mockReturnValue(throwError(() => axiosError));
+
+      // 408 is a timeout, not a permanent failure like 410/402 — it must
+      // fall through to the generic "please try again" message rather than
+      // the "retrying will not help" ServiceUnavailableException.
+      await expect(service.generateCategoryImage('cat-1')).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
     it('maps a CircuitOpenError to ServiceUnavailableException once the hf-image breaker trips', async () => {
       findCategoryById.mockResolvedValue({
         id: 'cat-1',

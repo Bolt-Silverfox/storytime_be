@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
+import { isAxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import type { Category, Theme } from '@prisma/client';
 import { EnvConfig } from '@/shared/config/env.validation';
@@ -173,6 +174,29 @@ export class AdminContentImageService {
       if (error instanceof CircuitOpenError) {
         throw new ServiceUnavailableException(
           'Cover image generation is temporarily unavailable. Please try again in a minute.',
+        );
+      }
+
+      // A non-retryable 4xx from the Hugging Face provider itself means
+      // "try again" is actively misleading — the request will keep failing
+      // until the model/provider config or account billing is fixed, not
+      // because of load. Confirmed live against the HF router: the
+      // `hf-inference` provider now returns 410 Gone for this model (it has
+      // dropped free serverless support for it), and the remaining live
+      // providers (fal-ai, nscale, wavespeed) return 402-style "no remaining
+      // credits" errors for this account. withRetry already skips retrying
+      // these (isTransientError only retries 429/5xx), so surface that
+      // distinction to the caller too instead of the generic 500.
+      if (
+        isAxiosError(error) &&
+        error.response?.status !== undefined &&
+        error.response.status >= 400 &&
+        error.response.status < 500 &&
+        error.response.status !== 429 &&
+        error.response.status !== 408
+      ) {
+        throw new ServiceUnavailableException(
+          'The image generation provider is currently unavailable. Retrying will not help — please contact support.',
         );
       }
 
