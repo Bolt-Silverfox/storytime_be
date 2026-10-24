@@ -1,13 +1,56 @@
-import { IsIn, IsOptional } from 'class-validator';
+import { IsDateString, IsIn, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
+import { BadRequestException } from '@nestjs/common';
 
 export class ReadingAnalyticsRangeDto {
-  @ApiPropertyOptional({ enum: [7, 30, 90], default: 30 })
+  @ApiPropertyOptional({ enum: [7, 30, 90, 120, 365], default: 30 })
   @IsOptional()
   @Type(() => Number)
-  @IsIn([7, 30, 90])
-  range?: 7 | 30 | 90 = 30;
+  @IsIn([7, 30, 90, 120, 365])
+  range?: 7 | 30 | 90 | 120 | 365 = 30;
+
+  // Custom range (takes precedence over `range` when both are present).
+  @ApiPropertyOptional({
+    description:
+      'ISO date string. Together with endDate, overrides `range` with an explicit window.',
+  })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'ISO date string. Together with startDate, overrides `range` with an explicit window.',
+  })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+}
+
+/**
+ * Resolves a ReadingAnalyticsRangeDto into an absolute { start, end } window.
+ * A custom startDate/endDate pair takes precedence over `range` when both
+ * are present; otherwise falls back to now minus `range` days.
+ */
+export function resolveReadingAnalyticsWindow(dto: ReadingAnalyticsRangeDto): {
+  start: Date;
+  end: Date;
+} {
+  if (dto.startDate && dto.endDate) {
+    const start = new Date(dto.startDate);
+    const end = new Date(dto.endDate);
+    if (start.getTime() >= end.getTime()) {
+      throw new BadRequestException('startDate must be before endDate');
+    }
+    return { start, end };
+  }
+
+  const end = new Date();
+  const start = new Date(
+    end.getTime() - (dto.range ?? 30) * 24 * 60 * 60 * 1000,
+  );
+  return { start, end };
 }
 
 export class TopStoryDto {

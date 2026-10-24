@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { AdminReadingAnalyticsService } from './admin-reading-analytics.service';
 import {
@@ -331,5 +331,82 @@ describe('AdminReadingAnalyticsService', () => {
 
     expect(trend).toHaveLength(1);
     expect(getStoryReaderTrend).toHaveBeenCalledWith('s1', expect.anything());
+  });
+
+  describe('custom/extended range windows', () => {
+    it('passes a 365-day window through to the engagement repo for range=365', async () => {
+      getStoryReaderStats.mockResolvedValue([]);
+      findTitlesByIds.mockResolvedValue([]);
+
+      await service.getTopStories({ range: 365 });
+
+      const { start, end } = getStoryReaderStats.mock.calls[0][0];
+      const days = (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000);
+      expect(days).toBeCloseTo(365, 0);
+    });
+
+    it('passes a 120-day window through to the engagement repo for range=120', async () => {
+      getStoryReaderStats.mockResolvedValue([]);
+      findTitlesByIds.mockResolvedValue([]);
+
+      await service.getTopStories({ range: 120 });
+
+      const { start, end } = getStoryReaderStats.mock.calls[0][0];
+      const days = (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000);
+      expect(days).toBeCloseTo(120, 0);
+    });
+
+    it('uses an explicit startDate/endDate window, taking precedence over range', async () => {
+      getStoryReaderStats.mockResolvedValue([]);
+      findTitlesByIds.mockResolvedValue([]);
+
+      await service.getTopStories({
+        range: 30,
+        startDate: '2026-01-01',
+        endDate: '2026-02-01',
+      });
+
+      const { start, end } = getStoryReaderStats.mock.calls[0][0];
+      expect(start).toEqual(new Date('2026-01-01'));
+      expect(end).toEqual(new Date('2026-02-01'));
+    });
+
+    it('throws BadRequestException when startDate is not before endDate', async () => {
+      await expect(
+        service.getTopStories({
+          range: 30,
+          startDate: '2026-02-01',
+          endDate: '2026-01-01',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(getStoryReaderStats).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when startDate equals endDate', async () => {
+      await expect(
+        service.getTopStories({
+          range: 30,
+          startDate: '2026-01-01',
+          endDate: '2026-01-01',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('still applies the 5-reader suppression rule within a custom/365-day window', async () => {
+      getStoryReaderStats.mockResolvedValue([
+        {
+          storyId: 's1',
+          distinctReaders: 4,
+          completedCount: 1,
+          avgTimeSpentSeconds: 10,
+        },
+      ]);
+      findTitlesByIds.mockResolvedValue([{ id: 's1', title: 'Story' }]);
+
+      const result = await service.getTopStories({ range: 365 });
+
+      expect(result[0].readerCount).toBeNull();
+      expect(result[0].completionRate).toBeNull();
+    });
   });
 });

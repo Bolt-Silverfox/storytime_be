@@ -16,21 +16,21 @@ import {
   TopStoryDto,
   StoryDetailDto,
   TrendPointDto,
+  resolveReadingAnalyticsWindow,
 } from './dto/reading-analytics.dto';
 
 // Stories with fewer than this many distinct readers must never have their
 // real reader count or reader identities exposed in the API response.
 const READER_SUPPRESSION_THRESHOLD = 5;
 
-function rangeToDates(range: ReadingAnalyticsRangeDto): {
-  start: Date;
-  end: Date;
-} {
-  const end = new Date();
-  const start = new Date(
-    end.getTime() - (range.range ?? 30) * 24 * 60 * 60 * 1000,
-  );
-  return { start, end };
+// Cache key segment for a range: the day-count when it's a plain range, or
+// the explicit window when a custom startDate/endDate was given (distinct
+// custom windows must not collide on the same cache entry).
+function rangeCacheKey(range: ReadingAnalyticsRangeDto): string {
+  if (range.startDate && range.endDate) {
+    return `custom:${range.startDate}:${range.endDate}`;
+  }
+  return String(range.range ?? 30);
 }
 
 @Injectable()
@@ -45,13 +45,13 @@ export class AdminReadingAnalyticsService {
 
   async getTopStories(range: ReadingAnalyticsRangeDto): Promise<TopStoryDto[]> {
     const cacheKey = CACHE_KEYS.READING_ANALYTICS_TOP_STORIES(
-      range.range ?? 30,
+      rangeCacheKey(range),
     );
     const cached = await this.cacheManager.get<TopStoryDto[]>(cacheKey);
     if (cached) return cached;
 
     const stats = await this.engagementRepo.getStoryReaderStats(
-      rangeToDates(range),
+      resolveReadingAnalyticsWindow(range),
     );
     const titles = await this.storyRepo.findTitlesByIds(
       stats.map((s) => s.storyId),
@@ -121,7 +121,10 @@ export class AdminReadingAnalyticsService {
     const [trend, readers] = statsSuppressed
       ? [[], []]
       : await Promise.all([
-          this.engagementRepo.getStoryReaderTrend(storyId, rangeToDates(range)),
+          this.engagementRepo.getStoryReaderTrend(
+            storyId,
+            resolveReadingAnalyticsWindow(range),
+          ),
           this.engagementRepo.getStoryReaders(storyId),
         ]);
 
@@ -164,7 +167,7 @@ export class AdminReadingAnalyticsService {
 
     return this.engagementRepo.getStoryReaderTrend(
       storyId,
-      rangeToDates(range),
+      resolveReadingAnalyticsWindow(range),
     );
   }
 }

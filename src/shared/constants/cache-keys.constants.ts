@@ -13,8 +13,8 @@ export const CACHE_KEYS = {
   AI_CREDIT_ANALYTICS: 'admin:ai-credit:analytics',
   USER_GROWTH_MONTHLY: 'admin:user-growth-monthly',
   GUEST_STATS: 'admin:guest:stats',
-  READING_ANALYTICS_TOP_STORIES: (range: number) =>
-    `admin:reading-analytics:top-stories:${range}`,
+  READING_ANALYTICS_TOP_STORIES: (rangeKey: string | number) =>
+    `admin:reading-analytics:top-stories:${rangeKey}`,
 
   // Content caches (static data)
   CATEGORIES_ALL: 'categories:all',
