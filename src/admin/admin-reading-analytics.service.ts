@@ -13,6 +13,7 @@ import {
 } from '@/shared/constants/cache-keys.constants';
 import {
   ReadingAnalyticsRangeDto,
+  TopStoriesQueryDto,
   TopStoryDto,
   StoryDetailDto,
   TrendPointDto,
@@ -42,6 +43,30 @@ export class AdminReadingAnalyticsService {
     private readonly storyRepo: IAdminStoryRepository,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
+
+  // Pagination happens after suppression and sorting, on the cached full
+  // list, so page boundaries never depend on (or leak) real reader counts.
+  async getTopStoriesPage(query: TopStoriesQueryDto): Promise<{
+    data: TopStoryDto[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+  }> {
+    const all = await this.getTopStories({
+      range: query.range,
+      startDate: query.startDate,
+      endDate: query.endDate,
+    });
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    return {
+      data: all.slice((page - 1) * limit, page * limit),
+      meta: {
+        total: all.length,
+        page,
+        limit,
+        totalPages: Math.ceil(all.length / limit),
+      },
+    };
+  }
 
   async getTopStories(range: ReadingAnalyticsRangeDto): Promise<TopStoryDto[]> {
     const cacheKey = CACHE_KEYS.READING_ANALYTICS_TOP_STORIES(
@@ -77,7 +102,11 @@ export class AdminReadingAnalyticsService {
       })
       .sort((a, b) => (b.readerCount ?? 0) - (a.readerCount ?? 0));
 
-    await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.DASHBOARD);
+    // Never cache an empty list: `[]` is truthy, so it would be served for the
+    // whole TTL and hide the first readers of a story until it expired.
+    if (result.length > 0) {
+      await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.DASHBOARD);
+    }
     return result;
   }
 
