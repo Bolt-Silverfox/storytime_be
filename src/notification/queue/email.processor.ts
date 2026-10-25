@@ -23,9 +23,6 @@ export class EmailProcessor extends WorkerHost {
   }
 
   private initializeTransporter(): void {
-    const nodeEnv = this.configService.get('NODE_ENV');
-    const isProduction = nodeEnv === 'production';
-
     this.transporter = nodemailer.createTransport({
       host: this.configService.get('SMTP_HOST'),
       port: this.configService.get('SMTP_PORT') || 587,
@@ -34,10 +31,6 @@ export class EmailProcessor extends WorkerHost {
         user: this.configService.get('SMTP_USER'),
         pass: this.configService.get('SMTP_PASS'),
       },
-      tls: {
-        // Enable TLS validation in production for security
-        rejectUnauthorized: isProduction,
-      },
       // Connection pooling for better performance
       pool: true,
       maxConnections: 5,
@@ -45,7 +38,7 @@ export class EmailProcessor extends WorkerHost {
     });
 
     this.logger.log(
-      `Email transporter initialized (TLS validation: ${isProduction ? 'enabled' : 'disabled'})`,
+      'Email transporter initialized (TLS certificate validation: enabled)',
     );
   }
 
