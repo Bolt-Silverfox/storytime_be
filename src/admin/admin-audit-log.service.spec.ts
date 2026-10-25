@@ -88,8 +88,9 @@ describe('AdminAuditLogService', () => {
       ).resolves.toBeUndefined();
     });
 
-    it('never throws when resolving the admin name fails', async () => {
+    it('still writes the audit entry (with "Unknown" as the name) when resolving the admin name fails', async () => {
       findUnique.mockRejectedValue(new Error('db unavailable'));
+      create.mockResolvedValue({});
 
       await expect(
         service.record({
@@ -100,7 +101,9 @@ describe('AdminAuditLogService', () => {
           targetId: 'user-1',
         }),
       ).resolves.toBeUndefined();
-      expect(create).not.toHaveBeenCalled();
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ adminName: 'Unknown' }),
+      );
     });
   });
 

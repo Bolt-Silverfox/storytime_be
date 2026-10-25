@@ -2,6 +2,10 @@ import { IsDateString, IsIn, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { BadRequestException } from '@nestjs/common';
+import { DateUtil } from '../../shared/utils/date.util';
+
+const MAX_WINDOW_DAYS = 365;
+const MAX_WINDOW_MS = MAX_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
 export class ReadingAnalyticsRangeDto {
   @ApiPropertyOptional({ enum: [7, 30, 90, 120, 365], default: 30 })
@@ -39,9 +43,17 @@ export function resolveReadingAnalyticsWindow(dto: ReadingAnalyticsRangeDto): {
 } {
   if (dto.startDate && dto.endDate) {
     const start = new Date(dto.startDate);
-    const end = new Date(dto.endDate);
+    // A date-only `endDate` (e.g. "2026-02-01") parses to midnight UTC,
+    // which would exclude the rest of that day. Widen it to the end of
+    // that UTC day; a full timestamp is used as-is.
+    const end = DateUtil.toInclusiveUpperBound(dto.endDate);
     if (start.getTime() >= end.getTime()) {
       throw new BadRequestException('startDate must be before endDate');
+    }
+    if (end.getTime() - start.getTime() > MAX_WINDOW_MS) {
+      throw new BadRequestException(
+        `Date window cannot exceed ${MAX_WINDOW_DAYS} days`,
+      );
     }
     return { start, end };
   }

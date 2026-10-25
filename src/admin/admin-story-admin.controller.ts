@@ -487,6 +487,7 @@ export class AdminStoryAdminController {
   // =====================
 
   @Post('categories/:id/generate-image')
+  @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Generate a cover image for a category (AI)',
@@ -506,6 +507,7 @@ export class AdminStoryAdminController {
   }
 
   @Post('categories/:id/image')
+  @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @UseInterceptors(
     FileInterceptor('image', { limits: { fileSize: MAX_IMAGE_SIZE } }),
@@ -549,6 +551,7 @@ export class AdminStoryAdminController {
   }
 
   @Post('themes/:id/generate-image')
+  @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Generate a cover image for a theme (AI)',
@@ -568,6 +571,7 @@ export class AdminStoryAdminController {
   }
 
   @Post('themes/:id/image')
+  @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @UseInterceptors(
     FileInterceptor('image', { limits: { fileSize: MAX_IMAGE_SIZE } }),

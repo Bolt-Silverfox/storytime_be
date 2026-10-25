@@ -53,7 +53,41 @@ describe('resolveReadingAnalyticsWindow', () => {
       endDate: '2026-03-01',
     });
     expect(start).toEqual(new Date('2026-01-01'));
-    expect(end).toEqual(new Date('2026-03-01'));
+    expect(end).toEqual(new Date('2026-03-01T23:59:59.999Z'));
+  });
+
+  it('treats a date-only endDate as inclusive of the whole day, not its midnight start', () => {
+    const { end } = resolveReadingAnalyticsWindow({
+      startDate: '2026-01-01',
+      endDate: '2026-01-02',
+    });
+    expect(end.toISOString()).toBe('2026-01-02T23:59:59.999Z');
+  });
+
+  it('uses a full endDate timestamp as-is, without widening it to end-of-day', () => {
+    const { end } = resolveReadingAnalyticsWindow({
+      startDate: '2026-01-01',
+      endDate: '2026-01-02T10:00:00.000Z',
+    });
+    expect(end.toISOString()).toBe('2026-01-02T10:00:00.000Z');
+  });
+
+  it('throws BadRequestException when the custom window exceeds 365 days', () => {
+    expect(() =>
+      resolveReadingAnalyticsWindow({
+        startDate: '1970-01-01',
+        endDate: '2100-01-01',
+      }),
+    ).toThrow(BadRequestException);
+  });
+
+  it('accepts a custom window well within the 365-day max', () => {
+    expect(() =>
+      resolveReadingAnalyticsWindow({
+        startDate: '2026-01-01',
+        endDate: '2026-12-01',
+      }),
+    ).not.toThrow();
   });
 
   it('throws BadRequestException when startDate is not before endDate', () => {
@@ -66,12 +100,24 @@ describe('resolveReadingAnalyticsWindow', () => {
     ).toThrow(BadRequestException);
   });
 
-  it('throws BadRequestException when startDate equals endDate', () => {
+  it('treats a date-only startDate/endDate on the same calendar day as a valid single-day window', () => {
+    // Both are date-only, so endDate widens to end-of-day (23:59:59.999Z),
+    // making this a valid (if narrow) window rather than a zero-width one.
+    const { start, end } = resolveReadingAnalyticsWindow({
+      range: 30,
+      startDate: '2026-01-01',
+      endDate: '2026-01-01',
+    });
+    expect(start).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+    expect(end).toEqual(new Date('2026-01-01T23:59:59.999Z'));
+  });
+
+  it('throws BadRequestException when startDate equals endDate as identical full timestamps', () => {
     expect(() =>
       resolveReadingAnalyticsWindow({
         range: 30,
-        startDate: '2026-01-01',
-        endDate: '2026-01-01',
+        startDate: '2026-01-01T10:00:00.000Z',
+        endDate: '2026-01-01T10:00:00.000Z',
       }),
     ).toThrow(BadRequestException);
   });

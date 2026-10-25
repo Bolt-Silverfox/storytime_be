@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { GUARDS_METADATA, HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { AdminStoryAdminController } from './admin-story-admin.controller';
 import { AdminService } from './admin.service';
 import { AdminStoryService } from './admin-story.service';
@@ -44,6 +44,25 @@ describe('AdminStoryAdminController (category/theme cover images)', () => {
     expect(
       Reflect.getMetadata(GUARDS_METADATA, AdminStoryAdminController),
     ).toEqual([AuthSessionGuard, AdminGuard]);
+  });
+
+  describe('image endpoint HTTP status codes', () => {
+    it.each([
+      'generateCategoryImage',
+      'uploadCategoryImage',
+      'generateThemeImage',
+      'uploadThemeImage',
+    ])(
+      '%s declares @HttpCode(200), matching its documented/returned statusCode',
+      (methodName) => {
+        expect(
+          Reflect.getMetadata(
+            HTTP_CODE_METADATA,
+            (controller as unknown as Record<string, () => void>)[methodName],
+          ),
+        ).toBe(200);
+      },
+    );
   });
 
   describe('categories', () => {

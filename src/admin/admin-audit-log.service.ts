@@ -5,6 +5,7 @@ import {
   IAdminAuditLogRepository,
 } from './repositories/admin-audit-log.repository.interface';
 import { PrismaService } from '../prisma/prisma.service';
+import { DateUtil } from '../shared/utils/date.util';
 
 export interface RecordAdminAuditLogInput {
   adminId: string;
@@ -35,16 +36,6 @@ export interface PaginatedResult<T> {
   };
 }
 
-const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-// A date-only ISO string (no time component) should behave as an inclusive
-// upper bound for the whole day, not midnight at its start.
-function toInclusiveUpperBound(value: string): Date {
-  return DATE_ONLY_PATTERN.test(value)
-    ? new Date(`${value}T23:59:59.999Z`)
-    : new Date(value);
-}
-
 @Injectable()
 export class AdminAuditLogService {
   private readonly logger = new Logger(AdminAuditLogService.name);
@@ -65,8 +56,11 @@ export class AdminAuditLogService {
    * and logged here instead of propagated.
    */
   async record(input: RecordAdminAuditLogInput): Promise<void> {
+    // The admin-name lookup is a nice-to-have (it's not on the JWT payload).
+    // Caught separately from the write so that a lookup failure falls back
+    // to "Unknown" instead of skipping the audit write entirely.
+    let adminName = 'Unknown';
     try {
-      let adminName = 'Unknown';
       const admin = await this.prisma.user.findUnique({
         where: { id: input.adminId },
         select: { name: true },
@@ -74,7 +68,15 @@ export class AdminAuditLogService {
       if (admin?.name) {
         adminName = admin.name;
       }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to resolve admin name for audit log (adminId=${
+          input.adminId
+        }): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
+    try {
       await this.auditLogRepo.create({
         adminId: input.adminId,
         adminName,
@@ -106,11 +108,7 @@ export class AdminAuditLogService {
     if (from || to) {
       where.createdAt = {
         ...(from ? { gte: new Date(from) } : {}),
-        // A date-only `to` (e.g. "2026-02-01") parses to midnight UTC, which
-        // would exclude the rest of that day from an "inclusive" upper
-        // bound. Push a date-only value to the end of that UTC day; a full
-        // timestamp is used as-is.
-        ...(to ? { lte: toInclusiveUpperBound(to) } : {}),
+        ...(to ? { lte: DateUtil.toInclusiveUpperBound(to) } : {}),
       };
     }
 

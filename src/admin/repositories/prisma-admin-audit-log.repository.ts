@@ -33,7 +33,10 @@ export class PrismaAdminAuditLogRepository implements IAdminAuditLogRepository {
       where: params.where,
       skip: params.skip,
       take: params.take,
-      orderBy: { createdAt: 'desc' },
+      // `id` is a unique secondary sort key: rows sharing the same
+      // `createdAt` near a page boundary would otherwise have no stable
+      // order, letting skip/take duplicate or skip a row across pages.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
   }
 

@@ -368,7 +368,7 @@ describe('AdminReadingAnalyticsService', () => {
 
       const { start, end } = getStoryReaderStats.mock.calls[0][0];
       expect(start).toEqual(new Date('2026-01-01'));
-      expect(end).toEqual(new Date('2026-02-01'));
+      expect(end).toEqual(new Date('2026-02-01T23:59:59.999Z'));
     });
 
     it('throws BadRequestException when startDate is not before endDate', async () => {
@@ -382,12 +382,29 @@ describe('AdminReadingAnalyticsService', () => {
       expect(getStoryReaderStats).not.toHaveBeenCalled();
     });
 
-    it('throws BadRequestException when startDate equals endDate', async () => {
+    it('treats a date-only startDate/endDate on the same calendar day as a valid single-day window', async () => {
+      getStoryReaderStats.mockResolvedValue([]);
+      findTitlesByIds.mockResolvedValue([]);
+
+      // Both are date-only, so endDate widens to end-of-day, making this a
+      // valid (if narrow) window rather than a zero-width one.
+      await service.getTopStories({
+        range: 30,
+        startDate: '2026-01-01',
+        endDate: '2026-01-01',
+      });
+
+      const { start, end } = getStoryReaderStats.mock.calls[0][0];
+      expect(start).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+      expect(end).toEqual(new Date('2026-01-01T23:59:59.999Z'));
+    });
+
+    it('throws BadRequestException when startDate equals endDate as identical full timestamps', async () => {
       await expect(
         service.getTopStories({
           range: 30,
-          startDate: '2026-01-01',
-          endDate: '2026-01-01',
+          startDate: '2026-01-01T10:00:00.000Z',
+          endDate: '2026-01-01T10:00:00.000Z',
         }),
       ).rejects.toThrow(BadRequestException);
     });
