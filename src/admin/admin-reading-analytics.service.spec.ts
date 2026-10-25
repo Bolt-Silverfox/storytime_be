@@ -584,4 +584,93 @@ describe('AdminReadingAnalyticsService', () => {
       expect(result[0].completionRate).toBeNull();
     });
   });
+
+  describe('top-stories caching', () => {
+    let cachedService: AdminReadingAnalyticsService;
+
+    beforeEach(async () => {
+      const store = new Map<string, unknown>();
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AdminReadingAnalyticsService,
+          {
+            provide: ADMIN_ENGAGEMENT_REPOSITORY,
+            useValue: { getStoryReaderStats },
+          },
+          {
+            provide: ADMIN_STORY_REPOSITORY,
+            useValue: { findTitlesByIds },
+          },
+          {
+            provide: CACHE_MANAGER,
+            useValue: {
+              get: jest.fn((k: string) => Promise.resolve(store.get(k))),
+              set: jest.fn((k: string, v: unknown) => {
+                store.set(k, v);
+                return Promise.resolve();
+              }),
+            },
+          },
+        ],
+      }).compile();
+      cachedService = module.get(AdminReadingAnalyticsService);
+    });
+
+    it('does not cache an empty result, so the first reader shows up on the next call', async () => {
+      getStoryReaderStats.mockResolvedValueOnce([]);
+      findTitlesByIds.mockResolvedValue([{ id: 's1', title: 'First' }]);
+      expect(await cachedService.getTopStories({ range: 30 })).toEqual([]);
+
+      getStoryReaderStats.mockResolvedValueOnce([
+        {
+          storyId: 's1',
+          distinctReaders: 1,
+          completedCount: 0,
+          avgTimeSpentSeconds: 0,
+        },
+      ]);
+      const second = await cachedService.getTopStories({ range: 30 });
+
+      expect(second).toHaveLength(1);
+      expect(second[0].storyId).toBe('s1');
+      expect(getStoryReaderStats).toHaveBeenCalledTimes(2);
+    });
+
+    it('getTopStoriesPage reflects new rows after an uncached empty list', async () => {
+      getStoryReaderStats.mockResolvedValueOnce([]);
+      findTitlesByIds.mockResolvedValue([{ id: 's1', title: 'First' }]);
+      const empty = await cachedService.getTopStoriesPage({ range: 30 });
+      expect(empty.data).toEqual([]);
+      expect(empty.meta.total).toBe(0);
+
+      getStoryReaderStats.mockResolvedValueOnce([
+        {
+          storyId: 's1',
+          distinctReaders: 1,
+          completedCount: 0,
+          avgTimeSpentSeconds: 0,
+        },
+      ]);
+      const next = await cachedService.getTopStoriesPage({ range: 30 });
+      expect(next.data).toHaveLength(1);
+      expect(next.meta.total).toBe(1);
+    });
+
+    it('still caches a non-empty result', async () => {
+      getStoryReaderStats.mockResolvedValue([
+        {
+          storyId: 's1',
+          distinctReaders: 6,
+          completedCount: 3,
+          avgTimeSpentSeconds: 10,
+        },
+      ]);
+      findTitlesByIds.mockResolvedValue([{ id: 's1', title: 'First' }]);
+
+      await cachedService.getTopStories({ range: 30 });
+      await cachedService.getTopStories({ range: 30 });
+
+      expect(getStoryReaderStats).toHaveBeenCalledTimes(1);
+    });
+  });
 });

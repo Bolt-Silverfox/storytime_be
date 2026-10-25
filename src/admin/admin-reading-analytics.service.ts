@@ -102,7 +102,11 @@ export class AdminReadingAnalyticsService {
       })
       .sort((a, b) => (b.readerCount ?? 0) - (a.readerCount ?? 0));
 
-    await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.DASHBOARD);
+    // Never cache an empty list: `[]` is truthy, so it would be served for the
+    // whole TTL and hide the first readers of a story until it expired.
+    if (result.length > 0) {
+      await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.DASHBOARD);
+    }
     return result;
   }
 
