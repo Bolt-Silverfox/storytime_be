@@ -100,6 +100,20 @@ describe('PrismaAdminEngagementRepository.getStoryReaderStats', () => {
     expect(stats!.distinctReaders).toBe(3);
     expect(stats!.completedCount).toBe(1);
   });
+
+  it('getStoryReaderStatsForStory with a range counts only readers accessed inside it', async () => {
+    const inside = await repo.getStoryReaderStatsForStory(storyId, {
+      start: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      end: new Date(Date.now() + 1000),
+    });
+    expect(inside!.distinctReaders).toBe(3);
+
+    const outside = await repo.getStoryReaderStatsForStory(storyId, {
+      start: new Date('2000-01-01T00:00:00Z'),
+      end: new Date('2000-01-02T00:00:00Z'),
+    });
+    expect(outside).toBeNull();
+  });
 });
 
 describe('PrismaAdminEngagementRepository.getStoryReaderTrend', () => {

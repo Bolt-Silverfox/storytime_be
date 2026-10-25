@@ -333,6 +333,88 @@ describe('AdminReadingAnalyticsService', () => {
     expect(getStoryReaderTrend).toHaveBeenCalledWith('s1', expect.anything());
   });
 
+  describe('trend suppression is based on readers within the requested window', () => {
+    const stats = (distinctReaders: number) => ({
+      storyId: 's1',
+      distinctReaders,
+      completedCount: 1,
+      avgTimeSpentSeconds: 10,
+    });
+    // All-time stats take no range; windowed stats are called with one.
+    const mockStats = (allTime: number, inWindow: number | null) =>
+      getStoryReaderStatsForStory.mockImplementation(
+        (_id: string, range?: unknown) =>
+          Promise.resolve(
+            range
+              ? inWindow === null
+                ? null
+                : stats(inWindow)
+              : stats(allTime),
+          ),
+      );
+    const fiveReaders = Array.from({ length: 5 }, (_, i) => ({
+      readerId: `k${i}`,
+      readerType: 'kid' as const,
+      displayName: `Kid ${i}`,
+      lastAccessed: new Date(),
+    }));
+
+    it('getStoryTrend returns [] when the story has >=5 all-time readers but <5 in the window', async () => {
+      mockStats(8, 3);
+
+      const trend = await service.getStoryTrend('s1', { range: 7 });
+
+      expect(trend).toEqual([]);
+      expect(getStoryReaderTrend).not.toHaveBeenCalled();
+    });
+
+    it('getStoryTrend returns [] when nobody read the story in the window', async () => {
+      mockStats(8, null);
+
+      expect(await service.getStoryTrend('s1', { range: 7 })).toEqual([]);
+      expect(getStoryReaderTrend).not.toHaveBeenCalled();
+    });
+
+    it('getStoryTrend returns the trend when >=5 readers are in the window', async () => {
+      mockStats(8, 5);
+      getStoryReaderTrend.mockResolvedValue([
+        { date: '2026-10-01', distinctReaders: 2, completions: 1 },
+      ]);
+
+      const trend = await service.getStoryTrend('s1', { range: 7 });
+
+      expect(trend).toHaveLength(1);
+    });
+
+    it('getStoryDetail withholds the trend but keeps the all-time summary when the window has <5 readers', async () => {
+      mockStats(8, 3);
+      getStoryReaders.mockResolvedValue(fiveReaders);
+      getStoryReaderTrend.mockResolvedValue([
+        { date: '2026-10-01', distinctReaders: 1, completions: 0 },
+      ]);
+
+      const detail = await service.getStoryDetail('s1', { range: 7 });
+
+      expect(detail.trend).toEqual([]);
+      expect(getStoryReaderTrend).not.toHaveBeenCalled();
+      expect(detail.readersSuppressed).toBe(false);
+      expect(detail.readerCount).toBe(8);
+      expect(detail.readers).toHaveLength(5);
+    });
+
+    it('getStoryDetail returns the trend when the window has >=5 readers', async () => {
+      mockStats(8, 6);
+      getStoryReaders.mockResolvedValue(fiveReaders);
+      getStoryReaderTrend.mockResolvedValue([
+        { date: '2026-10-01', distinctReaders: 3, completions: 1 },
+      ]);
+
+      const detail = await service.getStoryDetail('s1', { range: 7 });
+
+      expect(detail.trend).toHaveLength(1);
+    });
+  });
+
   describe('custom/extended range windows', () => {
     it('passes a 365-day window through to the engagement repo for range=365', async () => {
       getStoryReaderStats.mockResolvedValue([]);
