@@ -29,6 +29,49 @@ describe('ReadingAnalyticsRangeDto', () => {
     expect(errors).toHaveLength(0);
   });
 
+  it.each(['2026-02-30', '2026-13-01', '2027-02-29', '2026-04-31'])(
+    'rejects the impossible calendar date %s for startDate and endDate',
+    async (bad) => {
+      const s = await validate(
+        plainToInstance(ReadingAnalyticsRangeDto, {
+          startDate: bad,
+          endDate: '2027-03-01',
+        }),
+      );
+      expect(s.some((e) => e.property === 'startDate')).toBe(true);
+      const e = await validate(
+        plainToInstance(ReadingAnalyticsRangeDto, {
+          startDate: '2026-01-01',
+          endDate: bad,
+        }),
+      );
+      expect(e.some((x) => x.property === 'endDate')).toBe(true);
+    },
+  );
+
+  it('rejects an impossible calendar date in a full ISO datetime', async () => {
+    const errors = await validate(
+      plainToInstance(ReadingAnalyticsRangeDto, {
+        startDate: '2026-02-30T10:00:00Z',
+        endDate: '2026-03-05',
+      }),
+    );
+    expect(errors.some((e) => e.property === 'startDate')).toBe(true);
+  });
+
+  it.each(['2028-02-29', '2026-02-28', '2026-03-01T10:30:00.000Z'])(
+    'accepts the valid date %s',
+    async (ok) => {
+      const errors = await validate(
+        plainToInstance(ReadingAnalyticsRangeDto, {
+          startDate: '2026-01-01',
+          endDate: ok,
+        }),
+      );
+      expect(errors).toHaveLength(0);
+    },
+  );
+
   it('rejects a non-ISO-date startDate', async () => {
     const dto = plainToInstance(ReadingAnalyticsRangeDto, {
       startDate: 'not-a-date',

@@ -27,7 +27,7 @@ export class ReadingAnalyticsRangeDto {
       'ISO date string. Together with endDate, overrides `range` with an explicit window.',
   })
   @IsOptional()
-  @IsDateString()
+  @IsDateString({ strict: true })
   startDate?: string;
 
   @ApiPropertyOptional({
@@ -35,7 +35,7 @@ export class ReadingAnalyticsRangeDto {
       'ISO date string. Together with startDate, overrides `range` with an explicit window.',
   })
   @IsOptional()
-  @IsDateString()
+  @IsDateString({ strict: true })
   endDate?: string;
 }
 

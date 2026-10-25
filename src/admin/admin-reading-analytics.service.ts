@@ -140,16 +140,16 @@ export class AdminReadingAnalyticsService {
 
     const statsSuppressed =
       stats.distinctReaders < READER_SUPPRESSION_THRESHOLD;
-    // Per-day trend counts and reader identities are both per-story reader
-    // data covered by the suppression rule, so neither is fetched for a
-    // suppressed story.
+    const window = resolveReadingAnalyticsWindow(range);
+    // Reader identities are covered by the all-time suppression rule, so they
+    // are not fetched for a suppressed story. The per-day trend is limited to
+    // the requested window, so it is suppressed on the distinct readers IN
+    // that window (a story with many all-time readers can have < 5 in a
+    // narrow window, which would expose individual reading days).
     const [trend, readers] = statsSuppressed
       ? [[], []]
       : await Promise.all([
-          this.engagementRepo.getStoryReaderTrend(
-            storyId,
-            resolveReadingAnalyticsWindow(range),
-          ),
+          this.getWindowedTrend(storyId, window),
           this.engagementRepo.getStoryReaders(storyId),
         ]);
 
@@ -184,15 +184,26 @@ export class AdminReadingAnalyticsService {
     storyId: string,
     range: ReadingAnalyticsRangeDto,
   ): Promise<TrendPointDto[]> {
-    const stats =
-      await this.engagementRepo.getStoryReaderStatsForStory(storyId);
-    if (!stats || stats.distinctReaders < READER_SUPPRESSION_THRESHOLD) {
+    return this.getWindowedTrend(storyId, resolveReadingAnalyticsWindow(range));
+  }
+
+  // Returns the per-day trend only when the window itself has at least
+  // READER_SUPPRESSION_THRESHOLD distinct readers (which also implies the
+  // all-time count meets it).
+  private async getWindowedTrend(
+    storyId: string,
+    window: { start: Date; end: Date },
+  ): Promise<TrendPointDto[]> {
+    const windowStats = await this.engagementRepo.getStoryReaderStatsForStory(
+      storyId,
+      window,
+    );
+    if (
+      !windowStats ||
+      windowStats.distinctReaders < READER_SUPPRESSION_THRESHOLD
+    ) {
       return [];
     }
-
-    return this.engagementRepo.getStoryReaderTrend(
-      storyId,
-      resolveReadingAnalyticsWindow(range),
-    );
+    return this.engagementRepo.getStoryReaderTrend(storyId, window);
   }
 }
