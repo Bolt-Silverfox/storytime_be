@@ -10,7 +10,21 @@ export interface DateRange {
   end: Date;
 }
 
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 export class DateUtil {
+  /**
+   * A date-only ISO string (no time component) parses to midnight UTC,
+   * which would exclude the rest of that day from an "inclusive" upper
+   * bound. Push a date-only value to the end of that UTC day; a full
+   * timestamp is used as-is.
+   */
+  static toInclusiveUpperBound(value: string): Date {
+    return DATE_ONLY_PATTERN.test(value)
+      ? new Date(`${value}T23:59:59.999Z`)
+      : new Date(value);
+  }
+
   static getRange(timeframe: Timeframe, now: Date = new Date()): DateRange {
     const end = new Date(now);
     let start = new Date(now);

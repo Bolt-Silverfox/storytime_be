@@ -6,6 +6,8 @@ import { AdminSystemController } from '../admin-system.controller';
 import { AdminService } from '../admin.service';
 import { AdminStoryService } from '../admin-story.service';
 import { AdminSystemService } from '../admin-system.service';
+import { AdminAuditLogService } from '../admin-audit-log.service';
+import { AdminContentImageService } from '../admin-content-image.service';
 import {
   DateRangeDto,
   StoryFilterDto,
@@ -73,6 +75,19 @@ describe('AdminController', () => {
         {
           provide: AdminSystemService,
           useValue: mockAdminSystemService,
+        },
+        {
+          provide: AdminAuditLogService,
+          useValue: { record: jest.fn() },
+        },
+        {
+          provide: AdminContentImageService,
+          useValue: {
+            generateCategoryImage: jest.fn(),
+            generateThemeImage: jest.fn(),
+            uploadCategoryImage: jest.fn(),
+            uploadThemeImage: jest.fn(),
+          },
         },
       ],
     })

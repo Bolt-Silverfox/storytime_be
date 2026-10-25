@@ -110,6 +110,19 @@ export interface IAdminStoryRepository {
 
   // Find themes with counts
   findThemes(): Promise<ThemeWithCounts[]>;
+
+  // Find a single category (basic, no counts) — existence check + current
+  // name/description for the AI image prompt
+  findCategoryById(id: string): Promise<Category | null>;
+
+  // Find a single theme (basic, no counts)
+  findThemeById(id: string): Promise<Theme | null>;
+
+  // Persist a newly generated/uploaded cover image URL on a category
+  updateCategoryImage(id: string, image: string): Promise<Category>;
+
+  // Persist a newly generated/uploaded cover image URL on a theme
+  updateThemeImage(id: string, image: string): Promise<Theme>;
 }
 
 export const ADMIN_STORY_REPOSITORY = Symbol('ADMIN_STORY_REPOSITORY');
