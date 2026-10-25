@@ -2,7 +2,10 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Admin } from './decorators/admin.decorator';
 import { AdminReadingAnalyticsService } from './admin-reading-analytics.service';
-import { ReadingAnalyticsRangeDto } from './dto/reading-analytics.dto';
+import {
+  ReadingAnalyticsRangeDto,
+  TopStoriesQueryDto,
+} from './dto/reading-analytics.dto';
 
 @ApiBearerAuth()
 @Controller('admin/reading-analytics')
@@ -16,12 +19,13 @@ export class AdminReadingAnalyticsController {
     summary:
       'Top stories by distinct readers, 5-reader minimum to show a count',
   })
-  async getTopStories(@Query() range: ReadingAnalyticsRangeDto) {
-    const data = await this.service.getTopStories(range);
+  async getTopStories(@Query() query: TopStoriesQueryDto) {
+    const { data, meta } = await this.service.getTopStoriesPage(query);
     return {
       statusCode: 200,
       message: 'Top stories retrieved successfully',
       data,
+      meta,
     };
   }
 

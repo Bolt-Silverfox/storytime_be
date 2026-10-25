@@ -1,4 +1,11 @@
-import { IsDateString, IsIn, IsOptional } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  Max,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { BadRequestException } from '@nestjs/common';
@@ -63,6 +70,23 @@ export function resolveReadingAnalyticsWindow(dto: ReadingAnalyticsRangeDto): {
     end.getTime() - (dto.range ?? 30) * 24 * 60 * 60 * 1000,
   );
   return { start, end };
+}
+
+export class TopStoriesQueryDto extends ReadingAnalyticsRangeDto {
+  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
 }
 
 export class TopStoryDto {

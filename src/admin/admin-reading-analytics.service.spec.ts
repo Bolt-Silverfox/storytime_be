@@ -123,6 +123,46 @@ describe('AdminReadingAnalyticsService', () => {
     expect(result.slice(1).map((r) => r.readerCount)).toEqual([null, null]);
   });
 
+  it('paginates top stories after suppression, with meta, keeping suppressed rows null', async () => {
+    const stats = [12, 9, 8, 7, 6, 3].map((n, i) => ({
+      storyId: `s${i}`,
+      distinctReaders: n,
+      completedCount: 1,
+      avgTimeSpentSeconds: 0,
+    }));
+    getStoryReaderStats.mockResolvedValue(stats);
+    findTitlesByIds.mockResolvedValue(
+      stats.map((s) => ({ id: s.storyId, title: s.storyId })),
+    );
+
+    const p1 = await service.getTopStoriesPage({
+      range: 30,
+      page: 1,
+      limit: 4,
+    });
+    const p2 = await service.getTopStoriesPage({
+      range: 30,
+      page: 2,
+      limit: 4,
+    });
+
+    expect(p1.data.map((r) => r.storyId)).toEqual(['s0', 's1', 's2', 's3']);
+    expect(p1.meta).toEqual({ total: 6, page: 1, limit: 4, totalPages: 2 });
+    expect(p2.data.map((r) => r.storyId)).toEqual(['s4', 's5']);
+    expect(p2.data[1].readerCount).toBeNull();
+    expect(p2.data[1].completionRate).toBeNull();
+  });
+
+  it('returns an empty page with totalPages 0 when there is no activity', async () => {
+    getStoryReaderStats.mockResolvedValue([]);
+    findTitlesByIds.mockResolvedValue([]);
+    const r = await service.getTopStoriesPage({ range: 30 });
+    expect(r).toEqual({
+      data: [],
+      meta: { total: 0, page: 1, limit: 20, totalPages: 0 },
+    });
+  });
+
   it('suppresses the reader list on story detail when total distinct readers is under 5', async () => {
     getStoryReaderStatsForStory.mockResolvedValue({
       storyId: 's1',
@@ -369,6 +409,42 @@ describe('AdminReadingAnalyticsService', () => {
       const { start, end } = getStoryReaderStats.mock.calls[0][0];
       expect(start).toEqual(new Date('2026-01-01'));
       expect(end).toEqual(new Date('2026-02-01T23:59:59.999Z'));
+    });
+
+    it('applies startDate/endDate (over range) together with page/limit on the paginated endpoint', async () => {
+      getStoryReaderStats.mockResolvedValue([
+        {
+          storyId: 's0',
+          distinctReaders: 8,
+          completedCount: 1,
+          avgTimeSpentSeconds: 0,
+        },
+        {
+          storyId: 's1',
+          distinctReaders: 2,
+          completedCount: 1,
+          avgTimeSpentSeconds: 0,
+        },
+      ]);
+      findTitlesByIds.mockResolvedValue([
+        { id: 's0', title: 's0' },
+        { id: 's1', title: 's1' },
+      ]);
+
+      const r = await service.getTopStoriesPage({
+        range: 7,
+        startDate: '2026-01-01',
+        endDate: '2026-02-01',
+        page: 2,
+        limit: 1,
+      });
+
+      const { start, end } = getStoryReaderStats.mock.calls[0][0];
+      expect(start).toEqual(new Date('2026-01-01'));
+      expect(end).toEqual(new Date('2026-02-01T23:59:59.999Z'));
+      expect(r.meta).toEqual({ total: 2, page: 2, limit: 1, totalPages: 2 });
+      expect(r.data).toHaveLength(1);
+      expect(r.data[0].readerCount).toBeNull();
     });
 
     it('throws BadRequestException when startDate is not before endDate', async () => {
