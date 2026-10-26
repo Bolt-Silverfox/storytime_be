@@ -1300,3 +1300,23 @@ model AdminAuditLog {
   @@index([targetType, targetId])
   @@map("admin_audit_logs")
 }
+
+// -------------------------
+// FX RATES (admin-managed; revenue is reported in USD)
+// -------------------------
+// rateToUsd = USD per 1 unit of `currency`. USD itself is implicit (rate 1, no
+// row). A transaction converts at the latest rate with effectiveFrom <= its
+// createdAt; if none is that old, the earliest rate is used (flagged).
+model FxRate {
+  id               String   @id @default(uuid())
+  currency         String // ISO-4217, upper-case
+  rateToUsd        Decimal  @db.Decimal(18, 8)
+  effectiveFrom    DateTime
+  source           String   @default("manual")
+  createdByAdminId String?
+  createdAt        DateTime @default(now())
+
+  @@unique([currency, effectiveFrom])
+  @@index([currency, effectiveFrom(sort: Desc)])
+  @@map("fx_rates")
+}
