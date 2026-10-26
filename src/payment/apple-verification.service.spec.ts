@@ -16,7 +16,6 @@ jest.mock('https', () => ({ request: jest.fn() }));
 
 describe('AppleVerificationService', () => {
   let service: AppleVerificationService;
-  let cbService: CircuitBreakerService;
 
   const mockConfigService = {
     get: jest.fn((key: string): string | undefined => {
@@ -43,7 +42,6 @@ describe('AppleVerificationService', () => {
     }).compile();
 
     service = module.get<AppleVerificationService>(AppleVerificationService);
-    cbService = module.get<CircuitBreakerService>(CircuitBreakerService);
   });
 
   describe('verify', () => {

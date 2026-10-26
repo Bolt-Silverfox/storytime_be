@@ -11,7 +11,13 @@ import {
   AUTH_REPOSITORY,
   IAuthRepository,
   IAuthRepositoryTransaction,
+  TokenWithUser,
 } from '../repositories';
+import {
+  makeToken,
+  makeUser,
+  makeUserIP,
+} from '@/shared/testing/prisma-fixtures';
 import { TokenType } from '../dto/auth.dto';
 import { AppEvents } from '@/shared/events';
 import { Role, OnboardingStatus } from '@prisma/client';
@@ -36,28 +42,21 @@ describe('PasswordService', () => {
   let tokenService: jest.Mocked<TokenService>;
   let eventEmitter: jest.Mocked<EventEmitter2>;
 
-  const mockUser = {
-    id: 'user-1',
-    email: 'test@example.com',
-    name: 'Test User',
+  const mockUser = makeUser({
     passwordHash: '$2a$10$hashedpasswordvalue',
-    isEmailVerified: true,
     role: Role.parent,
     onboardingStatus: OnboardingStatus.profile_setup,
-    googleId: null,
-    appleId: null,
-    avatarId: null,
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
-  };
+  });
 
-  const mockResetToken = {
-    id: 'token-1',
-    userId: 'user-1',
-    token: 'hashed-reset-token',
-    type: TokenType.PASSWORD_RESET,
-    expiresAt: new Date(Date.now() + 86400000), // 24 hours from now
-    createdAt: new Date(),
+  const mockResetToken: TokenWithUser = {
+    ...makeToken({
+      token: 'hashed-reset-token',
+      type: TokenType.PASSWORD_RESET,
+      expiresAt: new Date(Date.now() + 86400000), // 24 hours from now
+      createdAt: new Date(),
+    }),
     user: mockUser,
   };
 
@@ -107,9 +106,9 @@ describe('PasswordService', () => {
   describe('requestPasswordReset', () => {
     it('should create reset token and emit event for existing user', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
       authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
-      authRepository.createToken.mockResolvedValue({} as any);
+      authRepository.createToken.mockResolvedValue(makeToken());
 
       // Act
       const result = await service.requestPasswordReset({
@@ -153,10 +152,10 @@ describe('PasswordService', () => {
 
     it('should alert but NOT record IP when reset requested from an unfamiliar IP', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
       authRepository.findKnownUserIP.mockResolvedValue(null);
       authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
-      authRepository.createToken.mockResolvedValue({} as any);
+      authRepository.createToken.mockResolvedValue(makeToken());
 
       // Act
       await service.requestPasswordReset(
@@ -185,15 +184,13 @@ describe('PasswordService', () => {
 
     it('should touch a known IP and not alert on a familiar IP', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
-      authRepository.findKnownUserIP.mockResolvedValue({
-        id: 'ip-1',
-        userId: 'user-1',
-        ipAddress: '203.0.113.5',
-      } as any);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findKnownUserIP.mockResolvedValue(
+        makeUserIP({ ipAddress: '203.0.113.5' }),
+      );
       authRepository.touchUserIP.mockResolvedValue(undefined);
       authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
-      authRepository.createToken.mockResolvedValue({} as any);
+      authRepository.createToken.mockResolvedValue(makeToken());
 
       // Act
       await service.requestPasswordReset(
@@ -213,10 +210,10 @@ describe('PasswordService', () => {
 
     it('should still reset when the IP check throws', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
       authRepository.findKnownUserIP.mockRejectedValue(new Error('db down'));
       authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
-      authRepository.createToken.mockResolvedValue({} as any);
+      authRepository.createToken.mockResolvedValue(makeToken());
 
       // Act
       const result = await service.requestPasswordReset(
@@ -236,9 +233,9 @@ describe('PasswordService', () => {
 
     it('should skip the IP check entirely when no IP is provided', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
       authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
-      authRepository.createToken.mockResolvedValue({} as any);
+      authRepository.createToken.mockResolvedValue(makeToken());
 
       // Act
       await service.requestPasswordReset({ email: 'test@example.com' });
@@ -252,14 +249,14 @@ describe('PasswordService', () => {
     it('should delete existing reset tokens before creating new one', async () => {
       // Arrange
       const callOrder: string[] = [];
-      authRepository.findUserByEmail.mockResolvedValue(mockUser as any);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
       authRepository.deleteUserTokensByType.mockImplementation(() => {
         callOrder.push('deleteTokens');
         return Promise.resolve();
       });
       authRepository.createToken.mockImplementation(() => {
         callOrder.push('createToken');
-        return Promise.resolve({} as any);
+        return Promise.resolve(makeToken());
       });
 
       // Act
@@ -273,9 +270,7 @@ describe('PasswordService', () => {
   describe('validateResetToken', () => {
     it('should return success for a valid token', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
 
       // Act
       const result = await service.validateResetToken(
@@ -312,9 +307,7 @@ describe('PasswordService', () => {
         ...mockResetToken,
         expiresAt: new Date('2020-01-01'),
       };
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        expiredToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
       authRepository.deleteToken.mockResolvedValue(undefined);
 
       // Act & Assert
@@ -329,9 +322,7 @@ describe('PasswordService', () => {
 
     it('should throw UnauthorizedException when email does not match token user', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
 
       // Act & Assert
       await expect(
@@ -346,10 +337,8 @@ describe('PasswordService', () => {
   describe('resetPassword', () => {
     it('should reset password successfully with valid token', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
-      authRepository.updateUser.mockResolvedValue({} as any);
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      authRepository.updateUser.mockResolvedValue(makeUser());
       authRepository.deleteToken.mockResolvedValue(undefined);
       authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
 
@@ -380,10 +369,8 @@ describe('PasswordService', () => {
 
     it('should record the requesting IP as known on successful completion', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
-      authRepository.updateUser.mockResolvedValue({} as any);
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      authRepository.updateUser.mockResolvedValue(makeUser());
       authRepository.deleteToken.mockResolvedValue(undefined);
       authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
       authRepository.findKnownUserIP.mockResolvedValue(null);
@@ -413,13 +400,11 @@ describe('PasswordService', () => {
 
     it('should touch an already-known IP on completion without duplicating it', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
-      authRepository.updateUser.mockResolvedValue({} as any);
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      authRepository.updateUser.mockResolvedValue(makeUser());
       authRepository.deleteToken.mockResolvedValue(undefined);
       authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
-      authRepository.findKnownUserIP.mockResolvedValue({ id: 'ip-1' } as any);
+      authRepository.findKnownUserIP.mockResolvedValue(makeUserIP());
       authRepository.touchUserIP.mockResolvedValue(undefined);
 
       // Act
@@ -443,10 +428,8 @@ describe('PasswordService', () => {
 
     it('should still complete the reset when IP recording fails', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
-      authRepository.updateUser.mockResolvedValue({} as any);
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      authRepository.updateUser.mockResolvedValue(makeUser());
       authRepository.deleteToken.mockResolvedValue(undefined);
       authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
       // Unfamiliar IP, then the persistence itself fails — exercises the
@@ -499,9 +482,7 @@ describe('PasswordService', () => {
         ...mockResetToken,
         expiresAt: new Date('2020-01-01'),
       };
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        expiredToken as any,
-      );
+      authRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
       authRepository.deleteToken.mockResolvedValue(undefined);
 
       // Act & Assert
@@ -522,10 +503,8 @@ describe('PasswordService', () => {
 
     it('should invalidate all user sessions after password reset', async () => {
       // Arrange
-      authRepository.findTokenByHashedToken.mockResolvedValue(
-        mockResetToken as any,
-      );
-      authRepository.updateUser.mockResolvedValue({} as any);
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      authRepository.updateUser.mockResolvedValue(makeUser());
       authRepository.deleteToken.mockResolvedValue(undefined);
       authRepository.deleteAllUserSessions.mockResolvedValue(undefined);
 
@@ -559,10 +538,10 @@ describe('PasswordService', () => {
 
     it('should change password successfully', async () => {
       // Arrange
-      authRepository.findUserById.mockResolvedValue(mockUser as any);
+      authRepository.findUserById.mockResolvedValue(mockUser);
       authRepository.transaction.mockImplementation(async (fn) => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
-          updateUser: jest.fn().mockResolvedValue({} as any),
+          updateUser: jest.fn().mockResolvedValue(makeUser()),
           deleteOtherSessions: jest.fn().mockResolvedValue(undefined),
           findActiveUserLinkedProviderFields: jest.fn().mockResolvedValue(null),
           unlinkProviderField: jest.fn().mockResolvedValue(undefined),
@@ -584,10 +563,10 @@ describe('PasswordService', () => {
 
     it('should emit password.changed and USER_PASSWORD_CHANGED events', async () => {
       // Arrange
-      authRepository.findUserById.mockResolvedValue(mockUser as any);
+      authRepository.findUserById.mockResolvedValue(mockUser);
       authRepository.transaction.mockImplementation(async (fn) => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
-          updateUser: jest.fn().mockResolvedValue({} as any),
+          updateUser: jest.fn().mockResolvedValue(makeUser()),
           deleteOtherSessions: jest.fn().mockResolvedValue(undefined),
           findActiveUserLinkedProviderFields: jest.fn().mockResolvedValue(null),
           unlinkProviderField: jest.fn().mockResolvedValue(undefined),
@@ -634,7 +613,7 @@ describe('PasswordService', () => {
 
     it('should throw BadRequestException when old password is incorrect', async () => {
       // Arrange
-      authRepository.findUserById.mockResolvedValue(mockUser as any);
+      authRepository.findUserById.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
       // Act & Assert
@@ -649,7 +628,7 @@ describe('PasswordService', () => {
 
     it('should throw BadRequestException when new password is same as old', async () => {
       // Arrange
-      authRepository.findUserById.mockResolvedValue(mockUser as any);
+      authRepository.findUserById.mockResolvedValue(mockUser);
       // First call: oldPassword matches -> true
       // Second call: newPassword matches old hash -> true (same password)
       (bcrypt.compare as jest.Mock)
@@ -668,8 +647,8 @@ describe('PasswordService', () => {
 
     it('should use transaction to update password and delete other sessions', async () => {
       // Arrange
-      authRepository.findUserById.mockResolvedValue(mockUser as any);
-      const mockTxUpdateUser = jest.fn().mockResolvedValue({} as any);
+      authRepository.findUserById.mockResolvedValue(mockUser);
+      const mockTxUpdateUser = jest.fn().mockResolvedValue(makeUser());
       const mockTxDeleteOtherSessions = jest.fn().mockResolvedValue(undefined);
       authRepository.transaction.mockImplementation(async (fn) => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {

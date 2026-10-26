@@ -9,9 +9,7 @@ import type {
 import type { Kid, StoryBuddy, BuddyInteraction } from '@prisma/client';
 
 @Injectable()
-export class PrismaBuddySelectionRepository
-  implements IBuddySelectionRepository
-{
+export class PrismaBuddySelectionRepository implements IBuddySelectionRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findKidById(kidId: string): Promise<Kid | null> {

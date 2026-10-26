@@ -6,7 +6,7 @@ import {
   HealthCheckError,
 } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
-import * as admin from 'firebase-admin';
+import { getApp, type App } from 'firebase-admin/app';
 
 /**
  * Health indicator for Firebase/FCM
@@ -36,9 +36,9 @@ export class FirebaseHealthIndicator extends HealthIndicator {
       }
 
       // Check if Firebase app is initialized
-      let app: admin.app.App;
+      let app: App;
       try {
-        app = admin.app();
+        app = getApp();
       } catch {
         // Firebase not initialized yet - this is expected on first health check
         return this.getStatus(key, true, {

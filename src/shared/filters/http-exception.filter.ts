@@ -11,6 +11,28 @@ import { ErrorResponse } from '../dtos/api-response.dto';
 import { DomainException } from '../exceptions/domain.exception';
 import { captureException } from '../../sentry-setup';
 
+/**
+ * Human-readable name for a status code, e.g. 400 -> "Bad Request".
+ *
+ * GUARDED, because `HttpStatus[code]` is `undefined` for any status not in Nest's
+ * enum — 418, or a 499 proxied in from upstream. The previous code called
+ * `.toString()` on that directly, which threw a TypeError INSIDE the exception
+ * filter: Nest then falls back to its own handler, so the client gets a generic
+ * 500 instead of the real status and the original error is lost. A filter is the
+ * last place that can afford to throw.
+ */
+function httpStatusName(statusCode: number): string {
+  const name: string | undefined = HttpStatus[statusCode];
+  if (!name) {
+    // No enum entry: say what we know rather than inventing a label.
+    return `HTTP ${statusCode}`;
+  }
+  return name
+    .split('_')
+    .map((s) => s.charAt(0) + s.slice(1).toLowerCase())
+    .join(' ');
+}
+
 /** Shape of NestJS exception response objects */
 interface ExceptionResponseObject {
   message?: string | string[];
@@ -46,25 +68,32 @@ export class HttpExceptionFilter implements ExceptionFilter {
     if (typeof exceptionResponse === 'string') {
       // Standard HttpException response is a string
       message = exceptionResponse;
-      error = HttpStatus[statusCode]
-        .toString()
-        .split('_')
-        .map((s) => s.charAt(0) + s.slice(1).toLowerCase())
-        .join(' '); // e.g. "Bad Request"
+      error = httpStatusName(statusCode); // e.g. "Bad Request"
     } else if (
       typeof exceptionResponse === 'object' &&
       exceptionResponse !== null
     ) {
       // NestJS validation pipe error structure or DomainException response
       const resObj = exceptionResponse as ExceptionResponseObject;
-      message = resObj.message || 'An error occurred.';
-      error = resObj.error || HttpStatus[statusCode];
+      // `||` alone let an EMPTY ARRAY through: `[]` is truthy, so a response with
+      // `message: []` reached the client with no message at all instead of the
+      // fallback. Check emptiness explicitly for both shapes.
+      const raw = resObj.message;
+      const hasMessage =
+        typeof raw === 'string'
+          ? raw.length > 0
+          : Array.isArray(raw) && raw.length > 0;
+      message = hasMessage ? raw! : 'An error occurred.';
+      // `HttpStatus[statusCode]` is `string | undefined`, and `error` is typed
+      // `string` — so an unknown status used to put `undefined` in the response
+      // body. httpStatusName always returns a string.
+      error = resObj.error || httpStatusName(statusCode);
       // Extract code and details from response if not already set
       if (!code && resObj.code) code = resObj.code;
       if (!details && resObj.details) details = resObj.details;
     } else {
       message = 'An unknown HTTP error occurred.';
-      error = HttpStatus[statusCode];
+      error = httpStatusName(statusCode);
     }
 
     // Never leak a raw framework exception class name to the client, e.g.
@@ -81,9 +110,20 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     // Friendly, actionable copy for rate limiting (the dedicated
-    // ThrottlerExceptionFilter provides a premium-aware variant when it wins;
-    // this is the safety net so a 429 is never a raw framework string).
-    if (statusCode === HttpStatus.TOO_MANY_REQUESTS) {
+    // ThrottlerExceptionFilter provides a premium-aware variant when it wins).
+    // NOTE: this replaces the message on EVERY 429 that reaches this filter,
+    // not only raw framework strings -- a deliberate domain message such as
+    // QuotaExceededException's would be overwritten too (it has no call sites
+    // today; revisit this branch before giving it one).
+    //
+    // `getStatus()` is typed `number` while the enum member is a literal, so
+    // the member is widened to satisfy no-unsafe-enum-comparison. The
+    // alternative -- annotating `statusCode` as `HttpStatus` and dropping this
+    // cast -- just moves the same error onto the `statusCode >= 500`
+    // comparison below, which compares against a plain number. (Doing both at
+    // once is worse: an `HttpStatus`-typed left side against a `number`-widened
+    // right side re-flags this line too.)
+    if (statusCode === Number(HttpStatus.TOO_MANY_REQUESTS)) {
       message = 'Too many requests. Please wait a moment and try again.';
     }
 

@@ -8,6 +8,7 @@ import { AdminSupportController } from './admin-support.controller';
 import { AdminReadingAnalyticsController } from './admin-reading-analytics.controller';
 import { AdminCouponController } from './admin-coupon.controller';
 import { AdminSystemController } from './admin-system.controller';
+import { AdminAuditLogController } from './admin-audit-log.controller';
 import { AdminService } from './admin.service';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminDashboardMetricsService } from './admin-dashboard-metrics.service';
@@ -21,6 +22,8 @@ import { AdminExportService } from './admin-export.service';
 import { AdminSubscriptionOpsService } from './admin-subscription-ops.service';
 import { AdminStoryService } from './admin-story.service';
 import { AdminSystemService } from './admin-system.service';
+import { AdminAuditLogService } from './admin-audit-log.service';
+import { AdminContentImageService } from './admin-content-image.service';
 import {
   ADMIN_STORY_REPOSITORY,
   PrismaAdminStoryRepository,
@@ -42,18 +45,30 @@ import {
   PrismaAdminActivityRepository,
   ADMIN_ANALYTICS_REPOSITORY,
   PrismaAdminAnalyticsRepository,
+  ADMIN_AUDIT_LOG_REPOSITORY,
+  PrismaAdminAuditLogRepository,
 } from './repositories';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { VoiceModule } from '../voice/voice.module';
 import { CouponModule } from '../coupon/coupon.module';
 import { PaymentModule } from '../payment/payment.module';
+import { HttpModule } from '@nestjs/axios';
+import { UploadModule } from '../upload/upload.module';
 import { AdminSseController } from './sse/admin-sse.controller';
 import { AdminSseService } from './sse/admin-sse.service';
 import { SseAuthGuard } from './sse/sse-auth.guard';
 
 @Module({
-  imports: [PrismaModule, AuthModule, VoiceModule, CouponModule, PaymentModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    VoiceModule,
+    CouponModule,
+    PaymentModule,
+    HttpModule,
+    UploadModule,
+  ],
   controllers: [
     AdminDashboardController,
     AdminUserQueryController,
@@ -64,6 +79,7 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     AdminReadingAnalyticsController,
     AdminCouponController,
     AdminSystemController,
+    AdminAuditLogController,
     AdminSseController,
   ],
   providers: [
@@ -80,6 +96,8 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     AdminSubscriptionOpsService,
     AdminStoryService,
     AdminSystemService,
+    AdminAuditLogService,
+    AdminContentImageService,
     {
       provide: ADMIN_STORY_REPOSITORY,
       useClass: PrismaAdminStoryRepository,
@@ -119,6 +137,10 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     {
       provide: ADMIN_ANALYTICS_REPOSITORY,
       useClass: PrismaAdminAnalyticsRepository,
+    },
+    {
+      provide: ADMIN_AUDIT_LOG_REPOSITORY,
+      useClass: PrismaAdminAuditLogRepository,
     },
     AdminSseService,
     SseAuthGuard,

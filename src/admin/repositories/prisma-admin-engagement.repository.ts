@@ -9,9 +9,7 @@ import type {
 } from './admin-engagement.repository.interface';
 
 @Injectable()
-export class PrismaAdminEngagementRepository
-  implements IAdminEngagementRepository
-{
+export class PrismaAdminEngagementRepository implements IAdminEngagementRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   countKids(where: Prisma.KidWhereInput): Promise<number> {
@@ -89,7 +87,14 @@ export class PrismaAdminEngagementRepository
 
   async getStoryReaderStatsForStory(
     storyId: string,
+    range?: { start: Date; end: Date },
   ): Promise<StoryReaderStats | null> {
+    const spWindow = range
+      ? Prisma.sql`AND sp."lastAccessed" BETWEEN ${range.start} AND ${range.end}`
+      : Prisma.empty;
+    const uspWindow = range
+      ? Prisma.sql`AND usp."lastAccessed" BETWEEN ${range.start} AND ${range.end}`
+      : Prisma.empty;
     const rows = await this.prisma.$queryRaw<
       {
         kid_readers: bigint;
@@ -109,14 +114,14 @@ export class PrismaAdminEngagementRepository
         JOIN kids k ON k.id = sp."kidId"
         JOIN stories s ON s.id = sp."storyId"
         WHERE sp."isDeleted" = false AND k."isDeleted" = false AND s."isDeleted" = false
-          AND sp."storyId" = ${storyId}
+          AND sp."storyId" = ${storyId} ${spWindow}
         UNION ALL
         SELECT NULL::text AS "kidReader", usp."userId" AS "userReader", usp.completed, usp."totalTimeSpent"
         FROM user_story_progress usp
         JOIN users u ON u.id = usp."userId"
         JOIN stories s ON s.id = usp."storyId"
         WHERE usp."isDeleted" = false AND u."isDeleted" = false AND s."isDeleted" = false
-          AND usp."storyId" = ${storyId}
+          AND usp."storyId" = ${storyId} ${uspWindow}
       ) combined
     `);
 

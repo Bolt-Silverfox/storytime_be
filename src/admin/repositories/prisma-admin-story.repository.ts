@@ -9,7 +9,7 @@ import type {
   StoryLanguageCount,
   StoryAgeRange,
 } from './admin-story.repository.interface';
-import type { Prisma, Story } from '@prisma/client';
+import type { Prisma, Story, Category, Theme } from '@prisma/client';
 
 @Injectable()
 export class PrismaAdminStoryRepository implements IAdminStoryRepository {
@@ -38,7 +38,7 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
           },
         },
       },
-    }) as Promise<StoryWithCounts[]>;
+    });
   }
 
   async countStories(where: Prisma.StoryWhereInput): Promise<number> {
@@ -63,7 +63,7 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
           },
         },
       },
-    }) as Promise<StoryDetail | null>;
+    });
   }
 
   findStoryBasicById(storyId: string): Promise<Story | null> {
@@ -88,7 +88,7 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
       where: { isDeleted: false },
       _count: true,
     });
-    return result as StoryLanguageCount[];
+    return result;
   }
 
   findAgeRanges(): Promise<StoryAgeRange[]> {
@@ -151,7 +151,7 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
         },
       },
       orderBy: { name: 'asc' },
-    }) as Promise<CategoryWithCounts[]>;
+    });
   }
 
   async findThemes(): Promise<ThemeWithCounts[]> {
@@ -165,6 +165,25 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
         },
       },
       orderBy: { name: 'asc' },
-    }) as Promise<ThemeWithCounts[]>;
+    });
+  }
+
+  findCategoryById(id: string): Promise<Category | null> {
+    // findFirst (not findUnique) so isDeleted can be filtered alongside id —
+    // a soft-deleted category must be treated as not-found here, the same
+    // as findCategories() already excludes it from the list.
+    return this.prisma.category.findFirst({ where: { id, isDeleted: false } });
+  }
+
+  findThemeById(id: string): Promise<Theme | null> {
+    return this.prisma.theme.findFirst({ where: { id, isDeleted: false } });
+  }
+
+  updateCategoryImage(id: string, image: string): Promise<Category> {
+    return this.prisma.category.update({ where: { id }, data: { image } });
+  }
+
+  updateThemeImage(id: string, image: string): Promise<Theme> {
+    return this.prisma.theme.update({ where: { id }, data: { image } });
   }
 }

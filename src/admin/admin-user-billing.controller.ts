@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
+import { AdminAuditLogService } from './admin-audit-log.service';
 import { Admin } from './decorators/admin.decorator';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
@@ -29,7 +30,10 @@ import {
 @Admin()
 @ApiTags('admin')
 export class AdminUserBillingController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly auditLog: AdminAuditLogService,
+  ) {}
 
   // =====================
   // SUBSCRIPTION ACTIVATION
@@ -53,6 +57,14 @@ export class AdminUserBillingController {
       dto,
       req.authUserData.userId,
     );
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'subscription.manual_activate',
+      targetType: 'Subscription',
+      targetId: userId,
+      details: dto as unknown as Record<string, unknown>,
+    });
     return {
       statusCode: 201,
       message: 'Subscription activated successfully',

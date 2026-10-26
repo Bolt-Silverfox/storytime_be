@@ -31,8 +31,11 @@ export interface IAdminEngagementRepository {
     start: Date;
     end: Date;
   }): Promise<StoryReaderStats[]>;
+  // All-time when `range` is omitted; otherwise limited to progress rows whose
+  // lastAccessed falls in [range.start, range.end].
   getStoryReaderStatsForStory(
     storyId: string,
+    range?: { start: Date; end: Date },
   ): Promise<StoryReaderStats | null>;
   getStoryReaderTrend(
     storyId: string,

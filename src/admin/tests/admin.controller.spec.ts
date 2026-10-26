@@ -6,7 +6,13 @@ import { AdminSystemController } from '../admin-system.controller';
 import { AdminService } from '../admin.service';
 import { AdminStoryService } from '../admin-story.service';
 import { AdminSystemService } from '../admin-system.service';
-import { DateRangeDto, UserFilterDto } from '../dto/admin-filters.dto';
+import { AdminAuditLogService } from '../admin-audit-log.service';
+import { AdminContentImageService } from '../admin-content-image.service';
+import {
+  DateRangeDto,
+  StoryFilterDto,
+  UserFilterDto,
+} from '../dto/admin-filters.dto';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { AdminGuard } from '@/shared/guards/admin.guard';
 
@@ -69,6 +75,19 @@ describe('AdminController', () => {
         {
           provide: AdminSystemService,
           useValue: mockAdminSystemService,
+        },
+        {
+          provide: AdminAuditLogService,
+          useValue: { record: jest.fn() },
+        },
+        {
+          provide: AdminContentImageService,
+          useValue: {
+            generateCategoryImage: jest.fn(),
+            generateThemeImage: jest.fn(),
+            uploadCategoryImage: jest.fn(),
+            uploadThemeImage: jest.fn(),
+          },
         },
       ],
     })
@@ -156,7 +175,8 @@ describe('AdminController', () => {
       const mockResult = { data: [{ id: 'story-1' }], meta: { total: 1 } };
       adminStoryService.getAllStories.mockResolvedValue(mockResult);
 
-      const result = (await storyController.getAllStories({} as any)) as any;
+      const filters: StoryFilterDto = {};
+      const result = (await storyController.getAllStories(filters)) as any;
 
       expect(result.data).toEqual(mockResult.data);
       expect(result.meta).toEqual(mockResult.meta);

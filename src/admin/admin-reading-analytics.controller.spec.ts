@@ -7,7 +7,7 @@ import { AdminGuard } from '@/shared/guards/admin.guard';
 
 describe('AdminReadingAnalyticsController', () => {
   let controller: AdminReadingAnalyticsController;
-  const getTopStories = jest.fn();
+  const getTopStoriesPage = jest.fn();
   const getStoryDetail = jest.fn();
   const getStoryTrend = jest.fn();
 
@@ -18,7 +18,7 @@ describe('AdminReadingAnalyticsController', () => {
       providers: [
         {
           provide: AdminReadingAnalyticsService,
-          useValue: { getTopStories, getStoryDetail, getStoryTrend },
+          useValue: { getTopStoriesPage, getStoryDetail, getStoryTrend },
         },
       ],
     })
@@ -36,10 +36,20 @@ describe('AdminReadingAnalyticsController', () => {
     ).toEqual([AuthSessionGuard, AdminGuard]);
   });
 
-  it('getTopStories delegates to the service with the parsed range', async () => {
-    getTopStories.mockResolvedValue([]);
-    await controller.getTopStories({ range: 7 });
-    expect(getTopStories).toHaveBeenCalledWith({ range: 7 });
+  it('getTopStories delegates the query and returns data plus meta', async () => {
+    const meta = { total: 0, page: 2, limit: 10, totalPages: 0 };
+    getTopStoriesPage.mockResolvedValue({ data: [], meta });
+    const result = await controller.getTopStories({
+      range: 7,
+      page: 2,
+      limit: 10,
+    });
+    expect(getTopStoriesPage).toHaveBeenCalledWith({
+      range: 7,
+      page: 2,
+      limit: 10,
+    });
+    expect(result.meta).toEqual(meta);
   });
 
   it('getStoryDetail delegates with the story id and range', async () => {

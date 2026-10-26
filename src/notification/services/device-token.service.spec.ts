@@ -60,7 +60,7 @@ describe('DeviceTokenService', () => {
   describe('registerDeviceToken', () => {
     const dto: RegisterDeviceDto = {
       token: 'device-token-abc',
-      platform: 'ios' as DevicePlatform,
+      platform: 'ios',
       deviceName: 'iPhone 15',
     };
 
@@ -118,7 +118,7 @@ describe('DeviceTokenService', () => {
 
       const newDto: RegisterDeviceDto = {
         token: 'new-device-token',
-        platform: 'ios' as DevicePlatform,
+        platform: 'ios',
         deviceName: 'iPhone 15',
       };
 
@@ -164,7 +164,7 @@ describe('DeviceTokenService', () => {
 
       const noNameDto: RegisterDeviceDto = {
         token: 'new-device-token',
-        platform: 'ios' as DevicePlatform,
+        platform: 'ios',
       };
 
       await service.registerDeviceToken('user-1', noNameDto);
@@ -191,7 +191,7 @@ describe('DeviceTokenService', () => {
 
       const noNameDto: RegisterDeviceDto = {
         token: 'device-token-abc',
-        platform: 'ios' as DevicePlatform,
+        platform: 'ios',
       };
 
       await service.registerDeviceToken('user-1', noNameDto);
