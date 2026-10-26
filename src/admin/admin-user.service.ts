@@ -152,11 +152,19 @@ export class AdminUserService {
       'isDeleted',
       'isSuspended',
     ] as const;
+    const NULLABLE_SORT_FIELDS = ['lastLoginAt'] as const;
 
     let orderBy: Prisma.UserOrderByWithRelationInput;
     if (sortBy === 'isPaidUser') {
       // Sort by subscription status (relation-based ordering)
       orderBy = { subscription: { status: sortOrder } };
+    } else if (
+      NULLABLE_SORT_FIELDS.includes(
+        sortBy as (typeof NULLABLE_SORT_FIELDS)[number],
+      )
+    ) {
+      // Never-logged-in users (null) always sort last.
+      orderBy = { [sortBy]: { sort: sortOrder, nulls: 'last' } };
     } else if (
       VALID_USER_SORT_FIELDS.includes(
         sortBy as (typeof VALID_USER_SORT_FIELDS)[number],
@@ -190,6 +198,12 @@ export class AdminUserService {
           }),
           this.userRepo.count(where),
         ]);
+
+    // One grouped query for the whole page (no N+1).
+    const lastActivity =
+      users.length > 0
+        ? await this.userRepo.findLastActivityByUserIds(users.map((u) => u.id))
+        : new Map<string, Date>();
 
     return {
       data: users.map((user) => {
@@ -238,6 +252,7 @@ export class AdminUserService {
             hasActiveSubscription &&
             isComplimentarySource(user.subscription?.source),
           activeSubscription: hasActiveSubscription ? user.subscription : null,
+          lastActiveAt: latestOf(lastActivity.get(user.id), user.lastLoginAt),
           kidsCount: user._count.kids,
           sessionsCount: user._count.auth,
           favoritesCount: user._count.parentFavorites,
@@ -338,9 +353,14 @@ export class AdminUserService {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, pinHash, ...safeUser } = user;
 
+    const lastActivity = await this.userRepo.findLastActivityByUserIds([
+      userId,
+    ]);
+
     return {
       ...safeUser,
       subscription,
+      lastActiveAt: latestOf(lastActivity.get(userId), user.lastLoginAt),
       isPaidUser: hasActiveSubscription,
       isComplimentary:
         hasActiveSubscription &&
@@ -523,4 +543,11 @@ export class AdminUserService {
 
     return this.userRepo.updateUserUsage(userId, updateData);
   }
+}
+
+/** Greatest of the given dates, or null when none is set. */
+function latestOf(...dates: Array<Date | null | undefined>): Date | null {
+  let best: Date | null = null;
+  for (const d of dates) if (d && (!best || d > best)) best = d;
+  return best;
 }
