@@ -206,7 +206,7 @@ export class AdminUserService {
           currency,
           isPaidUser: hasActiveSubscription,
           activeSubscription: hasActiveSubscription ? user.subscription : null,
-          lastActiveAt: lastActivity.get(user.id) ?? user.lastLoginAt ?? null,
+          lastActiveAt: latestOf(lastActivity.get(user.id), user.lastLoginAt),
           kidsCount: user._count.kids,
           sessionsCount: user._count.auth,
           favoritesCount: user._count.parentFavorites,
@@ -259,7 +259,7 @@ export class AdminUserService {
 
     return {
       ...safeUser,
-      lastActiveAt: lastActivity.get(userId) ?? user.lastLoginAt ?? null,
+      lastActiveAt: latestOf(lastActivity.get(userId), user.lastLoginAt),
       isPaidUser: hasActiveSubscription,
       amountSpent: primarySpend?.[1] ?? 0,
       currency: primarySpend?.[0] ?? null,
@@ -438,4 +438,11 @@ export class AdminUserService {
 
     return this.userRepo.updateUserUsage(userId, updateData);
   }
+}
+
+/** Greatest of the given dates, or null when none is set. */
+function latestOf(...dates: Array<Date | null | undefined>): Date | null {
+  let best: Date | null = null;
+  for (const d of dates) if (d && (!best || d > best)) best = d;
+  return best;
 }

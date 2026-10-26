@@ -64,6 +64,15 @@ describe('AdminUserService lastLoginAt / lastActiveAt', () => {
       expect(userRepo.findLastActivityByUserIds).toHaveBeenCalledWith(['u1']);
     });
 
+    it('uses the greatest of recorded activity and lastLoginAt (login newer than stale activity)', async () => {
+      const staleActivity = new Date('2026-09-01T00:00:00Z');
+      userRepo.findByIdWithDetails.mockResolvedValue(baseDetail());
+      userRepo.findLastActivityByUserIds.mockResolvedValue(
+        new Map([['u1', staleActivity]]),
+      );
+      expect((await service.getUserById('u1')).lastActiveAt).toEqual(login);
+    });
+
     it('falls back to lastLoginAt when there is no session activity', async () => {
       userRepo.findByIdWithDetails.mockResolvedValue(baseDetail());
       userRepo.findLastActivityByUserIds.mockResolvedValue(new Map());
@@ -116,6 +125,15 @@ describe('AdminUserService lastLoginAt / lastActiveAt', () => {
       expect(r.data[1]).toEqual(
         expect.objectContaining({ lastLoginAt: null, lastActiveAt: null }),
       );
+    });
+
+    it('list rows also take the greatest of activity and lastLoginAt', async () => {
+      userRepo.findManyWithDetails.mockResolvedValue([baseListRow('u1')]);
+      userRepo.findLastActivityByUserIds.mockResolvedValue(
+        new Map([['u1', new Date('2026-09-01T00:00:00Z')]]),
+      );
+      const r = await service.getAllUsers({ page: 1, limit: 10 });
+      expect(r.data[0].lastActiveAt).toEqual(login);
     });
 
     it('skips the lookup for an empty page', async () => {
