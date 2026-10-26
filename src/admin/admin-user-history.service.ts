@@ -148,22 +148,41 @@ export class AdminUserHistoryService {
     const { kidIds, includeUser } = this.scope(kids, query.kidId);
     const kidName = new Map(kids.map((k) => [k.id, k.name]));
 
+    // The kid list always shows every kid (so the admin can switch child);
+    // each count honours the date range but NOT the kidId filter. Only needed
+    // as an extra query when a kidId narrows the main summary.
+    const perKidCounts = (): Promise<Map<string, number>> =>
+      this.repo
+        .getReadingSummary({
+          userId,
+          kidIds: kids.map((k) => k.id),
+          includeUser: false,
+          start,
+          end,
+        })
+        .then((r) => new Map(r.kids.map((k) => [k.kidId, k.storiesRead])));
+
     if (kidIds.length === 0 && !includeUser) {
       return {
         data: [] as UserReadingItem[],
-        summary: this.buildSummary(kids, EMPTY_RAW),
+        summary: this.buildSummary(
+          kids,
+          EMPTY_RAW,
+          kids.length > 0 ? await perKidCounts() : undefined,
+        ),
         meta: buildMeta(0, page, limit),
       };
     }
 
     const filter = { userId, kidIds, includeUser, start, end };
-    const [{ rows, total }, rawSummary] = await Promise.all([
+    const [{ rows, total }, rawSummary, allKidCounts] = await Promise.all([
       this.repo.findReadingPage({
         ...filter,
         skip: (page - 1) * limit,
         take: limit,
       }),
       this.repo.getReadingSummary(filter),
+      query.kidId && kids.length > 0 ? perKidCounts() : undefined,
     ]);
 
     const data: UserReadingItem[] = rows.map((r) => ({
@@ -180,7 +199,7 @@ export class AdminUserHistoryService {
 
     return {
       data,
-      summary: this.buildSummary(kids, rawSummary),
+      summary: this.buildSummary(kids, rawSummary, allKidCounts),
       meta: buildMeta(total, page, limit),
     };
   }
@@ -200,6 +219,7 @@ export class AdminUserHistoryService {
       user: ReaderAggregate;
       kids: Array<ReaderAggregate & { kidId: string }>;
     },
+    kidCounts?: Map<string, number>,
   ): UserReadingSummary {
     const all = [raw.user, ...raw.kids];
     let lastActiveAt: Date | null = null;
@@ -208,7 +228,8 @@ export class AdminUserHistoryService {
         lastActiveAt = a.lastActiveAt;
       }
     }
-    const perKid = new Map(raw.kids.map((k) => [k.kidId, k.storiesRead]));
+    const perKid =
+      kidCounts ?? new Map(raw.kids.map((k) => [k.kidId, k.storiesRead]));
     return {
       storiesRead: all.reduce((n, a) => n + a.storiesRead, 0),
       storiesCompleted: all.reduce((n, a) => n + a.storiesCompleted, 0),

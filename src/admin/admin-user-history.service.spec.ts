@@ -317,6 +317,57 @@ describe('AdminUserHistoryService', () => {
       expect(res.summary.storiesRead).toBe(0);
     });
 
+    it('keeps every kid in summary.kids with its date-range-only count when filtering by kidId, while totals stay kid-filtered', async () => {
+      repo.getReadingSummary.mockImplementation((f) => {
+        const onlyOneKid = f.kidIds.length === 1;
+        return Promise.resolve(
+          f.includeUser
+            ? { user: aggregate(0, 0, 0, null), kids: [] }
+            : {
+                user: aggregate(0, 0, 0, null),
+                kids: onlyOneKid
+                  ? [
+                      {
+                        kidId: 'k2',
+                        ...aggregate(1, 1, 30, '2026-01-09T00:00:00.000Z'),
+                      },
+                    ]
+                  : [
+                      {
+                        kidId: 'k1',
+                        ...aggregate(4, 2, 90, '2026-01-08T00:00:00.000Z'),
+                      },
+                      {
+                        kidId: 'k2',
+                        ...aggregate(1, 1, 30, '2026-01-09T00:00:00.000Z'),
+                      },
+                    ],
+              },
+        );
+      });
+      const res = await service.getReading('u1', {
+        kidId: 'k2',
+        range: 7,
+      });
+      expect(res.summary.storiesRead).toBe(1);
+      expect(res.summary.totalTimeSpentSeconds).toBe(30);
+      expect(res.summary.kids).toEqual([
+        { kidId: 'k1', name: 'Alpha', storiesRead: 4 },
+        { kidId: 'k2', name: null, storiesRead: 1 },
+      ]);
+      const kidList = repo.getReadingSummary.mock.calls.find(
+        ([f]) => f.kidIds.length === 2,
+      )![0];
+      expect(kidList.includeUser).toBe(false);
+      expect(kidList.start).toEqual(
+        repo.getReadingSummary.mock.calls[0][0].start,
+      );
+
+      const foreign = await service.getReading('u1', { kidId: 'foreign' });
+      expect(foreign.summary.storiesRead).toBe(0);
+      expect(foreign.summary.kids.map((k) => k.storiesRead)).toEqual([4, 1]);
+    });
+
     it('kidId filter queries only that kid (no user rows); foreign kidId is an empty page', async () => {
       await service.getReading('u1', { kidId: 'k2' });
       const arg = repo.findReadingPage.mock.calls[0][0];
