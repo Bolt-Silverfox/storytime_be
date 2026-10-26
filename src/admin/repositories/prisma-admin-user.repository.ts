@@ -99,6 +99,36 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
     });
   }
 
+  async findLastActivityByUserIds(
+    userIds: string[],
+  ): Promise<Map<string, Date>> {
+    const result = new Map<string, Date>();
+    if (userIds.length === 0) return result;
+    // Two grouped queries (sessions, then the user's own ActivityLog rows via
+    // the (userId, createdAt) index), merged to the newest per user. Kid-
+    // attributed rows (userId null, kidId set) are deliberately not counted.
+    const [sessions, logs] = await Promise.all([
+      this.prisma.session.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds }, isDeleted: false },
+        _max: { lastActivityAt: true },
+      }),
+      this.prisma.activityLog.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds }, isDeleted: false },
+        _max: { createdAt: true },
+      }),
+    ]);
+    const bump = (userId: string | null, at: Date | null) => {
+      if (!userId || !at) return;
+      const cur = result.get(userId);
+      if (!cur || at > cur) result.set(userId, at);
+    };
+    for (const row of sessions) bump(row.userId, row._max.lastActivityAt);
+    for (const row of logs) bump(row.userId, row._max.createdAt);
+    return result;
+  }
+
   findByIdWithDetails(userId: string): Promise<AdminUserDetail | null> {
     return this.prisma.user.findUnique({
       where: { id: userId },

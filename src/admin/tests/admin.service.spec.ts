@@ -124,6 +124,10 @@ const mockPrismaService = {
   },
   session: {
     findMany: jest.fn(),
+    groupBy: jest.fn().mockResolvedValue([]),
+  },
+  activityLog: {
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   $queryRaw: jest.fn(),
 };

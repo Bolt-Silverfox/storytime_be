@@ -214,6 +214,14 @@ export class PrismaAuthRepository implements IAuthRepository {
     return this.prisma.session.create({ data });
   }
 
+  async recordLastLogin(userId: string): Promise<void> {
+    // updateMany so a missing / suspended / deleted user is a silent no-op, not a throw.
+    await this.prisma.user.updateMany({
+      where: { id: userId, isSuspended: false, isDeleted: false },
+      data: { lastLoginAt: new Date() },
+    });
+  }
+
   async findSessionByToken(
     hashedToken: string,
   ): Promise<SessionWithUser | null> {

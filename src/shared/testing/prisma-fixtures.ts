@@ -36,6 +36,7 @@ export const makeUser = (overrides: Partial<User> = {}): User => ({
   role: 'parent',
   createdAt: FIXTURE_NOW,
   updatedAt: FIXTURE_NOW,
+  lastLoginAt: null,
   pinHash: null,
   biometricsEnabled: false,
   isSuspended: false,
