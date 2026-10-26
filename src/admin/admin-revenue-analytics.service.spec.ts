@@ -12,6 +12,7 @@ describe('AdminRevenueAnalyticsService', () => {
     count: jest.Mock;
     groupByStartedAt: jest.Mock;
     groupByActivePlan: jest.Mock;
+    groupByActiveSource: jest.Mock;
   };
   let paymentRepo: {
     groupRevenueByCreatedAt: jest.Mock;
@@ -27,6 +28,7 @@ describe('AdminRevenueAnalyticsService', () => {
       count: jest.fn(),
       groupByStartedAt: jest.fn().mockResolvedValue([]),
       groupByActivePlan: jest.fn().mockResolvedValue([]),
+      groupByActiveSource: jest.fn().mockResolvedValue([]),
     };
     paymentRepo = {
       groupRevenueByCreatedAt: jest.fn().mockResolvedValue([]),

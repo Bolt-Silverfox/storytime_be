@@ -41,7 +41,11 @@ export class AdminUserBillingController {
 
   @Post('users/:userId/activate-subscription')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Manually activate subscription for a user' })
+  @ApiOperation({
+    summary: 'Manually activate subscription for a user',
+    description:
+      "Creates or replaces the user's subscription as a COMPLIMENTARY grant (source=admin_grant) with full paid access. The calling admin and the required `reason` are stored on the subscription (grantedByAdminId, grantReason). Grants are excluded from paying-customer, conversion, churn and revenue figures. A later real store purchase by the user replaces the grant (source back to store, grant fields cleared).",
+  })
   @ApiParam({ name: 'userId', type: String })
   @ApiBody({ type: ActivateSubscriptionDto })
   @ApiCreatedResponse({ description: 'Subscription activated successfully' })

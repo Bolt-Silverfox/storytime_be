@@ -10,7 +10,10 @@ import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
 import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
 import { GoogleVerificationService } from '../payment/google-verification.service';
 import { AppleVerificationService } from '../payment/apple-verification.service';
-import { PRODUCT_ID_TO_PLAN } from '../subscription/subscription.constants';
+import {
+  PRODUCT_ID_TO_PLAN,
+  SUBSCRIPTION_SOURCE,
+} from '../subscription/subscription.constants';
 import {
   IAdminUserRepository,
   ADMIN_USER_REPOSITORY,
@@ -59,6 +62,16 @@ export class AdminSubscriptionOpsService {
 
     const existingSub = await this.subscriptionRepo.findByUserId(userId);
 
+    // Admin activation is always a complimentary grant: it is not backed by a
+    // store purchase, so it must never count as a paying customer. The grant
+    // fields are replaced on every (re)activation; a later real store purchase
+    // clears them (see PaymentService.upsertSubscriptionWithExpiry).
+    const grant = {
+      source: SUBSCRIPTION_SOURCE.ADMIN_GRANT,
+      grantedByAdminId: adminUserId,
+      grantReason: dto.reason,
+    };
+
     const subscription = await this.subscriptionRepo.upsertForActivation({
       userId,
       create: {
@@ -70,6 +83,7 @@ export class AdminSubscriptionOpsService {
         startedAt: now,
         endsAt,
         purchaseToken: `admin-activated-${Date.now()}`,
+        ...grant,
       },
       update: {
         plan: dto.plan,
@@ -79,6 +93,7 @@ export class AdminSubscriptionOpsService {
         startedAt: now,
         endsAt,
         purchaseToken: `admin-activated-${Date.now()}`,
+        ...grant,
         isDeleted: false,
         deletedAt: null,
       },

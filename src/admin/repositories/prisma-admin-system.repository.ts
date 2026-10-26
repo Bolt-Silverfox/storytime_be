@@ -6,6 +6,7 @@ import {
   SupportTicketWithUser,
 } from './admin-system.repository.interface';
 import { ActivityLogDto, SubscriptionDto } from '../dto/admin-responses.dto';
+import { isComplimentarySource } from '../../subscription/subscription.constants';
 
 @Injectable()
 export class PrismaAdminSystemRepository implements IAdminSystemRepository {
@@ -77,6 +78,22 @@ export class PrismaAdminSystemRepository implements IAdminSystemRepository {
       },
     });
 
+    // Resolve granting-admin names in one query (no FK on grantedByAdminId).
+    const adminIds = [
+      ...new Set(
+        subscriptions
+          .map((sub) => sub.grantedByAdminId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
+    const admins = adminIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: adminIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const adminNames = new Map(admins.map((a) => [a.id, a.name]));
+
     return subscriptions.map((sub) => ({
       id: sub.id,
       plan: sub.plan,
@@ -86,6 +103,13 @@ export class PrismaAdminSystemRepository implements IAdminSystemRepository {
       isDeleted: sub.isDeleted,
       deletedAt: sub.deletedAt || undefined,
       user: sub.user,
+      source: sub.source,
+      isComplimentary: isComplimentarySource(sub.source),
+      grantedByAdminId: sub.grantedByAdminId,
+      grantedByAdminName: sub.grantedByAdminId
+        ? (adminNames.get(sub.grantedByAdminId) ?? null)
+        : null,
+      grantReason: sub.grantReason,
     }));
   }
 

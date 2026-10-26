@@ -285,22 +285,55 @@ export class DashboardStatsDto {
 
   // Subscription metrics
   @ApiProperty({
-    description: 'Number of paid users (with active subscriptions)',
-    example: 180,
+    description:
+      'Number of PAYING users: active subscription with source=store (real store purchase). Complimentary access (admin grants, coupons, trials) is NOT counted here; see complimentaryUsers. Changed from "any active subscription".',
+    example: 170,
   })
   paidUsers: number;
 
-  @ApiProperty({ description: 'Number of unpaid users', example: 1070 })
+  @ApiProperty({
+    description:
+      'Number of users with active COMPLIMENTARY access (active subscription whose source is not store, e.g. admin_grant). They have full access but are not paying customers.',
+    example: 10,
+  })
+  complimentaryUsers: number;
+
+  @ApiProperty({
+    description:
+      'Number of users with NO active subscription (total users - paidUsers - complimentaryUsers). Unchanged meaning: users without paid access.',
+    example: 1070,
+  })
   unpaidUsers: number;
 
-  @ApiProperty({ description: 'Total number of subscriptions', example: 200 })
+  @ApiProperty({
+    description: 'Total number of subscriptions ever created (all sources)',
+    example: 200,
+  })
   totalSubscriptions: number;
 
-  @ApiProperty({ description: 'Number of active subscriptions', example: 180 })
+  @ApiProperty({
+    description:
+      'Number of active subscriptions = everyone with paid ACCESS (paying + complimentary). Unchanged; equals payingSubscriptions + complimentarySubscriptions.',
+    example: 180,
+  })
   activeSubscriptions: number;
 
   @ApiProperty({
-    description: 'Subscription plan breakdown',
+    description: 'Active subscriptions with source=store (paying customers)',
+    example: 170,
+  })
+  payingSubscriptions: number;
+
+  @ApiProperty({
+    description:
+      'Active subscriptions with a non-store source (complimentary access)',
+    example: 10,
+  })
+  complimentarySubscriptions: number;
+
+  @ApiProperty({
+    description:
+      'Subscription plan breakdown of ALL active access (paying + complimentary). Use dashboard/subscription-analytics for the paying/complimentary split.',
     example: [
       { plan: 'monthly', count: 120 },
       { plan: 'yearly', count: 60 },
@@ -312,11 +345,16 @@ export class DashboardStatsDto {
     count: number;
   }>;
 
-  @ApiProperty({ description: 'Total revenue generated', example: 12500.5 })
+  @ApiProperty({
+    description:
+      'Total revenue: sum of succeeded payment transactions (real store purchases only; complimentary grants create no transaction, so they never contribute). NOTE: amounts of different currencies are summed numerically; see GET admin/users/:id for per-currency spend.',
+    example: 12500.5,
+  })
   totalRevenue: number;
 
   @ApiProperty({
-    description: 'Conversion rate (paid users / total users)',
+    description:
+      'Conversion rate: paying users (source=store) / total users, percent. Complimentary access is excluded.',
     example: 14.4,
   })
   conversionRate: number;
@@ -364,10 +402,18 @@ export class UserGrowthDto {
   newUsers: number;
 
   @ApiProperty({
-    description: 'New paid users registered on this date',
+    description:
+      'New PAYING users registered on this date (active subscription, source=store)',
     example: 2,
   })
   paidUsers: number;
+
+  @ApiProperty({
+    description:
+      'New users registered on this date holding active COMPLIMENTARY access (non-store source)',
+    example: 1,
+  })
+  complimentaryUsers: number;
 
   @ApiProperty({
     description: 'Cumulative total users up to this date',
@@ -376,10 +422,17 @@ export class UserGrowthDto {
   totalUsers: number;
 
   @ApiProperty({
-    description: 'Cumulative total paid users up to this date',
+    description:
+      'Cumulative total PAYING users up to this date (source=store only)',
     example: 150,
   })
   totalPaidUsers: number;
+
+  @ApiProperty({
+    description: 'Cumulative total users with complimentary access',
+    example: 8,
+  })
+  totalComplimentaryUsers: number;
 }
 
 export class StoryStatsDto {
@@ -519,7 +572,8 @@ export class PaginatedResponseDto<T> {
 
 export class SubscriptionAnalyticsDto {
   @ApiProperty({
-    description: 'Subscription growth over time',
+    description:
+      'New subscriptions per day, ALL sources (paying + complimentary). See paying.subscriptionGrowth for real purchases only.',
     example: [
       { date: '2023-10-01', count: 5 },
       { date: '2023-10-02', count: 3 },
@@ -531,7 +585,8 @@ export class SubscriptionAnalyticsDto {
   }>;
 
   @ApiProperty({
-    description: 'Revenue growth over time',
+    description:
+      'Revenue per day from succeeded payment transactions (real purchases only; comped access creates none)',
     example: [
       { date: '2023-10-01', amount: 500 },
       { date: '2023-10-02', amount: 300 },
@@ -543,7 +598,8 @@ export class SubscriptionAnalyticsDto {
   }>;
 
   @ApiProperty({
-    description: 'Subscription plan breakdown',
+    description:
+      'Plan breakdown of ALL active access (paying + complimentary). Unchanged; see paying / complimentary for the split.',
     example: [
       { plan: 'monthly', count: 120 },
       { plan: 'yearly', count: 60 },
@@ -555,8 +611,42 @@ export class SubscriptionAnalyticsDto {
     count: number;
   }>;
 
-  @ApiProperty({ description: 'Churn rate percentage', example: 2.5 })
+  @ApiProperty({
+    description:
+      'Churn rate percentage over PAYING subscriptions only (source=store); expiring complimentary access is not churn',
+    example: 2.5,
+  })
   churnRate: number;
+
+  @ApiProperty({
+    description:
+      'Paying (source=store) breakdown: active count, plan breakdown and new-subscription growth. Additive.',
+    example: {
+      activeSubscriptions: 180,
+      planBreakdown: [{ plan: 'monthly', count: 120 }],
+      subscriptionGrowth: [{ date: '2023-10-01', count: 4 }],
+    },
+  })
+  paying: {
+    activeSubscriptions: number;
+    planBreakdown: Array<{ plan: string; count: number }>;
+    subscriptionGrowth: Array<{ date: string; count: number }>;
+  };
+
+  @ApiProperty({
+    description:
+      'Complimentary (non-store source) breakdown: active count, plan breakdown and count per source. Additive.',
+    example: {
+      activeSubscriptions: 10,
+      planBreakdown: [{ plan: 'yearly', count: 10 }],
+      bySource: [{ source: 'admin_grant', count: 10 }],
+    },
+  })
+  complimentary: {
+    activeSubscriptions: number;
+    planBreakdown: Array<{ plan: string; count: number }>;
+    bySource: Array<{ source: string; count: number }>;
+  };
 }
 
 export class RevenueAnalyticsDto {
@@ -1036,6 +1126,41 @@ export class SubscriptionDto {
     },
   })
   user: UserBasicInfo;
+
+  @ApiProperty({
+    description:
+      'How the access was obtained: store (real purchase), admin_grant, coupon or trial. Only store rows are paying customers.',
+    enum: ['store', 'admin_grant', 'coupon', 'trial'],
+    example: 'store',
+  })
+  source: string;
+
+  @ApiProperty({
+    description: 'True when source is not store (complimentary access)',
+    example: false,
+  })
+  isComplimentary: boolean;
+
+  @ApiProperty({
+    description: 'Admin user id who granted it (admin_grant only)',
+    nullable: true,
+    example: null,
+  })
+  grantedByAdminId: string | null;
+
+  @ApiProperty({
+    description: 'Name of the granting admin, when still resolvable',
+    nullable: true,
+    example: null,
+  })
+  grantedByAdminName: string | null;
+
+  @ApiProperty({
+    description: 'Reason given for the grant (admin_grant only)',
+    nullable: true,
+    example: null,
+  })
+  grantReason: string | null;
 }
 
 export class ActivityLogDto {
@@ -1141,11 +1266,24 @@ export class UserGrowthMonthlyDto {
   @ApiProperty({ example: ['Jan', 'Feb', 'Mar'] })
   labels: string[];
 
-  @ApiProperty({ example: [100, 120, 150] })
+  @ApiProperty({
+    description: 'Users per bucket with no active subscription',
+    example: [100, 120, 150],
+  })
   freeUsers: number[];
 
-  @ApiProperty({ example: [20, 30, 40] })
+  @ApiProperty({
+    description: 'PAYING users per bucket (active, source=store)',
+    example: [20, 30, 40],
+  })
   paidUsers: number[];
+
+  @ApiProperty({
+    description:
+      'Users per bucket with active COMPLIMENTARY access (non-store source). freeUsers + paidUsers + complimentaryUsers = all users in the bucket.',
+    example: [1, 0, 2],
+  })
+  complimentaryUsers: number[];
 }
 
 // User list item for paginated user listing - extended from base user fields

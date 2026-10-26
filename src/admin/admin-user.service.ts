@@ -22,6 +22,14 @@ import {
   ADMIN_PAYMENT_REPOSITORY,
   AdminUserListItem,
 } from './repositories';
+import { isComplimentarySource } from '../subscription/subscription.constants';
+
+/** Per-currency spend as a plain object, rounded to cents. Never mixes currencies. */
+function toCurrencyTotals(byCurrency: Map<string, number>) {
+  return Object.fromEntries(
+    [...byCurrency.entries()].map(([c, v]) => [c, Number(v.toFixed(2))]),
+  );
+}
 
 @Injectable()
 export class AdminUserService {
@@ -206,7 +214,14 @@ export class AdminUserService {
           creditUsed,
           amountSpent,
           currency,
+          spendingByCurrency: toCurrencyTotals(spendingByCurrency),
+          // Access, not payment: true for anyone with active paid ACCESS,
+          // including complimentary grants (gating is unchanged).
           isPaidUser: hasActiveSubscription,
+          // True when that active access is not a real store purchase.
+          isComplimentary:
+            hasActiveSubscription &&
+            isComplimentarySource(user.subscription?.source),
           activeSubscription: hasActiveSubscription ? user.subscription : null,
           kidsCount: user._count.kids,
           sessionsCount: user._count.auth,
@@ -305,14 +320,32 @@ export class AdminUserService {
       (a, b) => b[1] - a[1],
     )[0];
 
+    // Resolve the granting admin's name (no FK on grantedByAdminId).
+    const grantedByAdminId = user.subscription?.grantedByAdminId ?? null;
+    const grantedBy = grantedByAdminId
+      ? await this.userRepo.findById(grantedByAdminId)
+      : null;
+    const subscription = user.subscription
+      ? {
+          ...user.subscription,
+          isComplimentary: isComplimentarySource(user.subscription.source),
+          grantedByAdminName: grantedBy?.name ?? null,
+        }
+      : null;
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, pinHash, ...safeUser } = user;
 
     return {
       ...safeUser,
+      subscription,
       isPaidUser: hasActiveSubscription,
+      isComplimentary:
+        hasActiveSubscription &&
+        isComplimentarySource(user.subscription?.source),
       amountSpent: primarySpend?.[1] ?? 0,
       currency: primarySpend?.[0] ?? null,
+      spendingByCurrency: toCurrencyTotals(spendingByCurrency),
       stats: {
         sessionsCount: user._count.auth,
         favoritesCount: user._count.parentFavorites,
