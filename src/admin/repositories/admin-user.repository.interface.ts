@@ -29,7 +29,7 @@ export type AdminUserListItem = Prisma.UserGetPayload<{
       };
     };
     paymentTransactions: {
-      select: { amount: true; currency: true };
+      select: { amount: true; currency: true; createdAt: true };
     };
     _count: {
       select: {

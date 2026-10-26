@@ -2,6 +2,8 @@ import { Test } from '@nestjs/testing';
 import { plainToInstance } from 'class-transformer';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminUserService } from './admin-user.service';
+import { AdminFxRateService } from './admin-fx-rate.service';
+import { FxRateTable } from './utils/fx-conversion.util';
 import {
   ADMIN_PAYMENT_REPOSITORY,
   ADMIN_USER_REPOSITORY,
@@ -44,6 +46,12 @@ describe('AdminUserService.getAllUsers paidFirst', () => {
         AdminUserService,
         { provide: ADMIN_USER_REPOSITORY, useClass: PrismaAdminUserRepository },
         { provide: ADMIN_PAYMENT_REPOSITORY, useValue: {} },
+        {
+          provide: AdminFxRateService,
+          useValue: {
+            getRateTable: jest.fn().mockResolvedValue(new FxRateTable([])),
+          },
+        },
       ],
     }).compile();
     prisma = moduleRef.get(PrismaService);

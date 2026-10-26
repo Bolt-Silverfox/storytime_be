@@ -53,6 +53,8 @@ export class AdminExportService {
       'Last Active',
       // Appended last so existing positional consumers keep working.
       'Is Complimentary',
+      // Converted to USD with the shared FX rates (same figure as the API).
+      'Amount Spent (USD)',
     ];
 
     const rows = allUsers.map((user) => [
@@ -73,6 +75,7 @@ export class AdminExportService {
       this.formatDate(user.lastLoginAt),
       this.formatDate(user.lastActiveAt),
       user.isComplimentary || false,
+      (user.amountSpent as number | null | undefined) ?? 0,
     ]);
 
     const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -129,16 +132,28 @@ export class AdminExportService {
         rawData = revenue;
         filename = `revenue-analytics-${new Date().toISOString().split('T')[0]}`;
         if (format === 'csv') {
-          // Amount is blank on days that mix currencies (never a cross-currency
-          // sum); Currency Breakdown always lists each currency, e.g. NGN:25000;USD:5
-          const headers = ['Date', 'Amount', 'Currency Breakdown'];
+          // Amount is the USD-converted day total (same figure as the API);
+          // Currency Breakdown lists the ORIGINAL amounts per currency, e.g.
+          // NGN:25000;USD:5; Unconverted Breakdown lists currencies that have
+          // no FX rate yet (excluded from Amount).
+          const headers = [
+            'Date',
+            'Amount',
+            'Currency Breakdown',
+            'Base Currency',
+            'Unconverted Breakdown',
+          ];
+          const fmt = (totals: Record<string, number> | undefined) =>
+            Object.entries(totals ?? {})
+              .map(([currency, total]) => `${currency}:${total}`)
+              .join(';');
           const rows = revenue.dailyRevenue.map((r) =>
             [
               r.date,
-              r.amount ?? '',
-              Object.entries(r.byCurrency)
-                .map(([currency, total]) => `${currency}:${total}`)
-                .join(';'),
+              r.amount,
+              fmt(r.byCurrency),
+              revenue.baseCurrency ?? 'USD',
+              fmt(r.unconvertedByCurrency),
             ].join(','),
           );
           csvContent = [headers.join(','), ...rows].join('\n');

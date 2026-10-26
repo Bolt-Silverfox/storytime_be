@@ -213,8 +213,8 @@ export class AnalyticsMetricDto {
 }
 
 /**
- * Revenue in ONE currency. Amounts of different currencies are never added
- * together and no FX conversion is ever applied.
+ * Revenue in ONE currency, in its ORIGINAL amounts (never converted here; see
+ * ConvertedRevenueByCurrencyDto for the USD-converted view).
  */
 export class RevenueByCurrencyDto {
   @ApiProperty({
@@ -237,10 +237,87 @@ export class RevenueByCurrencyDto {
   transactions: number;
 }
 
+export class ConvertedRevenueByCurrencyDto extends RevenueByCurrencyDto {
+  @ApiProperty({
+    description:
+      'This currency converted to USD (rounded to 2 dp at the end only).',
+    example: 16.25,
+  })
+  usdTotal: number;
+
+  @ApiProperty({
+    description:
+      'The most recent FX rate (USD per 1 unit of the currency, by effectiveFrom) that was applied to this currency. 1 for USD.',
+    example: 0.00065,
+  })
+  rateUsed: number;
+}
+
+/**
+ * Fields shared by every USD-converted revenue summary. Conversion rule: each
+ * succeeded transaction converts at the latest FX rate whose effectiveFrom is
+ * <= its createdAt; if none is that old the EARLIEST rate of the currency is
+ * used (usedEarliestRate=true); a currency with no rate at all is NOT converted
+ * (listed under unconvertedCurrencies, excluded from totalRevenue).
+ */
+export class ConvertedRevenueFieldsDto {
+  @ApiProperty({
+    description: 'Currency every converted figure is expressed in.',
+    example: 'USD',
+    enum: ['USD'],
+  })
+  baseCurrency: 'USD';
+
+  @ApiProperty({
+    description:
+      'Per currency that WAS converted: original total + count, the USD equivalent (usdTotal) and the latest rate applied. Largest usdTotal first. The USD totals sum to totalRevenue (up to rounding).',
+    type: [ConvertedRevenueByCurrencyDto],
+    example: [
+      {
+        currency: 'USD',
+        total: 9.99,
+        transactions: 1,
+        usdTotal: 9.99,
+        rateUsed: 1,
+      },
+      {
+        currency: 'NGN',
+        total: 4500,
+        transactions: 1,
+        usdTotal: 2.93,
+        rateUsed: 0.00065,
+      },
+    ],
+  })
+  convertedRevenueByCurrency: ConvertedRevenueByCurrencyDto[];
+
+  @ApiProperty({
+    description:
+      'Currencies that have NO FX rate yet (original amounts). They are excluded from totalRevenue; an admin must add a rate via POST /admin/fx-rates. Never guessed.',
+    type: [RevenueByCurrencyDto],
+    example: [],
+  })
+  unconvertedCurrencies: RevenueByCurrencyDto[];
+
+  @ApiProperty({
+    description:
+      'True when unconvertedCurrencies is non-empty, i.e. totalRevenue understates real revenue.',
+    example: false,
+  })
+  hasUnconvertedRevenue: boolean;
+
+  @ApiProperty({
+    description:
+      'True when at least one transaction predates the earliest FX rate of its currency and was converted at that earliest rate.',
+    example: false,
+  })
+  usedEarliestRate: boolean;
+}
+
 export class MetricWithTrendDto {
   @ApiProperty({
     description:
-      'Current value. null only for totalRevenue when revenue spans several currencies (see revenueByCurrency).',
+      'Current value. For totalRevenue this is the USD-converted total.',
     nullable: true,
     type: Number,
   })
@@ -263,7 +340,7 @@ export class MetricWithTrendDto {
 }
 
 // Dashboard Statistics DTO
-export class DashboardStatsDto {
+export class DashboardStatsDto extends ConvertedRevenueFieldsDto {
   @ApiProperty({ description: 'Total number of users', example: 1250 })
   totalUsers: number;
 
@@ -377,16 +454,14 @@ export class DashboardStatsDto {
 
   @ApiProperty({
     description:
-      'Total revenue (all time): sum of succeeded payment transactions (real store purchases only; complimentary grants create no transaction). The plain sum ONLY when every succeeded transaction shares one currency (0 when there are none); null when several currencies are present, because amounts of different currencies are never added together and no FX conversion is applied. Use revenueByCurrency for the real figures.',
+      'Total revenue (all time) in USD (baseCurrency): succeeded payment transactions (real store purchases only; complimentary grants create no transaction), each converted at the FX rate effective on its date. 0 when there are none. Currencies with no FX rate are excluded and listed in unconvertedCurrencies (hasUnconvertedRevenue). Original per-currency amounts: revenueByCurrency.',
     example: 12500.5,
-    nullable: true,
-    type: Number,
   })
-  totalRevenue: number | null;
+  totalRevenue: number;
 
   @ApiProperty({
     description:
-      'True when succeeded transactions span more than one currency (totalRevenue is then null).',
+      'Informational: true when succeeded transactions span more than one currency (totalRevenue is converted to USD either way).',
     example: false,
   })
   mixedCurrencies: boolean;
@@ -633,20 +708,21 @@ export class SubscriptionAnalyticsDto {
 
   @ApiProperty({
     description:
-      'Revenue per day from succeeded payment transactions (real purchases only; comped access creates none). `amount` is the day total only when that day is single-currency, otherwise null; `byCurrency` always carries the per-currency figures. Currencies are never summed together.',
+      'Revenue per day from succeeded payment transactions (real purchases only; comped access creates none). `amount` is the USD-converted day total (each transaction at the FX rate effective on its date; currencies without a rate excluded); `byCurrency` keeps the original per-currency amounts.',
     example: [
       { date: '2023-10-01', amount: 500, byCurrency: { USD: 500 } },
       {
         date: '2023-10-02',
-        amount: null,
+        amount: 21.25,
         byCurrency: { NGN: 25000, USD: 5 },
       },
     ],
   })
   revenueGrowth: Array<{
     date: string;
-    amount: number | null;
+    amount: number;
     byCurrency: Record<string, number>;
+    unconvertedByCurrency?: Record<string, number>;
   }>;
 
   @ApiProperty({
@@ -701,19 +777,17 @@ export class SubscriptionAnalyticsDto {
   };
 }
 
-export class RevenueAnalyticsDto {
+export class RevenueAnalyticsDto extends ConvertedRevenueFieldsDto {
   @ApiProperty({
     description:
-      'Total revenue of succeeded transactions in the requested date range. The plain sum ONLY when every succeeded transaction in scope shares one currency (0 when there are none); null when several currencies are present. Amounts of different currencies are never added together and no FX conversion is applied: use revenueByCurrency.',
-    example: null,
-    nullable: true,
-    type: Number,
+      'Total revenue of succeeded transactions in the requested date range, in USD (baseCurrency), each transaction converted at the FX rate effective on its date. 0 when there are none. Currencies with no FX rate are excluded (see unconvertedCurrencies). Original per-currency amounts: revenueByCurrency.',
+    example: 12.92,
   })
-  totalRevenue: number | null;
+  totalRevenue: number;
 
   @ApiProperty({
     description:
-      'True when succeeded transactions in scope span more than one currency (totalRevenue is then null).',
+      'Informational: true when succeeded transactions in scope span more than one currency (totalRevenue is converted to USD either way).',
     example: true,
   })
   mixedCurrencies: boolean;
@@ -731,51 +805,54 @@ export class RevenueAnalyticsDto {
 
   @ApiProperty({
     description:
-      'Daily revenue. `amount` is populated only when that day is single-currency, otherwise null; `byCurrency` always carries the per-currency totals.',
+      'Daily revenue. `amount` is the USD-converted total for that day (each transaction at the rate effective on its own date; currencies without a rate are excluded and shown in `unconvertedByCurrency`); `byCurrency` keeps the ORIGINAL per-currency amounts.',
     example: [
       { date: '2023-10-01', amount: 500, byCurrency: { USD: 500 } },
       {
         date: '2023-10-02',
-        amount: null,
+        amount: 21.25,
         byCurrency: { NGN: 25000, USD: 5 },
       },
     ],
   })
   dailyRevenue: Array<{
     date: string;
-    amount: number | null;
+    amount: number;
     byCurrency: Record<string, number>;
+    unconvertedByCurrency?: Record<string, number>;
   }>;
 
   @ApiProperty({
     description:
-      'Monthly revenue; `total_amount` is null when the month mixes currencies (see `byCurrency`).',
+      'Monthly revenue; `total_amount` is the USD-converted total, `byCurrency` the original amounts, `unconvertedByCurrency` currencies lacking an FX rate (excluded from total_amount).',
     example: [
       { month: '2023-10', total_amount: 12500, byCurrency: { USD: 12500 } },
     ],
   })
   monthlyRevenue: Array<{
     month: string;
-    total_amount: number | null;
+    total_amount: number;
     byCurrency: Record<string, number>;
+    unconvertedByCurrency?: Record<string, number>;
   }>;
 
   @ApiProperty({
     description:
-      'Yearly revenue; `total_amount` is null when the year mixes currencies (see `byCurrency`).',
+      'Yearly revenue; `total_amount` is the USD-converted total, `byCurrency` the original amounts, `unconvertedByCurrency` currencies lacking an FX rate (excluded from total_amount).',
     example: [
       { year: '2023', total_amount: 85000, byCurrency: { USD: 85000 } },
     ],
   })
   yearlyRevenue: Array<{
     year: string;
-    total_amount: number | null;
+    total_amount: number;
     byCurrency: Record<string, number>;
+    unconvertedByCurrency?: Record<string, number>;
   }>;
 
   @ApiProperty({
     description:
-      'Top subscription plans (all-time revenue; subscription_count = currently active PAYING subscribers on the plan, free plan excluded). `total_revenue` is null when the plan has revenue in several currencies. Ranked by revenue when all plans share one currency, otherwise by transaction count.',
+      'Top subscription plans (all-time revenue; subscription_count = currently active PAYING subscribers on the plan, free plan excluded). `total_revenue` is the USD-converted revenue (plan payments converted at the rate effective on each payment date; currencies without a rate excluded, see `unconvertedByCurrency`); `byCurrency` keeps the original amounts. Ranked by converted revenue, ties by transaction count.',
     example: [
       {
         plan: 'yearly',
@@ -789,8 +866,9 @@ export class RevenueAnalyticsDto {
   topPlans: Array<{
     plan: string;
     subscription_count: number;
-    total_revenue: number | null;
+    total_revenue: number;
     byCurrency: Record<string, number>;
+    unconvertedByCurrency?: Record<string, number>;
     transactions: number;
   }>;
 }
@@ -834,19 +912,17 @@ export class UserDetailDto {
 
   @ApiProperty({
     description:
-      "Total spent across succeeded transactions. A number only when all of the user's transactions share one currency (0 when none); null when they span several currencies (never summed across currencies - see spendingByCurrency).",
+      'Total spent across succeeded transactions, converted to USD (each payment at the FX rate effective on its date; 0 when none). Payments in a currency with no FX rate are excluded (see spendingByCurrency for original amounts).',
     example: 125.5,
-    nullable: true,
-    type: Number,
   })
-  amountSpent: number | null;
+  amountSpent: number;
 
   @ApiProperty({
-    description: 'Currency of amount spent',
+    description:
+      "Currency of amountSpent: always 'USD' (the base currency); amountSpent is converted.",
     example: 'USD',
-    nullable: true,
   })
-  currency: string | null;
+  currency: string;
 
   @ApiProperty({
     description: 'User profile',
@@ -1419,9 +1495,9 @@ export class UserListItemDto {
     nullable: true,
     type: Number,
     description:
-      'Single-currency total, or null when the user paid in several currencies (see spendingByCurrency).',
+      'Total spent converted to USD (payments in currencies without an FX rate excluded). Original amounts: spendingByCurrency.',
   })
-  amountSpent: number | null;
+  amountSpent: number;
 
   @ApiProperty({ example: true })
   isPaidUser: boolean;

@@ -10,9 +10,9 @@ import {
   ADMIN_ENGAGEMENT_REPOSITORY,
 } from './repositories';
 
-describe('AdminDashboardMetricsService totalRevenue currency handling', () => {
+describe('AdminDashboardMetricsService totalRevenue FX conversion', () => {
   let service: AdminDashboardMetricsService;
-  const sumRevenueByCurrency = jest.fn();
+  const sumRevenueWithRates = jest.fn();
 
   beforeEach(async () => {
     jest.resetAllMocks();
@@ -32,7 +32,7 @@ describe('AdminDashboardMetricsService totalRevenue currency handling', () => {
         },
         {
           provide: ADMIN_PAYMENT_REPOSITORY,
-          useValue: { sumRevenueByCurrency },
+          useValue: { sumRevenueWithRates },
         },
         {
           provide: ADMIN_STORY_REPOSITORY,
@@ -63,18 +63,34 @@ describe('AdminDashboardMetricsService totalRevenue currency handling', () => {
     service = module.get(AdminDashboardMetricsService);
   });
 
-  it('no transactions -> 0, not mixed', async () => {
-    sumRevenueByCurrency.mockResolvedValue([]);
+  const usd = { rate: 1, effectiveFrom: null, usedEarliest: false };
+  const ngn = {
+    rate: 0.00065,
+    effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+    usedEarliest: false,
+  };
+
+  it('no transactions -> 0 USD, nothing unconverted', async () => {
+    sumRevenueWithRates.mockResolvedValue([]);
     const s = await service.getDashboardStats();
+    expect(s.baseCurrency).toBe('USD');
     expect(s.totalRevenue).toBe(0);
     expect(s.mixedCurrencies).toBe(false);
     expect(s.revenueByCurrency).toEqual([]);
+    expect(s.convertedRevenueByCurrency).toEqual([]);
+    expect(s.unconvertedCurrencies).toEqual([]);
+    expect(s.hasUnconvertedRevenue).toBe(false);
+    expect(s.usedEarliestRate).toBe(false);
   });
 
-  it('single currency -> plain total plus breakdown; trend still computed', async () => {
-    sumRevenueByCurrency
-      .mockResolvedValueOnce([{ currency: 'USD', amount: 120, count: 4 }])
-      .mockResolvedValueOnce([{ currency: 'USD', amount: 100, count: 3 }]);
+  it('single currency (USD) is unchanged; trend still computed', async () => {
+    sumRevenueWithRates
+      .mockResolvedValueOnce([
+        { currency: 'USD', amount: 120, count: 4, rate: usd },
+      ])
+      .mockResolvedValueOnce([
+        { currency: 'USD', amount: 100, count: 3, rate: usd },
+      ]);
     const s = await service.getDashboardStats();
     expect(s.totalRevenue).toBe(120);
     expect(s.mixedCurrencies).toBe(false);
@@ -88,37 +104,74 @@ describe('AdminDashboardMetricsService totalRevenue currency handling', () => {
     });
   });
 
-  it('mixed currencies -> totalRevenue null, never a cross-currency sum; no fake trend', async () => {
-    sumRevenueByCurrency
+  it('mixed currencies are converted to USD (NGN 4500 + USD 9.99 -> 12.92)', async () => {
+    sumRevenueWithRates
       .mockResolvedValueOnce([
-        { currency: 'NGN', amount: 25000, count: 5 },
-        { currency: 'USD', amount: 52.98, count: 3 },
+        { currency: 'NGN', amount: 4500, count: 1, rate: ngn },
+        { currency: 'USD', amount: 9.99, count: 1, rate: usd },
       ])
-      .mockResolvedValueOnce([{ currency: 'NGN', amount: 20000, count: 4 }]);
+      .mockResolvedValueOnce([
+        { currency: 'NGN', amount: 4500, count: 1, rate: ngn },
+      ]);
     const s = await service.getDashboardStats();
-    expect(s.totalRevenue).toBeNull();
+    expect(s.totalRevenue).toBe(12.92);
     expect(s.mixedCurrencies).toBe(true);
+    expect(s.hasUnconvertedRevenue).toBe(false);
     expect(s.revenueByCurrency).toEqual([
-      { currency: 'NGN', total: 25000, transactions: 5 },
-      { currency: 'USD', total: 52.98, transactions: 3 },
+      { currency: 'NGN', total: 4500, transactions: 1 },
+      { currency: 'USD', total: 9.99, transactions: 1 },
     ]);
+    expect(s.convertedRevenueByCurrency).toEqual([
+      {
+        currency: 'USD',
+        total: 9.99,
+        transactions: 1,
+        usdTotal: 9.99,
+        rateUsed: 1,
+      },
+      {
+        currency: 'NGN',
+        total: 4500,
+        transactions: 1,
+        usdTotal: 2.93,
+        rateUsed: 0.00065,
+      },
+    ]);
+    // previous month converted total is 2.925 -> 2.93; trend is vs converted prev
     expect(s.performanceMetrics.totalRevenue).toMatchObject({
-      value: null,
-      trend: 0,
-      direction: 'neutral',
+      value: 12.92,
+      direction: 'up',
     });
   });
 
-  it('single currency now but a different currency last month -> no trend (cannot compare)', async () => {
-    sumRevenueByCurrency
-      .mockResolvedValueOnce([{ currency: 'USD', amount: 50, count: 1 }])
-      .mockResolvedValueOnce([{ currency: 'NGN', amount: 20000, count: 4 }]);
+  it('a currency with no rate is listed as unconverted and excluded from the total', async () => {
+    sumRevenueWithRates
+      .mockResolvedValueOnce([
+        { currency: 'NGN', amount: 25000, count: 5, rate: null },
+        { currency: 'USD', amount: 52.98, count: 3, rate: usd },
+      ])
+      .mockResolvedValueOnce([]);
     const s = await service.getDashboardStats();
-    expect(s.totalRevenue).toBe(50);
-    expect(s.performanceMetrics.totalRevenue).toMatchObject({
-      value: 50,
-      trend: 0,
-      direction: 'neutral',
-    });
+    expect(s.totalRevenue).toBe(52.98);
+    expect(s.hasUnconvertedRevenue).toBe(true);
+    expect(s.unconvertedCurrencies).toEqual([
+      { currency: 'NGN', total: 25000, transactions: 5 },
+    ]);
+  });
+
+  it('flags usedEarliestRate when a payment predates the earliest rate', async () => {
+    sumRevenueWithRates
+      .mockResolvedValueOnce([
+        {
+          currency: 'NGN',
+          amount: 1000,
+          count: 1,
+          rate: { ...ngn, usedEarliest: true },
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    const s = await service.getDashboardStats();
+    expect(s.usedEarliestRate).toBe(true);
+    expect(s.totalRevenue).toBe(0.65);
   });
 });

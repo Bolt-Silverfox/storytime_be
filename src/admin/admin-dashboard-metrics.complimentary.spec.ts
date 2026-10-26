@@ -21,9 +21,14 @@ describe('AdminDashboardMetricsService complimentary vs paying', () => {
     if (where.source?.not === 'store') return Promise.resolve(4);
     return Promise.resolve(10);
   });
-  const sumRevenue = jest
-    .fn()
-    .mockResolvedValue([{ currency: 'USD', amount: 29.94, count: 6 }]);
+  const sumRevenue = jest.fn().mockResolvedValue([
+    {
+      currency: 'USD',
+      amount: 29.94,
+      count: 6,
+      rate: { rate: 1, effectiveFrom: null, usedEarliest: false },
+    },
+  ]);
   const users = [
     {
       createdAt: new Date('2026-10-01'),
@@ -58,7 +63,7 @@ describe('AdminDashboardMetricsService complimentary vs paying', () => {
         },
         {
           provide: ADMIN_PAYMENT_REPOSITORY,
-          useValue: { sumRevenueByCurrency: sumRevenue },
+          useValue: { sumRevenueWithRates: sumRevenue },
         },
         {
           provide: ADMIN_STORY_REPOSITORY,
@@ -106,8 +111,9 @@ describe('AdminDashboardMetricsService complimentary vs paying', () => {
   it('revenue is transaction-based and is not filtered by subscription source', async () => {
     const s = await service.getDashboardStats();
     expect(s.totalRevenue).toBe(29.94);
-    expect(sumRevenue).toHaveBeenCalledWith(
-      expect.not.objectContaining({ source: expect.anything() }),
+    // the revenue query takes no subscription-source filter at all
+    expect(sumRevenue.mock.calls.every((c) => c[0]?.source === undefined)).toBe(
+      true,
     );
   });
 

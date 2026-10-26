@@ -7,6 +7,8 @@ import { AdminStoryAdminController } from './admin-story-admin.controller';
 import { AdminSupportController } from './admin-support.controller';
 import { AdminReadingAnalyticsController } from './admin-reading-analytics.controller';
 import { AdminCouponController } from './admin-coupon.controller';
+import { AdminFxRateController } from './admin-fx-rate.controller';
+import { AdminFxRateService } from './admin-fx-rate.service';
 import { AdminSystemController } from './admin-system.controller';
 import { AdminAuditLogController } from './admin-audit-log.controller';
 import { AdminUserHistoryController } from './admin-user-history.controller';
@@ -49,6 +51,8 @@ import {
   PrismaAdminAnalyticsRepository,
   ADMIN_AUDIT_LOG_REPOSITORY,
   PrismaAdminAuditLogRepository,
+  ADMIN_FX_RATE_REPOSITORY,
+  PrismaAdminFxRateRepository,
   ADMIN_USER_HISTORY_REPOSITORY,
   PrismaAdminUserHistoryRepository,
 } from './repositories';
@@ -82,6 +86,7 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     AdminSupportController,
     AdminReadingAnalyticsController,
     AdminCouponController,
+    AdminFxRateController,
     AdminSystemController,
     AdminAuditLogController,
     AdminUserHistoryController,
@@ -102,6 +107,7 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     AdminStoryService,
     AdminSystemService,
     AdminAuditLogService,
+    AdminFxRateService,
     AdminUserHistoryService,
     AdminContentImageService,
     {
@@ -143,6 +149,10 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     {
       provide: ADMIN_ANALYTICS_REPOSITORY,
       useClass: PrismaAdminAnalyticsRepository,
+    },
+    {
+      provide: ADMIN_FX_RATE_REPOSITORY,
+      useClass: PrismaAdminFxRateRepository,
     },
     {
       provide: ADMIN_AUDIT_LOG_REPOSITORY,

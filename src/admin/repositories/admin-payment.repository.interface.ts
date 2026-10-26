@@ -1,21 +1,22 @@
-import type { Prisma } from '@prisma/client';
+import type { ResolvedRate } from '../utils/fx-conversion.util';
 
-/** One row per currency (null currency = legacy/unknown). Never summed across currencies. */
-export interface RevenueByCurrencyRow {
+/**
+ * Revenue + transaction count for one (currency, applied FX rate) group. Rows
+ * are grouped by the rate each payment converts at (see fx-conversion.util for
+ * the selection rule), so the caller can convert without per-row work.
+ * `rate` is null when the currency has no FX rate at all (unconverted).
+ */
+export interface RevenueRateRow {
   currency: string | null;
   amount: number;
   count: number;
-}
-
-export interface RevenueByDate {
-  createdAt: Date;
-  /** Day total per (normalized) currency, e.g. { NGN: 5000, USD: 4.99 }. */
-  byCurrency: Record<string, number>;
+  rate: ResolvedRate | null;
 }
 
 export interface UserPaymentAmount {
   amount: number;
   currency: string | null;
+  createdAt: Date;
 }
 
 export interface DatedPaymentAmount {
@@ -24,33 +25,19 @@ export interface DatedPaymentAmount {
   createdAt: Date;
 }
 
-export interface RevenueByPlan {
+export interface RevenueByPlan extends RevenueRateRow {
   plan: string | null;
-  currency: string | null;
-  _sum: { amount: number | null };
-  _count: number;
 }
 
 export interface IAdminPaymentRepository {
-  // Revenue + transaction count per currency for an arbitrary where clause
-  sumRevenueByCurrency(
-    where: Prisma.PaymentTransactionWhereInput,
-  ): Promise<RevenueByCurrencyRow[]>;
+  // Succeeded revenue + count grouped by (currency, applied rate) in ONE SQL
+  // query (rate picked per transaction date). Optional createdAt cap.
+  sumRevenueWithRates(filter?: {
+    createdAtLte?: Date;
+  }): Promise<RevenueRateRow[]>;
 
-  // Successful transactions for a single user (amount + currency)
+  // Successful transactions for a single user (amount + currency + date)
   findSuccessfulByUser(userId: string): Promise<UserPaymentAmount[]>;
-
-  // Revenue grouped by createdAt in range (subscription analytics — unordered)
-  groupRevenueByCreatedAt(
-    startDate: Date,
-    endDate: Date,
-  ): Promise<RevenueByDate[]>;
-
-  // Revenue grouped by createdAt in range, ordered asc (revenue analytics)
-  groupRevenueByCreatedAtOrdered(
-    startDate: Date,
-    endDate: Date,
-  ): Promise<RevenueByDate[]>;
 
   // Successful transactions in range (amount + currency + createdAt), ordered asc
   findSuccessfulInRange(
@@ -58,9 +45,8 @@ export interface IAdminPaymentRepository {
     endDate: Date,
   ): Promise<DatedPaymentAmount[]>;
 
-  // Successful revenue + transaction count grouped by (plan, currency); each payment was
-  // for (top-plans analytics). Attributes each payment to its own plan rather
-  // than to the payer's current subscription.
+  // Successful revenue + count grouped by (plan, currency, applied rate), each
+  // payment attributed to the plan it was for (top-plans analytics).
   groupRevenueByPlan(): Promise<RevenueByPlan[]>;
 }
 

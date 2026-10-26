@@ -4,7 +4,6 @@ import { Cache } from 'cache-manager';
 import { Role } from '@prisma/client';
 import {
   DashboardStatsDto,
-  MetricWithTrendDto,
   UserGrowthDto,
   StoryStatsDto,
   UserGrowthMonthlyDto,
@@ -31,10 +30,7 @@ import {
   IAdminEngagementRepository,
   ADMIN_ENGAGEMENT_REPOSITORY,
 } from './repositories';
-import {
-  RevenueSummary,
-  summarizeRevenue,
-} from './utils/revenue-currency.util';
+import { summarizeConvertedRevenue } from './utils/fx-conversion.util';
 import {
   COMPLIMENTARY_SUBSCRIPTION_WHERE,
   isComplimentarySource,
@@ -62,39 +58,6 @@ export class AdminDashboardMetricsService {
     private readonly engagementRepo: IAdminEngagementRepository,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
-
-  /**
-   * Month-over-month trend for revenue. Only meaningful when both periods are
-   * in the same single currency; otherwise value is null (current period mixed)
-   * or the trend is neutral (periods not comparable). Never mixes currencies.
-   */
-  private revenueTrend(
-    current: RevenueSummary,
-    previous: RevenueSummary,
-  ): MetricWithTrendDto {
-    const timeframe = TrendLabel.VS_LAST_MONTH;
-    if (current.totalRevenue === null) {
-      return { value: null, trend: 0, direction: 'neutral', timeframe };
-    }
-    const prevCurrency = previous.revenueByCurrency[0]?.currency;
-    const curCurrency = current.revenueByCurrency[0]?.currency;
-    const comparable =
-      previous.totalRevenue !== null &&
-      (!prevCurrency || !curCurrency || prevCurrency === curCurrency);
-    if (!comparable) {
-      return {
-        value: current.totalRevenue,
-        trend: 0,
-        direction: 'neutral',
-        timeframe,
-      };
-    }
-    return DashboardUtil.calculateTrend(
-      current.totalRevenue,
-      previous.totalRevenue ?? 0,
-      timeframe,
-    );
-  }
 
   async getDashboardStats(): Promise<DashboardStatsDto> {
     // Check cache first
@@ -198,16 +161,13 @@ export class AdminDashboardMetricsService {
       }),
 
       // Revenue (succeeded transactions only; comped access has none)
-      this.paymentRepo.sumRevenueByCurrency({
-        status: 'success',
-        deletedAt: null,
-      }),
+      this.paymentRepo.sumRevenueWithRates(),
     ]);
 
     const totalUsersCount = await this.userRepo.count({ isDeleted: false });
-    // Revenue is summarised per currency: totalRevenue is a plain number only
-    // when a single currency is involved (null otherwise; never FX-summed).
-    const revenue = summarizeRevenue(totalRevenueResult);
+    // Revenue is converted to USD at the stored FX rate effective on each
+    // transaction's date; currencies without a rate are reported separately.
+    const revenue = summarizeConvertedRevenue(totalRevenueResult);
 
     // 2. Fetch Previous Period Metrics for Trends
     // Trends for "Total" metrics (Growth vs Last Month)
@@ -279,15 +239,15 @@ export class AdminDashboardMetricsService {
         OR: [{ endsAt: null }, { endsAt: { gt: lastMonthEnd } }],
       }),
 
-      this.paymentRepo.sumRevenueByCurrency({
-        status: 'success',
-        deletedAt: null,
-        createdAt: { lte: lastMonthEnd },
-      }),
+      this.paymentRepo.sumRevenueWithRates({ createdAtLte: lastMonthEnd }),
     ]);
 
-    const prevRevenue = summarizeRevenue(prevTotalRevenueResult);
-    const totalRevenueTrend = this.revenueTrend(revenue, prevRevenue);
+    const prevRevenue = summarizeConvertedRevenue(prevTotalRevenueResult);
+    const totalRevenueTrend = DashboardUtil.calculateTrend(
+      revenue.totalRevenue,
+      prevRevenue.totalRevenue,
+      TrendLabel.VS_LAST_MONTH,
+    );
 
     // Trends for "Active" & "New" metrics (Time shifting)
     const [
@@ -361,9 +321,14 @@ export class AdminDashboardMetricsService {
         plan: p.plan,
         count: p._count,
       })),
+      baseCurrency: revenue.baseCurrency,
       totalRevenue: revenue.totalRevenue,
       mixedCurrencies: revenue.mixedCurrencies,
       revenueByCurrency: revenue.revenueByCurrency,
+      convertedRevenueByCurrency: revenue.convertedRevenueByCurrency,
+      unconvertedCurrencies: revenue.unconvertedCurrencies,
+      hasUnconvertedRevenue: revenue.hasUnconvertedRevenue,
+      usedEarliestRate: revenue.usedEarliestRate,
       conversionRate:
         totalUsersCount > 0
           ? Number(((paidUsers / totalUsersCount) * 100).toFixed(2))

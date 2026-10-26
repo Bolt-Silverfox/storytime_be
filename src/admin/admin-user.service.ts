@@ -24,17 +24,21 @@ import {
 } from './repositories';
 import {
   CurrencyTotals,
-  UNKNOWN_CURRENCY,
   addToCurrencyTotals,
-  singleCurrencyTotal,
 } from './utils/revenue-currency.util';
+import {
+  BASE_CURRENCY,
+  FxRateTable,
+  bucketConvertedRevenue,
+} from './utils/fx-conversion.util';
+import { AdminFxRateService } from './admin-fx-rate.service';
 import {
   PAID_PLAN_WHERE,
   hasPaidAccess,
   isComplimentarySource,
 } from '../subscription/subscription.constants';
 
-/** Per-currency spend as a plain object, rounded to cents. Never mixes currencies. */
+/** Per-currency ORIGINAL spend as a plain object, rounded to cents. */
 function spendingTotals(
   transactions: { amount: number; currency: string | null }[],
 ): CurrencyTotals {
@@ -46,16 +50,21 @@ function spendingTotals(
 }
 
 /**
- * Headline spend: the plain total + its currency when the user paid in exactly
- * one currency (currency is null for the UNKNOWN bucket); 0 when nothing was
- * paid; amountSpent null when several currencies are involved.
+ * Headline spend in USD: every payment converts at the FX rate effective on
+ * its own date; payments in a currency with no rate are excluded and reported
+ * in `unconvertedSpendingByCurrency`. Original amounts stay in spendingByCurrency.
  */
-function headlineSpend(totals: CurrencyTotals) {
-  const keys = Object.keys(totals);
+function usdSpend(
+  transactions: { amount: number; currency: string | null; createdAt: Date }[],
+  table: FxRateTable,
+) {
+  const bucket = bucketConvertedRevenue(transactions, () => 'all', table).get(
+    'all',
+  );
   return {
-    amountSpent: singleCurrencyTotal(totals),
-    currency:
-      keys.length === 1 && keys[0] !== UNKNOWN_CURRENCY ? keys[0] : null,
+    amountSpent: bucket?.amount ?? 0,
+    currency: BASE_CURRENCY,
+    unconvertedSpendingByCurrency: bucket?.unconvertedByCurrency ?? {},
   };
 }
 
@@ -66,6 +75,7 @@ export class AdminUserService {
     private readonly userRepo: IAdminUserRepository,
     @Inject(ADMIN_PAYMENT_REPOSITORY)
     private readonly paymentRepo: IAdminPaymentRepository,
+    private readonly fxRates: AdminFxRateService,
   ) {}
 
   async getAllUsers(
@@ -181,15 +191,15 @@ export class AdminUserService {
       filters.paidFirst === true &&
       (hasActiveSub === undefined || hasActiveSub === null);
 
-    const [users, total] = paidFirst
-      ? await this.findPaidFirstPage(
+    const usersPage = paidFirst
+      ? this.findPaidFirstPage(
           where,
           activeSubscriptionCriteria,
           orderBy,
           skip,
           limit,
         )
-      : await Promise.all([
+      : Promise.all([
           this.userRepo.findManyWithDetails({
             where,
             skip,
@@ -198,6 +208,10 @@ export class AdminUserService {
           }),
           this.userRepo.count(where),
         ]);
+    const [[users, total], fxTable] = await Promise.all([
+      usersPage,
+      this.fxRates.getRateTable(),
+    ]);
 
     // One grouped query for the whole page (no N+1).
     const lastActivity =
@@ -229,10 +243,10 @@ export class AdminUserService {
             ),
           0,
         );
-        // Group spending by currency; amountSpent is only a plain number when
-        // every transaction shares one currency (null if several).
+        // spendingByCurrency = original amounts; amountSpent = USD-converted.
         const spendingByCurrency = spendingTotals(user.paymentTransactions);
-        const { amountSpent, currency } = headlineSpend(spendingByCurrency);
+        const { amountSpent, currency, unconvertedSpendingByCurrency } =
+          usdSpend(user.paymentTransactions, fxTable);
 
         const hasActiveSubscription = hasPaidAccess(user.subscription);
 
@@ -244,6 +258,7 @@ export class AdminUserService {
           amountSpent,
           currency,
           spendingByCurrency,
+          unconvertedSpendingByCurrency,
           // Access, not payment: true for anyone with active paid ACCESS,
           // including complimentary grants (gating is unchanged).
           isPaidUser: hasActiveSubscription,
@@ -334,8 +349,12 @@ export class AdminUserService {
 
     const userTransactions =
       await this.paymentRepo.findSuccessfulByUser(userId);
+    const fxTable = await this.fxRates.getRateTable();
     const spendingByCurrency = spendingTotals(userTransactions);
-    const { amountSpent, currency } = headlineSpend(spendingByCurrency);
+    const { amountSpent, currency, unconvertedSpendingByCurrency } = usdSpend(
+      userTransactions,
+      fxTable,
+    );
 
     // Resolve the granting admin's name (no FK on grantedByAdminId).
     const grantedByAdminId = user.subscription?.grantedByAdminId ?? null;
@@ -368,6 +387,7 @@ export class AdminUserService {
       amountSpent,
       currency,
       spendingByCurrency,
+      unconvertedSpendingByCurrency,
       stats: {
         sessionsCount: user._count.auth,
         favoritesCount: user._count.parentFavorites,
