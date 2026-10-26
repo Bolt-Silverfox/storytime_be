@@ -1,0 +1,28 @@
+# Version consistency: the storytime-ci reusable version-check job, ported as
+# .woodpecker/scripts/version-check.sh. Status check:
+# ci/woodpecker/pr/version (pull requests only, as on GitHub: there is no push
+# run, so no push context).
+#
+# The `clone` override is what the script needs: the full history, tags, and
+# the PR's target branch (fetched, not merged) to compare package.json against.
+#
+# LIGHT lane: git and node only.
+when:
+  - event: pull_request
+
+labels:
+  lane: light
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git:2.10.1
+    settings:
+      tags: true
+      partial: false
+      fetch_target_branch: true
+
+steps:
+  - name: version
+    image: node:24.22.1-bookworm
+    commands:
+      - bash .woodpecker/scripts/version-check.sh

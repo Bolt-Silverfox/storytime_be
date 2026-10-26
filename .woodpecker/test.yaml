@@ -1,0 +1,85 @@
+# Unit tests: the GitHub "Test" job (postgres + redis services, synthetic .env,
+# migrations, jest). Status check: ci/woodpecker/{push,pr}/test
+#
+# HEAVY lane, jest at --maxWorkers=1 (in band) with a 2 GB heap. Measured in a
+# 3 GiB container: --maxWorkers=2 is OOM-killed at any heap (1 GB, 1.25 GB,
+# 2 GB: workers die with SIGKILL / "ran out of memory", 5-9 suites fail);
+# --maxWorkers=1 passes all 130 suites / 1414 tests in about 65 s, peaking at
+# about 2.6 GiB.
+# `--coverage` is not passed (GitHub's dev job did; it only wrote a report that
+# nothing uploaded, and V8 coverage costs memory). Postgres and redis are
+# service containers reached by name; .woodpecker/scripts/wait-for.mjs waits
+# for their ports (the postgres image listens on TCP only once it is ready).
+#
+# The doubled dollar in commands escapes Woodpecker's own variable substitution.
+# PRs run once (as pull_request); pushes run only on the long-lived branches,
+# where there is no PR to cover them. Halves spot usage per PR commit.
+when:
+  - event: pull_request
+  - event: push
+    branch: [main, "develop-v*", "release-v*"]
+
+labels:
+  lane: heavy
+
+variables:
+  - &node_image node:24.22.1-bookworm
+  - &pnpm "corepack enable && corepack prepare pnpm@10.15.1 --activate"
+  # The pnpm store goes beside the checkout, on the same workspace volume
+  # (/woodpecker is the Docker backend's workspace base), so installs can
+  # hardlink and the store is shared by the workflow's steps. Left to default,
+  # pnpm would create .pnpm-store INSIDE the checkout (the step's home is on
+  # another filesystem), where a bare `eslint` would lint it.
+  - &corepack_env
+    COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    npm_config_store_dir: /woodpecker/.pnpm-store
+  - &db_env
+    DATABASE_URL: postgresql://postgres:postgres@postgres:5432/storytime_test
+    REDIS_URL: redis://redis:6379
+
+services:
+  - name: postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: storytime_test
+
+  - name: redis
+    image: redis:7-alpine
+
+steps:
+  - name: install
+    image: *node_image
+    environment: *corepack_env
+    commands:
+      - *pnpm
+      - pnpm install --frozen-lockfile --ignore-scripts
+
+  - name: generate
+    image: *node_image
+    environment:
+      <<: [*corepack_env, *db_env]
+    commands:
+      - *pnpm
+      - pnpm db:generate
+
+  - name: migrate
+    image: *node_image
+    environment:
+      <<: [*corepack_env, *db_env]
+    commands:
+      - *pnpm
+      - cp .woodpecker/ci.env .env
+      - node .woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379
+      - pnpm db:migrate:deploy
+
+  - name: jest
+    image: *node_image
+    environment:
+      <<: [*corepack_env, *db_env]
+      NODE_OPTIONS: --max-old-space-size=2048
+    commands:
+      - *pnpm
+      - cp .woodpecker/ci.env .env
+      - pnpm test --maxWorkers=1
