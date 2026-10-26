@@ -1,5 +1,6 @@
 import { AdminUserService } from './admin-user.service';
 import { AdminExportService } from './admin-export.service';
+import { FxRateTable } from './utils/fx-conversion.util';
 
 describe('AdminUserService lastLoginAt / lastActiveAt', () => {
   const login = new Date('2026-10-01T10:00:00Z');
@@ -49,6 +50,9 @@ describe('AdminUserService lastLoginAt / lastActiveAt', () => {
     service = new AdminUserService(
       userRepo as never,
       { findSuccessfulByUser: jest.fn().mockResolvedValue([]) } as never,
+      {
+        getRateTable: jest.fn().mockResolvedValue(new FxRateTable([])),
+      } as never,
     );
   });
 
@@ -187,10 +191,11 @@ describe('AdminUserService lastLoginAt / lastActiveAt', () => {
         'Last Login',
         'Last Active',
         'Is Complimentary',
+        'Amount Spent (USD)',
       ]);
-      expect(
-        row.endsWith(`${login.toISOString()},${active.toISOString()},false`),
-      ).toBe(true);
+      expect(row).toContain(
+        `${login.toISOString()},${active.toISOString()},false,`,
+      );
     });
   });
 });
