@@ -52,6 +52,7 @@ describe('SubscriptionService', () => {
   let mockPaymentTxRepo: MockPaymentTransactionRepository;
   let mockUserRepo: MockUserRepository;
   let mockCacheMetrics: ReturnType<typeof createMockCacheMetrics>;
+  let mockEventEmitter: { emit: jest.Mock };
 
   const mockSubscription = {
     id: 'sub-1',
@@ -69,6 +70,7 @@ describe('SubscriptionService', () => {
     mockPaymentTxRepo = createMockPaymentTransactionRepository();
     mockUserRepo = createMockUserRepository();
     mockCacheMetrics = createMockCacheMetrics();
+    mockEventEmitter = { emit: jest.fn() };
 
     jest.clearAllMocks();
 
@@ -82,7 +84,7 @@ describe('SubscriptionService', () => {
         },
         { provide: USER_REPOSITORY, useValue: mockUserRepo },
         { provide: CacheMetricsService, useValue: mockCacheMetrics },
-        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+        { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     }).compile();
 
@@ -192,7 +194,10 @@ describe('SubscriptionService', () => {
         status: SUBSCRIPTION_STATUS.ACTIVE,
       };
 
-      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSubscription);
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
+        ...mockSubscription,
+        plan: 'free',
+      });
       mockSubscriptionRepo.updateById.mockResolvedValue(updatedSub);
       mockCacheMetrics.del.mockResolvedValue(undefined);
 
@@ -202,6 +207,165 @@ describe('SubscriptionService', () => {
       expect(result.subscription.plan).toBe('free');
       expect(mockSubscriptionRepo.updateById).toHaveBeenCalled();
       expect(mockSubscriptionRepo.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('subscribe (subscription source)', () => {
+    it('creates the free-plan row explicitly as source=store', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
+      mockSubscriptionRepo.create.mockResolvedValue({
+        ...mockSubscription,
+        plan: 'free',
+      });
+      mockCacheMetrics.del.mockResolvedValue(undefined);
+
+      await service.subscribe('user-1', 'free');
+
+      expect(mockSubscriptionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ source: 'store' }),
+        expect.anything(),
+      );
+    });
+
+    it('re-selecting free on an expired admin grant clears the grant fields', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
+        ...mockSubscription,
+        endsAt: new Date(Date.now() - 1000),
+        source: 'admin_grant',
+        grantedByAdminId: 'admin-9',
+        grantReason: 'press',
+      });
+      mockSubscriptionRepo.updateById.mockResolvedValue({
+        ...mockSubscription,
+        plan: 'free',
+      });
+      mockCacheMetrics.del.mockResolvedValue(undefined);
+
+      await service.subscribe('user-1', 'free');
+
+      expect(mockSubscriptionRepo.updateById).toHaveBeenCalledWith(
+        mockSubscription.id,
+        expect.objectContaining({
+          source: 'store',
+          grantedByAdminId: null,
+          grantReason: null,
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('subscribe free never overwrites a live paid subscription', () => {
+    const liveStore = {
+      ...mockSubscription,
+      source: 'store',
+      purchaseToken: 'real-google-token',
+    };
+    const expectUntouched = (result: {
+      subscription: unknown;
+      paidSubscriptionActive: boolean;
+      message?: string;
+    }) => {
+      expect(mockSubscriptionRepo.updateById).not.toHaveBeenCalled();
+      expect(mockSubscriptionRepo.create).not.toHaveBeenCalled();
+      expect(mockCacheMetrics.del).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emit).not.toHaveBeenCalled();
+      expect(result.paidSubscriptionActive).toBe(true);
+      expect(result.message).toMatch(/paid subscription is still active/i);
+    };
+
+    it('returns a live store subscription unchanged', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(liveStore);
+      const result = await service.subscribe('user-1', 'free');
+      expect(result.subscription).toEqual(liveStore);
+      expectUntouched(result);
+    });
+
+    it('returns a live admin grant unchanged and keeps grant fields hidden from the user', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
+        ...mockSubscription,
+        source: 'admin_grant',
+        grantedByAdminId: 'admin-9',
+        grantReason: 'press',
+      });
+      const result = await service.subscribe('user-1', 'free');
+      expect(result.subscription).toEqual(
+        expect.objectContaining({ source: 'admin_grant', plan: 'monthly' }),
+      );
+      expect(result.subscription).not.toHaveProperty('grantedByAdminId');
+      expect(result.subscription).not.toHaveProperty('grantReason');
+      expectUntouched(result);
+    });
+
+    it('allows free on an expired paid row', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
+        ...liveStore,
+        endsAt: new Date(Date.now() - 1000),
+      });
+      mockSubscriptionRepo.updateById.mockResolvedValue({
+        ...liveStore,
+        plan: 'free',
+      });
+      const result = await service.subscribe('user-1', 'free');
+      expect(mockSubscriptionRepo.updateById).toHaveBeenCalled();
+      expect(result.paidSubscriptionActive).toBe(false);
+    });
+
+    it('allows free on a cancelled row', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
+        ...liveStore,
+        status: SUBSCRIPTION_STATUS.CANCELLED,
+      });
+      mockSubscriptionRepo.updateById.mockResolvedValue({
+        ...liveStore,
+        plan: 'free',
+      });
+      const result = await service.subscribe('user-1', 'free');
+      expect(mockSubscriptionRepo.updateById).toHaveBeenCalled();
+      expect(result.paidSubscriptionActive).toBe(false);
+    });
+
+    it('a user with no subscription still gets the free row', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
+      mockSubscriptionRepo.create.mockResolvedValue({
+        ...mockSubscription,
+        plan: 'free',
+      });
+      const result = await service.subscribe('user-1', 'free');
+      expect(mockSubscriptionRepo.create).toHaveBeenCalled();
+      expect(result.paidSubscriptionActive).toBe(false);
+    });
+  });
+
+  describe('user-facing responses hide internal grant fields', () => {
+    const grantRow = {
+      ...mockSubscription,
+      source: 'admin_grant',
+      grantedByAdminId: 'admin-9',
+      grantReason: 'internal note: press',
+    };
+
+    it('getSubscriptionForUser omits grantedByAdminId and grantReason', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(grantRow);
+
+      const res = await service.getSubscriptionForUser('user-1');
+
+      expect(res).not.toHaveProperty('grantedByAdminId');
+      expect(res).not.toHaveProperty('grantReason');
+      expect(res).toHaveProperty('plan', mockSubscription.plan);
+    });
+
+    it('cancel omits them too', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(grantRow);
+      mockSubscriptionRepo.updateById.mockResolvedValue({
+        ...grantRow,
+        status: SUBSCRIPTION_STATUS.CANCELLED,
+      });
+
+      const res = await service.cancel('user-1');
+
+      expect(res).not.toHaveProperty('grantedByAdminId');
+      expect(res).not.toHaveProperty('grantReason');
     });
   });
 

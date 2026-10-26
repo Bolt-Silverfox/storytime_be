@@ -15,6 +15,9 @@ import { createHash } from 'crypto';
 import {
   PLANS,
   PRODUCT_ID_TO_PLAN,
+  STORE_SOURCE_FIELDS,
+  hasRealStoreToken,
+  withoutAdminGrantFields,
 } from '@/subscription/subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, PaymentFailedEvent } from '@/shared/events';
@@ -459,6 +462,11 @@ export class PaymentService {
       platform: platformDetails?.platform ?? null,
       productId: platformDetails?.productId ?? null,
       purchaseToken: platformDetails?.purchaseToken ?? null,
+      // A verified store purchase always makes the row a real paying
+      // subscription: it overrides any admin grant (source back to 'store',
+      // grantedBy/reason cleared). Written inside the same token-guarded CAS as
+      // the token swap, so a lost race writes none of these fields.
+      ...STORE_SOURCE_FIELDS,
     };
 
     let subscription;
@@ -555,8 +563,21 @@ export class PaymentService {
     const existing = await this.subscriptionRepository.findFirstByUser(userId);
     if (!existing) throw new NotFoundException('No subscription to cancel');
 
+    // Only a REAL store subscription has anything to cancel at Apple/Google.
+    // Granted rows (source != store: admin_grant/coupon/trial) and rows holding
+    // a synthetic `admin-activated-*` token carry no store-side subscription, so
+    // calling the stores with that token would be a bogus (and failing) request.
+    const storeBacked = hasRealStoreToken(existing);
+    if (!storeBacked) {
+      this.logger.log(
+        `Cancelling non-store subscription locally for user ${userId.substring(0, 8)} ` +
+          `(source=${existing.source}); no Apple/Google call made`,
+      );
+    }
+
     // Cancel on Google Play if this is a Google subscription with stored tokens
     if (
+      storeBacked &&
       existing.platform === 'google' &&
       existing.productId &&
       existing.purchaseToken
@@ -596,7 +617,11 @@ export class PaymentService {
 
     // Check Apple subscription auto-renewal status
     let appleAutoRenewWarning: string | undefined;
-    if (existing.platform === 'apple' && existing.purchaseToken) {
+    if (
+      storeBacked &&
+      existing.platform === 'apple' &&
+      existing.purchaseToken
+    ) {
       const statusResult =
         await this.appleVerificationService.getSubscriptionStatus(
           existing.purchaseToken,
@@ -640,13 +665,21 @@ export class PaymentService {
 
     if (appleAutoRenewWarning) {
       return {
-        ...subscription,
+        ...withoutAdminGrantFields(subscription),
         warning: appleAutoRenewWarning,
         manageUrl: 'https://apps.apple.com/account/subscriptions',
       };
     }
 
-    return subscription;
+    if (!storeBacked) {
+      return {
+        ...withoutAdminGrantFields(subscription),
+        storeCancellation: 'skipped' as const,
+        note: 'This access was not purchased through the App Store or Google Play, so it was cancelled locally only; there is no store subscription to cancel.',
+      };
+    }
+
+    return withoutAdminGrantFields(subscription);
   }
 
   private getErrorMessage(error: unknown): string {

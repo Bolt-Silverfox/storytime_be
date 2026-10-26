@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, Subscription } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { SUBSCRIPTION_SOURCE } from '@/subscription/subscription.constants';
 import {
   AppleNotificationInfo,
   AppleVerificationService,
@@ -625,8 +626,12 @@ export class SubscriptionWebhookService {
     platform: 'apple' | 'google',
     purchaseToken: string,
   ): Promise<Subscription | null> {
+    // Store notifications only ever concern store-sourced rows. An admin grant
+    // carries a synthetic `admin-activated-*` token that can never match a real
+    // store token; the explicit source filter makes that invariant structural
+    // so a store webhook can never expire/cancel a complimentary row.
     return this.prisma.subscription.findFirst({
-      where: { platform, purchaseToken },
+      where: { platform, purchaseToken, source: SUBSCRIPTION_SOURCE.STORE },
     });
   }
 
@@ -804,6 +809,9 @@ export class SubscriptionWebhookService {
       const res = await this.prisma.subscription.updateMany({
         where: {
           id: subscription.id,
+          // If an admin grant replaced this row between the lookup and this
+          // write, the source no longer matches and nothing is written.
+          source: SUBSCRIPTION_SOURCE.STORE,
           OR: [{ lastEventAt: null }, { lastEventAt: { lte: eventAt } }],
         },
         data: data,

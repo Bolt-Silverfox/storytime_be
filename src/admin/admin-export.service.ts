@@ -18,6 +18,10 @@ export class AdminExportService {
     return escaped;
   }
 
+  private formatDate(value: unknown): string {
+    return value ? new Date(value as string | number | Date).toISOString() : '';
+  }
+
   async exportUsersAsCsv(filters: UserFilterDto): Promise<string> {
     // Paginate through all matching users
     const pageSize = 1000;
@@ -45,6 +49,12 @@ export class AdminExportService {
       'Registration Date',
       'Is Deleted',
       'Is Suspended',
+      'Last Login',
+      'Last Active',
+      // Appended last so existing positional consumers keep working.
+      'Is Complimentary',
+      // Converted to USD with the shared FX rates (same figure as the API).
+      'Amount Spent (USD)',
     ];
 
     const rows = allUsers.map((user) => [
@@ -62,6 +72,10 @@ export class AdminExportService {
         : '',
       user.isDeleted,
       user.isSuspended || false,
+      this.formatDate(user.lastLoginAt),
+      this.formatDate(user.lastActiveAt),
+      user.isComplimentary || false,
+      (user.amountSpent as number | null | undefined) ?? 0,
     ]);
 
     const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -93,6 +107,9 @@ export class AdminExportService {
             'Paid Users',
             'Total Users',
             'Total Paid Users',
+            // Appended last so existing positional consumers keep working.
+            'Complimentary Users',
+            'Total Complimentary Users',
           ];
           const rows = growth.map((g) =>
             [
@@ -101,6 +118,8 @@ export class AdminExportService {
               g.paidUsers,
               g.totalUsers,
               g.totalPaidUsers,
+              g.complimentaryUsers,
+              g.totalComplimentaryUsers,
             ].join(','),
           );
           csvContent = [headers.join(','), ...rows].join('\n');
@@ -113,9 +132,29 @@ export class AdminExportService {
         rawData = revenue;
         filename = `revenue-analytics-${new Date().toISOString().split('T')[0]}`;
         if (format === 'csv') {
-          const headers = ['Date', 'Amount'];
+          // Amount is the USD-converted day total (same figure as the API);
+          // Currency Breakdown lists the ORIGINAL amounts per currency, e.g.
+          // NGN:25000;USD:5; Unconverted Breakdown lists currencies that have
+          // no FX rate yet (excluded from Amount).
+          const headers = [
+            'Date',
+            'Amount',
+            'Currency Breakdown',
+            'Base Currency',
+            'Unconverted Breakdown',
+          ];
+          const fmt = (totals: Record<string, number> | undefined) =>
+            Object.entries(totals ?? {})
+              .map(([currency, total]) => `${currency}:${total}`)
+              .join(';');
           const rows = revenue.dailyRevenue.map((r) =>
-            [r.date, r.amount].join(','),
+            [
+              r.date,
+              r.amount,
+              fmt(r.byCurrency),
+              revenue.baseCurrency ?? 'USD',
+              fmt(r.unconvertedByCurrency),
+            ].join(','),
           );
           csvContent = [headers.join(','), ...rows].join('\n');
         }

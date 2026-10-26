@@ -30,6 +30,14 @@ import {
   IAdminEngagementRepository,
   ADMIN_ENGAGEMENT_REPOSITORY,
 } from './repositories';
+import { summarizeConvertedRevenue } from './utils/fx-conversion.util';
+import {
+  COMPLIMENTARY_SUBSCRIPTION_WHERE,
+  isComplimentarySource,
+  isFreePlan,
+  PAID_PLAN_WHERE,
+  PAYING_SUBSCRIPTION_WHERE,
+} from '../subscription/subscription.constants';
 
 @Injectable()
 export class AdminDashboardMetricsService {
@@ -103,6 +111,7 @@ export class AdminDashboardMetricsService {
       totalFavorites,
       totalSubscriptions,
       activeSubscriptionsCount,
+      payingSubscriptionsCount,
       totalRevenueResult,
     ] = await Promise.all([
       this.userRepo.count({ role: Role.parent, isDeleted: false }),
@@ -136,18 +145,29 @@ export class AdminDashboardMetricsService {
       this.engagementRepo.countFavorites(), // Total favorites (cumulative)
 
       // Subs
-      this.subscriptionRepo.count({}),
+      // Every real (non-free) subscription row ever created
+      this.subscriptionRepo.count({ ...PAID_PLAN_WHERE }),
+      // All active PAID access (paying + complimentary); plan='free' rows excluded
       this.subscriptionRepo.count({
+        ...PAID_PLAN_WHERE,
+        status: 'active',
+        OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+      }),
+      // Active AND paying (real store purchase)
+      this.subscriptionRepo.count({
+        ...PAYING_SUBSCRIPTION_WHERE,
         status: 'active',
         OR: [{ endsAt: null }, { endsAt: { gt: now } }],
       }),
 
-      // Revenue
-      this.paymentRepo.sumRevenue({ status: 'success', deletedAt: null }),
+      // Revenue (succeeded transactions only; comped access has none)
+      this.paymentRepo.sumRevenueWithRates(),
     ]);
 
     const totalUsersCount = await this.userRepo.count({ isDeleted: false });
-    const totalRevenue = totalRevenueResult._sum.amount || 0;
+    // Revenue is converted to USD at the stored FX rate effective on each
+    // transaction's date; currencies without a rate are reported separately.
+    const revenue = summarizeConvertedRevenue(totalRevenueResult);
 
     // 2. Fetch Previous Period Metrics for Trends
     // Trends for "Total" metrics (Growth vs Last Month)
@@ -166,6 +186,7 @@ export class AdminDashboardMetricsService {
       prevTotalFavorites,
       prevTotalSubscriptions,
       prevActiveSubscriptionsCount,
+      prevPayingSubscriptionsCount,
       prevTotalRevenueResult,
     ] = await Promise.all([
       this.userRepo.count({
@@ -200,24 +221,33 @@ export class AdminDashboardMetricsService {
         createdAt: { lte: lastMonthEnd },
       }),
       this.subscriptionRepo.count({
+        ...PAID_PLAN_WHERE,
         startedAt: { lte: lastMonthEnd },
       }),
 
       // Active Subs History (Approximate)
       this.subscriptionRepo.count({
+        ...PAID_PLAN_WHERE,
+        status: 'active',
+        startedAt: { lte: lastMonthEnd },
+        OR: [{ endsAt: null }, { endsAt: { gt: lastMonthEnd } }],
+      }),
+      this.subscriptionRepo.count({
+        ...PAYING_SUBSCRIPTION_WHERE,
         status: 'active',
         startedAt: { lte: lastMonthEnd },
         OR: [{ endsAt: null }, { endsAt: { gt: lastMonthEnd } }],
       }),
 
-      this.paymentRepo.sumRevenue({
-        status: 'success',
-        deletedAt: null,
-        createdAt: { lte: lastMonthEnd },
-      }),
+      this.paymentRepo.sumRevenueWithRates({ createdAtLte: lastMonthEnd }),
     ]);
 
-    const prevTotalRevenue = prevTotalRevenueResult._sum.amount || 0;
+    const prevRevenue = summarizeConvertedRevenue(prevTotalRevenueResult);
+    const totalRevenueTrend = DashboardUtil.calculateTrend(
+      revenue.totalRevenue,
+      prevRevenue.totalRevenue,
+      TrendLabel.VS_LAST_MONTH,
+    );
 
     // Trends for "Active" & "New" metrics (Time shifting)
     const [
@@ -254,10 +284,15 @@ export class AdminDashboardMetricsService {
       range30d.start,
       range30d.end,
     );
-    const paidUsers = activeSubscriptionsCount;
-    const unpaidUsers = totalUsersCount - paidUsers;
-    const prevPaidUsers = prevActiveSubscriptionsCount;
-    const prevUnpaidUsers = prevTotalUsers - prevPaidUsers;
+    // paidUsers = PAYING (source=store) only; comped access is reported
+    // separately. unpaidUsers = users with no active access at all, so
+    // paid + complimentary + unpaid = total.
+    const paidUsers = payingSubscriptionsCount;
+    const complimentaryUsers =
+      activeSubscriptionsCount - payingSubscriptionsCount;
+    const unpaidUsers = totalUsersCount - activeSubscriptionsCount;
+    const prevPaidUsers = prevPayingSubscriptionsCount;
+    const prevUnpaidUsers = prevTotalUsers - prevActiveSubscriptionsCount;
 
     const result: DashboardStatsDto = {
       totalUsers: totalUsersCount,
@@ -276,14 +311,24 @@ export class AdminDashboardMetricsService {
       totalFavorites,
       averageSessionTime: Math.round(avgSessionTime),
       paidUsers,
+      complimentaryUsers,
       unpaidUsers,
       totalSubscriptions,
       activeSubscriptions: activeSubscriptionsCount,
+      payingSubscriptions: payingSubscriptionsCount,
+      complimentarySubscriptions: complimentaryUsers,
       subscriptionPlans: subscriptionPlans.map((p) => ({
         plan: p.plan,
         count: p._count,
       })),
-      totalRevenue: Number(totalRevenue.toFixed(2)),
+      baseCurrency: revenue.baseCurrency,
+      totalRevenue: revenue.totalRevenue,
+      mixedCurrencies: revenue.mixedCurrencies,
+      revenueByCurrency: revenue.revenueByCurrency,
+      convertedRevenueByCurrency: revenue.convertedRevenueByCurrency,
+      unconvertedCurrencies: revenue.unconvertedCurrencies,
+      hasUnconvertedRevenue: revenue.hasUnconvertedRevenue,
+      usedEarliestRate: revenue.usedEarliestRate,
       conversionRate:
         totalUsersCount > 0
           ? Number(((paidUsers / totalUsersCount) * 100).toFixed(2))
@@ -368,11 +413,7 @@ export class AdminDashboardMetricsService {
         ),
 
         // Revenue & Subs
-        totalRevenue: DashboardUtil.calculateTrend(
-          totalRevenue,
-          prevTotalRevenue,
-          TrendLabel.VS_LAST_MONTH,
-        ),
+        totalRevenue: totalRevenueTrend,
         totalSubscriptions: DashboardUtil.calculateTrend(
           totalSubscriptions,
           prevTotalSubscriptions,
@@ -441,15 +482,26 @@ export class AdminDashboardMetricsService {
       (acc, user) => {
         const date = user.createdAt.toISOString().split('T')[0];
         if (!acc[date]) {
-          acc[date] = { total: 0, paid: 0 };
+          acc[date] = { total: 0, paid: 0, complimentary: 0 };
         }
         acc[date].total += 1;
-        if (user.subscription?.status === 'active') {
-          acc[date].paid += 1;
+        if (
+          user.subscription?.status === 'active' &&
+          !isFreePlan(user.subscription.plan)
+        ) {
+          // Paying = real store subscription; anything else is comped access.
+          if (isComplimentarySource(user.subscription.source)) {
+            acc[date].complimentary += 1;
+          } else {
+            acc[date].paid += 1;
+          }
         }
         return acc;
       },
-      {} as Record<string, { total: number; paid: number }>,
+      {} as Record<
+        string,
+        { total: number; paid: number; complimentary: number }
+      >,
     );
 
     let totalUsers = await this.userRepo.count({
@@ -461,6 +513,16 @@ export class AdminDashboardMetricsService {
       createdAt: { lt: startDate },
       isDeleted: false,
       subscription: {
+        ...PAYING_SUBSCRIPTION_WHERE,
+        status: 'active',
+      },
+    });
+
+    let totalComplimentaryUsers = await this.userRepo.count({
+      createdAt: { lt: startDate },
+      isDeleted: false,
+      subscription: {
+        ...COMPLIMENTARY_SUBSCRIPTION_WHERE,
         status: 'active',
       },
     });
@@ -468,12 +530,15 @@ export class AdminDashboardMetricsService {
     return Object.entries(groupedByDate).map(([date, counts]) => {
       totalUsers += counts.total;
       totalPaidUsers += counts.paid;
+      totalComplimentaryUsers += counts.complimentary;
       return {
         date,
         newUsers: counts.total,
         paidUsers: counts.paid,
+        complimentaryUsers: counts.complimentary,
         totalUsers,
         totalPaidUsers,
+        totalComplimentaryUsers,
       };
     });
   }
@@ -599,14 +664,19 @@ export class AdminDashboardMetricsService {
 
     const freeCounts = new Array(labels.length).fill(0);
     const paidCounts = new Array(labels.length).fill(0);
+    const complimentaryCounts = new Array(labels.length).fill(0);
 
     users.forEach((u) => {
       const label = getLabel(u.createdAt);
       const index = labels.indexOf(label);
       if (index !== -1) {
-        const isPaid = u.subscription?.status === 'active';
-        if (isPaid) paidCounts[index]++;
-        else freeCounts[index]++;
+        const hasAccess =
+          u.subscription?.status === 'active' &&
+          !isFreePlan(u.subscription.plan);
+        if (!hasAccess) freeCounts[index]++;
+        else if (isComplimentarySource(u.subscription?.source))
+          complimentaryCounts[index]++;
+        else paidCounts[index]++;
       }
     });
 
@@ -615,6 +685,7 @@ export class AdminDashboardMetricsService {
         labels,
         freeUsers: freeCounts,
         paidUsers: paidCounts,
+        complimentaryUsers: complimentaryCounts,
       },
     };
   }

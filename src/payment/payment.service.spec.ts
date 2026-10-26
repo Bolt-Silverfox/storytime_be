@@ -585,6 +585,104 @@ describe('PaymentService', () => {
     });
   });
 
+  describe('verifyPurchase subscription source', () => {
+    const userId = 'user-1';
+    const dto = {
+      platform: 'google' as const,
+      productId: 'com.storytime.monthly',
+      purchaseToken: 'real-store-token',
+    };
+    const future = () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    beforeEach(() => {
+      mockGoogleVerification.verify.mockResolvedValue({
+        success: true,
+        isSubscription: true,
+        amount: 4.99,
+        currency: 'USD',
+        expirationTime: future(),
+        metadata: { acknowledgementState: 1 },
+      });
+      mockPaymentTxRepo.create.mockResolvedValue({
+        id: 'tx-1',
+        userId,
+        amount: 4.99,
+        currency: 'USD',
+        status: 'success',
+        reference: 'h',
+      });
+    });
+
+    it('creates new rows explicitly as source=store', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
+      mockSubscriptionRepo.create.mockResolvedValue({
+        id: 's',
+        plan: 'monthly',
+        status: 'active',
+      });
+
+      await service.verifyPurchase(userId, dto);
+
+      expect(mockSubscriptionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ source: 'store' }),
+      );
+    });
+
+    it('a real purchase overrides an admin grant: source back to store, grant fields cleared', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
+        id: 'comp-sub',
+        userId,
+        plan: 'yearly',
+        status: 'active',
+        source: 'admin_grant',
+        grantedByAdminId: 'admin-9',
+        grantReason: 'press',
+        purchaseToken: 'admin-activated-1700000000000',
+      });
+      mockSubscriptionRepo.findById.mockResolvedValue({
+        id: 'comp-sub',
+        plan: 'monthly',
+        status: 'active',
+      });
+
+      await service.verifyPurchase(userId, dto);
+
+      expect(mockSubscriptionRepo.updateByIdIfToken).toHaveBeenCalledWith(
+        'comp-sub',
+        'admin-activated-1700000000000', // CAS guard still the grant's token
+        expect.objectContaining({
+          source: 'store',
+          grantedByAdminId: null,
+          grantReason: null,
+          purchaseToken: 'real-store-token',
+        }),
+      );
+    });
+
+    it('a lost CAS race writes nothing, so grant fields are never half-overwritten', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
+        id: 'comp-sub',
+        userId,
+        source: 'admin_grant',
+        grantedByAdminId: 'admin-9',
+        grantReason: 'press',
+        purchaseToken: 'admin-activated-1',
+      });
+      mockSubscriptionRepo.updateByIdIfToken.mockResolvedValue(0);
+      mockSubscriptionRepo.findById.mockResolvedValue({
+        id: 'comp-sub',
+        plan: 'yearly',
+        status: 'active',
+        source: 'admin_grant',
+      });
+
+      await service.verifyPurchase(userId, dto);
+
+      expect(mockSubscriptionRepo.updateById).not.toHaveBeenCalled();
+      expect(mockSubscriptionRepo.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getSubscription', () => {
     it('should return enriched subscription for user', async () => {
       const mockSub = {
@@ -675,6 +773,7 @@ describe('PaymentService', () => {
         plan: 'monthly',
         status: 'active',
         endsAt: futureDate,
+        source: 'store',
         platform: 'google',
         productId: 'com.storytime.monthly',
         purchaseToken: 'google-token-123',
@@ -706,6 +805,7 @@ describe('PaymentService', () => {
         plan: 'monthly',
         status: 'active',
         endsAt: futureDate,
+        source: 'store',
         platform: 'google',
         productId: 'com.storytime.monthly',
         purchaseToken: 'google-token-123',
@@ -733,6 +833,7 @@ describe('PaymentService', () => {
         plan: 'monthly',
         status: 'active',
         endsAt: futureDate,
+        source: 'store',
         platform: 'apple',
         productId: 'com.storytime.monthly',
         purchaseToken: 'original-tx-123',
@@ -766,6 +867,7 @@ describe('PaymentService', () => {
         plan: 'monthly',
         status: 'active',
         endsAt: futureDate,
+        source: 'store',
         platform: 'apple',
         productId: 'com.storytime.monthly',
         purchaseToken: 'original-tx-123',
@@ -793,6 +895,7 @@ describe('PaymentService', () => {
         plan: 'monthly',
         status: 'active',
         endsAt: futureDate,
+        source: 'store',
         platform: 'apple',
         productId: 'com.storytime.monthly',
         purchaseToken: 'original-tx-123',
@@ -811,6 +914,78 @@ describe('PaymentService', () => {
       const result = await service.cancelSubscription('u1');
 
       expect(result.status).toBe('cancelled');
+    });
+
+    describe('granted / synthetic-token rows never hit the stores', () => {
+      const futureDate = new Date(Date.now() + 86400000 * 30);
+      it.each([
+        [
+          'admin_grant row on google with an admin-activated token',
+          {
+            source: 'admin_grant',
+            platform: 'google',
+            productId: 'com.storytime.monthly',
+            purchaseToken: 'admin-activated-1700000000000',
+          },
+        ],
+        [
+          'admin_grant row on apple with an admin-activated token',
+          {
+            source: 'admin_grant',
+            platform: 'apple',
+            productId: 'com.storytime.monthly',
+            purchaseToken: 'admin-activated-1700000000000',
+          },
+        ],
+        [
+          'coupon row carrying a platform and a token',
+          {
+            source: 'coupon',
+            platform: 'google',
+            productId: 'com.storytime.monthly',
+            purchaseToken: 'whatever-token',
+          },
+        ],
+        [
+          'store row that still holds an admin-activated token',
+          {
+            source: 'store',
+            platform: 'google',
+            productId: 'com.storytime.monthly',
+            purchaseToken: 'admin-activated-1700000000000',
+          },
+        ],
+      ])('%s', async (_name, fields) => {
+        const mockSub = {
+          id: 'sub-1',
+          plan: 'monthly',
+          status: 'active',
+          endsAt: futureDate,
+          ...fields,
+        };
+        mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSub);
+        mockSubscriptionRepo.updateById.mockResolvedValue({
+          ...mockSub,
+          status: 'cancelled',
+        });
+
+        const result = await service.cancelSubscription('u1');
+
+        expect(
+          mockGoogleVerification.cancelSubscription,
+        ).not.toHaveBeenCalled();
+        expect(
+          mockAppleVerification.getSubscriptionStatus,
+        ).not.toHaveBeenCalled();
+        // same local semantics as before: cancelled, endsAt preserved
+        expect(mockSubscriptionRepo.updateById).toHaveBeenCalledWith('sub-1', {
+          status: 'cancelled',
+          endsAt: futureDate,
+        });
+        expect(result.status).toBe('cancelled');
+        expect(result).toHaveProperty('storeCancellation', 'skipped');
+        expect(result).not.toHaveProperty('warning');
+      });
     });
   });
 });

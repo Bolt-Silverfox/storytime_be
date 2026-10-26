@@ -50,7 +50,7 @@ PORT="$new_port" NODE_ENV="$ENV" pm2 start dist/main.js \
 # --- 3. Health-gate the new color (liveness, then deep check) -----------------
 log "Health-gating http://127.0.0.1:${new_port}${HEALTH_READY_PATH} (timeout ${HEALTH_TIMEOUT}s)"
 deadline=$(( $(date +%s) + HEALTH_TIMEOUT ))
-until curl -fsS "http://127.0.0.1:${new_port}${HEALTH_READY_PATH}" >/dev/null 2>&1; do
+until curl -fsS --connect-timeout 3 --max-time 10 "http://127.0.0.1:${new_port}${HEALTH_READY_PATH}" >/dev/null 2>&1; do
   if [ "$(date +%s)" -ge "$deadline" ]; then
     err "New color '$new' did not become ready in ${HEALTH_TIMEOUT}s — rolling back."
     pm2 logs "${APP}-${new}" --lines 40 --nostream || true
@@ -60,7 +60,7 @@ until curl -fsS "http://127.0.0.1:${new_port}${HEALTH_READY_PATH}" >/dev/null 2>
   sleep 3
 done
 
-if ! curl -fsS "http://127.0.0.1:${new_port}${HEALTH_FULL_PATH}" >/dev/null 2>&1; then
+if ! curl -fsS --connect-timeout 3 --max-time 10 "http://127.0.0.1:${new_port}${HEALTH_FULL_PATH}" >/dev/null 2>&1; then
   err "New color '$new' failed the deep health check (${HEALTH_FULL_PATH}) — rolling back."
   pm2 delete "${APP}-${new}" >/dev/null 2>&1 || true
   exit 1

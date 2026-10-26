@@ -7,6 +7,7 @@ import { AdminRevenueAnalyticsService } from '../admin-revenue-analytics.service
 import { AdminSystemMetricsService } from '../admin-system-metrics.service';
 import { AdminGuestAnalyticsService } from '../admin-guest-analytics.service';
 import { AdminUserService } from '../admin-user.service';
+import { AdminFxRateService } from '../admin-fx-rate.service';
 import { AdminCouponService } from '../admin-coupon.service';
 import { AdminExportService } from '../admin-export.service';
 import { AdminSubscriptionOpsService } from '../admin-subscription-ops.service';
@@ -27,6 +28,8 @@ import {
   PrismaAdminSubscriptionRepository,
   ADMIN_PAYMENT_REPOSITORY,
   PrismaAdminPaymentRepository,
+  ADMIN_FX_RATE_REPOSITORY,
+  PrismaAdminFxRateRepository,
   ADMIN_COUPON_REPOSITORY,
   PrismaAdminCouponRepository,
   ADMIN_CONTENT_REPOSITORY,
@@ -116,14 +119,21 @@ const mockPrismaService = {
     groupBy: jest.fn(),
   },
   paymentTransaction: {
-    aggregate: jest.fn(),
+    groupBy: jest.fn(),
     findMany: jest.fn(),
+  },
+  fxRate: {
+    findMany: jest.fn().mockResolvedValue([]),
   },
   screenTimeSession: {
     findMany: jest.fn(),
   },
   session: {
     findMany: jest.fn(),
+    groupBy: jest.fn().mockResolvedValue([]),
+  },
+  activityLog: {
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   $queryRaw: jest.fn(),
 };
@@ -145,6 +155,11 @@ describe('AdminService', () => {
         AdminSystemMetricsService,
         AdminGuestAnalyticsService,
         AdminUserService,
+        AdminFxRateService,
+        {
+          provide: ADMIN_FX_RATE_REPOSITORY,
+          useClass: PrismaAdminFxRateRepository,
+        },
         AdminCouponService,
         AdminExportService,
         AdminSubscriptionOpsService,
@@ -299,9 +314,16 @@ describe('AdminService', () => {
       prisma.storyProgress.count.mockResolvedValue(100);
       prisma.favorite.count.mockResolvedValue(50);
       prisma.subscription.count.mockResolvedValue(15);
-      prisma.paymentTransaction.aggregate.mockResolvedValue({
-        _sum: { amount: 5000 },
-      });
+      prisma.$queryRaw.mockResolvedValue([
+        {
+          currency: 'USD',
+          rate: null,
+          effectiveFrom: null,
+          usedEarliest: null,
+          amount: 5000,
+          count: 10,
+        },
+      ]);
       prisma.screenTimeSession.findMany.mockResolvedValue([
         { duration: 10 },
         { duration: 20 },
@@ -384,7 +406,10 @@ describe('AdminService', () => {
               screenTimeSessions: [{ duration: 10 }, { duration: 20 }],
             },
           ],
-          paymentTransactions: [{ amount: 50 }, { amount: 25 }],
+          paymentTransactions: [
+            { amount: 50, currency: 'USD', createdAt: new Date() },
+            { amount: 25, currency: 'USD', createdAt: new Date() },
+          ],
           _count: {
             kids: 2,
             auth: 5,
@@ -426,7 +451,7 @@ describe('AdminService', () => {
 
       prisma.user.findUnique.mockResolvedValue(mockUser);
       prisma.paymentTransaction.findMany.mockResolvedValue([
-        { amount: 100, currency: 'USD' },
+        { amount: 100, currency: 'USD', createdAt: new Date() },
       ]);
 
       const result = await service.getUserById(userId);

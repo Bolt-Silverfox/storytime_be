@@ -1,9 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import {
-  HealthIndicator,
   HealthIndicatorResult,
-  HealthCheckError,
+  HealthIndicatorService,
 } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { getApp, type App } from 'firebase-admin/app';
@@ -13,12 +12,13 @@ import { getApp, type App } from 'firebase-admin/app';
  * Checks if Firebase Admin SDK is properly initialized
  */
 @Injectable()
-export class FirebaseHealthIndicator extends HealthIndicator {
+export class FirebaseHealthIndicator {
   private readonly logger = new Logger(FirebaseHealthIndicator.name);
 
-  constructor(private readonly configService: ConfigService) {
-    super();
-  }
+  constructor(
+    private readonly healthIndicatorService: HealthIndicatorService,
+    private readonly configService: ConfigService,
+  ) {}
 
   // eslint-disable-next-line @typescript-eslint/require-await
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
@@ -28,9 +28,9 @@ export class FirebaseHealthIndicator extends HealthIndicator {
       // Check if Firebase is configured
       const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
       if (!projectId) {
-        return this.getStatus(key, true, {
+        return this.healthIndicatorService.check(key).up({
           duration: `${Date.now() - startTime}ms`,
-          status: 'not_configured',
+          state: 'not_configured',
           message: 'Firebase not configured (optional service)',
         });
       }
@@ -41,9 +41,9 @@ export class FirebaseHealthIndicator extends HealthIndicator {
         app = getApp();
       } catch {
         // Firebase not initialized yet - this is expected on first health check
-        return this.getStatus(key, true, {
+        return this.healthIndicatorService.check(key).up({
           duration: `${Date.now() - startTime}ms`,
-          status: 'not_initialized',
+          state: 'not_initialized',
           message: 'Firebase SDK not yet initialized',
         });
       }
@@ -53,39 +53,29 @@ export class FirebaseHealthIndicator extends HealthIndicator {
       const duration = Date.now() - startTime;
 
       if (appProjectId !== projectId) {
-        throw new HealthCheckError(
-          'Firebase configuration mismatch',
-          this.getStatus(key, false, {
-            duration: `${duration}ms`,
-            configured: projectId,
-            actual: appProjectId,
-            error: 'Project ID mismatch',
-          }),
-        );
+        return this.healthIndicatorService.check(key).down({
+          duration: `${duration}ms`,
+          configured: projectId,
+          actual: appProjectId,
+          error: 'Project ID mismatch',
+        });
       }
 
-      return this.getStatus(key, true, {
+      return this.healthIndicatorService.check(key).up({
         duration: `${duration}ms`,
         projectId: appProjectId,
-        status: 'initialized',
+        state: 'initialized',
       });
     } catch (error) {
-      if (error instanceof HealthCheckError) {
-        throw error;
-      }
-
       const duration = Date.now() - startTime;
       const errorMessage = ErrorHandler.extractMessage(error);
 
       this.logger.warn(`Firebase health check failed: ${errorMessage}`);
 
-      throw new HealthCheckError(
-        'Firebase health check failed',
-        this.getStatus(key, false, {
-          duration: `${duration}ms`,
-          error: errorMessage,
-        }),
-      );
+      return this.healthIndicatorService.check(key).down({
+        duration: `${duration}ms`,
+        error: errorMessage,
+      });
     }
   }
 }

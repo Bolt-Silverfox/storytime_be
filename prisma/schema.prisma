@@ -92,6 +92,9 @@ model User {
   badges                  UserBadge[]
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
+  // Last successful login (any path that issues a new Session). Null until the
+  // user next logs in; set best-effort by TokenService.createTokenPair.
+  lastLoginAt             DateTime?
   pinHash                 String?
   biometricsEnabled       Boolean                  @default(false)
   // SUSPENSION FIELDS
@@ -143,6 +146,7 @@ model User {
 
   @@index([isDeleted])
   @@index([email, isDeleted])
+  @@index([lastLoginAt])
   @@index([avatarId])
   @@index([preferredVoiceId])
   @@index([role, isDeleted])
@@ -532,11 +536,22 @@ model Subscription {
   // inside the update (WHERE lastEventAt IS NULL OR lastEventAt <= eventAt), never a
   // read-then-write. Nullable so pre-existing rows and untimestamped events work.
   lastEventAt   DateTime?
+  // How this access was obtained: store | admin_grant | coupon | trial (see
+  // SUBSCRIPTION_SOURCE in subscription.constants.ts; a plain string like
+  // plan/status/platform). Only 'store' rows are real paying customers: admin
+  // metrics count paying/conversion/churn from source='store' only, while
+  // entitlement (access gating) ignores this column.
+  source        String    @default("store")
+  // Set only while source='admin_grant'; cleared when a real store purchase
+  // replaces the grant.
+  grantedByAdminId String?
+  grantReason   String?
   // SOFT DELETE FIELDS
   isDeleted     Boolean   @default(false)
   deletedAt     DateTime?
 
   @@index([userId, status])
+  @@index([source, status])
   @@index([status, isDeleted])
   @@index([purchaseToken])
   @@index([isDeleted])
@@ -1288,4 +1303,24 @@ model AdminAuditLog {
   @@index([action, createdAt])
   @@index([targetType, targetId])
   @@map("admin_audit_logs")
+}
+
+// -------------------------
+// FX RATES (admin-managed; revenue is reported in USD)
+// -------------------------
+// rateToUsd = USD per 1 unit of `currency`. USD itself is implicit (rate 1, no
+// row). A transaction converts at the latest rate with effectiveFrom <= its
+// createdAt; if none is that old, the earliest rate is used (flagged).
+model FxRate {
+  id               String   @id @default(uuid())
+  currency         String // ISO-4217, upper-case
+  rateToUsd        Decimal  @db.Decimal(18, 8)
+  effectiveFrom    DateTime
+  source           String   @default("manual")
+  createdByAdminId String?
+  createdAt        DateTime @default(now())
+
+  @@unique([currency, effectiveFrom])
+  @@index([currency, effectiveFrom(sort: Desc)])
+  @@map("fx_rates")
 }

@@ -109,6 +109,60 @@ describe('SubscriptionWebhookService', () => {
     service = module.get(SubscriptionWebhookService);
   });
 
+  // ------------------------------------------------- complimentary rows ----
+  describe('admin-granted (complimentary) subscriptions', () => {
+    it('only ever looks up store-sourced rows by platform + token', async () => {
+      apple.parseSignedNotification.mockReturnValue(
+        appleInfo({ notificationType: 'EXPIRED', notificationUUID: 'a-comp' }),
+      );
+
+      await service.handleApple({ signedPayload: 'jws' });
+
+      expect(prisma.subscription.findFirst).toHaveBeenCalledWith({
+        where: {
+          platform: 'apple',
+          purchaseToken: 'orig-tx-123',
+          source: 'store',
+        },
+      });
+    });
+
+    it('a store EXPIRED for a user whose row was replaced by an admin grant is skipped', async () => {
+      // The grant replaced the store token, so no store-sourced row matches.
+      prisma.subscription.findFirst.mockResolvedValue(null);
+      apple.parseSignedNotification.mockReturnValue(
+        appleInfo({ notificationType: 'EXPIRED', notificationUUID: 'a-comp2' }),
+      );
+
+      const res = await service.handleApple({ signedPayload: 'jws' });
+
+      expect(res.status).toBe('skipped');
+      expect(prisma.subscription.update).not.toHaveBeenCalled();
+      expect(prisma.subscription.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('guards the state-change write on source=store so a grant installed mid-flight is not clobbered', async () => {
+      apple.parseSignedNotification.mockReturnValue(
+        appleInfo({
+          notificationType: 'EXPIRED',
+          notificationUUID: 'a-comp3',
+          signedDate: Date.parse('2026-02-01T00:00:00Z'),
+        }),
+      );
+      prisma.subscription.findFirst.mockResolvedValue({
+        ...SUB,
+        lastEventAt: null,
+      });
+
+      await service.handleApple({ signedPayload: 'jws' });
+
+      const call = prisma.subscription.updateMany.mock.calls.find(
+        ([arg]) => arg?.where?.id === 'sub-1',
+      );
+      expect(call?.[0].where).toMatchObject({ source: 'store' });
+    });
+  });
+
   // ---------------------------------------------------------------- Apple ----
   describe('Apple', () => {
     it('activates the subscription on DID_RENEW and records processed', async () => {
@@ -721,6 +775,7 @@ describe('SubscriptionWebhookService', () => {
       expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
         where: {
           id: 'sub-1',
+          source: 'store',
           OR: [{ lastEventAt: null }, { lastEventAt: { lte: NEW } }],
         },
         data: {
@@ -785,6 +840,7 @@ describe('SubscriptionWebhookService', () => {
       expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
         where: {
           id: 'sub-1',
+          source: 'store',
           OR: [{ lastEventAt: null }, { lastEventAt: { lte: NEW } }],
         },
         data: {
@@ -885,6 +941,7 @@ describe('SubscriptionWebhookService', () => {
       expect(prisma.subscription.updateMany).toHaveBeenCalledWith({
         where: {
           id: 'sub-1',
+          source: 'store',
           OR: [{ lastEventAt: null }, { lastEventAt: { lte: NEW } }],
         },
         data: {

@@ -1,10 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminRevenueAnalyticsService } from './admin-revenue-analytics.service';
+import { AdminFxRateService } from './admin-fx-rate.service';
+import { FxRateTable } from './utils/fx-conversion.util';
 import {
   ADMIN_SUBSCRIPTION_REPOSITORY,
   ADMIN_PAYMENT_REPOSITORY,
   ADMIN_ACTIVITY_REPOSITORY,
 } from './repositories';
+
+const USD_RATE = { rate: 1, effectiveFrom: null, usedEarliest: false };
 
 describe('AdminRevenueAnalyticsService', () => {
   let service: AdminRevenueAnalyticsService;
@@ -12,10 +16,9 @@ describe('AdminRevenueAnalyticsService', () => {
     count: jest.Mock;
     groupByStartedAt: jest.Mock;
     groupByActivePlan: jest.Mock;
+    groupByActiveSource: jest.Mock;
   };
   let paymentRepo: {
-    groupRevenueByCreatedAt: jest.Mock;
-    groupRevenueByCreatedAtOrdered: jest.Mock;
     findSuccessfulInRange: jest.Mock;
     groupRevenueByPlan: jest.Mock;
   };
@@ -27,10 +30,9 @@ describe('AdminRevenueAnalyticsService', () => {
       count: jest.fn(),
       groupByStartedAt: jest.fn().mockResolvedValue([]),
       groupByActivePlan: jest.fn().mockResolvedValue([]),
+      groupByActiveSource: jest.fn().mockResolvedValue([]),
     };
     paymentRepo = {
-      groupRevenueByCreatedAt: jest.fn().mockResolvedValue([]),
-      groupRevenueByCreatedAtOrdered: jest.fn().mockResolvedValue([]),
       findSuccessfulInRange: jest.fn().mockResolvedValue([]),
       groupRevenueByPlan: jest.fn().mockResolvedValue([]),
     };
@@ -41,6 +43,12 @@ describe('AdminRevenueAnalyticsService', () => {
         { provide: ADMIN_SUBSCRIPTION_REPOSITORY, useValue: subscriptionRepo },
         { provide: ADMIN_PAYMENT_REPOSITORY, useValue: paymentRepo },
         { provide: ADMIN_ACTIVITY_REPOSITORY, useValue: {} },
+        {
+          provide: AdminFxRateService,
+          useValue: {
+            getRateTable: jest.fn().mockResolvedValue(new FxRateTable([])),
+          },
+        },
       ],
     }).compile();
 
@@ -114,8 +122,20 @@ describe('AdminRevenueAnalyticsService', () => {
   describe('topPlans revenue attribution', () => {
     it('attributes revenue to the plan each payment was for, not the payer current plan', async () => {
       paymentRepo.groupRevenueByPlan.mockResolvedValue([
-        { plan: 'monthly', _sum: { amount: 100 }, _count: 20 },
-        { plan: 'yearly', _sum: { amount: 480 }, _count: 10 },
+        {
+          plan: 'monthly',
+          currency: 'USD',
+          amount: 100,
+          count: 20,
+          rate: USD_RATE,
+        },
+        {
+          plan: 'yearly',
+          currency: 'USD',
+          amount: 480,
+          count: 10,
+          rate: USD_RATE,
+        },
       ]);
       subscriptionRepo.groupByActivePlan.mockResolvedValue([
         { plan: 'monthly', _count: 5 },
@@ -126,15 +146,35 @@ describe('AdminRevenueAnalyticsService', () => {
 
       // Sorted by revenue desc: yearly (480) before monthly (100).
       expect(result.topPlans).toEqual([
-        { plan: 'yearly', subscription_count: 8, total_revenue: 480 },
-        { plan: 'monthly', subscription_count: 5, total_revenue: 100 },
+        {
+          plan: 'yearly',
+          subscription_count: 8,
+          total_revenue: 480,
+          byCurrency: { USD: 480 },
+          unconvertedByCurrency: {},
+          transactions: 10,
+        },
+        {
+          plan: 'monthly',
+          subscription_count: 5,
+          total_revenue: 100,
+          byCurrency: { USD: 100 },
+          unconvertedByCurrency: {},
+          transactions: 20,
+        },
       ]);
     });
 
     it('keeps plans with revenue but no active subscribers, and buckets unattributed revenue as "unknown"', async () => {
       paymentRepo.groupRevenueByPlan.mockResolvedValue([
-        { plan: 'weekly', _sum: { amount: 30 }, _count: 20 },
-        { plan: null, _sum: { amount: 12 }, _count: 4 }, // historical, unmapped
+        {
+          plan: 'weekly',
+          currency: 'USD',
+          amount: 30,
+          count: 20,
+          rate: USD_RATE,
+        },
+        { plan: null, currency: 'USD', amount: 12, count: 4, rate: USD_RATE }, // historical, unmapped
       ]);
       // weekly has no currently-active subs; that plan must still appear.
       subscriptionRepo.groupByActivePlan.mockResolvedValue([]);
@@ -142,8 +182,22 @@ describe('AdminRevenueAnalyticsService', () => {
       const result = await service.getRevenueAnalytics(range);
 
       expect(result.topPlans).toEqual([
-        { plan: 'weekly', subscription_count: 0, total_revenue: 30 },
-        { plan: 'unknown', subscription_count: 0, total_revenue: 12 },
+        {
+          plan: 'weekly',
+          subscription_count: 0,
+          total_revenue: 30,
+          byCurrency: { USD: 30 },
+          unconvertedByCurrency: {},
+          transactions: 20,
+        },
+        {
+          plan: 'unknown',
+          subscription_count: 0,
+          total_revenue: 12,
+          byCurrency: { USD: 12 },
+          unconvertedByCurrency: {},
+          transactions: 4,
+        },
       ]);
     });
 
@@ -156,7 +210,14 @@ describe('AdminRevenueAnalyticsService', () => {
       const result = await service.getRevenueAnalytics(range);
 
       expect(result.topPlans).toEqual([
-        { plan: 'monthly', subscription_count: 3, total_revenue: 0 },
+        {
+          plan: 'monthly',
+          subscription_count: 3,
+          total_revenue: 0,
+          byCurrency: {},
+          unconvertedByCurrency: {},
+          transactions: 0,
+        },
       ]);
     });
   });

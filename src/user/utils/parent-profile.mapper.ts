@@ -1,5 +1,8 @@
 import { Subscription } from '@prisma/client';
-import { SUBSCRIPTION_STATUS } from '../../subscription/subscription.constants';
+import {
+  SUBSCRIPTION_STATUS,
+  isFreePlan,
+} from '../../subscription/subscription.constants';
 
 export interface UserWithRelations {
   id: string;
@@ -75,7 +78,9 @@ function getSubscriptionStatus(
     return SUBSCRIPTION_STATUS.ACTIVE;
   }
   if (!subscription) return SUBSCRIPTION_STATUS.FREE;
-  return subscription.status === SUBSCRIPTION_STATUS.ACTIVE
+  // 'active' means PAID access: an active plan='free' row is still 'free'.
+  return subscription.status === SUBSCRIPTION_STATUS.ACTIVE &&
+    !isFreePlan(subscription.plan)
     ? SUBSCRIPTION_STATUS.ACTIVE
     : SUBSCRIPTION_STATUS.FREE;
 }

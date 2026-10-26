@@ -123,6 +123,11 @@ export interface IAuthRepository {
     token: string;
     expiresAt: Date;
   }): Promise<Session>;
+  /**
+   * Stamp User.lastLoginAt = now for an active (not suspended / deleted) user.
+   * Callers treat this as best-effort.
+   */
+  recordLastLogin(userId: string): Promise<void>;
   findSessionByToken(hashedToken: string): Promise<SessionWithUser | null>;
   findSessionById(id: string): Promise<Session | null>;
   deleteSession(id: string): Promise<void>;

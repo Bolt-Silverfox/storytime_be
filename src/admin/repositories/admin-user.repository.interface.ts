@@ -11,6 +11,9 @@ export type AdminUserListItem = Prisma.UserGetPayload<{
         plan: true;
         status: true;
         endsAt: true;
+        source: true;
+        grantedByAdminId: true;
+        grantReason: true;
       };
     };
     profile: true;
@@ -26,7 +29,7 @@ export type AdminUserListItem = Prisma.UserGetPayload<{
       };
     };
     paymentTransactions: {
-      select: { amount: true; currency: true };
+      select: { amount: true; currency: true; createdAt: true };
     };
     _count: {
       select: {
@@ -98,11 +101,18 @@ export interface IAdminUserRepository {
     where: Prisma.UserWhereInput;
     skip: number;
     take: number;
-    orderBy: Prisma.UserOrderByWithRelationInput;
+    orderBy:
+      | Prisma.UserOrderByWithRelationInput
+      | Prisma.UserOrderByWithRelationInput[];
   }): Promise<AdminUserListItem[]>;
 
   // getUserById: single user with detail includes
   findByIdWithDetails(userId: string): Promise<AdminUserDetail | null>;
+
+  // lastActiveAt input: newest of non-deleted session activity and the user's
+  // own non-deleted ActivityLog rows (one grouped query each, not per user).
+  // Users with no recorded activity are absent from the map.
+  findLastActivityByUserIds(userIds: string[]): Promise<Map<string, Date>>;
 
   // Lookups
   findById(userId: string): Promise<User | null>;

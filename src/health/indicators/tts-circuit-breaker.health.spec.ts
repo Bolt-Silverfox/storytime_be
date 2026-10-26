@@ -1,5 +1,5 @@
 import { TTSCircuitBreakerHealthIndicator } from './tts-circuit-breaker.health';
-import { HealthCheckError } from '@nestjs/terminus';
+import { HealthIndicatorService } from '@nestjs/terminus';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 
 describe('TTSCircuitBreakerHealthIndicator', () => {
@@ -8,7 +8,10 @@ describe('TTSCircuitBreakerHealthIndicator', () => {
 
   beforeEach(() => {
     cbService = new CircuitBreakerService();
-    indicator = new TTSCircuitBreakerHealthIndicator(cbService);
+    indicator = new TTSCircuitBreakerHealthIndicator(
+      new HealthIndicatorService(),
+      cbService,
+    );
   });
 
   it('should report healthy when all breakers are CLOSED', () => {
@@ -34,8 +37,9 @@ describe('TTSCircuitBreakerHealthIndicator', () => {
     // Trip the breaker
     breaker.recordFailure({ status: 500 });
 
-    expect(() => indicator.isHealthy('tts-providers')).toThrow(
-      HealthCheckError,
+    // terminus 12 indicators return a `down` result instead of throwing
+    expect(indicator.isHealthy('tts-providers')['tts-providers'].status).toBe(
+      'down',
     );
   });
 
@@ -49,14 +53,11 @@ describe('TTSCircuitBreakerHealthIndicator', () => {
 
     breaker.recordFailure({ status: 500 });
 
-    try {
-      indicator.isHealthy('tts-providers');
-    } catch (error) {
-      expect(error).toBeInstanceOf(HealthCheckError);
-      const healthError = error as HealthCheckError;
-      const details = healthError.causes['tts-providers'];
-      expect(details.elevenlabs.state).toBe('OPEN');
-      expect(details.deepgram.state).toBe('CLOSED');
-    }
+    const details = indicator.isHealthy('tts-providers')[
+      'tts-providers'
+    ] as Record<string, any>;
+    expect(details.status).toBe('down');
+    expect(details.elevenlabs.state).toBe('OPEN');
+    expect(details.deepgram.state).toBe('CLOSED');
   });
 });
