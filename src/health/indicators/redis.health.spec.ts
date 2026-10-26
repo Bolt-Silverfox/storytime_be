@@ -52,4 +52,42 @@ describe('RedisHealthIndicator', () => {
     });
     expect(mockClient.disconnect).toHaveBeenCalledTimes(1);
   });
+
+  describe('with an unresponsive Redis', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => {
+      expect(jest.getTimerCount()).toBe(0);
+      jest.useRealTimers();
+    });
+
+    it.each(['connect', 'ping', 'info'] as const)(
+      'reports down with a timeout error when %s never settles',
+      async (hung) => {
+        const never = () => new Promise<never>(() => undefined);
+        mockClient.connect.mockImplementation(
+          hung === 'connect' ? never : () => Promise.resolve(undefined),
+        );
+        mockClient.ping.mockImplementation(
+          hung === 'ping' ? never : () => Promise.resolve('PONG'),
+        );
+        mockClient.info.mockImplementation(
+          hung === 'info' ? never : () => Promise.resolve(''),
+        );
+
+        let result: unknown;
+        void indicator.isHealthy('redis').then((r) => (result = r));
+
+        await jest.advanceTimersByTimeAsync(3000);
+
+        expect(result).toEqual({
+          redis: {
+            status: 'down',
+            duration: '3000ms',
+            error: 'timeout after 3000ms',
+          },
+        });
+        expect(mockClient.disconnect).toHaveBeenCalledTimes(1);
+      },
+    );
+  });
 });

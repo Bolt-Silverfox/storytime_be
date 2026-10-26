@@ -150,3 +150,62 @@ describe('QueueHealthIndicator', () => {
     });
   });
 });
+
+describe('QueueHealthIndicator with an unresponsive Redis', () => {
+  // The mirror of a stopped Redis: BullMQ queues commands offline and the
+  // returned promises never settle. 3000 = HEALTH_CHECK_TIMEOUT_MS.
+  const hungQueue = () => {
+    const never = () => new Promise<never>(() => undefined);
+    return {
+      getWaitingCount: jest.fn(never),
+      getActiveCount: jest.fn(never),
+      getCompletedCount: jest.fn(never),
+      getFailedCount: jest.fn(never),
+      getDelayedCount: jest.fn(never),
+      isPaused: jest.fn(never),
+    } as unknown as Queue;
+  };
+
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    expect(jest.getTimerCount()).toBe(0);
+    jest.useRealTimers();
+  });
+
+  it('isHealthy resolves down with a timeout error instead of hanging', async () => {
+    let result: unknown;
+    void build(hungQueue(), hungQueue())
+      .isHealthy('email-queue')
+      .then((r) => (result = r));
+
+    await jest.advanceTimersByTimeAsync(3000);
+
+    expect(result).toEqual({
+      'email-queue': {
+        status: 'down',
+        duration: '3000ms',
+        error: 'timeout after 3000ms',
+      },
+    });
+  });
+
+  it('checkQueue resolves down with a timeout error instead of hanging', async () => {
+    let result: unknown;
+    void build(hungQueue())
+      .checkQueue('q', 'email')
+      .then((r) => (result = r));
+
+    await jest.advanceTimersByTimeAsync(3000);
+
+    expect(result).toEqual({
+      q: { status: 'down', duration: '3000ms', error: 'timeout after 3000ms' },
+    });
+  });
+
+  it('clears its timer when the queue answers in time', async () => {
+    const result = await build(fakeQueue()).isHealthy('email-queue');
+
+    expect(result['email-queue'].status).toBe('up');
+    expect(jest.getTimerCount()).toBe(0);
+  });
+});

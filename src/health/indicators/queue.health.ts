@@ -8,6 +8,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { EMAIL_QUEUE_NAME } from '@/notification/queue/email-queue.constants';
 import { STORY_QUEUE_NAME } from '@/story/queue/story-queue.constants';
+import { withHealthTimeout } from './health-timeout';
 import { ALERTING_THRESHOLDS } from '@/shared/config/alerting.config';
 
 interface QueueStats {
@@ -62,7 +63,7 @@ export class QueueHealthIndicator {
     const startTime = Date.now();
 
     try {
-      const queueStats = await this.getAllQueueStats();
+      const queueStats = await withHealthTimeout(this.getAllQueueStats());
       const duration = Date.now() - startTime;
 
       const unhealthyQueues = this.getUnhealthyQueues(queueStats);
@@ -113,7 +114,9 @@ export class QueueHealthIndicator {
     const startTime = Date.now();
 
     try {
-      const stats = await this.getQueueStats(queueName, queue);
+      const stats = await withHealthTimeout(
+        this.getQueueStats(queueName, queue),
+      );
       const duration = Date.now() - startTime;
       const isHealthy =
         !stats.paused &&
@@ -143,13 +146,10 @@ export class QueueHealthIndicator {
   }
 
   private async getAllQueueStats(): Promise<QueueStats[]> {
-    const stats: QueueStats[] = [];
-
-    for (const [name, queue] of this.queues) {
-      stats.push(await this.getQueueStats(name, queue));
-    }
-
-    return stats;
+    // Concurrent so a stuck queue cannot add its wait to the others'.
+    return Promise.all(
+      [...this.queues].map(([name, queue]) => this.getQueueStats(name, queue)),
+    );
   }
 
   private async getQueueStats(name: string, queue: Queue): Promise<QueueStats> {

@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
 import Redis from 'ioredis';
+import { HEALTH_CHECK_TIMEOUT_MS, withHealthTimeout } from './health-timeout';
 
 @Injectable()
 export class RedisHealthIndicator {
@@ -26,15 +27,19 @@ export class RedisHealthIndicator {
         retryStrategy: () => null, // No reconnect attempts for health probe
         enableOfflineQueue: false,
         lazyConnect: true,
+        connectTimeout: HEALTH_CHECK_TIMEOUT_MS,
       });
 
-      await client.connect();
-
-      // Test connection with PING
-      const pong = await client.ping();
-
-      // Get some Redis info
-      const info = await client.info('memory');
+      const probe = client;
+      const { pong, info } = await withHealthTimeout(
+        (async () => {
+          await probe.connect();
+          // Test connection with PING, then read some Redis info
+          const pong = await probe.ping();
+          const info = await probe.info('memory');
+          return { pong, info };
+        })(),
+      );
       const usedMemoryMatch = info.match(/used_memory_human:(\S+)/);
       const usedMemory = usedMemoryMatch ? usedMemoryMatch[1] : 'unknown';
 
