@@ -67,6 +67,9 @@ export const CACHE_INVALIDATION = {
     CACHE_KEYS.SEASONS_ALL,
   ] as const,
 
+  /** Invalidate when FX rates change (cached figures embed converted revenue) */
+  REVENUE: [CACHE_KEYS.DASHBOARD_STATS] as const,
+
   /** Invalidate admin dashboard stats only */
   ADMIN_STATS: [
     CACHE_KEYS.DASHBOARD_STATS,
