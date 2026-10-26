@@ -6,6 +6,18 @@
  */
 export const HEALTH_CHECK_TIMEOUT_MS = 3000;
 
+let timeoutOverrideMs: number | undefined;
+
+/** Effective probe deadline: the production default unless a test overrides it. */
+export function getHealthTimeoutMs(): number {
+  return timeoutOverrideMs ?? HEALTH_CHECK_TIMEOUT_MS;
+}
+
+/** Test seam only: pass undefined to restore the production default. */
+export function setHealthTimeoutMsForTesting(ms: number | undefined): void {
+  timeoutOverrideMs = ms;
+}
+
 export class HealthCheckTimeoutError extends Error {
   constructor(public readonly timeoutMs: number) {
     super(`timeout after ${timeoutMs}ms`);
@@ -21,7 +33,7 @@ export class HealthCheckTimeoutError extends Error {
  */
 export async function withHealthTimeout<T>(
   work: Promise<T>,
-  timeoutMs: number = HEALTH_CHECK_TIMEOUT_MS,
+  timeoutMs: number = getHealthTimeoutMs(),
 ): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<never>((_, reject) => {

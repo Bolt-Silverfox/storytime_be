@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
 import Redis from 'ioredis';
-import { HEALTH_CHECK_TIMEOUT_MS, withHealthTimeout } from './health-timeout';
+import { getHealthTimeoutMs, withHealthTimeout } from './health-timeout';
 
 @Injectable()
 export class RedisHealthIndicator {
@@ -27,7 +27,7 @@ export class RedisHealthIndicator {
         retryStrategy: () => null, // No reconnect attempts for health probe
         enableOfflineQueue: false,
         lazyConnect: true,
-        connectTimeout: HEALTH_CHECK_TIMEOUT_MS,
+        connectTimeout: getHealthTimeoutMs(),
       });
 
       const probe = client;

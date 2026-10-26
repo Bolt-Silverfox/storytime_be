@@ -13,6 +13,11 @@ import {
   SmtpHealthIndicator,
   TTSCircuitBreakerHealthIndicator,
 } from './indicators';
+import {
+  HEALTH_CHECK_TIMEOUT_MS,
+  getHealthTimeoutMs,
+  setHealthTimeoutMsForTesting,
+} from './indicators/health-timeout';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 
 // A Redis that accepts nothing and answers nothing: every call stays pending.
@@ -38,16 +43,27 @@ const hungQueue = () => {
   } as unknown as Queue;
 };
 
+describe('health timeout default', () => {
+  it('is 3000ms in production, well under the deploy curl --max-time', () => {
+    expect(HEALTH_CHECK_TIMEOUT_MS).toBe(3000);
+    expect(getHealthTimeoutMs()).toBe(3000);
+  });
+});
+
 /**
  * Regression: with Redis down, BullMQ/ioredis calls queue offline and never
  * reject, so /health/ready, /health/queue and /health/full used to hang
  * forever. They must answer 503 well inside the deploy scripts' budget.
  */
 describe('HealthController with an unresponsive Redis', () => {
+  // Small deadline so the real HealthCheckService path runs in milliseconds
+  // instead of waiting the production 3s (flaky under load vs jest's 5s).
+  const TEST_TIMEOUT_MS = 100;
   let app: INestApplication;
   const server = () => app.getHttpServer() as Parameters<typeof request>[0];
 
   beforeAll(async () => {
+    setHealthTimeoutMsForTesting(TEST_TIMEOUT_MS);
     const moduleRef = await Test.createTestingModule({
       imports: [TerminusModule],
       controllers: [HealthController],
@@ -92,6 +108,7 @@ describe('HealthController with an unresponsive Redis', () => {
   });
 
   afterAll(async () => {
+    setHealthTimeoutMsForTesting(undefined);
     await app.close();
   });
 
@@ -100,13 +117,10 @@ describe('HealthController with an unresponsive Redis', () => {
     ['/health/queue', ['email-queue']],
     ['/health/full', ['redis', 'email-queue']],
   ])(
-    'GET %s returns 503 with down indicators within 5s',
+    'GET %s returns 503 with down indicators within the timeout',
     async (path, down) => {
-      const started = Date.now();
-
       const res = await request(server()).get(path).expect(503);
 
-      expect(Date.now() - started).toBeLessThan(5000);
       expect(res.body.status).toBe('error');
       // memory_* may also be down on a busy host; only the Redis-backed ones matter.
       expect(Object.keys(res.body.error as object)).toEqual(
@@ -115,7 +129,7 @@ describe('HealthController with an unresponsive Redis', () => {
       for (const key of down) {
         expect(res.body.error[key]).toMatchObject({
           status: 'down',
-          error: 'timeout after 3000ms',
+          error: `timeout after ${TEST_TIMEOUT_MS}ms`,
         });
       }
     },
