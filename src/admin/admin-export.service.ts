@@ -45,6 +45,8 @@ export class AdminExportService {
       'Registration Date',
       'Is Deleted',
       'Is Suspended',
+      // Appended last so existing positional consumers keep working.
+      'Is Complimentary',
     ];
 
     const rows = allUsers.map((user) => [
@@ -62,6 +64,7 @@ export class AdminExportService {
         : '',
       user.isDeleted,
       user.isSuspended || false,
+      user.isComplimentary || false,
     ]);
 
     const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -93,6 +96,9 @@ export class AdminExportService {
             'Paid Users',
             'Total Users',
             'Total Paid Users',
+            // Appended last so existing positional consumers keep working.
+            'Complimentary Users',
+            'Total Complimentary Users',
           ];
           const rows = growth.map((g) =>
             [
@@ -101,6 +107,8 @@ export class AdminExportService {
               g.paidUsers,
               g.totalUsers,
               g.totalPaidUsers,
+              g.complimentaryUsers,
+              g.totalComplimentaryUsers,
             ].join(','),
           );
           csvContent = [headers.join(','), ...rows].join('\n');

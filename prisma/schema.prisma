@@ -532,11 +532,22 @@ model Subscription {
   // inside the update (WHERE lastEventAt IS NULL OR lastEventAt <= eventAt), never a
   // read-then-write. Nullable so pre-existing rows and untimestamped events work.
   lastEventAt   DateTime?
+  // How this access was obtained: store | admin_grant | coupon | trial (see
+  // SUBSCRIPTION_SOURCE in subscription.constants.ts; a plain string like
+  // plan/status/platform). Only 'store' rows are real paying customers: admin
+  // metrics count paying/conversion/churn from source='store' only, while
+  // entitlement (access gating) ignores this column.
+  source        String    @default("store")
+  // Set only while source='admin_grant'; cleared when a real store purchase
+  // replaces the grant.
+  grantedByAdminId String?
+  grantReason   String?
   // SOFT DELETE FIELDS
   isDeleted     Boolean   @default(false)
   deletedAt     DateTime?
 
   @@index([userId, status])
+  @@index([source, status])
   @@index([status, isDeleted])
   @@index([purchaseToken])
   @@index([isDeleted])

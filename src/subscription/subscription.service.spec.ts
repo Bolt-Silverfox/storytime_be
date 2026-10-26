@@ -205,6 +205,82 @@ describe('SubscriptionService', () => {
     });
   });
 
+  describe('subscribe (subscription source)', () => {
+    it('creates the free-plan row explicitly as source=store', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
+      mockSubscriptionRepo.create.mockResolvedValue({
+        ...mockSubscription,
+        plan: 'free',
+      });
+      mockCacheMetrics.del.mockResolvedValue(undefined);
+
+      await service.subscribe('user-1', 'free');
+
+      expect(mockSubscriptionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ source: 'store' }),
+        expect.anything(),
+      );
+    });
+
+    it('replacing an admin grant with the free plan clears the grant fields', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
+        ...mockSubscription,
+        source: 'admin_grant',
+        grantedByAdminId: 'admin-9',
+        grantReason: 'press',
+      });
+      mockSubscriptionRepo.updateById.mockResolvedValue({
+        ...mockSubscription,
+        plan: 'free',
+      });
+      mockCacheMetrics.del.mockResolvedValue(undefined);
+
+      await service.subscribe('user-1', 'free');
+
+      expect(mockSubscriptionRepo.updateById).toHaveBeenCalledWith(
+        mockSubscription.id,
+        expect.objectContaining({
+          source: 'store',
+          grantedByAdminId: null,
+          grantReason: null,
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('user-facing responses hide internal grant fields', () => {
+    const grantRow = {
+      ...mockSubscription,
+      source: 'admin_grant',
+      grantedByAdminId: 'admin-9',
+      grantReason: 'internal note: press',
+    };
+
+    it('getSubscriptionForUser omits grantedByAdminId and grantReason', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(grantRow);
+
+      const res = await service.getSubscriptionForUser('user-1');
+
+      expect(res).not.toHaveProperty('grantedByAdminId');
+      expect(res).not.toHaveProperty('grantReason');
+      expect(res).toHaveProperty('plan', mockSubscription.plan);
+    });
+
+    it('cancel omits them too', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(grantRow);
+      mockSubscriptionRepo.updateById.mockResolvedValue({
+        ...grantRow,
+        status: SUBSCRIPTION_STATUS.CANCELLED,
+      });
+
+      const res = await service.cancel('user-1');
+
+      expect(res).not.toHaveProperty('grantedByAdminId');
+      expect(res).not.toHaveProperty('grantReason');
+    });
+  });
+
   // ==================== CANCEL SUBSCRIPTION TESTS ====================
 
   describe('cancel', () => {

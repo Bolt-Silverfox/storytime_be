@@ -11,6 +11,9 @@ export type AdminUserListItem = Prisma.UserGetPayload<{
         plan: true;
         status: true;
         endsAt: true;
+        source: true;
+        grantedByAdminId: true;
+        grantReason: true;
       };
     };
     profile: true;
