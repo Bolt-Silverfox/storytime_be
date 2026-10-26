@@ -11,6 +11,7 @@ import { AdminFxRateController } from './admin-fx-rate.controller';
 import { AdminFxRateService } from './admin-fx-rate.service';
 import { AdminSystemController } from './admin-system.controller';
 import { AdminAuditLogController } from './admin-audit-log.controller';
+import { AdminUserHistoryController } from './admin-user-history.controller';
 import { AdminService } from './admin.service';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminDashboardMetricsService } from './admin-dashboard-metrics.service';
@@ -25,6 +26,7 @@ import { AdminSubscriptionOpsService } from './admin-subscription-ops.service';
 import { AdminStoryService } from './admin-story.service';
 import { AdminSystemService } from './admin-system.service';
 import { AdminAuditLogService } from './admin-audit-log.service';
+import { AdminUserHistoryService } from './admin-user-history.service';
 import { AdminContentImageService } from './admin-content-image.service';
 import {
   ADMIN_STORY_REPOSITORY,
@@ -51,6 +53,8 @@ import {
   PrismaAdminAuditLogRepository,
   ADMIN_FX_RATE_REPOSITORY,
   PrismaAdminFxRateRepository,
+  ADMIN_USER_HISTORY_REPOSITORY,
+  PrismaAdminUserHistoryRepository,
 } from './repositories';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
@@ -85,6 +89,7 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     AdminFxRateController,
     AdminSystemController,
     AdminAuditLogController,
+    AdminUserHistoryController,
     AdminSseController,
   ],
   providers: [
@@ -103,6 +108,7 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     AdminSystemService,
     AdminAuditLogService,
     AdminFxRateService,
+    AdminUserHistoryService,
     AdminContentImageService,
     {
       provide: ADMIN_STORY_REPOSITORY,
@@ -151,6 +157,10 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     {
       provide: ADMIN_AUDIT_LOG_REPOSITORY,
       useClass: PrismaAdminAuditLogRepository,
+    },
+    {
+      provide: ADMIN_USER_HISTORY_REPOSITORY,
+      useClass: PrismaAdminUserHistoryRepository,
     },
     AdminSseService,
     SseAuthGuard,

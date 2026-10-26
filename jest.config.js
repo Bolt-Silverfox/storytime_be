@@ -4,6 +4,11 @@ module.exports = {
     rootDir: '.',
     testRegex: '.*\\.(spec|e2e-spec)\\.ts$',
     transform: {
+      // @nestjs/terminus 12 is ESM-only and uses `import.meta`, which ts-jest
+      // cannot compile to CommonJS. Compile it with SWC instead. This entry
+      // must stay before the catch-all ts-jest entry (first match wins).
+      '/node_modules/\\.pnpm/@nestjs\\+terminus@.*\\.js$':
+        '<rootDir>/test/esm-to-cjs.transform.js',
       '^.+\\.(t|j)sx?$': 'ts-jest',
     },
     collectCoverageFrom: ['**/*.(t|j)s'],
@@ -14,7 +19,7 @@ module.exports = {
     // cannot require them, so they must be transformed rather than passed
     // through untouched.
     transformIgnorePatterns: [
-      '/node_modules/\\.pnpm/(?!@nestjs\\+(jwt|event-emitter|schedule)@)',
+      '/node_modules/\\.pnpm/(?!@nestjs\\+(jwt|event-emitter|schedule|terminus)@)',
     ],
     // Use V8 coverage rather than babel-plugin-istanbul. Istanbul pulls
     // test-exclude@6, which calls minimatch's callable default export; the
