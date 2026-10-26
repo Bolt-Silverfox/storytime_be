@@ -69,6 +69,11 @@ export class SubscriptionService {
    * Subscribe to a plan.
    * For paid plans, use the PaymentService.verifyPurchase endpoint after completing IAP.
    * This method only handles free plan subscriptions directly.
+   *
+   * Choosing the free plan NEVER touches a live paid subscription (store
+   * purchase or admin grant/coupon/trial): the existing row is returned
+   * unchanged with `paidSubscriptionActive: true`. Expired, cancelled and
+   * free rows are replaced as before.
    */
   async subscribe(userId: string, planKey: string) {
     const plan = PLANS[planKey];
@@ -85,41 +90,55 @@ export class SubscriptionService {
     const now = new Date();
     const endsAt = new Date(now.getTime() + plan.days * 24 * 60 * 60 * 1000);
 
-    const subscription = await this.subscriptionRepository.executeTransaction(
-      async (tx) => {
+    const { subscription, paidSubscriptionActive } =
+      await this.subscriptionRepository.executeTransaction(async (tx) => {
         const existing = await this.subscriptionRepository.findFirstByUser(
           userId,
           tx,
         );
 
-        if (existing) {
-          return this.subscriptionRepository.updateById(
-            existing.id,
-            {
-              plan: planKey,
-              status: SUBSCRIPTION_STATUS.ACTIVE,
-              startedAt: now,
-              endsAt,
-              // Choosing the free plan replaces any admin grant on this row.
-              ...STORE_SOURCE_FIELDS,
-            },
-            tx,
-          );
+        if (existing && hasPaidAccess(existing, now)) {
+          return { subscription: existing, paidSubscriptionActive: true };
         }
 
-        return this.subscriptionRepository.create(
-          {
-            userId,
-            plan: planKey,
-            status: SUBSCRIPTION_STATUS.ACTIVE,
-            startedAt: now,
-            endsAt,
-            ...STORE_SOURCE_FIELDS,
-          },
-          tx,
-        );
-      },
-    );
+        const written = existing
+          ? await this.subscriptionRepository.updateById(
+              existing.id,
+              {
+                plan: planKey,
+                status: SUBSCRIPTION_STATUS.ACTIVE,
+                startedAt: now,
+                endsAt,
+                // Choosing the free plan replaces any admin grant on this row.
+                ...STORE_SOURCE_FIELDS,
+              },
+              tx,
+            )
+          : await this.subscriptionRepository.create(
+              {
+                userId,
+                plan: planKey,
+                status: SUBSCRIPTION_STATUS.ACTIVE,
+                startedAt: now,
+                endsAt,
+                ...STORE_SOURCE_FIELDS,
+              },
+              tx,
+            );
+        return { subscription: written, paidSubscriptionActive: false };
+      });
+
+    if (paidSubscriptionActive) {
+      this.logger.log(
+        `Free plan requested but a paid subscription is active; left untouched for user ${userId.substring(0, 8)}`,
+      );
+      return {
+        subscription: withoutAdminGrantFields(subscription),
+        paidSubscriptionActive: true,
+        message:
+          'A paid subscription is still active, so the free plan was not applied.',
+      };
+    }
 
     // Invalidate cache after subscription change
     await this.invalidateCache(userId);
@@ -139,7 +158,10 @@ export class SubscriptionService {
     };
     this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CREATED, createdEvent);
 
-    return { subscription: withoutAdminGrantFields(subscription) };
+    return {
+      subscription: withoutAdminGrantFields(subscription),
+      paidSubscriptionActive: false,
+    };
   }
 
   async cancel(userId: string) {
