@@ -87,6 +87,24 @@ export class UserFilterDto extends PaginationDto {
   @IsOptional()
   @IsString()
   subscriptionPlan?: string;
+
+  /**
+   * When true, users with an active paid subscription (same definition as
+   * `hasActiveSubscription=true`, i.e. /admin/users/paid) are listed first,
+   * then everyone else, each group in the requested sort order. Default false
+   * (order unchanged). Ignored when `hasActiveSubscription` is set.
+   */
+  @IsOptional()
+  @Transform(({ value, obj, key }) => {
+    // Read the raw query value: enableImplicitConversion would turn the
+    // string 'false' into true before this runs.
+    const raw = obj[key] ?? value;
+    if (raw === 'true' || raw === true) return true;
+    if (raw === 'false' || raw === false) return false;
+    return undefined;
+  })
+  @IsBoolean()
+  paidFirst?: boolean;
 }
 
 export class StoryFilterDto extends PaginationDto {

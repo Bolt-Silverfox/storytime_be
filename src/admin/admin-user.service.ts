@@ -20,6 +20,7 @@ import {
   ADMIN_USER_REPOSITORY,
   IAdminPaymentRepository,
   ADMIN_PAYMENT_REPOSITORY,
+  AdminUserListItem,
 } from './repositories';
 import { isComplimentarySource } from '../subscription/subscription.constants';
 
@@ -79,17 +80,18 @@ export class AdminUserService {
 
     // Filter by subscription status
     const hasActiveSub = filters.hasActiveSubscription;
+    // One `now` for the whole request so the paid / not-paid groups below are
+    // exact complements of each other.
+    const now = new Date();
+    const activeSubscriptionCriteria: Prisma.SubscriptionWhereInput = {
+      status: 'active',
+      isDeleted: false,
+      OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+    };
     if (hasActiveSub !== undefined && hasActiveSub !== null) {
-      const now = new Date();
       // Normalize value - handle both boolean and string (query params may come as strings)
       const wantsActiveSubscription =
         hasActiveSub === true || String(hasActiveSub) === 'true';
-
-      const activeSubscriptionCriteria = {
-        status: 'active',
-        isDeleted: false,
-        OR: [{ endsAt: null }, { endsAt: { gt: now } }],
-      };
 
       if (wantsActiveSubscription) {
         where.subscription = activeSubscriptionCriteria;
@@ -134,15 +136,29 @@ export class AdminUserService {
       orderBy = { createdAt: sortOrder };
     }
 
-    const [users, total] = await Promise.all([
-      this.userRepo.findManyWithDetails({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-      }),
-      this.userRepo.count(where),
-    ]);
+    // paidFirst only has meaning when the caller has not already narrowed to
+    // paid / unpaid via hasActiveSubscription.
+    const paidFirst =
+      filters.paidFirst === true &&
+      (hasActiveSub === undefined || hasActiveSub === null);
+
+    const [users, total] = paidFirst
+      ? await this.findPaidFirstPage(
+          where,
+          activeSubscriptionCriteria,
+          orderBy,
+          skip,
+          limit,
+        )
+      : await Promise.all([
+          this.userRepo.findManyWithDetails({
+            where,
+            skip,
+            take: limit,
+            orderBy,
+          }),
+          this.userRepo.count(where),
+        ]);
 
     return {
       data: users.map((user) => {
@@ -220,6 +236,60 @@ export class AdminUserService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * One page of users with active-paid subscribers first, then the rest, each
+   * group in `orderBy` (+ `id` as a tiebreaker so pages never overlap or skip).
+   * The paid group is a prefix of the full ordering, so a page is the paid
+   * slice [skip, paidTotal) followed by the head of the free group.
+   */
+  private async findPaidFirstPage(
+    where: Prisma.UserWhereInput,
+    activeSubscriptionCriteria: Prisma.SubscriptionWhereInput,
+    orderBy: Prisma.UserOrderByWithRelationInput,
+    skip: number,
+    take: number,
+  ) {
+    const paidWhere: Prisma.UserWhereInput = {
+      AND: [where, { subscription: activeSubscriptionCriteria }],
+    };
+    const freeWhere: Prisma.UserWhereInput = {
+      AND: [
+        where,
+        {
+          OR: [
+            { subscription: null },
+            { subscription: { NOT: activeSubscriptionCriteria } },
+          ],
+        },
+      ],
+    };
+    const stableOrder = [orderBy, { id: 'asc' as const }];
+    const fetch = (w: Prisma.UserWhereInput, s: number, t: number) =>
+      this.userRepo.findManyWithDetails({
+        where: w,
+        skip: s,
+        take: t,
+        orderBy: stableOrder,
+      });
+
+    const [paidTotal, freeTotal] = await Promise.all([
+      this.userRepo.count(paidWhere),
+      this.userRepo.count(freeWhere),
+    ]);
+
+    let users: AdminUserListItem[] = [];
+    if (skip < paidTotal) {
+      const paidTake = Math.min(take, paidTotal - skip);
+      users = await fetch(paidWhere, skip, paidTake);
+      if (take > paidTake) {
+        users = users.concat(await fetch(freeWhere, 0, take - paidTake));
+      }
+    } else {
+      users = await fetch(freeWhere, skip - paidTotal, take);
+    }
+    return [users, paidTotal + freeTotal] as const;
   }
 
   async getUserById(userId: string): Promise<any> {
