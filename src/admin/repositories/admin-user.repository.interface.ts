@@ -98,7 +98,9 @@ export interface IAdminUserRepository {
     where: Prisma.UserWhereInput;
     skip: number;
     take: number;
-    orderBy: Prisma.UserOrderByWithRelationInput;
+    orderBy:
+      | Prisma.UserOrderByWithRelationInput
+      | Prisma.UserOrderByWithRelationInput[];
   }): Promise<AdminUserListItem[]>;
 
   // getUserById: single user with detail includes

@@ -50,7 +50,9 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
     where: Prisma.UserWhereInput;
     skip: number;
     take: number;
-    orderBy: Prisma.UserOrderByWithRelationInput;
+    orderBy:
+      | Prisma.UserOrderByWithRelationInput
+      | Prisma.UserOrderByWithRelationInput[];
   }): Promise<AdminUserListItem[]> {
     return this.prisma.user.findMany({
       where: params.where,

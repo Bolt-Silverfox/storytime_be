@@ -130,6 +130,13 @@ export class AdminUserQueryController {
     description: 'Filter by subscription status',
   })
   @ApiQuery({
+    name: 'paidFirst',
+    required: false,
+    type: Boolean,
+    description:
+      'List users with an active paid subscription first (same definition as /admin/users/paid), then the rest in the requested sort order. Default false. Ignored when hasActiveSubscription is set.',
+  })
+  @ApiQuery({
     name: 'createdAfter',
     required: false,
     type: String,
