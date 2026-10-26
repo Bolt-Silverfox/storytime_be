@@ -29,6 +29,7 @@ import { PrismaExceptionFilter } from './shared/filters/prisma-exception.filter'
 import { SentryExceptionFilter } from './shared/filters/sentry-exception.filter';
 import { ThrottlerExceptionFilter } from './shared/filters/throttler-exception.filter';
 import { requestLogger } from './shared/middleware/request-logger.middleware';
+import { corsOptions } from './shared/config/cors.config';
 import { swaggerCspDirectives } from './shared/config/security.config';
 import { WinstonModule } from 'nest-winston';
 import { winstonConfig } from './shared/config/logger.config';
@@ -138,40 +139,7 @@ async function bootstrap() {
     helmet({ contentSecurityPolicy: { directives: swaggerCspDirectives } }),
   );
   app.use(requestLogger);
-  app.enableCors({
-    origin: (
-      origin: string | undefined,
-      callback: (err: Error | null, allow?: boolean) => void,
-    ) => {
-      // Allow requests with no origin (mobile apps, curl, etc.)
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      // Allow storytimeapp.me and all subdomains
-      const storytimePattern = /^https?:\/\/([a-z0-9-]+\.)*storytimeapp\.me$/;
-
-      // Allow localhost for development
-      const localhostPattern = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/;
-
-      if (storytimePattern.test(origin) || localhostPattern.test(origin)) {
-        return callback(null, true);
-      }
-
-      callback(new Error('Not allowed by CORS'));
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'Accept',
-      'X-Requested-With',
-      'X-API-Key',
-    ],
-    credentials: true,
-    preflightContinue: false,
-    optionsSuccessStatus: 204,
-  });
+  app.enableCors(corsOptions);
 
   // Enable global DTO/Payload validation
   app.useGlobalPipes(
