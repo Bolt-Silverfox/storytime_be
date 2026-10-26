@@ -13,24 +13,25 @@ import {
 } from '@/shared/constants/cache-keys.constants';
 import {
   ReadingAnalyticsRangeDto,
+  TopStoriesQueryDto,
   TopStoryDto,
   StoryDetailDto,
   TrendPointDto,
+  resolveReadingAnalyticsWindow,
 } from './dto/reading-analytics.dto';
 
 // Stories with fewer than this many distinct readers must never have their
 // real reader count or reader identities exposed in the API response.
 const READER_SUPPRESSION_THRESHOLD = 5;
 
-function rangeToDates(range: ReadingAnalyticsRangeDto): {
-  start: Date;
-  end: Date;
-} {
-  const end = new Date();
-  const start = new Date(
-    end.getTime() - (range.range ?? 30) * 24 * 60 * 60 * 1000,
-  );
-  return { start, end };
+// Cache key segment for a range: the day-count when it's a plain range, or
+// the explicit window when a custom startDate/endDate was given (distinct
+// custom windows must not collide on the same cache entry).
+function rangeCacheKey(range: ReadingAnalyticsRangeDto): string {
+  if (range.startDate && range.endDate) {
+    return `custom:${range.startDate}:${range.endDate}`;
+  }
+  return String(range.range ?? 30);
 }
 
 @Injectable()
@@ -43,15 +44,39 @@ export class AdminReadingAnalyticsService {
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
+  // Pagination happens after suppression and sorting, on the cached full
+  // list, so page boundaries never depend on (or leak) real reader counts.
+  async getTopStoriesPage(query: TopStoriesQueryDto): Promise<{
+    data: TopStoryDto[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+  }> {
+    const all = await this.getTopStories({
+      range: query.range,
+      startDate: query.startDate,
+      endDate: query.endDate,
+    });
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    return {
+      data: all.slice((page - 1) * limit, page * limit),
+      meta: {
+        total: all.length,
+        page,
+        limit,
+        totalPages: Math.ceil(all.length / limit),
+      },
+    };
+  }
+
   async getTopStories(range: ReadingAnalyticsRangeDto): Promise<TopStoryDto[]> {
     const cacheKey = CACHE_KEYS.READING_ANALYTICS_TOP_STORIES(
-      range.range ?? 30,
+      rangeCacheKey(range),
     );
     const cached = await this.cacheManager.get<TopStoryDto[]>(cacheKey);
     if (cached) return cached;
 
     const stats = await this.engagementRepo.getStoryReaderStats(
-      rangeToDates(range),
+      resolveReadingAnalyticsWindow(range),
     );
     const titles = await this.storyRepo.findTitlesByIds(
       stats.map((s) => s.storyId),
@@ -77,7 +102,11 @@ export class AdminReadingAnalyticsService {
       })
       .sort((a, b) => (b.readerCount ?? 0) - (a.readerCount ?? 0));
 
-    await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.DASHBOARD);
+    // Never cache an empty list: `[]` is truthy, so it would be served for the
+    // whole TTL and hide the first readers of a story until it expired.
+    if (result.length > 0) {
+      await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS.DASHBOARD);
+    }
     return result;
   }
 
@@ -115,13 +144,16 @@ export class AdminReadingAnalyticsService {
 
     const statsSuppressed =
       stats.distinctReaders < READER_SUPPRESSION_THRESHOLD;
-    // Per-day trend counts and reader identities are both per-story reader
-    // data covered by the suppression rule, so neither is fetched for a
-    // suppressed story.
+    const window = resolveReadingAnalyticsWindow(range);
+    // Reader identities are covered by the all-time suppression rule, so they
+    // are not fetched for a suppressed story. The per-day trend is limited to
+    // the requested window, so it is suppressed on the distinct readers IN
+    // that window (a story with many all-time readers can have < 5 in a
+    // narrow window, which would expose individual reading days).
     const [trend, readers] = statsSuppressed
       ? [[], []]
       : await Promise.all([
-          this.engagementRepo.getStoryReaderTrend(storyId, rangeToDates(range)),
+          this.getWindowedTrend(storyId, window),
           this.engagementRepo.getStoryReaders(storyId),
         ]);
 
@@ -156,15 +188,26 @@ export class AdminReadingAnalyticsService {
     storyId: string,
     range: ReadingAnalyticsRangeDto,
   ): Promise<TrendPointDto[]> {
-    const stats =
-      await this.engagementRepo.getStoryReaderStatsForStory(storyId);
-    if (!stats || stats.distinctReaders < READER_SUPPRESSION_THRESHOLD) {
+    return this.getWindowedTrend(storyId, resolveReadingAnalyticsWindow(range));
+  }
+
+  // Returns the per-day trend only when the window itself has at least
+  // READER_SUPPRESSION_THRESHOLD distinct readers (which also implies the
+  // all-time count meets it).
+  private async getWindowedTrend(
+    storyId: string,
+    window: { start: Date; end: Date },
+  ): Promise<TrendPointDto[]> {
+    const windowStats = await this.engagementRepo.getStoryReaderStatsForStory(
+      storyId,
+      window,
+    );
+    if (
+      !windowStats ||
+      windowStats.distinctReaders < READER_SUPPRESSION_THRESHOLD
+    ) {
       return [];
     }
-
-    return this.engagementRepo.getStoryReaderTrend(
-      storyId,
-      rangeToDates(range),
-    );
+    return this.engagementRepo.getStoryReaderTrend(storyId, window);
   }
 }

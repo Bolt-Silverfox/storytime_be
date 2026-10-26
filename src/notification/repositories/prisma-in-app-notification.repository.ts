@@ -4,9 +4,7 @@ import type { IInAppNotificationRepository } from './in-app-notification.reposit
 import type { Notification, Prisma } from '@prisma/client';
 
 @Injectable()
-export class PrismaInAppNotificationRepository
-  implements IInAppNotificationRepository
-{
+export class PrismaInAppNotificationRepository implements IInAppNotificationRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async createNotification(

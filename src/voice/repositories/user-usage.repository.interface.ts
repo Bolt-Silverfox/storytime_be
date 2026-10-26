@@ -1,9 +1,7 @@
 import type { UserUsage } from '@prisma/client';
 
 export type UsageCounterField =
-  | 'elevenLabsCount'
-  | 'geminiStoryCount'
-  | 'geminiImageCount';
+  'elevenLabsCount' | 'geminiStoryCount' | 'geminiImageCount';
 
 // ==================== Repository Interface ====================
 export interface IUserUsageRepository {

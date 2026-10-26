@@ -98,9 +98,9 @@ describe('GuestSessionService — Redis outage surfaces 503, not 401', () => {
   }): GuestSessionService {
     const service = new GuestSessionService(configService, guestRepository);
     const keyvStub = {
-      get: opts.get ?? (async () => undefined),
-      set: opts.set ?? (async () => true),
-      delete: async () => true,
+      get: opts.get ?? (() => Promise.resolve(undefined)),
+      set: opts.set ?? (() => Promise.resolve(true)),
+      delete: () => Promise.resolve(true),
       on: () => keyvStub,
     };
     // Simulate the Redis-backed state onModuleInit would have established.
@@ -137,7 +137,7 @@ describe('GuestSessionService — Redis outage surfaces 503, not 401', () => {
     };
     const service = redisBackedService({
       isReady: false,
-      get: async () => existing,
+      get: () => Promise.resolve(existing),
     });
     await expect(
       service.updateGuestProgress('sid', 'story-1', 50),
@@ -155,11 +155,10 @@ describe('GuestSessionService — Redis outage surfaces 503, not 401', () => {
   it('read that rejects while client still reports ready -> 503', async () => {
     const service = redisBackedService({
       isReady: true,
-      get: async () => {
-        throw new Error(
-          'READONLY You can-t write against a read only replica.',
-        );
-      },
+      get: () =>
+        Promise.reject(
+          new Error('READONLY You can-t write against a read only replica.'),
+        ),
     });
     await expect(service.getGuestSession('sid')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
@@ -176,10 +175,8 @@ describe('GuestSessionService — Redis outage surfaces 503, not 401', () => {
     };
     const service = redisBackedService({
       isReady: true,
-      get: async () => existing,
-      set: async () => {
-        throw new Error('Connection timeout');
-      },
+      get: () => Promise.resolve(existing),
+      set: () => Promise.reject(new Error('Connection timeout')),
     });
     await expect(
       service.updateGuestProgress('sid', 'story-1', 50),
@@ -192,9 +189,7 @@ describe('GuestSessionService — Redis outage surfaces 503, not 401', () => {
   it('read rejected as offline (client not ready) -> 503, not a hang', async () => {
     const service = redisBackedService({
       isReady: false,
-      get: async () => {
-        throw new Error('The client is offline');
-      },
+      get: () => Promise.reject(new Error('The client is offline')),
     });
     await expect(service.getGuestSession('sid')).rejects.toBeInstanceOf(
       ServiceUnavailableException,

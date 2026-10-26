@@ -184,11 +184,15 @@ const sdkConfig: Partial<NodeSDKConfiguration> = {
     environment: deploymentEnvironment,
   }),
   metricReader: createMetricReader(),
-  logRecordProcessor: new BatchLogRecordProcessor(
-    environment === 'development'
-      ? new ConsoleLogRecordExporter()
-      : logExporter,
-  ),
+  logRecordProcessor: new BatchLogRecordProcessor({
+    // sdk-logs 0.223 takes an options object. Passing the exporter positionally
+    // was valid through 0.21x and is now a type error. The 0.x line treats this
+    // as a minor, which is why it arrived inside a "minor-and-patch" group.
+    exporter:
+      environment === 'development'
+        ? new ConsoleLogRecordExporter()
+        : logExporter,
+  }),
   instrumentations: [
     getNodeAutoInstrumentations({
       // Automatically instrument HTTP, Express, Prisma, Redis, etc.

@@ -108,7 +108,7 @@ export class PrismaStoryRepository implements IStoryRepository {
         seasons: true,
         questions: { select: { id: true } },
       },
-    }) as Promise<StoryWithRelations[]>;
+    });
   }
 
   async countStories(where: Prisma.StoryWhereInput): Promise<number> {
@@ -129,7 +129,7 @@ export class PrismaStoryRepository implements IStoryRepository {
         seasons: true,
         questions: { select: { id: true } },
       },
-    }) as Promise<StoryWithRelations>;
+    });
   }
 
   async updateStory(
@@ -148,7 +148,7 @@ export class PrismaStoryRepository implements IStoryRepository {
         seasons: true,
         questions: { select: { id: true } },
       },
-    }) as Promise<StoryWithRelations>;
+    });
   }
 
   async deleteStoryPermanently(id: string): Promise<Story> {
@@ -280,7 +280,7 @@ export class PrismaStoryRepository implements IStoryRepository {
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
-    }) as Promise<StoryProgressWithStory[]>;
+    });
   }
 
   async findCompletedProgress(
@@ -295,7 +295,7 @@ export class PrismaStoryRepository implements IStoryRepository {
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
-    }) as Promise<StoryProgressWithStory[]>;
+    });
   }
 
   async deleteStoryProgress(
@@ -363,7 +363,7 @@ export class PrismaStoryRepository implements IStoryRepository {
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
-    }) as Promise<UserStoryProgressWithStory[]>;
+    });
   }
 
   async findUserCompletedProgress(
@@ -378,7 +378,7 @@ export class PrismaStoryRepository implements IStoryRepository {
       },
       include: { story: true },
       orderBy: { lastAccessed: 'desc' },
-    }) as Promise<UserStoryProgressWithStory[]>;
+    });
   }
 
   async deleteUserStoryProgress(
@@ -496,7 +496,7 @@ export class PrismaStoryRepository implements IStoryRepository {
         isDeleted: false,
       },
       include: { story: true },
-    }) as Promise<DailyChallengeWithStory[]>;
+    });
   }
 
   async findDailyChallengeById(id: string): Promise<DailyChallenge | null> {
@@ -589,7 +589,7 @@ export class PrismaStoryRepository implements IStoryRepository {
           include: { story: true },
         },
       },
-    }) as Promise<DailyChallengeAssignmentWithChallenge | null>;
+    });
   }
 
   async findWeeklyDailyChallengeAssignments(
@@ -616,7 +616,7 @@ export class PrismaStoryRepository implements IStoryRepository {
       orderBy: {
         assignedAt: 'asc',
       },
-    }) as Promise<DailyChallengeAssignmentWithChallenge[]>;
+    });
   }
 
   async findAllDailyChallengeAssignments(): Promise<

@@ -3,9 +3,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import type { IParagraphAudioCacheRepository } from './paragraph-audio-cache.repository.interface';
 
 @Injectable()
-export class PrismaParagraphAudioCacheRepository
-  implements IParagraphAudioCacheRepository
-{
+export class PrismaParagraphAudioCacheRepository implements IParagraphAudioCacheRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findDistinctVoiceIdsForStory(

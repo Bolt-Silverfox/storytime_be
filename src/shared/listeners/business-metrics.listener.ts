@@ -4,19 +4,11 @@ import { metrics, Counter } from '@opentelemetry/api';
 import {
   AppEvents,
   UserRegisteredEvent,
-  UserDeletedEvent,
-  UserEmailVerifiedEvent,
-  KidCreatedEvent,
-  KidDeletedEvent,
   StoryCreatedEvent,
-  StoryCompletedEvent,
   PaymentCompletedEvent,
   PaymentFailedEvent,
   SubscriptionCreatedEvent,
   SubscriptionChangedEvent,
-  SubscriptionCancelledEvent,
-  BadgeEarnedEvent,
-  StreakUpdatedEvent,
 } from '@/shared/events';
 
 /**
@@ -137,22 +129,22 @@ export class BusinessMetricsListener {
   }
 
   @OnEvent(AppEvents.USER_DELETED)
-  onUserDeleted(_payload: UserDeletedEvent): void {
+  onUserDeleted(): void {
     this.safe(() => this.usersDeleted.add(1));
   }
 
   @OnEvent(AppEvents.USER_EMAIL_VERIFIED)
-  onEmailVerified(_payload: UserEmailVerifiedEvent): void {
+  onEmailVerified(): void {
     this.safe(() => this.emailVerified.add(1));
   }
 
   @OnEvent(AppEvents.KID_CREATED)
-  onKidCreated(_payload: KidCreatedEvent): void {
+  onKidCreated(): void {
     this.safe(() => this.kidsCreated.add(1));
   }
 
   @OnEvent(AppEvents.KID_DELETED)
-  onKidDeleted(_payload: KidDeletedEvent): void {
+  onKidDeleted(): void {
     this.safe(() => this.kidsDeleted.add(1));
   }
 
@@ -166,7 +158,7 @@ export class BusinessMetricsListener {
   }
 
   @OnEvent(AppEvents.STORY_COMPLETED)
-  onStoryCompleted(_payload: StoryCompletedEvent): void {
+  onStoryCompleted(): void {
     this.safe(() => this.storiesCompleted.add(1));
   }
 
@@ -218,17 +210,17 @@ export class BusinessMetricsListener {
   }
 
   @OnEvent(AppEvents.SUBSCRIPTION_CANCELLED)
-  onSubscriptionCancelled(_payload: SubscriptionCancelledEvent): void {
+  onSubscriptionCancelled(): void {
     this.safe(() => this.subscriptionsCancelled.add(1));
   }
 
   @OnEvent(AppEvents.BADGE_EARNED)
-  onBadgeEarned(_payload: BadgeEarnedEvent): void {
+  onBadgeEarned(): void {
     this.safe(() => this.badgesEarned.add(1));
   }
 
   @OnEvent(AppEvents.STREAK_UPDATED)
-  onStreakUpdated(_payload: StreakUpdatedEvent): void {
+  onStreakUpdated(): void {
     this.safe(() => this.streakUpdates.add(1));
   }
 }

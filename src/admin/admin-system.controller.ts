@@ -4,12 +4,15 @@ import {
   Post,
   Body,
   Query,
+  Req,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { AdminSystemService } from './admin-system.service';
+import { AdminAuditLogService } from './admin-audit-log.service';
 import { Admin } from './decorators/admin.decorator';
+import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
 import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import { BatchedBroadcastNotificationDto } from './dto/batched-broadcast-notification.dto';
 import { GuestActivityFilterDto } from './dto/guest-stats.dto';
@@ -33,6 +36,7 @@ export class AdminSystemController {
   constructor(
     private readonly adminService: AdminService,
     private readonly adminSystemService: AdminSystemService,
+    private readonly auditLog: AdminAuditLogService,
   ) {}
 
   // =====================
@@ -261,8 +265,18 @@ export class AdminSystemController {
   @ApiBody({ type: BroadcastNotificationDto })
   @ApiCreatedResponse({ description: 'Notification queued for broadcast' })
   @HttpCode(HttpStatus.CREATED)
-  async broadcastNotification(@Body() dto: BroadcastNotificationDto) {
+  async broadcastNotification(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: BroadcastNotificationDto,
+  ) {
     const data = await this.adminService.broadcastNotification(dto);
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'notification.broadcast',
+      targetType: 'Notification',
+      details: { title: dto.title, body: dto.body },
+    });
     return {
       statusCode: 201,
       message: 'Broadcast notification queued',
@@ -280,9 +294,17 @@ export class AdminSystemController {
   @ApiCreatedResponse({ description: 'Batched broadcast queued' })
   @HttpCode(HttpStatus.CREATED)
   async broadcastNotificationBatched(
+    @Req() req: AuthenticatedRequest,
     @Body() dto: BatchedBroadcastNotificationDto,
   ) {
     const data = await this.adminService.broadcastNotificationBatched(dto);
+    await this.auditLog.record({
+      adminId: req.authUserData.userId,
+      adminEmail: req.authUserData.email,
+      action: 'notification.broadcast',
+      targetType: 'Notification',
+      details: { title: dto.title, body: dto.body, batched: true },
+    });
     return {
       statusCode: 201,
       message: 'Batched broadcast notification queued',

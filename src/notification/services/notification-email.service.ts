@@ -33,9 +33,6 @@ export class NotificationEmailService {
         user: this.configService.get('SMTP_USER'),
         pass: this.configService.get('SMTP_PASS'),
       },
-      tls: {
-        rejectUnauthorized: this.configService.get('NODE_ENV') === 'production',
-      },
     });
   }
 

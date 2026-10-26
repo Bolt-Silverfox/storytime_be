@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '22'
+  NODE_VERSION: '24'
 
 permissions:
   contents: read
@@ -32,7 +32,7 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -53,7 +53,7 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
@@ -61,14 +61,65 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # BLOCKING, deliberately. These two were `continue-on-error: true`, which
+      # meant they ran, printed their findings, and passed the job anyway -- so
+      # unformatted or lint-failing code reached `develop-v*` unchallenged and
+      # was first caught by `deploy-prod.yml`, whose Format check is blocking,
+      # on a PR into `main`. That turned a one-file formatting slip into a
+      # blocked RELEASE several merges later (it happened: the ElevenLabs
+      # provider in #596/#597, caught by promotion #607).
+      #
+      # Use the repo's pinned prettier, not `prettier@latest`: 3.4.2 reports one
+      # offending file in this tree where 3.6.x reports 27. Raising the pin is a
+      # deliberate repo-wide reformat, not a side effect.
+      # The `build` job generates the Prisma client; this one did not, so every
+      # type-aware lint rule below saw Prisma models as `error` types. Generating
+      # it here costs one step and makes the Lint output describe the code rather
+      # than a missing client.
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
       - name: Format check
-        continue-on-error: true
         run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
 
+      # ADVISORY, deliberately, and this comment is a retraction. This step was
+      # briefly made blocking in this same branch on the strength of a CI run
+      # that reported every quality step as `success`. That reading was invalid:
+      # `continue-on-error: true` makes a FAILING step report success, so "all
+      # steps green" cannot distinguish a check that passes from a failure being
+      # ignored -- which is the very condition the change was meant to fix.
+      #
+      # MEASURED, both runs, same tree:
+      #
+      #   without `Generate Prisma client`   994 problems (799 errors, 195 warn)
+      #   with it (added above)               89 problems ( 18 errors,  71 warn)
+      #
+      # So ~98% of the errors were artifacts of a missing client, not defects:
+      # with no generated client, typescript-eslint's type-aware rules see every
+      # Prisma model as an `error` type, which produced 382
+      # `no-redundant-type-constituents` hits of the form "X is an 'error' type
+      # that acts as 'any'" and inflated `require-await` and `no-unsafe-argument`
+      # alongside them.
+      #
+      # NOW BLOCKING. The 18 errors are cleared (#610): with the Prisma client
+      # generated above, `pnpm run lint` reports 0 errors and 71 warnings, so
+      # this gate holds the line rather than announcing a backlog.
+      #
+      # The 71 warnings stay warnings. Nearly all are `no-unsafe-argument` on
+      # `jest.fn()` mock returns in specs, where the unsafe argument is the
+      # mock, not the code under test. Promoting them to errors would mean
+      # typing hundreds of mocks for no defect caught.
+      #
+      # Do not re-add `continue-on-error` here. With it set, a FAILING step
+      # reports `success`, which is how the errors accumulated unnoticed in the
+      # first place and how a CI run was misread as evidence they did not exist.
       - name: Lint
-        continue-on-error: true
         run: pnpm run lint
 
+      # STILL ADVISORY, and that is not an oversight. A newly published CVE in a
+      # transitive dependency would otherwise block every dev branch the moment
+      # it lands, with no change on our side having caused it. `|| true` inside
+      # the step keeps it that way even if `continue-on-error` is removed later.
       - name: Security audit
         continue-on-error: true
         run: pnpm audit --audit-level=high || true
@@ -103,7 +154,7 @@ jobs:
 
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -124,7 +175,7 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
@@ -149,15 +200,6 @@ jobs:
 
       - name: Build
         run: pnpm build
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts
-          path: |
-            dist/
-            node_modules/.prisma/
-          retention-days: 1
 
   # ===================
   # Test (runs on all events)
@@ -200,7 +242,7 @@ jobs:
 
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -221,7 +263,7 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
@@ -279,8 +321,13 @@ jobs:
       - name: Run database migrations
         run: pnpm db:migrate:deploy
 
+      # BLOCKING, deliberately -- see the note on the quality steps above.
+      # This step carried `continue-on-error: true` until now, so the Test
+      # check reported success no matter what. That is how three ESM-only
+      # @nestjs 12 bumps (#630, #635, #636) landed on develop-v1.3.1 while
+      # breaking 41 suites, and how a run logging "Test Suites: 85 failed"
+      # was still reported as a passing check.
       - name: Run tests with coverage
-        continue-on-error: true
         run: pnpm test --coverage
 
       # No Codecov upload here on purpose: this job runs untrusted pull-request
@@ -365,7 +412,7 @@ jobs:
 
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: block
           # The old host's IP (52.18.195.224:22) and the emerj-shared-db RDS
@@ -394,7 +441,7 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'

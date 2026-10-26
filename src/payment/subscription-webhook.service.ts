@@ -278,7 +278,7 @@ export class SubscriptionWebhookService {
         'Pub/Sub message data must be a JSON object',
       );
     }
-    return parsed as GoogleRtdnPayload;
+    return parsed;
   }
 
   private googleEventType(payload: GoogleRtdnPayload): string {
@@ -806,7 +806,7 @@ export class SubscriptionWebhookService {
           id: subscription.id,
           OR: [{ lastEventAt: null }, { lastEventAt: { lte: eventAt } }],
         },
-        data: data as Prisma.SubscriptionUpdateManyMutationInput,
+        data: data,
       });
       if (res.count === 0) {
         this.logger.log(
