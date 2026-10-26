@@ -30,6 +30,11 @@ import {
   IAdminEngagementRepository,
   ADMIN_ENGAGEMENT_REPOSITORY,
 } from './repositories';
+import {
+  COMPLIMENTARY_SUBSCRIPTION_WHERE,
+  isComplimentarySource,
+  PAYING_SUBSCRIPTION_WHERE,
+} from '../subscription/subscription.constants';
 
 @Injectable()
 export class AdminDashboardMetricsService {
@@ -103,6 +108,7 @@ export class AdminDashboardMetricsService {
       totalFavorites,
       totalSubscriptions,
       activeSubscriptionsCount,
+      payingSubscriptionsCount,
       totalRevenueResult,
     ] = await Promise.all([
       this.userRepo.count({ role: Role.parent, isDeleted: false }),
@@ -137,12 +143,19 @@ export class AdminDashboardMetricsService {
 
       // Subs
       this.subscriptionRepo.count({}),
+      // All active access (paying + complimentary)
       this.subscriptionRepo.count({
         status: 'active',
         OR: [{ endsAt: null }, { endsAt: { gt: now } }],
       }),
+      // Active AND paying (real store purchase)
+      this.subscriptionRepo.count({
+        ...PAYING_SUBSCRIPTION_WHERE,
+        status: 'active',
+        OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+      }),
 
-      // Revenue
+      // Revenue (succeeded transactions only; comped access has none)
       this.paymentRepo.sumRevenue({ status: 'success', deletedAt: null }),
     ]);
 
@@ -166,6 +179,7 @@ export class AdminDashboardMetricsService {
       prevTotalFavorites,
       prevTotalSubscriptions,
       prevActiveSubscriptionsCount,
+      prevPayingSubscriptionsCount,
       prevTotalRevenueResult,
     ] = await Promise.all([
       this.userRepo.count({
@@ -205,6 +219,12 @@ export class AdminDashboardMetricsService {
 
       // Active Subs History (Approximate)
       this.subscriptionRepo.count({
+        status: 'active',
+        startedAt: { lte: lastMonthEnd },
+        OR: [{ endsAt: null }, { endsAt: { gt: lastMonthEnd } }],
+      }),
+      this.subscriptionRepo.count({
+        ...PAYING_SUBSCRIPTION_WHERE,
         status: 'active',
         startedAt: { lte: lastMonthEnd },
         OR: [{ endsAt: null }, { endsAt: { gt: lastMonthEnd } }],
@@ -254,10 +274,15 @@ export class AdminDashboardMetricsService {
       range30d.start,
       range30d.end,
     );
-    const paidUsers = activeSubscriptionsCount;
-    const unpaidUsers = totalUsersCount - paidUsers;
-    const prevPaidUsers = prevActiveSubscriptionsCount;
-    const prevUnpaidUsers = prevTotalUsers - prevPaidUsers;
+    // paidUsers = PAYING (source=store) only; comped access is reported
+    // separately. unpaidUsers = users with no active access at all, so
+    // paid + complimentary + unpaid = total.
+    const paidUsers = payingSubscriptionsCount;
+    const complimentaryUsers =
+      activeSubscriptionsCount - payingSubscriptionsCount;
+    const unpaidUsers = totalUsersCount - activeSubscriptionsCount;
+    const prevPaidUsers = prevPayingSubscriptionsCount;
+    const prevUnpaidUsers = prevTotalUsers - prevActiveSubscriptionsCount;
 
     const result: DashboardStatsDto = {
       totalUsers: totalUsersCount,
@@ -276,9 +301,12 @@ export class AdminDashboardMetricsService {
       totalFavorites,
       averageSessionTime: Math.round(avgSessionTime),
       paidUsers,
+      complimentaryUsers,
       unpaidUsers,
       totalSubscriptions,
       activeSubscriptions: activeSubscriptionsCount,
+      payingSubscriptions: payingSubscriptionsCount,
+      complimentarySubscriptions: complimentaryUsers,
       subscriptionPlans: subscriptionPlans.map((p) => ({
         plan: p.plan,
         count: p._count,
@@ -441,15 +469,23 @@ export class AdminDashboardMetricsService {
       (acc, user) => {
         const date = user.createdAt.toISOString().split('T')[0];
         if (!acc[date]) {
-          acc[date] = { total: 0, paid: 0 };
+          acc[date] = { total: 0, paid: 0, complimentary: 0 };
         }
         acc[date].total += 1;
         if (user.subscription?.status === 'active') {
-          acc[date].paid += 1;
+          // Paying = real store subscription; anything else is comped access.
+          if (isComplimentarySource(user.subscription.source)) {
+            acc[date].complimentary += 1;
+          } else {
+            acc[date].paid += 1;
+          }
         }
         return acc;
       },
-      {} as Record<string, { total: number; paid: number }>,
+      {} as Record<
+        string,
+        { total: number; paid: number; complimentary: number }
+      >,
     );
 
     let totalUsers = await this.userRepo.count({
@@ -461,6 +497,16 @@ export class AdminDashboardMetricsService {
       createdAt: { lt: startDate },
       isDeleted: false,
       subscription: {
+        ...PAYING_SUBSCRIPTION_WHERE,
+        status: 'active',
+      },
+    });
+
+    let totalComplimentaryUsers = await this.userRepo.count({
+      createdAt: { lt: startDate },
+      isDeleted: false,
+      subscription: {
+        ...COMPLIMENTARY_SUBSCRIPTION_WHERE,
         status: 'active',
       },
     });
@@ -468,12 +514,15 @@ export class AdminDashboardMetricsService {
     return Object.entries(groupedByDate).map(([date, counts]) => {
       totalUsers += counts.total;
       totalPaidUsers += counts.paid;
+      totalComplimentaryUsers += counts.complimentary;
       return {
         date,
         newUsers: counts.total,
         paidUsers: counts.paid,
+        complimentaryUsers: counts.complimentary,
         totalUsers,
         totalPaidUsers,
+        totalComplimentaryUsers,
       };
     });
   }
@@ -599,14 +648,17 @@ export class AdminDashboardMetricsService {
 
     const freeCounts = new Array(labels.length).fill(0);
     const paidCounts = new Array(labels.length).fill(0);
+    const complimentaryCounts = new Array(labels.length).fill(0);
 
     users.forEach((u) => {
       const label = getLabel(u.createdAt);
       const index = labels.indexOf(label);
       if (index !== -1) {
-        const isPaid = u.subscription?.status === 'active';
-        if (isPaid) paidCounts[index]++;
-        else freeCounts[index]++;
+        const hasAccess = u.subscription?.status === 'active';
+        if (!hasAccess) freeCounts[index]++;
+        else if (isComplimentarySource(u.subscription?.source))
+          complimentaryCounts[index]++;
+        else paidCounts[index]++;
       }
     });
 
@@ -615,6 +667,7 @@ export class AdminDashboardMetricsService {
         labels,
         freeUsers: freeCounts,
         paidUsers: paidCounts,
+        complimentaryUsers: complimentaryCounts,
       },
     };
   }

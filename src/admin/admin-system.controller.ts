@@ -48,7 +48,7 @@ export class AdminSystemController {
   @ApiOperation({
     summary: 'List all subscriptions',
     description:
-      'Returns all subscriptions with user details. Optional status filter.',
+      'Returns all subscriptions with user details. Each row carries `source` (store | admin_grant | coupon | trial), `isComplimentary` (source != store: full access but NOT a paying customer), and for admin grants `grantedByAdminId`, `grantedByAdminName` and `grantReason`. Optional status and source filters (combined with AND). An unknown source value returns 400.',
   })
   @ApiQuery({
     name: 'status',
@@ -56,6 +56,14 @@ export class AdminSystemController {
     type: String,
     description: 'Filter by subscription status',
     example: 'active',
+  })
+  @ApiQuery({
+    name: 'source',
+    required: false,
+    enum: ['store', 'admin_grant', 'coupon', 'trial'],
+    description:
+      'Filter by how the access was obtained. store = real paying subscriptions; any other value = complimentary access.',
+    example: 'admin_grant',
   })
   @ApiOkResponse({
     description: 'Subscriptions retrieved successfully',
@@ -77,6 +85,11 @@ export class AdminSystemController {
               email: 'parent@example.com',
               name: 'John Doe',
             },
+            source: 'store',
+            isComplimentary: false,
+            grantedByAdminId: null,
+            grantedByAdminName: null,
+            grantReason: null,
           },
           {
             id: 'sub-124',
@@ -91,13 +104,21 @@ export class AdminSystemController {
               email: 'parent2@example.com',
               name: 'Jane Smith',
             },
+            source: 'admin_grant',
+            isComplimentary: true,
+            grantedByAdminId: 'admin-1',
+            grantedByAdminName: 'Ada Admin',
+            grantReason: 'Press review copy',
           },
         ],
       },
     },
   })
-  async getSubscriptions(@Query('status') status?: string) {
-    const data = await this.adminSystemService.getSubscriptions(status);
+  async getSubscriptions(
+    @Query('status') status?: string,
+    @Query('source') source?: string,
+  ) {
+    const data = await this.adminSystemService.getSubscriptions(status, source);
     return {
       statusCode: 200,
       message: 'Subscriptions retrieved successfully',

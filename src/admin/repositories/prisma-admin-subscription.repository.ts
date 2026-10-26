@@ -4,6 +4,7 @@ import { Prisma, Subscription } from '@prisma/client';
 import type {
   IAdminSubscriptionRepository,
   SubscriptionPlanCount,
+  SubscriptionSourceCount,
   SubscriptionStartedAtCount,
   SubscriptionWithUser,
 } from './admin-subscription.repository.interface';
@@ -16,9 +17,25 @@ export class PrismaAdminSubscriptionRepository implements IAdminSubscriptionRepo
     return this.prisma.subscription.count({ where });
   }
 
-  async groupByActivePlan(now: Date): Promise<SubscriptionPlanCount[]> {
+  async groupByActivePlan(
+    now: Date,
+    extraWhere: Prisma.SubscriptionWhereInput = {},
+  ): Promise<SubscriptionPlanCount[]> {
     const result = await this.prisma.subscription.groupBy({
       by: ['plan'],
+      where: {
+        ...extraWhere,
+        status: 'active',
+        OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+      },
+      _count: true,
+    });
+    return result;
+  }
+
+  async groupByActiveSource(now: Date): Promise<SubscriptionSourceCount[]> {
+    const result = await this.prisma.subscription.groupBy({
+      by: ['source'],
       where: {
         status: 'active',
         OR: [{ endsAt: null }, { endsAt: { gt: now } }],
@@ -35,9 +52,11 @@ export class PrismaAdminSubscriptionRepository implements IAdminSubscriptionRepo
   async groupByStartedAt(
     startDate: Date,
     endDate: Date,
+    extraWhere: Prisma.SubscriptionWhereInput = {},
   ): Promise<SubscriptionStartedAtCount[]> {
     const rows = await this.prisma.subscription.findMany({
       where: {
+        ...extraWhere,
         startedAt: { gte: startDate, lte: endDate },
       },
       select: { startedAt: true },
