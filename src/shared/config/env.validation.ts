@@ -46,7 +46,7 @@ export const envSchema = z
     SMTP_SECURE: z
       .string()
       .transform((val) => val === 'true')
-      .default('false'),
+      .default(false),
     SMTP_USER: z.string().email('SMTP_USER must be a valid email'),
     SMTP_PASS: z.string().min(1, 'SMTP_PASS is required'),
     MAIL_ENCRYPTION: z.enum(['TLS', 'SSL']).optional().default('TLS'),
