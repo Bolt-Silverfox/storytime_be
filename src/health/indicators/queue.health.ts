@@ -1,14 +1,14 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import {
-  HealthIndicator,
   HealthIndicatorResult,
-  HealthCheckError,
+  HealthIndicatorService,
 } from '@nestjs/terminus';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { EMAIL_QUEUE_NAME } from '@/notification/queue/email-queue.constants';
 import { STORY_QUEUE_NAME } from '@/story/queue/story-queue.constants';
+import { withHealthTimeout } from './health-timeout';
 import { ALERTING_THRESHOLDS } from '@/shared/config/alerting.config';
 
 interface QueueStats {
@@ -21,31 +21,34 @@ interface QueueStats {
   paused: boolean;
 }
 
-interface QueueHealthResult {
+// A type alias rather than an interface: terminus 12's indicator data is
+// typed Record<string, unknown>, which interfaces do not satisfy because
+// they get no implicit index signature.
+type QueueHealthResult = {
   duration: string;
   queues: Record<string, QueueStats>;
   totalWaiting: number;
   totalActive: number;
   totalFailed: number;
   unhealthyQueues: string[];
-}
+};
 
 /**
  * Health indicator for BullMQ queues
  * Monitors the email and story generation queues
  */
 @Injectable()
-export class QueueHealthIndicator extends HealthIndicator {
+export class QueueHealthIndicator {
   private readonly queues: Map<string, Queue> = new Map();
 
   constructor(
+    private readonly healthIndicatorService: HealthIndicatorService,
     @InjectQueue(EMAIL_QUEUE_NAME)
     private readonly emailQueue: Queue,
     @Optional()
     @InjectQueue(STORY_QUEUE_NAME)
     private readonly storyQueue: Queue | null,
   ) {
-    super();
     // Register available queues
     this.queues.set('email', this.emailQueue);
     if (this.storyQueue) {
@@ -60,7 +63,7 @@ export class QueueHealthIndicator extends HealthIndicator {
     const startTime = Date.now();
 
     try {
-      const queueStats = await this.getAllQueueStats();
+      const queueStats = await withHealthTimeout(this.getAllQueueStats());
       const duration = Date.now() - startTime;
 
       const unhealthyQueues = this.getUnhealthyQueues(queueStats);
@@ -76,31 +79,21 @@ export class QueueHealthIndicator extends HealthIndicator {
       };
 
       if (!isHealthy) {
-        throw new HealthCheckError(
-          'One or more queues are unhealthy',
-          this.getStatus(key, false, {
-            ...result,
-            reason: `Unhealthy queues: ${unhealthyQueues.join(', ')}`,
-          }),
-        );
+        return this.healthIndicatorService.check(key).down({
+          ...result,
+          reason: `Unhealthy queues: ${unhealthyQueues.join(', ')}`,
+        });
       }
 
-      return this.getStatus(key, true, result);
+      return this.healthIndicatorService.check(key).up(result);
     } catch (error) {
-      if (error instanceof HealthCheckError) {
-        throw error;
-      }
-
       const duration = Date.now() - startTime;
       const errorMessage = ErrorHandler.extractMessage(error);
 
-      throw new HealthCheckError(
-        'Queue health check failed',
-        this.getStatus(key, false, {
-          duration: `${duration}ms`,
-          error: errorMessage,
-        }),
-      );
+      return this.healthIndicatorService.check(key).down({
+        duration: `${duration}ms`,
+        error: errorMessage,
+      });
     }
   }
 
@@ -113,7 +106,7 @@ export class QueueHealthIndicator extends HealthIndicator {
   ): Promise<HealthIndicatorResult> {
     const queue = this.queues.get(queueName);
     if (!queue) {
-      return this.getStatus(key, false, {
+      return this.healthIndicatorService.check(key).down({
         error: `Queue '${queueName}' not registered`,
       });
     }
@@ -121,53 +114,42 @@ export class QueueHealthIndicator extends HealthIndicator {
     const startTime = Date.now();
 
     try {
-      const stats = await this.getQueueStats(queueName, queue);
+      const stats = await withHealthTimeout(
+        this.getQueueStats(queueName, queue),
+      );
       const duration = Date.now() - startTime;
       const isHealthy =
         !stats.paused &&
         stats.failed < ALERTING_THRESHOLDS.QUEUE_FAILED_JOBS.CRITICAL;
 
       if (!isHealthy) {
-        throw new HealthCheckError(
-          `Queue '${queueName}' is unhealthy`,
-          this.getStatus(key, false, {
-            duration: `${duration}ms`,
-            ...stats,
-            reason: stats.paused ? 'Queue is paused' : 'Too many failed jobs',
-          }),
-        );
+        return this.healthIndicatorService.check(key).down({
+          duration: `${duration}ms`,
+          ...stats,
+          reason: stats.paused ? 'Queue is paused' : 'Too many failed jobs',
+        });
       }
 
-      return this.getStatus(key, true, {
+      return this.healthIndicatorService.check(key).up({
         duration: `${duration}ms`,
         ...stats,
       });
     } catch (error) {
-      if (error instanceof HealthCheckError) {
-        throw error;
-      }
-
       const duration = Date.now() - startTime;
       const errorMessage = ErrorHandler.extractMessage(error);
 
-      throw new HealthCheckError(
-        `Queue '${queueName}' health check failed`,
-        this.getStatus(key, false, {
-          duration: `${duration}ms`,
-          error: errorMessage,
-        }),
-      );
+      return this.healthIndicatorService.check(key).down({
+        duration: `${duration}ms`,
+        error: errorMessage,
+      });
     }
   }
 
   private async getAllQueueStats(): Promise<QueueStats[]> {
-    const stats: QueueStats[] = [];
-
-    for (const [name, queue] of this.queues) {
-      stats.push(await this.getQueueStats(name, queue));
-    }
-
-    return stats;
+    // Concurrent so a stuck queue cannot add its wait to the others'.
+    return Promise.all(
+      [...this.queues].map(([name, queue]) => this.getQueueStats(name, queue)),
+    );
   }
 
   private async getQueueStats(name: string, queue: Queue): Promise<QueueStats> {

@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
-  HealthIndicator,
   HealthIndicatorResult,
-  HealthCheckError,
+  HealthIndicatorService,
 } from '@nestjs/terminus';
 import {
   CircuitBreakerService,
@@ -15,10 +14,11 @@ import {
  * are observable via the health endpoint.
  */
 @Injectable()
-export class CircuitBreakerHealthIndicator extends HealthIndicator {
-  constructor(private readonly cbService: CircuitBreakerService) {
-    super();
-  }
+export class CircuitBreakerHealthIndicator {
+  constructor(
+    private readonly healthIndicatorService: HealthIndicatorService,
+    private readonly cbService: CircuitBreakerService,
+  ) {}
 
   isHealthy(key: string): HealthIndicatorResult {
     const allBreakers = this.cbService.getAllBreakers();
@@ -40,12 +40,7 @@ export class CircuitBreakerHealthIndicator extends HealthIndicator {
       }
     }
 
-    const result = this.getStatus(key, !hasOpenBreaker, details);
-
-    if (hasOpenBreaker) {
-      throw new HealthCheckError('Circuit breaker(s) OPEN', result);
-    }
-
-    return result;
+    const session = this.healthIndicatorService.check(key);
+    return hasOpenBreaker ? session.down(details) : session.up(details);
   }
 }

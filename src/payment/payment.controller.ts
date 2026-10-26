@@ -39,7 +39,11 @@ export class PaymentController {
   @Post('cancel')
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Cancel subscription (keeps access until endsAt)' })
+  @ApiOperation({
+    summary: 'Cancel subscription (keeps access until endsAt)',
+    description:
+      'Real store subscriptions are cancelled at Google Play (Apple: auto-renew status is checked and a warning returned). Granted / complimentary access (source != store, or an admin-activated token) is cancelled locally only: Apple/Google are never called with a synthetic token, and the response carries storeCancellation="skipped" and a note.',
+  })
   @ApiOkResponse({ type: CancelSubscriptionResponseDto })
   async cancel(@Req() req: AuthenticatedRequest) {
     return this.paymentService.cancelSubscription(req.authUserData.userId);

@@ -214,6 +214,7 @@ describe('AdminController', () => {
       expect(result.data).toEqual(mockSubs);
       expect(adminSystemService.getSubscriptions).toHaveBeenCalledWith(
         'active',
+        undefined,
       );
     });
 

@@ -6,7 +6,13 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
-import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
+import {
+  SUBSCRIPTION_STATUS,
+  PLANS,
+  STORE_SOURCE_FIELDS,
+  hasPaidAccess,
+  withoutAdminGrantFields,
+} from './subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AppEvents,
@@ -53,13 +59,21 @@ export class SubscriptionService {
   }
 
   async getSubscriptionForUser(userId: string) {
-    return this.subscriptionRepository.findFirstByUser(userId);
+    // End-user response: never expose which admin granted access or why.
+    return withoutAdminGrantFields(
+      await this.subscriptionRepository.findFirstByUser(userId),
+    );
   }
 
   /**
    * Subscribe to a plan.
    * For paid plans, use the PaymentService.verifyPurchase endpoint after completing IAP.
    * This method only handles free plan subscriptions directly.
+   *
+   * Choosing the free plan NEVER touches a live paid subscription (store
+   * purchase or admin grant/coupon/trial): the existing row is returned
+   * unchanged with `paidSubscriptionActive: true`. Expired, cancelled and
+   * free rows are replaced as before.
    */
   async subscribe(userId: string, planKey: string) {
     const plan = PLANS[planKey];
@@ -76,38 +90,55 @@ export class SubscriptionService {
     const now = new Date();
     const endsAt = new Date(now.getTime() + plan.days * 24 * 60 * 60 * 1000);
 
-    const subscription = await this.subscriptionRepository.executeTransaction(
-      async (tx) => {
+    const { subscription, paidSubscriptionActive } =
+      await this.subscriptionRepository.executeTransaction(async (tx) => {
         const existing = await this.subscriptionRepository.findFirstByUser(
           userId,
           tx,
         );
 
-        if (existing) {
-          return this.subscriptionRepository.updateById(
-            existing.id,
-            {
-              plan: planKey,
-              status: SUBSCRIPTION_STATUS.ACTIVE,
-              startedAt: now,
-              endsAt,
-            },
-            tx,
-          );
+        if (existing && hasPaidAccess(existing, now)) {
+          return { subscription: existing, paidSubscriptionActive: true };
         }
 
-        return this.subscriptionRepository.create(
-          {
-            userId,
-            plan: planKey,
-            status: SUBSCRIPTION_STATUS.ACTIVE,
-            startedAt: now,
-            endsAt,
-          },
-          tx,
-        );
-      },
-    );
+        const written = existing
+          ? await this.subscriptionRepository.updateById(
+              existing.id,
+              {
+                plan: planKey,
+                status: SUBSCRIPTION_STATUS.ACTIVE,
+                startedAt: now,
+                endsAt,
+                // Choosing the free plan replaces any admin grant on this row.
+                ...STORE_SOURCE_FIELDS,
+              },
+              tx,
+            )
+          : await this.subscriptionRepository.create(
+              {
+                userId,
+                plan: planKey,
+                status: SUBSCRIPTION_STATUS.ACTIVE,
+                startedAt: now,
+                endsAt,
+                ...STORE_SOURCE_FIELDS,
+              },
+              tx,
+            );
+        return { subscription: written, paidSubscriptionActive: false };
+      });
+
+    if (paidSubscriptionActive) {
+      this.logger.log(
+        `Free plan requested but a paid subscription is active; left untouched for user ${userId.substring(0, 8)}`,
+      );
+      return {
+        subscription: withoutAdminGrantFields(subscription),
+        paidSubscriptionActive: true,
+        message:
+          'A paid subscription is still active, so the free plan was not applied.',
+      };
+    }
 
     // Invalidate cache after subscription change
     await this.invalidateCache(userId);
@@ -127,7 +158,10 @@ export class SubscriptionService {
     };
     this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CREATED, createdEvent);
 
-    return { subscription };
+    return {
+      subscription: withoutAdminGrantFields(subscription),
+      paidSubscriptionActive: false,
+    };
   }
 
   async cancel(userId: string) {
@@ -160,7 +194,7 @@ export class SubscriptionService {
       `Subscription cancelled for user ${userId.substring(0, 8)}`,
     );
 
-    return cancelled;
+    return withoutAdminGrantFields(cancelled);
   }
 
   async listHistory(userId: string) {
@@ -192,10 +226,9 @@ export class SubscriptionService {
           return true;
         }
 
-        const sub = user.subscription;
-        if (!sub || sub.status !== SUBSCRIPTION_STATUS.ACTIVE) return false;
-
-        return sub.endsAt === null || sub.endsAt > new Date();
+        // A plan='free' row is active for ~100 years but grants no paid
+        // access; hasPaidAccess excludes it (real paid plans unchanged).
+        return hasPaidAccess(user.subscription);
       },
       SUBSCRIPTION_CACHE_TTL_MS,
       CACHE_KEY_PATTERN,

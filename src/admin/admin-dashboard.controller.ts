@@ -79,7 +79,24 @@ export class AdminDashboardController {
             { plan: 'yearly', count: 60 },
             { plan: 'family', count: 20 },
           ],
+          baseCurrency: 'USD',
           totalRevenue: 12500.5,
+          mixedCurrencies: false,
+          revenueByCurrency: [
+            { currency: 'USD', total: 12500.5, transactions: 240 },
+          ],
+          convertedRevenueByCurrency: [
+            {
+              currency: 'USD',
+              total: 12500.5,
+              transactions: 240,
+              usdTotal: 12500.5,
+              rateUsed: 1,
+            },
+          ],
+          unconvertedCurrencies: [],
+          hasUnconvertedRevenue: false,
+          usedEarliestRate: false,
           conversionRate: 14.4,
         },
       },
@@ -182,8 +199,12 @@ export class AdminDashboardController {
             { date: '2023-10-02', count: 3 },
           ],
           revenueGrowth: [
-            { date: '2023-10-01', amount: 500 },
-            { date: '2023-10-02', amount: 300 },
+            { date: '2023-10-01', amount: 500, byCurrency: { USD: 500 } },
+            {
+              date: '2023-10-02',
+              amount: null,
+              byCurrency: { NGN: 25000, USD: 5 },
+            },
           ],
           planBreakdown: [
             { plan: 'monthly', count: 120 },
@@ -209,7 +230,7 @@ export class AdminDashboardController {
   @ApiOperation({
     summary: 'Get revenue analytics',
     description:
-      'Returns detailed revenue breakdown by day, month, year, and top subscription plans.',
+      "Returns detailed revenue breakdown by day, month, year, and top subscription plans, all in USD (`baseCurrency`). Each succeeded transaction is converted at the admin-managed FX rate (POST /admin/fx-rates) effective on its own date: the latest rate with effectiveFrom <= the transaction date; if the transaction predates the earliest rate, that earliest rate is used and `usedEarliestRate` is true. A currency with NO rate is never guessed: it is excluded from every converted figure and listed in `unconvertedCurrencies` (`hasUnconvertedRevenue`). `totalRevenue` and each series amount (`dailyRevenue[].amount`, `monthlyRevenue[].total_amount`, `yearlyRevenue[].total_amount`, `topPlans[].total_revenue`) are converted USD numbers (0 when empty); `revenueByCurrency` and each point's `byCurrency` keep the ORIGINAL per-currency amounts, `convertedRevenueByCurrency` shows each currency's usdTotal and latest rate used, and a point's `unconvertedByCurrency` lists amounts excluded for lack of a rate. `mixedCurrencies` is informational. `topPlans` is all-time, ranked by converted revenue; `subscription_count` counts active PAYING subscribers (free plan excluded).",
   })
   @ApiQuery({
     name: 'startDate',
@@ -232,28 +253,68 @@ export class AdminDashboardController {
         statusCode: 200,
         message: 'Revenue analytics retrieved successfully',
         data: {
+          baseCurrency: 'USD',
+          totalRevenue: 72.48,
+          mixedCurrencies: true,
+          revenueByCurrency: [
+            { currency: 'NGN', total: 30000, transactions: 6 },
+            { currency: 'USD', total: 52.98, transactions: 3 },
+          ],
+          convertedRevenueByCurrency: [
+            {
+              currency: 'USD',
+              total: 52.98,
+              transactions: 3,
+              usdTotal: 52.98,
+              rateUsed: 1,
+            },
+            {
+              currency: 'NGN',
+              total: 30000,
+              transactions: 6,
+              usdTotal: 19.5,
+              rateUsed: 0.00065,
+            },
+          ],
+          unconvertedCurrencies: [],
+          hasUnconvertedRevenue: false,
+          usedEarliestRate: false,
           dailyRevenue: [
-            { date: '2023-10-01', amount: 500 },
-            { date: '2023-10-02', amount: 750 },
+            { date: '2023-10-01', amount: 16.25, byCurrency: { NGN: 25000 } },
+            {
+              date: '2023-10-02',
+              amount: 56.23,
+              byCurrency: { NGN: 5000, USD: 52.98 },
+            },
           ],
           monthlyRevenue: [
-            { month: '2023-10', total_amount: 12500 },
-            { month: '2023-09', total_amount: 11800 },
+            {
+              month: '2023-10',
+              total_amount: 72.48,
+              byCurrency: { NGN: 30000, USD: 52.98 },
+            },
           ],
           yearlyRevenue: [
-            { year: '2023', total_amount: 85000 },
-            { year: '2022', total_amount: 72000 },
+            {
+              year: '2023',
+              total_amount: 72.48,
+              byCurrency: { NGN: 30000, USD: 52.98 },
+            },
           ],
           topPlans: [
             {
               plan: 'yearly',
               subscription_count: 60,
-              total_revenue: 6000,
+              total_revenue: 52.98,
+              byCurrency: { USD: 52.98 },
+              transactions: 3,
             },
             {
               plan: 'monthly',
               subscription_count: 120,
-              total_revenue: 4800,
+              total_revenue: 19.5,
+              byCurrency: { NGN: 30000 },
+              transactions: 6,
             },
           ],
         },
