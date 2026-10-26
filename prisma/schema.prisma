@@ -92,6 +92,9 @@ model User {
   badges                  UserBadge[]
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
+  // Last successful login (any path that issues a new Session). Null until the
+  // user next logs in; set best-effort by TokenService.createTokenPair.
+  lastLoginAt             DateTime?
   pinHash                 String?
   biometricsEnabled       Boolean                  @default(false)
   // SUSPENSION FIELDS
@@ -143,6 +146,7 @@ model User {
 
   @@index([isDeleted])
   @@index([email, isDeleted])
+  @@index([lastLoginAt])
   @@index([avatarId])
   @@index([preferredVoiceId])
   @@index([role, isDeleted])

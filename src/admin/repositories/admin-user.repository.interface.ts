@@ -104,6 +104,10 @@ export interface IAdminUserRepository {
   // getUserById: single user with detail includes
   findByIdWithDetails(userId: string): Promise<AdminUserDetail | null>;
 
+  // lastActiveAt: newest non-deleted session activity per user (one grouped query).
+  // Users with no recorded activity are absent from the map.
+  findLastActivityByUserIds(userIds: string[]): Promise<Map<string, Date>>;
+
   // Lookups
   findById(userId: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;

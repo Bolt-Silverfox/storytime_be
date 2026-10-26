@@ -452,6 +452,8 @@ export class AdminUserQueryController {
           isDeleted: false,
           createdAt: '2023-10-01T12:00:00Z',
           updatedAt: '2023-10-15T10:30:00Z',
+          lastLoginAt: '2023-10-15T10:00:00Z',
+          lastActiveAt: '2023-10-15T10:30:00Z',
           isPaidUser: true,
           amountSpent: 125.5,
           currency: 'USD',

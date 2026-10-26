@@ -94,6 +94,24 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
     });
   }
 
+  async findLastActivityByUserIds(
+    userIds: string[],
+  ): Promise<Map<string, Date>> {
+    const result = new Map<string, Date>();
+    if (userIds.length === 0) return result;
+    const rows = await this.prisma.session.groupBy({
+      by: ['userId'],
+      where: { userId: { in: userIds }, isDeleted: false },
+      _max: { lastActivityAt: true },
+    });
+    for (const row of rows) {
+      if (row._max.lastActivityAt) {
+        result.set(row.userId, row._max.lastActivityAt);
+      }
+    }
+    return result;
+  }
+
   findByIdWithDetails(userId: string): Promise<AdminUserDetail | null> {
     return this.prisma.user.findUnique({
       where: { id: userId },
