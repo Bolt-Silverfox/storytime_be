@@ -9,6 +9,9 @@ module.exports = {
       // must stay before the catch-all ts-jest entry (first match wins).
       '/node_modules/\\.pnpm/@nestjs\\+terminus@.*\\.js$':
         '<rootDir>/test/esm-to-cjs.transform.js',
+      // sanitize-html >= 2.17.7 pulls in the ESM-only htmlparser2 12 stack.
+      '/node_modules/\\.pnpm/(htmlparser2@12|entities@8|domhandler@6|domutils@4|domelementtype@3|dom-serializer@3)\\.[^/]*/.*\\.js$':
+        '<rootDir>/test/esm-to-cjs.transform.js',
       '^.+\\.(t|j)sx?$': 'ts-jest',
     },
     collectCoverageFrom: ['**/*.(t|j)s'],
@@ -19,7 +22,7 @@ module.exports = {
     // cannot require them, so they must be transformed rather than passed
     // through untouched.
     transformIgnorePatterns: [
-      '/node_modules/\\.pnpm/(?!@nestjs\\+(jwt|event-emitter|schedule|terminus)@)',
+      '/node_modules/\\.pnpm/(?!@nestjs\\+(jwt|event-emitter|schedule|terminus)@|(htmlparser2@12|entities@8|domhandler@6|domutils@4|domelementtype@3|dom-serializer@3)\\.)',
     ],
     // Use V8 coverage rather than babel-plugin-istanbul. Istanbul pulls
     // test-exclude@6, which calls minimatch's callable default export; the
