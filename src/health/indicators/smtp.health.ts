@@ -1,21 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import {
-  HealthIndicator,
   HealthIndicatorResult,
-  HealthCheckError,
+  HealthIndicatorService,
 } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
 import * as nodemailer from 'nodemailer';
 
 @Injectable()
-export class SmtpHealthIndicator extends HealthIndicator {
+export class SmtpHealthIndicator {
   private readonly logger = new Logger(SmtpHealthIndicator.name);
 
-  constructor(private readonly configService: ConfigService<EnvConfig, true>) {
-    super();
-  }
+  constructor(
+    private readonly healthIndicatorService: HealthIndicatorService,
+    private readonly configService: ConfigService<EnvConfig, true>,
+  ) {}
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     const startTime = Date.now();
@@ -40,7 +40,7 @@ export class SmtpHealthIndicator extends HealthIndicator {
 
       const duration = Date.now() - startTime;
 
-      return this.getStatus(key, true, {
+      return this.healthIndicatorService.check(key).up({
         duration: `${duration}ms`,
         host: this.configService.get('SMTP_HOST'),
         port: this.configService.get('SMTP_PORT') || 587,
@@ -52,14 +52,11 @@ export class SmtpHealthIndicator extends HealthIndicator {
 
       this.logger.warn(`SMTP health check failed: ${errorMessage}`);
 
-      throw new HealthCheckError(
-        'SMTP health check failed',
-        this.getStatus(key, false, {
-          duration: `${duration}ms`,
-          host: this.configService.get('SMTP_HOST'),
-          error: errorMessage,
-        }),
-      );
+      return this.healthIndicatorService.check(key).down({
+        duration: `${duration}ms`,
+        host: this.configService.get('SMTP_HOST'),
+        error: errorMessage,
+      });
     }
   }
 }

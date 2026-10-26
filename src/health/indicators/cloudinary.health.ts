@@ -1,9 +1,8 @@
 import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { ErrorHandler } from '@/shared/utils/error-handler.util';
 import {
-  HealthIndicator,
   HealthIndicatorResult,
-  HealthCheckError,
+  HealthIndicatorService,
 } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import type { v2 as CloudinaryType } from 'cloudinary';
@@ -13,17 +12,16 @@ import type { v2 as CloudinaryType } from 'cloudinary';
  * Checks if Cloudinary is properly configured and accessible
  */
 @Injectable()
-export class CloudinaryHealthIndicator extends HealthIndicator {
+export class CloudinaryHealthIndicator {
   private readonly logger = new Logger(CloudinaryHealthIndicator.name);
 
   constructor(
+    private readonly healthIndicatorService: HealthIndicatorService,
     private readonly configService: ConfigService,
     @Optional()
     @Inject('CLOUDINARY')
     private readonly cloudinary: typeof CloudinaryType | null,
-  ) {
-    super();
-  }
+  ) {}
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     const startTime = Date.now();
@@ -32,17 +30,17 @@ export class CloudinaryHealthIndicator extends HealthIndicator {
       // Check if Cloudinary is configured
       const cloudName = this.configService.get<string>('CLOUDINARY_CLOUD_NAME');
       if (!cloudName) {
-        return this.getStatus(key, true, {
+        return this.healthIndicatorService.check(key).up({
           duration: `${Date.now() - startTime}ms`,
-          status: 'not_configured',
+          state: 'not_configured',
           message: 'Cloudinary not configured (optional service)',
         });
       }
 
       if (!this.cloudinary) {
-        return this.getStatus(key, true, {
+        return this.healthIndicatorService.check(key).up({
           duration: `${Date.now() - startTime}ms`,
-          status: 'not_injected',
+          state: 'not_injected',
           message: 'Cloudinary provider not available',
         });
       }
@@ -53,26 +51,19 @@ export class CloudinaryHealthIndicator extends HealthIndicator {
       const duration = Date.now() - startTime;
 
       if (result.status !== 'ok') {
-        throw new HealthCheckError(
-          'Cloudinary API returned non-ok status',
-          this.getStatus(key, false, {
-            duration: `${duration}ms`,
-            cloudName,
-            status: result.status,
-          }),
-        );
+        return this.healthIndicatorService.check(key).down({
+          duration: `${duration}ms`,
+          cloudName,
+          httpStatus: result.status,
+        });
       }
 
-      return this.getStatus(key, true, {
+      return this.healthIndicatorService.check(key).up({
         duration: `${duration}ms`,
         cloudName,
-        status: 'ok',
+        state: 'ok',
       });
     } catch (error) {
-      if (error instanceof HealthCheckError) {
-        throw error;
-      }
-
       const duration = Date.now() - startTime;
       const errorMessage = ErrorHandler.extractMessage(error);
 
@@ -83,20 +74,16 @@ export class CloudinaryHealthIndicator extends HealthIndicator {
         errorMessage.includes('Rate Limit') ||
         errorMessage.includes('timeout')
       ) {
-        return this.getStatus(key, true, {
+        return this.healthIndicatorService.check(key).degraded({
           duration: `${duration}ms`,
-          status: 'degraded',
           message: errorMessage,
         });
       }
 
-      throw new HealthCheckError(
-        'Cloudinary health check failed',
-        this.getStatus(key, false, {
-          duration: `${duration}ms`,
-          error: errorMessage,
-        }),
-      );
+      return this.healthIndicatorService.check(key).down({
+        duration: `${duration}ms`,
+        error: errorMessage,
+      });
     }
   }
 }
