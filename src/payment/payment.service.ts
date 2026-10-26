@@ -15,6 +15,8 @@ import { createHash } from 'crypto';
 import {
   PLANS,
   PRODUCT_ID_TO_PLAN,
+  STORE_SOURCE_FIELDS,
+  withoutAdminGrantFields,
 } from '@/subscription/subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, PaymentFailedEvent } from '@/shared/events';
@@ -459,6 +461,11 @@ export class PaymentService {
       platform: platformDetails?.platform ?? null,
       productId: platformDetails?.productId ?? null,
       purchaseToken: platformDetails?.purchaseToken ?? null,
+      // A verified store purchase always makes the row a real paying
+      // subscription: it overrides any admin grant (source back to 'store',
+      // grantedBy/reason cleared). Written inside the same token-guarded CAS as
+      // the token swap, so a lost race writes none of these fields.
+      ...STORE_SOURCE_FIELDS,
     };
 
     let subscription;
@@ -640,13 +647,13 @@ export class PaymentService {
 
     if (appleAutoRenewWarning) {
       return {
-        ...subscription,
+        ...withoutAdminGrantFields(subscription),
         warning: appleAutoRenewWarning,
         manageUrl: 'https://apps.apple.com/account/subscriptions',
       };
     }
 
-    return subscription;
+    return withoutAdminGrantFields(subscription);
   }
 
   private getErrorMessage(error: unknown): string {

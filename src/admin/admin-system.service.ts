@@ -18,6 +18,10 @@ import {
   defaultAgeGroups,
   systemAvatars,
 } from '../prisma/seed-data';
+import {
+  isSubscriptionSource,
+  SUBSCRIPTION_SOURCES,
+} from '../subscription/subscription.constants';
 import { CACHE_INVALIDATION } from '@/shared/constants/cache-keys.constants';
 
 const PERMANENT_DELETION_MSG = 'Permanent deletion requested';
@@ -64,9 +68,18 @@ export class AdminSystemService {
     });
   }
 
-  async getSubscriptions(status?: string): Promise<SubscriptionDto[]> {
+  async getSubscriptions(
+    status?: string,
+    source?: string,
+  ): Promise<SubscriptionDto[]> {
+    if (source && !isSubscriptionSource(source)) {
+      throw new ValidationException(
+        `Invalid source "${source}". Expected one of: ${SUBSCRIPTION_SOURCES.join(', ')}`,
+      );
+    }
     const where: Prisma.SubscriptionWhereInput = { isDeleted: false };
     if (status) where.status = status;
+    if (source) where.source = source;
 
     return this.adminSystemRepository.findSubscriptions({
       where,

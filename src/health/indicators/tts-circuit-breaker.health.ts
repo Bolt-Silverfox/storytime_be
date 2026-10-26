@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
-  HealthIndicator,
   HealthIndicatorResult,
-  HealthCheckError,
+  HealthIndicatorService,
 } from '@nestjs/terminus';
 import {
   CircuitBreakerService,
@@ -11,10 +10,11 @@ import {
 import { TTS_BREAKER_NAMES } from '@/shared/constants/circuit-breaker.constants';
 
 @Injectable()
-export class TTSCircuitBreakerHealthIndicator extends HealthIndicator {
-  constructor(private readonly cbService: CircuitBreakerService) {
-    super();
-  }
+export class TTSCircuitBreakerHealthIndicator {
+  constructor(
+    private readonly healthIndicatorService: HealthIndicatorService,
+    private readonly cbService: CircuitBreakerService,
+  ) {}
 
   isHealthy(key: string): HealthIndicatorResult {
     const allBreakers = this.cbService.getAllBreakers();
@@ -38,12 +38,7 @@ export class TTSCircuitBreakerHealthIndicator extends HealthIndicator {
       }
     }
 
-    const result = this.getStatus(key, !hasOpenBreaker, details);
-
-    if (hasOpenBreaker) {
-      throw new HealthCheckError('TTS circuit breaker(s) OPEN', result);
-    }
-
-    return result;
+    const session = this.healthIndicatorService.check(key);
+    return hasOpenBreaker ? session.down(details) : session.up(details);
   }
 }

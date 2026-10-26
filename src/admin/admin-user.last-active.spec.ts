@@ -155,7 +155,7 @@ describe('AdminUserService lastLoginAt / lastActiveAt', () => {
   });
 
   describe('users CSV export', () => {
-    it('includes Last Login and Last Active columns', async () => {
+    it('includes Last Login, Last Active then Is Complimentary columns', async () => {
       const adminUserService = {
         getAllUsers: jest.fn().mockResolvedValue({
           data: [
@@ -186,9 +186,10 @@ describe('AdminUserService lastLoginAt / lastActiveAt', () => {
       expect(header.split(',').slice(10)).toEqual([
         'Last Login',
         'Last Active',
+        'Is Complimentary',
       ]);
       expect(
-        row.endsWith(`${login.toISOString()},${active.toISOString()}`),
+        row.endsWith(`${login.toISOString()},${active.toISOString()},false`),
       ).toBe(true);
     });
   });

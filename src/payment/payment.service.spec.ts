@@ -585,6 +585,104 @@ describe('PaymentService', () => {
     });
   });
 
+  describe('verifyPurchase subscription source', () => {
+    const userId = 'user-1';
+    const dto = {
+      platform: 'google' as const,
+      productId: 'com.storytime.monthly',
+      purchaseToken: 'real-store-token',
+    };
+    const future = () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    beforeEach(() => {
+      mockGoogleVerification.verify.mockResolvedValue({
+        success: true,
+        isSubscription: true,
+        amount: 4.99,
+        currency: 'USD',
+        expirationTime: future(),
+        metadata: { acknowledgementState: 1 },
+      });
+      mockPaymentTxRepo.create.mockResolvedValue({
+        id: 'tx-1',
+        userId,
+        amount: 4.99,
+        currency: 'USD',
+        status: 'success',
+        reference: 'h',
+      });
+    });
+
+    it('creates new rows explicitly as source=store', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue(null);
+      mockSubscriptionRepo.create.mockResolvedValue({
+        id: 's',
+        plan: 'monthly',
+        status: 'active',
+      });
+
+      await service.verifyPurchase(userId, dto);
+
+      expect(mockSubscriptionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ source: 'store' }),
+      );
+    });
+
+    it('a real purchase overrides an admin grant: source back to store, grant fields cleared', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
+        id: 'comp-sub',
+        userId,
+        plan: 'yearly',
+        status: 'active',
+        source: 'admin_grant',
+        grantedByAdminId: 'admin-9',
+        grantReason: 'press',
+        purchaseToken: 'admin-activated-1700000000000',
+      });
+      mockSubscriptionRepo.findById.mockResolvedValue({
+        id: 'comp-sub',
+        plan: 'monthly',
+        status: 'active',
+      });
+
+      await service.verifyPurchase(userId, dto);
+
+      expect(mockSubscriptionRepo.updateByIdIfToken).toHaveBeenCalledWith(
+        'comp-sub',
+        'admin-activated-1700000000000', // CAS guard still the grant's token
+        expect.objectContaining({
+          source: 'store',
+          grantedByAdminId: null,
+          grantReason: null,
+          purchaseToken: 'real-store-token',
+        }),
+      );
+    });
+
+    it('a lost CAS race writes nothing, so grant fields are never half-overwritten', async () => {
+      mockSubscriptionRepo.findFirstByUser.mockResolvedValue({
+        id: 'comp-sub',
+        userId,
+        source: 'admin_grant',
+        grantedByAdminId: 'admin-9',
+        grantReason: 'press',
+        purchaseToken: 'admin-activated-1',
+      });
+      mockSubscriptionRepo.updateByIdIfToken.mockResolvedValue(0);
+      mockSubscriptionRepo.findById.mockResolvedValue({
+        id: 'comp-sub',
+        plan: 'yearly',
+        status: 'active',
+        source: 'admin_grant',
+      });
+
+      await service.verifyPurchase(userId, dto);
+
+      expect(mockSubscriptionRepo.updateById).not.toHaveBeenCalled();
+      expect(mockSubscriptionRepo.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getSubscription', () => {
     it('should return enriched subscription for user', async () => {
       const mockSub = {

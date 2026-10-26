@@ -82,7 +82,8 @@ export class AdminUserQueryController {
   @ApiOperation({
     summary: 'List all users',
     description:
-      'Returns paginated list of users with filters for search, role, subscription status, and date ranges.',
+      'Returns paginated list of users with filters for search, role, subscription status, and date ranges.' +
+      ' `isPaidUser` means the user currently has paid ACCESS (an active, unexpired subscription), including complimentary grants; `isComplimentary` is true when that access is not a real store purchase (source != store, e.g. admin_grant). `amountSpent`/`currency` come from succeeded payment transactions only (comped users show 0) and report the largest single-currency total; `spendingByCurrency` lists every currency separately (amounts are never summed across currencies).',
   })
   @ApiQuery({
     name: 'page',
@@ -130,6 +131,13 @@ export class AdminUserQueryController {
     description: 'Filter by subscription status',
   })
   @ApiQuery({
+    name: 'paidFirst',
+    required: false,
+    type: Boolean,
+    description:
+      'List users with an active paid subscription first (same definition as /admin/users/paid), then the rest in the requested sort order. Default false. Ignored when hasActiveSubscription is set.',
+  })
+  @ApiQuery({
     name: 'createdAfter',
     required: false,
     type: String,
@@ -161,11 +169,16 @@ export class AdminUserQueryController {
             createdAt: '2023-10-01T12:00:00Z',
             updatedAt: '2023-10-15T10:30:00Z',
             isPaidUser: true,
+            isComplimentary: false,
+            spendingByCurrency: { USD: 9.99 },
             activeSubscription: {
               id: 'sub-123',
               plan: 'monthly',
               status: 'active',
               endsAt: '2023-11-15T10:30:00Z',
+              source: 'store',
+              grantedByAdminId: null,
+              grantReason: null,
             },
             profile: {
               id: 'profile-123',
@@ -221,7 +234,8 @@ export class AdminUserQueryController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get paid users',
-    description: 'Returns paginated list of users with active subscriptions.',
+    description:
+      'Returns paginated list of users with active paid ACCESS (paying and complimentary). Check `isComplimentary` on each row to tell grants from real purchasers.',
   })
   @ApiQuery({
     name: 'page',
@@ -428,7 +442,8 @@ export class AdminUserQueryController {
   @ApiOperation({
     summary: 'Get user by ID',
     description:
-      'Returns detailed user information including profile, kids, subscriptions, payment history, and activity statistics.',
+      'Returns detailed user information including profile, kids, subscriptions, payment history (each transaction includes its `currency`), and activity statistics.' +
+      ' `isPaidUser` means the user currently has paid ACCESS (an active, unexpired subscription), including complimentary grants; `isComplimentary` is true when that access is not a real store purchase (source != store, e.g. admin_grant). `amountSpent`/`currency` come from succeeded payment transactions only (comped users show 0) and report the largest single-currency total; `spendingByCurrency` lists every currency separately (amounts are never summed across currencies). `subscription` also carries source, grantedByAdminId, grantedByAdminName, grantReason and isComplimentary.',
   })
   @ApiParam({
     name: 'userId',
@@ -455,8 +470,10 @@ export class AdminUserQueryController {
           lastLoginAt: '2023-10-15T10:00:00Z',
           lastActiveAt: '2023-10-15T10:30:00Z',
           isPaidUser: true,
+          isComplimentary: false,
           amountSpent: 125.5,
           currency: 'USD',
+          spendingByCurrency: { USD: 125.5 },
           profile: {
             id: 'profile-123',
             explicitContent: false,
@@ -493,6 +510,11 @@ export class AdminUserQueryController {
             status: 'active',
             startedAt: '2023-10-01T12:00:00Z',
             endsAt: '2023-11-01T12:00:00Z',
+            source: 'store',
+            isComplimentary: false,
+            grantedByAdminId: null,
+            grantedByAdminName: null,
+            grantReason: null,
           },
           paymentTransactions: [
             {

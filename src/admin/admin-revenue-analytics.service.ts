@@ -19,6 +19,11 @@ import {
   IAdminActivityRepository,
   ADMIN_ACTIVITY_REPOSITORY,
 } from './repositories';
+import {
+  COMPLIMENTARY_SUBSCRIPTION_WHERE,
+  PAYING_SUBSCRIPTION_WHERE,
+  SUBSCRIPTION_SOURCE,
+} from '../subscription/subscription.constants';
 
 @Injectable()
 export class AdminRevenueAnalyticsService {
@@ -55,16 +60,42 @@ export class AdminRevenueAnalyticsService {
       ? AdminRevenueAnalyticsService.parseInclusiveEndDate(dateRange.endDate)
       : new Date();
 
-    const [subscriptions, revenue, planBreakdown] = await Promise.all([
-      // Get subscription growth
+    const now = new Date();
+    const [
+      subscriptions,
+      payingGrowth,
+      revenue,
+      planBreakdown,
+      payingPlans,
+      complimentaryPlans,
+      activeBySource,
+    ] = await Promise.all([
+      // Get subscription growth (all new access, paying + complimentary)
       this.subscriptionRepo.groupByStartedAt(startDate, endDate),
-      // Get revenue growth
+      // New real (store) subscriptions only
+      this.subscriptionRepo.groupByStartedAt(
+        startDate,
+        endDate,
+        PAYING_SUBSCRIPTION_WHERE,
+      ),
+      // Get revenue growth (real succeeded transactions only)
       this.paymentRepo.groupRevenueByCreatedAt(startDate, endDate),
-      // Get subscription plan breakdown
-      this.subscriptionRepo.groupByActivePlan(new Date()),
+      // Plan breakdown of ALL active access (paying + complimentary)
+      this.subscriptionRepo.groupByActivePlan(now),
+      this.subscriptionRepo.groupByActivePlan(now, PAYING_SUBSCRIPTION_WHERE),
+      this.subscriptionRepo.groupByActivePlan(
+        now,
+        COMPLIMENTARY_SUBSCRIPTION_WHERE,
+      ),
+      this.subscriptionRepo.groupByActiveSource(now),
     ]);
 
-    // Calculate churn rate
+    const toPlanCounts = (rows: { plan: string; _count: number }[]) =>
+      rows.map((p) => ({ plan: p.plan, count: p._count }));
+    const sumCounts = (rows: { _count: number }[]) =>
+      rows.reduce((total, r) => total + r._count, 0);
+
+    // Calculate churn rate (paying subscriptions only)
     const churnRate = await this.calculateChurnRate(startDate, endDate);
 
     return {
@@ -76,11 +107,23 @@ export class AdminRevenueAnalyticsService {
         date: rev.createdAt.toISOString().split('T')[0],
         amount: rev._sum.amount || 0,
       })),
-      planBreakdown: planBreakdown.map((plan) => ({
-        plan: plan.plan,
-        count: plan._count,
-      })),
+      planBreakdown: toPlanCounts(planBreakdown),
       churnRate,
+      paying: {
+        activeSubscriptions: sumCounts(payingPlans),
+        planBreakdown: toPlanCounts(payingPlans),
+        subscriptionGrowth: payingGrowth.map((sub) => ({
+          date: sub.startedAt.toISOString().split('T')[0],
+          count: sub._count,
+        })),
+      },
+      complimentary: {
+        activeSubscriptions: sumCounts(complimentaryPlans),
+        planBreakdown: toPlanCounts(complimentaryPlans),
+        bySource: activeBySource
+          .filter((row) => row.source !== SUBSCRIPTION_SOURCE.STORE)
+          .map((row) => ({ source: row.source, count: row._count })),
+      },
     };
   }
 
@@ -101,6 +144,7 @@ export class AdminRevenueAnalyticsService {
     // Base: had access at the start of the window (started before it and either
     // never ended or ended on/after the window start).
     const totalSubscriptionsAtStart = await this.subscriptionRepo.count({
+      ...PAYING_SUBSCRIPTION_WHERE,
       startedAt: { lt: startDate },
       OR: [{ endsAt: null }, { endsAt: { gte: startDate } }],
     });
@@ -110,6 +154,7 @@ export class AdminRevenueAnalyticsService {
     // avoids miscounting active auto-renewing subs whose endsAt (current period
     // boundary) happens to fall in the window.
     const churnedSubscriptions = await this.subscriptionRepo.count({
+      ...PAYING_SUBSCRIPTION_WHERE,
       startedAt: { lt: startDate },
       status: 'cancelled',
       endsAt: {
@@ -188,7 +233,12 @@ export class AdminRevenueAnalyticsService {
       // whole payment history was loaded into memory.
       const [revenueByPlan, activePlanCounts] = await Promise.all([
         this.paymentRepo.groupRevenueByPlan(),
-        this.subscriptionRepo.groupByActivePlan(new Date()),
+        // Paying subscriptions only: comped access earns no revenue and must not
+        // inflate a plan's subscriber count next to its revenue.
+        this.subscriptionRepo.groupByActivePlan(
+          new Date(),
+          PAYING_SUBSCRIPTION_WHERE,
+        ),
       ]);
 
       const planRevenueMap = new Map<

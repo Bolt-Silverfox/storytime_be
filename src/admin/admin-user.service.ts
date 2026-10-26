@@ -20,7 +20,16 @@ import {
   ADMIN_USER_REPOSITORY,
   IAdminPaymentRepository,
   ADMIN_PAYMENT_REPOSITORY,
+  AdminUserListItem,
 } from './repositories';
+import { isComplimentarySource } from '../subscription/subscription.constants';
+
+/** Per-currency spend as a plain object, rounded to cents. Never mixes currencies. */
+function toCurrencyTotals(byCurrency: Map<string, number>) {
+  return Object.fromEntries(
+    [...byCurrency.entries()].map(([c, v]) => [c, Number(v.toFixed(2))]),
+  );
+}
 
 @Injectable()
 export class AdminUserService {
@@ -71,17 +80,18 @@ export class AdminUserService {
 
     // Filter by subscription status
     const hasActiveSub = filters.hasActiveSubscription;
+    // One `now` for the whole request so the paid / not-paid groups below are
+    // exact complements of each other.
+    const now = new Date();
+    const activeSubscriptionCriteria: Prisma.SubscriptionWhereInput = {
+      status: 'active',
+      isDeleted: false,
+      OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+    };
     if (hasActiveSub !== undefined && hasActiveSub !== null) {
-      const now = new Date();
       // Normalize value - handle both boolean and string (query params may come as strings)
       const wantsActiveSubscription =
         hasActiveSub === true || String(hasActiveSub) === 'true';
-
-      const activeSubscriptionCriteria = {
-        status: 'active',
-        isDeleted: false,
-        OR: [{ endsAt: null }, { endsAt: { gt: now } }],
-      };
 
       if (wantsActiveSubscription) {
         where.subscription = activeSubscriptionCriteria;
@@ -134,15 +144,29 @@ export class AdminUserService {
       orderBy = { createdAt: sortOrder };
     }
 
-    const [users, total] = await Promise.all([
-      this.userRepo.findManyWithDetails({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-      }),
-      this.userRepo.count(where),
-    ]);
+    // paidFirst only has meaning when the caller has not already narrowed to
+    // paid / unpaid via hasActiveSubscription.
+    const paidFirst =
+      filters.paidFirst === true &&
+      (hasActiveSub === undefined || hasActiveSub === null);
+
+    const [users, total] = paidFirst
+      ? await this.findPaidFirstPage(
+          where,
+          activeSubscriptionCriteria,
+          orderBy,
+          skip,
+          limit,
+        )
+      : await Promise.all([
+          this.userRepo.findManyWithDetails({
+            where,
+            skip,
+            take: limit,
+            orderBy,
+          }),
+          this.userRepo.count(where),
+        ]);
 
     // One grouped query for the whole page (no N+1).
     const lastActivity =
@@ -204,7 +228,14 @@ export class AdminUserService {
           creditUsed,
           amountSpent,
           currency,
+          spendingByCurrency: toCurrencyTotals(spendingByCurrency),
+          // Access, not payment: true for anyone with active paid ACCESS,
+          // including complimentary grants (gating is unchanged).
           isPaidUser: hasActiveSubscription,
+          // True when that active access is not a real store purchase.
+          isComplimentary:
+            hasActiveSubscription &&
+            isComplimentarySource(user.subscription?.source),
           activeSubscription: hasActiveSubscription ? user.subscription : null,
           lastActiveAt: latestOf(lastActivity.get(user.id), user.lastLoginAt),
           kidsCount: user._count.kids,
@@ -220,6 +251,60 @@ export class AdminUserService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * One page of users with active-paid subscribers first, then the rest, each
+   * group in `orderBy` (+ `id` as a tiebreaker so pages never overlap or skip).
+   * The paid group is a prefix of the full ordering, so a page is the paid
+   * slice [skip, paidTotal) followed by the head of the free group.
+   */
+  private async findPaidFirstPage(
+    where: Prisma.UserWhereInput,
+    activeSubscriptionCriteria: Prisma.SubscriptionWhereInput,
+    orderBy: Prisma.UserOrderByWithRelationInput,
+    skip: number,
+    take: number,
+  ) {
+    const paidWhere: Prisma.UserWhereInput = {
+      AND: [where, { subscription: activeSubscriptionCriteria }],
+    };
+    const freeWhere: Prisma.UserWhereInput = {
+      AND: [
+        where,
+        {
+          OR: [
+            { subscription: null },
+            { subscription: { NOT: activeSubscriptionCriteria } },
+          ],
+        },
+      ],
+    };
+    const stableOrder = [orderBy, { id: 'asc' as const }];
+    const fetch = (w: Prisma.UserWhereInput, s: number, t: number) =>
+      this.userRepo.findManyWithDetails({
+        where: w,
+        skip: s,
+        take: t,
+        orderBy: stableOrder,
+      });
+
+    const [paidTotal, freeTotal] = await Promise.all([
+      this.userRepo.count(paidWhere),
+      this.userRepo.count(freeWhere),
+    ]);
+
+    let users: AdminUserListItem[] = [];
+    if (skip < paidTotal) {
+      const paidTake = Math.min(take, paidTotal - skip);
+      users = await fetch(paidWhere, skip, paidTake);
+      if (take > paidTake) {
+        users = users.concat(await fetch(freeWhere, 0, take - paidTake));
+      }
+    } else {
+      users = await fetch(freeWhere, skip - paidTotal, take);
+    }
+    return [users, paidTotal + freeTotal] as const;
   }
 
   async getUserById(userId: string): Promise<any> {
@@ -250,6 +335,19 @@ export class AdminUserService {
       (a, b) => b[1] - a[1],
     )[0];
 
+    // Resolve the granting admin's name (no FK on grantedByAdminId).
+    const grantedByAdminId = user.subscription?.grantedByAdminId ?? null;
+    const grantedBy = grantedByAdminId
+      ? await this.userRepo.findById(grantedByAdminId)
+      : null;
+    const subscription = user.subscription
+      ? {
+          ...user.subscription,
+          isComplimentary: isComplimentarySource(user.subscription.source),
+          grantedByAdminName: grantedBy?.name ?? null,
+        }
+      : null;
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, pinHash, ...safeUser } = user;
 
@@ -259,10 +357,15 @@ export class AdminUserService {
 
     return {
       ...safeUser,
+      subscription,
       lastActiveAt: latestOf(lastActivity.get(userId), user.lastLoginAt),
       isPaidUser: hasActiveSubscription,
+      isComplimentary:
+        hasActiveSubscription &&
+        isComplimentarySource(user.subscription?.source),
       amountSpent: primarySpend?.[1] ?? 0,
       currency: primarySpend?.[0] ?? null,
+      spendingByCurrency: toCurrencyTotals(spendingByCurrency),
       stats: {
         sessionsCount: user._count.auth,
         favoritesCount: user._count.parentFavorites,

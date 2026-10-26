@@ -6,7 +6,12 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
-import { SUBSCRIPTION_STATUS, PLANS } from './subscription.constants';
+import {
+  SUBSCRIPTION_STATUS,
+  PLANS,
+  STORE_SOURCE_FIELDS,
+  withoutAdminGrantFields,
+} from './subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AppEvents,
@@ -53,7 +58,10 @@ export class SubscriptionService {
   }
 
   async getSubscriptionForUser(userId: string) {
-    return this.subscriptionRepository.findFirstByUser(userId);
+    // End-user response: never expose which admin granted access or why.
+    return withoutAdminGrantFields(
+      await this.subscriptionRepository.findFirstByUser(userId),
+    );
   }
 
   /**
@@ -91,6 +99,8 @@ export class SubscriptionService {
               status: SUBSCRIPTION_STATUS.ACTIVE,
               startedAt: now,
               endsAt,
+              // Choosing the free plan replaces any admin grant on this row.
+              ...STORE_SOURCE_FIELDS,
             },
             tx,
           );
@@ -103,6 +113,7 @@ export class SubscriptionService {
             status: SUBSCRIPTION_STATUS.ACTIVE,
             startedAt: now,
             endsAt,
+            ...STORE_SOURCE_FIELDS,
           },
           tx,
         );
@@ -127,7 +138,7 @@ export class SubscriptionService {
     };
     this.eventEmitter.emit(AppEvents.SUBSCRIPTION_CREATED, createdEvent);
 
-    return { subscription };
+    return { subscription: withoutAdminGrantFields(subscription) };
   }
 
   async cancel(userId: string) {
@@ -160,7 +171,7 @@ export class SubscriptionService {
       `Subscription cancelled for user ${userId.substring(0, 8)}`,
     );
 
-    return cancelled;
+    return withoutAdminGrantFields(cancelled);
   }
 
   async listHistory(userId: string) {
