@@ -18,6 +18,10 @@ export class AdminExportService {
     return escaped;
   }
 
+  private formatDate(value: unknown): string {
+    return value ? new Date(value as string | number | Date).toISOString() : '';
+  }
+
   async exportUsersAsCsv(filters: UserFilterDto): Promise<string> {
     // Paginate through all matching users
     const pageSize = 1000;
@@ -45,6 +49,8 @@ export class AdminExportService {
       'Registration Date',
       'Is Deleted',
       'Is Suspended',
+      'Last Login',
+      'Last Active',
       // Appended last so existing positional consumers keep working.
       'Is Complimentary',
       // Converted to USD with the shared FX rates (same figure as the API).
@@ -66,6 +72,8 @@ export class AdminExportService {
         : '',
       user.isDeleted,
       user.isSuspended || false,
+      this.formatDate(user.lastLoginAt),
+      this.formatDate(user.lastActiveAt),
       user.isComplimentary || false,
       (user.amountSpent as number | null | undefined) ?? 0,
     ]);

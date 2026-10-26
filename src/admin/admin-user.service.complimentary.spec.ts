@@ -44,12 +44,14 @@ describe('AdminUserService complimentary vs paying', () => {
     count: jest.fn(),
     findByIdWithDetails: jest.fn(),
     findById: jest.fn(),
+    findLastActivityByUserIds: jest.fn(),
   };
   const paymentRepo = { findSuccessfulByUser: jest.fn() };
 
   beforeEach(async () => {
     jest.resetAllMocks();
     userRepo.count.mockResolvedValue(1);
+    userRepo.findLastActivityByUserIds.mockResolvedValue(new Map());
     paymentRepo.findSuccessfulByUser.mockResolvedValue([]);
     const module: TestingModule = await Test.createTestingModule({
       providers: [

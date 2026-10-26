@@ -49,8 +49,33 @@ export class TokenService {
       expiresAt,
     });
 
+    // Every new Session is a successful login (password, OAuth, registration
+    // auto-sign-in); refresh reuses a session and never gets here.
+    this.recordLastLogin(user.id);
+
     const jwt = this.generateJwt(user, session.id);
     return { jwt, refreshToken };
+  }
+
+  /**
+   * Fire-and-forget: stamping User.lastLoginAt must never slow down or fail a login.
+   */
+  private recordLastLogin(userId: string): void {
+    try {
+      void Promise.resolve(this.authRepository.recordLastLogin(userId)).catch(
+        (error: unknown) => this.logLastLoginFailure(userId, error),
+      );
+    } catch (error) {
+      this.logLastLoginFailure(userId, error);
+    }
+  }
+
+  private logLastLoginFailure(userId: string, error: unknown): void {
+    this.logger.error(
+      `Failed to record lastLoginAt for user ${userId}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 
   /**

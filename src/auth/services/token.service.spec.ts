@@ -57,6 +57,7 @@ describe('TokenService', () => {
 
     const mockAuthRepository: Partial<jest.Mocked<IAuthRepository>> = {
       createSession: jest.fn(),
+      recordLastLogin: jest.fn().mockResolvedValue(undefined),
       findSessionByToken: jest.fn(),
       findSessionById: jest.fn(),
       deleteSession: jest.fn(),
