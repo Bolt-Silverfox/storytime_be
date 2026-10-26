@@ -773,6 +773,7 @@ describe('PaymentService', () => {
         plan: 'monthly',
         status: 'active',
         endsAt: futureDate,
+        source: 'store',
         platform: 'google',
         productId: 'com.storytime.monthly',
         purchaseToken: 'google-token-123',
@@ -804,6 +805,7 @@ describe('PaymentService', () => {
         plan: 'monthly',
         status: 'active',
         endsAt: futureDate,
+        source: 'store',
         platform: 'google',
         productId: 'com.storytime.monthly',
         purchaseToken: 'google-token-123',
@@ -831,6 +833,7 @@ describe('PaymentService', () => {
         plan: 'monthly',
         status: 'active',
         endsAt: futureDate,
+        source: 'store',
         platform: 'apple',
         productId: 'com.storytime.monthly',
         purchaseToken: 'original-tx-123',
@@ -864,6 +867,7 @@ describe('PaymentService', () => {
         plan: 'monthly',
         status: 'active',
         endsAt: futureDate,
+        source: 'store',
         platform: 'apple',
         productId: 'com.storytime.monthly',
         purchaseToken: 'original-tx-123',
@@ -891,6 +895,7 @@ describe('PaymentService', () => {
         plan: 'monthly',
         status: 'active',
         endsAt: futureDate,
+        source: 'store',
         platform: 'apple',
         productId: 'com.storytime.monthly',
         purchaseToken: 'original-tx-123',
@@ -909,6 +914,78 @@ describe('PaymentService', () => {
       const result = await service.cancelSubscription('u1');
 
       expect(result.status).toBe('cancelled');
+    });
+
+    describe('granted / synthetic-token rows never hit the stores', () => {
+      const futureDate = new Date(Date.now() + 86400000 * 30);
+      it.each([
+        [
+          'admin_grant row on google with an admin-activated token',
+          {
+            source: 'admin_grant',
+            platform: 'google',
+            productId: 'com.storytime.monthly',
+            purchaseToken: 'admin-activated-1700000000000',
+          },
+        ],
+        [
+          'admin_grant row on apple with an admin-activated token',
+          {
+            source: 'admin_grant',
+            platform: 'apple',
+            productId: 'com.storytime.monthly',
+            purchaseToken: 'admin-activated-1700000000000',
+          },
+        ],
+        [
+          'coupon row carrying a platform and a token',
+          {
+            source: 'coupon',
+            platform: 'google',
+            productId: 'com.storytime.monthly',
+            purchaseToken: 'whatever-token',
+          },
+        ],
+        [
+          'store row that still holds an admin-activated token',
+          {
+            source: 'store',
+            platform: 'google',
+            productId: 'com.storytime.monthly',
+            purchaseToken: 'admin-activated-1700000000000',
+          },
+        ],
+      ])('%s', async (_name, fields) => {
+        const mockSub = {
+          id: 'sub-1',
+          plan: 'monthly',
+          status: 'active',
+          endsAt: futureDate,
+          ...fields,
+        };
+        mockSubscriptionRepo.findFirstByUser.mockResolvedValue(mockSub);
+        mockSubscriptionRepo.updateById.mockResolvedValue({
+          ...mockSub,
+          status: 'cancelled',
+        });
+
+        const result = await service.cancelSubscription('u1');
+
+        expect(
+          mockGoogleVerification.cancelSubscription,
+        ).not.toHaveBeenCalled();
+        expect(
+          mockAppleVerification.getSubscriptionStatus,
+        ).not.toHaveBeenCalled();
+        // same local semantics as before: cancelled, endsAt preserved
+        expect(mockSubscriptionRepo.updateById).toHaveBeenCalledWith('sub-1', {
+          status: 'cancelled',
+          endsAt: futureDate,
+        });
+        expect(result.status).toBe('cancelled');
+        expect(result).toHaveProperty('storeCancellation', 'skipped');
+        expect(result).not.toHaveProperty('warning');
+      });
     });
   });
 });

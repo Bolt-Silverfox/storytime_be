@@ -83,7 +83,7 @@ export class AdminUserQueryController {
     summary: 'List all users',
     description:
       'Returns paginated list of users with filters for search, role, subscription status, and date ranges.' +
-      ' `isPaidUser` means the user currently has paid ACCESS (an active, unexpired subscription), including complimentary grants; `isComplimentary` is true when that access is not a real store purchase (source != store, e.g. admin_grant). `amountSpent`/`currency` come from succeeded payment transactions only (comped users show 0) and report the largest single-currency total; `spendingByCurrency` lists every currency separately (amounts are never summed across currencies).',
+      " `isPaidUser` means the user currently has paid ACCESS (an active, unexpired subscription), including complimentary grants; `isComplimentary` is true when that access is not a real store purchase (source != store, e.g. admin_grant). `amountSpent`/`currency` come from succeeded payment transactions only: when all of the user's transactions share one currency `amountSpent` is that total (0 when none, comped users show 0) and `currency` is its code; when they span several currencies `amountSpent` and `currency` are null (amounts are never summed across currencies, no FX). `spendingByCurrency` always lists every currency separately (missing currency grouped as UNKNOWN).",
   })
   @ApiQuery({
     name: 'page',
@@ -436,7 +436,7 @@ export class AdminUserQueryController {
     summary: 'Get user by ID',
     description:
       'Returns detailed user information including profile, kids, subscriptions, payment history (each transaction includes its `currency`), and activity statistics.' +
-      ' `isPaidUser` means the user currently has paid ACCESS (an active, unexpired subscription), including complimentary grants; `isComplimentary` is true when that access is not a real store purchase (source != store, e.g. admin_grant). `amountSpent`/`currency` come from succeeded payment transactions only (comped users show 0) and report the largest single-currency total; `spendingByCurrency` lists every currency separately (amounts are never summed across currencies). `subscription` also carries source, grantedByAdminId, grantedByAdminName, grantReason and isComplimentary.',
+      " `isPaidUser` means the user currently has paid ACCESS (an active, unexpired subscription), including complimentary grants; `isComplimentary` is true when that access is not a real store purchase (source != store, e.g. admin_grant). `amountSpent`/`currency` come from succeeded payment transactions only: when all of the user's transactions share one currency `amountSpent` is that total (0 when none, comped users show 0) and `currency` is its code; when they span several currencies `amountSpent` and `currency` are null (amounts are never summed across currencies, no FX). `spendingByCurrency` always lists every currency separately (missing currency grouped as UNKNOWN). `subscription` also carries source, grantedByAdminId, grantedByAdminName, grantReason and isComplimentary.",
   })
   @ApiParam({
     name: 'userId',

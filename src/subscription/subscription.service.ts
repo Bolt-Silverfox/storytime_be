@@ -10,6 +10,7 @@ import {
   SUBSCRIPTION_STATUS,
   PLANS,
   STORE_SOURCE_FIELDS,
+  hasPaidAccess,
   withoutAdminGrantFields,
 } from './subscription.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -203,10 +204,9 @@ export class SubscriptionService {
           return true;
         }
 
-        const sub = user.subscription;
-        if (!sub || sub.status !== SUBSCRIPTION_STATUS.ACTIVE) return false;
-
-        return sub.endsAt === null || sub.endsAt > new Date();
+        // A plan='free' row is active for ~100 years but grants no paid
+        // access; hasPaidAccess excludes it (real paid plans unchanged).
+        return hasPaidAccess(user.subscription);
       },
       SUBSCRIPTION_CACHE_TTL_MS,
       CACHE_KEY_PATTERN,

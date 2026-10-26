@@ -212,9 +212,39 @@ export class AnalyticsMetricDto {
   timeframe: string;
 }
 
+/**
+ * Revenue in ONE currency. Amounts of different currencies are never added
+ * together and no FX conversion is ever applied.
+ */
+export class RevenueByCurrencyDto {
+  @ApiProperty({
+    description:
+      'ISO currency code, upper-cased. Transactions with no currency are grouped under "UNKNOWN".',
+    example: 'NGN',
+  })
+  currency: string;
+
+  @ApiProperty({
+    description: 'Sum of succeeded transactions in this currency',
+    example: 25000,
+  })
+  total: number;
+
+  @ApiProperty({
+    description: 'Number of succeeded transactions in this currency',
+    example: 5,
+  })
+  transactions: number;
+}
+
 export class MetricWithTrendDto {
-  @ApiProperty({ description: 'Current value' })
-  value: number;
+  @ApiProperty({
+    description:
+      'Current value. null only for totalRevenue when revenue spans several currencies (see revenueByCurrency).',
+    nullable: true,
+    type: Number,
+  })
+  value: number | null;
 
   @ApiProperty({ description: 'Trend percentage vs previous period' })
   trend: number;
@@ -347,10 +377,27 @@ export class DashboardStatsDto {
 
   @ApiProperty({
     description:
-      'Total revenue: sum of succeeded payment transactions (real store purchases only; complimentary grants create no transaction, so they never contribute). NOTE: amounts of different currencies are summed numerically; see GET admin/users/:id for per-currency spend.',
+      'Total revenue (all time): sum of succeeded payment transactions (real store purchases only; complimentary grants create no transaction). The plain sum ONLY when every succeeded transaction shares one currency (0 when there are none); null when several currencies are present, because amounts of different currencies are never added together and no FX conversion is applied. Use revenueByCurrency for the real figures.',
     example: 12500.5,
+    nullable: true,
+    type: Number,
   })
-  totalRevenue: number;
+  totalRevenue: number | null;
+
+  @ApiProperty({
+    description:
+      'True when succeeded transactions span more than one currency (totalRevenue is then null).',
+    example: false,
+  })
+  mixedCurrencies: boolean;
+
+  @ApiProperty({
+    description:
+      'All-time succeeded revenue per currency, largest total first. Null/missing currency is grouped under "UNKNOWN".',
+    type: [RevenueByCurrencyDto],
+    example: [{ currency: 'USD', total: 12500.5, transactions: 240 }],
+  })
+  revenueByCurrency: RevenueByCurrencyDto[];
 
   @ApiProperty({
     description:
@@ -586,15 +633,20 @@ export class SubscriptionAnalyticsDto {
 
   @ApiProperty({
     description:
-      'Revenue per day from succeeded payment transactions (real purchases only; comped access creates none)',
+      'Revenue per day from succeeded payment transactions (real purchases only; comped access creates none). `amount` is the day total only when that day is single-currency, otherwise null; `byCurrency` always carries the per-currency figures. Currencies are never summed together.',
     example: [
-      { date: '2023-10-01', amount: 500 },
-      { date: '2023-10-02', amount: 300 },
+      { date: '2023-10-01', amount: 500, byCurrency: { USD: 500 } },
+      {
+        date: '2023-10-02',
+        amount: null,
+        byCurrency: { NGN: 25000, USD: 5 },
+      },
     ],
   })
   revenueGrowth: Array<{
     date: string;
-    amount: number;
+    amount: number | null;
+    byCurrency: Record<string, number>;
   }>;
 
   @ApiProperty({
@@ -651,60 +703,95 @@ export class SubscriptionAnalyticsDto {
 
 export class RevenueAnalyticsDto {
   @ApiProperty({
-    description: 'Daily revenue breakdown',
+    description:
+      'Total revenue of succeeded transactions in the requested date range. The plain sum ONLY when every succeeded transaction in scope shares one currency (0 when there are none); null when several currencies are present. Amounts of different currencies are never added together and no FX conversion is applied: use revenueByCurrency.',
+    example: null,
+    nullable: true,
+    type: Number,
+  })
+  totalRevenue: number | null;
+
+  @ApiProperty({
+    description:
+      'True when succeeded transactions in scope span more than one currency (totalRevenue is then null).',
+    example: true,
+  })
+  mixedCurrencies: boolean;
+
+  @ApiProperty({
+    description:
+      'Succeeded revenue in the requested range per currency, largest total first. Null/missing currency is grouped under "UNKNOWN".',
+    type: [RevenueByCurrencyDto],
     example: [
-      { date: '2023-10-01', amount: 500 },
-      { date: '2023-10-02', amount: 750 },
+      { currency: 'NGN', total: 25000, transactions: 5 },
+      { currency: 'USD', total: 52.98, transactions: 3 },
+    ],
+  })
+  revenueByCurrency: RevenueByCurrencyDto[];
+
+  @ApiProperty({
+    description:
+      'Daily revenue. `amount` is populated only when that day is single-currency, otherwise null; `byCurrency` always carries the per-currency totals.',
+    example: [
+      { date: '2023-10-01', amount: 500, byCurrency: { USD: 500 } },
+      {
+        date: '2023-10-02',
+        amount: null,
+        byCurrency: { NGN: 25000, USD: 5 },
+      },
     ],
   })
   dailyRevenue: Array<{
     date: string;
-    amount: number;
+    amount: number | null;
+    byCurrency: Record<string, number>;
   }>;
 
   @ApiProperty({
-    description: 'Monthly revenue breakdown',
+    description:
+      'Monthly revenue; `total_amount` is null when the month mixes currencies (see `byCurrency`).',
     example: [
-      { month: '2023-10', total_amount: 12500 },
-      { month: '2023-09', total_amount: 11800 },
+      { month: '2023-10', total_amount: 12500, byCurrency: { USD: 12500 } },
     ],
   })
   monthlyRevenue: Array<{
     month: string;
-    total_amount: number;
+    total_amount: number | null;
+    byCurrency: Record<string, number>;
   }>;
 
   @ApiProperty({
-    description: 'Yearly revenue breakdown',
+    description:
+      'Yearly revenue; `total_amount` is null when the year mixes currencies (see `byCurrency`).',
     example: [
-      { year: '2023', total_amount: 85000 },
-      { year: '2022', total_amount: 72000 },
+      { year: '2023', total_amount: 85000, byCurrency: { USD: 85000 } },
     ],
   })
   yearlyRevenue: Array<{
     year: string;
-    total_amount: number;
+    total_amount: number | null;
+    byCurrency: Record<string, number>;
   }>;
 
   @ApiProperty({
-    description: 'Top subscription plans by revenue',
+    description:
+      'Top subscription plans (all-time revenue; subscription_count = currently active PAYING subscribers on the plan, free plan excluded). `total_revenue` is null when the plan has revenue in several currencies. Ranked by revenue when all plans share one currency, otherwise by transaction count.',
     example: [
       {
         plan: 'yearly',
         subscription_count: 60,
         total_revenue: 6000,
-      },
-      {
-        plan: 'monthly',
-        subscription_count: 120,
-        total_revenue: 4800,
+        byCurrency: { USD: 6000 },
+        transactions: 125,
       },
     ],
   })
   topPlans: Array<{
     plan: string;
     subscription_count: number;
-    total_revenue: number;
+    total_revenue: number | null;
+    byCurrency: Record<string, number>;
+    transactions: number;
   }>;
 }
 
@@ -746,10 +833,13 @@ export class UserDetailDto {
   isPaidUser: boolean;
 
   @ApiProperty({
-    description: 'Amount spent in the primary currency',
+    description:
+      "Total spent across succeeded transactions. A number only when all of the user's transactions share one currency (0 when none); null when they span several currencies (never summed across currencies - see spendingByCurrency).",
     example: 125.5,
+    nullable: true,
+    type: Number,
   })
-  amountSpent: number;
+  amountSpent: number | null;
 
   @ApiProperty({
     description: 'Currency of amount spent',
@@ -1324,8 +1414,14 @@ export class UserListItemDto {
   @ApiProperty({ example: 50 })
   creditUsed: number;
 
-  @ApiProperty({ example: 100.0 })
-  amountSpent: number;
+  @ApiProperty({
+    example: 100.0,
+    nullable: true,
+    type: Number,
+    description:
+      'Single-currency total, or null when the user paid in several currencies (see spendingByCurrency).',
+  })
+  amountSpent: number | null;
 
   @ApiProperty({ example: true })
   isPaidUser: boolean;

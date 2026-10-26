@@ -121,9 +121,17 @@ export class AdminExportService {
         rawData = revenue;
         filename = `revenue-analytics-${new Date().toISOString().split('T')[0]}`;
         if (format === 'csv') {
-          const headers = ['Date', 'Amount'];
+          // Amount is blank on days that mix currencies (never a cross-currency
+          // sum); Currency Breakdown always lists each currency, e.g. NGN:25000;USD:5
+          const headers = ['Date', 'Amount', 'Currency Breakdown'];
           const rows = revenue.dailyRevenue.map((r) =>
-            [r.date, r.amount].join(','),
+            [
+              r.date,
+              r.amount ?? '',
+              Object.entries(r.byCurrency)
+                .map(([currency, total]) => `${currency}:${total}`)
+                .join(';'),
+            ].join(','),
           );
           csvContent = [headers.join(','), ...rows].join('\n');
         }

@@ -44,12 +44,17 @@ export class AdminUserBillingController {
   @ApiOperation({
     summary: 'Manually activate subscription for a user',
     description:
-      "Creates or replaces the user's subscription as a COMPLIMENTARY grant (source=admin_grant) with full paid access. The calling admin and the required `reason` are stored on the subscription (grantedByAdminId, grantReason). Grants are excluded from paying-customer, conversion, churn and revenue figures. A later real store purchase by the user replaces the grant (source back to store, grant fields cleared).",
+      "Creates or replaces the user's subscription as a COMPLIMENTARY grant (source=admin_grant) with full paid access. The calling admin and the required `reason` are stored on the subscription (grantedByAdminId, grantReason). Grants are excluded from paying-customer, conversion, churn and revenue figures. A later real store purchase by the user replaces the grant (source back to store, grant fields cleared). REFUSED with 409 when the user has a live store subscription (source=store, active, endsAt in the future, real Apple/Google purchaseToken): overwriting its token would orphan the store subscription and make later renewal/cancel/refund webhooks be ignored. Allowed when the existing row is expired, cancelled, free, an earlier admin grant, or absent. Refused attempts are written to the admin activity log.",
   })
   @ApiParam({ name: 'userId', type: String })
   @ApiBody({ type: ActivateSubscriptionDto })
   @ApiCreatedResponse({ description: 'Subscription activated successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'User has an active store subscription (Apple/Google); wait for it to expire or cancel it in the store first',
+  })
   @HttpCode(HttpStatus.CREATED)
   async activateSubscription(
     @Param('userId', ParseUUIDPipe) userId: string,

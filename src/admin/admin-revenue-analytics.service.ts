@@ -20,6 +20,12 @@ import {
   ADMIN_ACTIVITY_REPOSITORY,
 } from './repositories';
 import {
+  CurrencyTotals,
+  addToCurrencyTotals,
+  singleCurrencyTotal,
+  summarizeRevenue,
+} from './utils/revenue-currency.util';
+import {
   COMPLIMENTARY_SUBSCRIPTION_WHERE,
   PAYING_SUBSCRIPTION_WHERE,
   SUBSCRIPTION_SOURCE,
@@ -103,9 +109,13 @@ export class AdminRevenueAnalyticsService {
         date: sub.startedAt.toISOString().split('T')[0],
         count: sub._count,
       })),
+      // Per-day revenue: `amount` is the plain total only when that day is
+      // single-currency (null if the day mixes currencies); `byCurrency`
+      // always carries the real figures. Never summed across currencies.
       revenueGrowth: revenue.map((rev) => ({
         date: rev.createdAt.toISOString().split('T')[0],
-        amount: rev._sum.amount || 0,
+        amount: singleCurrencyTotal(rev.byCurrency),
+        byCurrency: rev.byCurrency,
       })),
       planBreakdown: toPlanCounts(planBreakdown),
       churnRate,
@@ -191,38 +201,62 @@ export class AdminRevenueAnalyticsService {
         endDate,
       );
 
-      // Group by month
-      const monthlyRevenueMap = new Map<string, number>();
-      // Group by year
-      const yearlyRevenueMap = new Map<string, number>();
+      // Group by month / year, per currency (never mixing currencies)
+      const monthlyRevenueMap = new Map<string, CurrencyTotals>();
+      const yearlyRevenueMap = new Map<string, CurrencyTotals>();
+      const bump = (
+        map: Map<string, CurrencyTotals>,
+        key: string,
+        currency: string | null,
+        amount: number,
+      ) => {
+        const totals = map.get(key) ?? {};
+        addToCurrencyTotals(totals, currency, amount);
+        map.set(key, totals);
+      };
 
       allTransactions.forEach((transaction) => {
         const date = new Date(transaction.createdAt);
         const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
         const yearKey = date.getFullYear().toString();
-
-        monthlyRevenueMap.set(
+        bump(
+          monthlyRevenueMap,
           monthKey,
-          (monthlyRevenueMap.get(monthKey) || 0) + transaction.amount,
+          transaction.currency,
+          transaction.amount,
         );
-        yearlyRevenueMap.set(
+        bump(
+          yearlyRevenueMap,
           yearKey,
-          (yearlyRevenueMap.get(yearKey) || 0) + transaction.amount,
+          transaction.currency,
+          transaction.amount,
         );
       });
 
       const monthlyRevenue = Array.from(monthlyRevenueMap.entries()).map(
-        ([month, total]) => ({
+        ([month, byCurrency]) => ({
           month,
-          total_amount: total,
+          total_amount: singleCurrencyTotal(byCurrency),
+          byCurrency,
         }),
       );
 
       const yearlyRevenue = Array.from(yearlyRevenueMap.entries()).map(
-        ([year, total]) => ({
+        ([year, byCurrency]) => ({
           year,
-          total_amount: total,
+          total_amount: singleCurrencyTotal(byCurrency),
+          byCurrency,
         }),
+      );
+
+      // Scope totals (the requested date range): single plain number only when
+      // every succeeded transaction shares one currency.
+      const summary = summarizeRevenue(
+        allTransactions.map((t) => ({
+          currency: t.currency,
+          amount: t.amount,
+          count: 1,
+        })),
       );
 
       // Top plans: attribute each payment to the plan it was actually for
@@ -243,46 +277,68 @@ export class AdminRevenueAnalyticsService {
 
       const planRevenueMap = new Map<
         string,
-        { subscription_count: number; total_revenue: number }
+        {
+          subscription_count: number;
+          byCurrency: CurrencyTotals;
+          transactions: number;
+        }
       >();
-      const bumpPlan = (
-        plan: string,
-        revenue: number,
-        subscriptions: number,
-      ) => {
-        const current = planRevenueMap.get(plan) || {
+      const planEntry = (plan: string) => {
+        const current = planRevenueMap.get(plan) ?? {
           subscription_count: 0,
-          total_revenue: 0,
+          byCurrency: {},
+          transactions: 0,
         };
-        planRevenueMap.set(plan, {
-          subscription_count: current.subscription_count + subscriptions,
-          total_revenue: current.total_revenue + revenue,
-        });
+        planRevenueMap.set(plan, current);
+        return current;
       };
 
-      // Revenue per plan; historical rows we couldn't attribute land in 'unknown'.
+      // Revenue per (plan, currency); historical rows we couldn't attribute
+      // land in 'unknown'.
       for (const row of revenueByPlan) {
-        bumpPlan(row.plan ?? 'unknown', row._sum.amount ?? 0, 0);
+        const entry = planEntry(row.plan ?? 'unknown');
+        addToCurrencyTotals(
+          entry.byCurrency,
+          row.currency,
+          row._sum.amount ?? 0,
+        );
+        entry.transactions += row._count;
       }
       // Active-subscription counts per plan (plans may have revenue but no
       // active subs left, or vice versa, so this is a union).
       for (const row of activePlanCounts) {
-        bumpPlan(row.plan, 0, row._count);
+        planEntry(row.plan).subscription_count += row._count;
       }
 
+      const planCurrencies = new Set(
+        [...planRevenueMap.values()].flatMap((p) => Object.keys(p.byCurrency)),
+      );
+      const plansShareCurrency = planCurrencies.size <= 1;
       const topPlans = Array.from(planRevenueMap.entries())
         .map(([plan, stats]) => ({
           plan,
           subscription_count: stats.subscription_count,
-          total_revenue: stats.total_revenue,
+          total_revenue: singleCurrencyTotal(stats.byCurrency),
+          byCurrency: stats.byCurrency,
+          transactions: stats.transactions,
         }))
-        .sort((a, b) => b.total_revenue - a.total_revenue)
+        // Rank by revenue only when every plan is in the same currency;
+        // otherwise amounts are not comparable, so rank by transaction count.
+        .sort((a, b) =>
+          plansShareCurrency
+            ? (b.total_revenue ?? 0) - (a.total_revenue ?? 0)
+            : b.transactions - a.transactions,
+        )
         .slice(0, 10);
 
       return {
+        totalRevenue: summary.totalRevenue,
+        mixedCurrencies: summary.mixedCurrencies,
+        revenueByCurrency: summary.revenueByCurrency,
         dailyRevenue: dailyRevenue.map((day) => ({
           date: day.createdAt.toISOString().split('T')[0],
-          amount: day._sum.amount || 0,
+          amount: singleCurrencyTotal(day.byCurrency),
+          byCurrency: day.byCurrency,
         })),
         monthlyRevenue,
         yearlyRevenue,

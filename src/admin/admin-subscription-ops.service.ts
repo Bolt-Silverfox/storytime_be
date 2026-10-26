@@ -1,6 +1,7 @@
 import {
   Injectable,
   NotFoundException,
+  ConflictException,
   BadRequestException,
   Logger,
   Inject,
@@ -11,8 +12,10 @@ import { VerifyPurchaseDto } from '../payment/dto/verify-purchase.dto';
 import { GoogleVerificationService } from '../payment/google-verification.service';
 import { AppleVerificationService } from '../payment/apple-verification.service';
 import {
+  ADMIN_ACTIVATED_TOKEN_PREFIX,
   PRODUCT_ID_TO_PLAN,
   SUBSCRIPTION_SOURCE,
+  hasRealStoreToken,
 } from '../subscription/subscription.constants';
 import {
   IAdminUserRepository,
@@ -62,6 +65,41 @@ export class AdminSubscriptionOpsService {
 
     const existingSub = await this.subscriptionRepo.findByUserId(userId);
 
+    // A live store subscription owns the user's single Subscription row, and
+    // the Apple/Google webhooks find it by its real purchaseToken. Overwriting
+    // that token with a synthetic one would orphan the store subscription
+    // (later renewals/cancellations/refunds would be ignored). Refuse; admin
+    // activation stays allowed over expired/cancelled/free/granted/missing rows.
+    if (
+      existingSub &&
+      hasRealStoreToken(existingSub) &&
+      existingSub.status === 'active' &&
+      existingSub.endsAt != null &&
+      existingSub.endsAt > now
+    ) {
+      await this.activityRepo.createLog({
+        userId,
+        action: 'ADMIN_ACTIVATE_SUBSCRIPTION',
+        status: 'FAILED',
+        details: JSON.stringify({
+          reason: 'ACTIVE_STORE_SUBSCRIPTION',
+          requestedPlan: dto.plan,
+          requestedPlatform: dto.platform,
+          existingPlan: existingSub.plan,
+          existingPlatform: existingSub.platform,
+          existingEndsAt: existingSub.endsAt,
+          adminReason: dto.reason,
+          adminUserId,
+        }),
+      });
+      this.logger.warn(
+        `Admin ${adminUserId} activation refused for user ${userId}: active store subscription (${existingSub.platform}) until ${existingSub.endsAt.toISOString()}`,
+      );
+      throw new ConflictException(
+        'This user has an active store subscription (Apple/Google). Wait for it to expire, or cancel it in the store first, before granting admin access.',
+      );
+    }
+
     // Admin activation is always a complimentary grant: it is not backed by a
     // store purchase, so it must never count as a paying customer. The grant
     // fields are replaced on every (re)activation; a later real store purchase
@@ -82,7 +120,7 @@ export class AdminSubscriptionOpsService {
         productId: dto.productId ?? null,
         startedAt: now,
         endsAt,
-        purchaseToken: `admin-activated-${Date.now()}`,
+        purchaseToken: `${ADMIN_ACTIVATED_TOKEN_PREFIX}${Date.now()}`,
         ...grant,
       },
       update: {
@@ -92,7 +130,7 @@ export class AdminSubscriptionOpsService {
         productId: dto.productId ?? null,
         startedAt: now,
         endsAt,
-        purchaseToken: `admin-activated-${Date.now()}`,
+        purchaseToken: `${ADMIN_ACTIVATED_TOKEN_PREFIX}${Date.now()}`,
         ...grant,
         isDeleted: false,
         deletedAt: null,

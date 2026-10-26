@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma, Subscription } from '@prisma/client';
+import { PAID_PLAN_WHERE } from '../../subscription/subscription.constants';
 import type {
   IAdminSubscriptionRepository,
   SubscriptionPlanCount,
@@ -25,6 +26,7 @@ export class PrismaAdminSubscriptionRepository implements IAdminSubscriptionRepo
       by: ['plan'],
       where: {
         ...extraWhere,
+        ...PAID_PLAN_WHERE,
         status: 'active',
         OR: [{ endsAt: null }, { endsAt: { gt: now } }],
       },
@@ -37,6 +39,7 @@ export class PrismaAdminSubscriptionRepository implements IAdminSubscriptionRepo
     const result = await this.prisma.subscription.groupBy({
       by: ['source'],
       where: {
+        ...PAID_PLAN_WHERE,
         status: 'active',
         OR: [{ endsAt: null }, { endsAt: { gt: now } }],
       },
@@ -57,6 +60,7 @@ export class PrismaAdminSubscriptionRepository implements IAdminSubscriptionRepo
     const rows = await this.prisma.subscription.findMany({
       where: {
         ...extraWhere,
+        ...PAID_PLAN_WHERE,
         startedAt: { gte: startDate, lte: endDate },
       },
       select: { startedAt: true },

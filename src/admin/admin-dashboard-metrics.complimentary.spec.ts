@@ -21,7 +21,9 @@ describe('AdminDashboardMetricsService complimentary vs paying', () => {
     if (where.source?.not === 'store') return Promise.resolve(4);
     return Promise.resolve(10);
   });
-  const sumRevenue = jest.fn().mockResolvedValue({ _sum: { amount: 29.94 } });
+  const sumRevenue = jest
+    .fn()
+    .mockResolvedValue([{ currency: 'USD', amount: 29.94, count: 6 }]);
   const users = [
     {
       createdAt: new Date('2026-10-01'),
@@ -54,7 +56,10 @@ describe('AdminDashboardMetricsService complimentary vs paying', () => {
             groupByActivePlan: jest.fn().mockResolvedValue([]),
           },
         },
-        { provide: ADMIN_PAYMENT_REPOSITORY, useValue: { sumRevenue } },
+        {
+          provide: ADMIN_PAYMENT_REPOSITORY,
+          useValue: { sumRevenueByCurrency: sumRevenue },
+        },
         {
           provide: ADMIN_STORY_REPOSITORY,
           useValue: { countStories: jest.fn().mockResolvedValue(0) },
@@ -124,5 +129,54 @@ describe('AdminDashboardMetricsService complimentary vs paying', () => {
     expect(sum(m.data.paidUsers)).toBe(1);
     expect(sum(m.data.complimentaryUsers)).toBe(1);
     expect(sum(m.data.freeUsers)).toBe(1);
+  });
+
+  describe('free-plan rows are not counted as paying', () => {
+    it('every subscription count excludes plan=free (paid, active, total)', async () => {
+      await service.getDashboardStats();
+      expect(subscriptionCount.mock.calls.length).toBeGreaterThan(0);
+      for (const [where] of subscriptionCount.mock.calls) {
+        expect(where.plan).toEqual({ not: 'free' });
+      }
+    });
+
+    it('a user on an active free-plan row is neither paying nor complimentary in growth series', async () => {
+      const freeUser = {
+        createdAt: new Date('2026-10-01'),
+        subscription: { status: 'active', source: 'store', plan: 'free' },
+      };
+      const userRepo = (service as any).userRepo;
+      userRepo.findManyWithSubscription.mockResolvedValue([freeUser]);
+      userRepo.findManyForGrowthMonthly.mockResolvedValue([freeUser]);
+
+      const g = await service.getUserGrowth({
+        startDate: '2026-09-01',
+        endDate: '2026-10-30',
+      });
+      expect(g[0]).toMatchObject({
+        newUsers: 1,
+        paidUsers: 0,
+        complimentaryUsers: 0,
+      });
+
+      const m = await service.getUserGrowthMonthly('yearly' as never);
+      const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+      expect(sum(m.data.paidUsers)).toBe(0);
+      expect(sum(m.data.complimentaryUsers)).toBe(0);
+      expect(sum(m.data.freeUsers)).toBe(1);
+    });
+
+    it('cumulative baseline user counts use the paying / complimentary filters (which exclude free)', async () => {
+      await service.getUserGrowth({
+        startDate: '2026-09-01',
+        endDate: '2026-10-30',
+      });
+      const userRepo = (service as any).userRepo;
+      const subWheres = userRepo.count.mock.calls
+        .map(([w]: [any]) => w.subscription)
+        .filter(Boolean);
+      expect(subWheres.length).toBe(2);
+      for (const w of subWheres) expect(w.plan).toEqual({ not: 'free' });
+    });
   });
 });

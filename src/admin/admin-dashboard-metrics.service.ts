@@ -4,6 +4,7 @@ import { Cache } from 'cache-manager';
 import { Role } from '@prisma/client';
 import {
   DashboardStatsDto,
+  MetricWithTrendDto,
   UserGrowthDto,
   StoryStatsDto,
   UserGrowthMonthlyDto,
@@ -31,8 +32,14 @@ import {
   ADMIN_ENGAGEMENT_REPOSITORY,
 } from './repositories';
 import {
+  RevenueSummary,
+  summarizeRevenue,
+} from './utils/revenue-currency.util';
+import {
   COMPLIMENTARY_SUBSCRIPTION_WHERE,
   isComplimentarySource,
+  isFreePlan,
+  PAID_PLAN_WHERE,
   PAYING_SUBSCRIPTION_WHERE,
 } from '../subscription/subscription.constants';
 
@@ -55,6 +62,39 @@ export class AdminDashboardMetricsService {
     private readonly engagementRepo: IAdminEngagementRepository,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
+
+  /**
+   * Month-over-month trend for revenue. Only meaningful when both periods are
+   * in the same single currency; otherwise value is null (current period mixed)
+   * or the trend is neutral (periods not comparable). Never mixes currencies.
+   */
+  private revenueTrend(
+    current: RevenueSummary,
+    previous: RevenueSummary,
+  ): MetricWithTrendDto {
+    const timeframe = TrendLabel.VS_LAST_MONTH;
+    if (current.totalRevenue === null) {
+      return { value: null, trend: 0, direction: 'neutral', timeframe };
+    }
+    const prevCurrency = previous.revenueByCurrency[0]?.currency;
+    const curCurrency = current.revenueByCurrency[0]?.currency;
+    const comparable =
+      previous.totalRevenue !== null &&
+      (!prevCurrency || !curCurrency || prevCurrency === curCurrency);
+    if (!comparable) {
+      return {
+        value: current.totalRevenue,
+        trend: 0,
+        direction: 'neutral',
+        timeframe,
+      };
+    }
+    return DashboardUtil.calculateTrend(
+      current.totalRevenue,
+      previous.totalRevenue ?? 0,
+      timeframe,
+    );
+  }
 
   async getDashboardStats(): Promise<DashboardStatsDto> {
     // Check cache first
@@ -142,9 +182,11 @@ export class AdminDashboardMetricsService {
       this.engagementRepo.countFavorites(), // Total favorites (cumulative)
 
       // Subs
-      this.subscriptionRepo.count({}),
-      // All active access (paying + complimentary)
+      // Every real (non-free) subscription row ever created
+      this.subscriptionRepo.count({ ...PAID_PLAN_WHERE }),
+      // All active PAID access (paying + complimentary); plan='free' rows excluded
       this.subscriptionRepo.count({
+        ...PAID_PLAN_WHERE,
         status: 'active',
         OR: [{ endsAt: null }, { endsAt: { gt: now } }],
       }),
@@ -156,11 +198,16 @@ export class AdminDashboardMetricsService {
       }),
 
       // Revenue (succeeded transactions only; comped access has none)
-      this.paymentRepo.sumRevenue({ status: 'success', deletedAt: null }),
+      this.paymentRepo.sumRevenueByCurrency({
+        status: 'success',
+        deletedAt: null,
+      }),
     ]);
 
     const totalUsersCount = await this.userRepo.count({ isDeleted: false });
-    const totalRevenue = totalRevenueResult._sum.amount || 0;
+    // Revenue is summarised per currency: totalRevenue is a plain number only
+    // when a single currency is involved (null otherwise; never FX-summed).
+    const revenue = summarizeRevenue(totalRevenueResult);
 
     // 2. Fetch Previous Period Metrics for Trends
     // Trends for "Total" metrics (Growth vs Last Month)
@@ -214,11 +261,13 @@ export class AdminDashboardMetricsService {
         createdAt: { lte: lastMonthEnd },
       }),
       this.subscriptionRepo.count({
+        ...PAID_PLAN_WHERE,
         startedAt: { lte: lastMonthEnd },
       }),
 
       // Active Subs History (Approximate)
       this.subscriptionRepo.count({
+        ...PAID_PLAN_WHERE,
         status: 'active',
         startedAt: { lte: lastMonthEnd },
         OR: [{ endsAt: null }, { endsAt: { gt: lastMonthEnd } }],
@@ -230,14 +279,15 @@ export class AdminDashboardMetricsService {
         OR: [{ endsAt: null }, { endsAt: { gt: lastMonthEnd } }],
       }),
 
-      this.paymentRepo.sumRevenue({
+      this.paymentRepo.sumRevenueByCurrency({
         status: 'success',
         deletedAt: null,
         createdAt: { lte: lastMonthEnd },
       }),
     ]);
 
-    const prevTotalRevenue = prevTotalRevenueResult._sum.amount || 0;
+    const prevRevenue = summarizeRevenue(prevTotalRevenueResult);
+    const totalRevenueTrend = this.revenueTrend(revenue, prevRevenue);
 
     // Trends for "Active" & "New" metrics (Time shifting)
     const [
@@ -311,7 +361,9 @@ export class AdminDashboardMetricsService {
         plan: p.plan,
         count: p._count,
       })),
-      totalRevenue: Number(totalRevenue.toFixed(2)),
+      totalRevenue: revenue.totalRevenue,
+      mixedCurrencies: revenue.mixedCurrencies,
+      revenueByCurrency: revenue.revenueByCurrency,
       conversionRate:
         totalUsersCount > 0
           ? Number(((paidUsers / totalUsersCount) * 100).toFixed(2))
@@ -396,11 +448,7 @@ export class AdminDashboardMetricsService {
         ),
 
         // Revenue & Subs
-        totalRevenue: DashboardUtil.calculateTrend(
-          totalRevenue,
-          prevTotalRevenue,
-          TrendLabel.VS_LAST_MONTH,
-        ),
+        totalRevenue: totalRevenueTrend,
         totalSubscriptions: DashboardUtil.calculateTrend(
           totalSubscriptions,
           prevTotalSubscriptions,
@@ -472,7 +520,10 @@ export class AdminDashboardMetricsService {
           acc[date] = { total: 0, paid: 0, complimentary: 0 };
         }
         acc[date].total += 1;
-        if (user.subscription?.status === 'active') {
+        if (
+          user.subscription?.status === 'active' &&
+          !isFreePlan(user.subscription.plan)
+        ) {
           // Paying = real store subscription; anything else is comped access.
           if (isComplimentarySource(user.subscription.source)) {
             acc[date].complimentary += 1;
@@ -654,7 +705,9 @@ export class AdminDashboardMetricsService {
       const label = getLabel(u.createdAt);
       const index = labels.indexOf(label);
       if (index !== -1) {
-        const hasAccess = u.subscription?.status === 'active';
+        const hasAccess =
+          u.subscription?.status === 'active' &&
+          !isFreePlan(u.subscription.plan);
         if (!hasAccess) freeCounts[index]++;
         else if (isComplimentarySource(u.subscription?.source))
           complimentaryCounts[index]++;

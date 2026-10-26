@@ -21,13 +21,41 @@ import {
   IAdminPaymentRepository,
   ADMIN_PAYMENT_REPOSITORY,
 } from './repositories';
-import { isComplimentarySource } from '../subscription/subscription.constants';
+import {
+  CurrencyTotals,
+  UNKNOWN_CURRENCY,
+  addToCurrencyTotals,
+  singleCurrencyTotal,
+} from './utils/revenue-currency.util';
+import {
+  PAID_PLAN_WHERE,
+  hasPaidAccess,
+  isComplimentarySource,
+} from '../subscription/subscription.constants';
 
 /** Per-currency spend as a plain object, rounded to cents. Never mixes currencies. */
-function toCurrencyTotals(byCurrency: Map<string, number>) {
-  return Object.fromEntries(
-    [...byCurrency.entries()].map(([c, v]) => [c, Number(v.toFixed(2))]),
-  );
+function spendingTotals(
+  transactions: { amount: number; currency: string | null }[],
+): CurrencyTotals {
+  const totals: CurrencyTotals = {};
+  for (const txn of transactions) {
+    addToCurrencyTotals(totals, txn.currency, txn.amount);
+  }
+  return totals;
+}
+
+/**
+ * Headline spend: the plain total + its currency when the user paid in exactly
+ * one currency (currency is null for the UNKNOWN bucket); 0 when nothing was
+ * paid; amountSpent null when several currencies are involved.
+ */
+function headlineSpend(totals: CurrencyTotals) {
+  const keys = Object.keys(totals);
+  return {
+    amountSpent: singleCurrencyTotal(totals),
+    currency:
+      keys.length === 1 && keys[0] !== UNKNOWN_CURRENCY ? keys[0] : null,
+  };
 }
 
 @Injectable()
@@ -85,7 +113,10 @@ export class AdminUserService {
       const wantsActiveSubscription =
         hasActiveSub === true || String(hasActiveSub) === 'true';
 
+      // "Paid" = active, unexpired and NOT the free plan (a plan='free' row is
+      // active for ~100 years but is not paid access).
       const activeSubscriptionCriteria = {
+        ...PAID_PLAN_WHERE,
         status: 'active',
         isDeleted: false,
         OR: [{ endsAt: null }, { endsAt: { gt: now } }],
@@ -168,28 +199,12 @@ export class AdminUserService {
             ),
           0,
         );
-        // Group spending by currency (most users have one currency)
-        const spendingByCurrency = new Map<string, number>();
-        for (const txn of user.paymentTransactions) {
-          if (!txn.currency) continue;
-          const curr = txn.currency;
-          spendingByCurrency.set(
-            curr,
-            (spendingByCurrency.get(curr) ?? 0) + txn.amount,
-          );
-        }
-        // Primary currency = the one with the most spending
-        const primaryCurrency = [...spendingByCurrency.entries()].sort(
-          (a, b) => b[1] - a[1],
-        )[0];
-        const amountSpent = primaryCurrency?.[1] ?? 0;
-        const currency = primaryCurrency?.[0] ?? null;
+        // Group spending by currency; amountSpent is only a plain number when
+        // every transaction shares one currency (null if several).
+        const spendingByCurrency = spendingTotals(user.paymentTransactions);
+        const { amountSpent, currency } = headlineSpend(spendingByCurrency);
 
-        // Check if user has active subscription (same logic as getUserById)
-        const now = new Date();
-        const hasActiveSubscription =
-          user.subscription?.status === 'active' &&
-          (!user.subscription.endsAt || user.subscription.endsAt > now);
+        const hasActiveSubscription = hasPaidAccess(user.subscription);
 
         return {
           ...safeUser,
@@ -198,7 +213,7 @@ export class AdminUserService {
           creditUsed,
           amountSpent,
           currency,
-          spendingByCurrency: toCurrencyTotals(spendingByCurrency),
+          spendingByCurrency,
           // Access, not payment: true for anyone with active paid ACCESS,
           // including complimentary grants (gating is unchanged).
           isPaidUser: hasActiveSubscription,
@@ -230,25 +245,12 @@ export class AdminUserService {
     }
 
     // Check if user has active subscription
-    const now = new Date();
-    const hasActiveSubscription =
-      user.subscription?.status === 'active' &&
-      (!user.subscription.endsAt || user.subscription.endsAt > now);
+    const hasActiveSubscription = hasPaidAccess(user.subscription);
 
     const userTransactions =
       await this.paymentRepo.findSuccessfulByUser(userId);
-    const spendingByCurrency = new Map<string, number>();
-    for (const txn of userTransactions) {
-      if (!txn.currency) continue;
-      const curr = txn.currency;
-      spendingByCurrency.set(
-        curr,
-        (spendingByCurrency.get(curr) ?? 0) + txn.amount,
-      );
-    }
-    const primarySpend = [...spendingByCurrency.entries()].sort(
-      (a, b) => b[1] - a[1],
-    )[0];
+    const spendingByCurrency = spendingTotals(userTransactions);
+    const { amountSpent, currency } = headlineSpend(spendingByCurrency);
 
     // Resolve the granting admin's name (no FK on grantedByAdminId).
     const grantedByAdminId = user.subscription?.grantedByAdminId ?? null;
@@ -273,9 +275,9 @@ export class AdminUserService {
       isComplimentary:
         hasActiveSubscription &&
         isComplimentarySource(user.subscription?.source),
-      amountSpent: primarySpend?.[1] ?? 0,
-      currency: primarySpend?.[0] ?? null,
-      spendingByCurrency: toCurrencyTotals(spendingByCurrency),
+      amountSpent,
+      currency,
+      spendingByCurrency,
       stats: {
         sessionsCount: user._count.auth,
         favoritesCount: user._count.parentFavorites,

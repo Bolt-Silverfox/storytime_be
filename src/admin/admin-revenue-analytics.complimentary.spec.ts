@@ -40,11 +40,14 @@ describe('AdminRevenueAnalyticsService complimentary vs paying', () => {
       groupRevenueByCreatedAt: jest.fn().mockResolvedValue([]),
       groupRevenueByCreatedAtOrdered: jest.fn().mockResolvedValue([]),
       findSuccessfulInRange: jest.fn().mockResolvedValue([]),
-      groupRevenueByPlan: jest
-        .fn()
-        .mockResolvedValue([
-          { plan: 'monthly', _sum: { amount: 14.97 }, _count: 3 },
-        ]),
+      groupRevenueByPlan: jest.fn().mockResolvedValue([
+        {
+          plan: 'monthly',
+          currency: 'USD',
+          _sum: { amount: 14.97 },
+          _count: 3,
+        },
+      ]),
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -98,7 +101,7 @@ describe('AdminRevenueAnalyticsService complimentary vs paying', () => {
     expect(subscriptionRepo.groupByStartedAt).toHaveBeenCalledWith(
       expect.any(Date),
       expect.any(Date),
-      { source: 'store' },
+      { source: 'store', plan: { not: 'free' } },
     );
   });
 
@@ -115,5 +118,21 @@ describe('AdminRevenueAnalyticsService complimentary vs paying', () => {
     });
     // comped yearly access contributes neither revenue nor a paying subscription
     expect(yearly?.subscription_count ?? 0).toBe(0);
+  });
+
+  it('churn / paying counts exclude plan=free rows', async () => {
+    await service.getSubscriptionAnalytics({
+      startDate: '2026-10-01',
+      endDate: '2026-10-31',
+    });
+    for (const [where] of subscriptionRepo.count.mock.calls) {
+      expect(where.plan).toEqual({ not: 'free' });
+    }
+    // paying growth + plan breakdown calls carry the same fragment
+    expect(subscriptionRepo.groupByStartedAt).toHaveBeenCalledWith(
+      expect.any(Date),
+      expect.any(Date),
+      { source: 'store', plan: { not: 'free' } },
+    );
   });
 });
