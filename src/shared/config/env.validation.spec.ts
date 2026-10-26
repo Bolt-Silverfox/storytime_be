@@ -1,0 +1,73 @@
+import { validateEnv } from './env.validation';
+
+// Guards the zod 3 -> 4 upgrade (dependency audit fix): defaults, coercion and
+// the blank-means-default preprocess must behave exactly as before.
+const base = {
+  ELEVEN_LABS_KEY: 'k',
+  CLOUDINARY_CLOUD_NAME: 'c',
+  CLOUDINARY_API_KEY: 'k',
+  CLOUDINARY_API_SECRET: 's',
+  DEFAULT_SENDER_EMAIL: 'a@example.com',
+  DEFAULT_SENDER_NAME: 'n',
+  SMTP_HOST: 'localhost',
+  SMTP_USER: 'u@example.com',
+  SMTP_PASS: 'p',
+  JWT_SECRET: 'j',
+  ADMIN_SECRET: 'a',
+  SECRET: 's',
+  WEB_APP_BASE_URL: 'https://app.example.com',
+  GOOGLE_CLIENT_ID: 'g',
+  GOOGLE_CLIENT_SECRET: 'g',
+  GOOGLE_WEB_CLIENT_ID: 'g',
+  GOOGLE_ANDROID_CLIENT_ID: 'g',
+  GOOGLE_IOS_CLIENT_ID: 'g',
+  BACKEND_BASE_URL: 'https://api.example.com',
+  DEEPGRAM_API_KEY: 'd',
+  APPLE_CLIENT_ID: 'a',
+  APPLE_SERVICE_ID: 'a',
+  GEMINI_API_KEY: 'g',
+  HF_TOKEN: 'h',
+};
+
+describe('validateEnv', () => {
+  it('applies defaults', () => {
+    const env = validateEnv(base);
+    expect(env.PORT).toBe(3000);
+    expect(env.SMTP_PORT).toBe(587);
+    expect(env.SMTP_SECURE).toBe(false);
+    expect(env.MAIL_ENCRYPTION).toBe('TLS');
+    expect(env.NODE_ENV).toBe('development');
+  });
+
+  it('transforms SMTP_SECURE strings to booleans', () => {
+    expect(validateEnv({ ...base, SMTP_SECURE: 'true' }).SMTP_SECURE).toBe(
+      true,
+    );
+    expect(validateEnv({ ...base, SMTP_SECURE: 'false' }).SMTP_SECURE).toBe(
+      false,
+    );
+  });
+
+  it('coerces numeric strings', () => {
+    expect(validateEnv({ ...base, PORT: '4000' }).PORT).toBe(4000);
+  });
+
+  it('treats a blank quota cooldown as unset but rejects junk', () => {
+    expect(
+      validateEnv({ ...base, ELEVEN_LABS_QUOTA_COOLDOWN_MS: '  ' })
+        .ELEVEN_LABS_QUOTA_COOLDOWN_MS,
+    ).toBeUndefined();
+    expect(() =>
+      validateEnv({ ...base, ELEVEN_LABS_QUOTA_COOLDOWN_MS: 'abc' }),
+    ).toThrow('Invalid environment variables');
+    expect(() =>
+      validateEnv({ ...base, ELEVEN_LABS_QUOTA_COOLDOWN_MS: '0' }),
+    ).toThrow();
+  });
+
+  it('rejects missing required keys, bad urls and partial firebase config', () => {
+    expect(() => validateEnv({ ...base, JWT_SECRET: undefined })).toThrow();
+    expect(() => validateEnv({ ...base, WEB_APP_BASE_URL: 'nope' })).toThrow();
+    expect(() => validateEnv({ ...base, FIREBASE_PROJECT_ID: 'p' })).toThrow();
+  });
+});
