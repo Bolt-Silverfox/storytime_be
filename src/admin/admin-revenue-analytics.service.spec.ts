@@ -116,8 +116,8 @@ describe('AdminRevenueAnalyticsService', () => {
   describe('topPlans revenue attribution', () => {
     it('attributes revenue to the plan each payment was for, not the payer current plan', async () => {
       paymentRepo.groupRevenueByPlan.mockResolvedValue([
-        { plan: 'monthly', _sum: { amount: 100 }, _count: 20 },
-        { plan: 'yearly', _sum: { amount: 480 }, _count: 10 },
+        { plan: 'monthly', currency: 'USD', _sum: { amount: 100 }, _count: 20 },
+        { plan: 'yearly', currency: 'USD', _sum: { amount: 480 }, _count: 10 },
       ]);
       subscriptionRepo.groupByActivePlan.mockResolvedValue([
         { plan: 'monthly', _count: 5 },
@@ -128,15 +128,27 @@ describe('AdminRevenueAnalyticsService', () => {
 
       // Sorted by revenue desc: yearly (480) before monthly (100).
       expect(result.topPlans).toEqual([
-        { plan: 'yearly', subscription_count: 8, total_revenue: 480 },
-        { plan: 'monthly', subscription_count: 5, total_revenue: 100 },
+        {
+          plan: 'yearly',
+          subscription_count: 8,
+          total_revenue: 480,
+          byCurrency: { USD: 480 },
+          transactions: 10,
+        },
+        {
+          plan: 'monthly',
+          subscription_count: 5,
+          total_revenue: 100,
+          byCurrency: { USD: 100 },
+          transactions: 20,
+        },
       ]);
     });
 
     it('keeps plans with revenue but no active subscribers, and buckets unattributed revenue as "unknown"', async () => {
       paymentRepo.groupRevenueByPlan.mockResolvedValue([
-        { plan: 'weekly', _sum: { amount: 30 }, _count: 20 },
-        { plan: null, _sum: { amount: 12 }, _count: 4 }, // historical, unmapped
+        { plan: 'weekly', currency: 'USD', _sum: { amount: 30 }, _count: 20 },
+        { plan: null, currency: 'USD', _sum: { amount: 12 }, _count: 4 }, // historical, unmapped
       ]);
       // weekly has no currently-active subs; that plan must still appear.
       subscriptionRepo.groupByActivePlan.mockResolvedValue([]);
@@ -144,8 +156,20 @@ describe('AdminRevenueAnalyticsService', () => {
       const result = await service.getRevenueAnalytics(range);
 
       expect(result.topPlans).toEqual([
-        { plan: 'weekly', subscription_count: 0, total_revenue: 30 },
-        { plan: 'unknown', subscription_count: 0, total_revenue: 12 },
+        {
+          plan: 'weekly',
+          subscription_count: 0,
+          total_revenue: 30,
+          byCurrency: { USD: 30 },
+          transactions: 20,
+        },
+        {
+          plan: 'unknown',
+          subscription_count: 0,
+          total_revenue: 12,
+          byCurrency: { USD: 12 },
+          transactions: 4,
+        },
       ]);
     });
 
@@ -158,7 +182,13 @@ describe('AdminRevenueAnalyticsService', () => {
       const result = await service.getRevenueAnalytics(range);
 
       expect(result.topPlans).toEqual([
-        { plan: 'monthly', subscription_count: 3, total_revenue: 0 },
+        {
+          plan: 'monthly',
+          subscription_count: 3,
+          total_revenue: 0,
+          byCurrency: {},
+          transactions: 0,
+        },
       ]);
     });
   });

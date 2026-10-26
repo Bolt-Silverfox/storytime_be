@@ -116,7 +116,7 @@ const mockPrismaService = {
     groupBy: jest.fn(),
   },
   paymentTransaction: {
-    aggregate: jest.fn(),
+    groupBy: jest.fn(),
     findMany: jest.fn(),
   },
   screenTimeSession: {
@@ -303,9 +303,9 @@ describe('AdminService', () => {
       prisma.storyProgress.count.mockResolvedValue(100);
       prisma.favorite.count.mockResolvedValue(50);
       prisma.subscription.count.mockResolvedValue(15);
-      prisma.paymentTransaction.aggregate.mockResolvedValue({
-        _sum: { amount: 5000 },
-      });
+      prisma.paymentTransaction.groupBy.mockResolvedValue([
+        { currency: 'USD', _sum: { amount: 5000 }, _count: 10 },
+      ]);
       prisma.screenTimeSession.findMany.mockResolvedValue([
         { duration: 10 },
         { duration: 20 },

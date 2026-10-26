@@ -5,7 +5,7 @@ export type UserPremiumCheck = Prisma.UserGetPayload<{
   select: {
     role: true;
     premiumAccessUntil: true;
-    subscription: { select: { status: true; endsAt: true } };
+    subscription: { select: { status: true; plan: true; endsAt: true } };
   };
 }>;
 

@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConflictException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AdminSubscriptionOpsService } from './admin-subscription-ops.service';
 import {
@@ -72,5 +73,75 @@ describe('AdminSubscriptionOpsService.activateSubscription', () => {
         details: expect.stringContaining('"adminUserId":"admin-9"'),
       }),
     );
+  });
+
+  describe('protecting a live store subscription', () => {
+    const future = new Date(Date.now() + 5 * 86_400_000);
+    const past = new Date(Date.now() - 86_400_000);
+    const row = (over: Record<string, unknown>) => ({
+      id: 's0',
+      userId: 'u1',
+      plan: 'monthly',
+      status: 'active',
+      source: 'store',
+      endsAt: future,
+      purchaseToken: 'real-google-token',
+      platform: 'google',
+      ...over,
+    });
+
+    it('refuses with 409 when a live store subscription (real token) exists, and writes nothing', async () => {
+      subscriptionRepo.findByUserId.mockResolvedValue(row({}));
+
+      await expect(
+        service.activateSubscription('u1', dto as never, 'admin-9'),
+      ).rejects.toThrow(ConflictException);
+      await expect(
+        service.activateSubscription('u1', dto as never, 'admin-9'),
+      ).rejects.toThrow(/active store subscription/i);
+      expect(subscriptionRepo.upsertForActivation).not.toHaveBeenCalled();
+    });
+
+    it('audit-logs the refused attempt', async () => {
+      subscriptionRepo.findByUserId.mockResolvedValue(row({}));
+      await service
+        .activateSubscription('u1', dto as never, 'admin-9')
+        .catch(() => undefined);
+      expect(activityRepo.createLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ADMIN_ACTIVATE_SUBSCRIPTION',
+          status: 'FAILED',
+          details: expect.stringContaining('"adminUserId":"admin-9"'),
+        }),
+      );
+    });
+
+    it.each([
+      ['expired store sub', row({ endsAt: past })],
+      ['cancelled store sub', row({ status: 'cancelled' })],
+      [
+        'free plan row',
+        row({ plan: 'free', purchaseToken: null, platform: null }),
+      ],
+      [
+        'admin grant',
+        row({ source: 'admin_grant', purchaseToken: 'admin-activated-1' }),
+      ],
+      [
+        'store row holding an admin-activated token',
+        row({ purchaseToken: 'admin-activated-123' }),
+      ],
+      ['no existing row', null],
+    ])('allows activation over %s', async (_name, existing) => {
+      subscriptionRepo.findByUserId.mockResolvedValue(existing);
+
+      await expect(
+        service.activateSubscription('u1', dto as never, 'admin-9'),
+      ).resolves.toBeDefined();
+      expect(subscriptionRepo.upsertForActivation).toHaveBeenCalledTimes(1);
+      expect(activityRepo.createLog).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'SUCCESS' }),
+      );
+    });
   });
 });

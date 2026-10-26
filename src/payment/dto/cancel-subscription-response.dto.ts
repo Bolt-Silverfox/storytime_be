@@ -38,4 +38,19 @@ export class CancelSubscriptionResponseDto {
     example: 'https://apps.apple.com/account/subscriptions',
   })
   manageUrl?: string;
+
+  @ApiPropertyOptional({
+    enum: ['skipped'],
+    description:
+      'Present (as "skipped") only when the subscription was NOT a real ' +
+      'App Store / Google Play purchase (complimentary grant, coupon, trial, or ' +
+      'a synthetic admin-activated token). No store API is called for these: the ' +
+      'row is just marked cancelled locally with the same endsAt semantics.',
+  })
+  storeCancellation?: 'skipped';
+
+  @ApiPropertyOptional({
+    description: 'Human-readable explanation accompanying `storeCancellation`.',
+  })
+  note?: string;
 }

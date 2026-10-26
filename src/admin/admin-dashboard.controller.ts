@@ -80,6 +80,10 @@ export class AdminDashboardController {
             { plan: 'family', count: 20 },
           ],
           totalRevenue: 12500.5,
+          mixedCurrencies: false,
+          revenueByCurrency: [
+            { currency: 'USD', total: 12500.5, transactions: 240 },
+          ],
           conversionRate: 14.4,
         },
       },
@@ -182,8 +186,12 @@ export class AdminDashboardController {
             { date: '2023-10-02', count: 3 },
           ],
           revenueGrowth: [
-            { date: '2023-10-01', amount: 500 },
-            { date: '2023-10-02', amount: 300 },
+            { date: '2023-10-01', amount: 500, byCurrency: { USD: 500 } },
+            {
+              date: '2023-10-02',
+              amount: null,
+              byCurrency: { NGN: 25000, USD: 5 },
+            },
           ],
           planBreakdown: [
             { plan: 'monthly', count: 120 },
@@ -209,7 +217,7 @@ export class AdminDashboardController {
   @ApiOperation({
     summary: 'Get revenue analytics',
     description:
-      'Returns detailed revenue breakdown by day, month, year, and top subscription plans.',
+      'Returns detailed revenue breakdown by day, month, year, and top subscription plans. CURRENCIES ARE NEVER MIXED and no FX conversion is applied: `totalRevenue` (succeeded transactions in the date range) and each series amount (`dailyRevenue[].amount`, `monthlyRevenue[].total_amount`, `yearlyRevenue[].total_amount`, `topPlans[].total_revenue`) are plain numbers only when everything in that scope shares ONE currency (0 when there are no transactions) and are null when several currencies are present. `mixedCurrencies` says which case applies; `revenueByCurrency` (largest total first, missing currency grouped as "UNKNOWN") and each point\'s `byCurrency` always carry the real per-currency figures. A single day can be single-currency (numeric amount) even when the range as a whole is mixed. `topPlans` is all-time, ranked by revenue when all plans share a currency and by transaction count otherwise; `subscription_count` counts active PAYING subscribers (free plan excluded).',
   })
   @ApiQuery({
     name: 'startDate',
@@ -232,28 +240,48 @@ export class AdminDashboardController {
         statusCode: 200,
         message: 'Revenue analytics retrieved successfully',
         data: {
+          totalRevenue: null,
+          mixedCurrencies: true,
+          revenueByCurrency: [
+            { currency: 'NGN', total: 25000, transactions: 5 },
+            { currency: 'USD', total: 52.98, transactions: 3 },
+          ],
           dailyRevenue: [
-            { date: '2023-10-01', amount: 500 },
-            { date: '2023-10-02', amount: 750 },
+            { date: '2023-10-01', amount: 25000, byCurrency: { NGN: 25000 } },
+            {
+              date: '2023-10-02',
+              amount: null,
+              byCurrency: { NGN: 5000, USD: 52.98 },
+            },
           ],
           monthlyRevenue: [
-            { month: '2023-10', total_amount: 12500 },
-            { month: '2023-09', total_amount: 11800 },
+            {
+              month: '2023-10',
+              total_amount: null,
+              byCurrency: { NGN: 30000, USD: 52.98 },
+            },
           ],
           yearlyRevenue: [
-            { year: '2023', total_amount: 85000 },
-            { year: '2022', total_amount: 72000 },
+            {
+              year: '2023',
+              total_amount: null,
+              byCurrency: { NGN: 30000, USD: 52.98 },
+            },
           ],
           topPlans: [
             {
               plan: 'yearly',
               subscription_count: 60,
-              total_revenue: 6000,
+              total_revenue: 52.98,
+              byCurrency: { USD: 52.98 },
+              transactions: 3,
             },
             {
               plan: 'monthly',
               subscription_count: 120,
-              total_revenue: 4800,
+              total_revenue: 30000,
+              byCurrency: { NGN: 30000 },
+              transactions: 6,
             },
           ],
         },
