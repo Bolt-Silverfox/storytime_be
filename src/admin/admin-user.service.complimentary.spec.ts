@@ -4,6 +4,22 @@ import {
   ADMIN_USER_REPOSITORY,
   ADMIN_PAYMENT_REPOSITORY,
 } from './repositories';
+import { AdminFxRateService } from './admin-fx-rate.service';
+import { FxRateTable } from './utils/fx-conversion.util';
+
+const NGN_RATES = new FxRateTable([
+  {
+    currency: 'NGN',
+    rateToUsd: 0.001,
+    effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+  },
+  {
+    currency: 'NGN',
+    rateToUsd: 0.0005,
+    effectiveFrom: new Date('2026-06-01T00:00:00Z'),
+  },
+]);
+const at = (iso: string) => new Date(iso);
 
 const future = new Date(Date.now() + 30 * 86_400_000);
 const past = new Date(Date.now() - 86_400_000);
@@ -40,6 +56,10 @@ describe('AdminUserService complimentary vs paying', () => {
         AdminUserService,
         { provide: ADMIN_USER_REPOSITORY, useValue: userRepo },
         { provide: ADMIN_PAYMENT_REPOSITORY, useValue: paymentRepo },
+        {
+          provide: AdminFxRateService,
+          useValue: { getRateTable: jest.fn().mockResolvedValue(NGN_RATES) },
+        },
       ],
     }).compile();
     service = module.get(AdminUserService);
@@ -97,65 +117,72 @@ describe('AdminUserService complimentary vs paying', () => {
     expect(none.isComplimentary).toBe(false);
   });
 
-  it('reports spend per currency; amountSpent/currency are null when currencies are mixed', async () => {
+  it('amountSpent is converted to USD with currency USD; spendingByCurrency keeps original amounts', async () => {
     const u = await row(null, [
-      { amount: 4.99, currency: 'USD' },
-      { amount: 47.99, currency: 'USD' },
-      { amount: 1000, currency: 'NGN' },
+      { amount: 4.99, currency: 'USD', createdAt: at('2026-03-01') },
+      { amount: 47.99, currency: 'USD', createdAt: at('2026-03-02') },
+      { amount: 1000, currency: 'NGN', createdAt: at('2026-03-03') },
     ] as never);
     expect(u.spendingByCurrency).toEqual({ USD: 52.98, NGN: 1000 });
-    expect(u.amountSpent).toBeNull();
-    expect(u.currency).toBeNull();
+    // 52.98 + 1000 * 0.001 (rate effective on 2026-03-03) = 53.98
+    expect(u.amountSpent).toBe(53.98);
+    expect(u.currency).toBe('USD');
+    expect(u.unconvertedSpendingByCurrency).toEqual({});
   });
 
-  it('single currency keeps a numeric amountSpent and its currency', async () => {
+  it('each payment converts at the rate effective on its own date', async () => {
     const u = await row(null, [
-      { amount: 4.99, currency: 'USD' },
-      { amount: 47.99, currency: 'usd' },
+      { amount: 1000, currency: 'NGN', createdAt: at('2026-03-03') }, // 1.00
+      { amount: 1000, currency: 'NGN', createdAt: at('2026-07-03') }, // 0.50
+      { amount: 1000, currency: 'NGN', createdAt: at('2025-07-03') }, // earliest -> 1.00
+    ] as never);
+    expect(u.amountSpent).toBe(2.5);
+  });
+
+  it('single currency USD is unchanged', async () => {
+    const u = await row(null, [
+      { amount: 4.99, currency: 'USD', createdAt: at('2026-03-01') },
+      { amount: 47.99, currency: 'usd', createdAt: at('2026-03-02') },
     ] as never);
     expect(u.amountSpent).toBe(52.98);
     expect(u.currency).toBe('USD');
     expect(u.spendingByCurrency).toEqual({ USD: 52.98 });
   });
 
-  it('no transactions -> 0 and no currency', async () => {
+  it('no transactions -> 0 USD', async () => {
     const u = await row(null, []);
     expect(u.amountSpent).toBe(0);
-    expect(u.currency).toBeNull();
+    expect(u.currency).toBe('USD');
     expect(u.spendingByCurrency).toEqual({});
   });
 
-  it('transactions with a missing currency are grouped as UNKNOWN (and mix with real ones)', async () => {
-    const only = await row(null, [{ amount: 3, currency: null }] as never);
+  it('currencies without a rate (incl. UNKNOWN) are excluded from amountSpent and listed', async () => {
+    const only = await row(null, [
+      { amount: 3, currency: null, createdAt: at('2026-03-01') },
+    ] as never);
     expect(only.spendingByCurrency).toEqual({ UNKNOWN: 3 });
-    expect(only.amountSpent).toBe(3);
-    expect(only.currency).toBeNull();
+    expect(only.amountSpent).toBe(0);
+    expect(only.unconvertedSpendingByCurrency).toEqual({ UNKNOWN: 3 });
 
     const mixed = await row(null, [
-      { amount: 3, currency: null },
-      { amount: 5, currency: 'USD' },
+      { amount: 3, currency: 'GHS', createdAt: at('2026-03-01') },
+      { amount: 5, currency: 'USD', createdAt: at('2026-03-01') },
     ] as never);
-    expect(mixed.spendingByCurrency).toEqual({ UNKNOWN: 3, USD: 5 });
-    expect(mixed.amountSpent).toBeNull();
+    expect(mixed.spendingByCurrency).toEqual({ GHS: 3, USD: 5 });
+    expect(mixed.amountSpent).toBe(5);
+    expect(mixed.unconvertedSpendingByCurrency).toEqual({ GHS: 3 });
   });
 
-  it('getUserById applies the same single-vs-mixed rule', async () => {
+  it('getUserById converts the same way', async () => {
     userRepo.findByIdWithDetails.mockResolvedValue(listUser(null));
     paymentRepo.findSuccessfulByUser.mockResolvedValue([
-      { amount: 5, currency: 'EUR' },
-      { amount: 7, currency: 'USD' },
+      { amount: 2000, currency: 'NGN', createdAt: at('2026-03-01') },
+      { amount: 7, currency: 'USD', createdAt: at('2026-03-01') },
     ]);
-    const mixed = await service.getUserById('u1');
-    expect(mixed.amountSpent).toBeNull();
-    expect(mixed.currency).toBeNull();
-    expect(mixed.spendingByCurrency).toEqual({ EUR: 5, USD: 7 });
-
-    paymentRepo.findSuccessfulByUser.mockResolvedValue([
-      { amount: 5, currency: 'EUR' },
-    ]);
-    const single = await service.getUserById('u1');
-    expect(single.amountSpent).toBe(5);
-    expect(single.currency).toBe('EUR');
+    const res = await service.getUserById('u1');
+    expect(res.amountSpent).toBe(9);
+    expect(res.currency).toBe('USD');
+    expect(res.spendingByCurrency).toEqual({ NGN: 2000, USD: 7 });
   });
 
   it('getUserById exposes isComplimentary, the grant details, the admin name and txn currency', async () => {
@@ -173,7 +200,7 @@ describe('AdminUserService complimentary vs paying', () => {
     });
     userRepo.findById.mockResolvedValue({ id: 'admin-9', name: 'Ada Admin' });
     paymentRepo.findSuccessfulByUser.mockResolvedValue([
-      { amount: 5, currency: 'EUR' },
+      { amount: 5, currency: 'EUR', createdAt: new Date('2026-03-01') },
     ]);
 
     const res = await service.getUserById('u1');

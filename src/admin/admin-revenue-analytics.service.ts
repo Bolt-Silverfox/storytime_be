@@ -20,11 +20,11 @@ import {
   ADMIN_ACTIVITY_REPOSITORY,
 } from './repositories';
 import {
-  CurrencyTotals,
-  addToCurrencyTotals,
-  singleCurrencyTotal,
-  summarizeRevenue,
-} from './utils/revenue-currency.util';
+  bucketConvertedRevenue,
+  summarizeConvertedRevenue,
+  ConvertibleEntry,
+} from './utils/fx-conversion.util';
+import { AdminFxRateService } from './admin-fx-rate.service';
 import {
   COMPLIMENTARY_SUBSCRIPTION_WHERE,
   PAYING_SUBSCRIPTION_WHERE,
@@ -42,6 +42,7 @@ export class AdminRevenueAnalyticsService {
     private readonly paymentRepo: IAdminPaymentRepository,
     @Inject(ADMIN_ACTIVITY_REPOSITORY)
     private readonly activityRepo: IAdminActivityRepository,
+    private readonly fxRates: AdminFxRateService,
   ) {}
 
   // A date-only endDate ('2026-07-31') parses to midnight UTC, which would
@@ -70,7 +71,7 @@ export class AdminRevenueAnalyticsService {
     const [
       subscriptions,
       payingGrowth,
-      revenue,
+      revenueRows,
       planBreakdown,
       payingPlans,
       complimentaryPlans,
@@ -84,8 +85,8 @@ export class AdminRevenueAnalyticsService {
         endDate,
         PAYING_SUBSCRIPTION_WHERE,
       ),
-      // Get revenue growth (real succeeded transactions only)
-      this.paymentRepo.groupRevenueByCreatedAt(startDate, endDate),
+      // Revenue growth source rows (real succeeded transactions only)
+      this.paymentRepo.findSuccessfulInRange(startDate, endDate),
       // Plan breakdown of ALL active access (paying + complimentary)
       this.subscriptionRepo.groupByActivePlan(now),
       this.subscriptionRepo.groupByActivePlan(now, PAYING_SUBSCRIPTION_WHERE),
@@ -95,6 +96,12 @@ export class AdminRevenueAnalyticsService {
       ),
       this.subscriptionRepo.groupByActiveSource(now),
     ]);
+    const fxTable = await this.fxRates.getRateTable();
+    const revenueByDay = bucketConvertedRevenue(
+      revenueRows,
+      (row) => row.createdAt.toISOString().slice(0, 10),
+      fxTable,
+    );
 
     const toPlanCounts = (rows: { plan: string; _count: number }[]) =>
       rows.map((p) => ({ plan: p.plan, count: p._count }));
@@ -109,14 +116,17 @@ export class AdminRevenueAnalyticsService {
         date: sub.startedAt.toISOString().split('T')[0],
         count: sub._count,
       })),
-      // Per-day revenue: `amount` is the plain total only when that day is
-      // single-currency (null if the day mixes currencies); `byCurrency`
-      // always carries the real figures. Never summed across currencies.
-      revenueGrowth: revenue.map((rev) => ({
-        date: rev.createdAt.toISOString().split('T')[0],
-        amount: singleCurrencyTotal(rev.byCurrency),
-        byCurrency: rev.byCurrency,
-      })),
+      // Per-day revenue: `amount` is the USD-converted total (each transaction
+      // at the rate effective on its own date); `byCurrency` keeps the original
+      // per-currency figures.
+      revenueGrowth: [...revenueByDay.entries()]
+        .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
+        .map(([date, day]) => ({
+          date,
+          amount: day.amount,
+          byCurrency: day.byCurrency,
+          unconvertedByCurrency: day.unconvertedByCurrency,
+        })),
       planBreakdown: toPlanCounts(planBreakdown),
       churnRate,
       paying: {
@@ -189,73 +199,55 @@ export class AdminRevenueAnalyticsService {
       : new Date();
 
     try {
-      const dailyRevenue =
-        await this.paymentRepo.groupRevenueByCreatedAtOrdered(
-          startDate,
-          endDate,
-        );
+      // One query for the range; daily / monthly / yearly / total are all
+      // derived from the same rows with the same rates, so they cannot disagree.
+      const [allTransactions, fxTable] = await Promise.all([
+        this.paymentRepo.findSuccessfulInRange(startDate, endDate),
+        this.fxRates.getRateTable(),
+      ]);
 
-      // For monthly and yearly revenue
-      const allTransactions = await this.paymentRepo.findSuccessfulInRange(
-        startDate,
-        endDate,
-      );
-
-      // Group by month / year, per currency (never mixing currencies)
-      const monthlyRevenueMap = new Map<string, CurrencyTotals>();
-      const yearlyRevenueMap = new Map<string, CurrencyTotals>();
-      const bump = (
-        map: Map<string, CurrencyTotals>,
-        key: string,
-        currency: string | null,
-        amount: number,
-      ) => {
-        const totals = map.get(key) ?? {};
-        addToCurrencyTotals(totals, currency, amount);
-        map.set(key, totals);
+      const dayKey = (t: { createdAt: Date }) =>
+        t.createdAt.toISOString().slice(0, 10);
+      const monthKey = (t: { createdAt: Date }) => {
+        const date = new Date(t.createdAt);
+        return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
       };
+      const yearKey = (t: { createdAt: Date }) =>
+        new Date(t.createdAt).getFullYear().toString();
 
-      allTransactions.forEach((transaction) => {
-        const date = new Date(transaction.createdAt);
-        const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-        const yearKey = date.getFullYear().toString();
-        bump(
-          monthlyRevenueMap,
-          monthKey,
-          transaction.currency,
-          transaction.amount,
-        );
-        bump(
-          yearlyRevenueMap,
-          yearKey,
-          transaction.currency,
-          transaction.amount,
-        );
-      });
-
-      const monthlyRevenue = Array.from(monthlyRevenueMap.entries()).map(
-        ([month, byCurrency]) => ({
-          month,
-          total_amount: singleCurrencyTotal(byCurrency),
-          byCurrency,
+      const series = (key: (t: { createdAt: Date }) => string) =>
+        [...bucketConvertedRevenue(allTransactions, key, fxTable).entries()]
+          .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
+          .map(([k, b]) => ({
+            key: k,
+            amount: b.amount,
+            byCurrency: b.byCurrency,
+            unconvertedByCurrency: b.unconvertedByCurrency,
+          }));
+      const dailyRevenue = series(dayKey).map(({ key, ...rest }) => ({
+        date: key,
+        ...rest,
+      }));
+      const monthlyRevenue = series(monthKey).map(
+        ({ key, amount, ...rest }) => ({
+          month: key,
+          total_amount: amount,
+          ...rest,
         }),
       );
+      const yearlyRevenue = series(yearKey).map(({ key, amount, ...rest }) => ({
+        year: key,
+        total_amount: amount,
+        ...rest,
+      }));
 
-      const yearlyRevenue = Array.from(yearlyRevenueMap.entries()).map(
-        ([year, byCurrency]) => ({
-          year,
-          total_amount: singleCurrencyTotal(byCurrency),
-          byCurrency,
-        }),
-      );
-
-      // Scope totals (the requested date range): single plain number only when
-      // every succeeded transaction shares one currency.
-      const summary = summarizeRevenue(
+      // Scope totals (the requested date range), converted to USD.
+      const summary = summarizeConvertedRevenue(
         allTransactions.map((t) => ({
           currency: t.currency,
           amount: t.amount,
           count: 1,
+          rate: fxTable.resolve(t.currency, t.createdAt),
         })),
       );
 
@@ -277,32 +269,26 @@ export class AdminRevenueAnalyticsService {
 
       const planRevenueMap = new Map<
         string,
-        {
-          subscription_count: number;
-          byCurrency: CurrencyTotals;
-          transactions: number;
-        }
+        { subscription_count: number; entries: ConvertibleEntry[] }
       >();
       const planEntry = (plan: string) => {
         const current = planRevenueMap.get(plan) ?? {
           subscription_count: 0,
-          byCurrency: {},
-          transactions: 0,
+          entries: [],
         };
         planRevenueMap.set(plan, current);
         return current;
       };
 
-      // Revenue per (plan, currency); historical rows we couldn't attribute
-      // land in 'unknown'.
+      // Revenue per (plan, currency, applied rate); historical rows we couldn't
+      // attribute land in 'unknown'.
       for (const row of revenueByPlan) {
-        const entry = planEntry(row.plan ?? 'unknown');
-        addToCurrencyTotals(
-          entry.byCurrency,
-          row.currency,
-          row._sum.amount ?? 0,
-        );
-        entry.transactions += row._count;
+        planEntry(row.plan ?? 'unknown').entries.push({
+          currency: row.currency,
+          amount: row.amount,
+          count: row.count,
+          rate: row.rate,
+        });
       }
       // Active-subscription counts per plan (plans may have revenue but no
       // active subs left, or vice versa, so this is a union).
@@ -310,36 +296,39 @@ export class AdminRevenueAnalyticsService {
         planEntry(row.plan).subscription_count += row._count;
       }
 
-      const planCurrencies = new Set(
-        [...planRevenueMap.values()].flatMap((p) => Object.keys(p.byCurrency)),
-      );
-      const plansShareCurrency = planCurrencies.size <= 1;
+      const toTotals = (items: { currency: string; total: number }[]) =>
+        Object.fromEntries(items.map((i) => [i.currency, i.total]));
+
       const topPlans = Array.from(planRevenueMap.entries())
-        .map(([plan, stats]) => ({
-          plan,
-          subscription_count: stats.subscription_count,
-          total_revenue: singleCurrencyTotal(stats.byCurrency),
-          byCurrency: stats.byCurrency,
-          transactions: stats.transactions,
-        }))
-        // Rank by revenue only when every plan is in the same currency;
-        // otherwise amounts are not comparable, so rank by transaction count.
-        .sort((a, b) =>
-          plansShareCurrency
-            ? (b.total_revenue ?? 0) - (a.total_revenue ?? 0)
-            : b.transactions - a.transactions,
+        .map(([plan, stats]) => {
+          const converted = summarizeConvertedRevenue(stats.entries);
+          return {
+            plan,
+            subscription_count: stats.subscription_count,
+            total_revenue: converted.totalRevenue,
+            byCurrency: toTotals(converted.revenueByCurrency),
+            unconvertedByCurrency: toTotals(converted.unconvertedCurrencies),
+            transactions: stats.entries.reduce((n, e) => n + e.count, 0),
+          };
+        })
+        // Converted revenue is comparable across plans; ties by transactions.
+        .sort(
+          (a, b) =>
+            b.total_revenue - a.total_revenue ||
+            b.transactions - a.transactions,
         )
         .slice(0, 10);
 
       return {
+        baseCurrency: summary.baseCurrency,
         totalRevenue: summary.totalRevenue,
         mixedCurrencies: summary.mixedCurrencies,
         revenueByCurrency: summary.revenueByCurrency,
-        dailyRevenue: dailyRevenue.map((day) => ({
-          date: day.createdAt.toISOString().split('T')[0],
-          amount: singleCurrencyTotal(day.byCurrency),
-          byCurrency: day.byCurrency,
-        })),
+        convertedRevenueByCurrency: summary.convertedRevenueByCurrency,
+        unconvertedCurrencies: summary.unconvertedCurrencies,
+        hasUnconvertedRevenue: summary.hasUnconvertedRevenue,
+        usedEarliestRate: summary.usedEarliestRate,
+        dailyRevenue,
         monthlyRevenue,
         yearlyRevenue,
         topPlans,

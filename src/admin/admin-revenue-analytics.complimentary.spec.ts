@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminRevenueAnalyticsService } from './admin-revenue-analytics.service';
+import { AdminFxRateService } from './admin-fx-rate.service';
+import { FxRateTable } from './utils/fx-conversion.util';
 import {
   ADMIN_SUBSCRIPTION_REPOSITORY,
   ADMIN_PAYMENT_REPOSITORY,
@@ -37,15 +39,14 @@ describe('AdminRevenueAnalyticsService complimentary vs paying', () => {
       ]),
     };
     paymentRepo = {
-      groupRevenueByCreatedAt: jest.fn().mockResolvedValue([]),
-      groupRevenueByCreatedAtOrdered: jest.fn().mockResolvedValue([]),
       findSuccessfulInRange: jest.fn().mockResolvedValue([]),
       groupRevenueByPlan: jest.fn().mockResolvedValue([
         {
           plan: 'monthly',
           currency: 'USD',
-          _sum: { amount: 14.97 },
-          _count: 3,
+          amount: 14.97,
+          count: 3,
+          rate: { rate: 1, effectiveFrom: null, usedEarliest: false },
         },
       ]),
     };
@@ -55,6 +56,12 @@ describe('AdminRevenueAnalyticsService complimentary vs paying', () => {
         { provide: ADMIN_SUBSCRIPTION_REPOSITORY, useValue: subscriptionRepo },
         { provide: ADMIN_PAYMENT_REPOSITORY, useValue: paymentRepo },
         { provide: ADMIN_ACTIVITY_REPOSITORY, useValue: {} },
+        {
+          provide: AdminFxRateService,
+          useValue: {
+            getRateTable: jest.fn().mockResolvedValue(new FxRateTable([])),
+          },
+        },
       ],
     }).compile();
     service = module.get(AdminRevenueAnalyticsService);

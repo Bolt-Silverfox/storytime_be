@@ -1,82 +1,154 @@
 import { PrismaAdminPaymentRepository } from './prisma-admin-payment.repository';
 
-describe('PrismaAdminPaymentRepository per-currency aggregation', () => {
-  const groupBy = jest.fn();
+describe('PrismaAdminPaymentRepository FX-aware aggregation', () => {
+  const queryRaw = jest.fn();
   const findMany = jest.fn();
   const repo = new PrismaAdminPaymentRepository({
-    paymentTransaction: { groupBy, findMany },
+    $queryRaw: queryRaw,
+    paymentTransaction: { findMany },
   } as never);
 
   beforeEach(() => jest.resetAllMocks());
 
-  it('sumRevenueByCurrency groups by currency in the DB', async () => {
-    groupBy.mockResolvedValue([
-      { currency: 'NGN', _sum: { amount: 25000 }, _count: 5 },
-      { currency: null, _sum: { amount: null }, _count: 1 },
-    ]);
-    const rows = await repo.sumRevenueByCurrency({ status: 'success' });
-    expect(groupBy.mock.calls[0][0]).toMatchObject({
-      by: ['currency'],
-      where: { status: 'success' },
-    });
-    expect(rows).toEqual([
-      { currency: 'NGN', amount: 25000, count: 5 },
-      { currency: null, amount: 0, count: 1 },
-    ]);
-  });
+  const effective = new Date('2026-01-01T00:00:00Z');
 
-  it('daily revenue buckets by UTC day AND currency (never a single mixed number)', async () => {
-    findMany.mockResolvedValue([
+  it('sumRevenueWithRates aggregates in ONE SQL query with a LATERAL rate join (no per-row queries)', async () => {
+    queryRaw.mockResolvedValue([
       {
-        createdAt: new Date('2026-10-01T09:00:00Z'),
-        amount: 5000,
         currency: 'NGN',
+        rate: 0.00065,
+        effectiveFrom: effective,
+        usedEarliest: false,
+        amount: 25000,
+        count: 5,
       },
       {
-        createdAt: new Date('2026-10-01T23:00:00Z'),
-        amount: 4.99,
-        currency: 'usd',
+        currency: 'NGN',
+        rate: 0.001,
+        effectiveFrom: effective,
+        usedEarliest: true,
+        amount: 100,
+        count: 1,
       },
       {
-        createdAt: new Date('2026-10-01T23:30:00Z'),
-        amount: 5,
         currency: 'USD',
+        rate: null,
+        effectiveFrom: null,
+        usedEarliest: null,
+        amount: 9.99,
+        count: 1,
       },
       {
-        createdAt: new Date('2026-10-02T01:00:00Z'),
-        amount: 7,
+        currency: 'GHS',
+        rate: null,
+        effectiveFrom: null,
+        usedEarliest: null,
+        amount: 3,
+        count: 1,
+      },
+      {
         currency: null,
+        rate: null,
+        effectiveFrom: null,
+        usedEarliest: null,
+        amount: 7,
+        count: 2,
       },
     ]);
-    const days = await repo.groupRevenueByCreatedAtOrdered(
-      new Date('2026-10-01'),
-      new Date('2026-10-31'),
-    );
-    expect(findMany.mock.calls[0][0].select).toMatchObject({ currency: true });
-    expect(days).toEqual([
+    const rows = await repo.sumRevenueWithRates();
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    const sql: string = queryRaw.mock.calls[0][0].sql;
+    expect(sql).toContain('LEFT JOIN LATERAL');
+    expect(sql).toContain('"fx_rates"');
+    expect(sql).toContain('t."status" = \'success\'');
+    expect(sql).toContain('GROUP BY');
+    expect(rows).toEqual([
       {
-        createdAt: new Date('2026-10-01T00:00:00.000Z'),
-        byCurrency: { NGN: 5000, USD: 9.99 },
+        currency: 'NGN',
+        amount: 25000,
+        count: 5,
+        rate: { rate: 0.00065, effectiveFrom: effective, usedEarliest: false },
       },
       {
-        createdAt: new Date('2026-10-02T00:00:00.000Z'),
-        byCurrency: { UNKNOWN: 7 },
+        currency: 'NGN',
+        amount: 100,
+        count: 1,
+        rate: { rate: 0.001, effectiveFrom: effective, usedEarliest: true },
       },
+      {
+        currency: 'USD',
+        amount: 9.99,
+        count: 1,
+        rate: { rate: 1, effectiveFrom: null, usedEarliest: false },
+      },
+      { currency: 'GHS', amount: 3, count: 1, rate: null },
+      { currency: null, amount: 7, count: 2, rate: null },
     ]);
   });
 
-  it('groupRevenueByPlan groups by plan and currency', async () => {
-    groupBy.mockResolvedValue([
-      { plan: 'monthly', currency: 'NGN', _sum: { amount: 1 }, _count: 1 },
+  it('sumRevenueWithRates can cap by createdAt (previous-period trend)', async () => {
+    queryRaw.mockResolvedValue([]);
+    const cap = new Date('2026-09-30T23:59:59.999Z');
+    await repo.sumRevenueWithRates({ createdAtLte: cap });
+    const q = queryRaw.mock.calls[0][0];
+    expect(q.sql).toContain('t."createdAt" <=');
+    expect(q.values).toContain(cap);
+  });
+
+  it('groupRevenueByPlan groups by plan, currency and applied rate in SQL', async () => {
+    queryRaw.mockResolvedValue([
+      {
+        plan: 'monthly',
+        currency: 'NGN',
+        rate: 0.00065,
+        effectiveFrom: effective,
+        usedEarliest: false,
+        amount: 1,
+        count: 1,
+      },
+      {
+        plan: null,
+        currency: 'USD',
+        rate: null,
+        effectiveFrom: null,
+        usedEarliest: null,
+        amount: 2,
+        count: 1,
+      },
     ]);
     const rows = await repo.groupRevenueByPlan();
-    expect(groupBy.mock.calls[0][0].by).toEqual(['plan', 'currency']);
-    expect(rows[0]).toMatchObject({ plan: 'monthly', currency: 'NGN' });
+    expect(queryRaw.mock.calls[0][0].sql).toContain('LEFT JOIN LATERAL');
+    expect(rows[0]).toMatchObject({
+      plan: 'monthly',
+      currency: 'NGN',
+      amount: 1,
+      count: 1,
+      rate: { rate: 0.00065, usedEarliest: false },
+    });
+    expect(rows[1]).toMatchObject({
+      plan: null,
+      currency: 'USD',
+      rate: { rate: 1 },
+    });
   });
 
-  it('findSuccessfulInRange selects the currency', async () => {
+  it('findSuccessfulInRange selects currency and createdAt, ordered asc', async () => {
     findMany.mockResolvedValue([]);
     await repo.findSuccessfulInRange(new Date(0), new Date());
-    expect(findMany.mock.calls[0][0].select).toMatchObject({ currency: true });
+    expect(findMany.mock.calls[0][0].select).toMatchObject({
+      currency: true,
+      createdAt: true,
+    });
+    expect(findMany.mock.calls[0][0].orderBy).toEqual({ createdAt: 'asc' });
+  });
+
+  it('findSuccessfulByUser selects createdAt so each payment converts at its own date', async () => {
+    findMany.mockResolvedValue([]);
+    await repo.findSuccessfulByUser('u1');
+    expect(findMany.mock.calls[0][0].select).toMatchObject({
+      amount: true,
+      currency: true,
+      createdAt: true,
+    });
   });
 });

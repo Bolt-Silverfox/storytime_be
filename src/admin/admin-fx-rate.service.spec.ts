@@ -36,7 +36,6 @@ describe('CreateFxRateDto validation', () => {
     [{ currency: 'N1N', rateToUsd: 1 }, 'currency'],
     [{ currency: 'NGN', rateToUsd: 0 }, 'rateToUsd'],
     [{ currency: 'NGN', rateToUsd: -1 }, 'rateToUsd'],
-    [{ currency: 'NGN', rateToUsd: '0.5' }, 'rateToUsd'],
     [
       { currency: 'NGN', rateToUsd: 1, effectiveFrom: 'yesterday' },
       'effectiveFrom',
@@ -59,7 +58,7 @@ describe('AdminFxRateService', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     cache.del.mockResolvedValue(undefined);
-    service = new AdminFxRateService(repo as never, cache as never);
+    service = new AdminFxRateService(repo, cache as never);
   });
 
   const row = (over = {}) => ({

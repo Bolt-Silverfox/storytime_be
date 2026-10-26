@@ -83,7 +83,7 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
         },
         paymentTransactions: {
           where: { status: 'success', deletedAt: null },
-          select: { amount: true, currency: true },
+          select: { amount: true, currency: true, createdAt: true },
         },
         _count: {
           select: {
