@@ -27,14 +27,14 @@ export const GUEST_AUDIO_EAGER_PARAGRAPHS = 2;
  * cannot rotate cheaply; the hourly IP cap bounds how fast one source can walk
  * the catalogue (each story only ever generates once, then is cached). A NAT'd
  * classroom can still start 20 stories/min. A session may open at most 3
- * stories, so 6 starts per 10 minutes covers legitimate re-opens; status polls
+ * stories, so 12 starts per 10 minutes covers re-opens and retry taps; status polls
  * run every few seconds while a story generates.
  */
 export const GUEST_AUDIO_THROTTLE = {
   start: {
     ipPerMinute: { limit: 20, ttl: 60_000 },
     ipPerHour: { limit: 60, ttl: 3_600_000 },
-    perSession: { limit: 6, ttl: 600_000 },
+    perSession: { limit: 12, ttl: 600_000 },
   },
   status: {
     ipPerMinute: { limit: 120, ttl: 60_000 },
