@@ -5,8 +5,13 @@ import { preprocessTextForTTS } from './tts-text.util';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../../voice/dto/voice.dto';
 import { DEFAULT_VOICE, VOICE_CONFIG } from '../../voice/voice.constants';
 
-/** Best-first. Rows written before provider tracking carry 'unknown'. */
-const PROVIDER_RANK = ['elevenlabs', 'deepgram', 'edgetts', 'unknown'];
+/**
+ * Providers whose cached audio guests may be served. ElevenLabs is a paid
+ * benefit, so its rows (and untracked 'unknown' ones) are never returned to
+ * guests. Best-first.
+ */
+export const GUEST_CACHE_PROVIDERS = ['deepgram', 'edgetts'] as const;
+const PROVIDER_RANK: readonly string[] = GUEST_CACHE_PROVIDERS;
 const providerRank = (p: string): number => {
   const i = PROVIDER_RANK.indexOf(p);
   return i === -1 ? PROVIDER_RANK.length : i;
@@ -140,8 +145,8 @@ export class TtsCacheService {
   }
 
   /**
-   * Guest cache lookup: reuse ANY existing default-voice audio, whichever
-   * provider produced it. Picks the provider covering the most paragraphs (ties
+   * Guest cache lookup: reuse ANY existing default-voice audio produced by a
+   * free provider (deepgram/edgetts; never ElevenLabs). Picks the provider covering the most paragraphs (ties
    * go to the best provider) so a story stays in one voice where possible, then
    * fills remaining gaps from other providers — an existing clip is never
    * regenerated.
@@ -162,12 +167,16 @@ export class TtsCacheService {
     const rows = await this.ttsRepository.findParagraphAudioForVoices(
       storyId,
       aliases,
+      GUEST_CACHE_PROVIDERS,
       [...hashMap.keys()],
     );
 
     // provider -> hash -> newest audioUrl (rows arrive newest first)
     const byProvider = new Map<string, Map<string, string>>();
     for (const row of rows) {
+      // Defence in depth: never trust the query alone with the paid boundary.
+      if (!(GUEST_CACHE_PROVIDERS as readonly string[]).includes(row.provider))
+        continue;
       const perHash = byProvider.get(row.provider) ?? new Map<string, string>();
       if (!perHash.has(row.textHash)) perHash.set(row.textHash, row.audioUrl);
       byProvider.set(row.provider, perHash);
