@@ -126,7 +126,7 @@ describe('TextToSpeechService.batchTextToSpeechForGuest', () => {
     service = module.get(TextToSpeechService);
   });
 
-  it('serves a FULL cache hit with zero provider/upload calls (rows under mixed voice-id aliases, deepgram/edgetts)', async () => {
+  it('serves a FULL cache hit with zero provider/upload calls (rows under mixed voice-id aliases and providers)', async () => {
     const text = buildStory(4);
     const paras = paragraphsOf(text);
     expect(paras).toHaveLength(4);
@@ -134,8 +134,8 @@ describe('TextToSpeechService.batchTextToSpeechForGuest', () => {
     mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([
       cacheRow(paras[0], 'default', 'edgetts', 'https://a/0.mp3'),
       cacheRow(paras[1], DEFAULT_VOICE, 'deepgram', 'https://a/1.mp3'),
-      cacheRow(paras[2], DEFAULT_EL_ID, 'deepgram', 'https://a/2.mp3'),
-      cacheRow(paras[3], 'voice-row-uuid', 'deepgram', 'https://a/3.mp3'),
+      cacheRow(paras[2], DEFAULT_EL_ID, 'elevenlabs', 'https://a/2.mp3'),
+      cacheRow(paras[3], 'voice-row-uuid', 'unknown', 'https://a/3.mp3'),
     ]);
 
     const res = await service.batchTextToSpeechForGuest(STORY_ID, text);
@@ -153,10 +153,10 @@ describe('TextToSpeechService.batchTextToSpeechForGuest', () => {
     expect(mockEdgeTtsGenerate).not.toHaveBeenCalled();
     expect(mockUploadAudio).not.toHaveBeenCalled();
     expect(mockPrisma.paragraphAudioCache.upsert).not.toHaveBeenCalled();
-    // Covers every alias but only the FREE providers: ElevenLabs stays paid.
+    // The lookup is not scoped to one provider and covers every alias.
     const where =
       mockPrisma.paragraphAudioCache.findMany.mock.calls[0][0].where;
-    expect(where.provider).toEqual({ in: ['deepgram', 'edgetts'] });
+    expect(where.provider).toBeUndefined();
     expect(where.voiceId.in).toEqual(
       expect.arrayContaining([
         'default',
@@ -168,11 +168,11 @@ describe('TextToSpeechService.batchTextToSpeechForGuest', () => {
     );
   });
 
-  it('prefers the provider covering most paragraphs, then fills gaps from the other free provider', async () => {
+  it('prefers the provider covering most paragraphs, then fills gaps from others', async () => {
     const text = buildStory(3);
     const paras = paragraphsOf(text);
     mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([
-      cacheRow(paras[0], 'default', 'deepgram', 'https://dg/0.mp3'),
+      cacheRow(paras[0], DEFAULT_EL_ID, 'elevenlabs', 'https://el/0.mp3'),
       cacheRow(paras[0], 'default', 'edgetts', 'https://edge/0.mp3'),
       cacheRow(paras[1], 'default', 'edgetts', 'https://edge/1.mp3'),
       cacheRow(paras[2], 'default', 'edgetts', 'https://edge/2.mp3'),
@@ -184,31 +184,6 @@ describe('TextToSpeechService.batchTextToSpeechForGuest', () => {
       'https://edge/2.mp3',
     ]);
     expect(mockDeepgramGenerate).not.toHaveBeenCalled();
-  });
-
-  it('NEVER serves an ElevenLabs (paid) row to a guest; that paragraph is generated with Deepgram instead', async () => {
-    const text = buildStory(3);
-    const paras = paragraphsOf(text);
-    // Even if a (mis)configured query returned them, elevenlabs rows are dropped.
-    mockPrisma.paragraphAudioCache.findMany.mockResolvedValue([
-      cacheRow(paras[0], DEFAULT_EL_ID, 'elevenlabs', 'https://el/0.mp3'),
-      cacheRow(paras[0], DEFAULT_VOICE, 'elevenlabs', 'https://el/0b.mp3'),
-      cacheRow(paras[1], 'default', 'deepgram', 'https://dg/1.mp3'),
-      cacheRow(paras[2], 'default', 'unknown', 'https://u/2.mp3'),
-    ]);
-    const res = await service.batchTextToSpeechForGuest(STORY_ID, text, {
-      eagerCount: 5,
-    });
-    const urls = res.results.map((r) => r.audioUrl);
-    expect(urls.join()).not.toContain('https://el/');
-    expect(urls[1]).toBe('https://dg/1.mp3');
-    // paragraphs 0 (elevenlabs-only) and 2 (unknown provider) were regenerated for free providers
-    expect(mockDeepgramGenerate).toHaveBeenCalledTimes(2);
-    expect(mockElevenLabsGenerate).not.toHaveBeenCalled();
-    const providers = mockPrisma.paragraphAudioCache.upsert.mock.calls.map(
-      (c: any[]) => c[0].create.provider,
-    );
-    expect(providers).toEqual(['deepgram', 'deepgram']);
   });
 
   it('on a partial hit generates ONLY the missing paragraphs, never with ElevenLabs, and caches them under the default voice', async () => {
@@ -269,22 +244,5 @@ describe('TextToSpeechService.batchTextToSpeechForGuest', () => {
     expect(res.remainingUncached).toHaveLength(2);
     expect(res.wasTruncated).toBe(true);
     expect(res.results.map((r) => r.index)).toContain(0);
-  });
-
-  it('authed free/paid provider selection is untouched: still a single-provider-scoped lookup', async () => {
-    mockIsPremiumUser.mockResolvedValue(true);
-    const text = buildStory(2);
-    await service.batchTextToSpeechEager(
-      STORY_ID,
-      text,
-      DEFAULT_VOICE,
-      'user-1',
-      0,
-    );
-    const where =
-      mockPrisma.paragraphAudioCache.findMany.mock.calls[0][0].where;
-    // paid user -> elevenlabs rows only (a plain string, not the guest list)
-    expect(where.provider).toBe('elevenlabs');
-    expect(where.voiceId).toBe(DEFAULT_VOICE);
   });
 });

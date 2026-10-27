@@ -60,14 +60,12 @@ export class PrismaStoryTtsRepository implements IStoryTtsRepository {
   async findParagraphAudioForVoices(
     storyId: string,
     voiceIds: string[],
-    providers: readonly string[],
     textHashes: string[],
   ): Promise<ParagraphAudioCache[]> {
     return this.prisma.paragraphAudioCache.findMany({
       where: {
         storyId,
         voiceId: { in: voiceIds },
-        provider: { in: [...providers] },
         textHash: { in: textHashes },
       },
       orderBy: { createdAt: 'desc' },
