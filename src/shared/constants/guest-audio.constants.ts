@@ -17,24 +17,27 @@ export const GUEST_AUDIO_MAX_GENERATE_CHARS = 20_000;
 export const GUEST_AUDIO_EAGER_PARAGRAPHS = 2;
 
 /**
- * Throttle values for the guest audio routes.
+ * Throttle values for the guest audio routes. They map onto the app's three
+ * named throttlers (see throttle.config.ts), overridden per route:
+ *  - `short`  -> per IP, per minute  (global tracker = req.ip)
+ *  - `medium` -> per IP, per hour    (start route only)
+ *  - `long`   -> per GUEST SESSION   (custom tracker = x-guest-session-id)
  *
- * Per IP (global ThrottlerGuard, tracker = req.ip): sessions are free to mint,
- * so the IP is the only identity an attacker cannot rotate cheaply. A NAT'd
- * classroom may share one IP, hence 20 starts/min but only 120/hour.
- *
- * Per guest session (GuestSessionThrottleGuard): a session may open at most 3
- * stories, so 6 starts per 10 minutes covers re-opens; status polling runs
- * every few seconds while a story generates.
+ * Guest sessions are free to mint, so the IP is the identity an attacker
+ * cannot rotate cheaply; the hourly IP cap bounds how fast one source can walk
+ * the catalogue (each story only ever generates once, then is cached). A NAT'd
+ * classroom can still start 20 stories/min. A session may open at most 3
+ * stories, so 6 starts per 10 minutes covers legitimate re-opens; status polls
+ * run every few seconds while a story generates.
  */
 export const GUEST_AUDIO_THROTTLE = {
   start: {
-    ip: { limit: 20, ttl: 60_000 },
-    ipHourly: { limit: 120, ttl: 3_600_000 },
-    session: { limit: 6, ttl: 600_000 },
+    ipPerMinute: { limit: 20, ttl: 60_000 },
+    ipPerHour: { limit: 60, ttl: 3_600_000 },
+    perSession: { limit: 6, ttl: 600_000 },
   },
   status: {
-    ip: { limit: 120, ttl: 60_000 },
-    session: { limit: 240, ttl: 600_000 },
+    ipPerMinute: { limit: 120, ttl: 60_000 },
+    perSession: { limit: 240, ttl: 600_000 },
   },
 } as const;
