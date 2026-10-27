@@ -135,13 +135,7 @@ export class TtsCacheService {
     const uuids =
       await this.ttsRepository.findVoiceIdsByElevenLabsId(elevenLabsId);
     return [
-      ...new Set([
-        'default',
-        DEFAULT_VOICE as string,
-        ...legacy,
-        elevenLabsId,
-        ...uuids,
-      ]),
+      ...new Set(['default', DEFAULT_VOICE, ...legacy, elevenLabsId, ...uuids]),
     ];
   }
 

@@ -65,12 +65,11 @@ describe('GuestStoryAudioController', () => {
     expect(typeof meta('THROTTLER:TRACKERlong', h)).toBe('function');
   });
 
-  it('delegates start with the header session id and body', async () => {
+  it('delegates start with the header session id and NEVER forwards a client voiceId', async () => {
     service.start.mockResolvedValue({ ok: true });
     const out = await controller.startAudio(STORY, { voiceId: 'x' }, SESSION);
-    expect(service.start).toHaveBeenCalledWith(STORY, SESSION, {
-      voiceId: 'x',
-    });
+    expect(service.start).toHaveBeenCalledWith(STORY, SESSION);
+    expect(service.start.mock.calls[0]).toHaveLength(2);
     expect(out).toEqual({ ok: true });
   });
 

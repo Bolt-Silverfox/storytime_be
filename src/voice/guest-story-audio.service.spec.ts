@@ -67,7 +67,7 @@ describe('GuestStoryAudioService', () => {
 
   describe('start', () => {
     it('full cache hit: returns clips, queues nothing', async () => {
-      const res = await service.start(STORY, SESSION, {});
+      const res = await service.start(STORY, SESSION);
       expect(res.paragraphs).toHaveLength(2);
       expect(res.batchJobId).toBeUndefined();
       expect(res.pendingParagraphs).toBeUndefined();
@@ -82,12 +82,10 @@ describe('GuestStoryAudioService', () => {
           remainingUncached: [{ index: 2, text: 'three', hash: 'h2' }],
         }),
       );
-      const res = await service.start(STORY, SESSION, {
-        voiceId: 'XrExE9yKIg1WjnnlVkGX-someOtherVoice',
-      });
-      // the TTS facade has no voice parameter at all for guests
-      const args = tts.batchTextToSpeechForGuest.mock.calls[0];
-      expect(JSON.stringify(args)).not.toContain('someOtherVoice');
+      // start() has no voice parameter; the TTS facade has none either.
+      expect(service.start.length).toBe(2);
+      const res = await service.start(STORY, SESSION);
+      expect(tts.batchTextToSpeechForGuest.mock.calls[0]).toHaveLength(3);
       expect(queue.queueBatch).toHaveBeenCalledWith(
         expect.objectContaining({
           voiceId: DEFAULT_VOICE,
@@ -109,7 +107,7 @@ describe('GuestStoryAudioService', () => {
           remainingUncached: [{ index: 2, text: 'three', hash: 'h2' }],
         }),
       );
-      const res = await service.start(STORY, SESSION, {});
+      const res = await service.start(STORY, SESSION);
       expect(res.outline).toEqual([
         { index: 0, text: 'one' },
         { index: 1, text: 'two' },
@@ -124,16 +122,16 @@ describe('GuestStoryAudioService', () => {
         }),
       );
       queue.queueBatch.mockRejectedValue(new Error('redis down'));
-      const res = await service.start(STORY, SESSION, {});
+      const res = await service.start(STORY, SESSION);
       expect(res.paragraphs).toHaveLength(2);
       expect(res.batchJobId).toBeUndefined();
     });
 
     it('rejects a malformed session id (400) before touching anything', async () => {
-      await expect(service.start(STORY, 'nope', {})).rejects.toBeInstanceOf(
+      await expect(service.start(STORY, 'nope')).rejects.toBeInstanceOf(
         BadRequestException,
       );
-      await expect(service.start(STORY, undefined, {})).rejects.toBeInstanceOf(
+      await expect(service.start(STORY, undefined)).rejects.toBeInstanceOf(
         BadRequestException,
       );
       expect(guestSessions.getGuestSession).not.toHaveBeenCalled();
@@ -142,7 +140,7 @@ describe('GuestStoryAudioService', () => {
 
     it('rejects an expired/unknown session (401), no generation', async () => {
       guestSessions.getGuestSession.mockResolvedValue(null);
-      await expect(service.start(STORY, SESSION, {})).rejects.toBeInstanceOf(
+      await expect(service.start(STORY, SESSION)).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
       expect(tts.batchTextToSpeechForGuest).not.toHaveBeenCalled();
@@ -155,7 +153,7 @@ describe('GuestStoryAudioService', () => {
         uniqueStoriesRead: 3,
         readingHistory: { 'other-story': { progress: 0 } },
       });
-      await expect(service.start(STORY, SESSION, {})).rejects.toBeInstanceOf(
+      await expect(service.start(STORY, SESSION)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
       expect(tts.batchTextToSpeechForGuest).not.toHaveBeenCalled();
@@ -167,7 +165,7 @@ describe('GuestStoryAudioService', () => {
       stories.getStoryById.mockRejectedValue(
         new NotFoundException('Story not found'),
       );
-      await expect(service.start(STORY, SESSION, {})).rejects.toBeInstanceOf(
+      await expect(service.start(STORY, SESSION)).rejects.toBeInstanceOf(
         NotFoundException,
       );
       expect(tts.batchTextToSpeechForGuest).not.toHaveBeenCalled();
@@ -175,7 +173,7 @@ describe('GuestStoryAudioService', () => {
 
     it('treats a story without text as not found', async () => {
       stories.getStoryById.mockResolvedValue({ id: STORY, textContent: '' });
-      await expect(service.start(STORY, SESSION, {})).rejects.toBeInstanceOf(
+      await expect(service.start(STORY, SESSION)).rejects.toBeInstanceOf(
         NotFoundException,
       );
       expect(tts.batchTextToSpeechForGuest).not.toHaveBeenCalled();

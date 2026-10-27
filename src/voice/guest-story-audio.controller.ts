@@ -66,10 +66,11 @@ export class GuestStoryAudioController {
   @ApiResponse({ status: 429, description: 'Throttled' })
   startAudio(
     @Param('storyId', ParseUUIDPipe) storyId: string,
-    @Body() dto: GuestStoryAudioDto,
+    // Validated (so clients may keep sending voiceId) but never forwarded.
+    @Body() _dto: GuestStoryAudioDto,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
-    return this.audio.start(storyId, guestSessionId, dto ?? {});
+    return this.audio.start(storyId, guestSessionId);
   }
 
   @Get(':storyId/audio/:batchJobId')

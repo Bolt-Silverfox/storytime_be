@@ -12,7 +12,6 @@ import { TextToSpeechService } from '../story/text-to-speech.service';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
 import { GUEST_AUDIO_EAGER_PARAGRAPHS } from '@/shared/constants/guest-audio.constants';
 import { DEFAULT_VOICE } from './voice.constants';
-import type { GuestStoryAudioDto } from './dto/guest-story-audio.dto';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -49,12 +48,10 @@ export class GuestStoryAudioService {
     return sessionId;
   }
 
-  async start(
-    storyId: string,
-    guestSessionId: string | undefined,
-    // Deliberately unused: guests cannot choose a voice.
-    _dto: GuestStoryAudioDto,
-  ) {
+  /**
+   * Note there is deliberately NO voice parameter: guests cannot choose one.
+   */
+  async start(storyId: string, guestSessionId: string | undefined) {
     const sessionId = this.assertSessionId(guestSessionId);
 
     const session = await this.guestSessions.getGuestSession(sessionId);
