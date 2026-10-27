@@ -245,4 +245,19 @@ describe('TextToSpeechService.batchTextToSpeechForGuest', () => {
     expect(res.wasTruncated).toBe(true);
     expect(res.results.map((r) => r.index)).toContain(0);
   });
+
+  it('authed free/paid provider selection is untouched: still a single-provider-scoped lookup', async () => {
+    mockIsPremiumUser.mockResolvedValue(true);
+    await service.batchTextToSpeechEager(
+      STORY_ID,
+      buildStory(2),
+      DEFAULT_VOICE,
+      'user-1',
+      0,
+    );
+    const where =
+      mockPrisma.paragraphAudioCache.findMany.mock.calls[0][0].where;
+    expect(where.provider).toBe('elevenlabs');
+    expect(where.voiceId).toBe(DEFAULT_VOICE);
+  });
 });
