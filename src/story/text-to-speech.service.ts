@@ -112,7 +112,7 @@ export class TextToSpeechService {
     storyId: string,
     text: string,
     voiceType: string,
-    userId: string,
+    userId: string | undefined,
     options: {
       isPremium: boolean;
       providerOverride: 'elevenlabs' | 'deepgram' | 'edgetts';

@@ -59,6 +59,45 @@ describe('TtsBatchProcessor', () => {
     );
   });
 
+  describe('guest jobs', () => {
+    it('never passes the guest session id to TTS as a userId (no per-user quota rows for sessions)', async () => {
+      ttsService.generateSingleParagraphTTS.mockResolvedValue({
+        audioUrl: 'https://audio/0',
+      });
+
+      await processor.process(
+        makeJob({
+          userId: 'guest-session-uuid',
+          isGuest: true,
+          provider: 'deepgram',
+        }),
+      );
+
+      const [, , , userIdArg, opts] =
+        ttsService.generateSingleParagraphTTS.mock.calls[0];
+      expect(userIdArg).toBeUndefined();
+      expect(opts.providerOverride).not.toBe('elevenlabs');
+      // SSE / ownership still keyed by the session id.
+      expect(jobEvents.emitVoiceParagraphReady).toHaveBeenCalledWith(
+        'batch-1',
+        'guest-session-uuid',
+        0,
+        'https://audio/0',
+        expect.any(Number),
+      );
+    });
+
+    it('still passes the userId for authenticated jobs', async () => {
+      ttsService.generateSingleParagraphTTS.mockResolvedValue({
+        audioUrl: 'https://audio/0',
+      });
+      await processor.process(makeJob());
+      expect(ttsService.generateSingleParagraphTTS.mock.calls[0][3]).toBe(
+        'user-1',
+      );
+    });
+  });
+
   describe('duplicate outcome counting', () => {
     it('counts every duplicate index on success', async () => {
       ttsService.generateSingleParagraphTTS.mockResolvedValue({

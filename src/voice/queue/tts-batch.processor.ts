@@ -137,6 +137,7 @@ export class TtsBatchProcessor extends WorkerHost {
       storyId,
       voiceId,
       userId,
+      isGuest,
       isPremium,
       provider,
       paragraphs,
@@ -195,7 +196,9 @@ export class TtsBatchProcessor extends WorkerHost {
               storyId,
               text,
               voiceId,
-              userId,
+              // Guest session ids are not User rows: keep them out of the
+              // per-user quota/usage paths.
+              isGuest ? undefined : userId,
               { isPremium, providerOverride: activeProvider },
             );
             this.metrics.recordAttempt(activeProvider, 'success');
