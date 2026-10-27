@@ -12,6 +12,11 @@ import { VoiceQuotaService } from '../../voice/voice-quota.service';
 import { SubscriptionService } from '../../subscription/subscription.service';
 import { TtsSynthesisService } from './tts-synthesis.service';
 import { TtsCacheService } from './tts-cache.service';
+import { preprocessTextForTTS } from './tts-text.util';
+import {
+  GUEST_AUDIO_MAX_GENERATE_CHARS,
+  GUEST_AUDIO_MAX_PARAGRAPHS,
+} from '@/shared/constants/guest-audio.constants';
 
 /** Must match mobile StoryContentContainer's wordsPerChunk */
 const WORDS_PER_CHUNK = 30;
@@ -225,6 +230,136 @@ export class TtsBatchService {
     };
   }
 
+  /**
+   * Guest variant of {@link batchTextToSpeechEager}. Differences, all
+   * deliberate:
+   *  - the voice is ALWAYS {@link DEFAULT_VOICE} (callers cannot override it);
+   *  - the cache lookup accepts ANY existing default-voice row regardless of
+   *    provider or voiceId spelling, so existing audio is never regenerated;
+   *  - never ElevenLabs: generation uses Deepgram (Edge TTS if its breaker is
+   *    open) and runs without a userId so no per-user quota rows are touched;
+   *  - hard caps on paragraphs considered and characters generated.
+   * Returns the same shape as the eager variant.
+   */
+  async batchTextToSpeechGuestEager(
+    storyId: string,
+    fullText: string,
+    options: {
+      eagerCount?: number;
+      maxParagraphs?: number;
+      maxGenerateChars?: number;
+    } = {},
+  ): Promise<Awaited<ReturnType<TtsBatchService['batchTextToSpeechEager']>>> {
+    const eagerCount = options.eagerCount ?? 2;
+    const maxParagraphs = options.maxParagraphs ?? GUEST_AUDIO_MAX_PARAGRAPHS;
+    const maxChars = options.maxGenerateChars ?? GUEST_AUDIO_MAX_GENERATE_CHARS;
+
+    if (!fullText?.trim())
+      return {
+        results: [],
+        totalParagraphs: 0,
+        wasTruncated: false,
+        usedProvider: 'none',
+        eagerFailed: false,
+        remainingUncached: [],
+        batchProvider: 'edgetts',
+        isPremium: false,
+      };
+
+    const { allParagraphCount, wasTruncated, hashMap } =
+      this.prepareBatchParagraphs(storyId, fullText, maxParagraphs);
+
+    const { cached, uncached: allUncached } =
+      await this.cache.rebuildCacheForDefaultVoice(hashMap, storyId);
+
+    // Character budget for NEW audio only; cache hits are free.
+    let budget = maxChars;
+    let charCapped = false;
+    const uncached: typeof allUncached = [];
+    for (const p of [...allUncached].sort((a, b) => a.index - b.index)) {
+      const len = preprocessTextForTTS(p.text).length;
+      if (len > budget) {
+        charCapped = true;
+        break;
+      }
+      budget -= len;
+      uncached.push(p);
+    }
+
+    // Guests never get ElevenLabs; fall back to Edge TTS if Deepgram is down.
+    const batchProvider: 'deepgram' | 'edgetts' =
+      this.deepgramBreaker.canExecute() ? 'deepgram' : 'edgetts';
+
+    const base = {
+      totalParagraphs: allParagraphCount,
+      wasTruncated: wasTruncated || charCapped,
+      batchProvider,
+      isPremium: false,
+    };
+
+    // Duplicate-text positions of cached paragraphs are already in `cached`.
+    if (uncached.length === 0) {
+      return {
+        ...base,
+        results: cached.sort((a, b) => a.index - b.index),
+        usedProvider: batchProvider,
+        eagerFailed: false,
+        remainingUncached: [],
+      };
+    }
+
+    const eagerParagraphs = uncached.slice(0, eagerCount);
+    const queued = uncached.slice(eagerCount);
+
+    const eager =
+      eagerParagraphs.length > 0
+        ? await this.generateBatchForProvider(
+            eagerParagraphs,
+            batchProvider,
+            storyId,
+            DEFAULT_VOICE,
+            undefined,
+            false,
+          )
+        : { results: [], failedCount: 0 };
+
+    const urlByHash = new Map<string, string>();
+    for (const { hash, audioUrl } of eager.results) {
+      if (audioUrl) urlByHash.set(hash, audioUrl);
+    }
+    const duplicates: Array<{ index: number; text: string; audioUrl: string }> =
+      [];
+    for (const [hash, entries] of hashMap) {
+      const url = urlByHash.get(hash);
+      if (!url) continue;
+      for (let i = 1; i < entries.length; i++) {
+        duplicates.push({
+          index: entries[i].index,
+          text: entries[i].text,
+          audioUrl: url,
+        });
+      }
+    }
+
+    const eagerFailed =
+      eagerParagraphs.length > 0 &&
+      eager.failedCount === eagerParagraphs.length;
+    const remainingUncached = [
+      ...eagerParagraphs.filter((p) => !urlByHash.has(p.hash)),
+      ...queued,
+    ];
+
+    return {
+      ...base,
+      results: [...cached, ...eager.results, ...duplicates]
+        .sort((a, b) => a.index - b.index)
+        .map(({ index, text, audioUrl }) => ({ index, text, audioUrl })),
+      usedProvider: batchProvider,
+      eagerFailed,
+      remainingUncached,
+    };
+  }
+
   async batchTextToSpeechCloudUrls(
     storyId: string,
     fullText: string,
@@ -402,6 +537,7 @@ export class TtsBatchService {
   private prepareBatchParagraphs(
     storyId: string,
     fullText: string,
+    maxParagraphs = MAX_BATCH_PARAGRAPHS,
   ): {
     allParagraphCount: number;
     wasTruncated: boolean;
@@ -412,13 +548,13 @@ export class TtsBatchService {
       WORDS_PER_CHUNK,
     );
 
-    const wasTruncated = allParagraphs.length > MAX_BATCH_PARAGRAPHS;
+    const wasTruncated = allParagraphs.length > maxParagraphs;
     if (wasTruncated) {
       this.logger.warn(
-        `Story ${storyId} has ${allParagraphs.length} paragraphs, capping at ${MAX_BATCH_PARAGRAPHS}`,
+        `Story ${storyId} has ${allParagraphs.length} paragraphs, capping at ${maxParagraphs}`,
       );
     }
-    const paragraphs = allParagraphs.slice(0, MAX_BATCH_PARAGRAPHS);
+    const paragraphs = allParagraphs.slice(0, maxParagraphs);
 
     const hashMap = new Map<string, Array<{ index: number; text: string }>>();
     for (let idx = 0; idx < paragraphs.length; idx++) {
