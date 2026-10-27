@@ -94,4 +94,14 @@ describe('Guest audio HTTP (real ThrottlerGuard + ValidationPipe, mocked service
     }
     expect(throttledAt).toBe(limit);
   });
+
+  it('status polling from one IP is not cut off by the default medium (50/10s) limit', async () => {
+    const batch = '0b9d6f0e-33d2-4b0a-8c1f-1a2b3c4d5e6f';
+    for (let i = 0; i < 60; i++) {
+      await request(app.getHttpServer())
+        .get(`/guest/stories/${STORY}/audio/${batch}`)
+        .set('x-guest-session-id', sessionN(500))
+        .expect(200);
+    }
+  });
 });

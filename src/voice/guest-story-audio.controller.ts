@@ -15,7 +15,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Public } from '@/shared/decorators/public.decorator';
 import { GUEST_AUDIO_THROTTLE } from '@/shared/constants/guest-audio.constants';
 import { GuestStoryAudioService } from './guest-story-audio.service';
@@ -75,6 +75,10 @@ export class GuestStoryAudioController {
 
   @Get(':storyId/audio/:batchJobId')
   @Public()
+  // The default `medium` (50 req / 10 s per IP) would throttle shared-IP
+  // polling (every client polls every ~2 s); this route is governed by its own
+  // short (per-IP/min) and long (per-session) limits below.
+  @SkipThrottle({ medium: true })
   @Throttle({
     short: { ...STATUS.ipPerMinute },
     long: { ...STATUS.perSession, getTracker: guestSessionTracker },

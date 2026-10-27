@@ -65,6 +65,12 @@ describe('GuestStoryAudioController', () => {
     expect(typeof meta('THROTTLER:TRACKERlong', h)).toBe('function');
   });
 
+  it('status route skips the inherited per-IP `medium` throttler (shared-IP polling)', () => {
+    expect(meta('THROTTLER:SKIPmedium', controller.getAudioStatus)).toBe(true);
+    // start route keeps its own explicit medium (hourly) limit
+    expect(meta('THROTTLER:SKIPmedium', controller.startAudio)).toBeUndefined();
+  });
+
   it('delegates start with the header session id and NEVER forwards a client voiceId', async () => {
     service.start.mockResolvedValue({ ok: true });
     const out = await controller.startAudio(STORY, { voiceId: 'x' }, SESSION);
