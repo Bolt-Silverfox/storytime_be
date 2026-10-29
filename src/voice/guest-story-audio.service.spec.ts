@@ -345,14 +345,14 @@ describe('GuestStoryAudioService — integration with real session + queue', () 
     const { sessionId } = await sessions.createGuestSession();
     const generate = jest.fn();
     const svc = new GuestStoryAudioService(
-      sessions as never,
+      sessions,
       {
         getStoryById: jest
           .fn()
           .mockResolvedValue({ id: STORY, textContent: 'x y z' }),
       } as never,
       { batchTextToSpeechForGuest: generate } as never,
-      queue as never,
+      queue,
     );
 
     await sessions.updateGuestProgress(sessionId, STORY, 60);
@@ -397,14 +397,14 @@ describe('GuestStoryAudioService — integration with real session + queue', () 
       ),
     };
     const svc = new GuestStoryAudioService(
-      sessions as never,
+      sessions,
       {
         getStoryById: jest
           .fn()
           .mockResolvedValue({ id: STORY, textContent: 'x y z' }),
       } as never,
       tts as never,
-      queue as never,
+      queue,
     );
 
     const [r1, r2] = await Promise.all([
@@ -439,14 +439,14 @@ describe('GuestStoryAudioService — integration with real session + queue', () 
       Promise.reject(new Error('redis down'));
     const generate = jest.fn().mockResolvedValue(eagerResult());
     const svc = new GuestStoryAudioService(
-      sessions as never,
+      sessions,
       {
         getStoryById: jest
           .fn()
           .mockResolvedValue({ id: STORY, textContent: 'x y z' }),
       } as never,
       { batchTextToSpeechForGuest: generate } as never,
-      queue as never,
+      queue,
     );
     const res = await svc.start(STORY, a.sessionId);
     expect(res.statusCode).toBe(200);
