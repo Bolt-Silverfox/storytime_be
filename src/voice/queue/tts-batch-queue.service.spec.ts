@@ -107,11 +107,11 @@ describe('TtsBatchQueueService', () => {
 
     it('findInFlightBatch returns the id only while that batch is processing', async () => {
       r().get.mockResolvedValue('b-1');
-      r().hgetall.mockResolvedValue({ status: 'processing' });
+      r().hgetall.mockResolvedValue({ status: 'processing', isGuest: '1' });
       await expect(service.findInFlightBatch('s', 'default')).resolves.toBe(
         'b-1',
       );
-      r().hgetall.mockResolvedValue({ status: 'completed' });
+      r().hgetall.mockResolvedValue({ status: 'completed', isGuest: '1' });
       await expect(
         service.findInFlightBatch('s', 'default'),
       ).resolves.toBeNull();
