@@ -87,6 +87,52 @@ describe('TtsBatchProcessor', () => {
       );
     });
 
+    it('never uses ElevenLabs for a guest job even if the job data says elevenlabs', async () => {
+      ttsService.generateSingleParagraphTTS.mockResolvedValue({
+        audioUrl: 'https://audio/0',
+      });
+
+      await processor.process(
+        makeJob({
+          userId: 'guest-session-uuid',
+          isGuest: true,
+          provider: 'elevenlabs',
+          paragraphs: [
+            { index: 0, text: 'a', hash: 'h0' },
+            { index: 1, text: 'b', hash: 'h1' },
+          ],
+          totalParagraphs: 2,
+        }),
+      );
+
+      const used = ttsService.generateSingleParagraphTTS.mock.calls.map(
+        (c) => c[4].providerOverride,
+      );
+      expect(used).toHaveLength(2);
+      expect(used).not.toContain('elevenlabs');
+    });
+
+    it('never falls back TO ElevenLabs when a guest provider fails', async () => {
+      ttsService.generateSingleParagraphTTS.mockRejectedValue(
+        new Error('boom'),
+      );
+      jest.useFakeTimers({ doNotFake: ['nextTick'] });
+      try {
+        const p = processor.process(
+          makeJob({ isGuest: true, userId: 'g', provider: 'edgetts' }),
+        );
+        await jest.runAllTimersAsync();
+        await p;
+      } finally {
+        jest.useRealTimers();
+      }
+      const used = ttsService.generateSingleParagraphTTS.mock.calls.map(
+        (c) => c[4].providerOverride,
+      );
+      expect(used.length).toBeGreaterThan(0);
+      expect(used).not.toContain('elevenlabs');
+    });
+
     it('still passes the userId for authenticated jobs', async () => {
       ttsService.generateSingleParagraphTTS.mockResolvedValue({
         audioUrl: 'https://audio/0',

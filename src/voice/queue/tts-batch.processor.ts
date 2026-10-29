@@ -160,7 +160,9 @@ export class TtsBatchProcessor extends WorkerHost {
     // Shared hint: once we learn a provider is quota-exhausted, later paragraphs
     // start straight from the next provider instead of re-hitting the dead one.
     // It only ever moves forwards through PROVIDER_ORDER.
-    let preferredProvider: TtsProvider = provider;
+    // Guests are never served by ElevenLabs, even if the job data asks for it.
+    let preferredProvider: TtsProvider =
+      isGuest && provider === 'elevenlabs' ? 'deepgram' : provider;
 
     const advancePreferred = (exhausted: TtsProvider): void => {
       const next = PROVIDER_FALLBACK[exhausted]?.[0];

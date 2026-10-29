@@ -105,6 +105,6 @@ describe('Guest audio HTTP (real ThrottlerGuard + ValidationPipe, mocked service
           .set('x-guest-session-id', sessionN(500)),
       ),
     );
-    expect(responses.filter((r) => r.status === 429)).toHaveLength(0);
+    expect(responses.map((r) => r.status)).toEqual(Array(60).fill(200));
   });
 });
