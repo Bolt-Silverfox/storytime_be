@@ -266,8 +266,11 @@ export class TtsBatchService {
         isPremium: false,
       };
 
-    const { allParagraphCount, wasTruncated, hashMap } =
-      this.prepareBatchParagraphs(storyId, fullText, maxParagraphs);
+    const { wasTruncated, hashMap } = this.prepareBatchParagraphs(
+      storyId,
+      fullText,
+      maxParagraphs,
+    );
 
     const { cached, uncached: allUncached } =
       await this.cache.rebuildCacheForDefaultVoice(hashMap, storyId);
@@ -290,8 +293,20 @@ export class TtsBatchService {
     const batchProvider: 'deepgram' | 'edgetts' =
       this.deepgramBreaker.canExecute() ? 'deepgram' : 'edgetts';
 
+    // totalParagraphs is what this response can actually serve: paragraphs
+    // beyond the paragraph cap or over the character budget are never queued,
+    // so counting them would leave a client progress indicator unfinished.
+    const keptHashes = new Set(uncached.map((p) => p.hash));
+    const droppedHashes = new Set(
+      allUncached.filter((p) => !keptHashes.has(p.hash)).map((p) => p.hash),
+    );
+    let servableParagraphs = 0;
+    for (const [hash, entries] of hashMap) {
+      if (!droppedHashes.has(hash)) servableParagraphs += entries.length;
+    }
+
     const base = {
-      totalParagraphs: allParagraphCount,
+      totalParagraphs: servableParagraphs,
       wasTruncated: wasTruncated || charCapped,
       batchProvider,
       isPremium: false,

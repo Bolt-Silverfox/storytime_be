@@ -225,6 +225,9 @@ describe('TextToSpeechService.batchTextToSpeechForGuest', () => {
       maxParagraphs: 4,
     });
     expect(res.wasTruncated).toBe(true);
+    // totalParagraphs reflects what can actually be served, so a client
+    // progress indicator can finish (it used to say 10 for 4 served).
+    expect(res.totalParagraphs).toBe(4);
     expect(res.remainingUncached.map((p) => p.index)).toEqual([0, 1, 2, 3]);
     expect(mockDeepgramGenerate).not.toHaveBeenCalled();
   });
@@ -243,6 +246,8 @@ describe('TextToSpeechService.batchTextToSpeechForGuest', () => {
     // 5 uncached, only 2 fit under the char budget.
     expect(res.remainingUncached).toHaveLength(2);
     expect(res.wasTruncated).toBe(true);
+    // 1 cached + 2 queued = 3 servable; the 3 over the char budget are not.
+    expect(res.totalParagraphs).toBe(3);
     expect(res.results.map((r) => r.index)).toContain(0);
   });
 
