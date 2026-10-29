@@ -120,7 +120,9 @@ export class TtsBatchQueueService implements OnModuleDestroy {
       const meta = await this.redis.hgetall(
         `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:meta`,
       );
-      return meta.status === TtsBatchStatus.PROCESSING ? batchJobId : null;
+      return (meta.status as TtsBatchStatus) === TtsBatchStatus.PROCESSING
+        ? batchJobId
+        : null;
     } catch {
       return null;
     }
