@@ -97,10 +97,10 @@ export class GuestStoryAudioController {
   })
   @ApiResponse({ status: 429, description: 'Throttled' })
   getAudioStatus(
-    @Param('storyId', ParseUUIDPipe) _storyId: string,
+    @Param('storyId', ParseUUIDPipe) storyId: string,
     @Param('batchJobId', ParseUUIDPipe) batchJobId: string,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
-    return this.audio.status(batchJobId, guestSessionId);
+    return this.audio.status(storyId, batchJobId, guestSessionId);
   }
 }

@@ -87,6 +87,7 @@ describe('GuestStoryAudioController', () => {
       SESSION,
     );
     expect(service.status).toHaveBeenCalledWith(
+      STORY,
       '0b9d6f0e-33d2-4b0a-8c1f-1a2b3c4d5e6f',
       SESSION,
     );

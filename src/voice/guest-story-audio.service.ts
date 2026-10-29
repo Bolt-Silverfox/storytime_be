@@ -76,39 +76,60 @@ export class GuestStoryAudioService {
       throw new ForbiddenException('Open the story before requesting audio.');
     }
 
+    // Serialise generation per (story, voice): a concurrent start waits for the
+    // first, then hits the cache and joins its in-flight batch.
+    const lock = await this.queue.acquireStartLock(storyId, DEFAULT_VOICE);
+    let generated: Awaited<
+      ReturnType<TextToSpeechService['batchTextToSpeechForGuest']>
+    >;
+    let batchJobId: string | undefined;
+    let pendingParagraphs: number | undefined;
+    try {
+      // A batch already in flight owns the still-uncached paragraphs: look
+      // them up (cache only, eagerCount 0) and join it rather than generating
+      // them a second time inline.
+      const inFlight = await this.queue.findInFlightBatch(
+        storyId,
+        DEFAULT_VOICE,
+      );
+      generated = await this.tts.batchTextToSpeechForGuest(
+        storyId,
+        story.textContent,
+        { eagerCount: inFlight ? 0 : GUEST_AUDIO_EAGER_PARAGRAPHS },
+      );
+      const { remainingUncached, totalParagraphs, batchProvider } = generated;
+      if (remainingUncached.length > 0) {
+        try {
+          batchJobId =
+            inFlight ??
+            (await this.queue.queueBatch({
+              storyId,
+              voiceId: DEFAULT_VOICE,
+              userId: sessionId,
+              isGuest: true,
+              isPremium: false,
+              provider: batchProvider,
+              paragraphs: remainingUncached,
+              totalParagraphs,
+            }));
+          pendingParagraphs = remainingUncached.length;
+        } catch (error) {
+          this.logger.error(
+            `Failed to queue guest TTS batch for story ${storyId}: ${(error as Error).message}`,
+          );
+          // Return eager results without a batchJobId rather than a 500.
+        }
+      }
+    } finally {
+      await lock.release();
+    }
     const {
       results: paragraphs,
       totalParagraphs,
       wasTruncated,
       usedProvider,
       remainingUncached,
-      batchProvider,
-    } = await this.tts.batchTextToSpeechForGuest(storyId, story.textContent, {
-      eagerCount: GUEST_AUDIO_EAGER_PARAGRAPHS,
-    });
-
-    let batchJobId: string | undefined;
-    let pendingParagraphs: number | undefined;
-    if (remainingUncached.length > 0) {
-      try {
-        batchJobId = await this.queue.queueBatch({
-          storyId,
-          voiceId: DEFAULT_VOICE,
-          userId: sessionId,
-          isGuest: true,
-          isPremium: false,
-          provider: batchProvider,
-          paragraphs: remainingUncached,
-          totalParagraphs,
-        });
-        pendingParagraphs = remainingUncached.length;
-      } catch (error) {
-        this.logger.error(
-          `Failed to queue guest TTS batch for story ${storyId}: ${(error as Error).message}`,
-        );
-        // Return eager results without a batchJobId rather than a 500.
-      }
-    }
+    } = generated;
 
     const textByIndex = new Map<number, string>();
     for (const p of paragraphs) {
@@ -135,9 +156,24 @@ export class GuestStoryAudioService {
     };
   }
 
-  async status(batchJobId: string, guestSessionId: string | undefined) {
+  async status(
+    storyId: string,
+    batchJobId: string,
+    guestSessionId: string | undefined,
+  ) {
     const sessionId = this.assertSessionId(guestSessionId);
-    const status = await this.queue.getBatchStatus(batchJobId, sessionId);
+    const session = await this.guestSessions.getGuestSession(sessionId);
+    if (!session) {
+      throw new UnauthorizedException(
+        'Your guest session has expired. Please refresh the page to continue.',
+      );
+    }
+    // Scoped to the story in the URL; guest batches are shared by all guest
+    // sessions on that story (concurrent starts join one batch).
+    const status = await this.queue.getBatchStatus(batchJobId, sessionId, {
+      storyId,
+      allowSharedGuest: true,
+    });
     if (!status) {
       throw new NotFoundException(
         'Batch not found or expired. Completed paragraphs remain usable.',

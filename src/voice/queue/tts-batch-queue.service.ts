@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { randomUUID } from 'crypto';
+import { setTimeout as sleep } from 'timers/promises';
 import {
   TTS_BATCH_QUEUE_NAME,
   TTS_BATCH_JOB_NAMES,
@@ -18,6 +19,21 @@ import {
 } from './tts-batch-job.interface';
 import { TTS_BATCH_REDIS } from './tts-batch-redis.provider';
 
+/** Max time a start holds the per-(story, voice) lock (crash safety). */
+const START_LOCK_TTL_SECONDS = 60;
+/** How long a second start waits for the first before failing open. */
+const START_LOCK_WAIT_MS = 20_000;
+const START_LOCK_POLL_MS = 200;
+
+const RELEASE_LOCK_SCRIPT =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+
+export interface StartLock {
+  release(): Promise<void>;
+}
+
+const NOOP_LOCK: StartLock = { release: () => Promise.resolve() };
+
 @Injectable()
 export class TtsBatchQueueService implements OnModuleDestroy {
   private readonly logger = new Logger(TtsBatchQueueService.name);
@@ -31,6 +47,83 @@ export class TtsBatchQueueService implements OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     await this.redis.quit();
+  }
+
+  private inFlightKey(storyId: string, voiceId: string): string {
+    return `${TTS_BATCH_REDIS_PREFIX}:inflight:${storyId}:${voiceId}`;
+  }
+
+  /**
+   * Serialises "check cache -> generate -> queue" for one (story, voice) so two
+   * simultaneous starts do not both generate the same paragraphs. A second
+   * caller waits (bounded) for the first to finish, after which its own cache
+   * lookup hits and it joins the in-flight batch via {@link findInFlightBatch}.
+   * NEVER throws: if Redis is unavailable, or the wait budget is exhausted, it
+   * returns a no-op lock so the caller proceeds exactly as before.
+   */
+  async acquireStartLock(
+    storyId: string,
+    voiceId: string,
+    opts: { waitMs?: number; pollMs?: number } = {},
+  ): Promise<StartLock> {
+    const key = `${TTS_BATCH_REDIS_PREFIX}:start-lock:${storyId}:${voiceId}`;
+    const token = randomUUID();
+    const waitMs = opts.waitMs ?? START_LOCK_WAIT_MS;
+    const pollMs = opts.pollMs ?? START_LOCK_POLL_MS;
+    const deadline = Date.now() + waitMs;
+    try {
+      for (;;) {
+        const ok = await this.redis.set(
+          key,
+          token,
+          'EX',
+          START_LOCK_TTL_SECONDS,
+          'NX',
+        );
+        if (ok === 'OK') {
+          return {
+            release: async () => {
+              try {
+                await this.redis.eval(RELEASE_LOCK_SCRIPT, 1, key, token);
+              } catch {
+                // best effort: the TTL frees it
+              }
+            },
+          };
+        }
+        if (Date.now() >= deadline) {
+          this.logger.warn(
+            `Start lock for ${storyId}/${voiceId} still held after ${waitMs}ms; proceeding without it`,
+          );
+          return NOOP_LOCK;
+        }
+        await sleep(pollMs);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Start lock unavailable for ${storyId}/${voiceId}: ${(error as Error).message}`,
+      );
+      return NOOP_LOCK;
+    }
+  }
+
+  /** The still-processing batch for (story, voice), if any. Never throws. */
+  async findInFlightBatch(
+    storyId: string,
+    voiceId: string,
+  ): Promise<string | null> {
+    try {
+      const batchJobId = await this.redis.get(
+        this.inFlightKey(storyId, voiceId),
+      );
+      if (!batchJobId) return null;
+      const meta = await this.redis.hgetall(
+        `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:meta`,
+      );
+      return meta.status === TtsBatchStatus.PROCESSING ? batchJobId : null;
+    } catch {
+      return null;
+    }
   }
 
   async queueBatch(data: Omit<TtsBatchJobData, 'batchJobId'>): Promise<string> {
@@ -48,6 +141,8 @@ export class TtsBatchQueueService implements OnModuleDestroy {
       status: TtsBatchStatus.PROCESSING,
       totalQueued: String(data.paragraphs.length),
       userId: data.userId,
+      storyId: data.storyId,
+      ...(data.isGuest ? { isGuest: '1' } : {}),
     });
     // Create empty hash/set so keys exist for TTL
     pipeline.hset(completedKey, '_placeholder', '');
@@ -70,6 +165,21 @@ export class TtsBatchQueueService implements OnModuleDestroy {
       // Clean up Redis state keys so getBatchStatus won't report a stuck batch
       await this.redis.del(metaKey, completedKey, failedKey);
       throw error;
+    }
+
+    // Marker so a concurrent/subsequent start for the same (story, voice) can
+    // join this batch instead of generating the same paragraphs again.
+    try {
+      await this.redis.set(
+        this.inFlightKey(data.storyId, data.voiceId),
+        batchJobId,
+        'EX',
+        TTS_BATCH_REDIS_TTL,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not record in-flight marker for ${data.storyId}: ${(error as Error).message}`,
+      );
     }
 
     this.logger.log(
@@ -150,6 +260,7 @@ export class TtsBatchQueueService implements OnModuleDestroy {
   async getBatchStatus(
     batchJobId: string,
     userId?: string,
+    opts: { storyId?: string; allowSharedGuest?: boolean } = {},
   ): Promise<TtsBatchStatusResponse | null> {
     const metaKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:meta`;
     const completedKey = `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:completed`;
@@ -159,7 +270,13 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     if (!meta.status) return null;
 
     // Verify ownership if userId is provided
-    if (userId && meta.userId && meta.userId !== userId) return null;
+    // Guest batches are shared by every guest session on the same story
+    // (concurrent starts join one batch); they only contain public audio URLs.
+    const sharedGuest = opts.allowSharedGuest === true && meta.isGuest === '1';
+    if (userId && meta.userId && meta.userId !== userId && !sharedGuest) {
+      return null;
+    }
+    if (opts.storyId && meta.storyId !== opts.storyId) return null;
 
     const completedMap = await this.redis.hgetall(completedKey);
     const failedMembers = await this.redis.smembers(failedKey);
