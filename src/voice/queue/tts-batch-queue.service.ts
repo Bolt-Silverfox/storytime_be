@@ -49,8 +49,12 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     await this.redis.quit();
   }
 
-  private inFlightKey(storyId: string, voiceId: string): string {
-    return `${TTS_BATCH_REDIS_PREFIX}:inflight:${storyId}:${voiceId}`;
+  /**
+   * Scoped by audience: guest batches are pollable by any guest session, paid
+   * batches only by their owner, so a guest must never be handed a paid batch.
+   */
+  private inFlightKey(storyId: string, voiceId: string, guest: boolean) {
+    return `${TTS_BATCH_REDIS_PREFIX}:inflight:${guest ? 'guest' : 'paid'}:${storyId}:${voiceId}`;
   }
 
   /**
@@ -107,20 +111,21 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     }
   }
 
-  /** The still-processing batch for (story, voice), if any. Never throws. */
+  /** The still-processing GUEST batch for (story, voice), if any. Never throws. */
   async findInFlightBatch(
     storyId: string,
     voiceId: string,
   ): Promise<string | null> {
     try {
       const batchJobId = await this.redis.get(
-        this.inFlightKey(storyId, voiceId),
+        this.inFlightKey(storyId, voiceId, true),
       );
       if (!batchJobId) return null;
       const meta = await this.redis.hgetall(
         `${TTS_BATCH_REDIS_PREFIX}:${batchJobId}:meta`,
       );
-      return (meta.status as TtsBatchStatus) === TtsBatchStatus.PROCESSING
+      return (meta.status as TtsBatchStatus) === TtsBatchStatus.PROCESSING &&
+        meta.isGuest === '1'
         ? batchJobId
         : null;
     } catch {
@@ -173,7 +178,7 @@ export class TtsBatchQueueService implements OnModuleDestroy {
     // join this batch instead of generating the same paragraphs again.
     try {
       await this.redis.set(
-        this.inFlightKey(data.storyId, data.voiceId),
+        this.inFlightKey(data.storyId, data.voiceId, data.isGuest === true),
         batchJobId,
         'EX',
         TTS_BATCH_REDIS_TTL,

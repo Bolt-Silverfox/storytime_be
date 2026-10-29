@@ -121,6 +121,61 @@ describe('TtsBatchQueueService', () => {
       ).resolves.toBeNull();
     });
 
+    it('in-flight marker is audience-scoped: a paid batch is never handed to a guest; guest batches still join', async () => {
+      const kv = new Map<string, string>();
+      const meta = new Map<string, Record<string, string>>();
+      const pl = () => {
+        const p: Record<string, unknown> = {};
+        p.hset = (k: string, f: Record<string, string> | string) => {
+          if (typeof f !== 'string') meta.set(k, f);
+          return p;
+        };
+        p.sadd = () => p;
+        p.expire = () => p;
+        p.exec = () => Promise.resolve([]);
+        return p;
+      };
+      r().pipeline = jest.fn(pl);
+      r().set = jest.fn((k: string, v: string) => {
+        kv.set(k, v);
+        return Promise.resolve('OK');
+      });
+      r().get = jest.fn((k: string) => Promise.resolve(kv.get(k) ?? null));
+      r().hgetall = jest.fn((k: string) => Promise.resolve(meta.get(k) ?? {}));
+      const base = {
+        storyId: 'story-1',
+        voiceId: 'default',
+        userId: 'u',
+        isPremium: false,
+        provider: 'deepgram' as const,
+        paragraphs: [{ index: 0, text: 'a', hash: 'h' }],
+        totalParagraphs: 1,
+      };
+
+      await service.queueBatch({
+        ...base,
+        voiceId: 'default',
+        userId: 'paid-user',
+      });
+      await expect(
+        service.findInFlightBatch('story-1', 'default'),
+      ).resolves.toBeNull();
+
+      const g1 = await service.queueBatch({
+        ...base,
+        userId: 'g1',
+        isGuest: true,
+      });
+      await expect(
+        service.findInFlightBatch('story-1', 'default'),
+      ).resolves.toBe(g1);
+      // a later paid batch must not displace the guest marker
+      await service.queueBatch({ ...base, userId: 'paid-2' });
+      await expect(
+        service.findInFlightBatch('story-1', 'default'),
+      ).resolves.toBe(g1);
+    });
+
     it('getBatchStatus: story mismatch -> null; guest batches are readable by other guests only when opted in', async () => {
       r().hgetall.mockImplementation((k: string) =>
         Promise.resolve(
