@@ -70,4 +70,20 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ ...base, WEB_APP_BASE_URL: 'nope' })).toThrow();
     expect(() => validateEnv({ ...base, FIREBASE_PROJECT_ID: 'p' })).toThrow();
   });
+
+  it('TRUST_PROXY_HOPS defaults to 0, coerces strings, blank means default', () => {
+    expect(validateEnv(base).TRUST_PROXY_HOPS).toBe(0);
+    expect(
+      validateEnv({ ...base, TRUST_PROXY_HOPS: '1' }).TRUST_PROXY_HOPS,
+    ).toBe(1);
+    expect(
+      validateEnv({ ...base, TRUST_PROXY_HOPS: ' ' }).TRUST_PROXY_HOPS,
+    ).toBe(0);
+  });
+
+  it('TRUST_PROXY_HOPS rejects junk, negatives and fractions at startup', () => {
+    for (const v of ['abc', '-1', '1.5']) {
+      expect(() => validateEnv({ ...base, TRUST_PROXY_HOPS: v })).toThrow();
+    }
+  });
 });
