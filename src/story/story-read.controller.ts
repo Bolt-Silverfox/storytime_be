@@ -19,6 +19,7 @@ import {
 } from '@/shared/guards/story-access.guard';
 import { CheckStoryQuota } from '@/shared/decorators/story-quota.decorator';
 import { StoryQuotaService } from './story-quota.service';
+import { SceneReadService } from './scenes/scene-read.service';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -28,6 +29,7 @@ export class StoryReadController {
   constructor(
     private readonly storyService: StoryService,
     private readonly storyQuotaService: StoryQuotaService,
+    private readonly sceneReadService: SceneReadService,
   ) {}
 
   @Get(':id')
@@ -75,6 +77,11 @@ export class StoryReadController {
       );
     }
 
-    return story;
+    // Additive: backend page split + approved, non-stale scene art.
+    const extras = await this.sceneReadService.getReadExtras(
+      story.id,
+      story.textContent,
+    );
+    return { ...story, ...extras };
   }
 }

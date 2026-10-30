@@ -20,6 +20,7 @@ import { StoryLibraryController } from './story-library.controller';
 import { StoryRecommendationController } from './story-recommendation.controller';
 import { StoryAsyncController } from './story-async.controller';
 import { StoryService } from './story.service';
+import { SceneModule } from './scenes/scene.module';
 import { StoryFeedService } from './story-feed.service';
 import { StoryProgressService } from './story-progress.service';
 import { StoryRecommendationService } from './story-recommendation.service';
@@ -67,6 +68,7 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
     AuthModule,
     SubscriptionModule,
     UploadModule,
+    SceneModule,
     NotificationModule,
     PrismaModule,
     forwardRef(() => VoiceModule),
