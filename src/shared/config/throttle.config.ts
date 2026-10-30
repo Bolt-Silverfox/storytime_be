@@ -59,3 +59,15 @@ export const throttleConfig: ThrottlerModuleOptions & {
     },
   ],
 };
+
+/**
+ * Non-prod rate-limit relaxation shared by the global throttlers (app.module)
+ * and per-route overrides. Only explicit non-prod envs are relaxed; unknown or
+ * missing NODE_ENV stays strict (production).
+ */
+export const nonProdThrottleMultiplier = (nodeEnv?: string): number =>
+  ['development', 'staging', 'test', 'local'].includes(
+    (nodeEnv ?? 'production').toLowerCase(),
+  )
+    ? 100
+    : 1;

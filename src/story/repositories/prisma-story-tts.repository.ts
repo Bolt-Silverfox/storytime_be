@@ -57,6 +57,31 @@ export class PrismaStoryTtsRepository implements IStoryTtsRepository {
     });
   }
 
+  async findParagraphAudioForVoices(
+    storyId: string,
+    voiceIds: string[],
+    textHashes: string[],
+  ): Promise<ParagraphAudioCache[]> {
+    return this.prisma.paragraphAudioCache.findMany({
+      where: {
+        storyId,
+        voiceId: { in: voiceIds },
+        textHash: { in: textHashes },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findVoiceIdsByElevenLabsId(
+    elevenLabsVoiceId: string,
+  ): Promise<string[]> {
+    const voices = await this.prisma.voice.findMany({
+      where: { elevenLabsVoiceId, isDeleted: false },
+      select: { id: true },
+    });
+    return voices.map((v) => v.id);
+  }
+
   async findVoiceByIdOrName(type: string): Promise<Voice | null> {
     return this.prisma.voice.findFirst({
       where: {

@@ -9,6 +9,8 @@ import { NotificationModule } from '../notification/notification.module';
 import { GuestModule } from '../guest/guest.module';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { VoiceController } from './voice.controller';
+import { GuestStoryAudioController } from './guest-story-audio.controller';
+import { GuestStoryAudioService } from './guest-story-audio.service';
 import { VoiceService } from './voice.service';
 import { SpeechToTextService } from './speech-to-text.service';
 import { ElevenLabsTTSProvider } from './providers/eleven-labs-tts.provider';
@@ -55,9 +57,10 @@ import {
     forwardRef(() => GuestModule),
     BullModule.registerQueue({ name: TTS_BATCH_QUEUE_NAME }),
   ],
-  controllers: [VoiceController],
+  controllers: [VoiceController, GuestStoryAudioController],
   providers: [
     VoiceService,
+    GuestStoryAudioService,
     VoiceResponseMapper,
     VoiceCatalogService,
     VoicePreferenceService,
