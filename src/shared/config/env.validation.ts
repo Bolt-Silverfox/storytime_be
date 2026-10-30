@@ -3,9 +3,11 @@ import { Logger } from '@nestjs/common';
 
 export const envSchema = z
   .object({
+    // Unset must be strict: nonProdThrottleMultiplier relaxes rate limits for
+    // development/staging, so an absent NODE_ENV defaults to 'production'.
     NODE_ENV: z
       .enum(['development', 'production', 'staging'])
-      .default('development'),
+      .default('production'),
     PORT: z.coerce.number().default(3000),
     // Number of reverse-proxy hops in front of the app (Caddy = 1). 0 = none.
     // Blank means "use the default" (see ELEVEN_LABS_QUOTA_COOLDOWN_MS below).

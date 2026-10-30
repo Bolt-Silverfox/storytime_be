@@ -3,11 +3,7 @@ import { Injectable } from '@nestjs/common';
 import type { IStoryTtsRepository } from '../repositories/story-tts.repository.interface';
 import { preprocessTextForTTS } from './tts-text.util';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../../voice/dto/voice.dto';
-import {
-  DEFAULT_VOICE,
-  legacyDefaultAliasCutoff,
-  VOICE_CONFIG,
-} from '../../voice/voice.constants';
+import { DEFAULT_VOICE, VOICE_CONFIG } from '../../voice/voice.constants';
 
 /** Best-first. Rows written before provider tracking carry 'unknown'. */
 const PROVIDER_RANK = ['elevenlabs', 'deepgram', 'edgetts', 'unknown'];
@@ -182,11 +178,6 @@ export class TtsCacheService {
     }>;
   }> {
     const aliases = await this.getDefaultVoiceAliases();
-    const legacyKeys = new Set(
-      Object.entries(VOICE_TYPE_MIGRATION_MAP)
-        .filter(([, target]: [string, VoiceType]) => target === DEFAULT_VOICE)
-        .map(([k]) => k),
-    );
     const rows = await this.ttsRepository.findParagraphAudioForVoices(
       storyId,
       aliases,
@@ -196,17 +187,6 @@ export class TtsCacheService {
     // provider -> hash -> newest audioUrl (rows arrive newest first)
     const byProvider = new Map<string, Map<string, string>>();
     for (const row of rows) {
-      // Rows under the 'default' placeholder or a legacy voice name (LILY)
-      // were only the current Nimbus voice from a per-provider instant; older
-      // ones are a different voice and must not be served as Nimbus.
-      const isPlaceholder = row.voiceId === 'default';
-      if (
-        (isPlaceholder || legacyKeys.has(row.voiceId)) &&
-        new Date(row.createdAt) <
-          legacyDefaultAliasCutoff(row.provider, isPlaceholder)
-      ) {
-        continue;
-      }
       const perHash = byProvider.get(row.provider) ?? new Map<string, string>();
       if (!perHash.has(row.textHash)) perHash.set(row.textHash, row.audioUrl);
       byProvider.set(row.provider, perHash);
