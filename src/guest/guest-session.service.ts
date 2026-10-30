@@ -445,14 +445,21 @@ export class GuestSessionService implements OnModuleInit {
       completed === true ||
       clampedProgress >= 100;
 
-    // Update reading history when there is progress, a completion signal, or
-    // an existing entry to preserve.
-    if (clampedProgress > 0 || isCompleted || existing) {
+    // Progress may only update a story that was already opened through
+    // recordNewStoryAccess (GET guest/stories/:id), which enforces the
+    // story-exists check and the 3-story quota. Creating an entry here would
+    // let POST /guest/progress mark arbitrary stories as "opened" and unlock
+    // guest audio generation for them.
+    if (existing) {
       session.readingHistory[storyId] = {
         progress: clampedProgress,
         completed: isCompleted,
         lastReadAt: new Date(),
       };
+    } else {
+      this.logger.warn(
+        `Ignoring progress for unopened story ${storyId} (session ${this.maskSessionId(sessionId)})`,
+      );
     }
 
     // Update last active timestamp

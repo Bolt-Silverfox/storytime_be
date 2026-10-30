@@ -59,6 +59,91 @@ describe('TtsBatchProcessor', () => {
     );
   });
 
+  describe('guest jobs', () => {
+    it('never passes the guest session id to TTS as a userId (no per-user quota rows for sessions)', async () => {
+      ttsService.generateSingleParagraphTTS.mockResolvedValue({
+        audioUrl: 'https://audio/0',
+      });
+
+      await processor.process(
+        makeJob({
+          userId: 'guest-session-uuid',
+          isGuest: true,
+          provider: 'deepgram',
+        }),
+      );
+
+      const [, , , userIdArg, opts] =
+        ttsService.generateSingleParagraphTTS.mock.calls[0];
+      expect(userIdArg).toBeUndefined();
+      expect(opts.providerOverride).not.toBe('elevenlabs');
+      // SSE / ownership still keyed by the session id.
+      expect(jobEvents.emitVoiceParagraphReady).toHaveBeenCalledWith(
+        'batch-1',
+        'guest-session-uuid',
+        0,
+        'https://audio/0',
+        expect.any(Number),
+      );
+    });
+
+    it('never uses ElevenLabs for a guest job even if the job data says elevenlabs', async () => {
+      ttsService.generateSingleParagraphTTS.mockResolvedValue({
+        audioUrl: 'https://audio/0',
+      });
+
+      await processor.process(
+        makeJob({
+          userId: 'guest-session-uuid',
+          isGuest: true,
+          provider: 'elevenlabs',
+          paragraphs: [
+            { index: 0, text: 'a', hash: 'h0' },
+            { index: 1, text: 'b', hash: 'h1' },
+          ],
+          totalParagraphs: 2,
+        }),
+      );
+
+      const used = ttsService.generateSingleParagraphTTS.mock.calls.map(
+        (c) => c[4].providerOverride,
+      );
+      expect(used).toHaveLength(2);
+      expect(used).not.toContain('elevenlabs');
+    });
+
+    it('never falls back TO ElevenLabs when a guest provider fails', async () => {
+      ttsService.generateSingleParagraphTTS.mockRejectedValue(
+        new Error('boom'),
+      );
+      jest.useFakeTimers({ doNotFake: ['nextTick'] });
+      try {
+        const p = processor.process(
+          makeJob({ isGuest: true, userId: 'g', provider: 'edgetts' }),
+        );
+        await jest.runAllTimersAsync();
+        await p;
+      } finally {
+        jest.useRealTimers();
+      }
+      const used = ttsService.generateSingleParagraphTTS.mock.calls.map(
+        (c) => c[4].providerOverride,
+      );
+      expect(used.length).toBeGreaterThan(0);
+      expect(used).not.toContain('elevenlabs');
+    });
+
+    it('still passes the userId for authenticated jobs', async () => {
+      ttsService.generateSingleParagraphTTS.mockResolvedValue({
+        audioUrl: 'https://audio/0',
+      });
+      await processor.process(makeJob());
+      expect(ttsService.generateSingleParagraphTTS.mock.calls[0][3]).toBe(
+        'user-1',
+      );
+    });
+  });
+
   describe('duplicate outcome counting', () => {
     it('counts every duplicate index on success', async () => {
       ttsService.generateSingleParagraphTTS.mockResolvedValue({

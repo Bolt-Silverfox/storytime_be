@@ -112,7 +112,7 @@ export class TextToSpeechService {
     storyId: string,
     text: string,
     voiceType: string,
-    userId: string,
+    userId: string | undefined,
     options: {
       isPremium: boolean;
       providerOverride: 'elevenlabs' | 'deepgram' | 'edgetts';
@@ -130,6 +130,22 @@ export class TextToSpeechService {
       },
     );
     return { audioUrl: result.audioUrl, provider: result.provider };
+  }
+
+  /**
+   * Guest variant: forced default voice, cross-provider cache reuse, never
+   * ElevenLabs, hard caps. See {@link TtsBatchService.batchTextToSpeechGuestEager}.
+   */
+  async batchTextToSpeechForGuest(
+    storyId: string,
+    fullText: string,
+    options?: {
+      eagerCount?: number;
+      maxParagraphs?: number;
+      maxGenerateChars?: number;
+    },
+  ) {
+    return this.batch.batchTextToSpeechGuestEager(storyId, fullText, options);
   }
 
   async batchTextToSpeechEager(
