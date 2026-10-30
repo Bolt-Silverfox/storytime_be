@@ -3,11 +3,46 @@ import { VoiceType } from './dto/voice.dto';
 export const DEFAULT_VOICE = VoiceType.NIMBUS;
 
 /**
- * When NIMBUS became the default voice (commit 896ac37, 2026-02-26). Rows
- * stored under the 'default' placeholder before this were synthesized with the
- * previous default (CHARLIE, then LILY) and must not be served as NIMBUS.
+ * The current Nimbus voice is the one that used to be called LILY (the
+ * 896ac37 rename of LILY -> NIMBUS changed no voice settings). Cached audio
+ * stored under the legacy 'LILY' alias or the 'default' placeholder is only
+ * that voice from when each PROVIDER started producing it (commit author
+ * instants, UTC):
+ *  - elevenlabs: 360506b swapped LILY's ElevenLabs id to XrExE9yKIg1WjnnlVkGX
+ *    (before that it was pFZP5JQG7iQjIQuC4Bku). 'unknown' (pre-provider-
+ *    tracking) rows take the same, strictest, instant.
+ *  - edgetts: en-US-AvaMultilingualNeural has been LILY's since 0ea184a.
+ *  - deepgram: aura-2-hera-en since 3080ad5 (Deepgram was reintroduced there).
+ * The 'default' placeholder additionally meant CHARLIE until 7fc2139 made LILY
+ * the default.
  */
-export const DEFAULT_VOICE_NIMBUS_SINCE = new Date('2026-02-26T09:57:19Z');
+export const NIMBUS_VOICE_CURRENT_SINCE: Record<string, Date> = {
+  elevenlabs: new Date('2026-02-23T22:35:22Z'),
+  edgetts: new Date('2026-02-21T18:52:17Z'),
+  deepgram: new Date('2026-02-24T22:27:04Z'),
+  unknown: new Date('2026-02-23T22:35:22Z'),
+};
+/** 7fc2139: DEFAULT_VOICE changed from CHARLIE to LILY (today's NIMBUS). */
+export const DEFAULT_PLACEHOLDER_IS_NIMBUS_SINCE = new Date(
+  '2026-02-22T16:13:26Z',
+);
+
+/**
+ * Earliest instant a row stored under a legacy default alias is really the
+ * current Nimbus voice for its provider. `isPlaceholder` is true for the
+ * 'default' alias, false for legacy voice names such as 'LILY'.
+ */
+export const legacyDefaultAliasCutoff = (
+  provider: string,
+  isPlaceholder: boolean,
+): Date => {
+  const providerSince =
+    NIMBUS_VOICE_CURRENT_SINCE[provider] ?? NIMBUS_VOICE_CURRENT_SINCE.unknown;
+  return isPlaceholder &&
+    DEFAULT_PLACEHOLDER_IS_NIMBUS_SINCE.getTime() > providerSince.getTime()
+    ? DEFAULT_PLACEHOLDER_IS_NIMBUS_SINCE
+    : providerSince;
+};
 
 export const VOICE_AVATARS: Record<VoiceType, string> = {
   [VoiceType.MILO]:

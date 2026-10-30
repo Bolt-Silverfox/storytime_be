@@ -5,7 +5,7 @@ import { preprocessTextForTTS } from './tts-text.util';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../../voice/dto/voice.dto';
 import {
   DEFAULT_VOICE,
-  DEFAULT_VOICE_NIMBUS_SINCE,
+  legacyDefaultAliasCutoff,
   VOICE_CONFIG,
 } from '../../voice/voice.constants';
 
@@ -182,6 +182,11 @@ export class TtsCacheService {
     }>;
   }> {
     const aliases = await this.getDefaultVoiceAliases();
+    const legacyKeys = new Set(
+      Object.entries(VOICE_TYPE_MIGRATION_MAP)
+        .filter(([, target]: [string, VoiceType]) => target === DEFAULT_VOICE)
+        .map(([k]) => k),
+    );
     const rows = await this.ttsRepository.findParagraphAudioForVoices(
       storyId,
       aliases,
@@ -191,11 +196,14 @@ export class TtsCacheService {
     // provider -> hash -> newest audioUrl (rows arrive newest first)
     const byProvider = new Map<string, Map<string, string>>();
     for (const row of rows) {
-      // 'default' rows from before NIMBUS became the default were produced by
-      // an older default voice; do not serve them as NIMBUS.
+      // Rows under the 'default' placeholder or a legacy voice name (LILY)
+      // were only the current Nimbus voice from a per-provider instant; older
+      // ones are a different voice and must not be served as Nimbus.
+      const isPlaceholder = row.voiceId === 'default';
       if (
-        row.voiceId === 'default' &&
-        new Date(row.createdAt) < DEFAULT_VOICE_NIMBUS_SINCE
+        (isPlaceholder || legacyKeys.has(row.voiceId)) &&
+        new Date(row.createdAt) <
+          legacyDefaultAliasCutoff(row.provider, isPlaceholder)
       ) {
         continue;
       }

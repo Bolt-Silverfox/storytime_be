@@ -465,6 +465,8 @@ export class VoiceController {
 
     // Guest access validation: check session, story, and quota atomically
     if (isGuest) {
+      // Rate-limit first so a throttled request never burns a free story slot.
+      await this.guestStoryAudioService.checkIpCap(req.ip);
       const accessResult = await this.guestSessionService.recordNewStoryAccess(
         userId,
         dto.storyId,
@@ -489,6 +491,7 @@ export class VoiceController {
         dto.storyId,
         userId,
         req.ip,
+        { ipCapChecked: true },
       );
       return { ...guestResult, voiceId: resolvedVoice };
     }

@@ -44,7 +44,10 @@ const mockStoryQuotaService = {
     .mockResolvedValue({ canAccess: true, reason: 'premium' }),
   recordNewStoryAccess: jest.fn(),
 };
-const mockGuestStoryAudioService = { start: jest.fn() };
+const mockGuestStoryAudioService = {
+  start: jest.fn(),
+  checkIpCap: jest.fn(),
+};
 const mockGuestSessionService = {
   getGuestSession: jest.fn(),
   recordNewStoryAccess: jest.fn(),
@@ -310,6 +313,7 @@ describe('VoiceController', () => {
           textContent: 'Hi',
         });
         mockGuestStoryAudioService.start.mockResolvedValue(guestResult);
+        mockGuestStoryAudioService.checkIpCap.mockResolvedValue(undefined);
       });
 
       it('routes through the capped guest audio service, never the uncapped authed TTS path', async () => {
@@ -324,6 +328,7 @@ describe('VoiceController', () => {
           'story-1',
           SESSION,
           '5.5.5.5',
+          { ipCapChecked: true },
         );
         expect(
           mockTextToSpeechService.batchTextToSpeechEager,
@@ -343,6 +348,23 @@ describe('VoiceController', () => {
           SESSION,
         );
         expect(result.voiceId).toBe('XrExE9yKIg1WjnnlVkGX');
+      });
+
+      it('an over-cap request is rejected BEFORE a story slot is consumed', async () => {
+        mockGuestStoryAudioService.checkIpCap.mockRejectedValue(
+          new Error('429'),
+        );
+        await expect(
+          controller.batchTextToSpeech(
+            { storyId: 'story-1' },
+            { ip: '5.5.5.5' } as AuthenticatedRequest,
+            SESSION,
+          ),
+        ).rejects.toThrow('429');
+        expect(
+          mockGuestSessionService.recordNewStoryAccess,
+        ).not.toHaveBeenCalled();
+        expect(mockGuestStoryAudioService.start).not.toHaveBeenCalled();
       });
 
       it('still enforces the story quota before generating', async () => {

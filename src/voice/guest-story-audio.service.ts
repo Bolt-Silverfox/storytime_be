@@ -54,7 +54,7 @@ export class GuestStoryAudioService {
    * keys counters per class+handler, so decorators alone cannot share one.
    * Fails open (no IP, storage error) so it can never block on its own fault.
    */
-  private async enforceIpHourlyLimit(ip: string | undefined): Promise<void> {
+  async checkIpCap(ip: string | undefined): Promise<void> {
     if (!ip || !this.throttlerStorage) return;
     const { limit, ttl } = GUEST_AUDIO_THROTTLE.start.ipPerHour;
     let record: Awaited<ReturnType<ThrottlerStorage['increment']>>;
@@ -92,9 +92,11 @@ export class GuestStoryAudioService {
     storyId: string,
     guestSessionId: string | undefined,
     ip?: string,
+    // Set by callers that already ran checkIpCap (avoids double counting).
+    opts?: { ipCapChecked?: boolean },
   ) {
     const sessionId = this.assertSessionId(guestSessionId);
-    await this.enforceIpHourlyLimit(ip);
+    if (!opts?.ipCapChecked) await this.checkIpCap(ip);
 
     const session = await this.guestSessions.getGuestSession(sessionId);
     if (!session) {

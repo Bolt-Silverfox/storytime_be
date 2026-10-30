@@ -5,7 +5,14 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { GuestStoryAudioService } from './guest-story-audio.service';
-import { ThrottlerException, ThrottlerStorageService } from '@nestjs/throttler';
+import { Test } from '@nestjs/testing';
+import {
+  ThrottlerException,
+  ThrottlerModule,
+  ThrottlerStorage,
+  ThrottlerStorageService,
+} from '@nestjs/throttler';
+import { throttleConfig } from '@/shared/config/throttle.config';
 import { GUEST_AUDIO_THROTTLE } from '@/shared/constants/guest-audio.constants';
 import { DEFAULT_VOICE } from './voice.constants';
 
@@ -550,5 +557,64 @@ describe('GuestStoryAudioService — shared hourly IP limit', () => {
         service.start(STORY, SESSION, '1.1.1.1'),
       ).resolves.toBeDefined();
     });
+  });
+
+  it('is wired to the real ThrottlerModule storage (not silently fail-open) and rejects the 61st call through it', async () => {
+    const mod = await Test.createTestingModule({
+      imports: [
+        ThrottlerModule.forRoot({ throttlers: throttleConfig.throttlers }),
+      ],
+      providers: [
+        GuestStoryAudioService,
+        {
+          provide: (await import('@/guest/guest-session.service'))
+            .GuestSessionService,
+          useValue: guestSessions,
+        },
+        {
+          provide: (await import('../story/story.service')).StoryService,
+          useValue: stories,
+        },
+        {
+          provide: (await import('../story/text-to-speech.service'))
+            .TextToSpeechService,
+          useValue: tts,
+        },
+        {
+          provide: (await import('./queue/tts-batch-queue.service'))
+            .TtsBatchQueueService,
+          useValue: queue,
+        },
+      ],
+    }).compile();
+    const svc = mod.get(GuestStoryAudioService);
+    const injected = (svc as unknown as { throttlerStorage?: unknown })
+      .throttlerStorage;
+    expect(injected).toBeDefined();
+    expect(injected).toBe(mod.get(ThrottlerStorage));
+
+    const limit = GUEST_AUDIO_THROTTLE.start.ipPerHour.limit;
+    await svc.checkIpCap('6.6.6.6'); // standalone check counts as one hit
+    for (let i = 1; i < limit; i++) await svc.start(STORY, SESSION, '6.6.6.6');
+    await expect(svc.start(STORY, SESSION, '6.6.6.6')).rejects.toThrow(
+      ThrottlerException,
+    );
+    await mod.close();
+  });
+
+  it('start(..., { ipCapChecked: true }) does not count a second hit', async () => {
+    const storage = new ThrottlerStorageService();
+    const svc = new GuestStoryAudioService(
+      guestSessions as never,
+      stories as never,
+      tts as never,
+      queue as never,
+      storage,
+    );
+    await svc.checkIpCap('4.4.4.4');
+    await svc.start(STORY, SESSION, '4.4.4.4', { ipCapChecked: true });
+    const [rec] = [...storage.storage.values()];
+    expect([...rec.totalHits.values()]).toEqual([1]);
+    storage.onApplicationShutdown?.();
   });
 });
