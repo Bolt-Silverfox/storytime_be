@@ -125,9 +125,7 @@ describe('SceneAdminService', () => {
         scene({ sceneIndex: 0, status: 'APPROVED', imageUrl: 'u' }),
       ]);
       repo.findByStory.mockResolvedValueOnce([]);
-      await svc.replaceDefinitions('st1', [
-        { startPage: 0, endPage: 3 },
-      ]);
+      await svc.replaceDefinitions('st1', [{ startPage: 0, endPage: 3 }]);
       expect(repo.applyPlan.mock.calls[0][1].upserts[0].reset).toBe(true);
     });
 

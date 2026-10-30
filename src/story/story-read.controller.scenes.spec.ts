@@ -57,7 +57,10 @@ describe('StoryReadController - scene illustrations', () => {
   });
 
   it('serves an empty scenes array when nothing is approved', async () => {
-    scenes.getReadExtras.mockResolvedValue({ pages: ['Hello there.'], scenes: [] });
+    scenes.getReadExtras.mockResolvedValue({
+      pages: ['Hello there.'],
+      scenes: [],
+    });
     const res = await controller.getStoryById('st1', req);
     expect(res.scenes).toEqual([]);
   });

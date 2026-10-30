@@ -74,7 +74,7 @@ describe('story-pages.util', () => {
       expect(
         validateSceneRanges(
           ranges as { startPage: number; endPage: number }[],
-          pageCount as number,
+          pageCount,
         ),
       ).toEqual(expect.any(String));
     });

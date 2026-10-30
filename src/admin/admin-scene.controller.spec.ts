@@ -47,7 +47,7 @@ describe('AdminSceneController', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('lists a story\'s scenes', async () => {
+  it("lists a story's scenes", async () => {
     svc.listForStory.mockResolvedValue({ pageCount: 4, scenes: [] });
     const res = await controller.listForStory('st1');
     expect(svc.listForStory).toHaveBeenCalledWith('st1');
