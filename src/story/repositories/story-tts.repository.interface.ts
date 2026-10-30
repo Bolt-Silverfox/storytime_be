@@ -34,6 +34,18 @@ export interface IStoryTtsRepository {
     textHashes: string[],
   ): Promise<ParagraphAudioCache[]>;
 
+  // Find cached paragraph-audio entries for a story whose voiceId is any of
+  // `voiceIds` and whose textHash is in the set, across EVERY provider, newest
+  // first. Used by guest playback, which accepts any existing default-voice row.
+  findParagraphAudioForVoices(
+    storyId: string,
+    voiceIds: string[],
+    textHashes: string[],
+  ): Promise<ParagraphAudioCache[]>;
+
+  // Voice-table ids (non-deleted) backed by the given ElevenLabs voice id.
+  findVoiceIdsByElevenLabsId(elevenLabsVoiceId: string): Promise<string[]>;
+
   // Resolve a custom voice by id or name (non-deleted only).
   findVoiceByIdOrName(type: string): Promise<Voice | null>;
 }
