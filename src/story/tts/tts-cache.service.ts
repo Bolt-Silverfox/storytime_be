@@ -3,7 +3,11 @@ import { Injectable } from '@nestjs/common';
 import type { IStoryTtsRepository } from '../repositories/story-tts.repository.interface';
 import { preprocessTextForTTS } from './tts-text.util';
 import { VoiceType, VOICE_TYPE_MIGRATION_MAP } from '../../voice/dto/voice.dto';
-import { DEFAULT_VOICE, VOICE_CONFIG } from '../../voice/voice.constants';
+import {
+  DEFAULT_VOICE,
+  DEFAULT_VOICE_NIMBUS_SINCE,
+  VOICE_CONFIG,
+} from '../../voice/voice.constants';
 
 /** Best-first. Rows written before provider tracking carry 'unknown'. */
 const PROVIDER_RANK = ['elevenlabs', 'deepgram', 'edgetts', 'unknown'];
@@ -187,6 +191,14 @@ export class TtsCacheService {
     // provider -> hash -> newest audioUrl (rows arrive newest first)
     const byProvider = new Map<string, Map<string, string>>();
     for (const row of rows) {
+      // 'default' rows from before NIMBUS became the default were produced by
+      // an older default voice; do not serve them as NIMBUS.
+      if (
+        row.voiceId === 'default' &&
+        new Date(row.createdAt) < DEFAULT_VOICE_NIMBUS_SINCE
+      ) {
+        continue;
+      }
       const perHash = byProvider.get(row.provider) ?? new Map<string, string>();
       if (!perHash.has(row.textHash)) perHash.set(row.textHash, row.audioUrl);
       byProvider.set(row.provider, perHash);

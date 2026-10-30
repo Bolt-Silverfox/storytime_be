@@ -6,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Req,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -44,7 +45,6 @@ export class GuestStoryAudioController {
   @Public()
   @Throttle({
     short: { ...START.ipPerMinute },
-    medium: { ...START.ipPerHour },
     long: { ...START.perSession, getTracker: guestSessionTracker },
   })
   @ApiOperation({
@@ -69,8 +69,9 @@ export class GuestStoryAudioController {
     // Validated (so clients may keep sending voiceId) but never forwarded.
     @Body() _dto: GuestStoryAudioDto,
     @Headers('x-guest-session-id') guestSessionId?: string,
+    @Req() req?: { ip?: string },
   ) {
-    return this.audio.start(storyId, guestSessionId);
+    return this.audio.start(storyId, guestSessionId, req?.ip);
   }
 
   @Get(':storyId/audio/:batchJobId')

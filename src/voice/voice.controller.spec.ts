@@ -315,13 +315,15 @@ describe('VoiceController', () => {
       it('routes through the capped guest audio service, never the uncapped authed TTS path', async () => {
         const result = await controller.batchTextToSpeech(
           { storyId: 'story-1' },
-          guestReq,
+          { ip: '5.5.5.5' } as AuthenticatedRequest,
           SESSION,
         );
 
+        // Passes the client IP so the shared hourly per-IP cap applies.
         expect(mockGuestStoryAudioService.start).toHaveBeenCalledWith(
           'story-1',
           SESSION,
+          '5.5.5.5',
         );
         expect(
           mockTextToSpeechService.batchTextToSpeechEager,

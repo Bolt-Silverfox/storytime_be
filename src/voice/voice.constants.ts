@@ -2,6 +2,13 @@ import { VoiceType } from './dto/voice.dto';
 
 export const DEFAULT_VOICE = VoiceType.NIMBUS;
 
+/**
+ * When NIMBUS became the default voice (commit 896ac37, 2026-02-26). Rows
+ * stored under the 'default' placeholder before this were synthesized with the
+ * previous default (CHARLIE, then LILY) and must not be served as NIMBUS.
+ */
+export const DEFAULT_VOICE_NIMBUS_SINCE = new Date('2026-02-26T09:57:19Z');
+
 export const VOICE_AVATARS: Record<VoiceType, string> = {
   [VoiceType.MILO]:
     'https://res.cloudinary.com/billmal/image/upload/v1768772687/storytime/voice_avatars/milo.png',

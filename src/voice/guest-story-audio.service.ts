@@ -2,15 +2,22 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Inject,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ThrottlerException, ThrottlerStorage } from '@nestjs/throttler';
 import { GuestSessionService } from '@/guest/guest-session.service';
 import { StoryService } from '../story/story.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
-import { GUEST_AUDIO_EAGER_PARAGRAPHS } from '@/shared/constants/guest-audio.constants';
+import {
+  GUEST_AUDIO_EAGER_PARAGRAPHS,
+  GUEST_AUDIO_THROTTLE,
+} from '@/shared/constants/guest-audio.constants';
+import { nonProdThrottleMultiplier } from '@/shared/config/throttle.config';
 import { DEFAULT_VOICE } from './voice.constants';
 
 const UUID_REGEX =
@@ -36,7 +43,37 @@ export class GuestStoryAudioService {
     private readonly storyService: StoryService,
     private readonly tts: TextToSpeechService,
     private readonly queue: TtsBatchQueueService,
+    @Optional()
+    @Inject(ThrottlerStorage)
+    private readonly throttlerStorage?: ThrottlerStorage,
   ) {}
+
+  /**
+   * One hourly per-IP counter shared by every route that starts guest audio
+   * (/guest/stories/:id/audio and /voice/story/audio/batch). @nestjs/throttler
+   * keys counters per class+handler, so decorators alone cannot share one.
+   * Fails open (no IP, storage error) so it can never block on its own fault.
+   */
+  private async enforceIpHourlyLimit(ip: string | undefined): Promise<void> {
+    if (!ip || !this.throttlerStorage) return;
+    const { limit, ttl } = GUEST_AUDIO_THROTTLE.start.ipPerHour;
+    let record: Awaited<ReturnType<ThrottlerStorage['increment']>>;
+    try {
+      record = await this.throttlerStorage.increment(
+        `guest-audio-ip:${ip}`,
+        ttl,
+        limit * nonProdThrottleMultiplier(process.env.NODE_ENV),
+        ttl,
+        'guest-audio-ip-hour',
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Guest audio IP limiter unavailable: ${(error as Error).message}`,
+      );
+      return;
+    }
+    if (record.isBlocked) throw new ThrottlerException();
+  }
 
   private assertSessionId(sessionId: string | undefined): string {
     if (!sessionId) {
@@ -51,8 +88,13 @@ export class GuestStoryAudioService {
   /**
    * Note there is deliberately NO voice parameter: guests cannot choose one.
    */
-  async start(storyId: string, guestSessionId: string | undefined) {
+  async start(
+    storyId: string,
+    guestSessionId: string | undefined,
+    ip?: string,
+  ) {
     const sessionId = this.assertSessionId(guestSessionId);
+    await this.enforceIpHourlyLimit(ip);
 
     const session = await this.guestSessions.getGuestSession(sessionId);
     if (!session) {

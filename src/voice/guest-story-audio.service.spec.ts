@@ -5,6 +5,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { GuestStoryAudioService } from './guest-story-audio.service';
+import { ThrottlerException, ThrottlerStorageService } from '@nestjs/throttler';
+import { GUEST_AUDIO_THROTTLE } from '@/shared/constants/guest-audio.constants';
 import { DEFAULT_VOICE } from './voice.constants';
 
 const SESSION = '3f0c6a7e-1b2d-4c3e-8f4a-5b6c7d8e9f01';
@@ -92,7 +94,8 @@ describe('GuestStoryAudioService', () => {
         }),
       );
       // start() has no voice parameter; the TTS facade has none either.
-      expect(service.start.length).toBe(2);
+      // (storyId, sessionId, ip) - still no voice parameter.
+      expect(service.start.length).toBe(3);
       const res = await service.start(STORY, SESSION);
       expect(tts.batchTextToSpeechForGuest.mock.calls[0]).toHaveLength(3);
       expect(queue.queueBatch).toHaveBeenCalledWith(
@@ -451,5 +454,101 @@ describe('GuestStoryAudioService — integration with real session + queue', () 
     const res = await svc.start(STORY, a.sessionId);
     expect(res.statusCode).toBe(200);
     expect(generate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('GuestStoryAudioService — shared hourly IP limit', () => {
+  let service: GuestStoryAudioService;
+  let guestSessions: unknown;
+  let stories: unknown;
+  let tts: unknown;
+  let queue: unknown;
+  const origEnv = process.env.NODE_ENV;
+  afterAll(() => {
+    process.env.NODE_ENV = origEnv;
+  });
+  beforeEach(() => {
+    process.env.NODE_ENV = 'production';
+    guestSessions = {
+      getGuestSession: jest.fn().mockResolvedValue({
+        sessionId: SESSION,
+        uniqueStoriesRead: 1,
+        readingHistory: { [STORY]: { progress: 0 } },
+      }),
+      maskSessionId: jest.fn((s?: string) => `masked-${s?.slice(0, 4)}`),
+    };
+    stories = {
+      getStoryById: jest
+        .fn()
+        .mockResolvedValue({ id: STORY, textContent: 'one two three' }),
+    };
+    tts = {
+      batchTextToSpeechForGuest: jest.fn().mockResolvedValue(eagerResult()),
+    };
+    queue = {
+      queueBatch: jest.fn().mockResolvedValue('batch-1'),
+      acquireStartLock: jest
+        .fn()
+        .mockResolvedValue({ release: jest.fn().mockResolvedValue(undefined) }),
+      findInFlightBatch: jest.fn().mockResolvedValue(null),
+    };
+  });
+  describe('shared hourly per-IP limit', () => {
+    let storage: ThrottlerStorageService;
+    beforeEach(() => {
+      storage = new ThrottlerStorageService();
+      service = new GuestStoryAudioService(
+        guestSessions as never,
+        stories as never,
+        tts as never,
+        queue as never,
+        storage,
+      );
+    });
+    afterEach(() => storage.onApplicationShutdown?.());
+
+    it('rejects the 61st start from one IP within the hour (429), other IPs unaffected', async () => {
+      const limit = GUEST_AUDIO_THROTTLE.start.ipPerHour.limit;
+      for (let i = 0; i < limit; i++) {
+        await service.start(STORY, SESSION, '9.9.9.9');
+      }
+      await expect(service.start(STORY, SESSION, '9.9.9.9')).rejects.toThrow(
+        ThrottlerException,
+      );
+      await expect(
+        service.start(STORY, SESSION, '8.8.8.8'),
+      ).resolves.toBeDefined();
+    });
+
+    it('shares ONE counter regardless of which route calls start (same key)', async () => {
+      const limit = GUEST_AUDIO_THROTTLE.start.ipPerHour.limit;
+      // alternate callers (guest route / batch route) - both just call start(ip)
+      for (let i = 0; i < limit; i++) {
+        await service.start(STORY, SESSION, '7.7.7.7');
+      }
+      expect(storage.storage.size).toBe(1);
+      await expect(service.start(STORY, SESSION, '7.7.7.7')).rejects.toThrow(
+        ThrottlerException,
+      );
+    });
+
+    it('does nothing when no IP is available (fails open)', async () => {
+      await expect(
+        service.start(STORY, SESSION, undefined),
+      ).resolves.toBeDefined();
+    });
+
+    it('fails open if the throttler storage errors', async () => {
+      service = new GuestStoryAudioService(
+        guestSessions as never,
+        stories as never,
+        tts as never,
+        queue as never,
+        { increment: jest.fn().mockRejectedValue(new Error('x')) },
+      );
+      await expect(
+        service.start(STORY, SESSION, '1.1.1.1'),
+      ).resolves.toBeDefined();
+    });
   });
 });

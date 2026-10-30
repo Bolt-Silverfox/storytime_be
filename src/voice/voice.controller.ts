@@ -488,6 +488,7 @@ export class VoiceController {
       const guestResult = await this.guestStoryAudioService.start(
         dto.storyId,
         userId,
+        req.ip,
       );
       return { ...guestResult, voiceId: resolvedVoice };
     }

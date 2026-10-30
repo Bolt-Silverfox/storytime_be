@@ -9,7 +9,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { VoiceQuotaService } from '../voice/voice-quota.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
-import { VOICE_CONFIG, DEFAULT_VOICE } from '../voice/voice.constants';
+import {
+  VOICE_CONFIG,
+  DEFAULT_VOICE,
+  DEFAULT_VOICE_NIMBUS_SINCE,
+} from '../voice/voice.constants';
 import { splitByWordCountPreservingSentences } from '../voice/utils/paragraph-splitter';
 import { preprocessTextForTTS } from './tts/tts-text.util';
 
@@ -198,5 +202,66 @@ describe('TextToSpeechService authed default-voice cache reuse', () => {
       mockDeepgramGenerate.mock.calls.length +
         mockEdgeTtsGenerate.mock.calls.length,
     ).toBeGreaterThan(0);
+  });
+
+  it("ignores legacy 'default' rows older than the NIMBUS-default cutoff but serves newer ones and other aliases", async () => {
+    const old = new Date(DEFAULT_VOICE_NIMBUS_SINCE.getTime() - 86_400_000);
+    const fresh = new Date(DEFAULT_VOICE_NIMBUS_SINCE.getTime() + 86_400_000);
+    const withDate = (r: ReturnType<typeof cacheRow>, d: Date) => ({
+      ...r,
+      createdAt: d,
+    });
+    rows = [
+      withDate(
+        cacheRow(paras[0], 'default', 'edgetts', 'https://old/0.mp3'),
+        old,
+      ),
+      withDate(
+        cacheRow(paras[1], 'default', 'edgetts', 'https://new/1.mp3'),
+        fresh,
+      ),
+    ];
+    mockIsPremiumUser.mockResolvedValue(false);
+    mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
+
+    const res = await service.batchTextToSpeechEager(
+      STORY_ID,
+      text,
+      DEFAULT_VOICE,
+      'user-1',
+    );
+    const urls = res.results.map((r) => r.audioUrl);
+    expect(urls).not.toContain('https://old/0.mp3');
+    expect(urls).toContain('https://new/1.mp3');
+    // The stale paragraph was regenerated rather than served in the wrong voice.
+    expect(
+      mockDeepgramGenerate.mock.calls.length +
+        mockEdgeTtsGenerate.mock.calls.length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('old rows under the NIMBUS name / UUID aliases are still served (cutoff is for `default` only)', async () => {
+    const old = new Date(DEFAULT_VOICE_NIMBUS_SINCE.getTime() - 86_400_000);
+    rows = paras.map((p, i) => ({
+      ...cacheRow(
+        p,
+        i === 0 ? DEFAULT_VOICE : UUID,
+        'deepgram',
+        `https://o/${i}.mp3`,
+      ),
+      createdAt: old,
+    }));
+    mockIsPremiumUser.mockResolvedValue(false);
+    mockCanFreeUserUseElevenLabs.mockResolvedValue(false);
+    const res = await service.batchTextToSpeechEager(
+      STORY_ID,
+      text,
+      DEFAULT_VOICE,
+      'user-1',
+    );
+    expect(res.results.map((r) => r.audioUrl)).toEqual([
+      'https://o/0.mp3',
+      'https://o/1.mp3',
+    ]);
   });
 });

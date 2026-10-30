@@ -79,6 +79,8 @@ const GUEST_SESSION_LOCK_PREFIX = 'guest:session-lock:';
 const GUEST_LOCK_TTL_MS = 5_000;
 const GUEST_LOCK_WAIT_MS = 2_000;
 const GUEST_LOCK_POLL_MS = 25;
+/** Bound on waiting for the previous in-process holder (then run anyway). */
+const GUEST_FIFO_WAIT_MS = 5_000;
 const RELEASE_LOCK_SCRIPT =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 
@@ -290,9 +292,21 @@ export class GuestSessionService implements OnModuleInit {
     const prev = this.sessionChains.get(sessionId) ?? Promise.resolve();
     let releaseChain!: () => void;
     const mine = new Promise<void>((resolve) => (releaseChain = resolve));
-    const tail = prev.then(() => mine);
+    // The chain tail is our own completion (not prev-then-mine) so a
+    // never-settling predecessor cannot wedge later callers or leak the entry.
+    const tail = mine;
     this.sessionChains.set(sessionId, tail);
-    await prev;
+    let waitTimer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        prev,
+        new Promise<void>((resolve) => {
+          waitTimer = setTimeout(resolve, GUEST_FIFO_WAIT_MS);
+        }),
+      ]);
+    } finally {
+      if (waitTimer) clearTimeout(waitTimer);
+    }
     const releaseRedis = await this.acquireRedisLock(sessionId);
     try {
       return await fn();

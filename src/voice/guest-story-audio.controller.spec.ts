@@ -36,8 +36,6 @@ describe('GuestStoryAudioController', () => {
     const h = controller.startAudio;
     expect(meta('THROTTLER:LIMITshort', h)).toBe(t.ipPerMinute.limit);
     expect(meta('THROTTLER:TTLshort', h)).toBe(t.ipPerMinute.ttl);
-    expect(meta('THROTTLER:LIMITmedium', h)).toBe(t.ipPerHour.limit);
-    expect(meta('THROTTLER:TTLmedium', h)).toBe(t.ipPerHour.ttl);
     expect(meta('THROTTLER:LIMITlong', h)).toBe(t.perSession.limit);
     expect(meta('THROTTLER:TTLlong', h)).toBe(t.perSession.ttl);
     const tracker = meta('THROTTLER:TRACKERlong', h) as (
@@ -67,15 +65,21 @@ describe('GuestStoryAudioController', () => {
 
   it('status route skips the inherited per-IP `medium` throttler (shared-IP polling)', () => {
     expect(meta('THROTTLER:SKIPmedium', controller.getAudioStatus)).toBe(true);
-    // start route keeps its own explicit medium (hourly) limit
     expect(meta('THROTTLER:SKIPmedium', controller.startAudio)).toBeUndefined();
+    // The hourly per-IP cap lives in GuestStoryAudioService.start (shared with
+    // the batch route), not as decorator metadata that would double count.
+    expect(
+      meta('THROTTLER:LIMITmedium', controller.startAudio),
+    ).toBeUndefined();
   });
 
   it('delegates start with the header session id and NEVER forwards a client voiceId', async () => {
     service.start.mockResolvedValue({ ok: true });
-    const out = await controller.startAudio(STORY, { voiceId: 'x' }, SESSION);
-    expect(service.start).toHaveBeenCalledWith(STORY, SESSION);
-    expect(service.start.mock.calls[0]).toHaveLength(2);
+    const out = await controller.startAudio(STORY, { voiceId: 'x' }, SESSION, {
+      ip: '5.5.5.5',
+    });
+    expect(service.start).toHaveBeenCalledWith(STORY, SESSION, '5.5.5.5');
+    expect(service.start.mock.calls[0]).toHaveLength(3);
     expect(out).toEqual({ ok: true });
   });
 

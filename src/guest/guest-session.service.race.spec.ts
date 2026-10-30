@@ -106,4 +106,23 @@ describe('GuestSessionService — concurrent read-modify-write', () => {
     );
     expect(evalFn).toHaveBeenCalledTimes(1);
   });
+
+  it('does not wait forever on a never-settling predecessor and leaks no map entry', async () => {
+    const service = build();
+    const { sessionId } = await service.createGuestSession();
+    jest.useFakeTimers();
+    try {
+      const chains = (
+        service as unknown as { sessionChains: Map<string, Promise<void>> }
+      ).sessionChains;
+      chains.set(sessionId, new Promise<void>(() => undefined));
+
+      const p = service.recordNewStoryAccess(sessionId, 'story-q');
+      await jest.advanceTimersByTimeAsync(10_000);
+      await expect(p).resolves.toEqual({ recorded: true });
+      expect(chains.has(sessionId)).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
