@@ -101,8 +101,8 @@ describe('GuestStoryAudioService', () => {
         }),
       );
       // start() has no voice parameter; the TTS facade has none either.
-      // (storyId, sessionId, ip) - still no voice parameter.
-      expect(service.start.length).toBe(3);
+      // (storyId, sessionId, ip, opts) - still no voice parameter.
+      expect(service.start.length).toBe(4);
       const res = await service.start(STORY, SESSION);
       expect(tts.batchTextToSpeechForGuest.mock.calls[0]).toHaveLength(3);
       expect(queue.queueBatch).toHaveBeenCalledWith(
