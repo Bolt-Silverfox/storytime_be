@@ -70,7 +70,7 @@ export class GuestSessionController {
    */
   @Post('session')
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ long: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: 'Create a new guest session' })
   @ApiResponse({
     status: 201,
