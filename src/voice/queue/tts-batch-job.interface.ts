@@ -8,7 +8,13 @@ export interface TtsBatchJobData {
   batchJobId: string;
   storyId: string;
   voiceId: string;
+  /** User id, or the guest session id when `isGuest` (ownership / SSE key). */
   userId: string;
+  /**
+   * Guest job: `userId` is a guest session id, NOT a User row. The processor
+   * must not pass it to quota/usage code (UserUsage has a FK to User).
+   */
+  isGuest?: boolean;
   isPremium: boolean;
   provider: 'elevenlabs' | 'deepgram' | 'edgetts';
   paragraphs: Array<{

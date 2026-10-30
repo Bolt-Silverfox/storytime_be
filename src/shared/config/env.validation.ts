@@ -3,10 +3,18 @@ import { Logger } from '@nestjs/common';
 
 export const envSchema = z
   .object({
+    // Unset must be strict: nonProdThrottleMultiplier relaxes rate limits for
+    // development/staging, so an absent NODE_ENV defaults to 'production'.
     NODE_ENV: z
       .enum(['development', 'production', 'staging'])
-      .default('development'),
+      .default('production'),
     PORT: z.coerce.number().default(3000),
+    // Number of reverse-proxy hops in front of the app (Caddy = 1). 0 = none.
+    // Blank means "use the default" (see ELEVEN_LABS_QUOTA_COOLDOWN_MS below).
+    TRUST_PROXY_HOPS: z.preprocess(
+      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z.coerce.number().int().min(0).max(10).default(0),
+    ),
     CORS_ORIGIN: z.string().url().default('http://localhost:3000'),
     REDIS_URL: z.string().url().default('redis://localhost:6379'),
     ELEVEN_LABS_KEY: z.string().min(1, 'ELEVEN_LABS_KEY is required'),

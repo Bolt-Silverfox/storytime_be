@@ -33,6 +33,7 @@ import { corsOptions } from './shared/config/cors.config';
 import { swaggerCspDirectives } from './shared/config/security.config';
 import { WinstonModule } from 'nest-winston';
 import { winstonConfig } from './shared/config/logger.config';
+import { applyTrustProxy } from './shared/config/trust-proxy';
 
 const bootstrapLogger = new Logger('Bootstrap');
 const isProduction = process.env.NODE_ENV === 'production';
@@ -105,6 +106,18 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);
+
+  // Trust the reverse proxy (Caddy) so req.ip is the real client IP, not the
+  // proxy's. Must run before any middleware/throttler reads req.ip. 0 = off.
+  const trustProxyHops = applyTrustProxy(
+    app.getHttpAdapter().getInstance() as {
+      set(setting: string, value: unknown): unknown;
+    },
+    configService.get<number>('TRUST_PROXY_HOPS', 0),
+  );
+  if (trustProxyHops > 0) {
+    logger.log(`trust proxy enabled: ${trustProxyHops} hop(s)`);
+  }
 
   // 1. GLOBAL SETUP (Prefix, CORS, Security, Compression)
 

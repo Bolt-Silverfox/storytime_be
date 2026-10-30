@@ -38,6 +38,7 @@ import { APP_GUARD } from '@nestjs/core';
 import {
   throttleConfig,
   ThrottlerConfig,
+  nonProdThrottleMultiplier,
 } from './shared/config/throttle.config';
 import { AdminModule } from './admin/admin.module';
 import { CouponModule } from './coupon/coupon.module';
@@ -83,15 +84,9 @@ import { BullBoardConfigModule } from './admin/bull-board.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const nodeEnv = (
-          config.get<string>('NODE_ENV') ?? 'production'
-        ).toLowerCase();
-        const nonProdEnvs = ['development', 'staging', 'test', 'local'];
-        const isNonProd = nonProdEnvs.includes(nodeEnv);
-
-        // Only relax rate limits for explicit non-prod environments
-        // Unknown or missing NODE_ENV defaults to strict (production) limits
-        const multiplier = isNonProd ? 100 : 1;
+        const multiplier = nonProdThrottleMultiplier(
+          config.get<string>('NODE_ENV'),
+        );
 
         return {
           throttlers: throttleConfig.throttlers.map((t: ThrottlerConfig) => ({
