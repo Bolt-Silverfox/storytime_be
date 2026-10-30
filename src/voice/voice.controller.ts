@@ -586,7 +586,14 @@ export class VoiceController {
     );
 
     // Guest batches may be joined from another guest session (shared, public
-    // audio URLs only); paid batches never match allowSharedGuest.
+    // audio URLs only; paid batches never match allowSharedGuest) but only by a
+    // caller holding a live guest session.
+    if (isGuest) {
+      const session = await this.guestSessionService.getGuestSession(userId);
+      if (!session) {
+        throw new UnauthorizedException('Invalid or expired guest session');
+      }
+    }
     const status = await this.ttsBatchQueueService.getBatchStatus(
       batchJobId,
       userId,

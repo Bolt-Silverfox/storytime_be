@@ -377,6 +377,7 @@ describe('VoiceController', () => {
         status: 'processing',
       });
       const id = '3f0c6a7e-1b2d-4c3e-8f4a-5b6c7d8e9f01';
+      mockGuestSessionService.getGuestSession.mockResolvedValue({});
       await controller.getBatchStatus(id, {} as AuthenticatedRequest, id);
       expect(mockTtsBatchQueueService.getBatchStatus).toHaveBeenLastCalledWith(
         id,
@@ -388,6 +389,20 @@ describe('VoiceController', () => {
         id,
         'user-1',
         {},
+      );
+    });
+
+    it('guest batch-status polling with an expired/unknown session does not get shared access', async () => {
+      mockTtsBatchQueueService.getBatchStatus.mockResolvedValue(null);
+      mockGuestSessionService.getGuestSession.mockResolvedValue(null);
+      const id = '3f0c6a7e-1b2d-4c3e-8f4a-5b6c7d8e9f01';
+      await expect(
+        controller.getBatchStatus(id, {} as AuthenticatedRequest, id),
+      ).rejects.toThrow();
+      expect(mockTtsBatchQueueService.getBatchStatus).not.toHaveBeenCalledWith(
+        id,
+        id,
+        { allowSharedGuest: true },
       );
     });
   });
