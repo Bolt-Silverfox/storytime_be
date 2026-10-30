@@ -43,6 +43,7 @@ import { StoryService } from '../story/story.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { DEFAULT_VOICE } from './voice.constants';
+import { GuestStoryAudioService } from './guest-story-audio.service';
 import {
   BatchStoryAudioDto,
   CreateElevenLabsVoiceDto,
@@ -100,6 +101,7 @@ export class VoiceController {
     private readonly voiceQuotaService: VoiceQuotaService,
     private readonly ttsBatchQueueService: TtsBatchQueueService,
     private readonly guestSessionService: GuestSessionService,
+    private readonly guestStoryAudioService: GuestStoryAudioService,
   ) {}
 
   @Post('upload')
@@ -478,6 +480,16 @@ export class VoiceController {
         }
         // 'already_read' → proceed
       }
+
+      // Same capped, cache-first, default-voice (Deepgram/Edge, never
+      // ElevenLabs) path as POST /guest/stories/:id/audio. The response shape
+      // is identical; echo the requested voiceId so existing clients that
+      // sent an alias of the default voice see what they sent.
+      const guestResult = await this.guestStoryAudioService.start(
+        dto.storyId,
+        userId,
+      );
+      return { ...guestResult, voiceId: resolvedVoice };
     }
 
     const {
@@ -568,11 +580,17 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
     @Headers('x-guest-session-id') guestSessionId?: string,
   ) {
-    const { userId } = this.resolveRequesterUserId(req, guestSessionId);
+    const { userId, isGuest } = this.resolveRequesterUserId(
+      req,
+      guestSessionId,
+    );
 
+    // Guest batches may be joined from another guest session (shared, public
+    // audio URLs only); paid batches never match allowSharedGuest.
     const status = await this.ttsBatchQueueService.getBatchStatus(
       batchJobId,
       userId,
+      isGuest ? { allowSharedGuest: true } : {},
     );
 
     if (!status) {

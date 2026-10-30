@@ -14,6 +14,7 @@ import { VoiceQuotaService } from './voice-quota.service';
 import { TtsBatchQueueService } from './queue/tts-batch-queue.service';
 import { StoryQuotaService } from '../story/story-quota.service';
 import { GuestSessionService } from '@/guest/guest-session.service';
+import { GuestStoryAudioService } from './guest-story-audio.service';
 
 const mockVoiceService = {
   listVoices: jest.fn(),
@@ -43,6 +44,7 @@ const mockStoryQuotaService = {
     .mockResolvedValue({ canAccess: true, reason: 'premium' }),
   recordNewStoryAccess: jest.fn(),
 };
+const mockGuestStoryAudioService = { start: jest.fn() };
 const mockGuestSessionService = {
   getGuestSession: jest.fn(),
   recordNewStoryAccess: jest.fn(),
@@ -72,6 +74,10 @@ describe('VoiceController', () => {
         },
         { provide: StoryQuotaService, useValue: mockStoryQuotaService },
         { provide: GuestSessionService, useValue: mockGuestSessionService },
+        {
+          provide: GuestStoryAudioService,
+          useValue: mockGuestStoryAudioService,
+        },
       ],
     })
       .overrideGuard(AuthSessionGuard)
@@ -81,6 +87,9 @@ describe('VoiceController', () => {
     controller = module.get<VoiceController>(VoiceController);
     service = module.get(VoiceService);
     jest.clearAllMocks();
+    mockVoiceQuotaService.resolveCanonicalVoiceId.mockImplementation(
+      (v: string) => Promise.resolve(v),
+    );
   });
 
   it('should be defined', () => {
@@ -275,6 +284,111 @@ describe('VoiceController', () => {
       expect(
         mockTextToSpeechService.batchTextToSpeechEager,
       ).not.toHaveBeenCalled();
+    });
+
+    describe('guest callers (x-guest-session-id)', () => {
+      const guestReq = {} as AuthenticatedRequest;
+      const SESSION = '3f0c6a7e-1b2d-4c3e-8f4a-5b6c7d8e9f01';
+      const guestResult = {
+        message: 'Batch audio generated successfully',
+        paragraphs: [{ index: 0, text: 'Hi', audioUrl: 'https://a/0.mp3' }],
+        totalParagraphs: 1,
+        outline: [{ index: 0, text: 'Hi' }],
+        wasTruncated: false,
+        voiceId: 'NIMBUS',
+        usedProvider: 'deepgram',
+        statusCode: 200,
+      };
+
+      beforeEach(() => {
+        mockGuestSessionService.getGuestSession.mockResolvedValue({});
+        mockGuestSessionService.recordNewStoryAccess.mockResolvedValue({
+          recorded: true,
+        });
+        mockStoryService.getStoryById.mockResolvedValue({
+          id: 'story-1',
+          textContent: 'Hi',
+        });
+        mockGuestStoryAudioService.start.mockResolvedValue(guestResult);
+      });
+
+      it('routes through the capped guest audio service, never the uncapped authed TTS path', async () => {
+        const result = await controller.batchTextToSpeech(
+          { storyId: 'story-1' },
+          guestReq,
+          SESSION,
+        );
+
+        expect(mockGuestStoryAudioService.start).toHaveBeenCalledWith(
+          'story-1',
+          SESSION,
+        );
+        expect(
+          mockTextToSpeechService.batchTextToSpeechEager,
+        ).not.toHaveBeenCalled();
+        expect(mockTtsBatchQueueService.queueBatch).not.toHaveBeenCalled();
+        expect(result.paragraphs).toEqual(guestResult.paragraphs);
+        expect(result.statusCode).toBe(200);
+      });
+
+      it('echoes the requested default-voice alias in voiceId (mobile contract)', async () => {
+        mockVoiceQuotaService.resolveCanonicalVoiceId.mockResolvedValue(
+          'XrExE9yKIg1WjnnlVkGX',
+        );
+        const result = await controller.batchTextToSpeech(
+          { storyId: 'story-1', voiceId: 'XrExE9yKIg1WjnnlVkGX' },
+          guestReq,
+          SESSION,
+        );
+        expect(result.voiceId).toBe('XrExE9yKIg1WjnnlVkGX');
+      });
+
+      it('still enforces the story quota before generating', async () => {
+        mockGuestSessionService.recordNewStoryAccess.mockResolvedValue({
+          recorded: false,
+          reason: 'quota_exceeded',
+        });
+        await expect(
+          controller.batchTextToSpeech(
+            { storyId: 'story-1' },
+            guestReq,
+            SESSION,
+          ),
+        ).rejects.toThrow(ForbiddenException);
+        expect(mockGuestStoryAudioService.start).not.toHaveBeenCalled();
+      });
+
+      it('allows an already-read story through to the guest service', async () => {
+        mockGuestSessionService.recordNewStoryAccess.mockResolvedValue({
+          recorded: false,
+          reason: 'already_read',
+        });
+        await controller.batchTextToSpeech(
+          { storyId: 'story-1' },
+          guestReq,
+          SESSION,
+        );
+        expect(mockGuestStoryAudioService.start).toHaveBeenCalled();
+      });
+    });
+
+    it('guest batch-status polling may join a shared guest batch; authed does not', async () => {
+      mockTtsBatchQueueService.getBatchStatus.mockResolvedValue({
+        status: 'processing',
+      });
+      const id = '3f0c6a7e-1b2d-4c3e-8f4a-5b6c7d8e9f01';
+      await controller.getBatchStatus(id, {} as AuthenticatedRequest, id);
+      expect(mockTtsBatchQueueService.getBatchStatus).toHaveBeenLastCalledWith(
+        id,
+        id,
+        { allowSharedGuest: true },
+      );
+      await controller.getBatchStatus(id, mockRequest);
+      expect(mockTtsBatchQueueService.getBatchStatus).toHaveBeenLastCalledWith(
+        id,
+        'user-1',
+        {},
+      );
     });
   });
 });
