@@ -51,7 +51,11 @@ describe('Guest audio HTTP (real ThrottlerGuard + ValidationPipe, mocked service
       .set('x-guest-session-id', sessionN(1))
       .send({ voiceId: 'SOMETHING_ELSE' })
       .expect(201);
-    expect(service.start).toHaveBeenCalledWith(STORY, sessionN(1));
+    expect(service.start).toHaveBeenCalledWith(
+      STORY,
+      sessionN(1),
+      expect.any(String),
+    );
     await request(app.getHttpServer())
       .post(`/guest/stories/${STORY}/audio`)
       .set('x-guest-session-id', sessionN(1))

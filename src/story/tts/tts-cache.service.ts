@@ -77,6 +77,16 @@ export class TtsCacheService {
       duplicateIndices?: number[];
     }>;
   }> {
+    // The default voice is stored under several spellings/providers (guests
+    // write NIMBUS/deepgram; clients send a UUID or the ElevenLabs id). For the
+    // non-ElevenLabs (free/guest-tier) path, reuse any existing default-voice
+    // clip rather than regenerating it. ElevenLabs batches stay provider-scoped.
+    if (
+      provider !== 'elevenlabs' &&
+      (await this.isDefaultVoiceAlias(voiceId))
+    ) {
+      return this.rebuildCacheForDefaultVoice(hashMap, storyId);
+    }
     const entries = await this.ttsRepository.findParagraphAudioForProvider(
       storyId,
       voiceId,
@@ -137,6 +147,15 @@ export class TtsCacheService {
     return [
       ...new Set(['default', DEFAULT_VOICE, ...legacy, elevenLabsId, ...uuids]),
     ];
+  }
+
+  /** Alias check that degrades to exact-voice lookup if the Voice-table read fails. */
+  private async isDefaultVoiceAlias(voiceId: string): Promise<boolean> {
+    try {
+      return (await this.getDefaultVoiceAliases()).includes(voiceId);
+    } catch {
+      return false;
+    }
   }
 
   /**

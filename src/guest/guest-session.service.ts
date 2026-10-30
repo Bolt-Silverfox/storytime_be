@@ -74,6 +74,16 @@ export const GUEST_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
  */
 export const GUEST_STORY_LIMIT = 3; // Guests can read 3 unique stories per session
 
+/** Cross-instance per-session lock (Redis NX), short and self-expiring. */
+const GUEST_SESSION_LOCK_PREFIX = 'guest:session-lock:';
+const GUEST_LOCK_TTL_MS = 5_000;
+const GUEST_LOCK_WAIT_MS = 2_000;
+const GUEST_LOCK_POLL_MS = 25;
+/** Bound on waiting for the previous in-process holder (then run anyway). */
+const GUEST_FIFO_WAIT_MS = 5_000;
+const RELEASE_LOCK_SCRIPT =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+
 /**
  * Service for managing guest sessions and tracking reading progress.
  * Uses Redis via Keyv for persistence, with in-memory fallback for local development.
@@ -90,6 +100,8 @@ export class GuestSessionService implements OnModuleInit {
    * absent) apart from a storage outage (Redis down) — see isStorageUnavailable.
    */
   private redisStore?: KeyvRedis<unknown>;
+  /** Per-session in-process FIFO used by withSessionLock. */
+  private readonly sessionChains = new Map<string, Promise<void>>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -265,6 +277,96 @@ export class GuestSessionService implements OnModuleInit {
     this.assertWritePersisted(sessionId);
   }
 
+  /**
+   * Serialises read-modify-write cycles on ONE guest session (the session is a
+   * single JSON blob, so interleaved cycles lose updates and can overshoot the
+   * story quota). Two layers: an in-process FIFO chain per session id, plus a
+   * short Redis NX lock across instances when Redis-backed. NEVER throws from
+   * the locking itself: a Redis error or an exhausted wait budget fails open
+   * to the previous (unlocked) behaviour. Errors from `fn` propagate.
+   */
+  private async withSessionLock<T>(
+    sessionId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const prev = this.sessionChains.get(sessionId) ?? Promise.resolve();
+    let releaseChain!: () => void;
+    const mine = new Promise<void>((resolve) => (releaseChain = resolve));
+    // The chain tail is our own completion (not prev-then-mine) so a
+    // never-settling predecessor cannot wedge later callers or leak the entry.
+    const tail = mine;
+    this.sessionChains.set(sessionId, tail);
+    let waitTimer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        prev,
+        new Promise<void>((resolve) => {
+          waitTimer = setTimeout(resolve, GUEST_FIFO_WAIT_MS);
+        }),
+      ]);
+    } finally {
+      if (waitTimer) clearTimeout(waitTimer);
+    }
+    const releaseRedis = await this.acquireRedisLock(sessionId);
+    try {
+      return await fn();
+    } finally {
+      await releaseRedis();
+      releaseChain();
+      if (this.sessionChains.get(sessionId) === tail) {
+        this.sessionChains.delete(sessionId);
+      }
+    }
+  }
+
+  private async acquireRedisLock(
+    sessionId: string,
+  ): Promise<() => Promise<void>> {
+    const noop = () => Promise.resolve();
+    const client = this.redisStore?.client as
+      | {
+          set?: (k: string, v: string, o: unknown) => Promise<unknown>;
+          eval?: (script: string, o: unknown) => Promise<unknown>;
+        }
+      | undefined;
+    if (!client?.set || !client.eval) return noop;
+    const key = `${GUEST_SESSION_LOCK_PREFIX}${sessionId}`;
+    const token = randomUUID();
+    const deadline = Date.now() + GUEST_LOCK_WAIT_MS;
+    try {
+      for (;;) {
+        const ok = await client.set(key, token, {
+          NX: true,
+          PX: GUEST_LOCK_TTL_MS,
+        });
+        if (ok === 'OK') {
+          return async () => {
+            try {
+              await client.eval!(RELEASE_LOCK_SCRIPT, {
+                keys: [key],
+                arguments: [token],
+              });
+            } catch {
+              // best effort: the TTL frees it
+            }
+          };
+        }
+        if (Date.now() >= deadline) {
+          this.logger.warn(
+            `Session lock for ${this.maskSessionId(sessionId)} still held after ${GUEST_LOCK_WAIT_MS}ms; proceeding without it`,
+          );
+          return noop;
+        }
+        await new Promise((r) => setTimeout(r, GUEST_LOCK_POLL_MS));
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Session lock unavailable for ${this.maskSessionId(sessionId)}: ${(err as Error)?.message ?? err}`,
+      );
+      return noop;
+    }
+  }
+
   private createMemoryKeyv(): Keyv {
     const keyv = new Keyv({
       store: new CacheableMemory({
@@ -425,55 +527,57 @@ export class GuestSessionService implements OnModuleInit {
     progress: number,
     completed?: boolean,
   ): Promise<GuestSession | null> {
-    const session = await this.getGuestSession(sessionId);
+    return this.withSessionLock(sessionId, async () => {
+      const session = await this.getGuestSession(sessionId);
 
-    if (!session) {
-      this.logger.warn(
-        `Attempted to update progress for non-existent session: ${this.maskSessionId(sessionId)}`,
+      if (!session) {
+        this.logger.warn(
+          `Attempted to update progress for non-existent session: ${this.maskSessionId(sessionId)}`,
+        );
+        return null;
+      }
+
+      // Validate progress is between 0 and 100
+      const clampedProgress = Math.max(0, Math.min(100, progress));
+
+      // Completion is monotonic: once a story is finished it stays finished.
+      // Derive it from the explicit flag or a full progress reading.
+      const existing = session.readingHistory[storyId];
+      const isCompleted =
+        existing?.completed === true ||
+        completed === true ||
+        clampedProgress >= 100;
+
+      // Progress may only update a story that was already opened through
+      // recordNewStoryAccess (GET guest/stories/:id), which enforces the
+      // story-exists check and the 3-story quota. Creating an entry here would
+      // let POST /guest/progress mark arbitrary stories as "opened" and unlock
+      // guest audio generation for them.
+      if (existing) {
+        session.readingHistory[storyId] = {
+          progress: clampedProgress,
+          completed: isCompleted,
+          lastReadAt: new Date(),
+        };
+      } else {
+        this.logger.warn(
+          `Ignoring progress for unopened story ${storyId} (session ${this.maskSessionId(sessionId)})`,
+        );
+      }
+
+      // Update last active timestamp
+      session.lastActiveAt = new Date();
+
+      // Save back to cache with TTL refresh
+      const key = this.getSessionKey(sessionId);
+      await this.persistSession(key, session, sessionId);
+
+      this.logger.debug(
+        `Updated progress for session ${this.maskSessionId(sessionId)}, story ${storyId}: ${clampedProgress}%`,
       );
-      return null;
-    }
 
-    // Validate progress is between 0 and 100
-    const clampedProgress = Math.max(0, Math.min(100, progress));
-
-    // Completion is monotonic: once a story is finished it stays finished.
-    // Derive it from the explicit flag or a full progress reading.
-    const existing = session.readingHistory[storyId];
-    const isCompleted =
-      existing?.completed === true ||
-      completed === true ||
-      clampedProgress >= 100;
-
-    // Progress may only update a story that was already opened through
-    // recordNewStoryAccess (GET guest/stories/:id), which enforces the
-    // story-exists check and the 3-story quota. Creating an entry here would
-    // let POST /guest/progress mark arbitrary stories as "opened" and unlock
-    // guest audio generation for them.
-    if (existing) {
-      session.readingHistory[storyId] = {
-        progress: clampedProgress,
-        completed: isCompleted,
-        lastReadAt: new Date(),
-      };
-    } else {
-      this.logger.warn(
-        `Ignoring progress for unopened story ${storyId} (session ${this.maskSessionId(sessionId)})`,
-      );
-    }
-
-    // Update last active timestamp
-    session.lastActiveAt = new Date();
-
-    // Save back to cache with TTL refresh
-    const key = this.getSessionKey(sessionId);
-    await this.persistSession(key, session, sessionId);
-
-    this.logger.debug(
-      `Updated progress for session ${this.maskSessionId(sessionId)}, story ${storyId}: ${clampedProgress}%`,
-    );
-
-    return session;
+      return session;
+    });
   }
 
   /**
@@ -545,46 +649,48 @@ export class GuestSessionService implements OnModuleInit {
     sessionId: string,
     storyId: string,
   ): Promise<GuestStoryAccessResult> {
-    const session = await this.getGuestSession(sessionId);
+    return this.withSessionLock(sessionId, async () => {
+      const session = await this.getGuestSession(sessionId);
 
-    if (!session) {
-      this.logger.warn(
-        `Attempted to record story access for non-existent session: ${this.maskSessionId(sessionId)}`,
+      if (!session) {
+        this.logger.warn(
+          `Attempted to record story access for non-existent session: ${this.maskSessionId(sessionId)}`,
+        );
+        return { recorded: false, reason: 'session_not_found' };
+      }
+
+      // Check if story was already read (re-reading is always free)
+      if (session.readingHistory[storyId]) {
+        return { recorded: false, reason: 'already_read' };
+      }
+
+      // Check quota before consuming
+      if (session.uniqueStoriesRead >= GUEST_STORY_LIMIT) {
+        return { recorded: false, reason: 'quota_exceeded' };
+      }
+
+      // This is a new story - increment counter
+      session.uniqueStoriesRead += 1;
+
+      // Add to reading history with 0 progress
+      session.readingHistory[storyId] = {
+        progress: 0,
+        lastReadAt: new Date(),
+      };
+
+      // Update last active timestamp
+      session.lastActiveAt = new Date();
+
+      // Save back to cache with TTL refresh
+      const key = this.getSessionKey(sessionId);
+      await this.persistSession(key, session, sessionId);
+
+      this.logger.debug(
+        `Recorded new story access for session ${this.maskSessionId(sessionId)}, story ${storyId}. Total: ${session.uniqueStoriesRead}`,
       );
-      return { recorded: false, reason: 'session_not_found' };
-    }
 
-    // Check if story was already read (re-reading is always free)
-    if (session.readingHistory[storyId]) {
-      return { recorded: false, reason: 'already_read' };
-    }
-
-    // Check quota before consuming
-    if (session.uniqueStoriesRead >= GUEST_STORY_LIMIT) {
-      return { recorded: false, reason: 'quota_exceeded' };
-    }
-
-    // This is a new story - increment counter
-    session.uniqueStoriesRead += 1;
-
-    // Add to reading history with 0 progress
-    session.readingHistory[storyId] = {
-      progress: 0,
-      lastReadAt: new Date(),
-    };
-
-    // Update last active timestamp
-    session.lastActiveAt = new Date();
-
-    // Save back to cache with TTL refresh
-    const key = this.getSessionKey(sessionId);
-    await this.persistSession(key, session, sessionId);
-
-    this.logger.debug(
-      `Recorded new story access for session ${this.maskSessionId(sessionId)}, story ${storyId}. Total: ${session.uniqueStoriesRead}`,
-    );
-
-    return { recorded: true };
+      return { recorded: true };
+    });
   }
 
   /**

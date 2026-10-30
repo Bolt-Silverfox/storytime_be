@@ -1,4 +1,7 @@
+import { Test } from '@nestjs/testing';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { validateEnv } from './env.validation';
+import { nonProdThrottleMultiplier } from './throttle.config';
 
 // Guards the zod 3 -> 4 upgrade (dependency audit fix): defaults, coercion and
 // the blank-means-default preprocess must behave exactly as before.
@@ -36,7 +39,7 @@ describe('validateEnv', () => {
     expect(env.SMTP_PORT).toBe(587);
     expect(env.SMTP_SECURE).toBe(false);
     expect(env.MAIL_ENCRYPTION).toBe('TLS');
-    expect(env.NODE_ENV).toBe('development');
+    expect(env.NODE_ENV).toBe('production');
   });
 
   it('transforms SMTP_SECURE strings to booleans', () => {
@@ -85,5 +88,34 @@ describe('validateEnv', () => {
     for (const v of ['abc', '-1', '1.5']) {
       expect(() => validateEnv({ ...base, TRUST_PROXY_HOPS: v })).toThrow();
     }
+  });
+
+  describe('unset NODE_ENV stays strict (rate limits are not relaxed)', () => {
+    const saved = { ...process.env };
+    afterEach(() => {
+      process.env = { ...saved };
+    });
+
+    it('validateEnv -> production -> multiplier 1', () => {
+      const withoutNodeEnv: Record<string, unknown> = { ...base };
+      delete withoutNodeEnv.NODE_ENV;
+      const env = validateEnv(withoutNodeEnv);
+      expect(env.NODE_ENV).toBe('production');
+      expect(nonProdThrottleMultiplier(env.NODE_ENV)).toBe(1);
+    });
+
+    it('through ConfigModule with NODE_ENV absent from process.env', async () => {
+      delete process.env.NODE_ENV;
+      Object.assign(process.env, base);
+      const mod = await Test.createTestingModule({
+        imports: [
+          ConfigModule.forRoot({ ignoreEnvFile: true, validate: validateEnv }),
+        ],
+      }).compile();
+      const nodeEnv = mod.get(ConfigService).get<string>('NODE_ENV');
+      expect(nodeEnv).toBe('production');
+      expect(nonProdThrottleMultiplier(process.env.NODE_ENV)).toBe(1);
+      expect(nonProdThrottleMultiplier(nodeEnv)).toBe(1);
+    });
   });
 });
