@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiHeader } from '@nestjs/swagger';
+import { nonProdThrottleMultiplier } from '@/shared/config/throttle.config';
 import { Throttle } from '@nestjs/throttler';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import { Public } from '@/shared/decorators/public.decorator';
@@ -70,7 +71,13 @@ export class GuestSessionController {
    */
   @Post('session')
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({
+    long: {
+      // 5/min in prod; scaled like the global throttlers outside prod.
+      limit: () => 5 * nonProdThrottleMultiplier(process.env.NODE_ENV),
+      ttl: 60000,
+    },
+  })
   @ApiOperation({ summary: 'Create a new guest session' })
   @ApiResponse({
     status: 201,

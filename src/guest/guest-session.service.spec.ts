@@ -257,3 +257,44 @@ describe('GuestSessionService — raw node-redis client errors are handled', () 
     }
   });
 });
+
+/**
+ * A story only counts as "opened" (and so unlocks guest audio generation) once
+ * GET guest/stories/:id recorded access via recordNewStoryAccess, which
+ * enforces the 3-story quota. POST /guest/progress must not be a back door.
+ */
+describe('GuestSessionService — progress cannot open a story', () => {
+  const configService = {
+    get: jest.fn().mockReturnValue('redis://127.0.0.1:6390'),
+  } as unknown as ConfigService;
+  const guestRepository = {} as unknown as IGuestRepository;
+
+  it('updateGuestProgress does not create a readingHistory entry for an unopened story', async () => {
+    const service = new GuestSessionService(configService, guestRepository);
+    const { sessionId } = await service.createGuestSession();
+
+    await service.updateGuestProgress(sessionId, 'never-opened', 50);
+    await service.updateGuestProgress(sessionId, 'never-opened-2', 100, true);
+
+    const session = await service.getGuestSession(sessionId);
+    expect(session?.readingHistory['never-opened']).toBeUndefined();
+    expect(session?.readingHistory['never-opened-2']).toBeUndefined();
+    expect(session?.uniqueStoriesRead).toBe(0);
+  });
+
+  it('still records progress for a story opened through recordNewStoryAccess', async () => {
+    const service = new GuestSessionService(configService, guestRepository);
+    const { sessionId } = await service.createGuestSession();
+    await service.recordNewStoryAccess(sessionId, 'opened');
+
+    await service.updateGuestProgress(sessionId, 'opened', 40);
+    let session = await service.getGuestSession(sessionId);
+    expect(session?.readingHistory['opened']?.progress).toBe(40);
+    expect(session?.readingHistory['opened']?.completed).toBe(false);
+
+    await service.updateGuestProgress(sessionId, 'opened', 100, true);
+    session = await service.getGuestSession(sessionId);
+    expect(session?.readingHistory['opened']?.completed).toBe(true);
+    expect(session?.uniqueStoriesRead).toBe(1);
+  });
+});
