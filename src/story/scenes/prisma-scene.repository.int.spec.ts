@@ -258,6 +258,15 @@ describe('Scene repository + services (integration)', () => {
       expect((await reload(s.id)).imageUrl).toBe('Y');
     });
 
+    it('regenerate vs a different image landing with the same status (imageUrl guard alone) -> 409, Y kept', async () => {
+      const s = await mk(0, 0, 3, { status: 'APPROVED', imageUrl: 'X' });
+      interleave(patch(s.id, { imageUrl: 'Y' }));
+      await expect(admin.requestRegenerate(s.id)).rejects.toThrow(
+        ConflictException,
+      );
+      expect((await reload(s.id)).imageUrl).toBe('Y');
+    });
+
     it('regenerate vs concurrent status change (status guard) -> 409', async () => {
       const s = await mk(0, 0, 3, { status: 'APPROVED', imageUrl: 'X' });
       interleave(patch(s.id, { status: 'REJECTED' }));
@@ -400,7 +409,7 @@ describe('Scene repository + services (integration)', () => {
       expect(after.status).toBe('PENDING_REVIEW');
     });
 
-    it('concurrent redefinitions serialise: no deadlock, no unhandled DB error, contiguous result', async () => {
+    it('concurrent redefinitions serialise: all succeed (no deadlock / unique clash), contiguous result', async () => {
       await mk(0, 0, 3);
       const variants = [
         [{ startPage: 0, endPage: 3 }],
@@ -422,11 +431,11 @@ describe('Scene repository + services (integration)', () => {
         const results = await Promise.allSettled(
           variants.map((v) => admin.replaceDefinitions(storyId, v)),
         );
-        for (const r of results) {
-          if (r.status === 'rejected') {
-            expect(r.reason).toBeInstanceOf(ConflictException);
-          }
-        }
+        // serialised by the advisory lock: every redefinition succeeds
+        // (without the lock these surface as unique-key clashes/deadlocks)
+        expect(results.map((r) => r.status)).toEqual(
+          variants.map(() => 'fulfilled'),
+        );
         const live = await repo.findByStory(storyId);
         expect(live.map((x) => x.sceneIndex)).toEqual(live.map((_, i) => i));
         let next = 0;
