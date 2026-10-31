@@ -45,11 +45,17 @@ export interface IStorySceneRepository {
   findApprovedByStory(storyId: string): Promise<StorySceneImage[]>;
   findByIdWithStory(id: string): Promise<SceneWithStory | null>;
   /**
-   * One transaction: park/soft-delete retired scenes, move kept scenes to their
-   * new index (via a temporary index so the unique key never collides), create
-   * new scenes.
+   * One transaction, serialised per story (advisory lock): reads every scene of
+   * the story (incl. soft-deleted), asks `build` for the plan, then parks /
+   * soft-deletes retired scenes, moves kept scenes to their new index (via a
+   * temporary index so the unique key never collides) and creates new ones.
+   * Building the plan inside the lock means concurrent redefinitions can never
+   * act on a stale view.
    */
-  applyPlan(storyId: string, plan: ScenePlan): Promise<void>;
+  applyPlan(
+    storyId: string,
+    build: (existing: StorySceneImage[]) => ScenePlan,
+  ): Promise<void>;
   /**
    * Conditional update: applies `data` only if the row still matches `guard`
    * (compare-and-set). Returns the updated row, or null when the guard no

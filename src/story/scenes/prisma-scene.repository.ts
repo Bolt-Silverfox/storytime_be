@@ -49,65 +49,77 @@ export class PrismaStorySceneRepository implements IStorySceneRepository {
 
   findByIdWithStory(id: string): Promise<SceneWithStory | null> {
     return this.prisma.storySceneImage.findFirst({
-      where: { id, isDeleted: false },
+      where: { id },
       include: withStory,
     });
   }
 
-  async applyPlan(storyId: string, plan: ScenePlan): Promise<void> {
-    const row = this.prisma.storySceneImage;
-    const ops: Prisma.PrismaPromise<unknown>[] = [];
-    // A: free slots. Retired rows go straight to their (unique, negative)
-    // parking index; moving kept rows go to a temporary high index.
-    for (const r of plan.retires) {
-      ops.push(
-        row.update({
-          where: { id: r.id },
-          data: {
-            isDeleted: true,
-            deletedAt: new Date(),
-            ...(r.parkIndex !== null ? { sceneIndex: r.parkIndex } : {}),
-          },
-        }),
-      );
-    }
-    for (const k of plan.keeps.filter((x) => x.fromIndex !== x.sceneIndex)) {
-      ops.push(
-        row.update({
-          where: { id: k.id },
-          data: { sceneIndex: TEMP_INDEX_OFFSET + k.fromIndex },
-        }),
-      );
-    }
-    // B: final positions + new rows
-    for (const k of plan.keeps) {
-      ops.push(
-        row.update({
-          where: { id: k.id },
-          data: {
-            sceneIndex: k.sceneIndex,
-            ...(k.prompt !== undefined ? { prompt: k.prompt } : {}),
-            ...(k.styleNotes !== undefined ? { styleNotes: k.styleNotes } : {}),
-          },
-        }),
-      );
-    }
-    for (const c of plan.creates) {
-      ops.push(
-        row.create({
-          data: {
-            storyId,
-            sceneIndex: c.sceneIndex,
-            startPage: c.startPage,
-            endPage: c.endPage,
-            textHash: c.textHash,
-            prompt: c.prompt ?? null,
-            styleNotes: c.styleNotes ?? null,
-          },
-        }),
-      );
-    }
-    await this.prisma.$transaction(ops);
+  async applyPlan(
+    storyId: string,
+    build: (existing: StorySceneImage[]) => ScenePlan,
+  ): Promise<void> {
+    await this.prisma.$transaction(
+      async (tx) => {
+        // Serialise concurrent redefinitions of the same story (released at commit).
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${storyId}))`;
+        const existing = await tx.storySceneImage.findMany({
+          where: { storyId },
+          orderBy: { sceneIndex: 'asc' },
+        });
+        const plan = build(existing);
+        const row = tx.storySceneImage;
+
+        // A: free slots. Retired rows go straight to their (unique, negative)
+        // parking index; moving kept rows go to a temporary high index.
+        for (const r of plan.retires) {
+          await row.update({
+            where: { id: r.id },
+            data: {
+              isDeleted: true,
+              deletedAt: new Date(),
+              ...(r.parkIndex !== null ? { sceneIndex: r.parkIndex } : {}),
+            },
+          });
+        }
+        const moving = plan.keeps.filter((k) => k.fromIndex !== k.sceneIndex);
+        for (const k of moving) {
+          await row.update({
+            where: { id: k.id },
+            data: { sceneIndex: TEMP_INDEX_OFFSET + k.fromIndex },
+          });
+        }
+        // B: final positions. Only rows that actually change are written, so
+        // untouched pending scenes keep their review-queue position.
+        for (const k of plan.keeps) {
+          const edited = k.prompt !== undefined || k.styleNotes !== undefined;
+          if (k.fromIndex === k.sceneIndex && !edited) continue;
+          await row.update({
+            where: { id: k.id },
+            data: {
+              sceneIndex: k.sceneIndex,
+              ...(k.prompt !== undefined ? { prompt: k.prompt } : {}),
+              ...(k.styleNotes !== undefined
+                ? { styleNotes: k.styleNotes }
+                : {}),
+            },
+          });
+        }
+        for (const c of plan.creates) {
+          await row.create({
+            data: {
+              storyId,
+              sceneIndex: c.sceneIndex,
+              startPage: c.startPage,
+              endPage: c.endPage,
+              textHash: c.textHash,
+              prompt: c.prompt ?? null,
+              styleNotes: c.styleNotes ?? null,
+            },
+          });
+        }
+      },
+      { timeout: 30_000, maxWait: 10_000 },
+    );
   }
 
   async updateIf(

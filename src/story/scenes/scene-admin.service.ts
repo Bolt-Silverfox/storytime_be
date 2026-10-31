@@ -56,6 +56,20 @@ export interface SceneUploadMeta {
   prompt?: string;
 }
 
+/** Unique-key clash (P2002) or Postgres deadlock/serialization failure from a racing redefinition. */
+function isConcurrencyConflict(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const code = (err as { code?: unknown }).code;
+  if (code === 'P2002' || code === 'P2034') return true;
+  const message = (err as { message?: unknown }).message;
+  return (
+    typeof message === 'string' &&
+    (message.includes('40P01') ||
+      message.includes('40001') ||
+      /deadlock detected/i.test(message))
+  );
+}
+
 const REVIEWABLE: SceneImageStatus[] = ['PENDING_REVIEW', 'APPROVED'];
 
 @Injectable()
@@ -98,6 +112,11 @@ export class SceneAdminService {
   private async load(id: string): Promise<SceneWithStory> {
     const row = await this.repo.findByIdWithStory(id);
     if (!row) throw new NotFoundException('Scene not found');
+    if (row.isDeleted) {
+      throw new ConflictException(
+        'Scene was removed by a redefinition of the story scenes',
+      );
+    }
     return row;
   }
 
@@ -124,57 +143,73 @@ export class SceneAdminService {
     const error = validateSceneRanges(defs, pages.length);
     if (error) throw new BadRequestException(error);
 
-    const existing = await this.repo.findByStory(storyId, {
-      includeDeleted: true,
-    });
-    // Match live scenes by content (range + text hash), NOT by index, so
-    // inserting/splitting an earlier scene never resets later approved art.
-    const key = (s: number, e: number, h: string) => `${s}:${e}:${h}`;
-    const liveByKey = new Map(
-      existing
-        .filter((e) => !e.isDeleted)
-        .map((e) => [key(e.startPage, e.endPage, e.textHash), e]),
-    );
+    const buildPlan = (existing: StorySceneImage[]): ScenePlan => {
+      // Match live scenes by content (range + text hash), NOT by index, so
+      // inserting/splitting an earlier scene never resets later approved art.
+      const key = (s: number, e: number, h: string) => `${s}:${e}:${h}`;
+      const liveByKey = new Map(
+        existing
+          .filter((e) => !e.isDeleted)
+          .map((e) => [key(e.startPage, e.endPage, e.textHash), e]),
+      );
 
-    const keeps: ScenePlan['keeps'] = [];
-    const creates: ScenePlan['creates'] = [];
-    const keptIds = new Set<string>();
-    defs.forEach((d, sceneIndex) => {
-      const textHash = hashSceneText(pages, d.startPage, d.endPage);
-      const prev = liveByKey.get(key(d.startPage, d.endPage, textHash));
-      if (prev && !keptIds.has(prev.id)) {
-        keptIds.add(prev.id);
-        keeps.push({
-          id: prev.id,
-          fromIndex: prev.sceneIndex,
-          sceneIndex,
-          prompt: d.prompt,
-          styleNotes: d.styleNotes,
-        });
-      } else {
-        creates.push({
-          sceneIndex,
-          startPage: d.startPage,
-          endPage: d.endPage,
-          textHash,
-          prompt: d.prompt,
-          styleNotes: d.styleNotes,
-        });
+      const keeps: ScenePlan['keeps'] = [];
+      const creates: ScenePlan['creates'] = [];
+      const keptIds = new Set<string>();
+      defs.forEach((d, sceneIndex) => {
+        const textHash = hashSceneText(pages, d.startPage, d.endPage);
+        const prev = liveByKey.get(key(d.startPage, d.endPage, textHash));
+        if (prev && !keptIds.has(prev.id)) {
+          keptIds.add(prev.id);
+          keeps.push({
+            id: prev.id,
+            fromIndex: prev.sceneIndex,
+            sceneIndex,
+            // only genuine edits, so an identical PUT rewrites nothing
+            prompt:
+              d.prompt !== undefined && d.prompt !== prev.prompt
+                ? d.prompt
+                : undefined,
+            styleNotes:
+              d.styleNotes !== undefined && d.styleNotes !== prev.styleNotes
+                ? d.styleNotes
+                : undefined,
+          });
+        } else {
+          creates.push({
+            sceneIndex,
+            startPage: d.startPage,
+            endPage: d.endPage,
+            textHash,
+            prompt: d.prompt,
+            styleNotes: d.styleNotes,
+          });
+        }
+      });
+
+      // Everything not kept is retired. Rows sitting on an index a scene needs
+      // are parked at a fresh negative index; the rest are soft-deleted in place.
+      let nextPark = Math.min(0, ...existing.map((e) => e.sceneIndex)) - 1;
+      const retires: ScenePlan['retires'] = [];
+      for (const e of existing) {
+        if (keptIds.has(e.id)) continue;
+        const needsSlot = e.sceneIndex >= 0 && e.sceneIndex < defs.length;
+        if (e.isDeleted && !needsSlot) continue;
+        retires.push({ id: e.id, parkIndex: needsSlot ? nextPark-- : null });
       }
-    });
+      return { keeps, creates, retires };
+    };
 
-    // Everything not kept is retired. Rows sitting on an index a scene needs
-    // are parked at a fresh negative index; the rest are soft-deleted in place.
-    let nextPark = Math.min(0, ...existing.map((e) => e.sceneIndex)) - 1;
-    const retires: ScenePlan['retires'] = [];
-    for (const e of existing) {
-      if (keptIds.has(e.id)) continue;
-      const needsSlot = e.sceneIndex >= 0 && e.sceneIndex < defs.length;
-      if (e.isDeleted && !needsSlot) continue;
-      retires.push({ id: e.id, parkIndex: needsSlot ? nextPark-- : null });
+    try {
+      await this.repo.applyPlan(storyId, buildPlan);
+    } catch (err) {
+      if (isConcurrencyConflict(err)) {
+        throw new ConflictException(
+          'Scene plan changed concurrently; reload and try again',
+        );
+      }
+      throw err;
     }
-
-    await this.repo.applyPlan(storyId, { keeps, creates, retires });
     return this.listForStory(storyId);
   }
 
@@ -216,9 +251,11 @@ export class SceneAdminService {
       },
     );
     if (!updated) {
-      await this.uploadService.deleteImage(uploaded.public_id).catch(() => {
+      try {
+        await this.uploadService.deleteImage(uploaded.public_id);
+      } catch {
         // best effort: an orphaned asset is preferable to failing the request
-      });
+      }
       throw new ConflictException(
         'Scene was redefined while the image was uploading; upload again',
       );
