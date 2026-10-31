@@ -10,20 +10,6 @@ import { AuthSessionGuard } from '@/shared/guards/auth.guard';
  * Exercises the REAL AdminGuard: only AuthSessionGuard (JWT/session lookup) is
  * replaced by a stub that trusts an `x-test-role` header.
  */
-// Nest's FileTypeValidator sniffs magic bytes through a dynamic ESM import of
-// `file-type` (via `load-esm`), which Jest's CJS VM cannot do (it fails closed
-// -> 400). Fake only that sniffer; the validator and the controller's regex run.
-let sniffed: { mime: string; ext: string } | undefined = {
-  mime: 'image/png',
-  ext: 'png',
-};
-jest.mock('load-esm', () => ({
-  loadEsm: () =>
-    Promise.resolve({
-      fileTypeFromBuffer: () => Promise.resolve(sniffed),
-    }),
-}));
-
 const SCENE = { id: 's1', status: 'PENDING_REVIEW', imageUrl: 'u' };
 const STORY_SCENES = { storyId: 'st1', pageCount: 4, scenes: [SCENE] };
 // 1x1 PNG (real magic bytes: the upload pipe sniffs the file type)
@@ -142,38 +128,56 @@ describe('AdminSceneController authorization (real AdminGuard)', () => {
     expect(res.status).toBe(status);
   });
 
-  describe('POST scene-images/:id/image upload validation', () => {
+  describe('POST scene-images/:id/image upload validation (real file bytes)', () => {
     const post = () =>
       request(app.getHttpServer())
         .post('/admin/scene-images/s1/image')
         .set('x-test-role', 'admin');
-    const png = { filename: 'a.png', contentType: 'image/png' };
-    afterEach(() => {
-      sniffed = { mime: 'image/png', ext: 'png' };
-      svc.uploadImage.mockClear();
+    // The declared content type always LIES (image/png): only the sniffed bytes count.
+    const declared = { filename: 'a.png', contentType: 'image/png' };
+    const bytes = {
+      jpeg: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46]),
+      gif: Buffer.from('GIF89a\x01\x00\x01\x00', 'binary'),
+      webp: Buffer.concat([
+        Buffer.from('RIFF'),
+        Buffer.from([0x1a, 0, 0, 0]),
+        Buffer.from('WEBPVP8 '),
+      ]),
+      pdf: Buffer.from('%PDF-1.7\n%\xe2\xe3\xcf\xd3', 'binary'),
+      bmp: Buffer.from('BM\x1e\x00\x00\x00\x00\x00', 'binary'),
+      svg: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
+      html: Buffer.from('<html><script>alert(1)</script></html>'),
+    };
+    beforeEach(() => svc.uploadImage.mockClear());
+
+    it.each([
+      ['png', PNG],
+      ['jpeg', bytes.jpeg],
+      ['gif', bytes.gif],
+      ['webp', bytes.webp],
+    ] as const)('accepts a real %s', async (_n, buf) => {
+      await post().attach('file', buf, declared).expect(201);
+      expect(svc.uploadImage).toHaveBeenCalledTimes(1);
     });
 
-    it.each(['image/webp', 'image/jpeg', 'image/gif'])(
-      'accepts %s',
-      async (mime) => {
-        sniffed = { mime, ext: 'x' };
-        await post().attach('file', PNG, png).expect(201);
-      },
-    );
-
-    it.each(['application/pdf', 'image/svg+xml', 'text/html', 'image/bmp'])(
-      'rejects sniffed type %s with 400 and never reaches the service',
-      async (mime) => {
-        sniffed = { mime, ext: 'x' };
-        await post().attach('file', PNG, png).expect(400);
+    it.each([
+      ['pdf', bytes.pdf],
+      ['bmp', bytes.bmp],
+      ['svg', bytes.svg],
+      ['html', bytes.html],
+    ] as const)(
+      'rejects %s bytes sent as image/png with 400 and never reaches the service',
+      async (_n, buf) => {
+        await post().attach('file', buf, declared).expect(400);
         expect(svc.uploadImage).not.toHaveBeenCalled();
       },
     );
 
-    it('rejects a file whose type cannot be recognised (empty/garbage) with 400', async () => {
-      sniffed = undefined;
-      await post().attach('file', Buffer.alloc(0), png).expect(400);
-      await post().attach('file', Buffer.from('not an image'), png).expect(400);
+    it('rejects empty and garbage files with 400', async () => {
+      await post().attach('file', Buffer.alloc(0), declared).expect(400);
+      await post()
+        .attach('file', Buffer.from('not an image'), declared)
+        .expect(400);
       expect(svc.uploadImage).not.toHaveBeenCalled();
     });
 
@@ -183,9 +187,8 @@ describe('AdminSceneController authorization (real AdminGuard)', () => {
     });
 
     it('rejects an oversize file (> 5 MB) with 413', async () => {
-      await post()
-        .attach('file', Buffer.alloc(5 * 1024 * 1024 + 1), png)
-        .expect(413);
+      const big = Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]);
+      await post().attach('file', big, declared).expect(413);
       expect(svc.uploadImage).not.toHaveBeenCalled();
     });
   });
