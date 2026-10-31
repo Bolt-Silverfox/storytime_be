@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { SceneAdminService } from './scene-admin.service';
 import { hashSceneText, splitStoryIntoPages } from './story-pages.util';
@@ -116,6 +117,19 @@ describe('SceneAdminService', () => {
         ).rejects.toThrow(ConflictException);
       },
     );
+
+    it.each([
+      ['P2028 (transaction closed while waiting)', { code: 'P2028' }],
+      [
+        '55P03 lock_not_available',
+        new Error('ERROR: 55P03 canceling statement due to lock timeout'),
+      ],
+    ])('maps %s to a clean 503 "busy, retry"', async (_n, err) => {
+      repo.applyPlan.mockRejectedValue(err);
+      await expect(
+        svc.replaceDefinitions('st1', [{ startPage: 0, endPage: 3 }]),
+      ).rejects.toThrow(ServiceUnavailableException);
+    });
 
     it('does not mask unrelated errors', async () => {
       repo.applyPlan.mockRejectedValue(new Error('boom'));

@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AdminSceneController } from './admin-scene.controller';
@@ -10,16 +10,40 @@ import { AuthSessionGuard } from '@/shared/guards/auth.guard';
  * Exercises the REAL AdminGuard: only AuthSessionGuard (JWT/session lookup) is
  * replaced by a stub that trusts an `x-test-role` header.
  */
+// Nest's FileTypeValidator sniffs magic bytes through a dynamic ESM import of
+// `file-type` (via `load-esm`), which Jest's CJS VM cannot do (it fails closed
+// -> 400). Fake only that sniffer; the validator and the controller's regex run.
+jest.mock('load-esm', () => ({
+  loadEsm: async () => ({
+    fileTypeFromBuffer: async () => ({ mime: 'image/png', ext: 'png' }),
+  }),
+}));
+
+const SCENE = { id: 's1', status: 'PENDING_REVIEW', imageUrl: 'u' };
+const STORY_SCENES = { storyId: 'st1', pageCount: 4, scenes: [SCENE] };
+// 1x1 PNG (real magic bytes: the upload pipe sniffs the file type)
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 describe('AdminSceneController authorization (real AdminGuard)', () => {
   let app: INestApplication;
   const svc = {
-    listForStory: jest.fn().mockResolvedValue({ scenes: [] }),
-    replaceDefinitions: jest.fn(),
-    uploadImage: jest.fn(),
-    approve: jest.fn(),
-    reject: jest.fn(),
-    requestRegenerate: jest.fn(),
-    reviewQueue: jest.fn().mockResolvedValue({ data: [], meta: { total: 0 } }),
+    listForStory: jest.fn().mockResolvedValue(STORY_SCENES),
+    replaceDefinitions: jest.fn().mockResolvedValue(STORY_SCENES),
+    uploadImage: jest
+      .fn()
+      .mockResolvedValue({ scene: SCENE, previousImageUrl: null }),
+    approve: jest.fn().mockResolvedValue(SCENE),
+    reject: jest.fn().mockResolvedValue({ ...SCENE, status: 'REJECTED' }),
+    requestRegenerate: jest
+      .fn()
+      .mockResolvedValue({ scene: SCENE, previousImageUrl: 'u' }),
+    reviewQueue: jest.fn().mockResolvedValue({
+      data: [],
+      meta: { total: 0, page: 1, limit: 20, totalPages: 0 },
+    }),
   };
 
   beforeAll(async () => {
@@ -48,29 +72,54 @@ describe('AdminSceneController authorization (real AdminGuard)', () => {
       })
       .compile();
     app = mod.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true }),
+    );
     await app.init();
   });
 
   afterAll(() => app.close());
 
-  const routes: Array<['get' | 'post' | 'put', string]> = [
-    ['get', '/admin/stories/st1/scenes'],
-    ['put', '/admin/stories/st1/scenes'],
-    ['post', '/admin/scene-images/s1/image'],
-    ['post', '/admin/scene-images/s1/approve'],
-    ['post', '/admin/scene-images/s1/reject'],
-    ['post', '/admin/scene-images/s1/regenerate'],
-    ['get', '/admin/scene-images'],
+  type Route = [
+    'get' | 'post' | 'put',
+    string,
+    number, // expected status for an admin
+    (r: request.Test) => request.Test,
+  ];
+  const json = (body: object) => (r: request.Test) => r.send(body);
+  const routes: Route[] = [
+    ['get', '/admin/stories/st1/scenes', 200, (r) => r],
+    [
+      'put',
+      '/admin/stories/st1/scenes',
+      200,
+      json({ scenes: [{ startPage: 0, endPage: 3 }] }),
+    ],
+    [
+      'post',
+      '/admin/scene-images/s1/image',
+      201,
+      (r) =>
+        r.attach('file', PNG, { filename: 'a.png', contentType: 'image/png' }),
+    ],
+    ['post', '/admin/scene-images/s1/approve', 200, json({ imageUrl: 'u' })],
+    [
+      'post',
+      '/admin/scene-images/s1/reject',
+      200,
+      json({ reason: 'r', imageUrl: 'u' }),
+    ],
+    ['post', '/admin/scene-images/s1/regenerate', 200, (r) => r],
+    ['get', '/admin/scene-images', 200, (r) => r],
   ];
 
   it.each(routes)(
     '%s %s -> 403 for a non-admin and for no user',
-    async (m, url) => {
-      await request(app.getHttpServer())
-        [m](url)
+    async (m, url, _status, withBody) => {
+      await withBody(request(app.getHttpServer())[m](url))
         .set('x-test-role', 'parent')
         .expect(403);
-      await request(app.getHttpServer())[m](url).expect(403);
+      await withBody(request(app.getHttpServer())[m](url)).expect(403);
       expect(svc.approve).not.toHaveBeenCalled();
       expect(svc.reject).not.toHaveBeenCalled();
       expect(svc.requestRegenerate).not.toHaveBeenCalled();
@@ -79,13 +128,12 @@ describe('AdminSceneController authorization (real AdminGuard)', () => {
     },
   );
 
-  it.each(routes)(
-    '%s %s is not blocked by the guard for an admin (anything but 401/403)',
-    async (m, url) => {
-      const res = await request(app.getHttpServer())
-        [m](url)
-        .set('x-test-role', 'admin');
-      expect([401, 403]).not.toContain(res.status);
-    },
-  );
+  it.each(routes)('admin: %s %s -> %i', async (m, url, status, withBody) => {
+    const res = await withBody(request(app.getHttpServer())[m](url)).set(
+      'x-test-role',
+      'admin',
+    );
+    if (res.status !== status) throw new Error(JSON.stringify(res.body));
+    expect(res.status).toBe(status);
+  });
 });

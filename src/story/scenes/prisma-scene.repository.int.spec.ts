@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { PrismaStorySceneRepository } from './prisma-scene.repository';
 import { SceneReadService } from './scene-read.service';
@@ -221,6 +221,15 @@ describe('Scene repository + services (integration)', () => {
       expect((await reload(t.id)).status).toBe('PENDING_REVIEW');
     });
 
+    it('approve vs concurrent startPage change alone (startPage guard) -> 409', async () => {
+      const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      interleave(patch(s.id, { startPage: 1 }));
+      await expect(admin.approve(s.id, 'a', 'X')).rejects.toThrow(
+        ConflictException,
+      );
+      expect((await reload(s.id)).status).toBe('PENDING_REVIEW');
+    });
+
     it('reject vs concurrent upload of Y (imageUrl guard) -> 409, Y untouched', async () => {
       const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
       interleave(patch(s.id, { imageUrl: 'Y' }));
@@ -389,6 +398,51 @@ describe('Scene repository + services (integration)', () => {
       }
     });
 
+    it('a PUT that edits prompt/styleNotes on an UNMOVED kept row persists them and bumps updatedAt', async () => {
+      const kept = await mk(0, 0, 3, {
+        status: 'PENDING_REVIEW',
+        imageUrl: 'X',
+        prompt: 'old prompt',
+        styleNotes: 'old style',
+      });
+      const before = await prisma.storySceneImage.findUniqueOrThrow({
+        where: { id: kept.id },
+      });
+      await new Promise((r) => setTimeout(r, 15));
+      await admin.replaceDefinitions(storyId, [
+        {
+          startPage: 0,
+          endPage: 3,
+          prompt: 'new prompt',
+          styleNotes: 'new style',
+        },
+      ]);
+      const after = await prisma.storySceneImage.findUniqueOrThrow({
+        where: { id: kept.id },
+      });
+      expect(after).toMatchObject({
+        sceneIndex: 0,
+        prompt: 'new prompt',
+        styleNotes: 'new style',
+        status: 'PENDING_REVIEW',
+        imageUrl: 'X',
+      });
+      expect(after.updatedAt.getTime()).toBeGreaterThan(
+        before.updatedAt.getTime(),
+      );
+    });
+
+    it('a PUT that edits only styleNotes persists it too', async () => {
+      const kept = await mk(0, 0, 3, { prompt: 'p', styleNotes: 'a' });
+      await admin.replaceDefinitions(storyId, [
+        { startPage: 0, endPage: 3, prompt: 'p', styleNotes: 'b' },
+      ]);
+      const after = await prisma.storySceneImage.findUniqueOrThrow({
+        where: { id: kept.id },
+      });
+      expect([after.prompt, after.styleNotes]).toEqual(['p', 'b']);
+    });
+
     it('does not touch kept rows that do not move (review-queue position preserved)', async () => {
       const pending = await mk(0, 0, 1, {
         status: 'PENDING_REVIEW',
@@ -408,6 +462,35 @@ describe('Scene repository + services (integration)', () => {
       expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
       expect(after.status).toBe('PENDING_REVIEW');
     });
+
+    it('a PUT that cannot get the story lock fails fast with 503, releasing its connection', async () => {
+      await mk(0, 0, 3);
+      let release!: () => void;
+      const held = new Promise<void>((r) => (release = r));
+      let locked!: () => void;
+      const lockTaken = new Promise<void>((r) => (locked = r));
+      const holder = prisma.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${storyId}))`;
+          locked();
+          await held;
+        },
+        { timeout: 60_000 },
+      );
+      await lockTaken;
+      const started = Date.now();
+      try {
+        await expect(
+          admin.replaceDefinitions(storyId, [{ startPage: 0, endPage: 3 }]),
+        ).rejects.toThrow(ServiceUnavailableException);
+        expect(Date.now() - started).toBeLessThan(15_000);
+      } finally {
+        release();
+        await holder;
+      }
+      // lock released: the same PUT now succeeds
+      await admin.replaceDefinitions(storyId, [{ startPage: 0, endPage: 3 }]);
+    }, 30_000);
 
     it('concurrent redefinitions serialise: all succeed (no deadlock / unique clash), contiguous result', async () => {
       await mk(0, 0, 3);
