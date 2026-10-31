@@ -1,5 +1,9 @@
 import { PrismaClient } from '@prisma/client';
-import { SourceCacheService } from './source-cache.service';
+import {
+  PrismaFetchLease,
+  SourceCacheService,
+  FetchLease,
+} from './source-cache.service';
 
 /**
  * Real-Postgres tests for the source cache. Skipped when no DATABASE_URL.
@@ -150,6 +154,117 @@ describeDb('SourceCacheService (real Postgres)', () => {
         expect(fetcher).toHaveBeenCalledTimes(6);
       } finally {
         await small.$disconnect();
+      }
+    }, 30000);
+  });
+
+  describe('losing the lease', () => {
+    const key = (id: string) => `${source}\u0000${id}`;
+
+    it("PrismaFetchLease.release deletes only the caller's own lease (key AND owner)", async () => {
+      const lease = new PrismaFetchLease(prisma);
+      await prisma.$executeRaw`INSERT INTO "source_fetch_lease" ("sourceName","sourceId","lockedBy","expiresAt")
+        VALUES (${source}, 'own', 'other-owner', (now() at time zone 'utc') + interval '1 minute')`;
+      await lease.release(key('own'), 'me');
+      expect(
+        await prisma.sourceFetchLease.count({
+          where: {
+            sourceName: source,
+            sourceId: 'own',
+            lockedBy: 'other-owner',
+          },
+        }),
+      ).toBe(1);
+      await lease.release(key('own'), 'other-owner');
+      expect(
+        await prisma.sourceFetchLease.count({
+          where: { sourceName: source, sourceId: 'own' },
+        }),
+      ).toBe(0);
+    });
+
+    it("renew only extends the owner's lease", async () => {
+      const lease = new PrismaFetchLease(prisma);
+      expect(await lease.claim(key('rn'), 'a', 60000)).toBe(true);
+      expect(await lease.claim(key('rn'), 'b', 60000)).toBe(false);
+      expect(await lease.renew(key('rn'), 'b', 60000)).toBe(false);
+      expect(await lease.renew(key('rn'), 'a', 60000)).toBe(true);
+    });
+
+    it('renew always false: the stale holder discards its result; ONE winner, newer data kept', async () => {
+      const real = new PrismaFetchLease(prisma);
+      const noRenew: FetchLease = {
+        claim: (k, o, l) => real.claim(k, o, l),
+        renew: () => Promise.resolve(false),
+        release: (k, o) => real.release(k, o),
+        fenced: (k, o, w) => real.fenced(k, o, w),
+      };
+      const stale = new SourceCacheService(prisma as any, noRenew);
+      const fresh = new SourceCacheService(prisma2 as any);
+      const pA = stale.getOrFetch(
+        source,
+        'lost1',
+        async () => {
+          await new Promise((r) => setTimeout(r, 1800));
+          return { httpStatus: 200, contentHash: 'A-old' };
+        },
+        { leaseMs: 300 },
+      );
+      await new Promise((r) => setTimeout(r, 700)); // A's lease has expired
+      const b = await fresh.getOrFetch(source, 'lost1', () =>
+        Promise.resolve({ httpStatus: 200, contentHash: 'B-new' }),
+      );
+      expect(b.fetched).toBe(true);
+      const a = await pA;
+      expect(a.fetched).toBe(false);
+      expect(a.entry.contentHash).toBe('B-new');
+      const row = await prisma.sourceCache.findFirstOrThrow({
+        where: { sourceName: source, sourceId: 'lost1' },
+      });
+      expect(row.contentHash).toBe('B-new');
+      expect(row.contentChanged).toBe(false);
+      expect(row.previousContentHash).toBeNull();
+    }, 20000);
+
+    it("A's pool is hogged so its real renew times out: stale result is discarded", async () => {
+      const url = new URL(process.env.DATABASE_URL!);
+      url.searchParams.set('connection_limit', '1');
+      url.searchParams.set('pool_timeout', '1');
+      const hogged = new PrismaClient({ datasourceUrl: url.toString() });
+      await hogged.$connect();
+      const stale = new SourceCacheService(hogged as any);
+      const fresh = new SourceCacheService(prisma2 as any);
+      try {
+        const pA = stale.getOrFetch(
+          source,
+          'lost2',
+          async () => {
+            // hog A's only connection: renew (and A's own write) cannot run
+            void hogged.$transaction(
+              async (tx) => {
+                await tx.$executeRaw`SELECT pg_sleep(2.5)`;
+              },
+              { timeout: 10000 },
+            );
+            await new Promise((r) => setTimeout(r, 3000));
+            return { httpStatus: 200, contentHash: 'A-old' };
+          },
+          { leaseMs: 600 },
+        );
+        await new Promise((r) => setTimeout(r, 1200));
+        const b = await fresh.getOrFetch(source, 'lost2', () =>
+          Promise.resolve({ httpStatus: 200, contentHash: 'B-new' }),
+        );
+        expect(b.fetched).toBe(true);
+        const a = await pA;
+        expect(a.entry.contentHash).toBe('B-new');
+        const row = await prisma.sourceCache.findFirstOrThrow({
+          where: { sourceName: source, sourceId: 'lost2' },
+        });
+        expect(row.contentHash).toBe('B-new');
+        expect(row.contentChanged).toBe(false);
+      } finally {
+        await hogged.$disconnect();
       }
     }, 30000);
   });

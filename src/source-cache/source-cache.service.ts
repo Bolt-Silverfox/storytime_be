@@ -9,6 +9,7 @@ export const DEFAULT_NOT_FOUND_TTL_MS = 7 * DAY_MS;
 export const DEFAULT_LEASE_MS = 60_000;
 export const DEFAULT_WAIT_TIMEOUT_MS = 180_000;
 export const DEFAULT_POLL_MS = 250;
+export const DEFAULT_FETCH_TIMEOUT_MS = 60_000;
 export const MAX_POLL_MS = 2_000;
 export const SOURCE_FETCH_LEASE = Symbol('SOURCE_FETCH_LEASE');
 
@@ -29,6 +30,8 @@ export interface FetchResult {
 /** Receives the previous entry (if any) so it can send If-None-Match etc. */
 export type SourceFetcher = (
   previous: SourceCache | null,
+  /** Aborted on fetchTimeoutMs or when the lease is lost; pass to HTTP calls. */
+  signal: AbortSignal,
 ) => Promise<FetchResult>;
 
 export interface CacheOptions {
@@ -43,13 +46,31 @@ export interface CacheOptions {
   waitTimeoutMs?: number;
   /** Initial poll interval while waiting (backs off to 2 s). */
   pollMs?: number;
+  /**
+   * Hard cap on one fetcher run (default 60 s): the signal is aborted, the
+   * call rejects and the lease is released. Importers must still set their own
+   * HTTP timeouts; this only bounds a fetcher that hangs.
+   */
+  fetchTimeoutMs?: number;
 }
+
+type Db = Pick<PrismaClient, 'sourceCache'>;
 
 /** Claim/renew/release of the per-key fetch lease. No connection is held. */
 export interface FetchLease {
   claim(key: LeaseKey, owner: string, leaseMs: number): Promise<boolean>;
   renew(key: LeaseKey, owner: string, leaseMs: number): Promise<boolean>;
   release(key: LeaseKey, owner: string): Promise<void>;
+  /**
+   * Run `work` only if `owner` still holds an unexpired lease, atomically
+   * (the lease row is locked for the duration so nobody can take it over
+   * mid-write). Used to fence the cache write.
+   */
+  fenced<T>(
+    key: LeaseKey,
+    owner: string,
+    work: (db: Db) => Promise<T>,
+  ): Promise<{ held: true; value: T } | { held: false }>;
 }
 export type LeaseKey = string; // `${sourceName}\u0000${sourceId}`
 
@@ -76,6 +97,24 @@ export class SourceCacheFetchError extends Error {
       `Source fetch for ${sourceName}/${sourceId} returned HTTP ${httpStatus}; not cached`,
     );
     this.name = 'SourceCacheFetchError';
+  }
+}
+
+/** Thrown when this caller lost its lease and no newer entry exists. */
+export class SourceCacheLeaseLostError extends Error {
+  constructor(sourceName: string, sourceId: string) {
+    super(
+      `Lost the fetch lease on ${sourceName}/${sourceId}; result discarded`,
+    );
+    this.name = 'SourceCacheLeaseLostError';
+  }
+}
+
+/** Thrown when a fetcher exceeded fetchTimeoutMs. */
+export class SourceCacheFetchTimeoutError extends Error {
+  constructor(sourceName: string, sourceId: string, ms: number) {
+    super(`Fetch of ${sourceName}/${sourceId} exceeded ${ms} ms`);
+    this.name = 'SourceCacheFetchTimeoutError';
   }
 }
 
@@ -121,6 +160,29 @@ export class PrismaFetchLease implements FetchLease {
     return n === 1;
   }
 
+  async fenced<T>(
+    key: LeaseKey,
+    owner: string,
+    work: (db: Db) => Promise<T>,
+  ): Promise<{ held: true; value: T } | { held: false }> {
+    const [name, id] = splitKey(key);
+    // Short transaction (only the write, never the fetch). FOR UPDATE keeps a
+    // competing claim's ON CONFLICT UPDATE waiting until we commit.
+    return this.prisma.$transaction(
+      async (tx) => {
+        const rows = await tx.$queryRaw<{ ok: number }[]>`
+          SELECT 1 AS ok FROM "source_fetch_lease"
+          WHERE "sourceName" = ${name} AND "sourceId" = ${id}
+            AND "lockedBy" = ${owner}
+            AND "expiresAt" > (now() at time zone 'utc')
+          FOR UPDATE`;
+        if (rows.length === 0) return { held: false as const };
+        return { held: true as const, value: await work(tx) };
+      },
+      { timeout: 15_000, maxWait: 15_000 },
+    );
+  }
+
   async release(key: LeaseKey, owner: string) {
     const [name, id] = splitKey(key);
     await this.prisma.sourceFetchLease.deleteMany({
@@ -130,8 +192,6 @@ export class PrismaFetchLease implements FetchLease {
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-type Db = Pick<PrismaClient, 'sourceCache'>;
 
 const isCacheable = (status: number) =>
   (status >= 200 && status < 300) ||
@@ -283,7 +343,8 @@ export class SourceCacheService {
   ): Promise<GetOrFetchResult> {
     const key = `${sourceName}\u0000${sourceId}`;
     const running = this.inFlight.get(key);
-    if (running) return running;
+    // Joiners share the result but did not run the fetcher themselves.
+    if (running) return running.then((r) => ({ ...r, fetched: false }));
 
     const flight = this.run(sourceName, sourceId, fetcher, options).finally(
       () => this.inFlight.delete(key),
@@ -323,24 +384,60 @@ export class SourceCacheService {
       }
     }
 
+    const abort = new AbortController();
+    let lost = false;
+    let lastRenewOk = Date.now();
+    let renewing = false;
+    const markLost = (why: string) => {
+      if (lost) return;
+      lost = true;
+      this.logger.warn(`Fetch lease on ${sourceName}/${sourceId} lost: ${why}`);
+      abort.abort();
+    };
     const beat = setInterval(
       () => {
-        this.lease.renew(key, this.owner, leaseMs).catch((e: unknown) => {
-          this.logger.warn(
-            `Lease renew failed for ${sourceName}/${sourceId}: ${String(e)}`,
-          );
-        });
+        if (renewing || lost) return;
+        renewing = true;
+        this.lease
+          .renew(key, this.owner, leaseMs)
+          .then((ok) => {
+            if (ok) lastRenewOk = Date.now();
+            else markLost('renew reported another holder');
+          })
+          .catch((e: unknown) => {
+            this.logger.warn(
+              `Lease renew failed for ${sourceName}/${sourceId}: ${String(e)}`,
+            );
+            if (Date.now() - lastRenewOk >= leaseMs)
+              markLost('renewals failing past lease expiry');
+          })
+          .finally(() => {
+            renewing = false;
+          });
       },
       Math.max(10, Math.floor(leaseMs / 3)),
     );
     beat.unref();
+    const timeoutMs = options.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+    let timer: NodeJS.Timeout | undefined;
     try {
       // Re-check under the lease: the previous holder may just have finished.
       const current = await this.get(sourceName, sourceId);
       if (current && this.isFresh(current, nowFn())) {
         return { entry: current, fetched: false };
       }
-      const result = await fetcher(current);
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          abort.abort();
+          reject(
+            new SourceCacheFetchTimeoutError(sourceName, sourceId, timeoutMs),
+          );
+        }, timeoutMs);
+        timer.unref();
+      });
+      const running = fetcher(current, abort.signal);
+      running.catch(() => undefined); // a late rejection after timeout is not unhandled
+      const result = await Promise.race([running, timeout]);
       if (!isCacheable(result.httpStatus)) {
         throw new SourceCacheFetchError(
           sourceName,
@@ -348,16 +445,28 @@ export class SourceCacheService {
           result.httpStatus,
         );
       }
-      const entry = await this.put({
-        sourceName,
-        sourceId,
-        result,
-        ...options,
-        now: nowFn(),
-      });
-      return { entry, fetched: true };
+
+      // Fenced write: only if we still hold an unexpired lease. A holder that
+      // lost it must not overwrite a newer fetch with a stale result.
+      const written = lost
+        ? ({ held: false } as const)
+        : await this.lease.fenced(key, this.owner, (db) =>
+            this.put(
+              { sourceName, sourceId, result, ...options, now: nowFn() },
+              db,
+            ),
+          );
+      if (written.held) return { entry: written.value, fetched: true };
+
+      this.logger.warn(
+        `Discarding stale fetch result for ${sourceName}/${sourceId}: lease lost`,
+      );
+      const newer = await this.get(sourceName, sourceId);
+      if (newer) return { entry: newer, fetched: false };
+      throw new SourceCacheLeaseLostError(sourceName, sourceId);
     } finally {
       clearInterval(beat);
+      if (timer) clearTimeout(timer);
       await this.lease.release(key, this.owner).catch((e: unknown) => {
         this.logger.warn(
           `Lease release failed for ${sourceName}/${sourceId}: ${String(e)}`,

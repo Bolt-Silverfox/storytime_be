@@ -2,6 +2,8 @@ import {
   SourceCacheService,
   SourceCacheFetchError,
   SourceCacheLeaseTimeoutError,
+  SourceCacheLeaseLostError,
+  SourceCacheFetchTimeoutError,
   FetchResult,
 } from './source-cache.service';
 
@@ -36,11 +38,22 @@ function makeFakePrisma() {
   return { prisma, rows, delegate };
 }
 
+const fakeDbRef: { current: any } = { current: null };
+
 /** In-memory lease; `busyFor` = number of claim() calls that fail first. */
-function makeFakeLease(busyFor = 0) {
+function makeFakeLease(busyFor = 0, renewResult = true) {
   let busy = busyFor;
   const held = new Set<string>();
+  const state = { revoked: false };
   return {
+    state,
+    fenced: jest.fn(
+      async (key: string, _o: string, work: (db: any) => Promise<any>) => {
+        if (state.revoked || !held.has(key)) return { held: false as const };
+        return { held: true as const, value: await work(fakeDbRef.current) };
+      },
+    ) as any,
+
     held,
     claim: jest.fn((key: string) => {
       if (busy > 0) {
@@ -50,7 +63,7 @@ function makeFakeLease(busyFor = 0) {
       held.add(key);
       return Promise.resolve(true);
     }),
-    renew: jest.fn().mockResolvedValue(true),
+    renew: jest.fn().mockResolvedValue(renewResult),
     release: jest.fn((key: string) => {
       held.delete(key);
       return Promise.resolve();
@@ -75,6 +88,7 @@ describe('SourceCacheService', () => {
 
   beforeEach(() => {
     fake = makeFakePrisma();
+    fakeDbRef.current = fake.prisma;
     lease = makeFakeLease();
     svc = new SourceCacheService(fake.prisma, lease);
   });
@@ -175,7 +189,8 @@ describe('SourceCacheService', () => {
       const fetcher = jest.fn().mockResolvedValue(ok());
       const r = await svc.getOrFetch('gutenberg', '11', fetcher, { now: NOW });
       expect(fetcher).toHaveBeenCalledTimes(1);
-      expect(fetcher).toHaveBeenCalledWith(null);
+      expect(fetcher.mock.calls[0][0]).toBeNull();
+      expect(fetcher.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
       expect(r.fetched).toBe(true);
       expect(r.entry.contentHash).toBe('h1');
     });
@@ -261,6 +276,8 @@ describe('SourceCacheService', () => {
       const [ra, rb] = await Promise.all([a, b]);
       expect(fetcher).toHaveBeenCalledTimes(1);
       expect(ra.entry.id).toBe(rb.entry.id);
+      // only the caller that ran the fetcher reports fetched=true
+      expect([ra.fetched, rb.fetched]).toEqual([true, false]);
     });
 
     it('does not share a flight across different keys', async () => {
@@ -333,6 +350,80 @@ describe('SourceCacheService', () => {
       await svc.getOrFetch('g', '1', jest.fn().mockResolvedValue(ok()), {
         now: NOW,
       });
+    });
+  });
+
+  describe('lease loss and fencing', () => {
+    const slow = (ms: number, over: Partial<FetchResult> = {}) =>
+      jest.fn(
+        (_prev: unknown, _signal?: AbortSignal) =>
+          new Promise<FetchResult>((r) => setTimeout(() => r(ok(over)), ms)),
+      );
+
+    it('aborts the fetcher and skips the write when renew reports the lease lost', async () => {
+      lease = makeFakeLease(0, false);
+      svc = new SourceCacheService(fake.prisma, lease);
+      // a newer winner already wrote a row
+      await svc.put({
+        sourceName: 'g',
+        sourceId: '1',
+        result: ok({ contentHash: 'B-new' }),
+        now: new Date(NOW.getTime() - 10 * DAY),
+        ttlMs: DAY,
+      });
+      const fetcher = slow(200, { contentHash: 'A-old' });
+      const r = await svc.getOrFetch('g', '1', fetcher, {
+        now: NOW,
+        leaseMs: 30,
+      });
+      expect(fetcher.mock.calls[0][1]!.aborted).toBe(true);
+      expect(r.fetched).toBe(false);
+      expect(r.entry.contentHash).toBe('B-new');
+      expect((await svc.get('g', '1'))!.contentHash).toBe('B-new');
+      expect((await svc.get('g', '1'))!.contentChanged).toBe(false);
+    });
+
+    it('fences the write: a revoked lease discards the result even if renew never noticed', async () => {
+      const fetcher = jest.fn(() => {
+        lease.state.revoked = true; // someone else took the expired lease
+        return Promise.resolve(ok({ contentHash: 'A-old' }));
+      });
+      await expect(
+        svc.getOrFetch('g', '1', fetcher, { now: NOW }),
+      ).rejects.toBeInstanceOf(SourceCacheLeaseLostError);
+      expect(await svc.get('g', '1')).toBeNull();
+    });
+
+    it('returns the current entry instead of throwing when the lease was lost but a row exists', async () => {
+      const fetcher = jest.fn(async () => {
+        await svc.put({
+          sourceName: 'g',
+          sourceId: '1',
+          result: ok({ contentHash: 'B-new' }),
+          now: NOW,
+        });
+        lease.state.revoked = true;
+        return ok({ contentHash: 'A-old' });
+      });
+      const r = await svc.getOrFetch('g', '1', fetcher, {
+        now: new Date(NOW.getTime() + 40 * DAY),
+      });
+      expect(r.fetched).toBe(false);
+      expect(r.entry.contentHash).toBe('B-new');
+    });
+
+    it('a hung fetcher is aborted after fetchTimeoutMs and the lease is released', async () => {
+      let signal!: AbortSignal;
+      const fetcher = jest.fn((_p: unknown, s: AbortSignal) => {
+        signal = s;
+        return new Promise<FetchResult>(() => undefined);
+      });
+      await expect(
+        svc.getOrFetch('g', '1', fetcher, { now: NOW, fetchTimeoutMs: 30 }),
+      ).rejects.toBeInstanceOf(SourceCacheFetchTimeoutError);
+      expect(signal.aborted).toBe(true);
+      expect(lease.held.size).toBe(0);
+      expect(await svc.get('g', '1')).toBeNull();
     });
   });
 
