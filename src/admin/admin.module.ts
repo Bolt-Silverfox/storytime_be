@@ -63,6 +63,8 @@ import { CouponModule } from '../coupon/coupon.module';
 import { PaymentModule } from '../payment/payment.module';
 import { HttpModule } from '@nestjs/axios';
 import { UploadModule } from '../upload/upload.module';
+import { SceneModule } from '../story/scenes/scene.module';
+import { AdminSceneController } from './admin-scene.controller';
 import { AdminSseController } from './sse/admin-sse.controller';
 import { AdminSseService } from './sse/admin-sse.service';
 import { SseAuthGuard } from './sse/sse-auth.guard';
@@ -76,6 +78,7 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     PaymentModule,
     HttpModule,
     UploadModule,
+    SceneModule,
   ],
   controllers: [
     AdminDashboardController,
@@ -87,6 +90,7 @@ import { SseAuthGuard } from './sse/sse-auth.guard';
     AdminReadingAnalyticsController,
     AdminCouponController,
     AdminFxRateController,
+    AdminSceneController,
     AdminSystemController,
     AdminAuditLogController,
     AdminUserHistoryController,

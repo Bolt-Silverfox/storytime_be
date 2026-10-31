@@ -10,6 +10,7 @@ import { TTS_CIRCUIT_BREAKER_CONFIG } from '@/shared/constants/circuit-breaker.c
 import { splitByWordCountPreservingSentences } from '../../voice/utils/paragraph-splitter';
 import { VoiceQuotaService } from '../../voice/voice-quota.service';
 import { SubscriptionService } from '../../subscription/subscription.service';
+import { STORY_WORDS_PER_PAGE } from '../scenes/story-pages.util';
 import { TtsSynthesisService } from './tts-synthesis.service';
 import { TtsCacheService } from './tts-cache.service';
 import { preprocessTextForTTS } from './tts-text.util';
@@ -19,7 +20,7 @@ import {
 } from '@/shared/constants/guest-audio.constants';
 
 /** Must match mobile StoryContentContainer's wordsPerChunk */
-const WORDS_PER_CHUNK = 30;
+const WORDS_PER_CHUNK = STORY_WORDS_PER_PAGE;
 /** Max concurrent TTS provider calls in a batch */
 const MAX_CONCURRENT = 5;
 /** Max paragraphs allowed in a single batch request */

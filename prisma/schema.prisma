@@ -353,6 +353,7 @@ model Story {
   isDeleted             Boolean                @default(false)
   deletedAt             DateTime?
   images                StoryImage[]
+  sceneImages           StorySceneImage[]
   branches              StoryBranch[]
   favorites             Favorite[]
   parentFavorites       ParentFavorite[]
@@ -402,6 +403,48 @@ model StoryImage {
   @@index([storyId])
   @@index([isDeleted])
   @@map("story_images")
+}
+
+// Per-scene illustration. A scene is a STORED range of pages (pages = the
+// backend's 30-word split of Story.textContent, 0-based, endPage inclusive).
+// Kept separate from StoryImage (no ordering, no review workflow, unused by
+// clients) so the legacy `images` payload is untouched. Only APPROVED rows with
+// an imageUrl and a matching textHash are ever served to clients.
+enum SceneImageStatus {
+  PENDING_GENERATION
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+model StorySceneImage {
+  id              String           @id @default(uuid())
+  storyId         String
+  story           Story            @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  sceneIndex      Int
+  startPage       Int
+  endPage         Int
+  // sha256 of the scene's page text at definition time; mismatch => stale
+  textHash        String
+  imageUrl        String?
+  prompt          String?
+  styleNotes      String?
+  provider        String?
+  model           String?
+  status          SceneImageStatus @default(PENDING_GENERATION)
+  // admin user id (no FK, same convention as FxRate.createdByAdminId)
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean          @default(false)
+  deletedAt       DateTime?
+
+  @@unique([storyId, sceneIndex])
+  @@index([status, isDeleted, updatedAt, id])
+  @@map("story_scene_images")
 }
 
 model StoryBranch {

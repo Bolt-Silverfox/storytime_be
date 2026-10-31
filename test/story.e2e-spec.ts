@@ -21,6 +21,7 @@ import { StoryProgressService } from '../src/story/story-progress.service';
 import { StoryRecommendationService } from '../src/story/story-recommendation.service';
 import { DailyChallengeService } from '../src/story/daily-challenge.service';
 import { StoryQuotaService } from '../src/story/story-quota.service';
+import { SceneReadService } from '../src/story/scenes/scene-read.service';
 import { StoryQueueService } from '../src/story/queue';
 import { KidOwnershipService } from '../src/story/services/kid-ownership.service';
 import { STORY_REPOSITORY } from '../src/story/repositories/story.repository.interface';
@@ -297,6 +298,14 @@ describe('Story (e2e)', () => {
         },
         { provide: DailyChallengeService, useValue: mockDailyChallengeService },
         { provide: StoryQuotaService, useValue: mockStoryQuotaService },
+        {
+          provide: SceneReadService,
+          useValue: {
+            getReadExtras: jest
+              .fn()
+              .mockResolvedValue({ pages: [], scenes: [] }),
+          },
+        },
         { provide: StoryQueueService, useValue: mockStoryQueueService },
         {
           provide: PrismaService,
