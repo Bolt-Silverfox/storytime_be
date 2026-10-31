@@ -79,10 +79,13 @@ describe('AdminSceneController authorization (real AdminGuard)', () => {
     },
   );
 
-  it('lets an admin through', async () => {
-    await request(app.getHttpServer())
-      .get('/admin/scene-images')
-      .set('x-test-role', 'admin')
-      .expect(200);
-  });
+  it.each(routes)(
+    '%s %s is not blocked by the guard for an admin (anything but 401/403)',
+    async (m, url) => {
+      const res = await request(app.getHttpServer())
+        [m](url)
+        .set('x-test-role', 'admin');
+      expect([401, 403]).not.toContain(res.status);
+    },
+  );
 });

@@ -77,9 +77,51 @@ describe('SceneAdminService', () => {
     const live = (over: Record<string, unknown>) => scene(over);
     const hash = (a: number, b: number) => hashSceneText(pages, a, b);
 
+    let lastPlan: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     beforeEach(() => {
+      lastPlan = undefined;
       repo.findStoryText.mockResolvedValue({ id: 'st1', textContent: TEXT });
       repo.findByStory.mockResolvedValue([]);
+      // the plan is built INSIDE the repo's locked transaction from the rows it reads
+      repo.applyPlan.mockImplementation(
+        async (id: string, build: (rows: unknown[]) => unknown) => {
+          lastPlan = build(
+            await repo.findByStory(id, { includeDeleted: true }),
+          );
+        },
+      );
+    });
+
+    it('omits unchanged prompt/styleNotes so kept rows are not rewritten', async () => {
+      repo.findByStory.mockResolvedValue([
+        live({ id: 'a', sceneIndex: 0, prompt: 'same', styleNotes: null }),
+      ]);
+      await svc.replaceDefinitions('st1', [
+        { startPage: 0, endPage: 1, prompt: 'same' },
+        { startPage: 2, endPage: 3 },
+      ]);
+      expect(lastPlan.keeps[0].prompt).toBeUndefined();
+      expect(lastPlan.keeps[0].styleNotes).toBeUndefined();
+    });
+
+    it.each([
+      ['P2002', { code: 'P2002' }],
+      ['deadlock 40P01', new Error('ERROR: deadlock detected (40P01)')],
+    ])(
+      'maps %s from a concurrent redefinition to a clean 409',
+      async (_n, err) => {
+        repo.applyPlan.mockRejectedValue(err);
+        await expect(
+          svc.replaceDefinitions('st1', [{ startPage: 0, endPage: 3 }]),
+        ).rejects.toThrow(ConflictException);
+      },
+    );
+
+    it('does not mask unrelated errors', async () => {
+      repo.applyPlan.mockRejectedValue(new Error('boom'));
+      await expect(
+        svc.replaceDefinitions('st1', [{ startPage: 0, endPage: 3 }]),
+      ).rejects.toThrow('boom');
     });
 
     it('rejects invalid ranges without writing', async () => {
@@ -101,7 +143,7 @@ describe('SceneAdminService', () => {
         { startPage: 0, endPage: 1, prompt: 'p' },
         { startPage: 2, endPage: 3 },
       ]);
-      const [, plan] = repo.applyPlan.mock.calls[0];
+      const plan = lastPlan;
       expect(plan.keeps).toEqual([]);
       expect(plan.retires).toEqual([]);
       expect(plan.creates).toEqual([
@@ -124,7 +166,7 @@ describe('SceneAdminService', () => {
         { startPage: 0, endPage: 1 },
         { startPage: 2, endPage: 3 },
       ]);
-      const [, plan] = repo.applyPlan.mock.calls[0];
+      const plan = lastPlan;
       expect(plan.keeps).toEqual([
         expect.objectContaining({ id: 'a', fromIndex: 0, sceneIndex: 0 }),
       ]);
@@ -158,7 +200,7 @@ describe('SceneAdminService', () => {
         { startPage: 1, endPage: 1 },
         { startPage: 2, endPage: 3 },
       ]);
-      const [, plan] = repo.applyPlan.mock.calls[0];
+      const plan = lastPlan;
       expect(plan.keeps).toEqual([
         expect.objectContaining({ id: 'b', fromIndex: 1, sceneIndex: 2 }),
       ]);
@@ -189,7 +231,7 @@ describe('SceneAdminService', () => {
         { startPage: 0, endPage: 1 },
         { startPage: 2, endPage: 3 },
       ]);
-      const [, plan] = repo.applyPlan.mock.calls[0];
+      const plan = lastPlan;
       expect(plan.keeps).toEqual([]);
       expect(plan.creates).toHaveLength(2);
       expect(plan.retires.map((r: { id: string }) => r.id).sort()).toEqual([
@@ -204,7 +246,7 @@ describe('SceneAdminService', () => {
         live({ id: 'c', sceneIndex: 5, startPage: 9, endPage: 9 }),
       ]);
       await svc.replaceDefinitions('st1', [{ startPage: 0, endPage: 3 }]);
-      const [, plan] = repo.applyPlan.mock.calls[0];
+      const plan = lastPlan;
       expect(plan.keeps).toEqual([]);
       const byId = Object.fromEntries(
         plan.retires.map((r: { id: string; parkIndex: number | null }) => [
@@ -221,11 +263,28 @@ describe('SceneAdminService', () => {
         live({ id: 'd', sceneIndex: 0, isDeleted: true }),
       ]);
       await svc.replaceDefinitions('st1', [{ startPage: 0, endPage: 3 }]);
-      const [, plan] = repo.applyPlan.mock.calls[0];
+      const plan = lastPlan;
       expect(plan.retires).toEqual([
         expect.objectContaining({ id: 'd', parkIndex: expect.any(Number) }),
       ]);
     });
+  });
+
+  describe('retired scenes', () => {
+    it.each(['approve', 'reject', 'regenerate', 'upload'])(
+      '%s on a scene retired by a redefinition is a 409, not a 404',
+      async (op) => {
+        repo.findByIdWithStory.mockResolvedValue(scene({ isDeleted: true }));
+        const call = {
+          approve: () => svc.approve('s1', 'a', 'u'),
+          reject: () => svc.reject('s1', 'a', 'r', 'u'),
+          regenerate: () => svc.requestRegenerate('s1'),
+          upload: () =>
+            svc.uploadImage('s1', { buffer: Buffer.from('x') } as never, {}),
+        }[op]!;
+        await expect(call()).rejects.toThrow(ConflictException);
+      },
+    );
   });
 
   describe('uploadImage', () => {

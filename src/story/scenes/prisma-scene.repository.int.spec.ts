@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConflictException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { PrismaStorySceneRepository } from './prisma-scene.repository';
 import { SceneReadService } from './scene-read.service';
@@ -22,6 +23,8 @@ const h = (a: number, b: number) => hashSceneText(pages, a, b);
 describe('Scene repository + services (integration)', () => {
   let prisma: PrismaService;
   let repo: PrismaStorySceneRepository;
+  let storeRepo: PrismaStorySceneRepository; // the instance the services use
+  let uploadSvc: { deleteImage: jest.Mock };
   let read: SceneReadService;
   let admin: SceneAdminService;
   let storyId: string;
@@ -51,6 +54,8 @@ describe('Scene repository + services (integration)', () => {
     }).compile();
     prisma = module.get(PrismaService);
     repo = module.get(PrismaStorySceneRepository);
+    storeRepo = module.get(STORY_SCENE_REPOSITORY);
+    uploadSvc = module.get(UploadService);
     read = module.get(SceneReadService);
     admin = module.get(SceneAdminService);
   });
@@ -131,53 +136,187 @@ describe('Scene repository + services (integration)', () => {
     });
   });
 
-  describe('approval races (guarded writes)', () => {
-    it('approve of an image the reviewer saw succeeds', async () => {
+  describe('guarded writes: a real write lands between the service load and its guarded update', () => {
+    // The service has already loaded (and pre-checked) a snapshot when the
+    // interleaved write happens, so only the guard in the guarded UPDATE can
+    // stop it. Emptying/weakening a guard makes the matching test fail.
+    const interleave = (fn: () => Promise<unknown>) => {
+      const orig = storeRepo.findByIdWithStory.bind(storeRepo);
+      jest
+        .spyOn(storeRepo, 'findByIdWithStory')
+        .mockImplementationOnce(async (id: string) => {
+          const row = await orig(id);
+          await fn();
+          return row;
+        });
+    };
+    const patch = (id: string, data: Record<string, unknown>) => () =>
+      prisma.storySceneImage.update({ where: { id }, data: data as never });
+    const reload = (id: string) =>
+      prisma.storySceneImage.findUniqueOrThrow({ where: { id } });
+    const file = { buffer: Buffer.from('y') } as Express.Multer.File;
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('approve: baseline succeeds when nothing interleaves', async () => {
       const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
-      const res = await admin.approve(s.id, 'admin-1', 'X');
-      expect(res.status).toBe('APPROVED');
+      expect((await admin.approve(s.id, 'admin-1', 'X')).status).toBe(
+        'APPROVED',
+      );
       expect((await read.getReadExtras(storyId, TEXT)).scenes).toHaveLength(1);
     });
 
-    it('image replaced between view and approve -> 409, Y never served', async () => {
+    it('approve vs concurrent reject (status guard) -> 409, stays REJECTED, not served', async () => {
       const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
-      await admin.uploadImage(s.id, { buffer: Buffer.from('y') } as never, {});
-      await expect(admin.approve(s.id, 'admin-1', 'X')).rejects.toThrow(
-        /changed|Conflict|pending/i,
+      interleave(patch(s.id, { status: 'REJECTED' }));
+      await expect(admin.approve(s.id, 'a', 'X')).rejects.toThrow(
+        ConflictException,
       );
-      expect((await read.getReadExtras(storyId, TEXT)).scenes).toEqual([]);
-      const row = await prisma.storySceneImage.findUniqueOrThrow({
-        where: { id: s.id },
-      });
-      expect(row.status).toBe('PENDING_REVIEW');
-    });
-
-    it('reject committed after approve loaded it -> stays REJECTED', async () => {
-      const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
-      // the approve's guarded write, issued after a concurrent reject
-      await admin.reject(s.id, 'admin-2', 'nope', 'X');
-      const won = await repo.updateIf(
-        s.id,
-        { status: 'PENDING_REVIEW', imageUrl: 'X', isDeleted: false },
-        { status: 'APPROVED', reviewedById: 'admin-1', reviewedAt: new Date() },
-      );
-      expect(won).toBeNull();
-      const row = await prisma.storySceneImage.findUniqueOrThrow({
-        where: { id: s.id },
-      });
-      expect(row.status).toBe('REJECTED');
+      expect((await reload(s.id)).status).toBe('REJECTED');
       expect((await read.getReadExtras(storyId, TEXT)).scenes).toEqual([]);
     });
 
-    it('regenerate then approve -> 409, no APPROVED row without an image', async () => {
+    it('approve vs concurrent upload of Y (imageUrl guard) -> 409, Y never approved', async () => {
       const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
-      await admin.requestRegenerate(s.id);
-      await expect(admin.approve(s.id, 'admin-1', 'X')).rejects.toThrow();
-      const row = await prisma.storySceneImage.findUniqueOrThrow({
-        where: { id: s.id },
+      interleave(patch(s.id, { imageUrl: 'Y' }));
+      await expect(admin.approve(s.id, 'a', 'X')).rejects.toThrow(
+        ConflictException,
+      );
+      const row = await reload(s.id);
+      expect([row.status, row.imageUrl]).toEqual(['PENDING_REVIEW', 'Y']);
+    });
+
+    it('approve vs concurrent regenerate -> 409, no APPROVED row without an image', async () => {
+      const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      interleave(patch(s.id, { status: 'PENDING_GENERATION', imageUrl: null }));
+      await expect(admin.approve(s.id, 'a', 'X')).rejects.toThrow(
+        ConflictException,
+      );
+      const row = await reload(s.id);
+      expect([row.status, row.imageUrl]).toEqual(['PENDING_GENERATION', null]);
+    });
+
+    it('approve vs concurrent retire by a PUT (isDeleted guard) -> 409, stays unapproved', async () => {
+      const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      interleave(patch(s.id, { isDeleted: true, deletedAt: new Date() }));
+      await expect(admin.approve(s.id, 'a', 'X')).rejects.toThrow(
+        ConflictException,
+      );
+      expect((await reload(s.id)).status).toBe('PENDING_REVIEW');
+    });
+
+    it('approve vs concurrent redefinition of the scene text (range/hash guard) -> 409', async () => {
+      const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      interleave(patch(s.id, { textHash: 'changed' }));
+      await expect(admin.approve(s.id, 'a', 'X')).rejects.toThrow(
+        ConflictException,
+      );
+      expect((await reload(s.id)).status).toBe('PENDING_REVIEW');
+      const t = await mk(1, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      await prisma.storySceneImage.delete({ where: { id: s.id } });
+      interleave(patch(t.id, { endPage: 2 }));
+      await expect(admin.approve(t.id, 'a', 'X')).rejects.toThrow(
+        ConflictException,
+      );
+      expect((await reload(t.id)).status).toBe('PENDING_REVIEW');
+    });
+
+    it('reject vs concurrent upload of Y (imageUrl guard) -> 409, Y untouched', async () => {
+      const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      interleave(patch(s.id, { imageUrl: 'Y' }));
+      await expect(admin.reject(s.id, 'a', 'r', 'X')).rejects.toThrow(
+        ConflictException,
+      );
+      const row = await reload(s.id);
+      expect([row.status, row.imageUrl]).toEqual(['PENDING_REVIEW', 'Y']);
+    });
+
+    it('reject vs concurrent status change (status guard) -> 409', async () => {
+      const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      interleave(patch(s.id, { status: 'APPROVED' }));
+      await expect(admin.reject(s.id, 'a', 'r', 'X')).rejects.toThrow(
+        ConflictException,
+      );
+      expect((await reload(s.id)).status).toBe('APPROVED');
+    });
+
+    it('reject vs concurrent retire (isDeleted guard) -> 409', async () => {
+      const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      interleave(patch(s.id, { isDeleted: true, deletedAt: new Date() }));
+      await expect(admin.reject(s.id, 'a', 'r', 'X')).rejects.toThrow(
+        ConflictException,
+      );
+      expect((await reload(s.id)).status).toBe('PENDING_REVIEW');
+    });
+
+    it('regenerate vs concurrent upload of Y (imageUrl guard) -> 409, Y kept', async () => {
+      const s = await mk(0, 0, 3, { status: 'APPROVED', imageUrl: 'X' });
+      interleave(patch(s.id, { status: 'PENDING_REVIEW', imageUrl: 'Y' }));
+      await expect(admin.requestRegenerate(s.id)).rejects.toThrow(
+        ConflictException,
+      );
+      expect((await reload(s.id)).imageUrl).toBe('Y');
+    });
+
+    it('regenerate vs concurrent status change (status guard) -> 409', async () => {
+      const s = await mk(0, 0, 3, { status: 'APPROVED', imageUrl: 'X' });
+      interleave(patch(s.id, { status: 'REJECTED' }));
+      await expect(admin.requestRegenerate(s.id)).rejects.toThrow(
+        ConflictException,
+      );
+      const row = await reload(s.id);
+      expect([row.status, row.imageUrl]).toEqual(['REJECTED', 'X']);
+    });
+
+    it('regenerate vs concurrent retire (isDeleted guard) -> 409', async () => {
+      const s = await mk(0, 0, 3, { status: 'APPROVED', imageUrl: 'X' });
+      interleave(patch(s.id, { isDeleted: true, deletedAt: new Date() }));
+      await expect(admin.requestRegenerate(s.id)).rejects.toThrow(
+        ConflictException,
+      );
+      expect((await reload(s.id)).status).toBe('APPROVED');
+    });
+
+    it('upload vs concurrent redefinition (range/hash/isDeleted guards) -> 409, nothing attached, asset discarded', async () => {
+      for (const change of [
+        { textHash: 'changed' },
+        { endPage: 2 },
+        { startPage: 1 },
+        { isDeleted: true, deletedAt: new Date() },
+      ]) {
+        jest.clearAllMocks();
+        const s = await mk(0, 0, 3, {
+          status: 'PENDING_GENERATION',
+          imageUrl: null,
+        });
+        interleave(patch(s.id, change));
+        await expect(admin.uploadImage(s.id, file, {})).rejects.toThrow(
+          ConflictException,
+        );
+        const row = await reload(s.id);
+        expect(row.imageUrl).toBeNull();
+        expect(row.status).toBe('PENDING_GENERATION');
+        expect(uploadSvc.deleteImage).toHaveBeenCalledWith('p');
+        await prisma.storySceneImage.delete({ where: { id: s.id } });
+      }
+    });
+
+    it('operating on a scene already retired by a redefinition is a 409, not a 404', async () => {
+      const s = await mk(0, 0, 3, {
+        status: 'PENDING_REVIEW',
+        imageUrl: 'X',
+        isDeleted: true,
+        deletedAt: new Date(),
       });
-      expect(row.status).toBe('PENDING_GENERATION');
-      expect(row.imageUrl).toBeNull();
+      await expect(admin.approve(s.id, 'a', 'X')).rejects.toThrow(
+        ConflictException,
+      );
+      await expect(admin.reject(s.id, 'a', 'r', 'X')).rejects.toThrow(
+        ConflictException,
+      );
+      await expect(admin.requestRegenerate(s.id)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -238,6 +377,64 @@ describe('Scene repository + services (integration)', () => {
         await admin.replaceDefinitions(storyId, defs);
         const live = await repo.findByStory(storyId);
         expect(live.map((r) => r.sceneIndex)).toEqual(defs.map((_, i) => i));
+      }
+    });
+
+    it('does not touch kept rows that do not move (review-queue position preserved)', async () => {
+      const pending = await mk(0, 0, 1, {
+        status: 'PENDING_REVIEW',
+        imageUrl: 'X',
+      });
+      await mk(1, 2, 3, { status: 'PENDING_GENERATION', imageUrl: null });
+      const before = await prisma.storySceneImage.findUniqueOrThrow({
+        where: { id: pending.id },
+      });
+      await admin.replaceDefinitions(storyId, [
+        { startPage: 0, endPage: 1 },
+        { startPage: 2, endPage: 3 },
+      ]);
+      const after = await prisma.storySceneImage.findUniqueOrThrow({
+        where: { id: pending.id },
+      });
+      expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
+      expect(after.status).toBe('PENDING_REVIEW');
+    });
+
+    it('concurrent redefinitions serialise: no deadlock, no unhandled DB error, contiguous result', async () => {
+      await mk(0, 0, 3);
+      const variants = [
+        [{ startPage: 0, endPage: 3 }],
+        [
+          { startPage: 0, endPage: 1 },
+          { startPage: 2, endPage: 3 },
+        ],
+        [
+          { startPage: 0, endPage: 0 },
+          { startPage: 1, endPage: 2 },
+          { startPage: 3, endPage: 3 },
+        ],
+        [
+          { startPage: 0, endPage: 2 },
+          { startPage: 3, endPage: 3 },
+        ],
+      ];
+      for (let round = 0; round < 8; round++) {
+        const results = await Promise.allSettled(
+          variants.map((v) => admin.replaceDefinitions(storyId, v)),
+        );
+        for (const r of results) {
+          if (r.status === 'rejected') {
+            expect(r.reason).toBeInstanceOf(ConflictException);
+          }
+        }
+        const live = await repo.findByStory(storyId);
+        expect(live.map((x) => x.sceneIndex)).toEqual(live.map((_, i) => i));
+        let next = 0;
+        for (const sc of live) {
+          expect(sc.startPage).toBe(next);
+          next = sc.endPage + 1;
+        }
+        expect(next).toBe(pages.length);
       }
     });
   });
