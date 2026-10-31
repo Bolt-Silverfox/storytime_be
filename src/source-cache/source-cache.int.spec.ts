@@ -15,6 +15,11 @@ describeDb('SourceCacheService (real Postgres)', () => {
   const svcB = new SourceCacheService(prisma2 as any);
   const source = `it_${Date.now()}`;
 
+  // Open both pools up front so connection setup isn't counted in test time.
+  beforeAll(async () => {
+    await Promise.all([prisma.$connect(), prisma2.$connect()]);
+  });
+
   afterEach(async () => {
     await prisma.sourceCache.deleteMany({ where: { sourceName: source } });
   });
