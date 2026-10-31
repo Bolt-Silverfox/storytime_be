@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import type { SceneImageStatus, StorySceneImage } from '@prisma/client';
+import type { Prisma, SceneImageStatus, StorySceneImage } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type {
   IStorySceneRepository,
@@ -142,23 +141,14 @@ export class PrismaStorySceneRepository implements IStorySceneRepository {
     guard: Prisma.StorySceneImageWhereInput,
     data: Prisma.StorySceneImageUncheckedUpdateInput,
   ): Promise<StorySceneImage | null> {
-    try {
-      // Single guarded UPDATE ... RETURNING (Prisma extendedWhereUnique): the
-      // unique id plus the guard conditions, atomically.
-      return await this.prisma.storySceneImage.update({
-        where: { id, AND: [guard] },
-        data,
-      });
-    } catch (err) {
-      // P2025: no row matched id + guard (a concurrent change won)
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2025'
-      ) {
-        return null;
-      }
-      throw err;
-    }
+    // Single guarded UPDATE ... RETURNING. `updateManyAndReturn` (unlike
+    // `update`) returns an empty array when the guard does not match, so an
+    // expected lost race is silent (no prisma:error P2025 log / Sentry noise).
+    const rows = await this.prisma.storySceneImage.updateManyAndReturn({
+      where: { AND: [{ id }, guard] },
+      data: data as Prisma.StorySceneImageUpdateManyMutationInput,
+    });
+    return rows[0] ?? null;
   }
 
   async listForReview(params: {
