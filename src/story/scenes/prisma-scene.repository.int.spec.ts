@@ -345,6 +345,36 @@ describe('Scene repository + services (integration)', () => {
     });
   });
 
+  describe('review queue ordering', () => {
+    it('pages deterministically (updatedAt asc, id asc) when timestamps are equal: no gaps or duplicates', async () => {
+      const same = new Date('2026-01-01T00:00:00.000Z');
+      const rows = [];
+      for (let i = 0; i < 7; i++) {
+        rows.push(
+          await mk(i, i, i, { status: 'PENDING_REVIEW', imageUrl: `u${i}` }),
+        );
+      }
+      // force identical updatedAt (the @updatedAt trigger is client-side, so raw SQL sticks)
+      await prisma.$executeRaw`UPDATE story_scene_images SET "updatedAt" = ${same} WHERE "storyId" = ${storyId}`;
+      const seen: string[] = [];
+      for (let page = 0; page < 4; page++) {
+        const { items, total } = await repo.listForReview({
+          status: 'PENDING_REVIEW',
+          skip: page * 3,
+          take: 3,
+        });
+        expect(total).toBeGreaterThanOrEqual(7);
+        seen.push(
+          ...items.filter((r) => r.storyId === storyId).map((r) => r.id),
+        );
+      }
+      const expected = rows.map((r) => r.id).sort();
+      expect([...seen].sort()).toEqual(expected);
+      expect(new Set(seen).size).toBe(seen.length);
+      expect(seen).toEqual([...seen].sort()); // id asc within equal updatedAt
+    });
+  });
+
   describe('replaceDefinitions keeps unchanged scenes across index shifts', () => {
     it('INSERT: [0-1, 2-3 approved] -> [0-0, 1-1, 2-3] keeps the approved art', async () => {
       await mk(0, 0, 1, { status: 'PENDING_GENERATION', imageUrl: null });

@@ -42,6 +42,7 @@ describe('StoryReadController - scene illustrations', () => {
   it('adds pages and scenes and leaves every existing field unchanged', async () => {
     const extras = {
       pages: ['Hello there.'],
+      pageCount: 1,
       scenes: [
         { index: 0, startPage: 0, endPage: 0, imageUrl: 'https://s0.webp' },
       ],
@@ -52,6 +53,7 @@ describe('StoryReadController - scene illustrations', () => {
 
     expect(scenes.getReadExtras).toHaveBeenCalledWith('st1', 'Hello there.');
     expect(res).toEqual({ ...STORY, ...extras });
+    expect(res.pageCount).toBe(1);
     expect(res.coverImageUrl).toBe('https://cover');
     expect(res.images).toEqual(STORY.images);
   });

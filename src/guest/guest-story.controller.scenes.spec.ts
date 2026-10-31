@@ -45,6 +45,7 @@ describe('GuestStoryController.getStoryForGuest - scene illustrations', () => {
   it('adds pages and approved scenes, keeping existing fields', async () => {
     const extras = {
       pages: ['Hello there.'],
+      pageCount: 1,
       scenes: [
         { index: 0, startPage: 0, endPage: 0, imageUrl: 'https://s0.webp' },
       ],

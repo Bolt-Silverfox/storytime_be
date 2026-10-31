@@ -32,6 +32,7 @@ describe('SceneReadService', () => {
     const res = await svc.getReadExtras('st1', TEXT);
     expect(res.pages).toEqual(pages);
     expect(res.pages).toHaveLength(4);
+    expect(res.pageCount).toBe(4);
     expect(res.scenes).toEqual([]);
   });
 
@@ -84,7 +85,7 @@ describe('SceneReadService', () => {
 
   it('skips the DB when the story has no text', async () => {
     const res = await svc.getReadExtras('st1', null);
-    expect(res).toEqual({ pages: [], scenes: [] });
+    expect(res).toEqual({ pages: [], pageCount: 0, scenes: [] });
     expect(repo.findApprovedByStory).not.toHaveBeenCalled();
   });
 });
