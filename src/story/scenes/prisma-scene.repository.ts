@@ -146,7 +146,7 @@ export class PrismaStorySceneRepository implements IStorySceneRepository {
     // expected lost race is silent (no prisma:error P2025 log / Sentry noise).
     const rows = await this.prisma.storySceneImage.updateManyAndReturn({
       where: { AND: [{ id }, guard] },
-      data: data as Prisma.StorySceneImageUpdateManyMutationInput,
+      data,
     });
     return rows[0] ?? null;
   }
