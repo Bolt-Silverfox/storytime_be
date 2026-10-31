@@ -19,7 +19,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiConflictResponse,
   ApiConsumes,
+  ApiServiceUnavailableResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
@@ -86,6 +88,13 @@ export class AdminSceneController {
   }
 
   @Put('stories/:storyId/scenes')
+  @ApiConflictResponse({
+    description:
+      'Scene plan changed concurrently (unique-key/deadlock); reload and retry',
+  })
+  @ApiServiceUnavailableResponse({
+    description: 'Another redefinition holds the story lock; retry shortly',
+  })
   @ApiOperation({
     summary: 'Create/replace scene definitions for a story',
     description:
@@ -109,6 +118,10 @@ export class AdminSceneController {
     FileInterceptor('file', { limits: { fileSize: MAX_IMAGE_SIZE } }),
   )
   @ApiConsumes('multipart/form-data')
+  @ApiConflictResponse({
+    description:
+      'Scene is stale, was retired by a redefinition, or was redefined while the image was uploading (asset discarded)',
+  })
   @ApiOperation({
     summary: 'Upload an illustration for a scene',
     description:
@@ -144,6 +157,10 @@ export class AdminSceneController {
 
   @Post('scene-images/:id/approve')
   @HttpCode(HttpStatus.OK)
+  @ApiConflictResponse({
+    description:
+      'Scene was retired/stale, is not pending review, or the image/range changed or a concurrent reject/regenerate/upload won since the reviewer viewed it',
+  })
   @ApiOperation({
     summary: 'Approve a scene image',
     description:
@@ -168,6 +185,10 @@ export class AdminSceneController {
 
   @Post('scene-images/:id/reject')
   @HttpCode(HttpStatus.OK)
+  @ApiConflictResponse({
+    description:
+      'Scene was retired, has nothing to reject, or the image changed / a concurrent change won since the reviewer viewed it',
+  })
   @ApiOperation({ summary: 'Reject a scene image (reason required)' })
   @ApiBody({ type: RejectSceneDto })
   async reject(
@@ -190,6 +211,10 @@ export class AdminSceneController {
 
   @Post('scene-images/:id/regenerate')
   @HttpCode(HttpStatus.OK)
+  @ApiConflictResponse({
+    description:
+      'Scene was retired, is already pending generation, or was changed concurrently',
+  })
   @ApiOperation({
     summary: 'Request regeneration',
     description:

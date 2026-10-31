@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import type { SceneImageStatus, StorySceneImage } from '@prisma/client';
 import { UploadService } from '@/upload/upload.service';
@@ -57,6 +58,16 @@ export interface SceneUploadMeta {
 }
 
 /** Unique-key clash (P2002) or Postgres deadlock/serialization failure from a racing redefinition. */
+function isBusy(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  if ((err as { code?: unknown }).code === 'P2028') return true; // tx closed/timed out
+  const message = (err as { message?: unknown }).message;
+  return (
+    typeof message === 'string' &&
+    (message.includes('55P03') || /lock timeout/i.test(message))
+  );
+}
+
 function isConcurrencyConflict(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const code = (err as { code?: unknown }).code;
@@ -203,6 +214,11 @@ export class SceneAdminService {
     try {
       await this.repo.applyPlan(storyId, buildPlan);
     } catch (err) {
+      if (isBusy(err)) {
+        throw new ServiceUnavailableException(
+          'Another scene update for this story is in progress; retry shortly',
+        );
+      }
       if (isConcurrencyConflict(err)) {
         throw new ConflictException(
           'Scene plan changed concurrently; reload and try again',

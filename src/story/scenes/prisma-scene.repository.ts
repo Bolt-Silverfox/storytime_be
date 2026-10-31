@@ -12,6 +12,9 @@ const withStory = {
 } as const;
 
 /** Temporary index for kept rows while they swap places (unique key safety). */
+/** How long a redefinition waits for the per-story lock before giving up. */
+const LOCK_TIMEOUT_MS = 5000;
+
 const TEMP_INDEX_OFFSET = 1_000_000;
 
 @Injectable()
@@ -61,6 +64,11 @@ export class PrismaStorySceneRepository implements IStorySceneRepository {
     await this.prisma.$transaction(
       async (tx) => {
         // Serialise concurrent redefinitions of the same story (released at commit).
+        // Fail fast instead of queueing behind a long redefinition: a waiter
+        // otherwise pins a pooled connection until the tx timeout (55P03).
+        await tx.$executeRawUnsafe(
+          `SET LOCAL lock_timeout = '${LOCK_TIMEOUT_MS}ms'`,
+        );
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${storyId}))`;
         const existing = await tx.storySceneImage.findMany({
           where: { storyId },
