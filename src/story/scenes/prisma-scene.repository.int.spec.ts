@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import type { StorySceneImage } from '@prisma/client';
 import type { ScenePlan } from './scene.repository.interface';
@@ -164,6 +165,53 @@ describe('Scene repository + services (integration)', () => {
     const file = { buffer: Buffer.from('y') } as Express.Multer.File;
 
     afterEach(() => jest.restoreAllMocks());
+
+    it('updateIf changes ONLY the targeted id even when other rows match the same guard', async () => {
+      // two scenes with identical range/hash/status/imageUrl (and a third with null imageUrl x2)
+      const a1 = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      const a2 = await mk(1, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      const guard = {
+        isDeleted: false,
+        status: 'PENDING_REVIEW' as const,
+        imageUrl: 'X',
+        startPage: 0,
+        endPage: 3,
+        textHash: h(0, 3),
+      };
+      const hit = await storeRepo.updateIf(a1.id, guard, {
+        status: 'APPROVED',
+      });
+      expect(hit?.id).toBe(a1.id);
+      expect((await reload(a1.id)).status).toBe('APPROVED');
+      expect((await reload(a2.id)).status).toBe('PENDING_REVIEW');
+
+      const n1 = await mk(2, 0, 3, {
+        status: 'PENDING_GENERATION',
+        imageUrl: null,
+      });
+      const n2 = await mk(3, 0, 3, {
+        status: 'PENDING_GENERATION',
+        imageUrl: null,
+      });
+      const nullGuard = {
+        isDeleted: false,
+        status: 'PENDING_GENERATION' as const,
+        imageUrl: null,
+      };
+      expect(
+        (await storeRepo.updateIf(n1.id, nullGuard, { prompt: 'only me' }))?.id,
+      ).toBe(n1.id);
+      expect((await reload(n1.id)).prompt).toBe('only me');
+      expect((await reload(n2.id)).prompt).toBeNull();
+    });
+
+    it('approving one of two identical pending scenes leaves the other pending', async () => {
+      const s1 = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      const s2 = await mk(1, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
+      await admin.approve(s1.id, 'a', 'X');
+      expect((await reload(s1.id)).status).toBe('APPROVED');
+      expect((await reload(s2.id)).status).toBe('PENDING_REVIEW');
+    });
 
     it('approve: baseline succeeds when nothing interleaves', async () => {
       const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
@@ -346,48 +394,62 @@ describe('Scene repository + services (integration)', () => {
   });
 
   describe('review queue ordering', () => {
-    it('pages deterministically (updatedAt asc, id asc) when timestamps are equal: no gaps or duplicates', async () => {
-      const same = new Date('2026-01-01T00:00:00.000Z');
-      // ids inserted in DESCENDING order so heap/insert order != id order
-      const ids = Array.from(
-        { length: 7 },
-        (_, i) => `ffffffff-0000-4000-8000-00000000000${7 - i}`,
-      );
-      // Without the (status,isDeleted,updatedAt,id) index the planner must sort,
-      // so ties are broken only by the explicit `id asc` tiebreaker. (The index
-      // would otherwise hand rows back in id order and mask a missing tiebreaker.)
-      await prisma.$executeRawUnsafe(
-        'DROP INDEX IF EXISTS "story_scene_images_status_isDeleted_updatedAt_id_idx"',
-      );
-      try {
-        for (let i = 0; i < ids.length; i++) {
-          await mk(i, i, i, {
-            id: ids[i],
-            status: 'PENDING_REVIEW',
-            imageUrl: `u${i}`,
-          });
-        }
-        // identical updatedAt (@updatedAt is client-side, so raw SQL sticks)
-        await prisma.$executeRaw`UPDATE story_scene_images SET "updatedAt" = ${same} WHERE "storyId" = ${storyId}`;
-        const seen: string[] = [];
-        for (let page = 0; page < 4; page++) {
-          const { items, total } = await repo.listForReview({
-            status: 'PENDING_REVIEW',
-            skip: page * 3,
-            take: 3,
-          });
-          expect(total).toBeGreaterThanOrEqual(7);
-          seen.push(
-            ...items.filter((r) => r.storyId === storyId).map((r) => r.id),
-          );
-        }
-        expect(seen).toEqual([...ids].sort()); // id asc, no gaps/duplicates
-      } finally {
+    // Dropping the covering index forces a sort so only the explicit `id asc`
+    // tiebreaker orders ties. That is DDL, so it only runs on a database whose
+    // name marks it as disposable (CI uses storytime_test); set
+    // SCENE_INT_ALLOW_INDEX_DROP=1 to opt in on another throwaway database.
+    const dbName = (process.env.DATABASE_URL ?? '')
+      .split('?')[0]
+      .split('/')
+      .pop();
+    const canDropIndex =
+      /(^|_)test$/i.test(dbName ?? '') ||
+      process.env.SCENE_INT_ALLOW_INDEX_DROP === '1';
+    const queueIndexSql =
+      'CREATE INDEX IF NOT EXISTS "story_scene_images_status_isDeleted_updatedAt_id_idx" ON "story_scene_images"("status", "isDeleted", "updatedAt", "id")';
+
+    // repair drift if an earlier run was killed between DROP and CREATE
+    beforeAll(() => prisma.$executeRawUnsafe(queueIndexSql));
+
+    (canDropIndex ? it : it.skip)(
+      'pages deterministically (updatedAt asc, id asc) when timestamps are equal: no gaps or duplicates',
+      async () => {
+        const same = new Date('2026-01-01T00:00:00.000Z');
+        // random ids per run (no clashes on a shared DB), inserted in DESCENDING
+        // order so heap/insert order != id order
+        const sorted = Array.from({ length: 7 }, () => randomUUID()).sort();
+        const insertOrder = [...sorted].reverse();
         await prisma.$executeRawUnsafe(
-          'CREATE INDEX IF NOT EXISTS "story_scene_images_status_isDeleted_updatedAt_id_idx" ON "story_scene_images"("status", "isDeleted", "updatedAt", "id")',
+          'DROP INDEX IF EXISTS "story_scene_images_status_isDeleted_updatedAt_id_idx"',
         );
-      }
-    });
+        try {
+          for (let i = 0; i < insertOrder.length; i++) {
+            await mk(i, i, i, {
+              id: insertOrder[i],
+              status: 'PENDING_REVIEW',
+              imageUrl: `u${i}`,
+            });
+          }
+          // identical updatedAt (@updatedAt is client-side, so raw SQL sticks)
+          await prisma.$executeRaw`UPDATE story_scene_images SET "updatedAt" = ${same} WHERE "storyId" = ${storyId}`;
+          const seen: string[] = [];
+          for (let page = 0; page < 4; page++) {
+            const { items, total } = await repo.listForReview({
+              status: 'PENDING_REVIEW',
+              skip: page * 3,
+              take: 3,
+            });
+            expect(total).toBeGreaterThanOrEqual(7);
+            seen.push(
+              ...items.filter((r) => r.storyId === storyId).map((r) => r.id),
+            );
+          }
+          expect(seen).toEqual(sorted); // id asc, no gaps/duplicates
+        } finally {
+          await prisma.$executeRawUnsafe(queueIndexSql);
+        }
+      },
+    );
   });
 
   describe('replaceDefinitions keeps unchanged scenes across index shifts', () => {
