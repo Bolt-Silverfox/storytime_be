@@ -71,50 +71,95 @@ describe('AdminSceneController', () => {
     );
   });
 
-  it('uploads an image', async () => {
-    svc.uploadImage.mockResolvedValue({ id: 's1', status: 'PENDING_REVIEW' });
+  it('uploads an image and audits old + new url', async () => {
+    svc.uploadImage.mockResolvedValue({
+      scene: { id: 's1', status: 'PENDING_REVIEW', imageUrl: 'new' },
+      previousImageUrl: 'old',
+    });
     const file = { buffer: Buffer.from('x') } as Express.Multer.File;
-    await controller.uploadImage(req, 's1', file, { provider: 'p' });
+    const res = await controller.uploadImage(req, 's1', file, { provider: 'p' });
     expect(svc.uploadImage).toHaveBeenCalledWith('s1', file, { provider: 'p' });
+    expect(res.data).toEqual(expect.objectContaining({ imageUrl: 'new' }));
     expect(record).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'scene_image.upload', targetId: 's1' }),
+      expect.objectContaining({
+        action: 'scene_image.upload',
+        targetId: 's1',
+        details: expect.objectContaining({
+          previousImageUrl: 'old',
+          imageUrl: 'new',
+        }),
+      }),
     );
   });
 
-  it('approve passes the reviewer id and audit-logs', async () => {
-    svc.approve.mockResolvedValue({ id: 's1', status: 'APPROVED' });
-    await controller.approve(req, 's1');
-    expect(svc.approve).toHaveBeenCalledWith('s1', 'admin-1');
+  it('approve passes reviewer + seen image and audits the approved url', async () => {
+    svc.approve.mockResolvedValue({
+      id: 's1',
+      status: 'APPROVED',
+      imageUrl: 'seen',
+    });
+    await controller.approve(req, 's1', { imageUrl: 'seen' });
+    expect(svc.approve).toHaveBeenCalledWith('s1', 'admin-1', 'seen');
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
         adminId: 'admin-1',
         action: 'scene_image.approve',
         targetType: 'StorySceneImage',
         targetId: 's1',
+        details: expect.objectContaining({ imageUrl: 'seen' }),
       }),
     );
   });
 
-  it('reject passes reviewer + reason', async () => {
+  it('reject passes reviewer, reason and seen image', async () => {
     svc.reject.mockResolvedValue({ id: 's1', status: 'REJECTED' });
-    await controller.reject(req, 's1', { reason: 'bad hands' });
-    expect(svc.reject).toHaveBeenCalledWith('s1', 'admin-1', 'bad hands');
+    await controller.reject(req, 's1', {
+      reason: 'bad hands',
+      imageUrl: 'seen',
+    });
+    expect(svc.reject).toHaveBeenCalledWith(
+      's1',
+      'admin-1',
+      'bad hands',
+      'seen',
+    );
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'scene_image.reject',
-        details: expect.objectContaining({ reason: 'bad hands' }),
+        details: expect.objectContaining({
+          reason: 'bad hands',
+          imageUrl: 'seen',
+        }),
       }),
     );
   });
 
-  it('regenerate queues generation', async () => {
-    svc.requestRegenerate.mockResolvedValue({ id: 's1' });
+  it('regenerate queues generation and audits the discarded url', async () => {
+    svc.requestRegenerate.mockResolvedValue({
+      scene: { id: 's1' },
+      previousImageUrl: 'old',
+    });
     await controller.regenerate(req, 's1');
     expect(svc.requestRegenerate).toHaveBeenCalledWith('s1');
     expect(record).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'scene_image.regenerate' }),
+      expect.objectContaining({
+        action: 'scene_image.regenerate',
+        details: expect.objectContaining({ previousImageUrl: 'old' }),
+      }),
     );
   });
+
+  it.each(['approve', 'reject', 'regenerate'] as const)(
+    '%s responds 200 to match its body',
+    (method) => {
+      expect(
+        Reflect.getMetadata(
+          '__httpCode__',
+          AdminSceneController.prototype[method],
+        ),
+      ).toBe(200);
+    },
+  );
 
   it('review queue forwards filters and returns meta', async () => {
     svc.reviewQueue.mockResolvedValue({
