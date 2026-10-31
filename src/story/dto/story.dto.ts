@@ -17,6 +17,47 @@ import {
 import { SanitizeHtml } from '@/shared/decorators/sanitize-html.decorator';
 export { VoiceType } from '@/voice/dto/voice.dto';
 
+/**
+ * Credit information for openly-licensed / community stories. Null for every
+ * story without provenance. Deliberately excludes sourceId, contentHash,
+ * adaptationNotes and importedAt (internal; admin sees the last two).
+ */
+export class StoryCreditDto {
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Exact credit string to display with the story (author, licence, adaptation).',
+    example: 'Story by A. Author. Licensed CC BY 4.0. Adapted by Storytime.',
+  })
+  attributionText?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'A. Author' })
+  authorName?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'SPDX-style licence code',
+    example: 'CC-BY-4.0',
+  })
+  licenseCode?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'https://creativecommons.org/licenses/by/4.0/',
+  })
+  licenseUrl?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Where the story came from (e.g. gutenberg, bookdash)',
+    example: 'bookdash',
+  })
+  sourceName?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'https://bookdash.org/' })
+  sourceUrl?: string | null;
+}
+
 export class StoryImageDto {
   @ApiProperty()
   @IsString()
@@ -54,6 +95,24 @@ export class StoryBranchDto {
   @IsOptional()
   @IsString()
   nextB?: string;
+}
+
+/** Response shape of GET /stories/:id (documentation only). */
+export class StoryReadResponseDto extends StoryCreditDto {
+  @ApiProperty() id: string;
+  @ApiProperty() title: string;
+  @ApiProperty() description: string;
+  @ApiProperty() language: string;
+  @ApiProperty({ nullable: true }) coverImageUrl: string | null;
+  @ApiProperty({ nullable: true }) audioUrl: string | null;
+  @ApiProperty({ nullable: true }) textContent: string | null;
+  @ApiProperty() isInteractive: boolean;
+  @ApiProperty() ageMin: number;
+  @ApiProperty() ageMax: number;
+  @ApiProperty({ type: [StoryImageDto] }) images: StoryImageDto[];
+  @ApiProperty({ type: [StoryBranchDto] }) branches: StoryBranchDto[];
+  @ApiProperty() createdAt: Date;
+  @ApiProperty() updatedAt: Date;
 }
 
 export class CreateStoryDto {

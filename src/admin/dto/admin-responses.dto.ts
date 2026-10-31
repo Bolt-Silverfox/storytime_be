@@ -1,4 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { StoryCreditDto } from '@/story/dto/story.dto';
 
 // Nested type definitions for DTOs
 export class ProfileInfo {
@@ -1017,7 +1018,20 @@ export class UserDetailDto {
   };
 }
 
-export class StoryDetailDto {
+export class StoryDetailDto extends StoryCreditDto {
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Admin only: what Storytime changed from the source text',
+    example: 'Shortened for ages 3-5; AI-assisted rewrite of paragraph 2',
+  })
+  adaptationNotes?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Admin only: when the story was imported',
+  })
+  importedAt?: Date | null;
+
   @ApiProperty({ description: 'Story ID', example: 'story-123' })
   id: string;
 

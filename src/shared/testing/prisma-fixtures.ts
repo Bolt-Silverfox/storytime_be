@@ -153,6 +153,16 @@ export const makeStory = (overrides: Partial<Story> = {}): Story => ({
   isDeleted: false,
   deletedAt: null,
   creatorKidId: null,
+  sourceName: null,
+  sourceId: null,
+  sourceUrl: null,
+  licenseCode: null,
+  licenseUrl: null,
+  authorName: null,
+  attributionText: null,
+  adaptationNotes: null,
+  importedAt: null,
+  contentHash: null,
   ...overrides,
 });
 

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { SeedContext, SeedResult } from './types';
+import { contentHashOf } from '../../src/shared/utils/content-hash.util';
 
 interface StoryQuestion {
   question: string;
@@ -28,7 +29,32 @@ interface StoryData {
   durationSeconds?: number;
   difficultyLevel?: number;
   aiGenerated?: boolean;
+  // Optional provenance (see docs/story-provenance.md)
+  sourceName?: string;
+  sourceId?: string;
+  sourceUrl?: string;
+  licenseCode?: string;
+  licenseUrl?: string;
+  authorName?: string;
+  attributionText?: string;
+  adaptationNotes?: string;
+  importedAt?: string;
+  contentHash?: string;
 }
+
+const sourceKey = (name?: string | null, id?: string | null) =>
+  name && id ? `${name}\u0000${id}` : null;
+
+/**
+ * Hash used for dedupe/persistence: the supplied contentHash, or (only for
+ * stories that declare a sourceName) the hash of the normalised text. Plain
+ * curated stories are neither hashed nor hash-deduped (no behaviour change).
+ */
+const hashFor = (story: StoryData): string | null => {
+  if (story.contentHash) return story.contentHash;
+  if (story.sourceName && story.content) return contentHashOf(story.content);
+  return null;
+};
 
 export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
   const { prisma, logger } = ctx;
@@ -48,7 +74,11 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
     }
 
     const files = fs.readdirSync(dataDir).filter((file) => {
-      if (!file.startsWith('stories') || !file.endsWith('.json') || file.includes('backup')) {
+      if (
+        !file.startsWith('stories') ||
+        !file.endsWith('.json') ||
+        file.includes('backup')
+      ) {
         return false;
       }
 
@@ -71,11 +101,24 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
 
     // Pre-fetch existing titles to avoid duplicates
     const existingStories = await prisma.story.findMany({
-      select: { title: true },
+      select: {
+        title: true,
+        sourceName: true,
+        sourceId: true,
+        contentHash: true,
+      },
     });
     const existingTitles = new Set(
       existingStories.map((s) => s.title.trim().toLowerCase()),
     );
+
+    const existingSourceKeys = new Set<string>();
+    const existingHashes = new Set<string>();
+    for (const e of existingStories) {
+      const k = sourceKey(e.sourceName, e.sourceId);
+      if (k) existingSourceKeys.add(k);
+      if (e.contentHash) existingHashes.add(e.contentHash);
+    }
 
     let count = 0;
     let skipped = 0;
@@ -108,12 +151,16 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
         let batchCount = 0;
         let batchSkipped = 0;
         const createdTitlesThisBatch: string[] = [];
+        const createdSourceKeysThisBatch: string[] = [];
+        const createdHashesThisBatch: string[] = [];
 
         await prisma.$transaction(
           async (tx) => {
             batchCount = 0;
             batchSkipped = 0;
             createdTitlesThisBatch.length = 0;
+            createdSourceKeysThisBatch.length = 0;
+            createdHashesThisBatch.length = 0;
 
             for (const story of batch) {
               if (!story.title) {
@@ -121,9 +168,17 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
                 continue;
               }
               const normalizedTitle = story.title.trim().toLowerCase();
+              const key = sourceKey(story.sourceName, story.sourceId);
+              const hash = hashFor(story);
               if (
                 existingTitles.has(normalizedTitle) ||
-                createdTitlesThisBatch.includes(normalizedTitle)
+                createdTitlesThisBatch.includes(normalizedTitle) ||
+                (key &&
+                  (existingSourceKeys.has(key) ||
+                    createdSourceKeysThisBatch.includes(key))) ||
+                (hash &&
+                  (existingHashes.has(hash) ||
+                    createdHashesThisBatch.includes(hash)))
               ) {
                 batchSkipped++;
                 continue;
@@ -162,6 +217,18 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
                   durationSeconds: story.durationSeconds ?? null,
                   difficultyLevel: story.difficultyLevel ?? 1,
                   aiGenerated: story.aiGenerated ?? false,
+                  sourceName: story.sourceName ?? null,
+                  sourceId: story.sourceId ?? null,
+                  sourceUrl: story.sourceUrl ?? null,
+                  licenseCode: story.licenseCode ?? null,
+                  licenseUrl: story.licenseUrl ?? null,
+                  authorName: story.authorName ?? null,
+                  attributionText: story.attributionText ?? null,
+                  adaptationNotes: story.adaptationNotes ?? null,
+                  importedAt: story.importedAt
+                    ? new Date(story.importedAt)
+                    : null,
+                  contentHash: hash,
                   categories: {
                     connectOrCreate: cleanCategories.map((name: string) => ({
                       where: { name },
@@ -182,12 +249,10 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
                   },
                   seasons: story.seasons
                     ? {
-                        connectOrCreate: story.seasons.map(
-                          (name: string) => ({
-                            where: { name },
-                            create: { name },
-                          }),
-                        ),
+                        connectOrCreate: story.seasons.map((name: string) => ({
+                          where: { name },
+                          create: { name },
+                        })),
                       }
                     : undefined,
                   questions: {
@@ -203,6 +268,8 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
               });
 
               createdTitlesThisBatch.push(normalizedTitle);
+              if (key) createdSourceKeysThisBatch.push(key);
+              if (hash) createdHashesThisBatch.push(hash);
               batchCount++;
             }
           },
@@ -211,6 +278,8 @@ export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
 
         // Batch succeeded — update global tracking
         createdTitlesThisBatch.forEach((t) => existingTitles.add(t));
+        createdSourceKeysThisBatch.forEach((k) => existingSourceKeys.add(k));
+        createdHashesThisBatch.forEach((h) => existingHashes.add(h));
         fileCount += batchCount;
         fileSkipped += batchSkipped;
       }

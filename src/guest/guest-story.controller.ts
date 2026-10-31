@@ -195,6 +195,14 @@ export class GuestStoryController {
       scenes: sceneExtras.scenes,
       createdAt: story.createdAt,
       updatedAt: story.updatedAt,
+      // Credit info only (null for stories without provenance). sourceId,
+      // contentHash, adaptationNotes and importedAt are never exposed.
+      attributionText: story.attributionText ?? null,
+      authorName: story.authorName ?? null,
+      licenseCode: story.licenseCode ?? null,
+      licenseUrl: story.licenseUrl ?? null,
+      sourceName: story.sourceName ?? null,
+      sourceUrl: story.sourceUrl ?? null,
     };
   }
 
