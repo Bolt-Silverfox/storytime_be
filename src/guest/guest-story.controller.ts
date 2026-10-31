@@ -191,6 +191,7 @@ export class GuestStoryController {
       images: story.images ?? [],
       branches: story.branches ?? [],
       pages: sceneExtras.pages,
+      pageCount: sceneExtras.pageCount,
       scenes: sceneExtras.scenes,
       createdAt: story.createdAt,
       updatedAt: story.updatedAt,

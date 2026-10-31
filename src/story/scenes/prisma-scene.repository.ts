@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma, SceneImageStatus, StorySceneImage } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { SceneImageStatus, StorySceneImage } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type {
   IStorySceneRepository,
@@ -141,12 +142,23 @@ export class PrismaStorySceneRepository implements IStorySceneRepository {
     guard: Prisma.StorySceneImageWhereInput,
     data: Prisma.StorySceneImageUncheckedUpdateInput,
   ): Promise<StorySceneImage | null> {
-    const { count } = await this.prisma.storySceneImage.updateMany({
-      where: { AND: [{ id }, guard] },
-      data,
-    });
-    if (count === 0) return null;
-    return this.prisma.storySceneImage.findUnique({ where: { id } });
+    try {
+      // Single guarded UPDATE ... RETURNING (Prisma extendedWhereUnique): the
+      // unique id plus the guard conditions, atomically.
+      return await this.prisma.storySceneImage.update({
+        where: { id, AND: [guard] },
+        data,
+      });
+    } catch (err) {
+      // P2025: no row matched id + guard (a concurrent change won)
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2025'
+      ) {
+        return null;
+      }
+      throw err;
+    }
   }
 
   async listForReview(params: {
@@ -159,7 +171,8 @@ export class PrismaStorySceneRepository implements IStorySceneRepository {
       this.prisma.storySceneImage.findMany({
         where,
         include: withStory,
-        orderBy: { updatedAt: 'asc' },
+        // id tiebreaker => deterministic total order for pagination
+        orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
         skip: params.skip,
         take: params.take,
       }),

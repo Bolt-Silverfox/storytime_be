@@ -223,6 +223,12 @@ export class GuestStoryResponseDto {
   pages?: string[];
 
   @ApiProperty({
+    required: false,
+    description: 'Number of pages (= pages.length).',
+  })
+  pageCount?: number;
+
+  @ApiProperty({
     type: [StorySceneDto],
     required: false,
     description:

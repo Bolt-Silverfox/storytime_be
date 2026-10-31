@@ -15,6 +15,8 @@ export interface PublicScene {
 export interface StoryReadExtras {
   /** Backend page split (30-word, sentence-preserving), 0-based. */
   pages: string[];
+  /** pages.length, so clients need not count */
+  pageCount: number;
   /** APPROVED, non-stale scenes with an image only. */
   scenes: PublicScene[];
 }
@@ -31,7 +33,7 @@ export class SceneReadService {
     textContent: string | null | undefined,
   ): Promise<StoryReadExtras> {
     const pages = splitStoryIntoPages(textContent);
-    if (!pages.length) return { pages, scenes: [] };
+    if (!pages.length) return { pages, pageCount: 0, scenes: [] };
 
     const rows = await this.repo.findApprovedByStory(storyId);
     const scenes = rows
@@ -48,6 +50,6 @@ export class SceneReadService {
         endPage: r.endPage,
         imageUrl: r.imageUrl,
       }));
-    return { pages, scenes };
+    return { pages, pageCount: pages.length, scenes };
   }
 }

@@ -443,7 +443,7 @@ model StorySceneImage {
   deletedAt       DateTime?
 
   @@unique([storyId, sceneIndex])
-  @@index([status, isDeleted, updatedAt])
+  @@index([status, isDeleted, updatedAt, id])
   @@map("story_scene_images")
 }
 
