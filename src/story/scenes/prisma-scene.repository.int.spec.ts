@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  ConflictException,
+  GatewayTimeoutException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { PrismaStorySceneRepository } from './prisma-scene.repository';
 import { SceneReadService } from './scene-read.service';
@@ -480,9 +484,21 @@ describe('Scene repository + services (integration)', () => {
       await lockTaken;
       const started = Date.now();
       try {
-        await expect(
-          admin.replaceDefinitions(storyId, [{ startPage: 0, endPage: 3 }]),
-        ).rejects.toThrow(ServiceUnavailableException);
+        const err = await admin
+          .replaceDefinitions(storyId, [{ startPage: 0, endPage: 3 }])
+          .then(
+            () => null,
+            (
+              e: Error & {
+                cause?: { code?: string; meta?: { code?: string } };
+              },
+            ) => e,
+          );
+        expect(err).toBeInstanceOf(ServiceUnavailableException);
+        expect(err?.message).toMatch(/in progress/i);
+        // the real Prisma/Postgres shape is preserved as the cause
+        expect(err?.cause?.code).toBe('P2010');
+        expect(err?.cause?.meta?.code).toBe('55P03');
         expect(Date.now() - started).toBeLessThan(15_000);
       } finally {
         release();
@@ -491,6 +507,35 @@ describe('Scene repository + services (integration)', () => {
       // lock released: the same PUT now succeeds
       await admin.replaceDefinitions(storyId, [{ startPage: 0, endPage: 3 }]);
     }, 30_000);
+
+    it('an UNCONTENDED PUT that outlives the transaction timeout is a 504 "timed out" (not "another update in progress") with the P2028 cause', async () => {
+      await mk(0, 0, 3);
+      const orig = storeRepo.applyPlan.bind(storeRepo);
+      (storeRepo as unknown as { txTimeoutMs: number }).txTimeoutMs = 300;
+      jest.spyOn(storeRepo, 'applyPlan').mockImplementation((id, build) =>
+        orig(id, (rows) => {
+          const end = Date.now() + 700; // block past the 300ms tx timeout
+          while (Date.now() < end) {
+            /* spin */
+          }
+          return build(rows);
+        }),
+      );
+      try {
+        const err = await admin
+          .replaceDefinitions(storyId, [{ startPage: 0, endPage: 3 }])
+          .then(
+            () => null,
+            (e: Error & { cause?: { code?: string } }) => e,
+          );
+        expect(err).toBeInstanceOf(GatewayTimeoutException);
+        expect(err).not.toBeInstanceOf(ServiceUnavailableException);
+        expect(err?.message).not.toMatch(/in progress/i);
+        expect(err?.cause?.code).toBe('P2028');
+      } finally {
+        (storeRepo as unknown as { txTimeoutMs: number }).txTimeoutMs = 30_000;
+      }
+    }, 20_000);
 
     it('concurrent redefinitions serialise: all succeed (no deadlock / unique clash), contiguous result', async () => {
       await mk(0, 0, 3);

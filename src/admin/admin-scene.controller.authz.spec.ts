@@ -13,11 +13,14 @@ import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 // Nest's FileTypeValidator sniffs magic bytes through a dynamic ESM import of
 // `file-type` (via `load-esm`), which Jest's CJS VM cannot do (it fails closed
 // -> 400). Fake only that sniffer; the validator and the controller's regex run.
+let sniffed: { mime: string; ext: string } | undefined = {
+  mime: 'image/png',
+  ext: 'png',
+};
 jest.mock('load-esm', () => ({
   loadEsm: () =>
     Promise.resolve({
-      fileTypeFromBuffer: () =>
-        Promise.resolve({ mime: 'image/png', ext: 'png' }),
+      fileTypeFromBuffer: () => Promise.resolve(sniffed),
     }),
 }));
 
@@ -137,5 +140,53 @@ describe('AdminSceneController authorization (real AdminGuard)', () => {
     );
     if (res.status !== status) throw new Error(JSON.stringify(res.body));
     expect(res.status).toBe(status);
+  });
+
+  describe('POST scene-images/:id/image upload validation', () => {
+    const post = () =>
+      request(app.getHttpServer())
+        .post('/admin/scene-images/s1/image')
+        .set('x-test-role', 'admin');
+    const png = { filename: 'a.png', contentType: 'image/png' };
+    afterEach(() => {
+      sniffed = { mime: 'image/png', ext: 'png' };
+      svc.uploadImage.mockClear();
+    });
+
+    it.each(['image/webp', 'image/jpeg', 'image/gif'])(
+      'accepts %s',
+      async (mime) => {
+        sniffed = { mime, ext: 'x' };
+        await post().attach('file', PNG, png).expect(201);
+      },
+    );
+
+    it.each(['application/pdf', 'image/svg+xml', 'text/html', 'image/bmp'])(
+      'rejects sniffed type %s with 400 and never reaches the service',
+      async (mime) => {
+        sniffed = { mime, ext: 'x' };
+        await post().attach('file', PNG, png).expect(400);
+        expect(svc.uploadImage).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects a file whose type cannot be recognised (empty/garbage) with 400', async () => {
+      sniffed = undefined;
+      await post().attach('file', Buffer.alloc(0), png).expect(400);
+      await post().attach('file', Buffer.from('not an image'), png).expect(400);
+      expect(svc.uploadImage).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing file with 400', async () => {
+      await post().expect(400);
+      expect(svc.uploadImage).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversize file (> 5 MB) with 413', async () => {
+      await post()
+        .attach('file', Buffer.alloc(5 * 1024 * 1024 + 1), png)
+        .expect(413);
+      expect(svc.uploadImage).not.toHaveBeenCalled();
+    });
   });
 });

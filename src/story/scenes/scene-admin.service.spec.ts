@@ -3,7 +3,9 @@ import {
   ConflictException,
   NotFoundException,
   ServiceUnavailableException,
+  GatewayTimeoutException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { SceneAdminService } from './scene-admin.service';
 import { hashSceneText, splitStoryIntoPages } from './story-pages.util';
 
@@ -118,17 +120,67 @@ describe('SceneAdminService', () => {
       },
     );
 
-    it.each([
-      ['P2028 (transaction closed while waiting)', { code: 'P2028' }],
-      [
-        '55P03 lock_not_available',
-        new Error('ERROR: 55P03 canceling statement due to lock timeout'),
-      ],
-    ])('maps %s to a clean 503 "busy, retry"', async (_n, err) => {
+    // Real shape observed from Postgres via Prisma when `SET LOCAL lock_timeout`
+    // fires on pg_advisory_xact_lock inside $executeRaw (see int spec):
+    //   PrismaClientKnownRequestError code P2010,
+    //   meta { code: '55P03', message: 'ERROR: canceling statement due to lock timeout' }
+    const lockTimeoutError = () =>
+      new Prisma.PrismaClientKnownRequestError(
+        'Invalid `prisma.$executeRaw()` invocation:\n\nRaw query failed. Code: `55P03`. Message: `ERROR: canceling statement due to lock timeout`',
+        {
+          code: 'P2010',
+          clientVersion: 'test',
+          meta: {
+            code: '55P03',
+            message: 'ERROR: canceling statement due to lock timeout',
+          },
+        },
+      );
+    const txTimeoutError = () =>
+      new Prisma.PrismaClientKnownRequestError(
+        'Transaction API error: Transaction already closed: A query cannot be executed on an expired transaction.',
+        { code: 'P2028', clientVersion: 'test' },
+      );
+    const put = () =>
+      svc.replaceDefinitions('st1', [{ startPage: 0, endPage: 3 }]);
+    const thrown = async (): Promise<Error & { cause?: unknown }> => {
+      try {
+        await put();
+      } catch (e) {
+        return e as Error;
+      }
+      throw new Error('expected rejection');
+    };
+
+    it('maps the real lock-timeout error (P2010/55P03) to a 503 "in progress" and keeps the cause', async () => {
+      const err = lockTimeoutError();
       repo.applyPlan.mockRejectedValue(err);
-      await expect(
-        svc.replaceDefinitions('st1', [{ startPage: 0, endPage: 3 }]),
-      ).rejects.toThrow(ServiceUnavailableException);
+      const e = await thrown();
+      expect(e).toBeInstanceOf(ServiceUnavailableException);
+      expect(e.message).toMatch(/in progress/i);
+      expect(e.cause).toBe(err);
+    });
+
+    it('P2028 (tx timeout/closed, uncontended) is NOT reported as "another update in progress"; distinct 504 with cause', async () => {
+      const err = txTimeoutError();
+      repo.applyPlan.mockRejectedValue(err);
+      const e = await thrown();
+      expect(e).toBeInstanceOf(GatewayTimeoutException);
+      expect(e).not.toBeInstanceOf(ServiceUnavailableException);
+      expect(e.message).not.toMatch(/in progress/i);
+      expect(e.message).toMatch(/timed out/i);
+      expect(e.cause).toBe(err);
+    });
+
+    it('keeps the cause on the concurrency 409 too', async () => {
+      const err = new Prisma.PrismaClientKnownRequestError('dup', {
+        code: 'P2002',
+        clientVersion: 'test',
+      });
+      repo.applyPlan.mockRejectedValue(err);
+      const e = await thrown();
+      expect(e).toBeInstanceOf(ConflictException);
+      expect(e.cause).toBe(err);
     });
 
     it('does not mask unrelated errors', async () => {
