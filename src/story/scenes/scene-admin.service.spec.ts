@@ -161,6 +161,26 @@ describe('SceneAdminService', () => {
       expect(e.cause).toBe(err);
     });
 
+    // each detection branch must stand on its own (not be masked by another)
+    it.each([
+      [
+        'meta.code 55P03 only',
+        Object.assign(new Error('Raw query failed'), {
+          meta: { code: '55P03' },
+        }),
+      ],
+      ['message containing 55P03 only', new Error('ERROR: 55P03')],
+      [
+        'message "lock timeout" only',
+        new Error('canceling statement due to lock timeout'),
+      ],
+    ])('detects a lock timeout via %s', async (_n, err) => {
+      repo.applyPlan.mockRejectedValue(err);
+      const e = await thrown();
+      expect(e).toBeInstanceOf(ServiceUnavailableException);
+      expect(e.cause).toBe(err);
+    });
+
     it('P2028 (tx timeout/closed, uncontended) is NOT reported as "another update in progress"; distinct 504 with cause', async () => {
       const err = txTimeoutError();
       repo.applyPlan.mockRejectedValue(err);

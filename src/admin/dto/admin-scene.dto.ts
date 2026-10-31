@@ -43,6 +43,8 @@ export class SceneDefinitionDto {
 export class ReplaceScenesDto {
   @ApiProperty({
     type: [SceneDefinitionDto],
+    minItems: 1,
+    maxItems: 100,
     description:
       'Ordered scenes (sceneIndex = array position). Must start at page 0, be contiguous, non-overlapping and cover every page of the story.',
   })

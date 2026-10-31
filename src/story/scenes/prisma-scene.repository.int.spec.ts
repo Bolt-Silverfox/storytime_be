@@ -348,30 +348,45 @@ describe('Scene repository + services (integration)', () => {
   describe('review queue ordering', () => {
     it('pages deterministically (updatedAt asc, id asc) when timestamps are equal: no gaps or duplicates', async () => {
       const same = new Date('2026-01-01T00:00:00.000Z');
-      const rows = [];
-      for (let i = 0; i < 7; i++) {
-        rows.push(
-          await mk(i, i, i, { status: 'PENDING_REVIEW', imageUrl: `u${i}` }),
+      // ids inserted in DESCENDING order so heap/insert order != id order
+      const ids = Array.from(
+        { length: 7 },
+        (_, i) => `ffffffff-0000-4000-8000-00000000000${7 - i}`,
+      );
+      // Without the (status,isDeleted,updatedAt,id) index the planner must sort,
+      // so ties are broken only by the explicit `id asc` tiebreaker. (The index
+      // would otherwise hand rows back in id order and mask a missing tiebreaker.)
+      await prisma.$executeRawUnsafe(
+        'DROP INDEX IF EXISTS "story_scene_images_status_isDeleted_updatedAt_id_idx"',
+      );
+      try {
+        for (let i = 0; i < ids.length; i++) {
+          await mk(i, i, i, {
+            id: ids[i],
+            status: 'PENDING_REVIEW',
+            imageUrl: `u${i}`,
+          });
+        }
+        // identical updatedAt (@updatedAt is client-side, so raw SQL sticks)
+        await prisma.$executeRaw`UPDATE story_scene_images SET "updatedAt" = ${same} WHERE "storyId" = ${storyId}`;
+        const seen: string[] = [];
+        for (let page = 0; page < 4; page++) {
+          const { items, total } = await repo.listForReview({
+            status: 'PENDING_REVIEW',
+            skip: page * 3,
+            take: 3,
+          });
+          expect(total).toBeGreaterThanOrEqual(7);
+          seen.push(
+            ...items.filter((r) => r.storyId === storyId).map((r) => r.id),
+          );
+        }
+        expect(seen).toEqual([...ids].sort()); // id asc, no gaps/duplicates
+      } finally {
+        await prisma.$executeRawUnsafe(
+          'CREATE INDEX IF NOT EXISTS "story_scene_images_status_isDeleted_updatedAt_id_idx" ON "story_scene_images"("status", "isDeleted", "updatedAt", "id")',
         );
       }
-      // force identical updatedAt (the @updatedAt trigger is client-side, so raw SQL sticks)
-      await prisma.$executeRaw`UPDATE story_scene_images SET "updatedAt" = ${same} WHERE "storyId" = ${storyId}`;
-      const seen: string[] = [];
-      for (let page = 0; page < 4; page++) {
-        const { items, total } = await repo.listForReview({
-          status: 'PENDING_REVIEW',
-          skip: page * 3,
-          take: 3,
-        });
-        expect(total).toBeGreaterThanOrEqual(7);
-        seen.push(
-          ...items.filter((r) => r.storyId === storyId).map((r) => r.id),
-        );
-      }
-      const expected = rows.map((r) => r.id).sort();
-      expect([...seen].sort()).toEqual(expected);
-      expect(new Set(seen).size).toBe(seen.length);
-      expect(seen).toEqual([...seen].sort()); // id asc within equal updatedAt
     });
   });
 
