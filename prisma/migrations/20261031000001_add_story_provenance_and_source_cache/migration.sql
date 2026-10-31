@@ -3,8 +3,11 @@
 -- The ALTER TABLE / CREATE INDEX on "stories" below take ACCESS EXCLUSIVE /
 -- SHARE locks. Fail fast instead of queueing behind a long transaction (which
 -- would block every story read/write queued behind us). If this errors with a
--- lock timeout, re-run the deploy at a quieter moment. SET LOCAL is scoped to
--- the migration's implicit transaction.
+-- lock timeout (SQLSTATE 55P03) nothing was applied but Prisma records the
+-- migration as failed, and a plain re-run then fails with P3009. Recover with:
+--   prisma migrate resolve --rolled-back 20261031000001_add_story_provenance_and_source_cache
+-- and then run `prisma migrate deploy` again at a quieter moment. SET LOCAL is
+-- scoped to the migration's implicit transaction.
 SET LOCAL lock_timeout = '5s';
 --
 -- stories: ten NULLABLE columns with no default. Adding a nullable column

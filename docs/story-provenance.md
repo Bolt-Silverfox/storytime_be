@@ -115,7 +115,24 @@ per revalidation window.
   `SourceCacheLeaseTimeoutError`. Neither the holder's fetch nor a waiter ties up
   a pooled connection. In-process, concurrent callers for one key share the
   first caller's promise, so a later caller's `fetcher` and options (`ttlMs`,
-  `fetchedBy`, ...) are ignored for that flight.
+  `fetchedBy`, ...) are ignored for that flight. Only the caller that ran the
+  fetcher gets `fetched: true`; joiners get the same entry with `fetched: false`.
+- Lease loss is fenced. The heartbeat marks the lease lost when a renew reports
+  another holder, or when renewals keep failing past the lease lifetime; the
+  fetcher's `AbortSignal` (second argument) is then aborted. Independently, the
+  cache write only happens if this process still holds an unexpired lease (the
+  lease row is locked for the short write transaction), so a holder that lost
+  the lease can never overwrite a newer fetch. A discarded result is logged and
+  the current entry is returned (`fetched: false`), or
+  `SourceCacheLeaseLostError` is thrown if there is none.
+- `fetchTimeoutMs` (default 60 s) aborts a hung fetcher, rejects with
+  `SourceCacheFetchTimeoutError` and releases the lease. This does not replace
+  HTTP-level timeouts: importers must set their own and honour the signal.
+- Failed fetches (5xx/429/exceptions/timeouts) are not negative-cached. If a
+  holder fails, each waiting process claims the lease in turn and fetches again
+  (N waiting processes can cause N upstream hits). Importers are responsible
+  for backoff and `Retry-After` (see below) and should not retry a failing key
+  in a tight loop.
 - If a re-fetch returns a different `contentHash`, the row gets
   `contentChanged = true` and `previousContentHash`. If a story that had a hash
   now returns 404/410, or a response with no hash, the row keeps the last known
@@ -153,4 +170,12 @@ contains no fetcher. The importer must:
 
 The migration sets `SET LOCAL lock_timeout = '5s'` before touching `stories`.
 If the deploy fails with SQLSTATE 55P03 (lock not available), nothing was
-applied; re-run `prisma migrate deploy` at a quieter time.
+applied, but Prisma marks the migration failed and a plain re-run fails with
+P3009. Run
+
+```
+prisma migrate resolve --rolled-back 20261031000001_add_story_provenance_and_source_cache
+prisma migrate deploy
+```
+
+and redeploy at a quieter time.

@@ -356,8 +356,10 @@ describe('SourceCacheService', () => {
   describe('lease loss and fencing', () => {
     const slow = (ms: number, over: Partial<FetchResult> = {}) =>
       jest.fn(
-        (_prev: unknown, _signal?: AbortSignal) =>
-          new Promise<FetchResult>((r) => setTimeout(() => r(ok(over)), ms)),
+        (...args: [unknown, AbortSignal?]) =>
+          new Promise<FetchResult>((r) =>
+            setTimeout(() => r(ok(over)), ms + args.length * 0),
+          ),
       );
 
     it('aborts the fetcher and skips the write when renew reports the lease lost', async () => {
