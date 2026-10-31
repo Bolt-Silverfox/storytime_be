@@ -1414,3 +1414,15 @@ model FxRate {
   @@index([currency, effectiveFrom(sort: Desc)])
   @@map("fx_rates")
 }
+
+// Short-lived claim so only one process fetches a given source key. Holding a
+// lease never holds a DB connection; expiry (DB clock) frees a crashed holder.
+model SourceFetchLease {
+  sourceName String
+  sourceId   String
+  lockedBy   String
+  expiresAt  DateTime
+
+  @@id([sourceName, sourceId])
+  @@map("source_fetch_lease")
+}

@@ -44,7 +44,12 @@ the feed/library endpoints that return raw rows, leaves out `sourceId`,
 because the omit is applied at runtime.
 
 The guest story response builds its fields explicitly and adds the six credit
-fields only.
+fields only. Note that the six credit fields (`attributionText`, `authorName`,
+`licenseCode`, `licenseUrl`, `sourceName`, `sourceUrl`) are plain story columns,
+so they now appear (as `null` for existing stories) on every endpoint that
+returns raw story rows (feeds, library, favourites, downloads and so on), not
+only the guest and `GET /stories/:id` responses. Clients that render a story
+must show `attributionText` wherever the story is shown.
 
 ## Attribution rules per licence
 
@@ -64,7 +69,11 @@ display `attributionText` with the story.
   illustrator, translator, publisher and donor where the source names them,
   give the licence name and link, and state that the work was adapted. If any
   text was rewritten with AI, say so in the adaptation statement. Do not suggest
-  the creator endorses Storytime.
+  the creator endorses Storytime. Also: keep any copyright notice, licence notice
+  and disclaimer-of-warranties notice that the source carries; link to the
+  original work (`sourceUrl`); and keep earlier modification notices the source
+  already lists (add ours, do not replace theirs) **(unverified: reading of
+  CC BY 4.0 section 3(a); confirm with counsel)**.
 - **Book Dash extra credit rules.** Book Dash asks for its own credit line and
   for the book to link back to the original **(unverified: copy the exact wording
   from the book's own credits page into `attributionText` at import time)**.
@@ -88,18 +97,30 @@ per revalidation window.
 - `SourceCacheService.getOrFetch(source, id, fetcher, opts)` returns the cached
   entry while `revalidateAfter` is in the future; otherwise it calls `fetcher`
   once and stores the result. The fetcher receives the previous entry so it can
-  send `If-None-Match` / `If-Modified-Since`. A `304` result extends freshness
-  and keeps the stored data.
+  send `If-None-Match` / `If-Modified-Since`. A `304` keeps the stored data,
+  refreshes `etag` / `lastModified` and extends freshness. A `304` with no
+  stored row is an error (nothing to revalidate) and is not stored.
 - Defaults: 30 days for normal entries, 7 days for 404/410 (these are cached too
   so a missing page is not re-requested on every run).
 - Not cached, error thrown: 5xx, 429 and other non-2xx/404/410 statuses, and
   any exception from the fetcher.
-- Single flight: concurrent calls for one key in a process share one fetch; calls
-  from different processes are serialised with a Postgres advisory transaction
-  lock, so the second caller finds the first caller's row. The fetch runs inside
-  that transaction (default timeout 120 s), so keep fetchers bounded.
+- Single flight, no held connections: the fetch runs outside any database
+  transaction. Cross-process exclusion uses a lease row in `source_fetch_lease`
+  (claimed with one atomic `INSERT ... ON CONFLICT DO UPDATE ... WHERE expired`,
+  expiry on the database clock). The holder renews it with a heartbeat while the
+  fetcher runs (`leaseMs`, default 60 s) and releases it in `finally`; if the
+  process dies the lease expires and another caller takes over. Waiters poll the
+  cache with backoff (250 ms up to 2 s) and return the holder's result when it
+  lands; after `waitTimeoutMs` (default 180 s) they throw
+  `SourceCacheLeaseTimeoutError`. Neither the holder's fetch nor a waiter ties up
+  a pooled connection. In-process, concurrent callers for one key share the
+  first caller's promise, so a later caller's `fetcher` and options (`ttlMs`,
+  `fetchedBy`, ...) are ignored for that flight.
 - If a re-fetch returns a different `contentHash`, the row gets
-  `contentChanged = true` and `previousContentHash`. The flag is a prompt for
+  `contentChanged = true` and `previousContentHash`. If a story that had a hash
+  now returns 404/410, or a response with no hash, the row keeps the last known
+  `contentHash` and `rawPayloadKey`, takes the new `httpStatus`, and is also
+  flagged `contentChanged = true` (removed upstream; check `httpStatus`). The flag is a prompt for
   human review. Nothing creates, updates or publishes a story from it. It stays
   set until `acknowledgeChange()` is called.
 - `contentHash` comes from `contentHashOf()` (NFC, whitespace collapsed, trimmed,
@@ -112,3 +133,24 @@ per revalidation window.
 `(sourceName, sourceId)` and by `contentHash` when provided. A story that has a
 `sourceName` but no `contentHash` gets one computed from its content. Plain
 curated stories are not hash-deduped.
+
+## Requirements for the future importer (not implemented here)
+
+The fetcher passed to `getOrFetch` is where network safety lives, and this change
+contains no fetcher. The importer must:
+
+- accept `https` URLs only, from an allow-list of the known source hosts;
+- guard against SSRF: resolve and reject private, loopback and link-local
+  addresses, and cap and re-validate redirects (host allow-list on each hop);
+- enforce a response byte limit and a content-type allow-list, plus connect and
+  total timeouts;
+- honour `Retry-After` and back off on 429/503 (this cache deliberately does not
+  store those responses);
+- identify itself with a descriptive User-Agent and respect each source's terms
+  and robots rules **(unverified per source)**.
+
+## Deploy note
+
+The migration sets `SET LOCAL lock_timeout = '5s'` before touching `stories`.
+If the deploy fails with SQLSTATE 55P03 (lock not available), nothing was
+applied; re-run `prisma migrate deploy` at a quieter time.

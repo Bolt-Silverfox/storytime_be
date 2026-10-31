@@ -41,7 +41,7 @@ describeDb('SourceCacheService (real Postgres)', () => {
     ).rejects.toMatchObject({ code: 'P2002' });
   });
 
-  it('calls the fetcher once for concurrent getOrFetch from two services (advisory lock)', async () => {
+  it('calls the fetcher once for concurrent getOrFetch from two services (lease)', async () => {
     const fetcher = jest.fn(async () => {
       await new Promise((r) => setTimeout(r, 300));
       return { httpStatus: 200, contentHash: 'h', rawPayloadKey: 'k' };
@@ -119,5 +119,87 @@ describeDb('SourceCacheService (real Postgres)', () => {
       Promise.resolve({ httpStatus: 200, contentHash: 'b' }),
     );
     expect(await prisma.story.count()).toBe(before);
+  });
+
+  describe('no pool connection is held while fetching or waiting', () => {
+    it('slow fetches on many keys do not starve unrelated queries (pool of 3)', async () => {
+      const url = new URL(process.env.DATABASE_URL!);
+      url.searchParams.set('connection_limit', '3');
+      url.searchParams.set('pool_timeout', '2');
+      const small = new PrismaClient({ datasourceUrl: url.toString() });
+      await small.$connect();
+      const svc = new SourceCacheService(small as any);
+      const fetcher = jest.fn(async () => {
+        await new Promise((r) => setTimeout(r, 4000));
+        return { httpStatus: 200, contentHash: 'h' };
+      });
+      try {
+        const running = [1, 2, 3, 4, 5, 6].map((i) =>
+          svc.getOrFetch(source, `starve${i}`, fetcher),
+        );
+        // same key from a second service: a waiter must not hold a connection
+        const waiter = new SourceCacheService(small as any).getOrFetch(
+          source,
+          'starve1',
+          fetcher,
+          { pollMs: 100 },
+        );
+        await new Promise((r) => setTimeout(r, 1000));
+        await expect(small.story.count()).resolves.toEqual(expect.any(Number));
+        await Promise.all([...running, waiter]);
+        expect(fetcher).toHaveBeenCalledTimes(6);
+      } finally {
+        await small.$disconnect();
+      }
+    }, 30000);
+  });
+
+  describe('lease semantics', () => {
+    it('a fetcher slower than the lease is not double-fetched (heartbeat) and its result is stored', async () => {
+      const fetcher = jest.fn(async () => {
+        await new Promise((r) => setTimeout(r, 1500));
+        return { httpStatus: 200, contentHash: 'slow', rawPayloadKey: 'k' };
+      });
+      const [a, b] = await Promise.all([
+        svcA.getOrFetch(source, 'slow', fetcher, { leaseMs: 400, pollMs: 50 }),
+        svcB.getOrFetch(source, 'slow', fetcher, { leaseMs: 400, pollMs: 50 }),
+      ]);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(a.entry.id).toBe(b.entry.id);
+      expect(a.entry.rawPayloadKey).toBe('k');
+    }, 20000);
+
+    it('a crashed holder (lease never released) is superseded after expiry', async () => {
+      await prisma.$executeRaw`INSERT INTO "source_fetch_lease" ("sourceName","sourceId","lockedBy","expiresAt")
+        VALUES (${source}, 'crash', 'dead-process', (now() at time zone 'utc') + interval '1 second')`;
+      const fetcher = jest
+        .fn()
+        .mockResolvedValue({ httpStatus: 200, contentHash: 'h' });
+      const t0 = Date.now();
+      const r = await svcA.getOrFetch(source, 'crash', fetcher, {
+        pollMs: 100,
+      });
+      expect(r.fetched).toBe(true);
+      expect(Date.now() - t0).toBeGreaterThanOrEqual(800);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }, 15000);
+
+    it('releases the lease when the fetcher throws, so the next call fetches immediately', async () => {
+      await expect(
+        svcA.getOrFetch(source, 'boom', () =>
+          Promise.reject(new Error('boom')),
+        ),
+      ).rejects.toThrow('boom');
+      const t0 = Date.now();
+      const r = await svcA.getOrFetch(source, 'boom', () =>
+        Promise.resolve({ httpStatus: 200, contentHash: 'h' }),
+      );
+      expect(r.fetched).toBe(true);
+      expect(Date.now() - t0).toBeLessThan(500);
+    });
+  });
+
+  afterEach(async () => {
+    await prisma.sourceFetchLease.deleteMany({ where: { sourceName: source } });
   });
 });

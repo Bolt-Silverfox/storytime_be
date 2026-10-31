@@ -1,5 +1,12 @@
 -- Story provenance + source cache foundation. Purely additive.
 --
+-- The ALTER TABLE / CREATE INDEX on "stories" below take ACCESS EXCLUSIVE /
+-- SHARE locks. Fail fast instead of queueing behind a long transaction (which
+-- would block every story read/write queued behind us). If this errors with a
+-- lock timeout, re-run the deploy at a quieter moment. SET LOCAL is scoped to
+-- the migration's implicit transaction.
+SET LOCAL lock_timeout = '5s';
+--
 -- stories: ten NULLABLE columns with no default. Adding a nullable column
 -- with no default is metadata-only in Postgres (no table rewrite, no scan),
 -- and existing rows read NULL. No existing column or default is touched
@@ -56,3 +63,14 @@ CREATE INDEX "stories_contentHash_idx" ON "stories"("contentHash");
 -- CreateIndex: unique imported story per source. NULLs are distinct in
 -- Postgres, so non-imported stories (sourceName/sourceId NULL) never collide.
 CREATE UNIQUE INDEX "stories_sourceName_sourceId_key" ON "stories"("sourceName", "sourceId");
+
+-- source_fetch_lease: per-key fetch claim (see SourceCacheService). Rows are
+-- deleted on release; expiresAt (DB clock, UTC) frees a crashed holder.
+CREATE TABLE "source_fetch_lease" (
+    "sourceName" TEXT NOT NULL,
+    "sourceId" TEXT NOT NULL,
+    "lockedBy" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "source_fetch_lease_pkey" PRIMARY KEY ("sourceName","sourceId")
+);

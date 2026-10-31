@@ -1,6 +1,7 @@
 import {
   SourceCacheService,
   SourceCacheFetchError,
+  SourceCacheLeaseTimeoutError,
   FetchResult,
 } from './source-cache.service';
 
@@ -31,14 +32,30 @@ function makeFakePrisma() {
       return Promise.resolve(next);
     }),
   };
-  const prisma: any = {
-    sourceCache: delegate,
-    $executeRaw: jest.fn().mockResolvedValue(1),
-    $transaction: jest.fn((fn: any) =>
-      fn({ sourceCache: delegate, $executeRaw: prisma.$executeRaw }),
-    ),
-  };
+  const prisma: any = { sourceCache: delegate };
   return { prisma, rows, delegate };
+}
+
+/** In-memory lease; `busyFor` = number of claim() calls that fail first. */
+function makeFakeLease(busyFor = 0) {
+  let busy = busyFor;
+  const held = new Set<string>();
+  return {
+    held,
+    claim: jest.fn((key: string) => {
+      if (busy > 0) {
+        busy--;
+        return Promise.resolve(false);
+      }
+      held.add(key);
+      return Promise.resolve(true);
+    }),
+    renew: jest.fn().mockResolvedValue(true),
+    release: jest.fn((key: string) => {
+      held.delete(key);
+      return Promise.resolve();
+    }),
+  };
 }
 
 const NOW = new Date('2026-11-01T00:00:00Z');
@@ -54,9 +71,12 @@ describe('SourceCacheService', () => {
   let svc: SourceCacheService;
   let fake: ReturnType<typeof makeFakePrisma>;
 
+  let lease: ReturnType<typeof makeFakeLease>;
+
   beforeEach(() => {
     fake = makeFakePrisma();
-    svc = new SourceCacheService(fake.prisma);
+    lease = makeFakeLease();
+    svc = new SourceCacheService(fake.prisma, lease as any);
   });
 
   describe('isFresh / needsRevalidation', () => {
@@ -252,12 +272,139 @@ describe('SourceCacheService', () => {
       expect(fetcher).toHaveBeenCalledTimes(2);
     });
 
-    it('takes a per-key Postgres advisory lock inside the transaction', async () => {
+    it('claims a lease around the fetch and releases it afterwards', async () => {
       await svc.getOrFetch('g', '1', jest.fn().mockResolvedValue(ok()), {
         now: NOW,
       });
-      expect(fake.prisma.$transaction).toHaveBeenCalled();
-      expect(fake.prisma.$executeRaw).toHaveBeenCalled();
+      expect(lease.claim).toHaveBeenCalledTimes(1);
+      expect(lease.release).toHaveBeenCalledTimes(1);
+      expect(lease.held.size).toBe(0);
+    });
+
+    it('releases the lease when the fetcher throws', async () => {
+      await expect(
+        svc.getOrFetch('g', '1', jest.fn().mockRejectedValue(new Error('x')), {
+          now: NOW,
+        }),
+      ).rejects.toThrow('x');
+      expect(lease.held.size).toBe(0);
+    });
+
+    it('waits (polling, no fetch) while another holder has the lease, then fetches', async () => {
+      lease = makeFakeLease(3);
+      svc = new SourceCacheService(fake.prisma, lease as any);
+      const fetcher = jest.fn().mockResolvedValue(ok());
+      const r = await svc.getOrFetch('g', '1', fetcher, {
+        now: NOW,
+        pollMs: 1,
+      });
+      expect(lease.claim).toHaveBeenCalledTimes(4);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(r.fetched).toBe(true);
+    });
+
+    it("returns the other holder's result without fetching when it lands while waiting", async () => {
+      lease = makeFakeLease(1000);
+      svc = new SourceCacheService(fake.prisma, lease as any);
+      const fetcher = jest.fn().mockResolvedValue(ok());
+      const p = svc.getOrFetch('g', '1', fetcher, {
+        pollMs: 5,
+        waitTimeoutMs: 2000,
+      });
+      await new Promise((r) => setTimeout(r, 20));
+      await svc.put({ sourceName: 'g', sourceId: '1', result: ok() });
+      const r = await p;
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(r.fetched).toBe(false);
+    });
+
+    it('gives up with SourceCacheLeaseTimeoutError if the lease never frees', async () => {
+      lease = makeFakeLease(1000);
+      svc = new SourceCacheService(fake.prisma, lease as any);
+      const fetcher = jest.fn();
+      await expect(
+        svc.getOrFetch('g', '1', fetcher, { pollMs: 1, waitTimeoutMs: 30 }),
+      ).rejects.toBeInstanceOf(SourceCacheLeaseTimeoutError);
+      expect(fetcher).not.toHaveBeenCalled();
+    });
+
+    it('does not open a database transaction around the fetch', async () => {
+      expect(fake.prisma.$transaction).toBeUndefined();
+      await svc.getOrFetch('g', '1', jest.fn().mockResolvedValue(ok()), {
+        now: NOW,
+      });
+    });
+  });
+
+  describe('upstream removal and 304 handling', () => {
+    it('keeps the previous hash/payload and flags contentChanged when a 404 follows a 200', async () => {
+      await svc.put({ sourceName: 's', sourceId: '1', result: ok(), now: NOW });
+      const e = await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: { httpStatus: 404 },
+        now: NOW,
+      });
+      expect(e.httpStatus).toBe(404);
+      expect(e.contentHash).toBe('h1');
+      expect(e.rawPayloadKey).toBe('raw/gutenberg/11.html');
+      expect(e.contentChanged).toBe(true);
+    });
+
+    it('keeps the previous hash and flags when a 200 arrives with no hash', async () => {
+      await svc.put({ sourceName: 's', sourceId: '1', result: ok(), now: NOW });
+      const e = await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: { httpStatus: 200, contentHash: null },
+        now: NOW,
+      });
+      expect(e.contentHash).toBe('h1');
+      expect(e.contentChanged).toBe(true);
+    });
+
+    it('a first-time 404 is not flagged', async () => {
+      const e = await svc.put({
+        sourceName: 's',
+        sourceId: '2',
+        result: { httpStatus: 404 },
+        now: NOW,
+      });
+      expect(e.contentChanged).toBe(false);
+    });
+
+    it('treats 304 with no stored row as an error and stores nothing', async () => {
+      await expect(
+        svc.getOrFetch(
+          'g',
+          '1',
+          jest.fn().mockResolvedValue({ httpStatus: 304 }),
+          {
+            now: NOW,
+          },
+        ),
+      ).rejects.toBeInstanceOf(SourceCacheFetchError);
+      expect(await svc.get('g', '1')).toBeNull();
+      expect(lease.held.size).toBe(0);
+    });
+
+    it('a 304 updates etag and lastModified validators', async () => {
+      await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: ok({ etag: 'e1', lastModified: 'Mon' }),
+        now: NOW,
+        ttlMs: DAY,
+      });
+      const e = await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: { httpStatus: 304, etag: 'e2', lastModified: 'Tue' },
+        now: new Date(NOW.getTime() + 2 * DAY),
+      });
+      expect(e.etag).toBe('e2');
+      expect(e.lastModified).toBe('Tue');
+      expect(e.httpStatus).toBe(200);
     });
   });
 });
