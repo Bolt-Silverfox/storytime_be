@@ -44,6 +44,11 @@ describe('GuestStoryController credit fields', () => {
       guestSessionService as any,
       storyService as any,
       eventEmitter as any,
+      {
+        getReadExtras: jest
+          .fn()
+          .mockResolvedValue({ pages: [], pageCount: 0, scenes: [] }),
+      } as any,
     );
   };
   const sid = '11111111-1111-4111-8111-111111111111';

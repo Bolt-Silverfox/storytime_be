@@ -111,6 +111,16 @@ export class StoryReadResponseDto extends StoryCreditDto {
   @ApiProperty() ageMax: number;
   @ApiProperty({ type: [StoryImageDto] }) images: StoryImageDto[];
   @ApiProperty({ type: [StoryBranchDto] }) branches: StoryBranchDto[];
+  @ApiPropertyOptional({ type: [String], description: 'Backend page split' })
+  pages?: string[];
+  @ApiPropertyOptional({ description: 'Number of pages (= pages.length)' })
+  pageCount?: number;
+  @ApiPropertyOptional({
+    type: 'array',
+    items: { type: 'object' },
+    description: 'Approved scene art: { index, startPage, endPage, imageUrl }',
+  })
+  scenes?: Record<string, unknown>[];
   @ApiProperty() createdAt: Date;
   @ApiProperty() updatedAt: Date;
 }
