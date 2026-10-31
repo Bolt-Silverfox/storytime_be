@@ -21,6 +21,7 @@ import {
   ApiBody,
   ApiConflictResponse,
   ApiConsumes,
+  ApiGatewayTimeoutResponse,
   ApiServiceUnavailableResponse,
   ApiOperation,
   ApiTags,
@@ -95,10 +96,14 @@ export class AdminSceneController {
   @ApiServiceUnavailableResponse({
     description: 'Another redefinition holds the story lock; retry shortly',
   })
+  @ApiGatewayTimeoutResponse({
+    description:
+      'The update outran the transaction timeout; try fewer scenes at once',
+  })
   @ApiOperation({
     summary: 'Create/replace scene definitions for a story',
     description:
-      'Scenes must start at page 0, be contiguous, non-overlapping and cover every page. Unchanged scenes keep their image/status; changed or new scenes reset to PENDING_GENERATION; surplus scenes are soft-deleted.',
+      'Max 100 scenes. Scenes must start at page 0, be contiguous, non-overlapping and cover every page. Unchanged scenes keep their image/status; changed or new scenes reset to PENDING_GENERATION; surplus scenes are soft-deleted.',
   })
   @ApiBody({ type: ReplaceScenesDto })
   async replace(

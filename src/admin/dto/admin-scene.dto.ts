@@ -48,7 +48,7 @@ export class ReplaceScenesDto {
   })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(200)
+  @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => SceneDefinitionDto)
   scenes: SceneDefinitionDto[];

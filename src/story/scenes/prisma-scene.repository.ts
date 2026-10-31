@@ -11,14 +11,20 @@ const withStory = {
   story: { select: { id: true, title: true, textContent: true } },
 } as const;
 
-/** Temporary index for kept rows while they swap places (unique key safety). */
 /** How long a redefinition waits for the per-story lock before giving up. */
 const LOCK_TIMEOUT_MS = 5000;
 
+/** Interactive-transaction timeout for a redefinition (statements run sequentially). */
+const TX_TIMEOUT_MS = 30_000;
+
+/** Temporary index for kept rows while they swap places (unique key safety). */
 const TEMP_INDEX_OFFSET = 1_000_000;
 
 @Injectable()
 export class PrismaStorySceneRepository implements IStorySceneRepository {
+  /** Overridable in tests to exercise the transaction-timeout path. */
+  private txTimeoutMs = TX_TIMEOUT_MS;
+
   constructor(private readonly prisma: PrismaService) {}
 
   findStoryText(storyId: string) {
@@ -126,7 +132,7 @@ export class PrismaStorySceneRepository implements IStorySceneRepository {
           });
         }
       },
-      { timeout: 30_000, maxWait: 10_000 },
+      { timeout: this.txTimeoutMs, maxWait: 10_000 },
     );
   }
 

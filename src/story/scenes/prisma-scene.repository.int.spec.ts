@@ -1,4 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import type { StorySceneImage } from '@prisma/client';
+import type { ScenePlan } from './scene.repository.interface';
 import {
   ConflictException,
   GatewayTimeoutException,
@@ -12,6 +14,7 @@ import { STORY_SCENE_REPOSITORY } from './scene.repository.interface';
 import { UploadService } from '@/upload/upload.service';
 import { hashSceneText, splitStoryIntoPages } from './story-pages.util';
 
+type BuildPlan = (rows: StorySceneImage[]) => ScenePlan;
 const words = (n: number, p: string) =>
   Array.from({ length: n }, (_, i) => `${p}${i}`).join(' ');
 const TEXT = ['a', 'b', 'c', 'd'].map((p) => `${words(29, p)}.`).join(' ');
@@ -512,15 +515,18 @@ describe('Scene repository + services (integration)', () => {
       await mk(0, 0, 3);
       const orig = storeRepo.applyPlan.bind(storeRepo);
       (storeRepo as unknown as { txTimeoutMs: number }).txTimeoutMs = 300;
-      jest.spyOn(storeRepo, 'applyPlan').mockImplementation((id, build) =>
-        orig(id, (rows) => {
-          const end = Date.now() + 700; // block past the 300ms tx timeout
-          while (Date.now() < end) {
-            /* spin */
-          }
-          return build(rows);
-        }),
-      );
+      const spy = jest
+        .spyOn(storeRepo, 'applyPlan')
+
+        .mockImplementation((id: string, build: BuildPlan) =>
+          orig(id, (rows: StorySceneImage[]) => {
+            const end = Date.now() + 700; // block past the 300ms tx timeout
+            while (Date.now() < end) {
+              /* spin */
+            }
+            return build(rows);
+          }),
+        );
       try {
         const err = await admin
           .replaceDefinitions(storyId, [{ startPage: 0, endPage: 3 }])
@@ -533,6 +539,7 @@ describe('Scene repository + services (integration)', () => {
         expect(err?.message).not.toMatch(/in progress/i);
         expect(err?.cause?.code).toBe('P2028');
       } finally {
+        spy.mockRestore();
         (storeRepo as unknown as { txTimeoutMs: number }).txTimeoutMs = 30_000;
       }
     }, 20_000);

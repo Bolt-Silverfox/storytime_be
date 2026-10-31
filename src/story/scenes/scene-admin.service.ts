@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
+  GatewayTimeoutException,
 } from '@nestjs/common';
 import type { SceneImageStatus, StorySceneImage } from '@prisma/client';
 import { UploadService } from '@/upload/upload.service';
@@ -57,10 +58,15 @@ export interface SceneUploadMeta {
   prompt?: string;
 }
 
-/** Unique-key clash (P2002) or Postgres deadlock/serialization failure from a racing redefinition. */
-function isBusy(err: unknown): boolean {
+/**
+ * `SET LOCAL lock_timeout` fired while waiting for the per-story advisory lock.
+ * Observed shape: PrismaClientKnownRequestError code P2010 with
+ * meta.code '55P03' ("canceling statement due to lock timeout").
+ */
+function isLockTimeout(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
-  if ((err as { code?: unknown }).code === 'P2028') return true; // tx closed/timed out
+  const meta = (err as { meta?: { code?: unknown } }).meta;
+  if (meta?.code === '55P03') return true;
   const message = (err as { message?: unknown }).message;
   return (
     typeof message === 'string' &&
@@ -68,6 +74,16 @@ function isBusy(err: unknown): boolean {
   );
 }
 
+/** Interactive transaction exceeded its timeout / maxWait or was already closed (P2028). */
+function isTransactionTimeout(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { code?: unknown }).code === 'P2028'
+  );
+}
+
+/** Unique-key clash (P2002/P2034) or Postgres deadlock/serialization failure from a racing redefinition. */
 function isConcurrencyConflict(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const code = (err as { code?: unknown }).code;
@@ -214,14 +230,24 @@ export class SceneAdminService {
     try {
       await this.repo.applyPlan(storyId, buildPlan);
     } catch (err) {
-      if (isBusy(err)) {
+      if (isLockTimeout(err)) {
         throw new ServiceUnavailableException(
           'Another scene update for this story is in progress; retry shortly',
+          { cause: err },
+        );
+      }
+      if (isTransactionTimeout(err)) {
+        // Not contention: the update itself outran the transaction timeout (or
+        // the pool was exhausted). Retrying blindly will not help; surface it.
+        throw new GatewayTimeoutException(
+          'Scene update timed out; try again, or redefine fewer scenes at once',
+          { cause: err },
         );
       }
       if (isConcurrencyConflict(err)) {
         throw new ConflictException(
           'Scene plan changed concurrently; reload and try again',
+          { cause: err },
         );
       }
       throw err;
