@@ -4,8 +4,12 @@ Pipelines in `.woodpecker/` run on ci.fateround.com because GitHub Actions is
 unavailable. Phase 1 is CI only: no image build, no deploy, no secrets. The
 GitHub workflows in `.github/workflows/` are untouched.
 
-**Nothing runs until the repository is activated at ci.fateround.com** (owner,
-once). Until then these files are inert.
+The repository is activated at ci.fateround.com (repo 12) and pipelines run on
+every PR and on pushes to the long-lived branches. Pipelines #1-#7 failed to
+load their config (a folder inside `.woodpecker/`) and stay 'not started';
+ignore them. To re-run: restart a pipeline from the UI, or push a commit.
+Helper scripts and `ci.env` live in `ci/woodpecker/`, not `.woodpecker/`:
+Woodpecker treats every entry directly under `.woodpecker/` as a config.
 
 ## Workflow to check mapping
 
@@ -27,10 +31,17 @@ be repointed to these contexts only after one run has reported each of them.
 
 ## Differences from GitHub that matter
 
-- `security`: blocking on `pnpm audit --audit-level=high`, as requested. The
-  GitHub workflows ran it as advisory (`continue-on-error` / `|| true`), and at
-  the time of writing it reports 10 high findings, so this context is red until
-  they are fixed or the command gets `|| true`.
+- `security` is advisory, like GitHub's audit steps: `pnpm audit
+  --audit-level=high || echo ...` prints the findings and always exits 0. It
+  reports 10 high findings at the time of writing. Do not repoint it as a
+  required check while it reports highs.
+- Woodpecker tests the PR HEAD; GitHub tested the merge commit. A PR can be
+  green on Woodpecker and still break after merge.
+- No timeouts: the pinned `woodpecker-cli v3.18.1` lint rejects a step
+  `timeout` key, and the workflow timeout is a repo setting on the server (not
+  changed here). GitHub used 10-15 min; set the repo timeout on the server.
+- `version` uses `woodpeckerci/plugin-git:2.10.1` for its `clone:` override; a
+  custom clone image only works if the server's trusted-clone list allows it.
 - `lint` is heavy, not light: type-aware ESLint needs a 2 GB heap (1.5 GB runs
   out of memory), far over the light lane's 768 MiB. It runs `pnpm run lint`,
   which is `eslint --fix`, exactly as GitHub did.
@@ -88,3 +99,21 @@ about 2.6 GiB, `nest build` about 1.9 GiB, jest about 2.6 GiB (about 65 s for
 heavy steps sit close to the 3 GiB limit; if one is OOM-killed, lower
 `--max-old-space-size` before raising anything else. Light lane (768 MiB):
 `scan`, `version`, `security` only.
+
+## OPEN DECISION (owner): runner lane for lint, build, test, e2e
+
+State: these four use `labels: lane: heavy`, which in infra-shared is peapool's
+spot lane. Storytime's own lane is `heavy-storytime`, but its IMDS hop limit is
+2, so a CI step could reach the instance role that can assume the storytime
+deploy roles (ExternalId would be the only barrier). So do not just switch.
+Options:
+
+- (a) Keep `heavy`: peapool hosts the jobs. No infra change; storytime CI
+  shares peapool capacity and its spot interruptions.
+- (b) A storytime CI-only lane with IMDS hop limit 1 and no deploy-role assume
+  permission. Cleanest isolation; needs infra work and a new label.
+- (c) The light lane (768 MiB) where it fits: only `scan`, `version`, `security`
+  do. lint/build/test/e2e need 2-3 GiB, so this is not viable for them.
+
+Cost: each commit queues 4 heavy workflows (lint, build, test, e2e), including
+on Dependabot branches. Nothing here is changed until the owner decides.

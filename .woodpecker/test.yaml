@@ -11,7 +11,10 @@
 # service containers reached by name; ci/woodpecker/scripts/wait-for.mjs waits
 # for their ports (the postgres image listens on TCP only once it is ready).
 #
-# The doubled dollar in commands escapes Woodpecker's own variable substitution.
+# Commands use no doubled dollar: Woodpecker substitutes only ${VAR} forms, and
+# this file has none in commands (scan.yaml's bare $tracked/$scanner rely on
+# the same, and its step passed in pipeline #8). Server-side envsubst behaviour
+# was not verified directly.
 # PRs run once (as pull_request); pushes run only on the long-lived branches,
 # where there is no PR to cover them. Halves spot usage per PR commit.
 when:
