@@ -14,9 +14,11 @@ import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 // `file-type` (via `load-esm`), which Jest's CJS VM cannot do (it fails closed
 // -> 400). Fake only that sniffer; the validator and the controller's regex run.
 jest.mock('load-esm', () => ({
-  loadEsm: async () => ({
-    fileTypeFromBuffer: async () => ({ mime: 'image/png', ext: 'png' }),
-  }),
+  loadEsm: () =>
+    Promise.resolve({
+      fileTypeFromBuffer: () =>
+        Promise.resolve({ mime: 'image/png', ext: 'png' }),
+    }),
 }));
 
 const SCENE = { id: 's1', status: 'PENDING_REVIEW', imageUrl: 'u' };
