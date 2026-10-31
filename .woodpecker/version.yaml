@@ -1,5 +1,5 @@
 # Version consistency: the storytime-ci reusable version-check job, ported as
-# .woodpecker/scripts/version-check.sh. Status check:
+# ci/woodpecker/scripts/version-check.sh. Status check:
 # ci/woodpecker/pr/version (pull requests only, as on GitHub: there is no push
 # run, so no push context).
 #
@@ -25,4 +25,4 @@ steps:
   - name: version
     image: node:24.22.1-bookworm
     commands:
-      - bash .woodpecker/scripts/version-check.sh
+      - bash ci/woodpecker/scripts/version-check.sh

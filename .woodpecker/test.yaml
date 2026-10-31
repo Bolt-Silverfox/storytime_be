@@ -8,7 +8,7 @@
 # about 2.6 GiB.
 # `--coverage` is not passed (GitHub's dev job did; it only wrote a report that
 # nothing uploaded, and V8 coverage costs memory). Postgres and redis are
-# service containers reached by name; .woodpecker/scripts/wait-for.mjs waits
+# service containers reached by name; ci/woodpecker/scripts/wait-for.mjs waits
 # for their ports (the postgres image listens on TCP only once it is ready).
 #
 # The doubled dollar in commands escapes Woodpecker's own variable substitution.
@@ -70,8 +70,8 @@ steps:
       <<: [*corepack_env, *db_env]
     commands:
       - *pnpm
-      - cp .woodpecker/ci.env .env
-      - node .woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379
+      - cp ci/woodpecker/ci.env .env
+      - node ci/woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379
       - pnpm db:migrate:deploy
 
   - name: jest
@@ -81,5 +81,5 @@ steps:
       NODE_OPTIONS: --max-old-space-size=2048
     commands:
       - *pnpm
-      - cp .woodpecker/ci.env .env
+      - cp ci/woodpecker/ci.env .env
       - pnpm test --maxWorkers=1

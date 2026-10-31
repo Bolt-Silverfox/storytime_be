@@ -7,7 +7,7 @@
 // listens on TCP after its init phase is done (the temporary init server is
 // socket-only), so an open port means it is ready for queries.
 //
-//   node .woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379
+//   node ci/woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379
 import net from 'node:net';
 
 const targets = process.argv.slice(2);

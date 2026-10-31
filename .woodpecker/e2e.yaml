@@ -67,8 +67,8 @@ steps:
       <<: [*corepack_env, *db_env]
     commands:
       - *pnpm
-      - cp .woodpecker/ci.env .env
-      - node .woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379
+      - cp ci/woodpecker/ci.env .env
+      - node ci/woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379
       - pnpm db:migrate:deploy
 
   - name: jest-e2e
@@ -78,5 +78,5 @@ steps:
       NODE_OPTIONS: --max-old-space-size=2048
     commands:
       - *pnpm
-      - cp .woodpecker/ci.env .env
+      - cp ci/woodpecker/ci.env .env
       - pnpm exec jest --config test/jest-e2e.json --testPathIgnorePatterns payment --maxWorkers=1

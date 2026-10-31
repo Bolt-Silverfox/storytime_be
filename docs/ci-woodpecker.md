@@ -48,9 +48,9 @@ be repointed to these contexts only after one run has reported each of them.
 
 ## Environment
 
-`.woodpecker/ci.env` holds the synthetic values (all `ci-dummy`) the GitHub job
+`ci/woodpecker/ci.env` holds the synthetic values (all `ci-dummy`) the GitHub job
 wrote to `.env`; the only change is that the services are `postgres` and
-`redis` rather than `localhost`. `.woodpecker/scripts/wait-for.mjs` waits for
+`redis` rather than `localhost`. `ci/woodpecker/scripts/wait-for.mjs` waits for
 those ports. Node is `node:24.22.1-bookworm`, pnpm is 10.15.1 (the repo's
 `packageManager`) via corepack, installs use
 `pnpm install --frozen-lockfile --ignore-scripts`, and the pnpm store is not
@@ -73,7 +73,7 @@ docker run --rm --network wpnet --memory 3g -v "$PWD":/w -w /w \
   -e REDIS_URL=redis://redis:6379 node:24.22.1-bookworm sh -c '
     corepack enable && corepack prepare pnpm@10.15.1 --activate &&
     pnpm install --frozen-lockfile --ignore-scripts && pnpm db:generate &&
-    cp .woodpecker/ci.env .env && pnpm db:migrate:deploy &&
+    cp ci/woodpecker/ci.env .env && pnpm db:migrate:deploy &&
     NODE_OPTIONS=--max-old-space-size=2048 pnpm test --maxWorkers=1'
 ```
 
