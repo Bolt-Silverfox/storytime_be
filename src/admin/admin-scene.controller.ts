@@ -103,7 +103,7 @@ export class AdminSceneController {
   @ApiOperation({
     summary: 'Create/replace scene definitions for a story',
     description:
-      'Max 100 scenes. Scenes must start at page 0, be contiguous, non-overlapping and cover every page. Unchanged scenes keep their image/status; changed or new scenes reset to PENDING_GENERATION; surplus scenes are soft-deleted.',
+      'Max 100 scenes. Scenes must start at page 0, be contiguous, non-overlapping and cover every page. Scenes are matched by page range and text hash. If either changes, the old scene is retired (soft-deleted) and a NEW scene row is created with status PENDING_GENERATION; its image is not carried over. Edits to prompt/styleNotes only keep the existing scene, image and status. Scenes no longer in the list are soft-deleted.',
   })
   @ApiBody({ type: ReplaceScenesDto })
   async replace(
