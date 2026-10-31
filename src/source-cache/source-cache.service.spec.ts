@@ -76,7 +76,7 @@ describe('SourceCacheService', () => {
   beforeEach(() => {
     fake = makeFakePrisma();
     lease = makeFakeLease();
-    svc = new SourceCacheService(fake.prisma, lease as any);
+    svc = new SourceCacheService(fake.prisma, lease);
   });
 
   describe('isFresh / needsRevalidation', () => {
@@ -292,7 +292,7 @@ describe('SourceCacheService', () => {
 
     it('waits (polling, no fetch) while another holder has the lease, then fetches', async () => {
       lease = makeFakeLease(3);
-      svc = new SourceCacheService(fake.prisma, lease as any);
+      svc = new SourceCacheService(fake.prisma, lease);
       const fetcher = jest.fn().mockResolvedValue(ok());
       const r = await svc.getOrFetch('g', '1', fetcher, {
         now: NOW,
@@ -305,7 +305,7 @@ describe('SourceCacheService', () => {
 
     it("returns the other holder's result without fetching when it lands while waiting", async () => {
       lease = makeFakeLease(1000);
-      svc = new SourceCacheService(fake.prisma, lease as any);
+      svc = new SourceCacheService(fake.prisma, lease);
       const fetcher = jest.fn().mockResolvedValue(ok());
       const p = svc.getOrFetch('g', '1', fetcher, {
         pollMs: 5,
@@ -320,7 +320,7 @@ describe('SourceCacheService', () => {
 
     it('gives up with SourceCacheLeaseTimeoutError if the lease never frees', async () => {
       lease = makeFakeLease(1000);
-      svc = new SourceCacheService(fake.prisma, lease as any);
+      svc = new SourceCacheService(fake.prisma, lease);
       const fetcher = jest.fn();
       await expect(
         svc.getOrFetch('g', '1', fetcher, { pollMs: 1, waitTimeoutMs: 30 }),
