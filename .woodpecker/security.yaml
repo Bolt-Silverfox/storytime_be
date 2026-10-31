@@ -1,0 +1,33 @@
+# Dependency audit (high and above), as the GitHub "Security audit" step in
+# Code Quality. Status check:
+# ci/woodpecker/{push,pr}/security
+#
+# ADVISORY, like GitHub: the GitHub workflows ran this step as advisory
+# (`continue-on-error` / `|| true`), because a newly published CVE in a
+# transitive dependency would otherwise block every branch with no change on
+# our side. The step prints the audit and an 'advisory' line but always exits 0,
+# so this context reports and never blocks. Do NOT make it a required check
+# while it reports highs (see docs/ci-woodpecker.md).
+#
+# LIGHT lane: `pnpm audit` reads only package.json + pnpm-lock.yaml, so there
+# is no install and the step is tiny.
+# PRs run once (as pull_request); pushes run only on the long-lived branches.
+when:
+  - event: pull_request
+  - event: push
+    branch: [main, "develop-v*", "release-v*"]
+
+labels:
+  lane: light
+
+steps:
+  - name: audit
+    image: node:24.22.1-bookworm
+    environment:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      NODE_OPTIONS: --max-old-space-size=384
+    commands:
+      - corepack enable && corepack prepare pnpm@10.15.1 --activate
+      - |
+        pnpm audit --audit-level=high || echo "ADVISORY: pnpm audit reported high/critical advisories above. This step never fails the build; do not require this check while it reports findings."
+        echo "security audit finished (advisory only, exit 0)"
