@@ -74,12 +74,32 @@ export class UploadSceneImageDto {
   prompt?: string;
 }
 
+export class ApproveSceneDto {
+  @ApiProperty({
+    description:
+      'The imageUrl the reviewer was looking at. The approval is refused (409) if the scene image has changed since.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2048)
+  imageUrl: string;
+}
+
 export class RejectSceneDto {
   @ApiProperty({ example: 'Wrong character appearance' })
   @IsString()
   @MinLength(1)
   @MaxLength(1000)
   reason: string;
+
+  @ApiProperty({
+    description:
+      'The imageUrl the reviewer was looking at; refused (409) if it has changed since.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2048)
+  imageUrl: string;
 }
 
 export class SceneReviewQueueQueryDto {

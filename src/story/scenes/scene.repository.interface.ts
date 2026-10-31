@@ -4,15 +4,33 @@ export type SceneWithStory = StorySceneImage & {
   story: { id: string; title: string; textContent: string | null };
 };
 
-export interface ScenePlanItem {
+export interface SceneKeep {
+  id: string;
+  fromIndex: number;
+  sceneIndex: number;
+  prompt?: string;
+  styleNotes?: string;
+}
+
+export interface SceneCreate {
   sceneIndex: number;
   startPage: number;
   endPage: number;
   textHash: string;
   prompt?: string;
   styleNotes?: string;
-  /** true => wipe image/review state (range or text changed, or new row) */
-  reset: boolean;
+}
+
+export interface SceneRetire {
+  id: string;
+  /** Soft-delete; when set, also move the row to this (negative) index to free its slot. */
+  parkIndex: number | null;
+}
+
+export interface ScenePlan {
+  keeps: SceneKeep[];
+  creates: SceneCreate[];
+  retires: SceneRetire[];
 }
 
 export interface IStorySceneRepository {
@@ -26,15 +44,22 @@ export interface IStorySceneRepository {
   ): Promise<StorySceneImage[]>;
   findApprovedByStory(storyId: string): Promise<StorySceneImage[]>;
   findByIdWithStory(id: string): Promise<SceneWithStory | null>;
-  /** One transaction: upsert planned scenes (reviving soft-deleted), soft-delete removed indexes. */
-  applyPlan(
-    storyId: string,
-    plan: { upserts: ScenePlanItem[]; removeIndexes: number[] },
-  ): Promise<void>;
-  update(
+  /**
+   * One transaction: park/soft-delete retired scenes, move kept scenes to their
+   * new index (via a temporary index so the unique key never collides), create
+   * new scenes.
+   */
+  applyPlan(storyId: string, plan: ScenePlan): Promise<void>;
+  /**
+   * Conditional update: applies `data` only if the row still matches `guard`
+   * (compare-and-set). Returns the updated row, or null when the guard no
+   * longer holds (a concurrent change won).
+   */
+  updateIf(
     id: string,
+    guard: Prisma.StorySceneImageWhereInput,
     data: Prisma.StorySceneImageUncheckedUpdateInput,
-  ): Promise<StorySceneImage>;
+  ): Promise<StorySceneImage | null>;
   listForReview(params: {
     status: SceneImageStatus;
     skip: number;

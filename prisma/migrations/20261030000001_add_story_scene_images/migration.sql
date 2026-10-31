@@ -30,6 +30,6 @@ CREATE TABLE "story_scene_images" (
 
 CREATE UNIQUE INDEX "story_scene_images_storyId_sceneIndex_key" ON "story_scene_images"("storyId", "sceneIndex");
 
-CREATE INDEX "story_scene_images_status_isDeleted_createdAt_idx" ON "story_scene_images"("status", "isDeleted", "createdAt");
+CREATE INDEX "story_scene_images_status_isDeleted_updatedAt_idx" ON "story_scene_images"("status", "isDeleted", "updatedAt");
 
 ALTER TABLE "story_scene_images" ADD CONSTRAINT "story_scene_images_storyId_fkey" FOREIGN KEY ("storyId") REFERENCES "stories"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -77,7 +77,9 @@ describe('AdminSceneController', () => {
       previousImageUrl: 'old',
     });
     const file = { buffer: Buffer.from('x') } as Express.Multer.File;
-    const res = await controller.uploadImage(req, 's1', file, { provider: 'p' });
+    const res = await controller.uploadImage(req, 's1', file, {
+      provider: 'p',
+    });
     expect(svc.uploadImage).toHaveBeenCalledWith('s1', file, { provider: 'p' });
     expect(res.data).toEqual(expect.objectContaining({ imageUrl: 'new' }));
     expect(record).toHaveBeenCalledWith(

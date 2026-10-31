@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   MaxFileSizeValidator,
   FileTypeValidator,
   Param,
@@ -25,6 +27,7 @@ import { Admin } from './decorators/admin.decorator';
 import { AdminAuditLogService } from './admin-audit-log.service';
 import { SceneAdminService } from '@/story/scenes/scene-admin.service';
 import {
+  ApproveSceneDto,
   RejectSceneDto,
   ReplaceScenesDto,
   SceneReviewQueueQueryDto,
@@ -102,7 +105,9 @@ export class AdminSceneController {
   }
 
   @Post('scene-images/:id/image')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_IMAGE_SIZE } }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Upload an illustration for a scene',
@@ -123,27 +128,46 @@ export class AdminSceneController {
     file: Express.Multer.File,
     @Body() body: UploadSceneImageDto,
   ) {
-    const data = await this.scenes.uploadImage(id, file, body);
+    const { scene: data, previousImageUrl } = await this.scenes.uploadImage(
+      id,
+      file,
+      body,
+    );
     await this.audit(req, 'scene_image.upload', 'StorySceneImage', id, {
       provider: body.provider,
       model: body.model,
+      previousImageUrl,
+      imageUrl: data.imageUrl,
     });
     return { statusCode: 201, message: 'Scene image uploaded', data };
   }
 
   @Post('scene-images/:id/approve')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Approve a scene image',
     description:
-      'Requires status PENDING_REVIEW, an imageUrl and a non-stale scene. Records the reviewer.',
+      'Body must carry the imageUrl the reviewer saw; 409 if the image changed or the scene was concurrently rejected/regenerated. Requires status PENDING_REVIEW, an imageUrl and a non-stale scene. Records the reviewer.',
   })
-  async approve(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
-    const data = await this.scenes.approve(id, req.authUserData.userId);
-    await this.audit(req, 'scene_image.approve', 'StorySceneImage', id);
+  @ApiBody({ type: ApproveSceneDto })
+  async approve(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: ApproveSceneDto,
+  ) {
+    const data = await this.scenes.approve(
+      id,
+      req.authUserData.userId,
+      body.imageUrl,
+    );
+    await this.audit(req, 'scene_image.approve', 'StorySceneImage', id, {
+      imageUrl: body.imageUrl,
+    });
     return { statusCode: 200, message: 'Scene image approved', data };
   }
 
   @Post('scene-images/:id/reject')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reject a scene image (reason required)' })
   @ApiBody({ type: RejectSceneDto })
   async reject(
@@ -155,22 +179,28 @@ export class AdminSceneController {
       id,
       req.authUserData.userId,
       body.reason,
+      body.imageUrl,
     );
     await this.audit(req, 'scene_image.reject', 'StorySceneImage', id, {
       reason: body.reason,
+      imageUrl: body.imageUrl,
     });
     return { statusCode: 200, message: 'Scene image rejected', data };
   }
 
   @Post('scene-images/:id/regenerate')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Request regeneration',
     description:
       'Sets the scene back to PENDING_GENERATION and clears its image and review fields.',
   })
   async regenerate(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
-    const data = await this.scenes.requestRegenerate(id);
-    await this.audit(req, 'scene_image.regenerate', 'StorySceneImage', id);
+    const { scene: data, previousImageUrl } =
+      await this.scenes.requestRegenerate(id);
+    await this.audit(req, 'scene_image.regenerate', 'StorySceneImage', id, {
+      previousImageUrl,
+    });
     return { statusCode: 200, message: 'Regeneration requested', data };
   }
 

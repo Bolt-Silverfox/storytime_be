@@ -3,7 +3,7 @@ import type { Prisma, SceneImageStatus, StorySceneImage } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type {
   IStorySceneRepository,
-  ScenePlanItem,
+  ScenePlan,
   SceneWithStory,
 } from './scene.repository.interface';
 
@@ -11,15 +11,8 @@ const withStory = {
   story: { select: { id: true, title: true, textContent: true } },
 } as const;
 
-const RESET_STATE = {
-  status: 'PENDING_GENERATION' as const,
-  imageUrl: null,
-  provider: null,
-  model: null,
-  reviewedById: null,
-  reviewedAt: null,
-  rejectionReason: null,
-};
+/** Temporary index for kept rows while they swap places (unique key safety). */
+const TEMP_INDEX_OFFSET = 1_000_000;
 
 @Injectable()
 export class PrismaStorySceneRepository implements IStorySceneRepository {
@@ -61,51 +54,73 @@ export class PrismaStorySceneRepository implements IStorySceneRepository {
     });
   }
 
-  async applyPlan(
-    storyId: string,
-    plan: { upserts: ScenePlanItem[]; removeIndexes: number[] },
-  ): Promise<void> {
-    await this.prisma.$transaction([
-      ...plan.upserts.map((u) => {
-        const base = {
-          startPage: u.startPage,
-          endPage: u.endPage,
-          textHash: u.textHash,
-          ...(u.prompt !== undefined ? { prompt: u.prompt } : {}),
-          ...(u.styleNotes !== undefined ? { styleNotes: u.styleNotes } : {}),
-          isDeleted: false,
-          deletedAt: null,
-        };
-        return this.prisma.storySceneImage.upsert({
-          where: {
-            storyId_sceneIndex: { storyId, sceneIndex: u.sceneIndex },
+  async applyPlan(storyId: string, plan: ScenePlan): Promise<void> {
+    const row = this.prisma.storySceneImage;
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+    // A: free slots. Retired rows go straight to their (unique, negative)
+    // parking index; moving kept rows go to a temporary high index.
+    for (const r of plan.retires) {
+      ops.push(
+        row.update({
+          where: { id: r.id },
+          data: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            ...(r.parkIndex !== null ? { sceneIndex: r.parkIndex } : {}),
           },
-          create: {
+        }),
+      );
+    }
+    for (const k of plan.keeps.filter((x) => x.fromIndex !== x.sceneIndex)) {
+      ops.push(
+        row.update({
+          where: { id: k.id },
+          data: { sceneIndex: TEMP_INDEX_OFFSET + k.fromIndex },
+        }),
+      );
+    }
+    // B: final positions + new rows
+    for (const k of plan.keeps) {
+      ops.push(
+        row.update({
+          where: { id: k.id },
+          data: {
+            sceneIndex: k.sceneIndex,
+            ...(k.prompt !== undefined ? { prompt: k.prompt } : {}),
+            ...(k.styleNotes !== undefined ? { styleNotes: k.styleNotes } : {}),
+          },
+        }),
+      );
+    }
+    for (const c of plan.creates) {
+      ops.push(
+        row.create({
+          data: {
             storyId,
-            sceneIndex: u.sceneIndex,
-            ...base,
-            prompt: u.prompt ?? null,
-            styleNotes: u.styleNotes ?? null,
+            sceneIndex: c.sceneIndex,
+            startPage: c.startPage,
+            endPage: c.endPage,
+            textHash: c.textHash,
+            prompt: c.prompt ?? null,
+            styleNotes: c.styleNotes ?? null,
           },
-          update: u.reset ? { ...base, ...RESET_STATE } : base,
-        });
-      }),
-      ...(plan.removeIndexes.length
-        ? [
-            this.prisma.storySceneImage.updateMany({
-              where: { storyId, sceneIndex: { in: plan.removeIndexes } },
-              data: { isDeleted: true, deletedAt: new Date() },
-            }),
-          ]
-        : []),
-    ]);
+        }),
+      );
+    }
+    await this.prisma.$transaction(ops);
   }
 
-  update(
+  async updateIf(
     id: string,
+    guard: Prisma.StorySceneImageWhereInput,
     data: Prisma.StorySceneImageUncheckedUpdateInput,
-  ): Promise<StorySceneImage> {
-    return this.prisma.storySceneImage.update({ where: { id }, data });
+  ): Promise<StorySceneImage | null> {
+    const { count } = await this.prisma.storySceneImage.updateMany({
+      where: { AND: [{ id }, guard] },
+      data,
+    });
+    if (count === 0) return null;
+    return this.prisma.storySceneImage.findUnique({ where: { id } });
   }
 
   async listForReview(params: {

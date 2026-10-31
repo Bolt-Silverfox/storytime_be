@@ -30,16 +30,20 @@ describe('Scene repository + services (integration)', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PrismaService,
-        { provide: STORY_SCENE_REPOSITORY, useClass: PrismaStorySceneRepository },
+        {
+          provide: STORY_SCENE_REPOSITORY,
+          useClass: PrismaStorySceneRepository,
+        },
         PrismaStorySceneRepository,
         SceneReadService,
         SceneAdminService,
         {
           provide: UploadService,
           useValue: {
-            uploadImageFromBuffer: jest
-              .fn()
-              .mockResolvedValue({ secure_url: 'https://cdn/new.webp', public_id: 'p' }),
+            uploadImageFromBuffer: jest.fn().mockResolvedValue({
+              secure_url: 'https://cdn/new.webp',
+              public_id: 'p',
+            }),
             deleteImage: jest.fn(),
           },
         },
@@ -142,7 +146,9 @@ describe('Scene repository + services (integration)', () => {
         /changed|Conflict|pending/i,
       );
       expect((await read.getReadExtras(storyId, TEXT)).scenes).toEqual([]);
-      const row = await prisma.storySceneImage.findUniqueOrThrow({ where: { id: s.id } });
+      const row = await prisma.storySceneImage.findUniqueOrThrow({
+        where: { id: s.id },
+      });
       expect(row.status).toBe('PENDING_REVIEW');
     });
 
@@ -156,7 +162,9 @@ describe('Scene repository + services (integration)', () => {
         { status: 'APPROVED', reviewedById: 'admin-1', reviewedAt: new Date() },
       );
       expect(won).toBeNull();
-      const row = await prisma.storySceneImage.findUniqueOrThrow({ where: { id: s.id } });
+      const row = await prisma.storySceneImage.findUniqueOrThrow({
+        where: { id: s.id },
+      });
       expect(row.status).toBe('REJECTED');
       expect((await read.getReadExtras(storyId, TEXT)).scenes).toEqual([]);
     });
@@ -165,7 +173,9 @@ describe('Scene repository + services (integration)', () => {
       const s = await mk(0, 0, 3, { status: 'PENDING_REVIEW', imageUrl: 'X' });
       await admin.requestRegenerate(s.id);
       await expect(admin.approve(s.id, 'admin-1', 'X')).rejects.toThrow();
-      const row = await prisma.storySceneImage.findUniqueOrThrow({ where: { id: s.id } });
+      const row = await prisma.storySceneImage.findUniqueOrThrow({
+        where: { id: s.id },
+      });
       expect(row.status).toBe('PENDING_GENERATION');
       expect(row.imageUrl).toBeNull();
     });
@@ -214,9 +224,15 @@ describe('Scene repository + services (integration)', () => {
     it('repeated redefinition keeps working (parked rows do not collide)', async () => {
       await mk(0, 0, 3);
       for (const defs of [
-        [{ startPage: 0, endPage: 1 }, { startPage: 2, endPage: 3 }],
+        [
+          { startPage: 0, endPage: 1 },
+          { startPage: 2, endPage: 3 },
+        ],
         [{ startPage: 0, endPage: 3 }],
-        [{ startPage: 0, endPage: 0 }, { startPage: 1, endPage: 3 }],
+        [
+          { startPage: 0, endPage: 0 },
+          { startPage: 1, endPage: 3 },
+        ],
         [{ startPage: 0, endPage: 3 }],
       ]) {
         await admin.replaceDefinitions(storyId, defs);

@@ -128,13 +128,21 @@ describe('SceneAdminService', () => {
       expect(plan.keeps).toEqual([
         expect.objectContaining({ id: 'a', fromIndex: 0, sceneIndex: 0 }),
       ]);
-      expect(plan.creates.map((c: { sceneIndex: number }) => c.sceneIndex)).toEqual([1]);
+      expect(
+        plan.creates.map((c: { sceneIndex: number }) => c.sceneIndex),
+      ).toEqual([1]);
     });
 
     it('INSERT: an approved scene whose range is unchanged keeps its image when its index shifts', async () => {
       // old: [0-1 idx0, 2-3 idx1 APPROVED]  new: [0-0, 1-1, 2-3]
       repo.findByStory.mockResolvedValue([
-        live({ id: 'a', sceneIndex: 0, startPage: 0, endPage: 1, textHash: hash(0, 1) }),
+        live({
+          id: 'a',
+          sceneIndex: 0,
+          startPage: 0,
+          endPage: 1,
+          textHash: hash(0, 1),
+        }),
         live({
           id: 'b',
           sceneIndex: 1,
@@ -154,7 +162,9 @@ describe('SceneAdminService', () => {
       expect(plan.keeps).toEqual([
         expect.objectContaining({ id: 'b', fromIndex: 1, sceneIndex: 2 }),
       ]);
-      expect(plan.creates.map((c: { sceneIndex: number }) => c.sceneIndex)).toEqual([0, 1]);
+      expect(
+        plan.creates.map((c: { sceneIndex: number }) => c.sceneIndex),
+      ).toEqual([0, 1]);
       expect(plan.retires).toEqual([
         expect.objectContaining({ id: 'a', parkIndex: expect.any(Number) }),
       ]);
@@ -182,7 +192,10 @@ describe('SceneAdminService', () => {
       const [, plan] = repo.applyPlan.mock.calls[0];
       expect(plan.keeps).toEqual([]);
       expect(plan.creates).toHaveLength(2);
-      expect(plan.retires.map((r: { id: string }) => r.id).sort()).toEqual(['a', 'b']);
+      expect(plan.retires.map((r: { id: string }) => r.id).sort()).toEqual([
+        'a',
+        'b',
+      ]);
     });
 
     it('retires surplus scenes in place and never keeps a stale-hash scene', async () => {
@@ -194,7 +207,10 @@ describe('SceneAdminService', () => {
       const [, plan] = repo.applyPlan.mock.calls[0];
       expect(plan.keeps).toEqual([]);
       const byId = Object.fromEntries(
-        plan.retires.map((r: { id: string; parkIndex: number | null }) => [r.id, r.parkIndex]),
+        plan.retires.map((r: { id: string; parkIndex: number | null }) => [
+          r.id,
+          r.parkIndex,
+        ]),
       );
       expect(byId.a).toEqual(expect.any(Number)); // occupies target index 0 -> parked
       expect(byId.c).toBeNull(); // index 5 is free -> soft-deleted in place
@@ -258,6 +274,7 @@ describe('SceneAdminService', () => {
       repo.findByIdWithStory.mockResolvedValue(scene());
       upload.uploadImageFromBuffer.mockResolvedValue(uploaded);
       repo.updateIf.mockResolvedValue(null);
+      upload.deleteImage.mockResolvedValue(undefined);
       await expect(svc.uploadImage('s1', file, {})).rejects.toThrow(
         ConflictException,
       );
@@ -285,9 +302,7 @@ describe('SceneAdminService', () => {
       scene({ status: 'PENDING_REVIEW', imageUrl: 'seen', ...over });
 
     it('requires an imageUrl', async () => {
-      repo.findByIdWithStory.mockResolvedValue(
-        pending({ imageUrl: null }),
-      );
+      repo.findByIdWithStory.mockResolvedValue(pending({ imageUrl: null }));
       await expect(svc.approve('s1', 'admin-1', 'seen')).rejects.toThrow(
         BadRequestException,
       );
