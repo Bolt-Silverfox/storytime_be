@@ -24,6 +24,7 @@ export class CursorPaginationQueryDto {
 
 export class CursorPaginationMetaDto {
   @ApiProperty({
+    type: String,
     description: 'Cursor to fetch the next page (null if no more pages)',
     nullable: true,
     example: 'eyJpZCI6ImFiYzEyMyJ9',
@@ -31,6 +32,7 @@ export class CursorPaginationMetaDto {
   nextCursor: string | null;
 
   @ApiProperty({
+    type: String,
     description: 'Cursor to fetch the previous page (null if first page)',
     nullable: true,
   })

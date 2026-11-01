@@ -1,4 +1,7 @@
 import { GuestStoryResponseDto } from '@/guest/dto/guest.dto';
+import * as adminResponses from '@/admin/dto/admin-responses.dto';
+import * as readingAnalytics from '@/admin/dto/reading-analytics.dto';
+import * as storyDtos from './story.dto';
 import { StoryDetailDto } from '@/admin/dto/admin-responses.dto';
 import {
   CategoryDto,
@@ -107,6 +110,41 @@ describe('story credit DTO documentation', () => {
       const m = meta(cls, prop);
       expect(m.nullable).toBe(true);
       expect(m.type).toBe(t);
+    });
+  });
+
+  describe('sweep: every nullable property declares an explicit type', () => {
+    // design:type is Object for `T | null`, so a nullable ApiProperty without
+    // an explicit `type` is published as an object schema.
+    const offenders = (mod: Record<string, unknown>): string[] => {
+      const out: string[] = [];
+      for (const [name, cls] of Object.entries(mod)) {
+        if (typeof cls !== 'function' || !cls.prototype) continue;
+        const props: string[] = (
+          Reflect.getMetadata(
+            'swagger/apiModelPropertiesArray',
+            cls.prototype,
+          ) ?? []
+        ).map((p: string) => p.replace(/^:/, ''));
+        for (const prop of props) {
+          const m = Reflect.getMetadata(
+            'swagger/apiModelProperties',
+            cls.prototype,
+            prop,
+          ) as { nullable?: boolean; type?: unknown } | undefined;
+          if (m?.nullable && (m.type === undefined || m.type === Object))
+            out.push(`${name}.${prop}`);
+        }
+      }
+      return out;
+    };
+
+    it.each([
+      ['story.dto', storyDtos],
+      ['admin-responses.dto', adminResponses],
+      ['reading-analytics.dto', readingAnalytics],
+    ])('%s has no untyped nullable property', (_n, mod) => {
+      expect(offenders(mod as Record<string, unknown>)).toEqual([]);
     });
   });
 });

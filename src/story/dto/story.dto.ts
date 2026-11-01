@@ -483,10 +483,10 @@ export class CategoryDto {
   @ApiProperty()
   name: string;
 
-  @ApiProperty({ required: false, nullable: true })
+  @ApiProperty({ type: String, required: false, nullable: true })
   image?: string | null;
 
-  @ApiProperty({ required: false, nullable: true })
+  @ApiProperty({ type: String, required: false, nullable: true })
   description?: string | null;
 
   @ApiProperty({ required: false })
@@ -521,9 +521,9 @@ export class ThemeDto {
   id: string;
   @ApiProperty()
   name: string;
-  @ApiProperty({ required: false, nullable: true })
+  @ApiProperty({ type: String, required: false, nullable: true })
   image?: string | null;
-  @ApiProperty({ required: false, nullable: true })
+  @ApiProperty({ type: String, required: false, nullable: true })
   description?: string | null;
 }
 
@@ -683,7 +683,11 @@ export class PaginatedStoriesDto {
 }
 
 export class CursorPaginationMetaDto {
-  @ApiProperty({ description: 'Cursor for next page', nullable: true })
+  @ApiProperty({
+    type: String,
+    description: 'Cursor for next page',
+    nullable: true,
+  })
   nextCursor: string | null;
 
   @ApiProperty({ description: 'Whether more items exist' })
@@ -691,10 +695,10 @@ export class CursorPaginationMetaDto {
 }
 
 export class CursorPaginationStoriesMetaDto {
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ type: String, nullable: true })
   nextCursor: string | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ type: String, nullable: true })
   previousCursor: string | null;
 
   @ApiProperty()
