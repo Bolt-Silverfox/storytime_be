@@ -111,13 +111,13 @@ importers:
         version: 1.9.1
       '@bull-board/api':
         specifier: ^9.10.4
-        version: 9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3)
+        version: 9.10.4(@bull-board/ui@9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3))(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3)
       '@bull-board/express':
         specifier: ^9.10.4
-        version: 9.10.4(bullmq@5.76.11)(typescript@5.9.3)
+        version: 9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3)
       '@bull-board/nestjs':
         specifier: ^9.10.4
-        version: 9.10.4(@bull-board/api@9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3))(@nestjs/bull-shared@11.0.5(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8))(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+        version: 9.10.4(@bull-board/api@9.10.4(@bull-board/ui@9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3))(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3))(@nestjs/bull-shared@11.0.5(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8))(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@deepgram/sdk':
         specifier: ^5.15.0
         version: 5.15.0
@@ -141,7 +141,7 @@ importers:
         version: 4.0.1(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(axios@1.20.0)(rxjs@7.8.2)
       '@nestjs/bullmq':
         specifier: ^11.0.5
-        version: 11.0.5(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(bullmq@5.76.11)
+        version: 11.0.5(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(bullmq@6.4.2(ioredis@6.0.0))
       '@nestjs/cache-manager':
         specifier: ^3.1.3
         version: 3.1.3(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(cache-manager@7.2.9)(keyv@5.5.4)(rxjs@7.8.2)
@@ -263,8 +263,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       bullmq:
-        specifier: ^5.76.11
-        version: 5.76.11
+        specifier: ^6.4.2
+        version: 6.4.2(ioredis@6.0.0)
       cache-manager:
         specifier: ^7.2.9
         version: 7.2.9
@@ -1199,9 +1199,6 @@ packages:
     peerDependenciesMeta:
       '@types/node':
         optional: true
-
-  '@ioredis/commands@1.5.1':
-    resolution: {integrity: sha512-JH8ZL/ywcJyR9MmJ5BNqZllXNZQqQbnVZOqpPQqE1vHiFgAw4NHbvE0FOduNU8IX9babitBT46571OnPTT0Zcw==}
 
   '@ioredis/commands@2.0.0':
     resolution: {integrity: sha512-vrx0AE/T0h7cRZwfo1M39Cr+ZhZrkf0V8mQN75wucKCxCLD9l/VX6no3gFvrLqD1IlG/1LtzWovqEw3t0Vr9zg==}
@@ -2152,6 +2149,7 @@ packages:
   '@opentelemetry/propagator-jaeger@2.12.0':
     resolution: {integrity: sha512-Kz2Vz+NILW7S1WtN4rV1wr76fMtT/RRWvAMFBc91uTIi2dDMXxrfBKNe2KH7yaCfFp1X0xfAuabzuFczvoPB6A==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Package no longer supported. See https://github.com/open-telemetry/opentelemetry-js/pull/7077
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -2222,18 +2220,21 @@ packages:
   '@opentelemetry/sdk-trace-base@2.12.0':
     resolution: {integrity: sha512-JOERgZCxRM06FEJ5kEWxlSRChah6MmXDx3KwCruqEv/iEyLkTokCSemf2y1w8oIHtfrr8EVTpzebq/31vn2Cpg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.9.0':
     resolution: {integrity: sha512-cp9zmTl62R8PJrpvFcmc8N2JQU/xfa0S+61q511Nji+QxCfZ8Ifvg7H27G8cANe4crg4RTrWsVvanHiXjSp6ag==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.12.0':
     resolution: {integrity: sha512-9DufH1IlmQMoKAfot5y/FhTP1RnmhLb5K6eKmJO/bvzPjYwPAazoiAUbTZFdPbqxOXN0FEbhZx/e6SB1Og4jmg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -3857,9 +3858,23 @@ packages:
   buffer@6.0.3:
     resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
 
-  bullmq@5.76.11:
-    resolution: {integrity: sha512-9gXmLLuMbF1RvF2mQlBANuQoCHleqrXHy7IdSDOghjflJ3QR97nRXABWne4Qngz8ZwZzCQPrelzNqwfKf8L3Xw==}
-    engines: {node: '>=12.22.0'}
+  bullmq@6.4.2:
+    resolution: {integrity: sha512-fCPPJUgJFwbaN7nZiU/JzQVydss+mA3FUYaepvJQnkSUr4jmzobZcqMSJZPZygN/esQZLppE/cTyTYTNniO3bQ==}
+    engines: {node: '>=14.17.0'}
+    peerDependencies:
+      bullmq-otel: '>=2.0.0'
+      ioredis: '>=5.0.0'
+      pg: '>=8.0.0'
+      redis: '>=5.0.0'
+    peerDependenciesMeta:
+      bullmq-otel:
+        optional: true
+      ioredis:
+        optional: true
+      pg:
+        optional: true
+      redis:
+        optional: true
 
   busboy@1.6.0:
     resolution: {integrity: sha512-8SFQbg/0hQ9xy3UNTB0YEnsNBbWfhf7RtnzpL7TkBiTBRfrQ9Fxcnz7VJsleJpyp6rVLvXiuORqjlHi5q+PYuA==}
@@ -4171,10 +4186,9 @@ packages:
   create-require@1.1.1:
     resolution: {integrity: sha512-dcKFX3jn0MpIaXjisoRvexIJVEKzaq7z2rZKxf+MSr9TkdmHmsU4m2lcLojrj/FHl8mk5VxMmYA+ftRkP/3oKQ==}
 
-  cron-parser@4.9.0:
-    resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
-    engines: {node: '>=12.0.0'}
-    deprecated: v4 is no longer maintained, upgrade to v5
+  cron-parser@5.10.2:
+    resolution: {integrity: sha512-JfAYMY0LZaWQTuict8PhtF/ksSnq8xefSDmQUnnoqvkPYkU/y3UP0DTWzJKFBz0P1IXsDG8q0vY3zHkoFZOhvw==}
+    engines: {node: '>=18'}
 
   cron@4.4.0:
     resolution: {integrity: sha512-fkdfq+b+AHI4cKdhZlppHveI/mgz2qpiYxcm+t5E5TsxX7QrLS1VE0+7GENEk9z0EeGPcpSciGv6ez24duWhwQ==}
@@ -5315,10 +5329,6 @@ packages:
     resolution: {integrity: sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg==}
     engines: {node: '>=12'}
 
-  ioredis@5.10.1:
-    resolution: {integrity: sha512-HuEDBTI70aYdx1v6U97SbNx9F1+svQKBDo30o0b9fw055LMepzpOOd0Ccg9Q6tbqmBSJaMuY0fB7yw9/vjBYCA==}
-    engines: {node: '>=12.22.0'}
-
   ioredis@6.0.0:
     resolution: {integrity: sha512-f+Dtubxfpf6KYFq7WVXJoOLn0bk4TJrMrN9SzeE+jrWrCWj7XX3fA6vkryafhADX+GMymRxgDJDOI33COkJc0w==}
     engines: {node: '>=20.0.0'}
@@ -5744,14 +5754,8 @@ packages:
   lodash.clonedeep@4.5.0:
     resolution: {integrity: sha512-H5ZhCF25riFd9uB5UCkVKo61m3S/xZk1x4wA6yp/L3RFP6Z/eHH1ymQcGLo7J3GMPfm0V/7m1tryHuGVxpqEBQ==}
 
-  lodash.defaults@4.2.0:
-    resolution: {integrity: sha512-qjxPLHd3r5DnsdGacqOMU6pb/avJzdh9tFX2ymgoZE27BmjXrNy/y4LoaiTeAb+O3gL8AfpJGtqfX/ae2leYYQ==}
-
   lodash.includes@4.3.0:
     resolution: {integrity: sha512-W3Bx6mdkRTGtlJISOvVD/lbqjTlPPUDTMnlXZFnVwi9NKJ6tiAk6LVdlhZMm17VZisqhKcgzpO5Wz91PCt5b0w==}
-
-  lodash.isarguments@3.1.0:
-    resolution: {integrity: sha512-chi4NHZlZqZD18a0imDHnZPrDeBbTtVN7GXMwuGdRH9qotxAjYs3aVLKc7zNOG9eddR5Ksd8rvFEBc9SsggPpg==}
 
   lodash.isboolean@3.0.3:
     resolution: {integrity: sha512-Bz5mupy2SVbPHURB98VAcw+aHh4vRV5IPNhILUCsOzRmsTmSQ17jIuqopAentWoehktxGd9e/hbIXq980/1QJg==}
@@ -5976,8 +5980,8 @@ packages:
     resolution: {integrity: sha512-4kmO/MdyUIkLIvTPr8VHLil4AtoKIoniWPIEk5+CDy0xnWC84azhSFmuJ7PxZdsYtiP5kEeQsORAVIeMgxT+Hw==}
     hasBin: true
 
-  msgpackr@2.0.1:
-    resolution: {integrity: sha512-9J+tqTEsbHqY8YohazYgty7LgerFIWxvMLpUjqETSmjHojtJm2WnX2kK/2a1fLI7CO7ERP1YSEUXMucz4j+yBA==}
+  msgpackr@2.1.2:
+    resolution: {integrity: sha512-JHAdwubWNEadHQsFAib6uXOzKFxY8QOWHu9LCCksOINMC+TjgaKS2Tdrw7dW5SY0LLz8YK2/YqLSi2vigQt05w==}
 
   multer@2.5.0:
     resolution: {integrity: sha512-BsqOzYGVq49JcW2IzoSAxeKYRevb+dGGPPWleOR8Lrlk4igwxu1/9pwSXlByhCb7MVZDrNJFC0IBP5/O5nLYRw==}
@@ -6610,10 +6614,6 @@ packages:
   redis-info@3.1.0:
     resolution: {integrity: sha512-ER4L9Sh/vm63DkIE0bkSjxluQlioBiBgf5w1UuldaW/3vPcecdljVDisZhmnCMvsxHNiARTTDDHGg9cGwTfrKg==}
 
-  redis-parser@3.0.0:
-    resolution: {integrity: sha512-DJnGAeenTdpMEH6uAJRK/uiyEIH9WVsUmoLwzudwGJUwZPp80PDBWPHXSAGNPwNvIXAbe7MSUB1zQFugFml66A==}
-    engines: {node: '>=4'}
-
   reflect-metadata@0.2.2:
     resolution: {integrity: sha512-urBwgfrvVP/eAyXx4hluJivBKzuEbSQs9rKWCrCkbSxNv8mxPcUZKeuoF3Uy4mJl3Lwprp6yy5/39VWigZ4K6Q==}
 
@@ -6744,11 +6744,6 @@ packages:
 
   semver@6.3.1:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
-    hasBin: true
-
-  semver@7.8.0:
-    resolution: {integrity: sha512-AcM7dV/5ul4EekoQ29Agm5vri8JNqRyj39o0qpX6vDF2GZrtutZl5RwgD1XnZjiTAfncsJhMI48QQH3sN87YNA==}
-    engines: {node: '>=10'}
     hasBin: true
 
   semver@7.8.5:
@@ -7994,20 +7989,20 @@ snapshots:
 
   '@braintree/sanitize-url@7.1.2': {}
 
-  '@bull-board/api@9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3)':
+  '@bull-board/api@9.10.4(@bull-board/ui@9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3))(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3)':
     dependencies:
-      '@bull-board/ui': 9.10.4(bullmq@5.76.11)(typescript@5.9.3)
+      '@bull-board/ui': 9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3)
       redis-info: 3.1.0
       valibot: 1.5.0(typescript@5.9.3)
     optionalDependencies:
-      bullmq: 5.76.11
+      bullmq: 6.4.2(ioredis@6.0.0)
     transitivePeerDependencies:
       - typescript
 
-  '@bull-board/express@9.10.4(bullmq@5.76.11)(typescript@5.9.3)':
+  '@bull-board/express@9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3)':
     dependencies:
-      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3)
-      '@bull-board/ui': 9.10.4(bullmq@5.76.11)(typescript@5.9.3)
+      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3))(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3)
+      '@bull-board/ui': 9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3)
       ejs: 6.0.1
       express: 5.3.0
     transitivePeerDependencies:
@@ -8016,18 +8011,18 @@ snapshots:
       - supports-color
       - typescript
 
-  '@bull-board/nestjs@9.10.4(@bull-board/api@9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3))(@nestjs/bull-shared@11.0.5(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8))(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(reflect-metadata@0.2.2)(rxjs@7.8.2)':
+  '@bull-board/nestjs@9.10.4(@bull-board/api@9.10.4(@bull-board/ui@9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3))(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3))(@nestjs/bull-shared@11.0.5(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8))(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(reflect-metadata@0.2.2)(rxjs@7.8.2)':
     dependencies:
-      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3)
+      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3))(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3)
       '@nestjs/bull-shared': 11.0.5(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)
       '@nestjs/common': 11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 11.2.8(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.2.8)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       reflect-metadata: 0.2.2
       rxjs: 7.8.2
 
-  '@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3)':
+  '@bull-board/ui@9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3)':
     dependencies:
-      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@5.76.11)(typescript@5.9.3))(bullmq@5.76.11)(typescript@5.9.3)
+      '@bull-board/api': 9.10.4(@bull-board/ui@9.10.4(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3))(bullmq@6.4.2(ioredis@6.0.0))(typescript@5.9.3)
     transitivePeerDependencies:
       - bull
       - bullmq
@@ -8490,8 +8485,6 @@ snapshots:
     optionalDependencies:
       '@types/node': 24.19.2
 
-  '@ioredis/commands@1.5.1': {}
-
   '@ioredis/commands@2.0.0': {}
 
   '@isaacs/cliui@8.0.2':
@@ -8890,12 +8883,12 @@ snapshots:
       '@nestjs/core': 11.2.8(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.2.8)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       tslib: 2.8.1
 
-  '@nestjs/bullmq@11.0.5(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(bullmq@5.76.11)':
+  '@nestjs/bullmq@11.0.5(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(bullmq@6.4.2(ioredis@6.0.0))':
     dependencies:
       '@nestjs/bull-shared': 11.0.5(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)
       '@nestjs/common': 11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 11.2.8(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.2.8)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      bullmq: 5.76.11
+      bullmq: 6.4.2(ioredis@6.0.0)
       tslib: 2.8.1
 
   '@nestjs/cache-manager@3.1.3(@nestjs/common@11.2.8(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(cache-manager@7.2.9)(keyv@5.5.4)(rxjs@7.8.2)':
@@ -11516,16 +11509,15 @@ snapshots:
       base64-js: 1.5.1
       ieee754: 1.2.1
 
-  bullmq@5.76.11:
+  bullmq@6.4.2(ioredis@6.0.0):
     dependencies:
-      cron-parser: 4.9.0
-      ioredis: 5.10.1
-      msgpackr: 2.0.1
+      cron-parser: 5.10.2
+      msgpackr: 2.1.2
       node-abort-controller: 3.1.1
-      semver: 7.8.0
+      semver: 7.8.5
       tslib: 2.8.1
-    transitivePeerDependencies:
-      - supports-color
+    optionalDependencies:
+      ioredis: 6.0.0
 
   busboy@1.6.0:
     dependencies:
@@ -11810,7 +11802,7 @@ snapshots:
 
   create-require@1.1.1: {}
 
-  cron-parser@4.9.0:
+  cron-parser@5.10.2:
     dependencies:
       luxon: 3.7.2
 
@@ -13170,20 +13162,6 @@ snapshots:
 
   internmap@2.0.3: {}
 
-  ioredis@5.10.1:
-    dependencies:
-      '@ioredis/commands': 1.5.1
-      cluster-key-slot: 1.1.2
-      debug: 4.4.3
-      denque: 2.1.0
-      lodash.defaults: 4.2.0
-      lodash.isarguments: 3.1.0
-      redis-errors: 1.2.0
-      redis-parser: 3.0.0
-      standard-as-callback: 2.1.0
-    transitivePeerDependencies:
-      - supports-color
-
   ioredis@6.0.0:
     dependencies:
       '@ioredis/commands': 2.0.0
@@ -13771,11 +13749,7 @@ snapshots:
 
   lodash.clonedeep@4.5.0: {}
 
-  lodash.defaults@4.2.0: {}
-
   lodash.includes@4.3.0: {}
-
-  lodash.isarguments@3.1.0: {}
 
   lodash.isboolean@3.0.3: {}
 
@@ -13977,7 +13951,7 @@ snapshots:
       '@msgpackr-extract/msgpackr-extract-win32-x64': 3.0.4
     optional: true
 
-  msgpackr@2.0.1:
+  msgpackr@2.1.2:
     optionalDependencies:
       msgpackr-extract: 3.0.4
 
@@ -14596,10 +14570,6 @@ snapshots:
     dependencies:
       lodash: 4.18.1
 
-  redis-parser@3.0.0:
-    dependencies:
-      redis-errors: 1.2.0
-
   reflect-metadata@0.2.2: {}
 
   require-directory@2.1.1: {}
@@ -14739,8 +14709,6 @@ snapshots:
       semver: 7.8.5
 
   semver@6.3.1: {}
-
-  semver@7.8.0: {}
 
   semver@7.8.5: {}
 
