@@ -124,18 +124,27 @@ describe('processGutenbergText', () => {
   });
 });
 
-
 // ---- hardening round ------------------------------------------------------
 const wrap = (body: string, head = 'Title: Lantern Fox\nAuthor: Ada Example') =>
   `${head}\n\n*** START OF THE PROJECT GUTENBERG EBOOK X ***\n\n${body}\n\n*** END OF THE PROJECT GUTENBERG EBOOK X ***\n`;
 const plain = (e: Partial<AllowListEntry> = {}) =>
-  entry({ translator: undefined, expect: { title: 'Lantern Fox', author: 'Example' }, ...e });
+  entry({
+    translator: undefined,
+    expect: { title: 'Lantern Fox', author: 'Example' },
+    ...e,
+  });
 const STORY = 'A small fox found a lantern in the wood and carried it home.';
 
 describe('processGutenbergText hardening', () => {
   it.each([
-    ['multi-paragraph bracketed transcriber note', '[Transcriber\'s Note: spelling kept.\n\nThe list of volunteers follows here.\n\nMore about the edition.]'],
-    ['This eBook was produced by', 'This eBook was produced by Some Volunteers at a library.'],
+    [
+      'multi-paragraph bracketed transcriber note',
+      "[Transcriber's Note: spelling kept.\n\nThe list of volunteers follows here.\n\nMore about the edition.]",
+    ],
+    [
+      'This eBook was produced by',
+      'This eBook was produced by Some Volunteers at a library.',
+    ],
     ['This etext was produced by', 'This etext was produced by A. Person.'],
     ['Etext number line', 'Etext #14838\n'],
     ['PG edition line', 'PG edition, revised.'],
@@ -165,18 +174,26 @@ describe('processGutenbergText hardening', () => {
     ['Cyrillic o in Project', 'Pr\u043eject Gutenberg'],
     ['zero-width', 'Guten\u200bberg'],
   ])('fails closed on an obfuscated mention inside story text: %s', (_n, v) => {
-    const r = processGutenbergText(wrap(`She read about ${v} in a book.\n\n${STORY}`), plain());
+    const r = processGutenbergText(
+      wrap(`She read about ${v} in a book.\n\n${STORY}`),
+      plain(),
+    );
     expect(r).toEqual({ ok: false, reason: 'residual-reference' });
   });
 
   it('does not drop a story paragraph just because it is near the source name: fails closed instead', () => {
-    const r = processGutenbergText(wrap(`The fox met Gutenberg the owl.\n\n${STORY}`), plain());
+    const r = processGutenbergText(
+      wrap(`The fox met Gutenberg the owl.\n\n${STORY}`),
+      plain(),
+    );
     expect(r.ok).toBe(false);
   });
 
   it('obfuscated boilerplate (start pattern) is still dropped cleanly', () => {
     const r = processGutenbergText(
-      wrap(`Produced by Jane at the Online Distributed Proofreading Team\n\n${STORY}`),
+      wrap(
+        `Produced by Jane at the Online Distributed Proofreading Team\n\n${STORY}`,
+      ),
       plain(),
     );
     expect(r).toMatchObject({ ok: true, content: STORY });
@@ -186,17 +203,31 @@ describe('processGutenbergText hardening', () => {
     const body = `${STORY}\n`;
     it('ignores a marker that is not at the start of a line', () => {
       const t = `Title: Lantern Fox\nAuthor: Ada Example\n\nsee *** START OF THE PROJECT GUTENBERG EBOOK X ***\n\n${body}\n*** END OF THE PROJECT GUTENBERG EBOOK X ***`;
-      expect(processGutenbergText(t, plain())).toEqual({ ok: false, reason: 'no-start-marker' });
+      expect(processGutenbergText(t, plain())).toEqual({
+        ok: false,
+        reason: 'no-start-marker',
+      });
     });
     it('requires three asterisks and the words', () => {
-      for (const m of ['** START OF THE PROJECT GUTENBERG EBOOK X **', 'START OF THE PROJECT GUTENBERG EBOOK X', '*** START OF PROJECT GUTENBERG EBOOK X ***', '*** BEGIN OF THE PROJECT GUTENBERG EBOOK X ***']) {
+      for (const m of [
+        '** START OF THE PROJECT GUTENBERG EBOOK X **',
+        'START OF THE PROJECT GUTENBERG EBOOK X',
+        '*** START OF PROJECT GUTENBERG EBOOK X ***',
+        '*** BEGIN OF THE PROJECT GUTENBERG EBOOK X ***',
+      ]) {
         const t = `Title: Lantern Fox\nAuthor: Ada Example\n\n${m}\n\n${body}\n*** END OF THE PROJECT GUTENBERG EBOOK X ***`;
-        expect(processGutenbergText(t, plain())).toEqual({ ok: false, reason: 'no-start-marker' });
+        expect(processGutenbergText(t, plain())).toEqual({
+          ok: false,
+          reason: 'no-start-marker',
+        });
       }
     });
     it('requires an END marker at line start', () => {
       const t = `Title: Lantern Fox\nAuthor: Ada Example\n\n*** START OF THE PROJECT GUTENBERG EBOOK X ***\n\n${body}\nx *** END OF THE PROJECT GUTENBERG EBOOK X ***`;
-      expect(processGutenbergText(t, plain())).toEqual({ ok: false, reason: 'no-end-marker' });
+      expect(processGutenbergText(t, plain())).toEqual({
+        ok: false,
+        reason: 'no-end-marker',
+      });
     });
     it('accepts THIS and mixed case', () => {
       const t = `Title: Lantern Fox\nAuthor: Ada Example\n\n*** start of this project gutenberg ebook x ***\n\n${body}\n*** end of this project gutenberg ebook x ***`;
@@ -205,12 +236,18 @@ describe('processGutenbergText hardening', () => {
   });
 
   it('the final residual check is the safety net (a reference no strip rule knows)', () => {
-    const r = processGutenbergText(wrap(`${STORY} Visit gutenberg.org today.`), plain());
+    const r = processGutenbergText(
+      wrap(`${STORY} Visit gutenberg.org today.`),
+      plain(),
+    );
     expect(r).toEqual({ ok: false, reason: 'residual-reference' });
   });
 
   it('unclosed [Illustration marker is dropped to the end of its paragraph', () => {
-    const r = processGutenbergText(wrap(`${STORY} [Illustration: a fox\n\nNext.`), plain());
+    const r = processGutenbergText(
+      wrap(`${STORY} [Illustration: a fox\n\nNext.`),
+      plain(),
+    );
     expect(r).toMatchObject({ ok: true });
     if (r.ok) expect(r.content).not.toMatch(/illustration/i);
   });
@@ -224,17 +261,26 @@ describe('processGutenbergText hardening', () => {
   });
 
   it('title-cases chapter headings without capitalising after apostrophes', () => {
-    const r = processGutenbergText(wrap(`CHAPTER I. THE FOX'S LANTERN\n\n${STORY}`), plain());
-    expect(r.ok && r.content.split('\n\n')[0]).toBe("Chapter I. The Fox's Lantern");
+    const r = processGutenbergText(
+      wrap(`CHAPTER I. THE FOX'S LANTERN\n\n${STORY}`),
+      plain(),
+    );
+    expect(r.ok && r.content.split('\n\n')[0]).toBe(
+      "Chapter I. The Fox's Lantern",
+    );
   });
 
   it('refuses oversized works (cap on words)', () => {
     const big = Array.from({ length: 30 }, () => STORY).join('\n\n');
-    expect(processGutenbergText(wrap(big), plain(), { maxWords: 100 })).toEqual({
-      ok: false,
-      reason: 'oversized',
-    });
-    expect(processGutenbergText(wrap(big), plain(), { maxWords: 100000 })).toMatchObject({ ok: true });
+    expect(processGutenbergText(wrap(big), plain(), { maxWords: 100 })).toEqual(
+      {
+        ok: false,
+        reason: 'oversized',
+      },
+    );
+    expect(
+      processGutenbergText(wrap(big), plain(), { maxWords: 100000 }),
+    ).toMatchObject({ ok: true });
   });
 
   describe('performance (no quadratic regex)', () => {
@@ -244,11 +290,21 @@ describe('processGutenbergText hardening', () => {
       return Date.now() - st;
     };
     const N = 80_000;
+    // Warm the JIT so the threshold measures algorithmic cost, not first-call compile.
+    beforeAll(() => {
+      processGutenbergText(wrap('warm up '.repeat(2000)), plain());
+    });
     it.each([
       ['spaces in a paragraph', () => wrap(`a${' '.repeat(N)}b`)],
-      ['spaces then newline then spaces', () => wrap(`a${' '.repeat(N)}\n${' '.repeat(N)}b`)],
+      [
+        'spaces then newline then spaces',
+        () => wrap(`a${' '.repeat(N)}\n${' '.repeat(N)}b`),
+      ],
       ['eBook followed by spaces', () => wrap(`eBook${' '.repeat(N)}x`)],
-      ['many unclosed illustration markers', () => wrap('[Illustration '.repeat(N / 14))],
+      [
+        'many unclosed illustration markers',
+        () => wrap('[Illustration '.repeat(N / 14)),
+      ],
       ['many newlines', () => wrap(`a${'\n'.repeat(N)}b`)],
       ['many underscores', () => wrap('_a '.repeat(N / 3))],
       ['many opening brackets', () => wrap('['.repeat(N))],

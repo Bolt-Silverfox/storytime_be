@@ -27,7 +27,7 @@ pnpm import:gutenberg -- --source-dir /data/gutenberg
 pnpm import:gutenberg -- --commit --source-dir /data/gutenberg [--only 14838] [--ttl-days 30]
 ```
 
-Flags: `--dry-run` (default), `--commit`, `--source-dir <dir>` (required), `--cache-dir <dir>`, `--only <ebook id>` (must be on the allow-list), `--ttl-days <n>`, `--yes-production` (required for `--commit` when `NODE_ENV=production`). Exit code is 1 if any work errored.
+Flags: `--dry-run` (default), `--commit`, `--allow-unverified-ids`, `--source-dir <dir>` (required), `--cache-dir <dir>`, `--only <ebook id>` (must be on the allow-list), `--ttl-days <n>`, `--yes-production` (required for `--commit` unless the `DATABASE_URL` host is clearly local: localhost, 127.0.0.1, ::1, `*.local` or a unix socket; `NODE_ENV` is ignored; unknown or unparseable URLs count as remote). Exit code is 1 if any work errored.
 
 Dry-run reads an existing cache entry if there is one, otherwise reads the file directly; it never writes a story, a cache row or a payload file.
 
@@ -39,7 +39,7 @@ Dry-run reads an existing cache entry if there is one, otherwise reads the file 
 | `skip-exists` | A story with this `(sourceName, sourceId)` already exists and its text is unchanged. |
 | `skip-duplicate` | Another story already has the same `contentHash`. |
 | `changed` | Upstream text differs from the stored story. Nothing is updated or published; the cache row has `contentChanged=true` for a human to look at. |
-| `needs-review` | Allow-list status, unprovable translator status, or the file failed a safety check (reason shown). Not imported. |
+| `needs-review` | Allow-list status, unprovable translator status, unverified ebook id on `--commit`, an oversized work, or the file failed a safety check (reason shown). Not imported. |
 | `needs-editorial-retell` | Entry carries the `dated-content` flag. Not imported; needs a separate retell. |
 | `excluded` | Known not usable (reason on the entry). |
 | `rejected` | `--only` id is not on the allow-list. |
@@ -59,14 +59,15 @@ Accepted layouts under `--source-dir`: `<id>-0.txt`, `<id>.txt`, `pg<id>.txt`, `
 | --- | --- |
 | `ebookId` | digits only, unique |
 | `title`, `authorName`, `description` | our own wording; must not mention the source site |
-| `translator {name, deathYear}`, `illustrator` | credited in `attributionText`; a translator needs a death year |
+| `translator {name, deathYear}`, `illustrator` | translator is credited in `attributionText` and needs a death year; the illustrator is informational only and is NOT credited because pictures are not imported |
 | `firstPublished` | `approved` requires 1930 or earlier |
 | `status` | `approved`, `needs-review` or `excluded` (the last two need `statusReason`) |
-| `flags` | `dated-content` forces `needs-editorial-retell` |
+| `flags` | `dated-content` forces `needs-editorial-retell`; `violence` only adds an editor note to the report (an editorial call, still imports) |
 | `ageMin`, `ageMax`, `difficultyLevel` | 1 to 12 |
 | `categories`, `themes` | names of existing rows. Unknown names are reported and never created |
 | `expect {title, author, translator?}` | the file header must contain these, or the work goes to `needs-review` (guards against a wrong id or edition) |
 | `pdJustification` | why the text is US public domain |
+| `idVerified` | `false` until a human confirmed the id (title, author, translator edition) against the catalogue. `--commit` refuses unverified ids unless `--allow-unverified-ids`; dry-run still reports them with a note |
 
 Effective status order: `excluded`, `needs-review`, `dated-content` flag, translator rule, otherwise `approved`. Translator rule: a translator with no death year, or whose death year plus 71 is later than the current year, is `needs-review` (life+70).
 
@@ -82,16 +83,23 @@ Effective status order: `excluded`, `needs-review`, `dated-content` flag, transl
 
 Header and footer removed, licence text removed, producer and transcriber notes removed, `[Illustration]` placeholders removed, table of contents removed, hard line wraps rejoined into paragraphs separated by one blank line, `_italic_` markers removed, chapter headings kept as their own paragraph with capitals normalised, BOM/CRLF/zero-width characters/NBSP normalised, NFC. These changes are recorded in `adaptationNotes` (admin only). Pages are not stored: the reader splits `textContent` into 30-word pages at read time (`splitStoryIntoPages`), so scenes and paragraph audio are unaffected. `wordCount` and `durationSeconds` (150 words per minute) are filled in.
 
-Rules enforced in code: paragraphs mentioning the source site, its trademark, its proofreading volunteers or an ebook number are dropped; if any such string survives, or the start/end markers are missing, or the header does not match `expect`, the work becomes `needs-review` rather than being stored.
+Rules enforced in code:
+
+- Matching is done on a folded copy (NFKC, soft hyphens and zero-width characters removed, hyphen line breaks joined, look-alike Cyrillic/Greek letters mapped to Latin, non-letters ignored), so "Guten-\nberg", full-width and homoglyph variants are recognised. The stored text keeps its typography (NFC).
+- Only recognised boilerplate paragraphs are dropped (produced/prepared/transcribed/digitized by, "This eBook/etext ...", Etext/eBook numbers, PG edition, Michael S. Hart, Distributed Proofreaders, "End of the Project ...", the project name at paragraph start, bracketed transcriber notes including multi-paragraph ones). A story paragraph that merely mentions the source is NOT silently removed: it fails the final residual check and the work becomes `needs-review`.
+- Also `needs-review`: missing start/end marker (strict, at line start, three asterisks), header not matching `expect`, an unlisted translator, a bare "Transcriber's Note:" heading whose extent is unknown, and any work over 8,000 words (about 270 pages), which must be split first. Alice, Oz and any anthology are currently over the cap.
+- All cleaning is linear time (no backtracking-prone regexes) and is covered by a performance test.
+- Raw payload files are written 0600 in 0700 directories.
 
 ## Stored fields
 
-`sourceName='gutenberg'`, `sourceId=<ebook number>`, `sourceUrl=https://www.gutenberg.org/ebooks/<id>`, `licenseCode='PD-US'`, `licenseUrl` = Public Domain Mark 1.0, `authorName`, `attributionText` ("Title by Author; translated by ...; original illustrations by .... Public domain in the United States. Text cleaned and formatted for Storytime; wording unchanged."), `adaptationNotes`, `contentHash`, `importedAt`. `coverImageUrl` and `audioUrl` are empty strings because the columns are not nullable. `language='en'`, `aiGenerated=false`.
+`sourceName='gutenberg'`, `sourceId=<ebook number>`, `sourceUrl=https://www.gutenberg.org/ebooks/<id>`, `licenseCode='PD-US'`, `licenseUrl` = Public Domain Mark 1.0, `authorName`, `attributionText` ("Title by Author; translated by .... Public domain in the United States. Text cleaned and formatted for Storytime; wording unchanged."), `adaptationNotes`, `contentHash`, `importedAt`. `coverImageUrl` and `audioUrl` are empty strings because the columns are not nullable. `language='en'`, `aiGenerated=false`.
 
 ## Licence and legal caveats
 
+- **All ebook ids in the shipped allow-list are from memory (`idVerified: false`).** Verify each against the catalogue before the first `--commit`.
 - Public domain **in the United States only**. Storytime serves users globally; status elsewhere is not assumed and is **unverified** per author. UK, EU and other terms can be longer (life+70 for authors who died after 1955; Barrie's Peter Pan has a special UK rule).
-- "Project Gutenberg" is a registered trademark. Do not use the name in titles, text or attribution, and do not imply endorsement. The stored `sourceName` and `sourceUrl` contain the name for provenance, and the API returns both to clients (see `docs/story-provenance.md`). **Owner decision:** keep them, or hide them from client responses.
+- "Project Gutenberg" is a registered trademark. Do not use the name in titles, text or attribution, and do not imply endorsement. The stored `sourceName` and `sourceUrl` contain the name for provenance, but API responses return them as `null` for public-domain stories (`PublicCreditInterceptor`, see `docs/story-provenance.md`); admin routes still show them.
 - Translations and editions have their own copyright. This importer requires a known translator death year and the header check; it cannot see whether a particular edition added new copyrightable material (introductions, notes), which are dropped only where they sit outside the start/end markers.
 - Raw payloads kept in `--cache-dir` still contain the source's boilerplate. Keep them private; never serve them.
 

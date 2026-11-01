@@ -1,3 +1,4 @@
+import { maskSourceFieldsForPublic } from '@/shared/utils/public-credit.util';
 import {
   Controller,
   Get,
@@ -201,8 +202,10 @@ export class GuestStoryController {
       authorName: story.authorName ?? null,
       licenseCode: story.licenseCode ?? null,
       licenseUrl: story.licenseUrl ?? null,
-      sourceName: story.sourceName ?? null,
-      sourceUrl: story.sourceUrl ?? null,
+      // Public-domain works never expose the upstream site (see
+      // maskSourceFieldsForPublic); the global interceptor enforces the same.
+      sourceName: maskSourceFieldsForPublic(story).sourceName ?? null,
+      sourceUrl: maskSourceFieldsForPublic(story).sourceUrl ?? null,
     };
   }
 

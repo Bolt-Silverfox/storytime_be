@@ -28,7 +28,10 @@ describe('allow-list rules', () => {
   const NOW = new Date('2026-11-01T00:00:00Z');
 
   it('approved plain entry stays approved', () => {
-    expect(effectiveStatus(base(), NOW)).toEqual({ status: 'approved', editorNotes: [] });
+    expect(effectiveStatus(base(), NOW)).toEqual({
+      status: 'approved',
+      editorNotes: [],
+    });
   });
 
   it('dated-content flag forces needs-editorial-retell', () => {
@@ -80,11 +83,16 @@ describe('allow-list rules', () => {
 
   it('violence flag alone does not block import but yields an editor note', () => {
     const r = effectiveStatus(base({ flags: ['violence'] }), NOW);
-    expect(r).toEqual({ status: 'approved', editorNotes: [expect.stringMatching(/violence/i)] });
+    expect(r).toEqual({
+      status: 'approved',
+      editorNotes: [expect.stringMatching(/violence/i)],
+    });
   });
 
   it('validateAllowList requires idVerified to be a boolean', () => {
-    expect(() => validateAllowList([base({ idVerified: undefined as never })])).toThrow(/idVerified/);
+    expect(() =>
+      validateAllowList([base({ idVerified: undefined as never })]),
+    ).toThrow(/idVerified/);
   });
 
   describe('shipped allow-list', () => {
@@ -102,7 +110,9 @@ describe('allow-list rules', () => {
       }
     });
     it('no entry claims its id is verified (all ids were entered from memory)', () => {
-      expect(GUTENBERG_ALLOWLIST.every((e) => e.idVerified === false)).toBe(true);
+      expect(GUTENBERG_ALLOWLIST.every((e) => e.idVerified === false)).toBe(
+        true,
+      );
     });
     it('Aesop (21) is not approved: racist fable and ~300-fable anthology', () => {
       const e = GUTENBERG_ALLOWLIST.find((x) => x.ebookId === '21')!;

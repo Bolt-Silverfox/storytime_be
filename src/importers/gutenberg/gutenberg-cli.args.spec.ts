@@ -107,7 +107,8 @@ describe('--allow-unverified-ids', () => {
   it('defaults off and is parsed', () => {
     expect(parseCliArgs(['--source-dir', '/m']).allowUnverifiedIds).toBe(false);
     expect(
-      parseCliArgs(['--source-dir', '/m', '--allow-unverified-ids']).allowUnverifiedIds,
+      parseCliArgs(['--source-dir', '/m', '--allow-unverified-ids'])
+        .allowUnverifiedIds,
     ).toBe(true);
   });
 });
@@ -116,7 +117,15 @@ describe('formatReport editor notes', () => {
   it('prints editor notes', () => {
     const out = formatReport({
       mode: 'dry-run',
-      items: [{ ebookId: '55', title: 'Oz', outcome: 'create', written: false, editorNotes: ['violence: review passages'] }],
+      items: [
+        {
+          ebookId: '55',
+          title: 'Oz',
+          outcome: 'create',
+          written: false,
+          editorNotes: ['violence: review passages'],
+        },
+      ],
       summary: { create: 1 },
     });
     expect(out).toMatch(/note: violence: review passages/);

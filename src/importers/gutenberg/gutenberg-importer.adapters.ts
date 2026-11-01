@@ -32,12 +32,13 @@ export class FsPayloadStore implements PayloadStore {
   }
   async write(key: string, text: string): Promise<void> {
     const p = this.resolve(key);
-    await fs.promises.mkdir(path.dirname(p), { recursive: true });
+    await fs.promises.mkdir(path.dirname(p), { recursive: true, mode: 0o700 });
     const tmp = `${p}.${process.pid}.tmp`;
-    await fs.promises.writeFile(tmp, text, 'utf8');
+    await fs.promises.writeFile(tmp, text, { encoding: 'utf8', mode: 0o600 });
+    await fs.promises.chmod(tmp, 0o600);
     await fs.promises.rename(tmp, p);
   }
-  read(key: string): Promise<string> {
+  async read(key: string): Promise<string> {
     return fs.promises.readFile(this.resolve(key), 'utf8');
   }
 }

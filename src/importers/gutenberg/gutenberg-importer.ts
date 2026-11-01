@@ -106,6 +106,8 @@ export interface ReportItem {
   reason?: string;
   written: boolean;
   storyId?: string;
+  /** Things an editor should know before publishing (violence, unverified id ...). */
+  editorNotes?: string[];
   unmapped?: { categories: string[]; themes: string[] };
 }
 
@@ -122,6 +124,8 @@ export interface GutenbergImporterDeps {
   payloads: PayloadStore;
   allowList: AllowListEntry[];
   now?: () => Date;
+  /** Word cap per story; larger works go to needs-review. */
+  maxWords?: number;
   logger?: Pick<Logger, 'log' | 'warn' | 'error'>;
 }
 
@@ -130,6 +134,8 @@ export interface RunOptions {
   mode?: 'dry-run' | 'commit';
   only?: string;
   ttlMs?: number;
+  /** Let --commit import entries whose ebook id is not yet verified. */
+  allowUnverifiedIds?: boolean;
 }
 
 const urlFor = (id: string) => `https://www.gutenberg.org/ebooks/${id}`;
@@ -137,7 +143,6 @@ const urlFor = (id: string) => `https://www.gutenberg.org/ebooks/${id}`;
 export function buildAttribution(e: AllowListEntry): string {
   const parts = [`${e.title} by ${e.authorName}`];
   if (e.translator) parts.push(`translated by ${e.translator.name}`);
-  if (e.illustrator) parts.push(`original illustrations by ${e.illustrator}`);
   return `${parts.join('; ')}. Public domain in the United States. Text cleaned and formatted for Storytime; wording unchanged.`;
 }
 
@@ -202,18 +207,37 @@ export class GutenbergImporter {
     if (eff.status !== 'approved') {
       return { ...base, outcome: eff.status, reason: eff.reason };
     }
+    const editorNotes = [...(eff.editorNotes ?? [])];
+    if (!entry.idVerified) {
+      if (mode === 'commit' && !opts.allowUnverifiedIds) {
+        return {
+          ...base,
+          outcome: 'needs-review',
+          reason:
+            'ebook id not verified against the catalogue (confirm it, set idVerified, or pass --allow-unverified-ids)',
+        };
+      }
+      editorNotes.push(
+        'ebook id unverified: --commit will refuse unless --allow-unverified-ids',
+      );
+    }
+    const withNotes = { ...base, editorNotes };
 
     const loaded = await this.load(entry, mode, opts);
     if (loaded.kind === 'missing') {
       return {
-        ...base,
+        ...withNotes,
         outcome: 'missing-in-source',
         reason: 'not found in the source directory',
       };
     }
     const processed = loaded.processed;
     if (!processed.ok) {
-      return { ...base, outcome: 'needs-review', reason: processed.reason };
+      return {
+        ...withNotes,
+        outcome: 'needs-review',
+        reason: processed.reason,
+      };
     }
 
     const hash = contentHashOf(processed.content);
@@ -222,19 +246,19 @@ export class GutenbergImporter {
       if (existing.contentHash && existing.contentHash !== hash) {
         // Upstream text moved on. Flag only: never update or publish.
         return {
-          ...base,
+          ...withNotes,
           outcome: 'changed',
           reason:
             'upstream content differs from the stored story; needs human review',
           storyId: existing.id,
         };
       }
-      return { ...base, outcome: 'skip-exists', storyId: existing.id };
+      return { ...withNotes, outcome: 'skip-exists', storyId: existing.id };
     }
     const dupe = await this.deps.store.findByHash(hash);
     if (dupe) {
       return {
-        ...base,
+        ...withNotes,
         outcome: 'skip-duplicate',
         reason: 'same content hash as an existing story',
         storyId: dupe.id,
@@ -250,7 +274,7 @@ export class GutenbergImporter {
       themes: tax.unmappedThemes,
     };
     if (mode === 'dry-run') {
-      return { ...base, outcome: 'create', unmapped };
+      return { ...withNotes, outcome: 'create', unmapped };
     }
 
     const data: NewImportedStory = {
@@ -275,7 +299,7 @@ export class GutenbergImporter {
       licenseUrl: LICENSE_URL,
       authorName: entry.authorName,
       attributionText: buildAttribution(entry),
-      adaptationNotes: `Imported unmodified in wording. Changes: ${processed.notes.join('; ')}.`,
+      adaptationNotes: `Imported unmodified in wording. Illustrations are not included. Changes: ${processed.notes.join('; ')}.`,
       importedAt: this.now(),
       contentHash: hash,
       categoryIds: tax.categoryIds,
@@ -284,7 +308,7 @@ export class GutenbergImporter {
     try {
       const { id } = await this.deps.store.create(data);
       return {
-        ...base,
+        ...withNotes,
         outcome: 'create',
         written: true,
         storyId: id,
@@ -293,7 +317,7 @@ export class GutenbergImporter {
     } catch (err) {
       if (err instanceof DuplicateStoryError) {
         return {
-          ...base,
+          ...withNotes,
           outcome: 'skip-exists',
           reason: 'created concurrently',
         };
@@ -309,6 +333,7 @@ export class GutenbergImporter {
   ): Promise<{ kind: 'missing' } | { kind: 'ok'; processed: ProcessResult }> {
     const id = entry.ebookId;
     const { source, cache, payloads } = this.deps;
+    const pOpts = { maxWords: this.deps.maxWords };
 
     if (mode === 'dry-run') {
       const hit = await cache.peek(id);
@@ -320,18 +345,22 @@ export class GutenbergImporter {
           processed: processGutenbergText(
             await payloads.read(hit.rawPayloadKey),
             entry,
+            pOpts,
           ),
         };
       }
       const r = await source.fetch(id, new AbortController().signal);
       if (r.status !== 200) return { kind: 'missing' };
-      return { kind: 'ok', processed: processGutenbergText(r.text, entry) };
+      return {
+        kind: 'ok',
+        processed: processGutenbergText(r.text, entry, pOpts),
+      };
     }
 
     const fetcher: SourceFetcher = async (_prev, signal) => {
       const r = await source.fetch(id, signal);
       if (r.status !== 200) return { httpStatus: 404, sourceUrl: urlFor(id) };
-      const p = processGutenbergText(r.text, entry);
+      const p = processGutenbergText(r.text, entry, pOpts);
       // Hash the cleaned story text so cosmetic edition changes (dates,
       // producer credits) do not raise contentChanged.
       const contentHash = contentHashOf(p.ok ? p.content : r.text);
@@ -357,6 +386,7 @@ export class GutenbergImporter {
       processed: processGutenbergText(
         await payloads.read(cached.rawPayloadKey),
         entry,
+        pOpts,
       ),
     };
   }

@@ -12,8 +12,8 @@ before the first public import.
 
 | Field | Meaning | Exposed to clients |
 | --- | --- | --- |
-| `sourceName` | `gutenberg`, `bookdash`, `storyweaver`, `africanstorybook`, `community` | yes |
-| `sourceUrl` | page the story came from | yes |
+| `sourceName` | `gutenberg`, `bookdash`, `storyweaver`, `africanstorybook`, `community` | yes, except `null` for public-domain (`PD-US`) stories |
+| `sourceUrl` | page the story came from | yes, except `null` for public-domain (`PD-US`) stories |
 | `licenseCode` | `PD-US`, `CC0`, `CC-BY-4.0`, `STORYTIME_SUBMISSION_V1` | yes |
 | `licenseUrl` | link to the licence text | yes |
 | `authorName` | primary author | yes |
@@ -31,6 +31,23 @@ Uniqueness: `@@unique([sourceName, sourceId])`. Postgres treats NULLs as
 distinct, so stories with no source never collide. A partial unique index was
 not used because Prisma cannot express it and `prisma migrate diff` would then
 report drift. `contentHash` has a plain index.
+
+### Public-domain stories hide their upstream site
+
+`sourceName` and `sourceUrl` stay stored for provenance, but for `licenseCode =
+'PD-US'` (or `sourceName = 'gutenberg'`) they are returned to clients as `null`,
+because they would name the Project Gutenberg trademark. The public credit comes
+from `attributionText`, `authorName`, `licenseCode` and `licenseUrl`. This is
+enforced centrally by `PublicCreditInterceptor`
+(`src/shared/interceptors/public-credit.interceptor.ts`, registered as a global
+`APP_INTERCEPTOR` in `AppModule`), which walks every HTTP response (feeds,
+library, favourites, downloads, guest, `GET /stories/:id`, nested includes) with
+`maskSourceFieldsForPublic` (copy on write, never mutates cached objects). Admin
+routes (`/admin/...`) are exempt so reviewers still see the source. The guest
+mapping applies the same helper. Responses that do not go through the HTTP
+interceptor chain (websockets, queue payloads, logs) are not covered: do not put
+raw story rows there. CC BY sources keep `sourceUrl` because the licence needs
+the link back.
 
 ### How internal fields stay hidden
 

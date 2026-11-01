@@ -5,7 +5,11 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { SourceCacheService } from '@/source-cache/source-cache.service';
 import { GUTENBERG_ALLOWLIST } from './allowlist';
 import { GutenbergImportModule } from './gutenberg-import.module';
-import { formatReport, parseCliArgs } from './gutenberg-cli.args';
+import {
+  formatReport,
+  needsProductionConfirmation,
+  parseCliArgs,
+} from './gutenberg-cli.args';
 import { GutenbergImporter } from './gutenberg-importer';
 import {
   FsPayloadStore,
@@ -24,11 +28,11 @@ async function main(): Promise<number> {
   const args = parseCliArgs(process.argv.slice(2));
   if (
     args.mode === 'commit' &&
-    process.env.NODE_ENV === 'production' &&
-    !args.yesProduction
+    !args.yesProduction &&
+    needsProductionConfirmation(process.env.DATABASE_URL)
   ) {
     throw new Error(
-      'Refusing --commit with NODE_ENV=production without --yes-production',
+      'Refusing --commit: the database host is not clearly local. Pass --yes-production if this is intended',
     );
   }
   const source = new FilesystemGutenbergSource(args.sourceDir);
@@ -51,6 +55,7 @@ async function main(): Promise<number> {
       mode: args.mode,
       only: args.only,
       ttlMs: args.ttlMs,
+      allowUnverifiedIds: args.allowUnverifiedIds,
     });
     console.log(formatReport(report));
     return report.summary.error ? 1 : 0;

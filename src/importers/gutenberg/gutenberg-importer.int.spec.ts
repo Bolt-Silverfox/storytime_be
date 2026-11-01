@@ -34,6 +34,7 @@ const entry = (over: Partial<AllowListEntry>): AllowListEntry => ({
   description: 'A fox borrows a light.',
   expect: { title: 'Lantern Fox', author: 'Example' },
   pdJustification: 'invented',
+  idVerified: true,
   ...over,
 });
 const LIST = [

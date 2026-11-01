@@ -1,9 +1,8 @@
 import { CallHandler, ExecutionContext } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import * as fs from 'fs';
+import * as path from 'path';
 import { lastValueFrom, of } from 'rxjs';
 import { PublicCreditInterceptor } from './public-credit.interceptor';
-import { AppModule } from '@/app.module';
 
 const ctx = (url: string, type = 'http') =>
   ({
@@ -39,14 +38,15 @@ describe('PublicCreditInterceptor', () => {
     expect(out.items[0].story.attributionText).toBe('credit');
   });
 
-  it.each(['/api/v1/admin/stories/abc', '/api/v1/admin/stories?x=1', '/admin/x'])(
-    'leaves admin responses alone: %s',
-    async (url) => {
-      const out: any = await run(url, { story: row() });
-      expect(out.story.sourceName).toBe('gutenberg');
-      expect(out.story.sourceUrl).toBe('https://x');
-    },
-  );
+  it.each([
+    '/api/v1/admin/stories/abc',
+    '/api/v1/admin/stories?x=1',
+    '/admin/x',
+  ])('leaves admin responses alone: %s', async (url) => {
+    const out: any = await run(url, { story: row() });
+    expect(out.story.sourceName).toBe('gutenberg');
+    expect(out.story.sourceUrl).toBe('https://x');
+  });
 
   it('does not treat a path that merely contains "admin" as admin', async () => {
     const out: any = await run('/api/v1/stories/administer', { s: row() });
@@ -54,13 +54,10 @@ describe('PublicCreditInterceptor', () => {
   });
 
   it('is registered as a global APP_INTERCEPTOR in AppModule', () => {
-    const providers: any[] = Reflect.getMetadata('providers', AppModule);
-    expect(
-      providers.some(
-        (p) =>
-          p && p.provide === APP_INTERCEPTOR && p.useClass === PublicCreditInterceptor,
-      ),
-    ).toBe(true);
-    void Reflector;
+    // Source check: importing AppModule would boot the whole application graph.
+    const src = fs.readFileSync(path.resolve('src/app.module.ts'), 'utf8');
+    expect(src).toMatch(
+      /provide:\s*APP_INTERCEPTOR,\s*useClass:\s*PublicCreditInterceptor/,
+    );
   });
 });

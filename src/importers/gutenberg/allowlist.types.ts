@@ -1,5 +1,5 @@
 export type AllowListStatus = 'approved' | 'needs-review' | 'excluded';
-export type AllowListFlag = 'dated-content';
+export type AllowListFlag = 'dated-content' | 'violence';
 export type EffectiveStatus = AllowListStatus | 'needs-editorial-retell';
 
 export interface AllowListPerson {
@@ -21,7 +21,10 @@ export interface AllowListEntry {
   status: AllowListStatus;
   /** Required unless approved. */
   statusReason?: string;
-  /** `dated-content` (stereotypes, violence) forces needs-editorial-retell. */
+  /**
+   * `dated-content` (stereotypes) forces needs-editorial-retell. `violence`
+   * only adds an editor note to the report: an editorial call, not a block.
+   */
   flags: AllowListFlag[];
   ageMin: number;
   ageMax: number;
@@ -35,4 +38,10 @@ export interface AllowListEntry {
   expect: { title: string; author: string; translator?: string };
   /** Why this text is US public domain (author/translator death, pub year). */
   pdJustification: string;
+  /**
+   * true only once a human confirmed this id (title, author, translator
+   * edition) against the catalogue. --commit refuses unverified ids unless
+   * --allow-unverified-ids is given. Dry-run still reports them.
+   */
+  idVerified: boolean;
 }

@@ -146,7 +146,9 @@ describe('GutenbergImporter', () => {
     expect(fox.durationSeconds).toBeGreaterThan(0);
     const spoon = store.rows.find((s) => s.sourceId === '90002')!;
     expect(spoon.attributionText).not.toContain('Dot Drawn'); // pictures not imported
-    expect(spoon.adaptationNotes).toMatch(/illustrations? (are )?not included/i);
+    expect(spoon.adaptationNotes).toMatch(
+      /illustrations? (are )?not included/i,
+    );
     expect(r.items.find((i) => i.ebookId === '90001')!.unmapped).toEqual({
       categories: ['Not A Category'],
       themes: [],
@@ -364,7 +366,10 @@ describe('GutenbergImporter', () => {
         maxWords: 20,
       });
       const r = await imp.run({ mode: 'commit' });
-      expect(r.items[0]).toMatchObject({ outcome: 'needs-review', reason: 'oversized' });
+      expect(r.items[0]).toMatchObject({
+        outcome: 'needs-review',
+        reason: 'oversized',
+      });
       expect(store.creates).toBe(0);
     });
   });

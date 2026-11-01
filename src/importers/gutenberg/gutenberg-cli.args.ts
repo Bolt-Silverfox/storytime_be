@@ -8,6 +8,7 @@ export interface CliArgs {
   only?: string;
   ttlMs?: number;
   yesProduction: boolean;
+  allowUnverifiedIds: boolean;
 }
 
 export function parseCliArgs(argv: string[]): CliArgs {
@@ -21,6 +22,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
       only: { type: 'string' },
       'ttl-days': { type: 'string' },
       'yes-production': { type: 'boolean' },
+      'allow-unverified-ids': { type: 'boolean' },
     },
     strict: true,
   });
@@ -49,7 +51,32 @@ export function parseCliArgs(argv: string[]): CliArgs {
     only: values.only,
     ttlMs,
     yesProduction: !!values['yes-production'],
+    allowUnverifiedIds: !!values['allow-unverified-ids'],
   };
+}
+
+/**
+ * --commit needs an explicit --yes-production unless the database host is
+ * clearly local. Unknown or unparseable URLs count as remote (fail closed).
+ * NODE_ENV is deliberately ignored: it is trivially mis-set or mis-cased.
+ */
+export function needsProductionConfirmation(databaseUrl?: string): boolean {
+  if (!databaseUrl) return true;
+  let u: URL;
+  try {
+    u = new URL(databaseUrl);
+  } catch {
+    // Unix-socket URLs such as postgresql://u@/db?host=/var/run/postgresql
+    return !/^postgres(?:ql)?:\/\/[^@/?]*@?\/[^?]*\?(?:[^#]*&)?host=(?:\/|%2f)/i.test(
+      databaseUrl,
+    );
+  }
+  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1')
+    return false;
+  if (host.endsWith('.local') && host.length > '.local'.length) return false;
+  if (host === '' && u.searchParams.get('host')?.startsWith('/')) return false;
+  return true;
 }
 
 export function formatReport(r: ImportReport): string {
@@ -62,6 +89,7 @@ export function formatReport(r: ImportReport): string {
         '$1 ',
       ),
     );
+    for (const n of i.editorNotes ?? []) lines.push(`         note: ${n}`);
     if (i.unmapped?.categories.length) {
       lines.push(
         `         unmapped categories: ${i.unmapped.categories.join(', ')}`,

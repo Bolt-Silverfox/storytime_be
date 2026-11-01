@@ -7,7 +7,7 @@ export const LATEST_PD_US_PUBLICATION_YEAR = 1930;
 export function effectiveStatus(
   e: AllowListEntry,
   now: Date,
-): { status: EffectiveStatus; reason?: string } {
+): { status: EffectiveStatus; reason?: string; editorNotes?: string[] } {
   if (e.status === 'excluded')
     return { status: 'excluded', reason: e.statusReason };
   if (e.status === 'needs-review') {
@@ -17,7 +17,7 @@ export function effectiveStatus(
     return {
       status: 'needs-editorial-retell',
       reason:
-        'flagged dated-content (stereotypes or violence): needs an editorial retell, not a direct import',
+        'flagged dated-content (stereotypes): needs an editorial retell, not a direct import',
     };
   }
   if (e.translator) {
@@ -36,7 +36,13 @@ export function effectiveStatus(
       };
     }
   }
-  return { status: 'approved' };
+  const editorNotes: string[] = [];
+  if (e.flags.includes('violence')) {
+    editorNotes.push(
+      'violence: contains violent passages; an editor must read and decide before publishing',
+    );
+  }
+  return { status: 'approved', editorNotes };
 }
 
 export function validateAllowList(list: AllowListEntry[]): void {
@@ -81,6 +87,9 @@ export function validateAllowList(list: AllowListEntry[]): void {
         `${where}: approved needs a pre-1931 first publication (got ${e.firstPublished})`,
       );
     }
+    if (typeof e.idVerified !== 'boolean') {
+      throw new Error(`${where}: idVerified must be true or false`);
+    }
     if (!e.expect?.title || !e.expect?.author || !e.pdJustification) {
       throw new Error(
         `${where}: expect.title, expect.author and pdJustification are required`,
@@ -98,6 +107,7 @@ export function validateAllowList(list: AllowListEntry[]): void {
 export const GUTENBERG_ALLOWLIST: AllowListEntry[] = [
   {
     ebookId: '14838',
+    idVerified: false,
     title: 'The Tale of Peter Rabbit',
     authorName: 'Beatrix Potter',
     illustrator: 'Beatrix Potter',
@@ -116,6 +126,7 @@ export const GUTENBERG_ALLOWLIST: AllowListEntry[] = [
   },
   {
     ebookId: '11757',
+    idVerified: false,
     title: 'The Velveteen Rabbit',
     authorName: 'Margery Williams',
     illustrator: 'William Nicholson',
@@ -134,6 +145,7 @@ export const GUTENBERG_ALLOWLIST: AllowListEntry[] = [
   },
   {
     ebookId: '11',
+    idVerified: false,
     title: 'Alice’s Adventures in Wonderland',
     authorName: 'Lewis Carroll',
     illustrator: 'John Tenniel',
@@ -153,12 +165,13 @@ export const GUTENBERG_ALLOWLIST: AllowListEntry[] = [
   },
   {
     ebookId: '55',
+    idVerified: false,
     title: 'The Wonderful Wizard of Oz',
     authorName: 'L. Frank Baum',
     illustrator: 'W. W. Denslow',
     firstPublished: 1900,
     status: 'approved',
-    flags: [],
+    flags: ['violence'],
     ageMin: 7,
     ageMax: 10,
     difficultyLevel: 3,
@@ -167,16 +180,19 @@ export const GUTENBERG_ALLOWLIST: AllowListEntry[] = [
     description: 'A Kansas girl and three friends travel to the Emerald City.',
     expect: { title: 'Wizard of Oz', author: 'Baum' },
     pdJustification:
-      'Published 1900. Author died 1919, illustrator died 1915. Contains mild peril; reviewer should read before publishing.',
+      'Published 1900. Author died 1919, illustrator died 1915. Contains violent passages (flagged `violence`): an editor decides. About 39k words, so it is over the size cap until split by chapter.',
   },
   {
     ebookId: '21',
+    idVerified: false,
     title: 'Aesop’s Fables',
     authorName: 'Aesop',
     translator: { name: 'George Fyler Townsend', deathYear: 1900 },
     firstPublished: 1867,
-    status: 'approved',
-    flags: [],
+    status: 'needs-review',
+    statusReason:
+      'anthology of about 300 fables imported as one huge story, and at least one fable (The Blackamoor / The Ethiop) is racist; hold until split per fable and each fable reviewed',
+    flags: ['dated-content'],
     ageMin: 4,
     ageMax: 9,
     difficultyLevel: 2,
@@ -189,6 +205,7 @@ export const GUTENBERG_ALLOWLIST: AllowListEntry[] = [
   },
   {
     ebookId: '16',
+    idVerified: false,
     title: 'Peter Pan',
     authorName: 'J. M. Barrie',
     illustrator: 'F. D. Bedford',
@@ -207,6 +224,7 @@ export const GUTENBERG_ALLOWLIST: AllowListEntry[] = [
   },
   {
     ebookId: '2781',
+    idVerified: false,
     title: 'Just So Stories',
     authorName: 'Rudyard Kipling',
     firstPublished: 1902,
@@ -224,11 +242,14 @@ export const GUTENBERG_ALLOWLIST: AllowListEntry[] = [
   },
   {
     ebookId: '2591',
+    idVerified: false,
     title: 'Grimms’ Fairy Tales',
     authorName: 'Jacob and Wilhelm Grimm',
     translator: { name: 'Margaret Hunt', deathYear: 1912 },
     firstPublished: 1884,
-    status: 'approved',
+    status: 'needs-review',
+    statusReason:
+      'unverified: this id is probably not the Margaret Hunt translation; translator and edition must be confirmed against the catalogue before any approval',
     flags: ['dated-content'],
     ageMin: 7,
     ageMax: 12,
@@ -238,10 +259,11 @@ export const GUTENBERG_ALLOWLIST: AllowListEntry[] = [
     description: 'A large collection of German folk and fairy tales.',
     expect: { title: 'Grimm', author: 'Grimm', translator: 'Hunt' },
     pdJustification:
-      'Authors died 1859 and 1863. Margaret Hunt translation (1884), translator died 1912. The collection includes at least one antisemitic tale and graphic violence: needs retell, and it is an anthology that should be split per tale.',
+      'Authors died 1859 and 1863. IF the edition is the Margaret Hunt translation (1884, translator died 1912) it is public domain, but the id/edition is unverified and may be a different translator. The collection includes at least one antisemitic tale and graphic violence: needs retell, and it is an anthology that should be split per tale.',
   },
   {
     ebookId: '503',
+    idVerified: false,
     title: 'The Blue Fairy Book',
     authorName: 'Andrew Lang',
     illustrator: 'H. J. Ford',
@@ -262,6 +284,7 @@ export const GUTENBERG_ALLOWLIST: AllowListEntry[] = [
   },
   {
     ebookId: '1597',
+    idVerified: false,
     title: 'Fairy Tales of Hans Christian Andersen',
     authorName: 'Hans Christian Andersen',
     translator: { name: 'Mrs. H. B. Paull' },
@@ -282,6 +305,7 @@ export const GUTENBERG_ALLOWLIST: AllowListEntry[] = [
   },
   {
     ebookId: '27200',
+    idVerified: false,
     title: 'Andersen’s Fairy Tales (Hersholt translation)',
     authorName: 'Hans Christian Andersen',
     translator: { name: 'Jean Hersholt', deathYear: 1956 },
