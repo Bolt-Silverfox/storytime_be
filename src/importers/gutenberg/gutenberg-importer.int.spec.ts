@@ -51,7 +51,7 @@ const LIST = [
 ];
 
 describeDb('GutenbergImporter (real Postgres)', () => {
-  const prisma = new PrismaService();
+  let prisma: PrismaService;
   let srcDir: string;
   let cacheDir: string;
   let reads: string[];
@@ -66,7 +66,7 @@ describeDb('GutenbergImporter (real Postgres)', () => {
     };
     return new GutenbergImporter({
       source,
-      cache: new SourceCachePortImpl(new SourceCacheService(prisma as never)),
+      cache: new SourceCachePortImpl(new SourceCacheService(prisma)),
       store: new PrismaStoryStore(prisma),
       payloads: new FsPayloadStore(cacheDir),
       allowList: LIST,
@@ -84,6 +84,7 @@ describeDb('GutenbergImporter (real Postgres)', () => {
   };
 
   beforeAll(async () => {
+    prisma = new PrismaService();
     await prisma.$connect();
     await prisma.category.create({ data: { name: `${tag}-cat` } });
     await prisma.theme.create({ data: { name: `${tag}-theme` } });

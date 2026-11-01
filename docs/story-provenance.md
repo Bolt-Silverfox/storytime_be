@@ -159,6 +159,10 @@ per revalidation window.
 `sourceName` but no `contentHash` gets one computed from its content. Plain
 curated stories are not hash-deduped.
 
+## Importers
+
+The Project Gutenberg importer is documented in `docs/importers/gutenberg.md`.
+
 ## Requirements for the future importer (not implemented here)
 
 The fetcher passed to `getOrFetch` is where network safety lives, and this change
