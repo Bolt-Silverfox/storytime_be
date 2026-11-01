@@ -6,11 +6,30 @@
  */
 const MASKED_KEYS = ['sourceName', 'sourceUrl'] as const;
 
-const isMaskable = (o: Record<string, unknown>): boolean =>
-  ('sourceName' in o || 'sourceUrl' in o) &&
-  (o.licenseCode === 'PD-US' ||
-    (typeof o.sourceName === 'string' &&
-      o.sourceName.toLowerCase() === 'gutenberg'));
+const GUTENBERG_HOST = /(?:^|\.)gutenberg\.(?:org|net|ca|eu|info)$/;
+
+function isGutenbergUrl(url: string): boolean {
+  try {
+    return GUTENBERG_HOST.test(new URL(url.trim()).hostname.toLowerCase());
+  } catch {
+    return /gutenberg/i.test(url); // unparseable: fail closed
+  }
+}
+
+const isMaskable = (o: Record<string, unknown>): boolean => {
+  if (!('sourceName' in o || 'sourceUrl' in o)) return false;
+  if (o.licenseCode === 'PD-US') return true;
+  if (
+    typeof o.sourceName === 'string' &&
+    /gutenberg/i.test(o.sourceName.trim())
+  ) {
+    return true;
+  }
+  return typeof o.sourceUrl === 'string' && isGutenbergUrl(o.sourceUrl);
+};
+
+/** Real responses never nest this deep; beyond it we stop instead of overflowing. */
+export const MAX_MASK_DEPTH = 64;
 
 const isWalkable = (v: unknown): v is object =>
   typeof v === 'object' &&
@@ -26,11 +45,15 @@ const isWalkable = (v: unknown): v is object =>
  * be a cached object) and returns the same reference when nothing changed.
  */
 export function maskSourceFieldsForPublic<T>(value: T): T {
-  return walk(value, new Map()) as T;
+  return walk(value, new Map(), 0) as T;
 }
 
-function walk(value: unknown, seen: Map<object, unknown>): unknown {
-  if (!isWalkable(value)) return value;
+function walk(
+  value: unknown,
+  seen: Map<object, unknown>,
+  depth: number,
+): unknown {
+  if (depth > MAX_MASK_DEPTH || !isWalkable(value)) return value;
   if (seen.has(value)) return seen.get(value);
   // Cycle guard: provisional answer is the original object.
   seen.set(value, value);
@@ -39,7 +62,7 @@ function walk(value: unknown, seen: Map<object, unknown>): unknown {
   if (Array.isArray(value)) {
     let copy: unknown[] | null = null;
     for (let i = 0; i < value.length; i++) {
-      const next = walk(value[i], seen);
+      const next = walk(value[i], seen, depth + 1);
       if (next !== value[i]) {
         copy ??= value.slice();
         copy[i] = next;
@@ -58,7 +81,7 @@ function walk(value: unknown, seen: Map<object, unknown>): unknown {
         rec,
       ));
     for (const key of Object.keys(rec)) {
-      const next = walk(rec[key], seen);
+      const next = walk(rec[key], seen, depth + 1);
       if (next !== rec[key]) ensure()[key] = next;
     }
     if (isMaskable(rec)) {

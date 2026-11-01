@@ -218,7 +218,7 @@ export class GutenbergImporter {
         };
       }
       editorNotes.push(
-        'ebook id unverified: --commit will refuse unless --allow-unverified-ids',
+        'ebook id unverified: confirm title, author and edition against the catalogue before publishing',
       );
     }
     const withNotes = { ...base, editorNotes };
@@ -299,7 +299,9 @@ export class GutenbergImporter {
       licenseUrl: LICENSE_URL,
       authorName: entry.authorName,
       attributionText: buildAttribution(entry),
-      adaptationNotes: `Imported unmodified in wording. Illustrations are not included. Changes: ${processed.notes.join('; ')}.`,
+      adaptationNotes:
+        `Imported unmodified in wording. Illustrations are not included. Changes: ${processed.notes.join('; ')}.` +
+        (editorNotes.length ? ` Editor notes: ${editorNotes.join('; ')}.` : ''),
       importedAt: this.now(),
       contentHash: hash,
       categoryIds: tax.categoryIds,

@@ -304,6 +304,7 @@ describe('processGutenbergText hardening', () => {
     // Warm the JIT so the threshold measures algorithmic cost, not first-call compile.
     beforeAll(() => {
       processGutenbergText(wrap('warm up '.repeat(2000)), plain());
+      processGutenbergText(wrap('word\n'.repeat(50_000)), plain());
     });
     it.each([
       ['spaces in a paragraph', () => wrap(`a${' '.repeat(N)}b`)],

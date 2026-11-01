@@ -79,6 +79,15 @@ const CONFUSABLE: Record<string, string> = {
   օ: 'o',
   ց: 'g',
   ɡ: 'g',
+  ԍ: 'g',
+  β: 'b',
+  ᴜ: 'u',
+  ɢ: 'g',
+  ʙ: 'b',
+  ᴇ: 'e',
+  ɴ: 'n',
+  ʀ: 'r',
+  ᴛ: 't',
 };
 
 /** Compatibility-folded (NFKC) form used only for matching, never stored. */
@@ -91,16 +100,19 @@ const matchForm = (s: string): string => s.normalize('NFKC');
 const CONFUSABLE_RE = new RegExp(`[${Object.keys(CONFUSABLE).join('')}]`, 'g');
 const NOT_ALNUM = /[^\p{L}\p{N}]+/gu;
 
+const MARKS = /\p{M}+/gu;
+
 function probe(s: string): string {
-  return matchForm(s)
+  return s
+    .normalize('NFKD')
     .toLowerCase()
+    .replace(MARKS, '')
     .replace(CONFUSABLE_RE, (c) => CONFUSABLE[c])
     .replace(NOT_ALNUM, '');
 }
 
-const MICHAEL_HART = /michael\s+s\.?\s+hart/i;
+const MICHAEL_HART = /michael\s+(?:s\.?\s+)?hart/i;
 const PGDP = /\bpgdp\b/i;
-const EBOOK_NUMBER = /e-?(?:book|text)\s*(?:(?:no\.?|number|#)\s*)?\d+/gi;
 const EBOOK_NUMBER_TEST = /e-?(?:book|text)\s*(?:(?:no\.?|number|#)\s*)?\d+/i;
 
 function hasSourceReference(s: string): boolean {
@@ -116,13 +128,13 @@ const BOILERPLATE_START = new RegExp(
       'this\\s+(?:e-?book|e-?text|file)\\s+(?:was|is|should)\\b',
       '(?:e-?text\\s+)?(?:produced|prepared|transcribed|scanned|proofread|proofed|digitized|digitised|converted)\\s+(?:by|from)\\b',
       '(?:e-?text|e-?book)\\s*(?:(?:no\\.?|number|#)\\s*)?\\d+',
-      'pg\\s+(?:edition|version)\\b',
+      '(?:this\\s+)?pg\\s+(?:edition|version)\\b',
       '(?:the\\s+)?project\\s+gutenberg\\b',
       'end\\s+of\\s+(?:the\\s+)?project\\b',
       'updated\\s+editions\\b',
       'online\\s+distributed\\b',
       'distributed\\s+proofread',
-      'michael\\s+s\\.?\\s+hart\\b',
+      'michael\\s+(?:s\\.?\\s+)?hart\\b',
     ].join('|') +
     ')',
   'i',
@@ -181,15 +193,20 @@ function stripIllustrations(p: string): { text: string; changed: boolean } {
 
 const count = (s: string, ch: string): number => s.split(ch).length - 1;
 
-/** Join wrapped lines; a line ending in "-" joins the next word with no space. */
+/**
+ * Join wrapped lines; a line ending in "-" joins the next word with no space.
+ * Parts are collected in an array (no growing-string re-reads): linear time.
+ */
 function unwrap(lines: string[]): string {
-  let out = '';
+  const parts: string[] = [];
+  let prevHyphen = false;
   for (const l of lines) {
-    if (!out) out = l;
-    else if (out.endsWith('-') && /^\p{L}/u.test(l)) out += l;
-    else out += ` ${l}`;
+    if (parts.length === 0) parts.push(l);
+    else if (prevHyphen && /^\p{L}/u.test(l)) parts.push(l);
+    else parts.push(' ', l);
+    prevHyphen = l.endsWith('-');
   }
-  return out.replace(/ {2,}/g, ' ');
+  return parts.join('').replace(/ {2,}/g, ' ');
 }
 
 /**
@@ -296,14 +313,8 @@ export function processGutenbergText(
       p = ill.text;
       if (!p) continue;
     }
-    if (EBOOK_NUMBER_TEST.test(p)) {
-      p = p
-        .replace(EBOOK_NUMBER, '')
-        .replace(/[[(]\s*[\])]/g, '')
-        .replace(/ {2,}/g, ' ')
-        .trim();
-      if (!p) continue;
-    }
+    // An ebook number inside a story sentence is NOT deleted (that would drop
+    // story words); it stays and the final residual check fails the work.
     if (matchForm(p).toLowerCase() === titleLc) continue; // title page line
 
     const h = HEADING.exec(p);

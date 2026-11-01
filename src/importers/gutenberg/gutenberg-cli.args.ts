@@ -57,7 +57,9 @@ export function parseCliArgs(argv: string[]): CliArgs {
 
 /**
  * --commit needs an explicit --yes-production unless the database host is
- * clearly local. Unknown or unparseable URLs count as remote (fail closed).
+ * clearly local (localhost, 127.0.0.1, ::1, unix socket; NOT *.local names).
+ * An SSH tunnel to a remote database looks local and passes this guard: it is
+ * a safety net against mistakes, not authorization. Unknown or unparseable URLs count as remote (fail closed).
  * NODE_ENV is deliberately ignored: it is trivially mis-set or mis-cased.
  */
 export function needsProductionConfirmation(databaseUrl?: string): boolean {
@@ -74,7 +76,6 @@ export function needsProductionConfirmation(databaseUrl?: string): boolean {
   const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (host === 'localhost' || host === '127.0.0.1' || host === '::1')
     return false;
-  if (host.endsWith('.local') && host.length > '.local'.length) return false;
   if (host === '' && u.searchParams.get('host')?.startsWith('/')) return false;
   return true;
 }
