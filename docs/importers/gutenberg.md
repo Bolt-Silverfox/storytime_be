@@ -27,7 +27,7 @@ pnpm import:gutenberg -- --source-dir /data/gutenberg
 pnpm import:gutenberg -- --commit --source-dir /data/gutenberg [--only 14838] [--ttl-days 30]
 ```
 
-Flags: `--dry-run` (default), `--commit`, `--allow-unverified-ids`, `--source-dir <dir>` (required), `--cache-dir <dir>`, `--only <ebook id>` (must be on the allow-list), `--ttl-days <n>`, `--yes-production` (required for `--commit` unless the `DATABASE_URL` host is clearly local: localhost, 127.0.0.1, ::1, `*.local` or a unix socket; `NODE_ENV` is ignored; unknown or unparseable URLs count as remote). Exit code is 1 if any work errored.
+Flags: `--dry-run` (default), `--commit`, `--allow-unverified-ids`, `--source-dir <dir>` (required), `--cache-dir <dir>`, `--only <ebook id>` (must be on the allow-list), `--ttl-days <n>`, `--yes-production` (required for `--commit` unless the `DATABASE_URL` host is clearly local: localhost, 127.0.0.1, ::1 or a unix socket; `*.local` names do NOT count as local; `NODE_ENV` is ignored; unknown or unparseable URLs count as remote). Limit: an SSH tunnel to a remote database looks like localhost and passes this guard, so it is a safety net against mistakes, not authorization. Exit code is 1 if any work errored.
 
 Dry-run reads an existing cache entry if there is one, otherwise reads the file directly; it never writes a story, a cache row or a payload file.
 
@@ -81,13 +81,14 @@ Effective status order: `excluded`, `needs-review`, `dated-content` flag, transl
 
 ## What gets changed in the text
 
-Header and footer removed, licence text removed, producer and transcriber notes removed, `[Illustration]` placeholders removed, table of contents removed, hard line wraps rejoined into paragraphs separated by one blank line, `_italic_` markers removed, chapter headings kept as their own paragraph with capitals normalised, BOM/CRLF/zero-width characters/NBSP normalised, NFC. These changes are recorded in `adaptationNotes` (admin only). Pages are not stored: the reader splits `textContent` into 30-word pages at read time (`splitStoryIntoPages`), so scenes and paragraph audio are unaffected. `wordCount` and `durationSeconds` (150 words per minute) are filled in.
+Header and footer removed, licence text removed, producer and transcriber notes removed, `[Illustration]` placeholders removed, table of contents removed, hard line wraps rejoined into paragraphs separated by one blank line, `_italic_` markers removed, chapter headings kept as their own paragraph with capitals normalised, BOM/CRLF/zero-width characters/NBSP normalised, NFC. These changes, plus any editor notes (`violence` flag, unverified ebook id), are recorded in `adaptationNotes` (admin only), so reviewers see them on the story. Pages are not stored: the reader splits `textContent` into 30-word pages at read time (`splitStoryIntoPages`), so scenes and paragraph audio are unaffected. `wordCount` and `durationSeconds` (150 words per minute) are filled in.
 
 Rules enforced in code:
 
 - Matching is done on a folded copy (NFKC, soft hyphens and zero-width characters removed, hyphen line breaks joined, look-alike Cyrillic/Greek letters mapped to Latin, non-letters ignored), so "Guten-\nberg", full-width and homoglyph variants are recognised. The stored text keeps its typography (NFC).
 - Only recognised boilerplate paragraphs are dropped (produced/prepared/transcribed/digitized by, "This eBook/etext ...", Etext/eBook numbers, PG edition, Michael S. Hart, Distributed Proofreaders, "End of the Project ...", the project name at paragraph start, bracketed transcriber notes including multi-paragraph ones). A story paragraph that merely mentions the source is NOT silently removed: it fails the final residual check and the work becomes `needs-review`.
 - Also `needs-review`: missing start/end marker (strict, at line start, three asterisks), header not matching `expect`, an unlisted translator, a bare "Transcriber's Note:" heading whose extent is unknown, and any work over 8,000 words (about 270 pages), which must be split first. Alice, Oz and any anthology are currently over the cap.
+- An ebook/etext number inside a story sentence is never deleted (that would drop story words); the work fails closed to `needs-review`. The fold also strips combining marks and maps small-cap, Greek and Cyrillic look-alikes.
 - All cleaning is linear time (no backtracking-prone regexes) and is covered by a performance test.
 - Raw payload files are written 0600 in 0700 directories.
 

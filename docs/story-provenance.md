@@ -40,9 +40,9 @@ because they would name the Project Gutenberg trademark. The public credit comes
 from `attributionText`, `authorName`, `licenseCode` and `licenseUrl`. This is
 enforced centrally by `PublicCreditInterceptor`
 (`src/shared/interceptors/public-credit.interceptor.ts`, registered as a global
-`APP_INTERCEPTOR` in `AppModule`), which walks every HTTP response (feeds,
+`APP_INTERCEPTOR` in `AppModule`), which masks any row that is `PD-US`, or whose `sourceName` matches /gutenberg/i (after trim), or whose `sourceUrl` host is a gutenberg site (even a row with only `sourceUrl`). It walks every HTTP response (feeds,
 library, favourites, downloads, guest, `GET /stories/:id`, nested includes) with
-`maskSourceFieldsForPublic` (copy on write, never mutates cached objects). Admin
+`maskSourceFieldsForPublic` (copy on write, never mutates cached objects; recursion stops at depth 64). Admin
 routes (`/admin/...`) are exempt so reviewers still see the source. The guest
 mapping applies the same helper. Responses that do not go through the HTTP
 interceptor chain (websockets, queue payloads, logs) are not covered: do not put
