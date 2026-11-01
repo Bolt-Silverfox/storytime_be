@@ -78,3 +78,6 @@ temp_interactive_push.bat
 # Scanner checkout made by the shared malware-scan workflow. Tracking anything
 # here fails that job by design.
 .storytime-ci/
+
+# Gutenberg importer raw payload cache (private)
+/.cache/
