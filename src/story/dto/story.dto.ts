@@ -109,6 +109,10 @@ export class StoryReadResponseDto extends StoryCreditDto {
   @ApiProperty() isInteractive: boolean;
   @ApiProperty() ageMin: number;
   @ApiProperty() ageMax: number;
+  @ApiProperty({ type: () => [CategoryDto] }) categories: CategoryDto[];
+  @ApiProperty({ type: () => [ThemeDto] }) themes: ThemeDto[];
+  @ApiProperty({ type: () => [StoryQuestionDto] })
+  questions: StoryQuestionDto[];
   @ApiProperty({ type: [StoryImageDto] }) images: StoryImageDto[];
   @ApiProperty({ type: [StoryBranchDto] }) branches: StoryBranchDto[];
   @ApiPropertyOptional({ type: [String], description: 'Backend page split' })
@@ -513,6 +517,14 @@ export class ThemeDto {
   image?: string;
   @ApiProperty({ required: false })
   description?: string;
+}
+
+export class StoryQuestionDto {
+  @ApiProperty() id: string;
+  @ApiProperty() storyId: string;
+  @ApiProperty() question: string;
+  @ApiProperty({ type: [String] }) options: string[];
+  @ApiProperty() correctOption: number;
 }
 
 export class ErrorResponseDto {

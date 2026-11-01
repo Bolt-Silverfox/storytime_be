@@ -428,6 +428,22 @@ export class SourceCacheService {
     beat.unref();
     const timeoutMs = options.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
     let timer: NodeJS.Timeout | undefined;
+    let timedOut = false;
+    const discardStale = async (): Promise<GetOrFetchResult> => {
+      this.logger.warn(
+        `Discarding stale fetch result for ${sourceName}/${sourceId}: lease lost`,
+      );
+      const newer = await this.get(sourceName, sourceId);
+      if (newer) {
+        return {
+          entry: newer,
+          fetched: false,
+          leaseLost: true,
+          stale: !this.isFresh(newer, nowFn()),
+        };
+      }
+      throw new SourceCacheLeaseLostError(sourceName, sourceId);
+    };
     try {
       // Re-check under the lease: the previous holder may just have finished.
       const current = await this.get(sourceName, sourceId);
@@ -436,6 +452,7 @@ export class SourceCacheService {
       }
       const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
+          timedOut = true;
           abort.abort();
           reject(
             new SourceCacheFetchTimeoutError(sourceName, sourceId, timeoutMs),
@@ -445,7 +462,23 @@ export class SourceCacheService {
       });
       const running = fetcher(current, abort.signal);
       running.catch(() => undefined); // a late rejection after timeout is not unhandled
-      const result = await Promise.race([running, timeout]);
+      let result: FetchResult;
+      try {
+        result = await Promise.race([running, timeout]);
+      } catch (e) {
+        // A fetcher that honours the signal rejects (AbortError) when we abort
+        // it; report why we aborted instead of leaking the abort rejection.
+        if (timedOut) {
+          if (e instanceof SourceCacheFetchTimeoutError) throw e;
+          throw new SourceCacheFetchTimeoutError(
+            sourceName,
+            sourceId,
+            timeoutMs,
+          );
+        }
+        if (lost) return await discardStale();
+        throw e;
+      }
       if (!isCacheable(result.httpStatus)) {
         throw new SourceCacheFetchError(
           sourceName,
@@ -465,20 +498,7 @@ export class SourceCacheService {
             ),
           );
       if (written.held) return { entry: written.value, fetched: true };
-
-      this.logger.warn(
-        `Discarding stale fetch result for ${sourceName}/${sourceId}: lease lost`,
-      );
-      const newer = await this.get(sourceName, sourceId);
-      if (newer) {
-        return {
-          entry: newer,
-          fetched: false,
-          leaseLost: true,
-          stale: !this.isFresh(newer, nowFn()),
-        };
-      }
-      throw new SourceCacheLeaseLostError(sourceName, sourceId);
+      return await discardStale();
     } finally {
       clearInterval(beat);
       if (timer) clearTimeout(timer);

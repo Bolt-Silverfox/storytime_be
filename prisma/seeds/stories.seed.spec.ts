@@ -157,12 +157,49 @@ describe('seedStories provenance', () => {
     const { prisma, create } = setup([
       base({ title: 'One', sourceName: 'g', sourceId: '1', content: 'alpha' }),
       base({ title: 'Two', sourceName: 'g', sourceId: '1', content: 'beta' }),
-      base({ title: 'Three', contentHash: 'gamma-hash' }),
-      base({ title: 'Four', contentHash: 'gamma-hash' }),
+      base({
+        title: 'Three',
+        content: 'gamma',
+        contentHash: contentHashOf('gamma'),
+      }),
+      base({
+        title: 'Four',
+        content: 'gamma',
+        contentHash: contentHashOf('gamma'),
+      }),
     ]);
     const r = await seedStories({ prisma, logger });
     expect(r.count).toBe(2);
     expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('dedupes a story with a supplied correct hash against one whose hash is computed', async () => {
+    const { prisma, create } = setup([
+      base({
+        title: 'Imported',
+        sourceName: 'x',
+        sourceId: '1',
+        content: 'delta  text',
+      }),
+      base({
+        title: 'Curated copy',
+        content: 'delta text',
+        contentHash: contentHashOf('delta text'),
+      }),
+    ]);
+    const r = await seedStories({ prisma, logger });
+    expect(r.count).toBe(1);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a supplied contentHash that does not match the normalised content', async () => {
+    const { prisma, create } = setup([
+      base({ title: 'Bad', content: 'epsilon', contentHash: 'gamma-hash' }),
+    ]);
+    const r = await seedStories({ prisma, logger });
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/contentHash.*does not match/i);
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('does not hash-dedupe plain curated stories (no behaviour change)', async () => {

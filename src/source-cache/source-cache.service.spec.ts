@@ -444,6 +444,60 @@ describe('SourceCacheService', () => {
       expect(r.entry.contentHash).toBe('B-new');
     });
 
+    // A fetcher that honours the signal rejects with AbortError on abort.
+    const honouring = (ms: number) =>
+      jest.fn(
+        (_prev: unknown, signal: AbortSignal) =>
+          new Promise<FetchResult>((resolve, reject) => {
+            const t = setTimeout(
+              () => resolve(ok({ contentHash: 'A-old' })),
+              ms,
+            );
+            signal.addEventListener('abort', () => {
+              clearTimeout(t);
+              const e = new Error('The operation was aborted');
+              e.name = 'AbortError';
+              reject(e);
+            });
+          }),
+      );
+
+    it("maps a signal-honouring fetcher's AbortError after lease loss to the lease-lost result", async () => {
+      lease = makeFakeLease(0, false);
+      svc = new SourceCacheService(fake.prisma, lease);
+      await svc.put({
+        sourceName: 'g',
+        sourceId: '1',
+        result: ok({ contentHash: 'B-new' }),
+        now: new Date(NOW.getTime() - 10 * DAY),
+        ttlMs: DAY,
+      });
+      const r = await svc.getOrFetch('g', '1', honouring(500), {
+        now: NOW,
+        leaseMs: 30,
+      });
+      expect(r.leaseLost).toBe(true);
+      expect(r.fetched).toBe(false);
+      expect(r.entry.contentHash).toBe('B-new');
+    });
+
+    it('throws SourceCacheLeaseLostError (not AbortError) when lease lost, fetcher aborts, and no entry exists', async () => {
+      lease = makeFakeLease(0, false);
+      svc = new SourceCacheService(fake.prisma, lease);
+      await expect(
+        svc.getOrFetch('g', '1', honouring(500), { now: NOW, leaseMs: 30 }),
+      ).rejects.toBeInstanceOf(SourceCacheLeaseLostError);
+    });
+
+    it("maps a signal-honouring fetcher's AbortError after a timeout to SourceCacheFetchTimeoutError", async () => {
+      await expect(
+        svc.getOrFetch('g', '1', honouring(500), {
+          now: NOW,
+          fetchTimeoutMs: 30,
+        }),
+      ).rejects.toBeInstanceOf(SourceCacheFetchTimeoutError);
+    });
+
     it('a hung fetcher is aborted after fetchTimeoutMs and the lease is released', async () => {
       let signal!: AbortSignal;
       const fetcher = jest.fn((_p: unknown, s: AbortSignal) => {

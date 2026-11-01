@@ -49,4 +49,10 @@ describe('story credit DTO documentation', () => {
       expect.arrayContaining(['adaptationNotes', 'importedAt']),
     );
   });
+
+  it('StoryReadResponseDto documents categories, themes and questions', () => {
+    expect(swaggerProps(StoryReadResponseDto)).toEqual(
+      expect.arrayContaining(['categories', 'themes', 'questions']),
+    );
+  });
 });

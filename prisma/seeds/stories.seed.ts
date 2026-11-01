@@ -46,14 +46,30 @@ const sourceKey = (name?: string | null, id?: string | null) =>
   name && id ? `${name}\u0000${id}` : null;
 
 /**
- * Hash used for dedupe/persistence: the supplied contentHash, or (only for
- * stories that declare a sourceName) the hash of the normalised text. Plain
- * curated stories are neither hashed nor hash-deduped (no behaviour change).
+ * Hash used for dedupe/persistence. Always derived from the normalised
+ * content, never trusted from the file: a supplied contentHash must equal the
+ * computed one or the seed fails with a clear error (a stale or hand-typed hash
+ * would silently defeat dedupe). Only stories that declare a sourceName or a
+ * contentHash are hashed; plain curated stories are neither hashed nor
+ * hash-deduped (no behaviour change).
  */
 const hashFor = (story: StoryData): string | null => {
-  if (story.contentHash) return story.contentHash;
-  if (story.sourceName && story.content) return contentHashOf(story.content);
-  return null;
+  if (!story.sourceName && !story.contentHash) return null;
+  if (!story.content) {
+    if (story.contentHash) {
+      throw new Error(
+        `Story "${story.title}": contentHash supplied but there is no content to verify it against`,
+      );
+    }
+    return null;
+  }
+  const computed = contentHashOf(story.content);
+  if (story.contentHash && story.contentHash !== computed) {
+    throw new Error(
+      `Story "${story.title}": supplied contentHash does not match the sha256 of its normalised content (expected ${computed})`,
+    );
+  }
+  return computed;
 };
 
 export async function seedStories(ctx: SeedContext): Promise<SeedResult> {
