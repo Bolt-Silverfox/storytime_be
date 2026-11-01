@@ -20,6 +20,7 @@ const base = (over: Partial<AllowListEntry> = {}): AllowListEntry => ({
   description: 'd',
   expect: { title: 't', author: 'a' },
   pdJustification: 'x',
+  idVerified: true,
   ...over,
 });
 
@@ -27,7 +28,7 @@ describe('allow-list rules', () => {
   const NOW = new Date('2026-11-01T00:00:00Z');
 
   it('approved plain entry stays approved', () => {
-    expect(effectiveStatus(base(), NOW)).toEqual({ status: 'approved' });
+    expect(effectiveStatus(base(), NOW)).toEqual({ status: 'approved', editorNotes: [] });
   });
 
   it('dated-content flag forces needs-editorial-retell', () => {
@@ -77,6 +78,15 @@ describe('allow-list rules', () => {
     ).toThrow(/pre-1931|published/i);
   });
 
+  it('violence flag alone does not block import but yields an editor note', () => {
+    const r = effectiveStatus(base({ flags: ['violence'] }), NOW);
+    expect(r).toEqual({ status: 'approved', editorNotes: [expect.stringMatching(/violence/i)] });
+  });
+
+  it('validateAllowList requires idVerified to be a boolean', () => {
+    expect(() => validateAllowList([base({ idVerified: undefined as never })])).toThrow(/idVerified/);
+  });
+
   describe('shipped allow-list', () => {
     it('passes validation and has no Gutenberg reference in any public field', () => {
       expect(() => validateAllowList(GUTENBERG_ALLOWLIST)).not.toThrow();
@@ -90,6 +100,25 @@ describe('allow-list rules', () => {
         ].join(' ');
         expect(pub).not.toMatch(GUTENBERG_REFERENCE);
       }
+    });
+    it('no entry claims its id is verified (all ids were entered from memory)', () => {
+      expect(GUTENBERG_ALLOWLIST.every((e) => e.idVerified === false)).toBe(true);
+    });
+    it('Aesop (21) is not approved: racist fable and ~300-fable anthology', () => {
+      const e = GUTENBERG_ALLOWLIST.find((x) => x.ebookId === '21')!;
+      expect(e.flags).toContain('dated-content');
+      expect(effectiveStatus(e, NOW).status).toBe('needs-review');
+      expect(e.statusReason).toMatch(/split|anthology|fable/i);
+    });
+    it('Oz (55) carries a violence flag but stays an editorial call', () => {
+      const e = GUTENBERG_ALLOWLIST.find((x) => x.ebookId === '55')!;
+      expect(e.flags).toContain('violence');
+      expect(effectiveStatus(e, NOW).status).toBe('approved');
+    });
+    it('Grimm (2591) is not approved: translator edition unverified', () => {
+      const e = GUTENBERG_ALLOWLIST.find((x) => x.ebookId === '2591')!;
+      expect(['needs-review', 'excluded']).toContain(e.status);
+      expect(e.statusReason).toMatch(/unverified|translator|edition/i);
     });
     it('has about ten entries, with at least one of each outcome', () => {
       expect(GUTENBERG_ALLOWLIST.length).toBeGreaterThanOrEqual(9);

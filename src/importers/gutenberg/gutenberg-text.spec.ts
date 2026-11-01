@@ -21,6 +21,7 @@ const entry = (over: Partial<AllowListEntry> = {}): AllowListEntry => ({
   description: 'A fox borrows a light.',
   expect: { title: 'Lantern Fox', author: 'Example' },
   pdJustification: 'invented',
+  idVerified: true,
   ...over,
 });
 
@@ -86,7 +87,7 @@ describe('processGutenbergText', () => {
     expect(r).toMatchObject({ ok: false, reason: 'unlisted-translator' });
   });
 
-  it('removes paragraphs with obfuscated references and ebook numbers', () => {
+  it('fails closed (not a silent drop) when a story paragraph mentions the source', () => {
     const r = processGutenbergText(
       fx('90006-0.txt').toString('utf8'),
       entry({
@@ -95,9 +96,7 @@ describe('processGutenbergText', () => {
         expect: { title: 'Sneaky', author: 'Example' },
       }),
     );
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.content).toBe('Plain paragraph here.');
+    expect(r).toEqual({ ok: false, reason: 'residual-reference' });
   });
 
   it('property: no Gutenberg string survives for any fixture or random injection', () => {
@@ -122,5 +121,140 @@ describe('processGutenbergText', () => {
       expect(r.content).not.toMatch(/eBook\s*#?\s*\d/i);
       expect(r.content).not.toMatch(/proofreading/i);
     }
+  });
+});
+
+
+// ---- hardening round ------------------------------------------------------
+const wrap = (body: string, head = 'Title: Lantern Fox\nAuthor: Ada Example') =>
+  `${head}\n\n*** START OF THE PROJECT GUTENBERG EBOOK X ***\n\n${body}\n\n*** END OF THE PROJECT GUTENBERG EBOOK X ***\n`;
+const plain = (e: Partial<AllowListEntry> = {}) =>
+  entry({ translator: undefined, expect: { title: 'Lantern Fox', author: 'Example' }, ...e });
+const STORY = 'A small fox found a lantern in the wood and carried it home.';
+
+describe('processGutenbergText hardening', () => {
+  it.each([
+    ['multi-paragraph bracketed transcriber note', '[Transcriber\'s Note: spelling kept.\n\nThe list of volunteers follows here.\n\nMore about the edition.]'],
+    ['This eBook was produced by', 'This eBook was produced by Some Volunteers at a library.'],
+    ['This etext was produced by', 'This etext was produced by A. Person.'],
+    ['Etext number line', 'Etext #14838\n'],
+    ['PG edition line', 'PG edition, revised.'],
+    ['Michael S. Hart', 'Michael S. Hart began the e-text effort.'],
+    ['Distributed Proofreaders', 'Produced by Distributed Proofreaders Canada'],
+    ['Internet Archive', 'Digitized by the Internet Archive in 2008.'],
+    ['end-of line', 'End of the Project Gutenberg EBook of X'],
+  ])('drops boilerplate: %s', (_n, junk) => {
+    const r = processGutenbergText(wrap(`${junk}\n\n${STORY}`), plain());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.content).toBe(STORY);
+  });
+
+  it('strips an etext number embedded in a line and leaves the story text', () => {
+    const r = processGutenbergText(wrap(`${STORY} (Etext #14838)`), plain());
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.content).not.toMatch(/etext|14838/i);
+  });
+
+  it.each([
+    ['soft hyphen', 'Guten\u00adberg'],
+    ['line-break hyphen', 'Guten-\nberg'],
+    ['spaced letters', 'G u t e n b e r g'],
+    ['full-width', '\uff27utenberg'],
+    ['Cyrillic e', 'Gut\u0435nberg'],
+    ['Cyrillic o in Project', 'Pr\u043eject Gutenberg'],
+    ['zero-width', 'Guten\u200bberg'],
+  ])('fails closed on an obfuscated mention inside story text: %s', (_n, v) => {
+    const r = processGutenbergText(wrap(`She read about ${v} in a book.\n\n${STORY}`), plain());
+    expect(r).toEqual({ ok: false, reason: 'residual-reference' });
+  });
+
+  it('does not drop a story paragraph just because it is near the source name: fails closed instead', () => {
+    const r = processGutenbergText(wrap(`The fox met Gutenberg the owl.\n\n${STORY}`), plain());
+    expect(r.ok).toBe(false);
+  });
+
+  it('obfuscated boilerplate (start pattern) is still dropped cleanly', () => {
+    const r = processGutenbergText(
+      wrap(`Produced by Jane at the Online Distributed Proofreading Team\n\n${STORY}`),
+      plain(),
+    );
+    expect(r).toMatchObject({ ok: true, content: STORY });
+  });
+
+  describe('START/END markers are strict', () => {
+    const body = `${STORY}\n`;
+    it('ignores a marker that is not at the start of a line', () => {
+      const t = `Title: Lantern Fox\nAuthor: Ada Example\n\nsee *** START OF THE PROJECT GUTENBERG EBOOK X ***\n\n${body}\n*** END OF THE PROJECT GUTENBERG EBOOK X ***`;
+      expect(processGutenbergText(t, plain())).toEqual({ ok: false, reason: 'no-start-marker' });
+    });
+    it('requires three asterisks and the words', () => {
+      for (const m of ['** START OF THE PROJECT GUTENBERG EBOOK X **', 'START OF THE PROJECT GUTENBERG EBOOK X', '*** START OF PROJECT GUTENBERG EBOOK X ***', '*** BEGIN OF THE PROJECT GUTENBERG EBOOK X ***']) {
+        const t = `Title: Lantern Fox\nAuthor: Ada Example\n\n${m}\n\n${body}\n*** END OF THE PROJECT GUTENBERG EBOOK X ***`;
+        expect(processGutenbergText(t, plain())).toEqual({ ok: false, reason: 'no-start-marker' });
+      }
+    });
+    it('requires an END marker at line start', () => {
+      const t = `Title: Lantern Fox\nAuthor: Ada Example\n\n*** START OF THE PROJECT GUTENBERG EBOOK X ***\n\n${body}\nx *** END OF THE PROJECT GUTENBERG EBOOK X ***`;
+      expect(processGutenbergText(t, plain())).toEqual({ ok: false, reason: 'no-end-marker' });
+    });
+    it('accepts THIS and mixed case', () => {
+      const t = `Title: Lantern Fox\nAuthor: Ada Example\n\n*** start of this project gutenberg ebook x ***\n\n${body}\n*** end of this project gutenberg ebook x ***`;
+      expect(processGutenbergText(t, plain())).toMatchObject({ ok: true });
+    });
+  });
+
+  it('the final residual check is the safety net (a reference no strip rule knows)', () => {
+    const r = processGutenbergText(wrap(`${STORY} Visit gutenberg.org today.`), plain());
+    expect(r).toEqual({ ok: false, reason: 'residual-reference' });
+  });
+
+  it('unclosed [Illustration marker is dropped to the end of its paragraph', () => {
+    const r = processGutenbergText(wrap(`${STORY} [Illustration: a fox\n\nNext.`), plain());
+    expect(r).toMatchObject({ ok: true });
+    if (r.ok) expect(r.content).not.toMatch(/illustration/i);
+  });
+
+  it('unbracketed multi-paragraph transcriber note fails closed', () => {
+    const r = processGutenbergText(
+      wrap(`Transcriber's Note:\n\nSome notes continue here.\n\n${STORY}`),
+      plain(),
+    );
+    expect(r).toEqual({ ok: false, reason: 'transcriber-note-unbracketed' });
+  });
+
+  it('title-cases chapter headings without capitalising after apostrophes', () => {
+    const r = processGutenbergText(wrap(`CHAPTER I. THE FOX'S LANTERN\n\n${STORY}`), plain());
+    expect(r.ok && r.content.split('\n\n')[0]).toBe("Chapter I. The Fox's Lantern");
+  });
+
+  it('refuses oversized works (cap on words)', () => {
+    const big = Array.from({ length: 30 }, () => STORY).join('\n\n');
+    expect(processGutenbergText(wrap(big), plain(), { maxWords: 100 })).toEqual({
+      ok: false,
+      reason: 'oversized',
+    });
+    expect(processGutenbergText(wrap(big), plain(), { maxWords: 100000 })).toMatchObject({ ok: true });
+  });
+
+  describe('performance (no quadratic regex)', () => {
+    const ms = (t: string) => {
+      const st = Date.now();
+      processGutenbergText(t, plain());
+      return Date.now() - st;
+    };
+    const N = 80_000;
+    it.each([
+      ['spaces in a paragraph', () => wrap(`a${' '.repeat(N)}b`)],
+      ['spaces then newline then spaces', () => wrap(`a${' '.repeat(N)}\n${' '.repeat(N)}b`)],
+      ['eBook followed by spaces', () => wrap(`eBook${' '.repeat(N)}x`)],
+      ['many unclosed illustration markers', () => wrap('[Illustration '.repeat(N / 14))],
+      ['many newlines', () => wrap(`a${'\n'.repeat(N)}b`)],
+      ['many underscores', () => wrap('_a '.repeat(N / 3))],
+      ['many opening brackets', () => wrap('['.repeat(N))],
+    ])('%s under 100 ms', (_n, make) => {
+      const t = make();
+      expect(ms(t)).toBeLessThan(100);
+    });
   });
 });

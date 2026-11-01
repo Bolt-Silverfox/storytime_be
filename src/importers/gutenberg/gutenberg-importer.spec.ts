@@ -29,6 +29,7 @@ const e = (over: Partial<AllowListEntry>): AllowListEntry => ({
   description: 'A fox borrows a light.',
   expect: { title: 'Lantern Fox', author: 'Example' },
   pdJustification: 'invented',
+  idVerified: true,
   ...over,
 });
 
@@ -144,7 +145,8 @@ describe('GutenbergImporter', () => {
     expect(fox.ageMin).toBe(4);
     expect(fox.durationSeconds).toBeGreaterThan(0);
     const spoon = store.rows.find((s) => s.sourceId === '90002')!;
-    expect(spoon.attributionText).toContain('Dot Drawn');
+    expect(spoon.attributionText).not.toContain('Dot Drawn'); // pictures not imported
+    expect(spoon.adaptationNotes).toMatch(/illustrations? (are )?not included/i);
     expect(r.items.find((i) => i.ebookId === '90001')!.unmapped).toEqual({
       categories: ['Not A Category'],
       themes: [],
@@ -306,5 +308,64 @@ describe('GutenbergImporter', () => {
     expect(r.summary.create).toBe(2);
     expect(r.summary['needs-review']).toBe(3);
     expect(r.mode).toBe('dry-run');
+  });
+
+  describe('hardening round', () => {
+    it('violence flag surfaces as an editor note in dry-run and commit, and still imports', async () => {
+      const { source, store } = setup();
+      const imp = new GutenbergImporter({
+        source,
+        cache: new FakeCache(),
+        store,
+        payloads: new MemoryPayloads(),
+        allowList: [e({ flags: ['violence'] })],
+      });
+      const dry = await imp.run({ mode: 'dry-run' });
+      expect(dry.items[0].outcome).toBe('create');
+      expect(dry.items[0].editorNotes?.join(' ')).toMatch(/violence/i);
+      const c = await imp.run({ mode: 'commit' });
+      expect(c.items[0].editorNotes?.join(' ')).toMatch(/violence/i);
+      expect(store.rows).toHaveLength(1);
+    });
+
+    it('commit refuses unverified ebook ids before reading the source; dry-run still reports', async () => {
+      const source = new FakeGutenbergSource(TEXTS());
+      const store = new MemoryStore();
+      const mk = () =>
+        new GutenbergImporter({
+          source,
+          cache: new FakeCache(),
+          store,
+          payloads: new MemoryPayloads(),
+          allowList: [e({ idVerified: false })],
+        });
+      const dry = await mk().run({ mode: 'dry-run' });
+      expect(dry.items[0].outcome).toBe('create');
+      expect(dry.items[0].editorNotes?.join(' ')).toMatch(/unverified/i);
+      source.calls.length = 0;
+      const c = await mk().run({ mode: 'commit' });
+      expect(c.items[0].outcome).toBe('needs-review');
+      expect(c.items[0].reason).toMatch(/not verified/i);
+      expect(source.calls).toEqual([]);
+      expect(store.creates).toBe(0);
+      const ok = await mk().run({ mode: 'commit', allowUnverifiedIds: true });
+      expect(ok.items[0].outcome).toBe('create');
+      expect(store.creates).toBe(1);
+    });
+
+    it('oversized works go to needs-review and are not stored', async () => {
+      const store = new MemoryStore();
+      const imp = new GutenbergImporter({
+        source: new FakeGutenbergSource(TEXTS()),
+        cache: new FakeCache(),
+        store,
+        payloads: new MemoryPayloads(),
+        allowList: [e({})],
+        maxWords: 20,
+      });
+      const r = await imp.run({ mode: 'commit' });
+      expect(r.items[0]).toMatchObject({ outcome: 'needs-review', reason: 'oversized' });
+      expect(store.creates).toBe(0);
+    });
   });
 });

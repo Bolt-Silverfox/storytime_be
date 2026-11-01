@@ -1,4 +1,8 @@
-import { parseCliArgs, formatReport } from './gutenberg-cli.args';
+import {
+  parseCliArgs,
+  formatReport,
+  needsProductionConfirmation,
+} from './gutenberg-cli.args';
 
 describe('parseCliArgs', () => {
   it('defaults to dry-run', () => {
@@ -71,5 +75,50 @@ describe('formatReport', () => {
     expect(out).toMatch(/1\s+create\s+T/);
     expect(out).toMatch(/unmapped categories: X/);
     expect(out).toMatch(/why/);
+  });
+});
+
+describe('needsProductionConfirmation', () => {
+  it.each([
+    'postgresql://u:p@localhost:5432/db',
+    'postgresql://u:p@127.0.0.1:55731/db',
+    'postgresql://u:p@[::1]:5432/db',
+    'postgresql://u:p@box.local/db',
+    'postgresql://u:p@LOCALHOST/db',
+    'postgresql://u@/db?host=/var/run/postgresql',
+  ])('local database needs no confirmation: %s', (u) => {
+    expect(needsProductionConfirmation(u)).toBe(false);
+  });
+  it.each([
+    'postgresql://u:p@db.example.com:5432/db',
+    'postgresql://u:p@10.0.0.5/db',
+    'postgresql://u:p@localhost.evil.com/db',
+    'postgresql://u:p@notlocal/db',
+    'postgresql://u:p@evil.local.example.com/db',
+    'not a url',
+    '',
+    undefined,
+  ])('anything else needs --yes-production: %s', (u) => {
+    expect(needsProductionConfirmation(u)).toBe(true);
+  });
+});
+
+describe('--allow-unverified-ids', () => {
+  it('defaults off and is parsed', () => {
+    expect(parseCliArgs(['--source-dir', '/m']).allowUnverifiedIds).toBe(false);
+    expect(
+      parseCliArgs(['--source-dir', '/m', '--allow-unverified-ids']).allowUnverifiedIds,
+    ).toBe(true);
+  });
+});
+
+describe('formatReport editor notes', () => {
+  it('prints editor notes', () => {
+    const out = formatReport({
+      mode: 'dry-run',
+      items: [{ ebookId: '55', title: 'Oz', outcome: 'create', written: false, editorNotes: ['violence: review passages'] }],
+      summary: { create: 1 },
+    });
+    expect(out).toMatch(/note: violence: review passages/);
   });
 });
