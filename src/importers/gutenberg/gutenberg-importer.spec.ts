@@ -44,12 +44,45 @@ const LIST: AllowListEntry[] = [
     themes: [],
     expect: { title: 'Moon Spoon', author: 'Invented' },
   }),
-  e({ ebookId: '90003', title: 'Flagged', flags: ['dated-content'], translator: undefined, expect: { title: 'x', author: 'x' } }),
-  e({ ebookId: '90004', title: 'Lost Marker', translator: undefined, expect: { title: 'Lost Marker', author: 'Example' } }),
-  e({ ebookId: '90005', title: 'Wrong Id', translator: undefined, expect: { title: 'Wrong', author: 'Nobody' } }),
-  e({ ebookId: '90007', title: 'Pending', status: 'needs-review', statusReason: 'translator unknown', translator: undefined }),
-  e({ ebookId: '90008', title: 'Out', status: 'excluded', statusReason: 'copyrighted translation', translator: undefined }),
-  e({ ebookId: '90009', title: 'Absent', translator: undefined, expect: { title: 'a', author: 'a' } }),
+  e({
+    ebookId: '90003',
+    title: 'Flagged',
+    flags: ['dated-content'],
+    translator: undefined,
+    expect: { title: 'x', author: 'x' },
+  }),
+  e({
+    ebookId: '90004',
+    title: 'Lost Marker',
+    translator: undefined,
+    expect: { title: 'Lost Marker', author: 'Example' },
+  }),
+  e({
+    ebookId: '90005',
+    title: 'Wrong Id',
+    translator: undefined,
+    expect: { title: 'Wrong', author: 'Nobody' },
+  }),
+  e({
+    ebookId: '90007',
+    title: 'Pending',
+    status: 'needs-review',
+    statusReason: 'translator unknown',
+    translator: undefined,
+  }),
+  e({
+    ebookId: '90008',
+    title: 'Out',
+    status: 'excluded',
+    statusReason: 'copyrighted translation',
+    translator: undefined,
+  }),
+  e({
+    ebookId: '90009',
+    title: 'Absent',
+    translator: undefined,
+    expect: { title: 'a', author: 'a' },
+  }),
 ];
 
 const TEXTS = () => ({
@@ -65,14 +98,14 @@ function setup(texts: Record<string, string> = TEXTS()) {
   const cache = new FakeCache();
   const store = new MemoryStore();
   const payloads = new MemoryPayloads();
-  const mk = () =>
+  const mk = (at = new Date('2026-11-01T00:00:00Z')) =>
     new GutenbergImporter({
       source,
       cache,
       store,
       payloads,
       allowList: LIST,
-      now: () => new Date('2026-11-01T00:00:00Z'),
+      now: () => at,
     });
   return { source, cache, store, payloads, importer: mk(), mk };
 }
@@ -122,7 +155,14 @@ describe('GutenbergImporter', () => {
     const { importer, store } = setup();
     await importer.run({ mode: 'commit' });
     for (const s of store.rows) {
-      for (const f of [s.title, s.description, s.textContent, s.attributionText, s.authorName, s.adaptationNotes]) {
+      for (const f of [
+        s.title,
+        s.description,
+        s.textContent,
+        s.attributionText,
+        s.authorName,
+        s.adaptationNotes,
+      ]) {
         expect(f).not.toMatch(GUTENBERG_REFERENCE);
         expect(f).not.toMatch(/ebook\s*#?\s*\d|proofreading|pgdp/i);
       }
@@ -186,9 +226,15 @@ describe('GutenbergImporter', () => {
   it('skip reasons are reported for needs-review entries', async () => {
     const { importer } = setup();
     const r = await importer.run({ mode: 'dry-run' });
-    expect(r.items.find((i) => i.ebookId === '90007')!.reason).toBe('translator unknown');
-    expect(r.items.find((i) => i.ebookId === '90004')!.reason).toBe('no-start-marker');
-    expect(r.items.find((i) => i.ebookId === '90003')!.reason).toMatch(/dated-content/);
+    expect(r.items.find((i) => i.ebookId === '90007')!.reason).toBe(
+      'translator unknown',
+    );
+    expect(r.items.find((i) => i.ebookId === '90004')!.reason).toBe(
+      'no-start-marker',
+    );
+    expect(r.items.find((i) => i.ebookId === '90003')!.reason).toMatch(
+      /dated-content/,
+    );
   });
 
   it('upstream change sets contentChanged, reports changed, never updates or publishes', async () => {
@@ -198,9 +244,8 @@ describe('GutenbergImporter', () => {
     store.rows.find((s) => s.sourceId === '90001')!.isPublished = true;
     const before = { ...store.rows.find((s) => s.sourceId === '90001')! };
     source.texts['90001'] = fx('90001-0.txt').replace('small fox', 'tiny fox');
-    const later = mk();
-    const r = await later.run({ mode: 'commit', ttlMs: 0 });
-    // ttl 0 on first run means entry expired immediately -> refetched now
+    const later = mk(new Date('2027-01-15T00:00:00Z')); // past the 30-day ttl
+    const r = await later.run({ mode: 'commit' });
     expect(outcomes(r)['90001']).toBe('changed');
     expect(cache.entries.get('90001')!.contentChanged).toBe(true);
     expect(store.creates).toBe(2);
@@ -212,22 +257,19 @@ describe('GutenbergImporter', () => {
 
   it('dedupes on contentHash across different ebook ids', async () => {
     const texts = TEXTS();
-    const { importer, store } = setup({
-      ...texts,
-      '90002': texts['90001'].replace('Title: The Little Lantern Fox', 'Title: The Moon Spoon'),
-    });
-    // second work has same body but a different id; header expectations differ so loosen
-    const list = [LIST[0], { ...LIST[1], expect: { title: 'Moon Spoon', author: 'Example' }, translator: LIST[0].translator }];
+    const store = new MemoryStore();
     const imp = new GutenbergImporter({
-      source: new FakeGutenbergSource({ ...texts, '90002': texts['90001'].replace('Title: The Little Lantern Fox', 'Title: The Moon Spoon') }),
+      source: new FakeGutenbergSource({ ...texts, '90002': texts['90001'] }),
       cache: new FakeCache(),
       store,
       payloads: new MemoryPayloads(),
-      allowList: list,
+      allowList: [LIST[0], { ...LIST[0], ebookId: '90002' }],
     });
-    void importer;
     const r = await imp.run({ mode: 'commit' });
-    expect(outcomes(r)).toEqual({ '90001': 'create', '90002': 'skip-duplicate' });
+    expect(outcomes(r)).toEqual({
+      '90001': 'create',
+      '90002': 'skip-duplicate',
+    });
     expect(store.rows).toHaveLength(1);
   });
 

@@ -1,5 +1,8 @@
 import { SourceCache } from '@prisma/client';
-import { GetOrFetchResult, SourceFetcher } from '@/source-cache/source-cache.service';
+import {
+  GetOrFetchResult,
+  SourceFetcher,
+} from '@/source-cache/source-cache.service';
 import {
   GutenbergCachePort,
   PayloadStore,
@@ -50,16 +53,20 @@ export class FakeCache implements GutenbergCachePort {
   async getOrFetch(
     id: string,
     fetcher: SourceFetcher,
-    opts: { ttlMs?: number },
+    opts: { ttlMs?: number; now?: Date },
   ): Promise<GetOrFetchResult> {
     this.getOrFetchCalls++;
+    const now = opts.now ?? this.now;
     const hit = this.entries.get(id);
-    if (hit && hit.revalidateAfter > this.now) {
+    if (hit && hit.revalidateAfter > now) {
       return { entry: hit, fetched: false };
     }
     const r = await fetcher(hit ?? null, new AbortController().signal);
     const changed =
-      !!hit && !!hit.contentHash && !!r.contentHash && hit.contentHash !== r.contentHash;
+      !!hit &&
+      !!hit.contentHash &&
+      !!r.contentHash &&
+      hit.contentHash !== r.contentHash;
     const entry = {
       ...(hit ?? {}),
       id: hit?.id ?? `c-${id}`,
@@ -69,9 +76,11 @@ export class FakeCache implements GutenbergCachePort {
       rawPayloadKey: r.rawPayloadKey ?? hit?.rawPayloadKey ?? null,
       contentHash: r.contentHash ?? hit?.contentHash ?? null,
       contentChanged: hit?.contentChanged || changed,
-      previousContentHash: changed ? hit!.contentHash : (hit?.previousContentHash ?? null),
+      previousContentHash: changed
+        ? hit.contentHash
+        : (hit?.previousContentHash ?? null),
       httpStatus: r.httpStatus,
-      revalidateAfter: new Date(this.now.getTime() + (opts.ttlMs ?? 30 * 86400000)),
+      revalidateAfter: new Date(now.getTime() + (opts.ttlMs ?? 30 * 86400000)),
     } as SourceCache;
     this.entries.set(id, entry);
     return { entry, fetched: true };
@@ -86,7 +95,9 @@ export class MemoryStore implements StoryStorePort {
   findBySource(sourceId: string) {
     const r = this.rows.find((x) => x.sourceId === sourceId);
     return Promise.resolve(
-      r ? { id: r.id, contentHash: r.contentHash, isPublished: r.isPublished } : null,
+      r
+        ? { id: r.id, contentHash: r.contentHash, isPublished: r.isPublished }
+        : null,
     );
   }
   findByHash(hash: string) {

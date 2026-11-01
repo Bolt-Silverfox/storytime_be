@@ -45,25 +45,18 @@ describe('allow-list rules', () => {
   it('translator dead less than 70 full years is needs-review (life+70)', () => {
     // died 1956 -> PD from 1 Jan 2027, so still needs-review on 2026-11-01
     expect(
-      effectiveStatus(
-        base({ translator: { name: 'H', deathYear: 1956 } }),
-        NOW,
-      ).status,
+      effectiveStatus(base({ translator: { name: 'H', deathYear: 1956 } }), NOW)
+        .status,
     ).toBe('needs-review');
     expect(
-      effectiveStatus(
-        base({ translator: { name: 'H', deathYear: 1955 } }),
-        NOW,
-      ).status,
+      effectiveStatus(base({ translator: { name: 'H', deathYear: 1955 } }), NOW)
+        .status,
     ).toBe('approved');
   });
 
   it('explicit needs-review / excluded win and carry the reason', () => {
     expect(
-      effectiveStatus(
-        base({ status: 'excluded', statusReason: 'no' }),
-        NOW,
-      ),
+      effectiveStatus(base({ status: 'excluded', statusReason: 'no' }), NOW),
     ).toEqual({ status: 'excluded', reason: 'no' });
   });
 
@@ -76,9 +69,9 @@ describe('allow-list rules', () => {
     expect(() =>
       validateAllowList([base({ title: 'Project Gutenberg Tales' })]),
     ).toThrow(/reference/i);
-    expect(() =>
-      validateAllowList([base({ status: 'excluded' })]),
-    ).toThrow(/statusReason/);
+    expect(() => validateAllowList([base({ status: 'excluded' })])).toThrow(
+      /statusReason/,
+    );
     expect(() =>
       validateAllowList([base({ firstPublished: 1950, status: 'approved' })]),
     ).toThrow(/pre-1931|published/i);
