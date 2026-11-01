@@ -19,9 +19,10 @@ module.exports = {
   testEnvironment: 'node',
   // @nestjs/jwt 12, @nestjs/event-emitter 12, @nestjs/schedule 12,
   // @nestjs/passport 12 and @nestjs/cache-manager 12 ship
-  // ESM only (no `require` condition, no CJS build). Jest's CJS runtime
-  // cannot require them, so they must be transformed rather than passed
-  // through untouched.
+  // ESM only (no CJS build). Their `exports` map has a `require` condition,
+  // but it points at the same ESM file, which plain Node 24 can load through
+  // require(esm). Jest's CJS runtime cannot, so they must be transformed
+  // rather than passed through untouched.
   transformIgnorePatterns: [
     '/node_modules/\\.pnpm/(?!@nestjs\\+(jwt|event-emitter|schedule|terminus|passport|cache-manager)@|(htmlparser2@12|entities@8|domhandler@6|domutils@4|domelementtype@3|dom-serializer@3)\\.)',
   ],

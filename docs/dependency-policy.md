@@ -12,9 +12,23 @@ stale line.
 
 `@opentelemetry/*` 0.223 -> 0.300 is the OTel JS 3.0 jump. It is breaking even
 though 0.x "minor" bumps look harmless, and it must be done together with
-Sentry 11. Until then `@opentelemetry/*` (major and minor) and `@sentry/*`
-(major) are ignored in `.github/dependabot.yml` and excluded from the
-`minor-and-patch` group (patch updates still arrive as individual PRs).
+Sentry 11. Until then, in `.github/dependabot.yml`:
+
+- `@opentelemetry/*` majors and `@sentry/*` majors are ignored.
+- Minors are ignored only for the experimental 0.x OTel packages we depend on
+  (`sdk-node`, `sdk-logs`, `exporter-*`, `instrumentation-http`,
+  `auto-instrumentations-node`, `winston-transport`), listed by name. The stable
+  packages (`api`, `resources`, `sdk-metrics`, `semantic-conventions`,
+  `instrumentation-express`) still receive minor and patch updates. A new 0.x
+  `@opentelemetry/*` dependency must be added to the ignore list by hand;
+  otherwise its minor bumps would arrive unguarded.
+- Patch updates of the ignored packages still arrive.
+- `@sentry/*` and `@opentelemetry/*` each have their own Dependabot group
+  (`sentry`, `otel`) and are excluded from `minor-and-patch`. The Sentry group
+  matters: Sentry's global carrier is keyed by SDK version, so merging
+  `@sentry/node` without `@sentry/opentelemetry` leaves two `@sentry/core`
+  versions installed and spans/error context vanish silently with CI green.
+  Never merge a partial Sentry bump.
 
 Known breakage:
 
@@ -22,12 +36,12 @@ Known breakage:
   became `metricReaders`; `sdk-trace-base` was removed. Affects
   `src/otel-setup.ts` lines 1, 131, 186, 218 (and 22-26, 220-225).
 - The lockfile mixes OTel majors if packages are bumped individually.
-- `@sentry/opentelemetry` 10 peers `@opentelemetry/core` and
-  `sdk-trace-base` `^2`.
+- `@sentry/opentelemetry` 10 peers the `@opentelemetry/*` SDK packages at
+  `^1.30.1 || ^2.1.0` (not `^2` only).
 - Sentry 11 touches `src/sentry-setup.ts` lines 2, 40, 47.
 
 When doing the migration: bump all OTel and Sentry packages in one PR, update
-both setup files, then remove the `ignore` entries and the group exclusions.
+both setup files, then remove the `ignore` entries and the `minor-and-patch` exclusions.
 
 ## Release age
 
@@ -43,6 +57,8 @@ Dependabot PR for a fresh release.
   `@dependabot recreate`.
 - Major bumps arrive as individual PRs. ESM-only packages (e.g. `@nestjs/*` 12)
   need an entry in the `transformIgnorePatterns` allow-list in `jest.config.js`;
-  `src/common/esm-compat/esm-only-deps.spec.ts` guards this.
+  `src/common/esm-compat/esm-only-deps.spec.ts` guards this under jest, and the
+  `Build` CI job smoke-requires the built `dist` output under the production
+  Node major to cover the runtime side.
 - If a manual bump supersedes a Dependabot PR, close the PR and reference the
   superseding PR.

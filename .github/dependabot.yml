@@ -13,13 +13,23 @@ updates:
     labels:
       - 'dependencies'
     groups:
+      # @sentry/node and @sentry/opentelemetry (and the other @sentry/* packages)
+      # must resolve to ONE @sentry/core version: Sentry's global carrier is keyed
+      # by SDK version, so a split install silently drops spans/error context
+      # with CI still green. Likewise the OTel packages must move together.
+      sentry:
+        patterns:
+          - '@sentry/*'
+      otel:
+        patterns:
+          - '@opentelemetry/*'
       minor-and-patch:
         update-types:
           - 'minor'
           - 'patch'
-        # OpenTelemetry and Sentry must move together (OTel JS 3.0 + Sentry 11).
-        # Keep them out of the group so a "minor" bump (0.223 -> 0.300 is breaking
-        # for 0.x packages) cannot be hidden inside it.
+        # OpenTelemetry and Sentry have their own groups above (OTel JS 3.0 +
+        # Sentry 11 must move together). Keep them out of this group so a "minor"
+        # bump (0.223 -> 0.300 is breaking for 0.x packages) cannot be hidden in it.
         exclude-patterns:
           - '@opentelemetry/*'
           - '@sentry/*'
@@ -28,6 +38,37 @@ updates:
       - dependency-name: '@opentelemetry/*'
         update-types:
           - 'version-update:semver-major'
+      # Minors are ignored only for the experimental 0.x packages, where a minor
+      # bump is breaking (0.223 -> 0.300 is the OTel JS 3.0 jump). Stable
+      # packages (@opentelemetry/api, resources, sdk-metrics,
+      # semantic-conventions, instrumentation-express) keep receiving minor and
+      # patch updates. New 0.x @opentelemetry/* dependencies must be added here.
+      - dependency-name: '@opentelemetry/auto-instrumentations-node'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/exporter-logs-otlp-http'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/exporter-metrics-otlp-http'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/exporter-prometheus'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/exporter-trace-otlp-http'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/instrumentation-http'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/sdk-logs'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/sdk-node'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/winston-transport'
+        update-types:
           - 'version-update:semver-minor'
       - dependency-name: '@sentry/*'
         update-types:
