@@ -199,13 +199,20 @@ export class PrismaFetchLease implements FetchLease {
   }
 }
 
-/** True for an AbortError-style rejection (or the signal's own abort reason). */
-const isAbortError = (e: unknown, signal: AbortSignal): boolean =>
+/**
+ * True for an AbortError-style rejection (or the signal's own abort reason).
+ * Axios cancellation (CanceledError / ERR_CANCELED) counts only once the
+ * signal is actually aborted, so an unrelated cancel is never reclassified.
+ */
+export const isAbortError = (e: unknown, signal: AbortSignal): boolean =>
   (signal.aborted && e === signal.reason) ||
   (typeof e === 'object' &&
     e !== null &&
     ((e as { name?: unknown }).name === 'AbortError' ||
-      (e as { code?: unknown }).code === 'ABORT_ERR'));
+      (e as { code?: unknown }).code === 'ABORT_ERR' ||
+      (signal.aborted &&
+        ((e as { name?: unknown }).name === 'CanceledError' ||
+          (e as { code?: unknown }).code === 'ERR_CANCELED'))));
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 

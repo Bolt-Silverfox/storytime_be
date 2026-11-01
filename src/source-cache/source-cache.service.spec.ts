@@ -1,5 +1,6 @@
 import {
   SourceCacheService,
+  isAbortError,
   SourceCacheFetchError,
   SourceCacheLeaseTimeoutError,
   SourceCacheLeaseLostError,
@@ -497,6 +498,60 @@ describe('SourceCacheService', () => {
             signal.addEventListener('abort', () => reject(err));
           }),
       );
+
+    // Axios cancellation: CanceledError with code 'ERR_CANCELED'.
+    const axiosCanceled = () =>
+      Object.assign(new Error('canceled'), {
+        name: 'CanceledError',
+        code: 'ERR_CANCELED',
+      });
+
+    it('maps an Axios-style CanceledError after lease loss to the lease-lost result', async () => {
+      lease = makeFakeLease(0, false);
+      svc = new SourceCacheService(fake.prisma, lease);
+      await svc.put({
+        sourceName: 'g',
+        sourceId: '1',
+        result: ok({ contentHash: 'B-new' }),
+        now: new Date(NOW.getTime() - 10 * DAY),
+        ttlMs: DAY,
+      });
+      const r = await svc.getOrFetch(
+        'g',
+        '1',
+        failingOnAbort(axiosCanceled()),
+        { now: NOW, leaseMs: 30 },
+      );
+      expect(r.leaseLost).toBe(true);
+      expect(r.entry.contentHash).toBe('B-new');
+    });
+
+    it('isAbortError recognises Axios cancellation only when the signal is aborted', () => {
+      const c = new AbortController();
+      const err = axiosCanceled();
+      expect(isAbortError(err, c.signal)).toBe(false);
+      expect(
+        isAbortError(
+          Object.assign(new Error('x'), { code: 'ERR_CANCELED' }),
+          c.signal,
+        ),
+      ).toBe(false);
+      c.abort();
+      expect(isAbortError(err, c.signal)).toBe(true);
+      expect(isAbortError(new TypeError('boom'), c.signal)).toBe(false);
+    });
+
+    it('propagates a CanceledError unchanged when the signal was not aborted', async () => {
+      const err = axiosCanceled();
+      await expect(
+        svc.getOrFetch(
+          'g',
+          '1',
+          jest.fn(() => Promise.reject(err)),
+          { now: NOW },
+        ),
+      ).rejects.toBe(err);
+    });
 
     it('propagates a non-abort fetcher error raised after lease loss (not relabelled)', async () => {
       lease = makeFakeLease(0, false);
