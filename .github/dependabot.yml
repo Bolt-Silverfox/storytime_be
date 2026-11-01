@@ -1,4 +1,9 @@
 version: 2
+
+# Dependabot opens PRs against the repository DEFAULT branch (no `target-branch`
+# is set on purpose) and reads this file from it. The default branch MUST
+# therefore be moved to each new release line (currently develop-v1.7.0) when it
+# is cut. See docs/dependency-policy.md.
 updates:
   - package-ecosystem: 'npm'
     directory: '/'
@@ -12,6 +17,21 @@ updates:
         update-types:
           - 'minor'
           - 'patch'
+        # OpenTelemetry and Sentry must move together (OTel JS 3.0 + Sentry 11).
+        # Keep them out of the group so a "minor" bump (0.223 -> 0.300 is breaking
+        # for 0.x packages) cannot be hidden inside it.
+        exclude-patterns:
+          - '@opentelemetry/*'
+          - '@sentry/*'
+    ignore:
+      # Pending joint OTel 3.0 + Sentry 11 migration; see docs/dependency-policy.md.
+      - dependency-name: '@opentelemetry/*'
+        update-types:
+          - 'version-update:semver-major'
+          - 'version-update:semver-minor'
+      - dependency-name: '@sentry/*'
+        update-types:
+          - 'version-update:semver-major'
 
   - package-ecosystem: 'github-actions'
     directory: '/'
