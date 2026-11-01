@@ -1,6 +1,11 @@
 import { GuestStoryResponseDto } from '@/guest/dto/guest.dto';
 import { StoryDetailDto } from '@/admin/dto/admin-responses.dto';
-import { StoryCreditDto, StoryReadResponseDto } from './story.dto';
+import {
+  CategoryDto,
+  StoryCreditDto,
+  StoryReadResponseDto,
+  ThemeDto,
+} from './story.dto';
 
 const swaggerProps = (cls: any): string[] =>
   (
@@ -55,4 +60,21 @@ describe('story credit DTO documentation', () => {
       expect.arrayContaining(['categories', 'themes', 'questions']),
     );
   });
+
+  it.each([
+    ['CategoryDto', CategoryDto],
+    ['ThemeDto', ThemeDto],
+  ])(
+    '%s documents nullable image/description (DB columns are nullable)',
+    (_n, cls) => {
+      for (const prop of ['image', 'description']) {
+        const meta = Reflect.getMetadata(
+          'swagger/apiModelProperties',
+          cls.prototype,
+          prop,
+        ) as { nullable?: boolean };
+        expect(meta.nullable).toBe(true);
+      }
+    },
+  );
 });

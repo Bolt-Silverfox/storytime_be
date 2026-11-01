@@ -199,6 +199,14 @@ export class PrismaFetchLease implements FetchLease {
   }
 }
 
+/** True for an AbortError-style rejection (or the signal's own abort reason). */
+const isAbortError = (e: unknown, signal: AbortSignal): boolean =>
+  (signal.aborted && e === signal.reason) ||
+  (typeof e === 'object' &&
+    e !== null &&
+    ((e as { name?: unknown }).name === 'AbortError' ||
+      (e as { code?: unknown }).code === 'ABORT_ERR'));
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const isCacheable = (status: number) =>
@@ -466,17 +474,20 @@ export class SourceCacheService {
       try {
         result = await Promise.race([running, timeout]);
       } catch (e) {
-        // A fetcher that honours the signal rejects (AbortError) when we abort
-        // it; report why we aborted instead of leaking the abort rejection.
-        if (timedOut) {
-          if (e instanceof SourceCacheFetchTimeoutError) throw e;
-          throw new SourceCacheFetchTimeoutError(
-            sourceName,
-            sourceId,
-            timeoutMs,
-          );
+        // Only an abort-type rejection is attributed to our own abort (timeout
+        // or lease loss). Any other error is the fetcher's own failure and
+        // propagates unchanged.
+        if (e instanceof SourceCacheFetchTimeoutError) throw e;
+        if (isAbortError(e, abort.signal)) {
+          if (timedOut) {
+            throw new SourceCacheFetchTimeoutError(
+              sourceName,
+              sourceId,
+              timeoutMs,
+            );
+          }
+          if (lost) return await discardStale();
         }
-        if (lost) return await discardStale();
         throw e;
       }
       if (!isCacheable(result.httpStatus)) {

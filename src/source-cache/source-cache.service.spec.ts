@@ -489,6 +489,45 @@ describe('SourceCacheService', () => {
       ).rejects.toBeInstanceOf(SourceCacheLeaseLostError);
     });
 
+    // A fetcher that, once aborted, rejects with its OWN non-abort error.
+    const failingOnAbort = (err: Error) =>
+      jest.fn(
+        (_prev: unknown, signal: AbortSignal) =>
+          new Promise<FetchResult>((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(err));
+          }),
+      );
+
+    it('propagates a non-abort fetcher error raised after lease loss (not relabelled)', async () => {
+      lease = makeFakeLease(0, false);
+      svc = new SourceCacheService(fake.prisma, lease);
+      await svc.put({
+        sourceName: 'g',
+        sourceId: '1',
+        result: ok({ contentHash: 'B-new' }),
+        now: new Date(NOW.getTime() - 10 * DAY),
+        ttlMs: DAY,
+      });
+      const boom = new TypeError('upstream exploded');
+      await expect(
+        svc.getOrFetch('g', '1', failingOnAbort(boom), {
+          now: NOW,
+          leaseMs: 30,
+        }),
+      ).rejects.toBe(boom);
+    });
+
+    it('propagates a non-abort fetcher error raised after a timeout (not relabelled)', async () => {
+      const boom = new Error('HTTP 502 from source');
+      await expect(
+        svc.getOrFetch('g', '1', failingOnAbort(boom), {
+          now: NOW,
+          fetchTimeoutMs: 30,
+        }),
+      ).rejects.toBe(boom);
+      expect(lease.held.size).toBe(0);
+    });
+
     it("maps a signal-honouring fetcher's AbortError after a timeout to SourceCacheFetchTimeoutError", async () => {
       await expect(
         svc.getOrFetch('g', '1', honouring(500), {

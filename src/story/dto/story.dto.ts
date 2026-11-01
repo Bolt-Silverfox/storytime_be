@@ -475,11 +475,11 @@ export class CategoryDto {
   @ApiProperty()
   name: string;
 
-  @ApiProperty({ required: false })
-  image?: string;
+  @ApiProperty({ required: false, nullable: true })
+  image?: string | null;
 
-  @ApiProperty({ required: false })
-  description?: string;
+  @ApiProperty({ required: false, nullable: true })
+  description?: string | null;
 
   @ApiProperty({ required: false })
   storyCount?: number;
@@ -513,10 +513,10 @@ export class ThemeDto {
   id: string;
   @ApiProperty()
   name: string;
-  @ApiProperty({ required: false })
-  image?: string;
-  @ApiProperty({ required: false })
-  description?: string;
+  @ApiProperty({ required: false, nullable: true })
+  image?: string | null;
+  @ApiProperty({ required: false, nullable: true })
+  description?: string | null;
 }
 
 export class StoryQuestionDto {
