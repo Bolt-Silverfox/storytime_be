@@ -123,11 +123,19 @@ per revalidation window.
   cache write only happens if this process still holds an unexpired lease (the
   lease row is locked for the short write transaction), so a holder that lost
   the lease can never overwrite a newer fetch. A discarded result is logged and
-  the current entry is returned (`fetched: false`), or
-  `SourceCacheLeaseLostError` is thrown if there is none.
+  the current entry is returned with `fetched: false`, `leaseLost: true` and
+  `stale` (true when that entry is already past `revalidateAfter`, so callers
+  can tell they did not get fresh data), or `SourceCacheLeaseLostError` is
+  thrown if there is none.
 - `fetchTimeoutMs` (default 60 s) aborts a hung fetcher, rejects with
   `SourceCacheFetchTimeoutError` and releases the lease. This does not replace
-  HTTP-level timeouts: importers must set their own and honour the signal.
+  HTTP-level timeouts: importers must set their own and honour the signal. A
+  fetcher that ignores the signal keeps running after a timeout and can overlap
+  with the next holder's fetch (the cache write is still fenced, so its result
+  is discarded, but the upstream request is made twice).
+- The fenced write is a short transaction with a 15 s timeout. If the pool is
+  starved so that the write cannot start or finish in time, a finished fetch is
+  discarded (error, nothing cached) and must be fetched again.
 - Failed fetches (5xx/429/exceptions/timeouts) are not negative-cached. If a
   holder fails, each waiting process claims the lease in turn and fetches again
   (N waiting processes can cause N upstream hits). Importers are responsible

@@ -191,6 +191,81 @@ describeDb('SourceCacheService (real Postgres)', () => {
       expect(await lease.renew(key('rn'), 'a', 60000)).toBe(true);
     });
 
+    // The DB-side fence is the only guard when the lease is expired/stolen
+    // before the heartbeat marks it lost (renew still reports OK here).
+    const alwaysOkRenew = (): FetchLease => {
+      const real = new PrismaFetchLease(prisma);
+      return {
+        claim: (k, o, l) => real.claim(k, o, l),
+        renew: () => Promise.resolve(true),
+        release: (k, o) => real.release(k, o),
+        fenced: (k, o, w) => real.fenced(k, o, w),
+      };
+    };
+
+    it('DB fence: lease expired directly in SQL (heartbeat OK) discards the write', async () => {
+      const a = new SourceCacheService(prisma as any, alwaysOkRenew());
+      const p = a.getOrFetch(source, 'fx1', async () => {
+        await prisma.$executeRaw`UPDATE "source_fetch_lease"
+          SET "expiresAt" = (now() at time zone 'utc') - interval '5 seconds'
+          WHERE "sourceName" = ${source} AND "sourceId" = 'fx1'`;
+        return { httpStatus: 200, contentHash: 'A-old' };
+      });
+      await expect(p).rejects.toThrow(/lease/i);
+      expect(
+        await prisma.sourceCache.count({
+          where: { sourceName: source, sourceId: 'fx1' },
+        }),
+      ).toBe(0);
+    });
+
+    it("DB fence: lease stolen directly in SQL (heartbeat OK) keeps the other holder's row", async () => {
+      const a = new SourceCacheService(prisma as any, alwaysOkRenew());
+      const r = await a.getOrFetch(source, 'fx2', async () => {
+        await prisma.$executeRaw`UPDATE "source_fetch_lease"
+          SET "lockedBy" = 'thief'
+          WHERE "sourceName" = ${source} AND "sourceId" = 'fx2'`;
+        await prisma2.sourceCache.create({
+          data: {
+            sourceName: source,
+            sourceId: 'fx2',
+            httpStatus: 200,
+            contentHash: 'B-new',
+            revalidateAfter: new Date(Date.now() + 3600_000),
+          },
+        });
+        return { httpStatus: 200, contentHash: 'A-old' };
+      });
+      expect(r.fetched).toBe(false);
+      expect(r.leaseLost).toBe(true);
+      expect(r.entry.contentHash).toBe('B-new');
+      const row = await prisma.sourceCache.findFirstOrThrow({
+        where: { sourceName: source, sourceId: 'fx2' },
+      });
+      expect(row.contentHash).toBe('B-new');
+      expect(row.contentChanged).toBe(false);
+    });
+
+    it('DB fence: the lease row is locked during the write (FOR UPDATE) so it cannot be stolen mid-write', async () => {
+      const lease = new PrismaFetchLease(prisma);
+      expect(await lease.claim(key('fx3'), 'a', 60000)).toBe(true);
+      let workDoneAt = 0;
+      let stolenAt = 0;
+      const fenced = lease.fenced(key('fx3'), 'a', async () => {
+        await new Promise((r) => setTimeout(r, 800));
+        workDoneAt = Date.now();
+        return 'wrote';
+      });
+      await new Promise((r) => setTimeout(r, 250)); // let the fence tx lock the row
+      await prisma2.$executeRaw`UPDATE "source_fetch_lease"
+        SET "lockedBy" = 'thief'
+        WHERE "sourceName" = ${source} AND "sourceId" = 'fx3'`;
+      stolenAt = Date.now();
+      const res = await fenced;
+      expect(res).toEqual({ held: true, value: 'wrote' });
+      expect(stolenAt).toBeGreaterThanOrEqual(workDoneAt);
+    }, 15000);
+
     it('renew always false: the stale holder discards its result; ONE winner, newer data kept', async () => {
       const real = new PrismaFetchLease(prisma);
       const noRenew: FetchLease = {

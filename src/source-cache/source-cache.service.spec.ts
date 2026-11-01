@@ -380,9 +380,39 @@ describe('SourceCacheService', () => {
       });
       expect(fetcher.mock.calls[0][1]!.aborted).toBe(true);
       expect(r.fetched).toBe(false);
+      expect(r.leaseLost).toBe(true);
+      expect(r.stale).toBe(true); // seeded row is past revalidateAfter at NOW
       expect(r.entry.contentHash).toBe('B-new');
       expect((await svc.get('g', '1'))!.contentHash).toBe('B-new');
       expect((await svc.get('g', '1'))!.contentChanged).toBe(false);
+    });
+
+    it('flags stale=true when the lease was lost and only an expired older row exists', async () => {
+      await svc.put({
+        sourceName: 'g',
+        sourceId: '1',
+        result: ok({ contentHash: 'old' }),
+        now: new Date(NOW.getTime() - 40 * DAY),
+        ttlMs: DAY,
+      });
+      const fetcher = jest.fn(() => {
+        lease.state.revoked = true;
+        return Promise.resolve(ok({ contentHash: 'A-new' }));
+      });
+      const r = await svc.getOrFetch('g', '1', fetcher, { now: NOW });
+      expect(r.fetched).toBe(false);
+      expect(r.leaseLost).toBe(true);
+      expect(r.stale).toBe(true);
+      expect(r.entry.contentHash).toBe('old');
+    });
+
+    it('does not set leaseLost/stale on a normal fetch or cache hit', async () => {
+      const f = jest.fn().mockResolvedValue(ok());
+      const r1 = await svc.getOrFetch('g', '1', f, { now: NOW });
+      const r2 = await svc.getOrFetch('g', '1', f, { now: NOW });
+      expect(r1.leaseLost).toBeUndefined();
+      expect(r2.leaseLost).toBeUndefined();
+      expect(r2.stale).toBeUndefined();
     });
 
     it('fences the write: a revoked lease discards the result even if renew never noticed', async () => {

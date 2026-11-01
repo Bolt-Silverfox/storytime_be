@@ -84,6 +84,14 @@ export interface GetOrFetchResult {
   entry: SourceCache;
   /** true when the fetcher ran for this call; false = served from cache. */
   fetched: boolean;
+  /**
+   * Set (true) only when this caller lost its fetch lease and its result was
+   * discarded; `entry` is then whatever was already cached, not what the
+   * fetcher returned.
+   */
+  leaseLost?: true;
+  /** With `leaseLost`: true if that cached entry is past `revalidateAfter`. */
+  stale?: boolean;
 }
 
 /** Thrown for responses that must not be cached (5xx, 429, other 4xx). */
@@ -462,7 +470,14 @@ export class SourceCacheService {
         `Discarding stale fetch result for ${sourceName}/${sourceId}: lease lost`,
       );
       const newer = await this.get(sourceName, sourceId);
-      if (newer) return { entry: newer, fetched: false };
+      if (newer) {
+        return {
+          entry: newer,
+          fetched: false,
+          leaseLost: true,
+          stale: !this.isFresh(newer, nowFn()),
+        };
+      }
       throw new SourceCacheLeaseLostError(sourceName, sourceId);
     } finally {
       clearInterval(beat);
