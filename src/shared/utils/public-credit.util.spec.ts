@@ -78,4 +78,78 @@ describe('maskSourceFieldsForPublic', () => {
     expect(out).toBeInstanceOf(Dto);
     expect(out.sourceName).toBeNull();
   });
+
+  describe('extra masking rules', () => {
+    it.each([
+      'https://www.gutenberg.org/ebooks/1',
+      'https://gutenberg.org/x',
+      'http://aleph.gutenberg.org/1/2',
+      'https://www.gutenberg.ca/x',
+      'https://GUTENBERG.NET/x',
+    ])('masks any row whose sourceUrl host is a gutenberg site: %s', (url) => {
+      const out = maskSourceFieldsForPublic({
+        licenseCode: 'CC0',
+        sourceName: 'other',
+        sourceUrl: url,
+        attributionText: 'a',
+      });
+      expect(out.sourceUrl).toBeNull();
+      expect(out.sourceName).toBeNull();
+    });
+
+    it.each([' Gutenberg ', 'Project Gutenberg', 'GUTENBERG-mirror'])(
+      'masks sourceName matching /gutenberg/i after trim: %s',
+      (n) => {
+        const out = maskSourceFieldsForPublic({
+          sourceName: n,
+          sourceUrl: 'https://x.test/1',
+        });
+        expect(out.sourceName).toBeNull();
+        expect(out.sourceUrl).toBeNull();
+      },
+    );
+
+    it('masks an object that only has sourceUrl on a gutenberg host', () => {
+      const out = maskSourceFieldsForPublic({
+        sourceUrl: 'https://www.gutenberg.org/ebooks/9',
+      });
+      expect(out.sourceUrl).toBeNull();
+    });
+
+    it('does not mask a look-alike host or an unrelated licence', () => {
+      const a = {
+        licenseCode: 'CC-BY-4.0',
+        sourceName: 'bookdash',
+        sourceUrl: 'https://notgutenberg.org.example.com/x',
+      };
+      // host contains "gutenberg" only as a label of another registrable domain
+      expect(maskSourceFieldsForPublic(a).sourceUrl).toBe(a.sourceUrl);
+    });
+
+    it('stops at a depth cap instead of overflowing the stack', () => {
+      let deep: any = {
+        story: {
+          licenseCode: 'PD-US',
+          sourceName: 'gutenberg',
+          sourceUrl: 'https://www.gutenberg.org/1',
+        },
+      };
+      for (let i = 0; i < 20_000; i++) deep = { child: deep };
+      expect(() => maskSourceFieldsForPublic(deep)).not.toThrow();
+    });
+
+    it('still masks within the cap (depth 60)', () => {
+      let deep: any = {
+        story: {
+          licenseCode: 'PD-US',
+          sourceName: 'gutenberg',
+          sourceUrl: 'https://www.gutenberg.org/1',
+        },
+      };
+      for (let i = 0; i < 60; i++) deep = { child: deep };
+      let cur = maskSourceFieldsForPublic(deep);
+      for (let i = 0; i < 60; i++) cur = cur.child;
+      expect(cur.story.sourceName).toBeNull();
+    });
+  });
 });

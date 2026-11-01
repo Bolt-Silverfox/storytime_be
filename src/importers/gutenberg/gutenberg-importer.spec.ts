@@ -373,4 +373,24 @@ describe('GutenbergImporter', () => {
       expect(store.creates).toBe(0);
     });
   });
+
+  it('persists editor notes (violence, unverified id) in adaptationNotes for admin reviewers', async () => {
+    const store = new MemoryStore();
+    const imp = new GutenbergImporter({
+      source: new FakeGutenbergSource(TEXTS()),
+      cache: new FakeCache(),
+      store,
+      payloads: new MemoryPayloads(),
+      allowList: [e({ flags: ['violence'], idVerified: false })],
+    });
+    await imp.run({ mode: 'commit', allowUnverifiedIds: true });
+    expect(store.rows[0].adaptationNotes).toMatch(/Editor notes:.*violence/i);
+    expect(store.rows[0].adaptationNotes).toMatch(/unverified/i);
+  });
+
+  it('adaptationNotes has no editor-notes section when there are none', async () => {
+    const { importer, store } = setup();
+    await importer.run({ mode: 'commit' });
+    expect(store.rows[0].adaptationNotes).not.toMatch(/Editor notes/);
+  });
 });

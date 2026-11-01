@@ -149,6 +149,8 @@ describe('processGutenbergText hardening', () => {
     ['Etext number line', 'Etext #14838\n'],
     ['PG edition line', 'PG edition, revised.'],
     ['Michael S. Hart', 'Michael S. Hart began the e-text effort.'],
+    ['Michael Hart without initial', 'Michael Hart began the e-text effort.'],
+    ['This PG edition', 'This PG edition has been updated.'],
     ['Distributed Proofreaders', 'Produced by Distributed Proofreaders Canada'],
     ['Internet Archive', 'Digitized by the Internet Archive in 2008.'],
     ['end-of line', 'End of the Project Gutenberg EBook of X'],
@@ -159,10 +161,12 @@ describe('processGutenbergText hardening', () => {
     expect(r.content).toBe(STORY);
   });
 
-  it('strips an etext number embedded in a line and leaves the story text', () => {
-    const r = processGutenbergText(wrap(`${STORY} (Etext #14838)`), plain());
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.content).not.toMatch(/etext|14838/i);
+  it('an ebook number inside a story sentence fails closed instead of deleting words', () => {
+    const r = processGutenbergText(
+      wrap(`${STORY} We read (Etext #14838) twice.`),
+      plain(),
+    );
+    expect(r).toEqual({ ok: false, reason: 'residual-reference' });
   });
 
   it.each([
@@ -173,6 +177,13 @@ describe('processGutenbergText hardening', () => {
     ['Cyrillic e', 'Gut\u0435nberg'],
     ['Cyrillic o in Project', 'Pr\u043eject Gutenberg'],
     ['zero-width', 'Guten\u200bberg'],
+    ['umlaut (combining mark)', 'G\u00fctenberg'],
+    ['combining diaeresis', 'Gu\u0308tenberg'],
+    ['Cyrillic Ge U+050C', '\u050cutenberg'],
+    ['Greek beta', 'Gutenberg'.replace('b', '\u03b2')],
+    ['small-cap G U+0262', '\u0262utenberg'],
+    ['small-cap U U+1D1C', 'G\u1d1ctenberg'],
+    ['Michael Hart mid story', 'Michael Hart'],
   ])('fails closed on an obfuscated mention inside story text: %s', (_n, v) => {
     const r = processGutenbergText(
       wrap(`She read about ${v} in a book.\n\n${STORY}`),
@@ -311,6 +322,21 @@ describe('processGutenbergText hardening', () => {
     ])('%s under 100 ms', (_n, make) => {
       const t = make();
       expect(ms(t)).toBeLessThan(100);
+    });
+
+    it.each([
+      ['hyphen-ended lines (400 KB)', () => wrap('abcd-\n'.repeat(80_000))],
+      [
+        'hyphen-ended lines then letters',
+        () => wrap('ab-\ncd\n'.repeat(100_000)),
+      ],
+      [
+        '200k plain lines in one paragraph',
+        () => wrap('word\n'.repeat(200_000)),
+      ],
+    ])('%s under 200 ms', (_n, make) => {
+      const t = make();
+      expect(ms(t)).toBeLessThan(200);
     });
   });
 });

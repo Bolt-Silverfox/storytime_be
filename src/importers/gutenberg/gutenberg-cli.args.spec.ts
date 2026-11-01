@@ -83,7 +83,6 @@ describe('needsProductionConfirmation', () => {
     'postgresql://u:p@localhost:5432/db',
     'postgresql://u:p@127.0.0.1:55731/db',
     'postgresql://u:p@[::1]:5432/db',
-    'postgresql://u:p@box.local/db',
     'postgresql://u:p@LOCALHOST/db',
     'postgresql://u@/db?host=/var/run/postgresql',
   ])('local database needs no confirmation: %s', (u) => {
@@ -95,6 +94,8 @@ describe('needsProductionConfirmation', () => {
     'postgresql://u:p@localhost.evil.com/db',
     'postgresql://u:p@notlocal/db',
     'postgresql://u:p@evil.local.example.com/db',
+    'postgresql://u:p@box.local/db',
+    'postgresql://u:p@printer.local:5432/db',
     'not a url',
     '',
     undefined,
