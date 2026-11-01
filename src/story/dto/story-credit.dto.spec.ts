@@ -1,6 +1,7 @@
 import { GuestStoryResponseDto } from '@/guest/dto/guest.dto';
 import * as adminResponses from '@/admin/dto/admin-responses.dto';
 import * as readingAnalytics from '@/admin/dto/reading-analytics.dto';
+import * as cursorPagination from '@/shared/dtos/cursor-pagination.dto';
 import * as storyDtos from './story.dto';
 import { StoryDetailDto } from '@/admin/dto/admin-responses.dto';
 import {
@@ -143,6 +144,7 @@ describe('story credit DTO documentation', () => {
       ['story.dto', storyDtos],
       ['admin-responses.dto', adminResponses],
       ['reading-analytics.dto', readingAnalytics],
+      ['cursor-pagination.dto', cursorPagination],
     ])('%s has no untyped nullable property', (_n, mod) => {
       expect(offenders(mod as Record<string, unknown>)).toEqual([]);
     });
