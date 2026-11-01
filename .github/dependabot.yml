@@ -38,11 +38,14 @@ updates:
       - dependency-name: '@opentelemetry/*'
         update-types:
           - 'version-update:semver-major'
-      # Minors are ignored only for the experimental 0.x packages, where a minor
-      # bump is breaking (0.223 -> 0.300 is the OTel JS 3.0 jump). Stable
-      # packages (@opentelemetry/api, resources, sdk-metrics,
-      # semantic-conventions, instrumentation-express) keep receiving minor and
-      # patch updates. New 0.x @opentelemetry/* dependencies must be added here.
+      # Minors are ignored only for the 0.x packages tied to the OTel JS 0.223
+      # SDK line, where a minor bump is breaking (0.223 -> 0.300 is the 3.0
+      # jump). Stable packages (@opentelemetry/api, resources, sdk-metrics,
+      # semantic-conventions) keep receiving minor and patch updates.
+      # @opentelemetry/instrumentation-express is a 0.x contrib package left
+      # unfrozen on purpose: it is versioned independently of the SDK line and
+      # only needs the stable api. New 0.x @opentelemetry/* dependencies must be
+      # added here unless they are deliberately left unfrozen like it.
       - dependency-name: '@opentelemetry/auto-instrumentations-node'
         update-types:
           - 'version-update:semver-minor'

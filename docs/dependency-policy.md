@@ -18,10 +18,13 @@ Sentry 11. Until then, in `.github/dependabot.yml`:
 - Minors are ignored only for the experimental 0.x OTel packages we depend on
   (`sdk-node`, `sdk-logs`, `exporter-*`, `instrumentation-http`,
   `auto-instrumentations-node`, `winston-transport`), listed by name. The stable
-  packages (`api`, `resources`, `sdk-metrics`, `semantic-conventions`,
-  `instrumentation-express`) still receive minor and patch updates. A new 0.x
-  `@opentelemetry/*` dependency must be added to the ignore list by hand;
-  otherwise its minor bumps would arrive unguarded.
+  packages (`api`, `resources`, `sdk-metrics`, `semantic-conventions`) still
+  receive minor and patch updates. `instrumentation-express` is also 0.x but a
+  contrib package, deliberately left unfrozen: it is versioned independently of
+  the SDK 0.223 line and depends only on the stable `api`, so its updates do not
+  create a mixed-SDK install. A new 0.x `@opentelemetry/*` dependency must be
+  added to the ignore list by hand unless it is deliberately left unfrozen like
+  this one; otherwise its minor bumps would arrive unguarded.
 - Patch updates of the ignored packages still arrive.
 - `@sentry/*` and `@opentelemetry/*` each have their own Dependabot group
   (`sentry`, `otel`) and are excluded from `minor-and-patch`. The Sentry group
