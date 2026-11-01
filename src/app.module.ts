@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { Module } from '@nestjs/common';
+import { PublicCreditInterceptor } from './shared/interceptors/public-credit.interceptor';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -34,7 +35,7 @@ import { PaymentModule } from './payment/payment.module';
 import { AchievementProgressModule } from './achievement-progress/achievement-progress.module';
 import { ParentFavoriteModule } from './parent-favorites/parent-favorites.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import {
   throttleConfig,
   ThrottlerConfig,
@@ -158,6 +159,10 @@ import { BullBoardConfigModule } from './admin/bull-board.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: PublicCreditInterceptor,
     },
   ],
 })

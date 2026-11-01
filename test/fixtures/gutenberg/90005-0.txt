@@ -1,0 +1,8 @@
+Title: Totally Different Book
+Author: Someone Else
+
+*** START OF THE PROJECT GUTENBERG EBOOK OTHER ***
+
+This is another book entirely, so the id is wrong.
+
+*** END OF THE PROJECT GUTENBERG EBOOK OTHER ***
