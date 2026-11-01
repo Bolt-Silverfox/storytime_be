@@ -201,6 +201,19 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Plain Node (production major, no jest transform) must be able to load
+      # the ESM-only Nest 12 packages and a compiled module that imports them.
+      # dist/app.module.js is NOT used: it validates env at import time and
+      # exits without the full production environment. auth.module needs none.
+      # Proves import-time loading only, not that the app boots or reaches a DB.
+      - name: Smoke-load built output
+        run: >
+          node -e "
+          for (const m of ['@nestjs/jwt','@nestjs/event-emitter','@nestjs/schedule','@nestjs/passport','@nestjs/cache-manager']) require(m);
+          require('./dist/auth/auth.module.js');
+          console.log('smoke ok');
+          "
+
   # ===================
   # Test (runs on all events)
   # ===================
