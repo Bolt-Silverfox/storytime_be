@@ -17,14 +17,15 @@ Sentry 11. Until then, in `.github/dependabot.yml`:
 - `@opentelemetry/*` majors and `@sentry/*` majors are ignored.
 - Minors are ignored only for the experimental 0.x OTel packages we depend on
   (`sdk-node`, `sdk-logs`, `exporter-*`, `instrumentation-http`,
-  `auto-instrumentations-node`, `winston-transport`), listed by name. The stable
-  packages (`api`, `resources`, `sdk-metrics`, `semantic-conventions`) still
-  receive minor and patch updates. `instrumentation-express` is also 0.x but a
-  contrib package, deliberately left unfrozen: it is versioned independently of
-  the SDK 0.223 line and depends only on the stable `api`, so its updates do not
-  create a mixed-SDK install. A new 0.x `@opentelemetry/*` dependency must be
-  added to the ignore list by hand unless it is deliberately left unfrozen like
-  this one; otherwise its minor bumps would arrive unguarded.
+  `instrumentation-express`, `auto-instrumentations-node`, `winston-transport`),
+  listed by name. The stable packages (`api`, `resources`, `sdk-metrics`,
+  `semantic-conventions`) still receive minor and patch updates.
+  `instrumentation-express` is frozen even though it is a contrib package:
+  `src/otel-setup.ts` loads it through `auto-instrumentations-node` (0.81.0
+  pins `^0.71.0`), so a direct 0.72 bump would leave the running
+  instrumentation on 0.71.x while installing OTel 3.0 dependencies. A new 0.x
+  `@opentelemetry/*` dependency must be added to the ignore list by hand;
+  otherwise its minor bumps would arrive unguarded.
 - Patch updates of the ignored packages still arrive.
 - `@sentry/*` and `@opentelemetry/*` each have their own Dependabot group
   (`sentry`, `otel`) and are excluded from `minor-and-patch`. The Sentry group
@@ -62,6 +63,8 @@ Dependabot PR for a fresh release.
   need an entry in the `transformIgnorePatterns` allow-list in `jest.config.js`;
   `src/common/esm-compat/esm-only-deps.spec.ts` guards this under jest, and the
   `Build` CI job smoke-requires the built `dist` output under the production
-  Node major to cover the runtime side.
+  Node major to cover the runtime side. Both checks use fixed package lists: when
+  adding a package to the allow-list, also add it to the spec and to the
+  "Smoke-load built output" step in `.github/workflows/dev-deploy.yml`.
 - If a manual bump supersedes a Dependabot PR, close the PR and reference the
   superseding PR.
