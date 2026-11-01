@@ -327,7 +327,11 @@ export class SourceCacheService {
       lastModified: result.lastModified ?? null,
       fetchedAt: now,
       revalidateAfter,
-      licenseSnapshot: result.licenseSnapshot ?? null,
+      // The snapshot describes the payload it was captured with: keep it with
+      // the retained payload when content was lost.
+      licenseSnapshot: lostContent
+        ? (existing?.licenseSnapshot ?? null)
+        : (result.licenseSnapshot ?? null),
       fetchedBy: input.fetchedBy ?? null,
     };
 

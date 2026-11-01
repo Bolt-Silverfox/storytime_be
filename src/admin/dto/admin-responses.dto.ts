@@ -1020,6 +1020,7 @@ export class UserDetailDto {
 
 export class StoryDetailDto extends StoryCreditDto {
   @ApiPropertyOptional({
+    type: String,
     nullable: true,
     description: 'Admin only: what Storytime changed from the source text',
     example: 'Shortened for ages 3-5; AI-assisted rewrite of paragraph 2',
@@ -1027,6 +1028,7 @@ export class StoryDetailDto extends StoryCreditDto {
   adaptationNotes?: string | null;
 
   @ApiPropertyOptional({
+    type: Date,
     nullable: true,
     description: 'Admin only: when the story was imported',
   })

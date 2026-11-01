@@ -2,7 +2,9 @@ import { GuestStoryResponseDto } from '@/guest/dto/guest.dto';
 import { StoryDetailDto } from '@/admin/dto/admin-responses.dto';
 import {
   CategoryDto,
+  StoryBranchDto,
   StoryCreditDto,
+  StoryImageDto,
   StoryReadResponseDto,
   ThemeDto,
 } from './story.dto';
@@ -77,4 +79,34 @@ describe('story credit DTO documentation', () => {
       }
     },
   );
+
+  describe('nullable fields declare an explicit scalar type', () => {
+    // `string | null` emits `Object` under decorator metadata, which Swagger
+    // would publish as an object schema. Each nullable field must therefore
+    // carry an explicit `type` alongside `nullable: true`.
+    const meta = (cls: any, prop: string) =>
+      Reflect.getMetadata(
+        'swagger/apiModelProperties',
+        cls.prototype,
+        prop,
+      ) as { nullable?: boolean; type?: unknown };
+
+    it.each([
+      ...CREDIT.map((p) => [StoryCreditDto, p, String]),
+      ...['coverImageUrl', 'audioUrl', 'textContent', ...CREDIT].map((p) => [
+        StoryReadResponseDto,
+        p,
+        String,
+      ]),
+      [StoryDetailDto, 'adaptationNotes', String],
+      [StoryDetailDto, 'importedAt', Date],
+      [StoryImageDto, 'caption', String],
+      [StoryBranchDto, 'nextA', String],
+      [StoryBranchDto, 'nextB', String],
+    ] as [any, string, unknown][])('%p.%s is a nullable %p', (cls, prop, t) => {
+      const m = meta(cls, prop);
+      expect(m.nullable).toBe(true);
+      expect(m.type).toBe(t);
+    });
+  });
 });

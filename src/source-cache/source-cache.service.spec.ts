@@ -609,7 +609,12 @@ describe('SourceCacheService', () => {
 
   describe('upstream removal and 304 handling', () => {
     it('keeps the previous hash/payload and flags contentChanged when a 404 follows a 200', async () => {
-      await svc.put({ sourceName: 's', sourceId: '1', result: ok(), now: NOW });
+      await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: ok({ licenseSnapshot: 'CC-BY-4.0' }),
+        now: NOW,
+      });
       const e = await svc.put({
         sourceName: 's',
         sourceId: '1',
@@ -620,18 +625,29 @@ describe('SourceCacheService', () => {
       expect(e.contentHash).toBe('h1');
       expect(e.rawPayloadKey).toBe('raw/gutenberg/11.html');
       expect(e.contentChanged).toBe(true);
+      expect(e.licenseSnapshot).toBe('CC-BY-4.0');
     });
 
     it('keeps the previous hash and flags when a 200 arrives with no hash', async () => {
-      await svc.put({ sourceName: 's', sourceId: '1', result: ok(), now: NOW });
+      await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: ok({ licenseSnapshot: 'CC-BY-4.0' }),
+        now: NOW,
+      });
       const e = await svc.put({
         sourceName: 's',
         sourceId: '1',
-        result: { httpStatus: 200, contentHash: null },
+        result: {
+          httpStatus: 200,
+          contentHash: null,
+          licenseSnapshot: 'CC0',
+        },
         now: NOW,
       });
       expect(e.contentHash).toBe('h1');
       expect(e.contentChanged).toBe(true);
+      expect(e.licenseSnapshot).toBe('CC-BY-4.0');
     });
 
     it('a first-time 404 is not flagged', async () => {
