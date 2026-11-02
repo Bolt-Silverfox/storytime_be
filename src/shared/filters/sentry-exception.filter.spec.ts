@@ -52,6 +52,20 @@ describe('SentryExceptionFilter', () => {
     expect(captureException).toHaveBeenCalledTimes(1);
   });
 
+  it('still reports errors that carry only .status (AxiosError, genai ApiError)', () => {
+    filter.catch(Object.assign(new Error('Not Found'), { status: 404 }), host);
+    filter.catch(
+      Object.assign(new Error('x'), { statusCode: null, status: 404 }),
+      host,
+    );
+    expect(captureException).toHaveBeenCalledTimes(2);
+  });
+
+  it('still reports a non-integer statusCode', () => {
+    filter.catch(httpError(404.5, 'odd'), host);
+    expect(captureException).toHaveBeenCalledTimes(1);
+  });
+
   it('still reports http-errors 5xx and plain errors', () => {
     filter.catch(httpError(500, 'boom'), host);
     filter.catch(new Error('unexpected'), host);
