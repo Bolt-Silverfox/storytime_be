@@ -29,6 +29,21 @@ export class SentryExceptionFilter extends BaseExceptionFilter {
     if (exception instanceof HttpException) {
       return exception.getStatus() >= 500;
     }
+    // Errors from the http-errors family (body-parser / raw-body: "request
+    // aborted", "request entity too large", malformed JSON) are not Nest
+    // HttpExceptions but carry the same client-error status. A client that drops
+    // the connection mid-upload is not a server fault.
+    const status = SentryExceptionFilter.statusOf(exception);
+    if (status !== undefined && status >= 400 && status < 500) {
+      return false;
+    }
     return true;
+  }
+
+  private static statusOf(exception: unknown): number | undefined {
+    if (!exception || typeof exception !== 'object') return undefined;
+    const e = exception as { status?: unknown; statusCode?: unknown };
+    const status = e.statusCode ?? e.status;
+    return typeof status === 'number' ? status : undefined;
   }
 }

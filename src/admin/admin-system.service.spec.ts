@@ -9,7 +9,10 @@ import {
   ADMIN_CONTENT_REPOSITORY,
   PrismaAdminContentRepository,
 } from './repositories';
-import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
+import {
+  ElevenLabsAuthError,
+  ElevenLabsTTSProvider,
+} from '../voice/providers/eleven-labs-tts.provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { ValidationException } from '@/shared/exceptions';
 
@@ -475,6 +478,40 @@ describe('AdminSystemService', () => {
 
       expect(result).toEqual(subscriptionInfo);
       expect(elevenLabsProvider.getSubscriptionInfo).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns an unavailable payload (not a 502) when the key lacks user_read', async () => {
+      elevenLabsProvider.getSubscriptionInfo.mockRejectedValue(
+        new ElevenLabsAuthError('insufficient_key_permission'),
+      );
+
+      const result = await service.getElevenLabsBalance();
+
+      expect(result).toEqual({
+        available: false,
+        reason: 'insufficient_key_permission',
+        message: expect.stringContaining('user_read'),
+      });
+    });
+
+    it('returns an unavailable payload when the key is invalid', async () => {
+      elevenLabsProvider.getSubscriptionInfo.mockRejectedValue(
+        new ElevenLabsAuthError('invalid_key'),
+      );
+
+      const result = await service.getElevenLabsBalance();
+
+      expect(result).toMatchObject({ available: false, reason: 'invalid_key' });
+    });
+
+    it('still rethrows unexpected provider failures', async () => {
+      elevenLabsProvider.getSubscriptionInfo.mockRejectedValue(
+        new Error('socket hang up'),
+      );
+
+      await expect(service.getElevenLabsBalance()).rejects.toThrow(
+        'socket hang up',
+      );
     });
   });
 
