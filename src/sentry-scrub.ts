@@ -120,7 +120,15 @@ export function scrubSentryEvent<E extends SentryEvent>(event: E): E {
 }
 
 /** Options merged into Sentry.init so every outgoing event is scrubbed. */
-export function buildSentryOptions() {
+export function buildSentryOptions(): Required<
+  Pick<
+    NodeOptions,
+    | 'sendDefaultPii'
+    | 'beforeSend'
+    | 'beforeSendTransaction'
+    | 'beforeBreadcrumb'
+  >
+> {
   return {
     sendDefaultPii: false,
     beforeSend: (event: ErrorEvent) => scrubSentryEvent(event),

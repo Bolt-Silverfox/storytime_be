@@ -181,7 +181,10 @@ describe('end-to-end through Sentry.init with a fake transport', () => {
     const { buildSentryOptions } = await import('./sentry-scrub');
     expect(typeof buildSentryOptions().beforeSendTransaction).toBe('function');
     const tx: any = { type: 'transaction', ...requestEvent() };
-    const out = buildSentryOptions().beforeSendTransaction(tx as never) as any;
+    const out = buildSentryOptions().beforeSendTransaction(
+      tx as never,
+      {},
+    ) as any;
     expect(out.request.headers.Authorization).toBe(REDACTED);
   });
 
