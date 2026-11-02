@@ -507,7 +507,12 @@ describe('AdminSystemService', () => {
 
       const result = await service.getElevenLabsBalance();
 
-      expect(result).toMatchObject({ available: false, reason: 'invalid_key' });
+      expect(result).toMatchObject({
+        available: false,
+        reason: 'invalid_key',
+        message:
+          'ElevenLabs balance unavailable: ElevenLabs rejected the key (invalid, disabled or restricted).',
+      });
     });
 
     it('alerts Sentry at most once per hour for invalid_key, never for missing permission', async () => {

@@ -3,7 +3,13 @@ import {
   ElevenLabsAuthError,
   ElevenLabsTTSProvider,
 } from './eleven-labs-tts.provider';
+import { captureException, captureMessage } from '../../sentry-setup';
 import { StreamConverter } from '../utils/stream-converter';
+
+jest.mock('../../sentry-setup', () => ({
+  captureException: jest.fn(),
+  captureMessage: jest.fn(),
+}));
 
 describe('ElevenLabsTTSProvider.getSubscriptionInfo auth failures', () => {
   const build = (getSubscription: jest.Mock) => {
@@ -72,26 +78,43 @@ describe('ElevenLabsTTSProvider.getSubscriptionInfo auth failures', () => {
     });
   });
 
-  it('never writes the API key to the logger', async () => {
-    const secret = 'sk_super_secret_key_123';
-    const provider = build(
-      jest.fn().mockRejectedValue(
-        Object.assign(new Error('Status code: 401'), {
-          statusCode: 401,
-          body: { detail: { status: 'invalid_api_key' } },
-        }),
+  it('never leaks the API key to any logger method or Sentry call', async () => {
+    const secret = 'sk_SENTINEL_secret_key_123';
+    const config = {
+      get: jest.fn((k: string) =>
+        k === 'ELEVEN_LABS_KEY' ? secret : undefined,
       ),
+    } as unknown as ConfigService;
+    const provider = new ElevenLabsTTSProvider(config, {} as StreamConverter);
+    const sdkError = Object.assign(new Error('Status code: 401'), {
+      statusCode: 401,
+      body: { detail: { status: 'invalid_api_key', message: secret } },
+      config: { headers: { 'xi-api-key': secret } },
+      cause: new Error(`bad key ${secret}`),
+    });
+    (provider as unknown as { client: unknown }).client = {
+      user: { getSubscription: jest.fn().mockRejectedValue(sdkError) },
+    };
+    const calls: unknown[][] = [];
+    for (const m of [
+      'error',
+      'warn',
+      'log',
+      'debug',
+      'verbose',
+      'fatal',
+    ] as const) {
+      jest
+        .spyOn(provider['logger'], m)
+        .mockImplementation((...args: unknown[]) => void calls.push(args));
+    }
+    const err = await provider.getSubscriptionInfo().catch((e) => e);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(JSON.stringify(calls)).not.toContain(secret);
+    expect(JSON.stringify({ m: err.message, r: err.reason })).not.toContain(
+      secret,
     );
-    (provider as unknown as { apiKey: string }).apiKey = secret;
-    const logged: string[] = [];
-    jest
-      .spyOn(provider['logger'], 'error')
-      .mockImplementation((m: unknown) => void logged.push(String(m)));
-    jest
-      .spyOn(provider['logger'], 'warn')
-      .mockImplementation((m: unknown) => void logged.push(String(m)));
-    await provider.getSubscriptionInfo().catch(() => undefined);
-    expect(logged.length).toBeGreaterThan(0);
-    expect(logged.join('\n')).not.toContain(secret);
+    expect(captureException).not.toHaveBeenCalled();
+    expect(captureMessage).not.toHaveBeenCalled();
   });
 });
