@@ -56,7 +56,7 @@ const sourceKey = (name?: string | null, id?: string | null) =>
  * hash-deduped (no behaviour change).
  */
 const hashFor = (story: StoryData): string | null => {
-  if (!story.sourceName && !story.contentHash) return null;
+  if (story.sourceName == null && !story.contentHash) return null;
   if (!story.content) {
     if (story.contentHash) {
       throw new Error(

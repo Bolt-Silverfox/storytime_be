@@ -217,6 +217,29 @@ describe('seedStories provenance', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("hashes and hash-dedupes a story whose sourceName is '' (persisted identity)", async () => {
+    const { prisma, create } = setup([
+      base({
+        title: 'One',
+        sourceName: '',
+        sourceId: '1',
+        content: 'same text',
+      }),
+      base({
+        title: 'Two',
+        sourceName: '',
+        sourceId: '2',
+        content: 'same text',
+      }),
+    ]);
+    const r = await seedStories({ prisma, logger });
+    expect(r.count).toBe(1);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0].data.contentHash).toBe(
+      contentHashOf('same text'),
+    );
+  });
+
   it('dedupes a story with a supplied correct hash against one whose hash is computed', async () => {
     const { prisma, create } = setup([
       base({
