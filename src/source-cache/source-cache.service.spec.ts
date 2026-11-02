@@ -28,6 +28,18 @@ function makeFakePrisma() {
       rows.set(k, next);
       return Promise.resolve(next);
     }),
+    updateMany: jest.fn(({ where, data }: any) => {
+      const row = rows.get(`${where.sourceName}|${where.sourceId}`);
+      if (
+        !row ||
+        (where.contentHash !== undefined &&
+          row.contentHash !== where.contentHash)
+      ) {
+        return Promise.resolve({ count: 0 });
+      }
+      rows.set(`${where.sourceName}|${where.sourceId}`, { ...row, ...data });
+      return Promise.resolve({ count: 1 });
+    }),
     update: jest.fn(({ where, data }: any) => {
       const k = key(where);
       const next = { ...rows.get(k), ...data };
@@ -169,7 +181,30 @@ describe('SourceCacheService', () => {
         now: NOW,
       });
       expect(same.contentChanged).toBe(true); // sticky until acknowledged
-      await svc.acknowledgeChange('s', '1');
+      expect(await svc.acknowledgeChange('s', '1', 'h2')).toBe(true);
+      expect((await svc.get('s', '1'))!.contentChanged).toBe(false);
+    });
+
+    it('does not clear the flag when the row changed after the reviewer looked (h2 -> h3)', async () => {
+      await svc.put({ sourceName: 's', sourceId: '1', result: ok(), now: NOW });
+      await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: ok({ contentHash: 'h2' }),
+        now: NOW,
+      });
+      await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: ok({ contentHash: 'h3' }),
+        now: NOW,
+      });
+      // Reviewer saw h2; the row is now h3.
+      expect(await svc.acknowledgeChange('s', '1', 'h2')).toBe(false);
+      const row = (await svc.get('s', '1'))!;
+      expect(row.contentChanged).toBe(true);
+      expect(row.contentHash).toBe('h3');
+      expect(await svc.acknowledgeChange('s', '1', 'h3')).toBe(true);
       expect((await svc.get('s', '1'))!.contentChanged).toBe(false);
     });
 

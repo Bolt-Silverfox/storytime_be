@@ -42,8 +42,10 @@ interface StoryData {
   contentHash?: string;
 }
 
+// Mirrors the DB unique (sourceName, sourceId): any pair where both are
+// non-null is a key, including empty strings (they are persisted as-is).
 const sourceKey = (name?: string | null, id?: string | null) =>
-  name && id ? `${name}\u0000${id}` : null;
+  name != null && id != null ? `${name}\u0000${id}` : null;
 
 /**
  * Hash used for dedupe/persistence. Always derived from the normalised

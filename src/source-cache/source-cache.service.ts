@@ -267,12 +267,23 @@ export class SourceCacheService {
     return !this.isFresh(entry, now);
   }
 
-  /** Clear the contentChanged flag after a human has reviewed the change. */
-  acknowledgeChange(sourceName: string, sourceId: string) {
-    return this.prisma.sourceCache.update({
-      where: { sourceName_sourceId: { sourceName, sourceId } },
+  /**
+   * Clear the contentChanged flag after a human has reviewed the change.
+   * `reviewedHash` is the contentHash the reviewer saw; the flag is cleared
+   * only if the row still has that hash, so a change that landed after the
+   * review (e.g. h2 -> h3) stays flagged. Returns false when nothing was
+   * cleared (row missing or changed since it was reviewed).
+   */
+  async acknowledgeChange(
+    sourceName: string,
+    sourceId: string,
+    reviewedHash: string | null,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.sourceCache.updateMany({
+      where: { sourceName, sourceId, contentHash: reviewedHash },
       data: { contentChanged: false },
     });
+    return count === 1;
   }
 
   async put(input: PutInput, db: Db = this.prisma): Promise<SourceCache> {

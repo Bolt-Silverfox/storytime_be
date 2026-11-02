@@ -173,6 +173,50 @@ describe('seedStories provenance', () => {
     expect(create).toHaveBeenCalledTimes(2);
   });
 
+  it('treats an empty-string sourceId as a key, like the DB unique constraint', async () => {
+    const { prisma, create } = setup([
+      base({
+        title: 'One',
+        sourceName: 'gutenberg',
+        sourceId: '',
+        content: 'a1',
+      }),
+      base({
+        title: 'Two',
+        sourceName: 'gutenberg',
+        sourceId: '',
+        content: 'b2',
+      }),
+    ]);
+    const r = await seedStories({ prisma, logger });
+    expect(r.count).toBe(1);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips a story whose (sourceName, '') key already exists in the DB", async () => {
+    const { prisma, create } = setup(
+      [
+        base({
+          title: 'New',
+          sourceName: 'gutenberg',
+          sourceId: '',
+          content: 'zz',
+        }),
+      ],
+      [
+        {
+          title: 'Old',
+          sourceName: 'gutenberg',
+          sourceId: '',
+          contentHash: null,
+        },
+      ],
+    );
+    const r = await seedStories({ prisma, logger });
+    expect(r.count).toBe(0);
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('dedupes a story with a supplied correct hash against one whose hash is computed', async () => {
     const { prisma, create } = setup([
       base({
