@@ -15,55 +15,115 @@ type TxEvent = Parameters<NonNullable<NodeOptions['beforeSendTransaction']>>[0];
 
 export const REDACTED = '[Filtered]';
 
-/** Keys (headers, cookies, body/query fields) whose values must never be sent. */
-const SENSITIVE_KEY =
-  /auth|token|cookie|secret|key|session|password|passwd|credential/i;
+/** Substrings that mark a key (header, cookie, body/query field) as secret. */
+const SENSITIVE_SUBSTRING =
+  /auth|token|cookie|secret|key|session|password|passwd|credential|jwt|bearer|private|signature/i;
+
+/**
+ * Whole words (split on non-alphanumerics and camelCase boundaries) that mark a
+ * key as secret. Word matching keeps e.g. `spinner` / `company` / `expand`
+ * readable while still catching `pin`, `newPin`, `pin-reset-otp`, `cardNumber`.
+ */
+const SENSITIVE_WORDS = new Set([
+  'pin',
+  'otp',
+  'code',
+  'cvv',
+  'cvc',
+  'card',
+  'pan',
+  'sig',
+  'reset',
+  'nonce',
+  'state',
+]);
+
+/** Keys that merely report an outcome (`status_code`) are never secret by word. */
+const OUTCOME_WORDS = new Set(['status']);
 
 const MAX_DEPTH = 10;
+const MAX_TEXT = 20_000;
+
+function words(key: string): string[] {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
 
 function isSensitive(key: string): boolean {
-  return SENSITIVE_KEY.test(key);
+  if (SENSITIVE_SUBSTRING.test(key)) return true;
+  const w = words(key);
+  if (w.some((x) => OUTCOME_WORDS.has(x))) return false;
+  return w.some((x) => SENSITIVE_WORDS.has(x));
 }
 
-/** Recursively redact values of sensitive keys. Returns a copy; depth-capped. */
-function scrubValue(value: unknown, depth = 0): unknown {
-  if (depth > MAX_DEPTH || value === null || typeof value !== 'object') {
-    return value;
+function decodeKey(raw: string): string {
+  try {
+    return decodeURIComponent(raw.replace(/\+/g, ' '));
+  } catch {
+    return raw;
   }
-  if (Array.isArray(value)) {
-    return value.map((v) => scrubValue(v, depth + 1));
-  }
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    out[k] = isSensitive(k) ? REDACTED : scrubValue(v, depth + 1);
-  }
-  return out;
 }
 
-/** Redact sensitive params in a `a=b&c=d` string (no leading `?`). */
+/** Redact sensitive params in a `a=b&c=d` string (a leading `?` is allowed). */
 function scrubQueryString(qs: string): string {
   return qs
     .split('&')
     .map((pair) => {
       const eq = pair.indexOf('=');
       if (eq < 0) return pair;
-      let key = pair.slice(0, eq);
-      try {
-        key = decodeURIComponent(key.replace(/\+/g, ' '));
-      } catch {
-        // keep raw key
-      }
+      const rawKey = pair.slice(0, eq);
+      const key = decodeKey(rawKey.startsWith('?') ? rawKey.slice(1) : rawKey);
       return isSensitive(key) ? `${pair.slice(0, eq)}=${REDACTED}` : pair;
     })
     .join('&');
 }
 
+/** Redact `?k=v` / `&k=v` / `#k=v` params embedded anywhere in free text. */
+function scrubText(text: string): string {
+  if (text.length > MAX_TEXT || !text.includes('=')) {
+    return text.length > MAX_TEXT ? REDACTED : text;
+  }
+  return text.replace(
+    /([?&#]|^)([^=&\s#?]{1,200})=([^&\s#"']*)/g,
+    (m, pre: string, k: string) =>
+      isSensitive(decodeKey(k)) ? `${pre}${k}=${REDACTED}` : m,
+  );
+}
+
+const QUERY_KEYS = new Set([
+  'http.query',
+  'url.query',
+  'query',
+  'query_string',
+]);
+
+/** Redact a bag of attributes (breadcrumb / span / trace `data`). */
+function scrubAttrs(data: unknown, depth = 0): unknown {
+  if (data === null || typeof data !== 'object') {
+    return typeof data === 'string' ? scrubText(data) : data;
+  }
+  if (depth > MAX_DEPTH) return REDACTED;
+  if (Array.isArray(data)) return data.map((v) => scrubAttrs(v, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+    if (isSensitive(k)) out[k] = REDACTED;
+    else if (typeof v === 'string' && QUERY_KEYS.has(k.toLowerCase())) {
+      out[k] = scrubQueryString(v);
+    } else out[k] = scrubAttrs(v, depth + 1);
+  }
+  return out;
+}
+
+/** Recursively redact values of sensitive keys. Returns a copy; depth-capped. */
+function scrubValue(value: unknown): unknown {
+  return scrubAttrs(value);
+}
+
 function scrubUrl(url: string): string {
-  const q = url.indexOf('?');
-  if (q < 0) return url;
-  const hash = url.indexOf('#', q);
-  const end = hash < 0 ? url.length : hash;
-  return `${url.slice(0, q + 1)}${scrubQueryString(url.slice(q + 1, end))}${url.slice(end)}`;
+  return scrubText(url);
 }
 
 function scrubQuery(q: unknown): unknown {
@@ -83,18 +143,33 @@ function scrubBody(data: unknown): unknown {
   try {
     return JSON.stringify(scrubValue(JSON.parse(data)));
   } catch {
-    return data.includes('=') ? scrubQueryString(data) : data;
+    // Truncated JSON (Sentry cuts bodies at 10 KB) or other text. Only plain
+    // urlencoded bodies can be scrubbed safely; anything else is dropped.
+    return /^[^\s{[]*=[^\s]*$/.test(data) && data.length <= MAX_TEXT
+      ? scrubQueryString(data)
+      : REDACTED;
   }
 }
 
 export function scrubSentryBreadcrumb<B extends Breadcrumb>(crumb: B): B {
-  if (!crumb.data) return crumb;
-  const data = scrubValue(crumb.data) as Record<string, unknown>;
-  if (typeof data.url === 'string') data.url = scrubUrl(data.url);
-  return { ...crumb, data };
+  const out = { ...crumb };
+  if (crumb.data) out.data = scrubAttrs(crumb.data) as B['data'];
+  if (typeof crumb.message === 'string') out.message = scrubText(crumb.message);
+  return out;
 }
 
-export function scrubSentryEvent<E extends SentryEvent>(event: E): E {
+function scrubSpan<S extends { data?: unknown; description?: unknown }>(
+  span: S,
+): S {
+  const out = { ...span };
+  if (span.data) out.data = scrubAttrs(span.data);
+  if (typeof span.description === 'string') {
+    out.description = scrubText(span.description);
+  }
+  return out;
+}
+
+function scrubEventUnsafe<E extends SentryEvent>(event: E): E {
   const req = event.request;
   if (req) {
     if (req.headers)
@@ -116,7 +191,50 @@ export function scrubSentryEvent<E extends SentryEvent>(event: E): E {
   if (event.breadcrumbs) {
     event.breadcrumbs = event.breadcrumbs.map((b) => scrubSentryBreadcrumb(b));
   }
+  if (typeof event.message === 'string')
+    event.message = scrubText(event.message);
+  if (typeof event.transaction === 'string') {
+    event.transaction = scrubText(event.transaction);
+  }
+  for (const ex of event.exception?.values ?? []) {
+    if (typeof ex.value === 'string') ex.value = scrubText(ex.value);
+  }
+  const trace = event.contexts?.trace;
+  if (trace?.data) trace.data = scrubAttrs(trace.data) as typeof trace.data;
+  if (event.spans) event.spans = event.spans.map((s) => scrubSpan(s));
+  if (event.extra) event.extra = scrubValue(event.extra) as typeof event.extra;
   return event;
+}
+
+/** Scrub an event; on any failure strip everything that could carry secrets. */
+export function scrubSentryEvent<E extends SentryEvent>(event: E): E {
+  try {
+    return scrubEventUnsafe(event);
+  } catch {
+    const stripped: E = {
+      ...event,
+      request: undefined,
+      breadcrumbs: undefined,
+      contexts: undefined,
+      extra: undefined,
+    };
+    try {
+      if (stripped.spans) {
+        stripped.spans = stripped.spans.map((s) => ({ ...s, data: {} }));
+      }
+    } catch {
+      stripped.spans = undefined;
+    }
+    return stripped;
+  }
+}
+
+function safeBreadcrumb(crumb: Breadcrumb): Breadcrumb | null {
+  try {
+    return scrubSentryBreadcrumb(crumb);
+  } catch {
+    return null;
+  }
 }
 
 /** Options merged into Sentry.init so every outgoing event is scrubbed. */
@@ -133,6 +251,6 @@ export function buildSentryOptions(): Required<
     sendDefaultPii: false,
     beforeSend: (event: ErrorEvent) => scrubSentryEvent(event),
     beforeSendTransaction: (event: TxEvent) => scrubSentryEvent(event),
-    beforeBreadcrumb: (crumb: Breadcrumb) => scrubSentryBreadcrumb(crumb),
+    beforeBreadcrumb: (crumb: Breadcrumb) => safeBreadcrumb(crumb),
   };
 }
