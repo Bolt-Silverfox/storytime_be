@@ -9,7 +9,7 @@ import { map } from 'rxjs/operators';
 import { maskSourceFieldsForPublic } from '../utils/public-credit.util';
 
 /** `/admin` as a whole path segment (after the optional /api/v1 prefix). */
-const ADMIN_PATH = /^(?:\/api\/v\d+)?\/admin(?:[/?#]|$)/;
+const ADMIN_PATH = /^(?:\/api\/v\d+)?\/admin(?:[/?#]|$)/i;
 
 /**
  * Global response filter: public-domain stories never expose sourceName or

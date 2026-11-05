@@ -138,6 +138,67 @@ describe('maskSourceFieldsForPublic', () => {
       expect(() => maskSourceFieldsForPublic(deep)).not.toThrow();
     });
 
+    it('drops, rather than passes through, a subtree beyond the depth cap', () => {
+      let deep: any = {
+        story: {
+          licenseCode: 'PD-US',
+          sourceName: 'gutenberg',
+          sourceUrl: 'https://www.gutenberg.org/1',
+        },
+      };
+      for (let i = 0; i < 70; i++) deep = { child: deep };
+      expect(JSON.stringify(maskSourceFieldsForPublic(deep))).not.toMatch(
+        /gutenberg/i,
+      );
+    });
+
+    it('masks the output of toJSON on a row that serialises itself', () => {
+      const row = { toJSON: () => pd() };
+      const json = JSON.parse(JSON.stringify(maskSourceFieldsForPublic(row)));
+      expect(json.sourceName).toBeNull();
+      expect(json.sourceUrl).toBeNull();
+      expect(json.authorName).toBe('A');
+    });
+
+    it('masks a toJSON row nested in an array', () => {
+      const out = maskSourceFieldsForPublic({
+        items: [{ toJSON: () => pd() }],
+      });
+      expect(JSON.stringify(out)).not.toMatch(/gutenberg|example\.org\/ebooks/);
+    });
+
+    it('drops an object whose toJSON throws', () => {
+      const bad = {
+        sourceUrl: 'https://www.gutenberg.org/1',
+        toJSON: () => {
+          throw new Error('boom');
+        },
+      };
+      expect(JSON.stringify(maskSourceFieldsForPublic({ bad }))).not.toMatch(
+        /gutenberg/i,
+      );
+    });
+
+    it('keeps the same reference for a toJSON value with nothing to mask', () => {
+      const dec = { toJSON: () => '1.50' };
+      const wrapper = { price: dec };
+      expect(maskSourceFieldsForPublic(wrapper)).toBe(wrapper);
+    });
+
+    it.each([
+      'https://gutenberg.pglaf.org/1/2/3/12345/12345-0.txt',
+      'http://www.pglaf.org/x',
+      'https://gutenberg.readingroo.ms/1/2/3',
+      'https://mirrors.xmission.com/gutenberg/1/2/3',
+      'https://aleph.gutenberg.org/1/2/3',
+    ])('masks a sourceUrl on a Gutenberg mirror: %s', (sourceUrl) => {
+      const out = maskSourceFieldsForPublic({
+        sourceName: 'x',
+        sourceUrl,
+      });
+      expect(out.sourceUrl).toBeNull();
+    });
+
     it('still masks within the cap (depth 60)', () => {
       let deep: any = {
         story: {

@@ -42,6 +42,8 @@ describe('PublicCreditInterceptor', () => {
     '/api/v1/admin/stories/abc',
     '/api/v1/admin/stories?x=1',
     '/admin/x',
+    '/api/v1/Admin/stories',
+    '/API/V1/ADMIN/stories/abc',
   ])('leaves admin responses alone: %s', async (url) => {
     const out: any = await run(url, { story: row() });
     expect(out.story.sourceName).toBe('gutenberg');

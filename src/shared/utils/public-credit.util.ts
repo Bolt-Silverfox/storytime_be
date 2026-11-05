@@ -6,11 +6,17 @@
  */
 const MASKED_KEYS = ['sourceName', 'sourceUrl'] as const;
 
-const GUTENBERG_HOST = /(?:^|\.)gutenberg\.(?:org|net|ca|eu|info)$/;
+const GUTENBERG_HOST =
+  /(?:^|\.)gutenberg(?:\.|$)|(?:^|\.)(?:pglaf\.org|readingroo\.ms)$/;
+const GUTENBERG_PATH = /(?:^|\/)gutenberg(?:\/|$)/i;
 
 function isGutenbergUrl(url: string): boolean {
   try {
-    return GUTENBERG_HOST.test(new URL(url.trim()).hostname.toLowerCase());
+    const u = new URL(url.trim());
+    return (
+      GUTENBERG_HOST.test(u.hostname.toLowerCase()) ||
+      GUTENBERG_PATH.test(u.pathname)
+    );
   } catch {
     return /gutenberg/i.test(url); // unparseable: fail closed
   }
@@ -36,8 +42,7 @@ const isWalkable = (v: unknown): v is object =>
   v !== null &&
   !(v instanceof Date) &&
   !ArrayBuffer.isView(v) &&
-  !(v instanceof ArrayBuffer) &&
-  typeof (v as { toJSON?: unknown }).toJSON !== 'function';
+  !(v instanceof ArrayBuffer);
 
 /**
  * Returns `value` with sourceName/sourceUrl nulled on every nested object that
@@ -53,12 +58,29 @@ function walk(
   seen: Map<object, unknown>,
   depth: number,
 ): unknown {
-  if (depth > MAX_MASK_DEPTH || !isWalkable(value)) return value;
+  if (!isWalkable(value)) return value;
+  if (depth > MAX_MASK_DEPTH) return null;
   if (seen.has(value)) return seen.get(value);
   // Cycle guard: provisional answer is the original object.
   seen.set(value, value);
 
   let result: unknown = value;
+  const toJSON = (value as { toJSON?: unknown }).toJSON;
+  if (typeof toJSON === 'function') {
+    let json: unknown;
+    try {
+      json = (toJSON as () => unknown).call(value);
+    } catch {
+      seen.set(value, null);
+      return null;
+    }
+    if (json !== value) {
+      const masked = walk(json, seen, depth + 1);
+      result = masked === json ? value : masked;
+      seen.set(value, result);
+      return result;
+    }
+  }
   if (Array.isArray(value)) {
     let copy: unknown[] | null = null;
     for (let i = 0; i < value.length; i++) {
