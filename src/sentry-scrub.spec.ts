@@ -293,6 +293,33 @@ describe('free-text credential scrubbing', () => {
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
     expect(ms).toBeLessThan(100);
   });
+
+  const CHAINED: Array<[string, string]> = [
+    ['chained a=', 'a='.repeat(10_000)],
+    ['chained ab=', 'ab='.repeat(6_666)],
+    ['chained percent-encoded a=%3D', 'a=%3D'.repeat(4_000)],
+  ];
+
+  it.each(CHAINED)('scrubs %s in linear time', (_name, text) => {
+    const started = process.hrtime.bigint();
+    messages(text);
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+    expect(ms).toBeLessThan(750);
+  });
+
+  it('redacts only the secrets in a chain of key=value pairs', () => {
+    const text =
+      'a=a=b=token=abc123 x=y=password=hunter2 foo=bar&k=k=secret=zzz';
+    for (const out of messages(text)) {
+      expect(out).toBe(`a=${REDACTED} x=${REDACTED} foo=bar&k=${REDACTED}`);
+    }
+  });
+
+  it('still redacts a secret nested inside a quoted value', () => {
+    for (const out of messages(`x="y token=abc123" z='q password=hunter2'`)) {
+      expect(out).toBe(`x="y token=${REDACTED}" z='q password=${REDACTED}'`);
+    }
+  });
 });
 
 describe('span and trace attribute scrubbing', () => {

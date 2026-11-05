@@ -214,7 +214,12 @@ function scrubText(text: string, nested = true): string {
     const { inner, quote } = value;
     if (!quote && OUTCOME_VALUES.has(inner.toLowerCase())) continue;
     if (byWhitespace && /^[a-z]+$/.test(inner)) continue;
-    if (!sensitive && (quote || !hasNestedSecret(inner))) continue;
+    if (!sensitive && quote) continue;
+    if (!sensitive && !hasNestedSecret(inner)) {
+      out += src.slice(last, value.end);
+      last = value.end;
+      continue;
+    }
     out += src.slice(last, valueAt) + quote + REDACTED + quote;
     last = value.end;
   }
