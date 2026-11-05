@@ -3,10 +3,12 @@ import {
   REDACTED,
   buildSentryOptions,
   scrubSentryBreadcrumb,
-  scrubSentryEvent,
 } from './sentry-scrub';
 
 const dump = (v: unknown) => JSON.stringify(v);
+
+const scrubSentryEvent = (event: any): any =>
+  buildSentryOptions().beforeSend(event, {});
 
 describe('breadcrumbs (query kept separately from url)', () => {
   it('redacts http.query / url.query and keeps non-secret params', () => {
@@ -94,7 +96,7 @@ describe('request bodies', () => {
       request: { data: '%70assword=SENT_B2&a=1&refresh%5Ftoken=SENT_B3' },
     } as any);
     expect(dump(e)).not.toMatch(/SENT_/);
-    expect(e.request.data).toContain('a=1');
+    expect(e.request.data).toBeUndefined();
   });
 
   it('redacts unparseable non-urlencoded text', () => {
@@ -136,17 +138,13 @@ describe('key matching', () => {
     'sessionId',
   ];
   it.each(sensitive)('redacts %s', (k) => {
-    const e: any = scrubSentryEvent({
-      request: { data: { [k]: 'SENT_K' } },
-    } as any);
+    const e: any = scrubSentryEvent({ extra: { [k]: 'SENT_K' } } as any);
     expect(dump(e)).not.toContain('SENT_K');
   });
 
   const safe = [
-    'email',
     'method',
     'status_code',
-    'name',
     'spinner',
     'company',
     'expand',
@@ -155,9 +153,7 @@ describe('key matching', () => {
     'page',
   ];
   it.each(safe)('keeps %s', (k) => {
-    const e: any = scrubSentryEvent({
-      request: { data: { [k]: 'keepme' } },
-    } as any);
+    const e: any = scrubSentryEvent({ extra: { [k]: 'keepme' } } as any);
     expect(dump(e)).toContain('keepme');
   });
 });

@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import * as Sentry from '@sentry/node';
 import {
   REDACTED,
-  scrubSentryEvent,
+  buildSentryOptions,
   scrubSentryBreadcrumb,
 } from './sentry-scrub';
 
@@ -33,6 +34,17 @@ function requestEvent(): any {
   };
 }
 
+function scrubSentryEvent(event: any): any {
+  return buildSentryOptions().beforeSend(event, {});
+}
+
+function scrubTransaction(event: any): any {
+  return buildSentryOptions().beforeSendTransaction(
+    { type: 'transaction', ...event },
+    {},
+  );
+}
+
 describe('scrubSentryEvent', () => {
   it('redacts sensitive headers case-insensitively, keeps the rest', () => {
     const e = scrubSentryEvent(requestEvent());
@@ -42,7 +54,7 @@ describe('scrubSentryEvent', () => {
     expect(h['Set-Cookie']).toBe(REDACTED);
     expect(h['X-Api-Key']).toBe(REDACTED);
     expect(h['x-guest-session-id']).toBe(REDACTED);
-    expect(h['user-agent']).toBe('jest');
+    expect(h['user-agent']).toBeUndefined();
     expect(h['content-type']).toBe('application/json');
     expect(JSON.stringify(e)).not.toContain('eyJhbGci');
   });
@@ -55,14 +67,12 @@ describe('scrubSentryEvent', () => {
     expect(e.request!.url).toBe(
       `https://api.example.com/auth/login?token=${REDACTED}&page=2`,
     );
-    const d: any = e.request!.data;
-    expect(d.email).toBe('a@b.c');
-    expect(d.password).toBe(REDACTED);
-    expect(d.nested.refreshToken).toBe(REDACTED);
-    expect(d.nested.list[0]).toEqual({ accessToken: REDACTED, ok: 1 });
+    expect(e.request!.data).toBeUndefined();
+    expect(JSON.stringify(e)).not.toContain('a@b.c');
+    expect(JSON.stringify(e)).not.toContain('hunter2');
   });
 
-  it('handles string bodies (JSON) and object/array query strings', () => {
+  it('drops string bodies and scrubs object/array query strings', () => {
     const ev: any = requestEvent();
     ev.request.data = JSON.stringify({ password: 'p', x: 1 });
     ev.request.query_string = [
@@ -70,10 +80,7 @@ describe('scrubSentryEvent', () => {
       ['a', 'b'],
     ];
     const e = scrubSentryEvent(ev);
-    expect(JSON.parse(e.request!.data as string)).toEqual({
-      password: REDACTED,
-      x: 1,
-    });
+    expect(e.request!.data).toBeUndefined();
     expect(e.request!.query_string).toEqual([
       ['refresh_token', REDACTED],
       ['a', 'b'],
@@ -99,6 +106,15 @@ describe('scrubSentryEvent', () => {
     expect(b.data.headers.authorization).toBe(REDACTED);
     expect(b.data.status_code).toBe(500);
     expect(scrubSentryEvent({ message: 'y' } as any)).toEqual({ message: 'y' });
+  });
+
+  it('drops the user-agent header on error events and transactions', () => {
+    const err = scrubSentryEvent(requestEvent());
+    const tx = scrubTransaction(requestEvent());
+    for (const h of [err.request.headers, tx.request.headers]) {
+      expect(Object.keys(h).filter((k) => /user.?agent/i.test(k))).toEqual([]);
+      expect(h['content-type']).toBe('application/json');
+    }
   });
 
   it('scrubSentryBreadcrumb redacts data', () => {
@@ -191,5 +207,143 @@ describe('end-to-end through Sentry.init with a fake transport', () => {
   it('sets sendDefaultPii false', async () => {
     const { buildSentryOptions } = await import('./sentry-scrub');
     expect(buildSentryOptions().sendDefaultPii).toBe(false);
+  });
+});
+
+describe('free-text credential scrubbing', () => {
+  const messages = (text: string) => {
+    const out = scrubSentryEvent({
+      message: text,
+      exception: { values: [{ value: text }] },
+    });
+    return [out.message, out.exception.values[0].value] as string[];
+  };
+
+  const LEAKS: Array<[string, string]> = [
+    [
+      'Invalid `prisma.user.create()` invocation: { data: { email: "SENT@x.io", name: "SENTNAME", passwordHash: "$2b$10$SENTHASH", pinHash: "SENTPIN" } }',
+      'SENT',
+    ],
+    ['refreshToken: SENTSECRET', 'SENTSECRET'],
+    ['clientSecret: "SENTSECRET"', 'SENTSECRET'],
+    ['access_token SENTSECRET', 'SENTSECRET'],
+    ["{'password': 'SENTSECRET'}", 'SENTSECRET'],
+    ['pwd=SENTSECRET', 'SENTSECRET'],
+    ['password= SENTSECRET', 'SENTSECRET'],
+    ['password => SENTSECRET', 'SENTSECRET'],
+    ['Password = "SENTSECRET"', 'SENTSECRET'],
+    ['{"password":"SENTSECRET","ok":1}', 'SENTSECRET'],
+    ['{"detail": "bad password: SENTSECRET"}', 'SENTSECRET'],
+    ['login failed password: hunter2SENT, retry', 'hunter2SENT'],
+    ['otp: 123456 rejected', '123456'],
+    ['GET /cb?next=%2Fx%3Ftoken%3DSENTSECRET failed', 'SENTSECRET'],
+    ['Authorization: Bearer SENTSECRET.abc.def', 'SENTSECRET'],
+    ['api_key=SENTSECRET&page=2', 'SENTSECRET'],
+  ];
+
+  it.each(LEAKS)('redacts %s', (text, secret) => {
+    for (const out of messages(text)) {
+      expect(out).not.toContain(secret);
+      expect(out).toContain(REDACTED);
+    }
+  });
+
+  const HARMLESS = [
+    'otp code mismatch',
+    'Missing secret key',
+    'token bucket empty',
+    'pin attempts exceeded',
+    'Error validating token payload',
+    'access token: invalid_grant',
+    'jwt expired',
+    'Invalid OTP',
+    'Refresh token not found',
+    'name must be a string',
+    'connect ECONNREFUSED 127.0.0.1:5432',
+    'Request failed with status code 500',
+    'GET https://api.example.com/stories?page=2&limit=10 failed',
+    'Story 42 not found for user',
+    'Unique constraint failed on the fields: (`id`)',
+    'Cannot read properties of undefined (reading "length")',
+    'Redis connection to localhost:6379 timed out',
+  ];
+
+  it.each(HARMLESS)('leaves %s unchanged', (text) => {
+    for (const out of messages(text)) expect(out).toBe(text);
+  });
+
+  const ADVERSARIAL: Array<[string, string]> = [
+    ['token plus 20k spaces then comma', `token${' '.repeat(19_994)},`],
+    ['20k spaces', ' '.repeat(20_000)],
+    ['repeated key words', 'token '.repeat(3_300)],
+    ['repeated password colons', 'password: '.repeat(2_000)],
+    ['long key-like run', 'a'.repeat(20_000)],
+    ['long dotted run', 'a.'.repeat(10_000)],
+    ['equals runs', '='.repeat(20_000)],
+    ['quote runs', '"a'.repeat(10_000)],
+  ];
+
+  it.each(ADVERSARIAL)('scrubs %s in a few ms', (_name, text) => {
+    const started = process.hrtime.bigint();
+    messages(text);
+    scrubSentryEvent({
+      request: { headers: { 'x-custom': text }, url: text },
+      message: text,
+    });
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+    expect(ms).toBeLessThan(100);
+  });
+});
+
+describe('span and trace attribute scrubbing', () => {
+  const OTEL_SAFE = {
+    'db.name': 'storytime',
+    'messaging.destination.name': 'audio',
+    'bullmq.queue.name': 'tts',
+    'job.name': 'render',
+    'service.name': 'storytime-be',
+    'host.name': 'api-1',
+    'net.peer.name': 'db.internal',
+    'code.function.name': 'run',
+    'server.address': 'db.internal',
+    storyId: 's1',
+  };
+
+  const OTEL_PRIVATE = {
+    'client.address': '1.2.3.4',
+    'http.client_ip': '1.2.3.4',
+    'net.peer.ip': '1.2.3.4',
+    'network.peer.address': '1.2.3.4',
+    'user_agent.original': 'Mozilla',
+    'http.request.header.x-real-ip': '1.2.3.4',
+    kidId: 'k1',
+    childId: 'c1',
+    homeAddress: '1 Road',
+  };
+
+  it('keeps OTel service attributes and redacts client identity on spans, trace data and breadcrumbs', () => {
+    const tx = scrubTransaction({
+      contexts: {
+        trace: {
+          trace_id: 't',
+          span_id: 's',
+          data: { ...OTEL_SAFE, ...OTEL_PRIVATE },
+        },
+      },
+      spans: [
+        {
+          span_id: 'a',
+          trace_id: 't',
+          data: { ...OTEL_SAFE, ...OTEL_PRIVATE },
+        },
+      ],
+    });
+    const crumb: any = scrubSentryBreadcrumb({
+      data: { ...OTEL_SAFE, ...OTEL_PRIVATE },
+    });
+    for (const data of [tx.contexts.trace.data, tx.spans[0].data, crumb.data]) {
+      for (const [k, v] of Object.entries(OTEL_SAFE)) expect(data[k]).toBe(v);
+      for (const k of Object.keys(OTEL_PRIVATE)) expect(data[k]).toBe(REDACTED);
+    }
   });
 });

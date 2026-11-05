@@ -15,9 +15,8 @@ type TxEvent = Parameters<NonNullable<NodeOptions['beforeSendTransaction']>>[0];
 
 export const REDACTED = '[Filtered]';
 
-/** Substrings that mark a key (header, cookie, body/query field) as secret. */
 const SENSITIVE_SUBSTRING =
-  /auth|token|cookie|secret|key|session|password|passwd|credential|jwt|bearer|private|signature/i;
+  /auth|token|cookie|secret|key|session|password|passwd|pwd|credential|jwt|bearer|private|signature/i;
 
 /**
  * Whole words (split on non-alphanumerics and camelCase boundaries) that mark a
@@ -38,15 +37,42 @@ const SENSITIVE_WORDS = new Set([
   'state',
 ]);
 
-/** Substrings that mark a key as personal data (adult, child or network identity). */
 const PII_SUBSTRING =
-  /e-?mail|phone|msisdn|first.?name|last.?name|full.?name|display.?name|user.?name|birth|age.?range|avatar|address|client.?ip|forwarded|real.?ip|remote.?addr/i;
+  /e-?mail|phone|msisdn|first.?name|last.?name|full.?name|display.?name|user.?name|birth|age.?range|avatar|client.?ip|forwarded|real.?ip|remote.?addr/i;
+
+const ADDRESS_SUBSTRING = /address/i;
 
 const USER_AGENT_KEY = /user.?agent/i;
 
+const CLIENT_IDENTITY_KEYS = new Set([
+  'client.address',
+  'client.socket.address',
+  'http.client_ip',
+  'net.peer.ip',
+  'net.sock.peer.addr',
+  'network.peer.address',
+  'user_agent.original',
+]);
+
+const HEADER_ATTR_PREFIX = 'http.request.header.';
+
+const OUTCOME_VALUES = new Set([
+  'invalid_request',
+  'invalid_client',
+  'invalid_grant',
+  'unauthorized_client',
+  'unsupported_grant_type',
+  'invalid_scope',
+  'invalid_token',
+  'access_denied',
+  'expired',
+  'invalid',
+  'missing',
+  'required',
+]);
+
 type Scope = 'credentials' | 'headers' | 'attrs';
 
-/** Whole words that mark a key as personal data. */
 const PII_WORDS = new Set([
   'name',
   'dob',
@@ -58,7 +84,6 @@ const PII_WORDS = new Set([
   'ip',
 ]);
 
-/** Keys that merely report an outcome (`status_code`) are never secret by word. */
 const OUTCOME_WORDS = new Set(['status']);
 
 const MAX_DEPTH = 10;
@@ -77,6 +102,13 @@ function isSensitive(key: string, scope: Scope = 'attrs'): boolean {
   const pii = scope !== 'credentials';
   if (pii && PII_SUBSTRING.test(key)) return true;
   if (scope === 'attrs' && USER_AGENT_KEY.test(key)) return true;
+  const lower = key.toLowerCase();
+  if (pii && CLIENT_IDENTITY_KEYS.has(lower)) return true;
+  if (lower.startsWith(HEADER_ATTR_PREFIX)) {
+    return isSensitive(key.slice(HEADER_ATTR_PREFIX.length), scope);
+  }
+  if (key.includes('.')) return false;
+  if (pii && ADDRESS_SUBSTRING.test(key)) return true;
   const w = words(key);
   if (w.some((x) => OUTCOME_WORDS.has(x))) return false;
   return w.some((x) => SENSITIVE_WORDS.has(x) || (pii && PII_WORDS.has(x)));
@@ -126,93 +158,68 @@ function scrubQueryString(qs: string): string {
     .join('&');
 }
 
-/**
- * Redact `k=v` params (after start, whitespace, `?`, `&` or `#`) and bearer or
- * basic credentials embedded anywhere in free text.
- */
+const KEY_VALUE_HEAD =
+  /(?<![^\s=:&?#{}()[\],;<>"'])(["']?)([^\s=:&?#{}()[\],;<>"']{1,100})\1(?:[ \t]*(?:=>|[:=])[ \t]*|([ \t]+))/g;
+
+const UNQUOTED_VALUE = /[^\s&,;"'})\]]+/y;
+
+function isSecretLabel(key: string): boolean {
+  return (
+    (SENSITIVE_SUBSTRING.test(key) && !key.includes('.')) ||
+    words(key).some((x) => x === 'pin' || x === 'otp')
+  );
+}
+
+interface ValueSpan {
+  inner: string;
+  end: number;
+  quote: string;
+}
+
+function readValue(text: string, at: number): ValueSpan | null {
+  const quote = text[at];
+  if (quote === '"' || quote === "'") {
+    for (let i = at + 1; i < text.length; i++) {
+      if (text[i] === '\\') i++;
+      else if (text[i] === quote) {
+        return { inner: text.slice(at + 1, i), end: i + 1, quote };
+      }
+    }
+    return { inner: text.slice(at + 1), end: text.length, quote };
+  }
+  UNQUOTED_VALUE.lastIndex = at;
+  const m = UNQUOTED_VALUE.exec(text);
+  return m ? { inner: m[0], end: at + m[0].length, quote: '' } : null;
+}
+
 function scrubText(text: string, nested = true): string {
   if (text.length > MAX_TEXT) return REDACTED;
-  let out = text.replace(
+  const src = text.replace(
     /\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/gi,
     (_m, scheme: string) => `${scheme} ${REDACTED}`,
   );
-  out = out.replace(
-    /("(?:[^"\\]|\\.){1,200}"\s*:\s*)("(?:[^"\\]|\\.)*"|[^\s,}\]]+)/g,
-    (m, head: string) =>
-      isSensitive(head.slice(1, head.indexOf('"', 1)))
-        ? `${head}"${REDACTED}"`
-        : m,
-  );
-  out = out.replace(
-    LOOSE_SECRET,
-    (m, key: string, sep: string, value: string) =>
-      LOOSE_STOPWORDS.has(value.toLowerCase()) ? m : `${key}${sep}${REDACTED}`,
-  );
-  if (!out.includes('=')) return out;
-  out = out.replace(
-    /([?&#\s]|^)([^=&\s#?]{1,200})=([^&\s#"']*)/g,
-    (m, pre: string, k: string, v: string) =>
-      isSensitive(decodeKey(k)) || (nested && hasNestedSecret(v))
-        ? `${pre}${k}=${REDACTED}`
-        : m,
-  );
-  return out;
+  let out = '';
+  let last = 0;
+  for (const m of src.matchAll(KEY_VALUE_HEAD)) {
+    if (m.index < last) continue;
+    const byWhitespace = m[3] !== undefined;
+    if (byWhitespace && !isSecretLabel(decodeKey(m[2]))) continue;
+    const valueAt = m.index + m[0].length;
+    if (src.startsWith(REDACTED, valueAt)) continue;
+    const sensitive = isSensitive(decodeKey(m[2]));
+    const mayHideSecret = nested && !byWhitespace && m[0].includes('=');
+    if (!sensitive && !mayHideSecret) continue;
+    const value = readValue(src, valueAt);
+    if (!value || value.inner === '') continue;
+    const { inner, quote } = value;
+    if (!quote && OUTCOME_VALUES.has(inner.toLowerCase())) continue;
+    if (byWhitespace && /^[a-z]+$/.test(inner)) continue;
+    if (!sensitive && (quote || !hasNestedSecret(inner))) continue;
+    out += src.slice(last, valueAt) + quote + REDACTED + quote;
+    last = value.end;
+  }
+  return out + src.slice(last);
 }
-
-const LOOSE_SECRET =
-  /\b(password|passwd|pwd|passcode|secret|token|otp|pin|api[_-]?key|credentials?)(\s*[:\s]\s*)("[^"]*"|'[^']*'|[^\s"',;]+)/gi;
-
-const LOOSE_STOPWORDS = new Set([
-  'is',
-  'was',
-  'are',
-  'were',
-  'has',
-  'have',
-  'had',
-  'not',
-  'must',
-  'should',
-  'expired',
-  'invalid',
-  'missing',
-  'required',
-  'mismatch',
-  'for',
-  'from',
-  'in',
-  'of',
-  'and',
-  'or',
-  'to',
-  'the',
-  'a',
-  'an',
-  'does',
-  'did',
-  'cannot',
-  'supplied',
-  'provided',
-  'found',
-  'valid',
-  'empty',
-  'too',
-  'incorrect',
-  'refresh',
-  'reset',
-  'verification',
-  'check',
-  'length',
-  'format',
-  'hash',
-  'type',
-  'based',
-  'auth',
-  'authentication',
-  'exchange',
-  'endpoint',
-  REDACTED.toLowerCase(),
-]);
 
 const QUERY_KEYS = new Set([
   'http.query',
@@ -261,19 +268,6 @@ function scrubQuery(q: unknown): unknown {
   return scrubValue(q);
 }
 
-function scrubBody(data: unknown): unknown {
-  if (typeof data !== 'string') return scrubValue(data, 'credentials');
-  try {
-    return JSON.stringify(scrubValue(JSON.parse(data), 'credentials'));
-  } catch {
-    // Truncated JSON (Sentry cuts bodies at 10 KB) or other text. Only plain
-    // urlencoded bodies can be scrubbed safely; anything else is dropped.
-    return /^[^\s{[]*=[^\s]*$/.test(data) && data.length <= MAX_TEXT
-      ? scrubQueryString(data)
-      : REDACTED;
-  }
-}
-
 export function scrubSentryBreadcrumb<B extends Breadcrumb>(crumb: B): B {
   const out = { ...crumb };
   if (crumb.data) out.data = scrubAttrs(crumb.data) as B['data'];
@@ -295,8 +289,12 @@ function scrubSpan<S extends { data?: unknown; description?: unknown }>(
 function scrubEventUnsafe<E extends SentryEvent>(event: E): E {
   const req = event.request;
   if (req) {
-    if (req.headers)
+    if (req.headers) {
       req.headers = scrubValue(req.headers, 'headers') as typeof req.headers;
+      for (const k of Object.keys(req.headers)) {
+        if (USER_AGENT_KEY.test(k)) delete req.headers[k];
+      }
+    }
     if (req.cookies) {
       // Cookie names are arbitrary (e.g. `sid`), so redact every value.
       req.cookies = Object.fromEntries(
@@ -308,7 +306,7 @@ function scrubEventUnsafe<E extends SentryEvent>(event: E): E {
         req.query_string,
       ) as typeof req.query_string;
     }
-    if (req.data !== undefined) req.data = scrubBody(req.data);
+    delete req.data;
     if (typeof req.url === 'string') req.url = scrubUrl(req.url);
   }
   if (event.breadcrumbs) {
@@ -403,24 +401,6 @@ function scrubOrDrop<E extends SentryEvent>(event: E): E | null {
   }
 }
 
-/** Scrub an event; on any failure keep only allowlisted structural fields. */
-export function scrubSentryEvent<E extends SentryEvent>(event: E): E {
-  return scrubOrDrop(event) ?? ({} as E);
-}
-
-function scrubOutgoing<E extends SentryEvent>(event: E): E | null {
-  const out = scrubOrDrop(event);
-  if (out?.request) {
-    delete out.request.data;
-    if (out.type === 'transaction' && out.request.headers) {
-      for (const k of Object.keys(out.request.headers)) {
-        if (USER_AGENT_KEY.test(k)) delete out.request.headers[k];
-      }
-    }
-  }
-  return out;
-}
-
 function safeBreadcrumb(crumb: Breadcrumb): Breadcrumb | null {
   try {
     return scrubSentryBreadcrumb(crumb);
@@ -441,8 +421,8 @@ export function buildSentryOptions(): Required<
 > {
   return {
     sendDefaultPii: false,
-    beforeSend: (event: ErrorEvent) => scrubOutgoing(event),
-    beforeSendTransaction: (event: TxEvent) => scrubOutgoing(event),
+    beforeSend: (event: ErrorEvent) => scrubOrDrop(event),
+    beforeSendTransaction: (event: TxEvent) => scrubOrDrop(event),
     beforeBreadcrumb: (crumb: Breadcrumb) => safeBreadcrumb(crumb),
   };
 }
