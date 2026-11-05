@@ -237,29 +237,78 @@ function scrubEventUnsafe<E extends SentryEvent>(event: E): E {
   return event;
 }
 
-/** Scrub an event; on any failure strip everything that could carry secrets. */
+const SAFE_EVENT_KEYS = [
+  'event_id',
+  'type',
+  'timestamp',
+  'start_timestamp',
+  'level',
+  'platform',
+  'release',
+  'environment',
+  'dist',
+  'sdk',
+] as const;
+
+const SAFE_SPAN_KEYS = [
+  'span_id',
+  'trace_id',
+  'parent_span_id',
+  'op',
+  'origin',
+  'status',
+  'start_timestamp',
+  'timestamp',
+] as const;
+
+const SAFE_TRACE_KEYS = [
+  'trace_id',
+  'span_id',
+  'parent_span_id',
+  'op',
+  'origin',
+  'status',
+] as const;
+
+function pick(
+  source: unknown,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (source === null || typeof source !== 'object') return out;
+  const src = source as Record<string, unknown>;
+  for (const k of keys) {
+    const v = src[k];
+    if (v === undefined) continue;
+    if (v === null || ['string', 'number', 'boolean'].includes(typeof v)) {
+      out[k] = v;
+    } else if (k === 'sdk') {
+      out[k] = pick(v, ['name', 'version']);
+    }
+  }
+  return out;
+}
+
+function allowlistEvent<E extends SentryEvent>(event: E): E {
+  const out: Record<string, unknown> = pick(event, SAFE_EVENT_KEYS);
+  const trace = pick(event.contexts?.trace, SAFE_TRACE_KEYS);
+  if (Object.keys(trace).length > 0) out.contexts = { trace };
+  if (Array.isArray(event.spans)) {
+    out.spans = event.spans.map((s) => pick(s, SAFE_SPAN_KEYS));
+  }
+  return out as E;
+}
+
+/** Scrub an event; on any failure keep only allowlisted structural fields. */
 export function scrubSentryEvent<E extends SentryEvent>(event: E): E {
   try {
     return scrubEventUnsafe(event);
   } catch {
-    const stripped: E = {
-      ...event,
-      request: undefined,
-      message: undefined,
-      transaction: undefined,
-      exception: undefined,
-      breadcrumbs: undefined,
-      contexts: undefined,
-      extra: undefined,
-    };
     try {
-      if (stripped.spans) {
-        stripped.spans = stripped.spans.map((s) => ({ ...s, data: {} }));
-      }
+      return allowlistEvent(event);
     } catch {
-      stripped.spans = undefined;
+      return {} as E;
     }
-    return stripped;
   }
 }
 

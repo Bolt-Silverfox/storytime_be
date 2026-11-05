@@ -214,6 +214,89 @@ describe('depth, text and failure handling', () => {
     expect(dump(t)).not.toContain('SENT_F');
   });
 
+  it('fallback drops span description and data', () => {
+    const t: any = scrubSentryEvent({
+      type: 'transaction',
+      spans: [
+        {
+          span_id: 's1',
+          op: 'http.client',
+          description: 'GET http://h/x?token=SENT_SPAN',
+          data: { url: 'http://h/x?token=SENT_SPAN' },
+        },
+      ],
+      request: {
+        get headers() {
+          throw new Error('boom');
+        },
+      },
+    } as any);
+    expect(dump(t)).not.toContain('SENT_SPAN');
+    expect(t.spans[0].span_id).toBe('s1');
+    expect(t.spans[0].op).toBe('http.client');
+  });
+
+  it('fallback is an allowlist: no credential survives in any other field', () => {
+    const ev: any = {
+      event_id: 'abc',
+      level: 'error',
+      release: 'r1',
+      environment: 'prod',
+      platform: 'node',
+      message: 'SENT_ALL',
+      logentry: { message: 'SENT_ALL', params: ['SENT_ALL'] },
+      transaction: 'SENT_ALL',
+      culprit: 'SENT_ALL',
+      server_name: 'SENT_ALL',
+      user: { id: 'SENT_ALL', email: 'SENT_ALL', ip_address: 'SENT_ALL' },
+      tags: { a: 'SENT_ALL' },
+      extra: { a: 'SENT_ALL' },
+      fingerprint: ['SENT_ALL'],
+      modules: { SENT_ALL: '1' },
+      contexts: {
+        trace: { trace_id: 't', span_id: 's', data: { a: 'SENT_ALL' } },
+        other: { a: 'SENT_ALL' },
+      },
+      breadcrumbs: [{ message: 'SENT_ALL', data: { a: 'SENT_ALL' } }],
+      exception: {
+        values: [
+          {
+            value: 'SENT_ALL',
+            stacktrace: { frames: [{ vars: { a: 'SENT_ALL' } }] },
+          },
+        ],
+      },
+      threads: { values: [{ name: 'SENT_ALL' }] },
+      debug_meta: { images: [{ code_file: 'SENT_ALL' }] },
+      sdk: { name: 'sentry.javascript.node', version: '1' },
+      spans: [
+        {
+          span_id: 's1',
+          description: 'SENT_ALL',
+          data: { a: 'SENT_ALL' },
+          tags: { a: 'SENT_ALL' },
+          op: 'db',
+          origin: 'auto',
+          status: 'ok',
+        },
+      ],
+      request: {
+        url: 'SENT_ALL',
+        get headers() {
+          throw new Error('boom');
+        },
+      },
+    };
+    const out: any = scrubSentryEvent(ev);
+    expect(dump(out)).not.toContain('SENT_ALL');
+    expect(out.event_id).toBe('abc');
+    expect(out.level).toBe('error');
+    expect(out.release).toBe('r1');
+    expect(out.environment).toBe('prod');
+    expect(out.spans[0].op).toBe('db');
+    expect(out.contexts.trace.trace_id).toBe('t');
+  });
+
   it('drops a breadcrumb when scrubbing it fails', () => {
     const crumb: any = {
       get data() {
