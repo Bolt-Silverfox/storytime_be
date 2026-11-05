@@ -345,3 +345,192 @@ describe('review findings: nested and free-text credentials', () => {
     expect(e.message).toBe('failed: ok=1');
   });
 });
+
+describe('review round 2: credentials in free text', () => {
+  it.each([
+    ['json', '{"password":"SENT1","otp":"SENT2"}'],
+    ['json spaced', 'body {"refreshToken" : "SENT1", "pin": 123456}'],
+    ['colon', 'password: SENT1'],
+    ['colon quoted', 'login failed, password: "SENT1 x"'],
+    ['space', 'token SENT1'],
+    ['otp space', 'invalid otp SENT1 supplied'],
+  ])('redacts %s form in message and exception value', (_n, msg) => {
+    const e: any = scrubSentryEvent({
+      message: msg,
+      exception: { values: [{ value: msg }] },
+    } as any);
+    expect(dump(e)).not.toContain('SENT1');
+    expect(dump(e)).not.toContain('SENT2');
+  });
+
+  it.each([
+    'token expired',
+    'password is required',
+    'Invalid token: expired',
+    'the keyboard was pressed',
+    'secret',
+  ])('keeps harmless text %j', (msg) => {
+    const e: any = scrubSentryEvent({ message: msg } as any);
+    expect(e.message).toBe(msg);
+  });
+});
+
+describe('review round 2: PII in requests', () => {
+  it('beforeSend drops request.data entirely', () => {
+    const out: any = buildSentryOptions().beforeSend(
+      {
+        request: {
+          data: {
+            email: 'SENT_E@x.io',
+            phone: 'SENT_P',
+            name: 'SENT_N',
+            password: 'SENT_PW',
+          },
+        },
+      } as any,
+      {},
+    );
+    expect(dump(out)).not.toMatch(/SENT_/);
+    expect(out.request.data).toBeUndefined();
+  });
+
+  it('beforeSend drops a string request.data', () => {
+    const out: any = buildSentryOptions().beforeSend(
+      { request: { data: '{"email":"SENT_E"}' } } as any,
+      {},
+    );
+    expect(dump(out)).not.toContain('SENT_E');
+  });
+
+  it('redacts PII params in url, query_string and breadcrumb queries', () => {
+    const qs = 'email=SENT_E%40x.io&phone=SENT_P&firstName=SENT_F&page=2';
+    const e: any = scrubSentryEvent({
+      request: {
+        url: `https://x.y/users?${qs}`,
+        query_string: qs,
+      },
+      breadcrumbs: [
+        {
+          category: 'http',
+          data: { 'http.query': `?${qs}`, url: `https://x.y/u?${qs}` },
+        },
+      ],
+    } as any);
+    expect(dump(e)).not.toContain('SENT_');
+    expect(e.request.url).toContain('page=2');
+    expect(e.request.query_string).toContain('page=2');
+  });
+
+  it.each([
+    'email',
+    'phone',
+    'phoneNumber',
+    'name',
+    'firstName',
+    'last_name',
+    'fullName',
+    'dob',
+    'dateOfBirth',
+    'age',
+    'ageRange',
+    'kidName',
+    'childName',
+    'displayName',
+    'avatarId',
+  ])('redacts query param %s', (key) => {
+    const e: any = scrubSentryEvent({
+      request: { query_string: `${key}=SENT_V&page=2` },
+    } as any);
+    expect(dump(e)).not.toContain('SENT_V');
+    expect(e.request.query_string).toContain('page=2');
+  });
+
+  it.each(['page', 'limit', 'sort', 'hostname', 'filename', 'language'])(
+    'keeps harmless query param %s',
+    (key) => {
+      const e: any = scrubSentryEvent({
+        request: { query_string: `${key}=ok` },
+      } as any);
+      expect(e.request.query_string).toBe(`${key}=ok`);
+    },
+  );
+});
+
+describe('review round 2: double failure', () => {
+  const hostile = () =>
+    new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('boom');
+        },
+        ownKeys() {
+          throw new Error('boom');
+        },
+      },
+    );
+
+  it('beforeSend returns null so no envelope item is sent', () => {
+    expect(buildSentryOptions().beforeSend(hostile() as any, {})).toBeNull();
+  });
+
+  it('beforeSendTransaction returns null so no envelope item is sent', () => {
+    expect(
+      buildSentryOptions().beforeSendTransaction(hostile() as any, {}),
+    ).toBeNull();
+  });
+});
+
+describe('review round 2: fallback sdk allowlist', () => {
+  it('keeps sdk name and version only', () => {
+    const out: any = scrubSentryEvent({
+      sdk: {
+        name: 'sentry.javascript.node',
+        version: '1',
+        integrations: ['SENT_SDK'],
+        packages: [{ name: 'SENT_SDK', version: '1' }],
+      },
+      request: {
+        get headers() {
+          throw new Error('boom');
+        },
+      },
+    } as any);
+    expect(dump(out)).not.toContain('SENT_SDK');
+    expect(out.sdk).toEqual({ name: 'sentry.javascript.node', version: '1' });
+  });
+});
+
+describe('review round 2: end-user IP and user agent in transactions', () => {
+  it('redacts client address, client ip, user agent and the header', () => {
+    const tx: any = {
+      type: 'transaction',
+      request: {
+        headers: {
+          'user-agent': 'SENT_UA',
+          'User-Agent': 'SENT_UA',
+          accept: 'a/b',
+        },
+      },
+      contexts: {
+        trace: {
+          trace_id: 't',
+          data: {
+            'client.address': '203.0.113.9',
+            'http.client_ip': '203.0.113.9',
+            'user_agent.original': 'SENT_UA',
+            'http.user_agent': 'SENT_UA',
+            'http.request.header.user-agent': 'SENT_UA',
+            'http.response.status_code': 200,
+          },
+        },
+      },
+      spans: [{ data: { 'client.address': '203.0.113.9' } }],
+    };
+    const out: any = buildSentryOptions().beforeSendTransaction(tx, {});
+    expect(dump(out)).not.toContain('203.0.113.9');
+    expect(dump(out)).not.toContain('SENT_UA');
+    expect(out.request.headers.accept).toBe('a/b');
+    expect(out.contexts.trace.data['http.response.status_code']).toBe(200);
+  });
+});

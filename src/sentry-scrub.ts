@@ -38,6 +38,26 @@ const SENSITIVE_WORDS = new Set([
   'state',
 ]);
 
+/** Substrings that mark a key as personal data (adult, child or network identity). */
+const PII_SUBSTRING =
+  /e-?mail|phone|msisdn|first.?name|last.?name|full.?name|display.?name|user.?name|birth|age.?range|avatar|address|client.?ip|forwarded|real.?ip|remote.?addr/i;
+
+const USER_AGENT_KEY = /user.?agent/i;
+
+type Scope = 'credentials' | 'headers' | 'attrs';
+
+/** Whole words that mark a key as personal data. */
+const PII_WORDS = new Set([
+  'name',
+  'dob',
+  'age',
+  'kid',
+  'kids',
+  'child',
+  'children',
+  'ip',
+]);
+
 /** Keys that merely report an outcome (`status_code`) are never secret by word. */
 const OUTCOME_WORDS = new Set(['status']);
 
@@ -52,11 +72,14 @@ function words(key: string): string[] {
     .filter(Boolean);
 }
 
-function isSensitive(key: string): boolean {
+function isSensitive(key: string, scope: Scope = 'attrs'): boolean {
   if (SENSITIVE_SUBSTRING.test(key)) return true;
+  const pii = scope !== 'credentials';
+  if (pii && PII_SUBSTRING.test(key)) return true;
+  if (scope === 'attrs' && USER_AGENT_KEY.test(key)) return true;
   const w = words(key);
   if (w.some((x) => OUTCOME_WORDS.has(x))) return false;
-  return w.some((x) => SENSITIVE_WORDS.has(x));
+  return w.some((x) => SENSITIVE_WORDS.has(x) || (pii && PII_WORDS.has(x)));
 }
 
 function decodeKey(raw: string): string {
@@ -113,6 +136,18 @@ function scrubText(text: string, nested = true): string {
     /\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/gi,
     (_m, scheme: string) => `${scheme} ${REDACTED}`,
   );
+  out = out.replace(
+    /("(?:[^"\\]|\\.){1,200}"\s*:\s*)("(?:[^"\\]|\\.)*"|[^\s,}\]]+)/g,
+    (m, head: string) =>
+      isSensitive(head.slice(1, head.indexOf('"', 1)))
+        ? `${head}"${REDACTED}"`
+        : m,
+  );
+  out = out.replace(
+    LOOSE_SECRET,
+    (m, key: string, sep: string, value: string) =>
+      LOOSE_STOPWORDS.has(value.toLowerCase()) ? m : `${key}${sep}${REDACTED}`,
+  );
   if (!out.includes('=')) return out;
   out = out.replace(
     /([?&#\s]|^)([^=&\s#?]{1,200})=([^&\s#"']*)/g,
@@ -124,6 +159,61 @@ function scrubText(text: string, nested = true): string {
   return out;
 }
 
+const LOOSE_SECRET =
+  /\b(password|passwd|pwd|passcode|secret|token|otp|pin|api[_-]?key|credentials?)(\s*[:\s]\s*)("[^"]*"|'[^']*'|[^\s"',;]+)/gi;
+
+const LOOSE_STOPWORDS = new Set([
+  'is',
+  'was',
+  'are',
+  'were',
+  'has',
+  'have',
+  'had',
+  'not',
+  'must',
+  'should',
+  'expired',
+  'invalid',
+  'missing',
+  'required',
+  'mismatch',
+  'for',
+  'from',
+  'in',
+  'of',
+  'and',
+  'or',
+  'to',
+  'the',
+  'a',
+  'an',
+  'does',
+  'did',
+  'cannot',
+  'supplied',
+  'provided',
+  'found',
+  'valid',
+  'empty',
+  'too',
+  'incorrect',
+  'refresh',
+  'reset',
+  'verification',
+  'check',
+  'length',
+  'format',
+  'hash',
+  'type',
+  'based',
+  'auth',
+  'authentication',
+  'exchange',
+  'endpoint',
+  REDACTED.toLowerCase(),
+]);
+
 const QUERY_KEYS = new Set([
   'http.query',
   'url.query',
@@ -132,25 +222,27 @@ const QUERY_KEYS = new Set([
 ]);
 
 /** Redact a bag of attributes (breadcrumb / span / trace `data`). */
-function scrubAttrs(data: unknown, depth = 0): unknown {
+function scrubAttrs(data: unknown, depth = 0, scope: Scope = 'attrs'): unknown {
   if (data === null || typeof data !== 'object') {
     return typeof data === 'string' ? scrubText(data) : data;
   }
   if (depth > MAX_DEPTH) return REDACTED;
-  if (Array.isArray(data)) return data.map((v) => scrubAttrs(v, depth + 1));
+  if (Array.isArray(data)) {
+    return data.map((v) => scrubAttrs(v, depth + 1, scope));
+  }
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
-    if (isSensitive(k)) out[k] = REDACTED;
+    if (isSensitive(k, scope)) out[k] = REDACTED;
     else if (typeof v === 'string' && QUERY_KEYS.has(k.toLowerCase())) {
       out[k] = scrubQueryString(v);
-    } else out[k] = scrubAttrs(v, depth + 1);
+    } else out[k] = scrubAttrs(v, depth + 1, scope);
   }
   return out;
 }
 
 /** Recursively redact values of sensitive keys. Returns a copy; depth-capped. */
-function scrubValue(value: unknown): unknown {
-  return scrubAttrs(value);
+function scrubValue(value: unknown, scope: Scope = 'attrs'): unknown {
+  return scrubAttrs(value, 0, scope);
 }
 
 function scrubUrl(url: string): string {
@@ -170,9 +262,9 @@ function scrubQuery(q: unknown): unknown {
 }
 
 function scrubBody(data: unknown): unknown {
-  if (typeof data !== 'string') return scrubValue(data);
+  if (typeof data !== 'string') return scrubValue(data, 'credentials');
   try {
-    return JSON.stringify(scrubValue(JSON.parse(data)));
+    return JSON.stringify(scrubValue(JSON.parse(data), 'credentials'));
   } catch {
     // Truncated JSON (Sentry cuts bodies at 10 KB) or other text. Only plain
     // urlencoded bodies can be scrubbed safely; anything else is dropped.
@@ -204,7 +296,7 @@ function scrubEventUnsafe<E extends SentryEvent>(event: E): E {
   const req = event.request;
   if (req) {
     if (req.headers)
-      req.headers = scrubValue(req.headers) as typeof req.headers;
+      req.headers = scrubValue(req.headers, 'headers') as typeof req.headers;
     if (req.cookies) {
       // Cookie names are arbitrary (e.g. `sid`), so redact every value.
       req.cookies = Object.fromEntries(
@@ -299,17 +391,34 @@ function allowlistEvent<E extends SentryEvent>(event: E): E {
   return out as E;
 }
 
-/** Scrub an event; on any failure keep only allowlisted structural fields. */
-export function scrubSentryEvent<E extends SentryEvent>(event: E): E {
+function scrubOrDrop<E extends SentryEvent>(event: E): E | null {
   try {
     return scrubEventUnsafe(event);
   } catch {
     try {
       return allowlistEvent(event);
     } catch {
-      return {} as E;
+      return null;
     }
   }
+}
+
+/** Scrub an event; on any failure keep only allowlisted structural fields. */
+export function scrubSentryEvent<E extends SentryEvent>(event: E): E {
+  return scrubOrDrop(event) ?? ({} as E);
+}
+
+function scrubOutgoing<E extends SentryEvent>(event: E): E | null {
+  const out = scrubOrDrop(event);
+  if (out?.request) {
+    delete out.request.data;
+    if (out.type === 'transaction' && out.request.headers) {
+      for (const k of Object.keys(out.request.headers)) {
+        if (USER_AGENT_KEY.test(k)) delete out.request.headers[k];
+      }
+    }
+  }
+  return out;
 }
 
 function safeBreadcrumb(crumb: Breadcrumb): Breadcrumb | null {
@@ -332,8 +441,8 @@ export function buildSentryOptions(): Required<
 > {
   return {
     sendDefaultPii: false,
-    beforeSend: (event: ErrorEvent) => scrubSentryEvent(event),
-    beforeSendTransaction: (event: TxEvent) => scrubSentryEvent(event),
+    beforeSend: (event: ErrorEvent) => scrubOutgoing(event),
+    beforeSendTransaction: (event: TxEvent) => scrubOutgoing(event),
     beforeBreadcrumb: (crumb: Breadcrumb) => safeBreadcrumb(crumb),
   };
 }
