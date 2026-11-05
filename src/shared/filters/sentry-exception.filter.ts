@@ -41,15 +41,20 @@ export class SentryExceptionFilter extends BaseExceptionFilter {
   }
 
   /**
-   * Mirrors Nest's BaseExceptionFilter.isHttpError, which replies with the
-   * error's own status only when `statusCode` is an integer. Keying on
-   * `status` too would skip reporting for errors Nest answers with 500
-   * (AxiosError, @google/genai ApiError carry only `.status`).
+   * Nest's BaseExceptionFilter.isHttpError replies with the error's own status
+   * only when `statusCode` and `message` are both truthy; otherwise it answers
+   * 500. Keying on `status` too would skip reporting for errors Nest answers
+   * with 500 (AxiosError, @google/genai ApiError carry only `.status`).
    */
   private static statusOf(exception: unknown): number | undefined {
     if (!exception || typeof exception !== 'object') return undefined;
-    const { statusCode } = exception as { statusCode?: unknown };
-    return typeof statusCode === 'number' && Number.isInteger(statusCode)
+    const { statusCode, message } = exception as {
+      statusCode?: unknown;
+      message?: unknown;
+    };
+    return message &&
+      typeof statusCode === 'number' &&
+      Number.isInteger(statusCode)
       ? statusCode
       : undefined;
   }

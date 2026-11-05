@@ -61,6 +61,17 @@ describe('SentryExceptionFilter', () => {
     expect(captureException).toHaveBeenCalledTimes(2);
   });
 
+  it('reports a 4xx statusCode with no message, which Nest answers with 500', () => {
+    filter.catch({ statusCode: 404 }, host);
+    filter.catch(Object.assign(new Error(''), { statusCode: 404 }), host);
+    expect(captureException).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not report a 4xx statusCode that carries a message', () => {
+    filter.catch({ statusCode: 404, message: 'gone' }, host);
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
   it('still reports a non-integer statusCode', () => {
     filter.catch(httpError(404.5, 'odd'), host);
     expect(captureException).toHaveBeenCalledTimes(1);
