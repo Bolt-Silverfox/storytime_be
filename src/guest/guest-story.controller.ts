@@ -175,6 +175,7 @@ export class GuestStoryController {
       story.id,
       story.textContent,
     );
+    const masked = maskSourceFieldsForPublic(story);
 
     return {
       id: story.id,
@@ -202,10 +203,8 @@ export class GuestStoryController {
       authorName: story.authorName ?? null,
       licenseCode: story.licenseCode ?? null,
       licenseUrl: story.licenseUrl ?? null,
-      // Public-domain works never expose the upstream site (see
-      // maskSourceFieldsForPublic); the global interceptor enforces the same.
-      sourceName: maskSourceFieldsForPublic(story).sourceName ?? null,
-      sourceUrl: maskSourceFieldsForPublic(story).sourceUrl ?? null,
+      sourceName: masked.sourceName ?? null,
+      sourceUrl: masked.sourceUrl ?? null,
     };
   }
 

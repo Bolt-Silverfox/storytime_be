@@ -12,9 +12,12 @@ import {
 import { FilesystemGutenbergSource } from './gutenberg-source';
 import { AllowListEntry } from './allowlist.types';
 import { GUTENBERG_REFERENCE } from './gutenberg-text';
+import { canRunDestructiveDbTests } from '@/shared/testing/local-db.guard';
 
-/** Real Postgres, real SourceCacheService. No network. Skipped without DATABASE_URL. */
-const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
+/** Real Postgres, real SourceCacheService. No network. Deletes rows: skipped unless DATABASE_URL is a local database. */
+const describeDb = canRunDestructiveDbTests(process.env.DATABASE_URL)
+  ? describe
+  : describe.skip;
 
 const FX = path.resolve('test/fixtures/gutenberg');
 const tag = `gint${Date.now()}`;

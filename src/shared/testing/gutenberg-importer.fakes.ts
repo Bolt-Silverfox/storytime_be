@@ -8,8 +8,11 @@ import {
   PayloadStore,
   StoryStorePort,
   NewImportedStory,
-} from './gutenberg-importer';
-import { GutenbergFetchResult, GutenbergSource } from './gutenberg-source';
+} from '@/importers/gutenberg/gutenberg-importer';
+import {
+  GutenbergFetchResult,
+  GutenbergSource,
+} from '@/importers/gutenberg/gutenberg-source';
 
 /** In-memory source. `texts` maps ebook id -> text. Counts calls. */
 export class FakeGutenbergSource implements GutenbergSource {

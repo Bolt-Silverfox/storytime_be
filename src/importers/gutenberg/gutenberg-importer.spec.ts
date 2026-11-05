@@ -8,7 +8,7 @@ import {
   FakeGutenbergSource,
   MemoryPayloads,
   MemoryStore,
-} from './gutenberg-importer.fakes';
+} from '@/shared/testing/gutenberg-importer.fakes';
 
 const fx = (n: string) =>
   fs.readFileSync(path.resolve('test/fixtures/gutenberg', n), 'utf8');
