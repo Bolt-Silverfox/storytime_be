@@ -294,6 +294,105 @@ describe('processGutenbergText hardening', () => {
     ).toMatchObject({ ok: true });
   });
 
+  describe('copyright signals in the header', () => {
+    const head = (extra: string) =>
+      `Title: Lantern Fox\nAuthor: Ada Example\n${extra}`;
+    it.each([
+      [
+        'copyrighted eBook notice',
+        'This is a COPYRIGHTED Project Gutenberg eBook.',
+      ],
+      ['copyright status line', 'Copyright Status: Copyrighted'],
+      ['all rights reserved', 'Copyright 2001 Someone. All rights reserved.'],
+      [
+        'free-text translation credit',
+        'Translated from the French by Living Person (2001)',
+      ],
+      ['plain translated by', 'Translated by Living Person'],
+      ['contributor line', 'Contributor: Living Person'],
+    ])('routes %s to review', (_n, line) => {
+      expect(processGutenbergText(wrap(STORY, head(line)), plain())).toEqual({
+        ok: false,
+        reason: 'copyright-signal',
+      });
+    });
+
+    it('routes a translator named in the Title line to review', () => {
+      expect(
+        processGutenbergText(
+          wrap(
+            STORY,
+            'Title: Lantern Fox (translated by Living Person)\nAuthor: Ada Example',
+          ),
+          plain(),
+        ),
+      ).toEqual({ ok: false, reason: 'copyright-signal' });
+    });
+
+    it('routes a translation credit naming someone other than the listed translator to review', () => {
+      const e = entry({ expect: { title: 'Lantern Fox', author: 'Example' } });
+      expect(
+        processGutenbergText(
+          wrap(
+            STORY,
+            head('Translator: Bram Sample\nTranslated by Living Person'),
+          ),
+          e,
+        ),
+      ).toEqual({ ok: false, reason: 'copyright-signal' });
+    });
+
+    it('accepts a translation credit naming the listed translator', () => {
+      const e = entry({ expect: { title: 'Lantern Fox', author: 'Example' } });
+      expect(
+        processGutenbergText(
+          wrap(
+            STORY,
+            head('Translator: Bram Sample\nTranslated by Bram Sample'),
+          ),
+          e,
+        ),
+      ).toMatchObject({ ok: true });
+    });
+
+    it('accepts an explicit not-copyrighted status line', () => {
+      expect(
+        processGutenbergText(
+          wrap(
+            STORY,
+            head('Copyright Status: Not copyrighted in the United States.'),
+          ),
+          plain(),
+        ),
+      ).toMatchObject({ ok: true });
+    });
+
+    it('accepts a clean public-domain header', () => {
+      expect(
+        processGutenbergText(
+          wrap(
+            STORY,
+            head(
+              'Release date: March 3, 2010 [eBook #90001]\nLanguage: English',
+            ),
+          ),
+          plain(),
+        ),
+      ).toMatchObject({ ok: true });
+    });
+
+    it('ignores signal words in the book body', () => {
+      expect(
+        processGutenbergText(
+          wrap(
+            'The tale was translated by an owl. All rights reserved for foxes.',
+          ),
+          plain(),
+        ),
+      ).toMatchObject({ ok: true });
+    });
+  });
+
   describe('performance (no quadratic regex)', () => {
     const ms = (t: string) => {
       const st = Date.now();

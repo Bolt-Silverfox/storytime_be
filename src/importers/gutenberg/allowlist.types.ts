@@ -34,7 +34,7 @@ export interface AllowListEntry {
   themes: string[];
   /** One-line blurb written by us. */
   description: string;
-  /** Sanity check of the source header so a wrong id cannot be imported. */
+  /** Substrings the file header must contain; a sanity check, not proof the edition is the verified one. */
   expect: { title: string; author: string; translator?: string };
   /** Why this text is US public domain (author/translator death, pub year). */
   pdJustification: string;

@@ -12,6 +12,7 @@ export type ProcessFailure =
   | 'no-end-marker'
   | 'header-mismatch'
   | 'unlisted-translator'
+  | 'copyright-signal'
   | 'transcriber-note-unbracketed'
   | 'residual-reference'
   | 'empty-after-clean'
@@ -149,6 +150,28 @@ const lineValue = (lines: string[], field: string): string | null => {
   return null;
 };
 
+const COPYRIGHT_SIGNAL =
+  /copyrighted\s+project\s+gutenberg|all\s+rights\s+reserved|^contributor:/i;
+const COPYRIGHT_STATUS = /^copyright\s+status:[ \t]*(.*)$/i;
+const NOT_COPYRIGHTED = /^(?:not\s+copyrighted|public\s+domain)\b/i;
+const TRANSLATION_CREDIT = /\btranslated\b[^\n]{0,100}?\bby\b/i;
+
+function hasCopyrightSignal(head: string[], entry: AllowListEntry): boolean {
+  const translator = entry.translator
+    ? matchForm(entry.translator.name).toLowerCase()
+    : null;
+  return head.some((raw) => {
+    const l = matchForm(raw).trim();
+    if (COPYRIGHT_SIGNAL.test(l)) return true;
+    const status = COPYRIGHT_STATUS.exec(l);
+    if (status && !NOT_COPYRIGHTED.test(status[1].trim())) return true;
+    return (
+      TRANSLATION_CREDIT.test(l) &&
+      !(translator && l.toLowerCase().includes(translator))
+    );
+  });
+}
+
 /** First letter of each word upper-case, rest lower; apostrophes untouched. */
 const titleCase = (s: string): string =>
   s
@@ -245,6 +268,9 @@ export function processGutenbergText(
   }
   if (hTranslator && !entry.translator) {
     return { ok: false, reason: 'unlisted-translator' };
+  }
+  if (hasCopyrightSignal(head, entry)) {
+    return { ok: false, reason: 'copyright-signal' };
   }
 
   // Paragraphs: runs of non-blank lines.

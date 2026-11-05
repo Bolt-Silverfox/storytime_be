@@ -65,7 +65,7 @@ Accepted layouts under `--source-dir`: `<id>-0.txt`, `<id>.txt`, `pg<id>.txt`, `
 | `flags` | `dated-content` forces `needs-editorial-retell`; `violence` only adds an editor note to the report (an editorial call, still imports) |
 | `ageMin`, `ageMax`, `difficultyLevel` | 1 to 12 |
 | `categories`, `themes` | names of existing rows. Unknown names are reported and never created |
-| `expect {title, author, translator?}` | the file header must contain these, or the work goes to `needs-review` (guards against a wrong id or edition) |
+| `expect {title, author, translator?}` | the file header must contain these substrings, or the work goes to `needs-review`. This is a sanity check only: it does not prove the edition is the one a human verified. The header is also scanned for copyright signals (`COPYRIGHTED Project Gutenberg eBook`, a `Copyright Status:` other than not-copyrighted, `All rights reserved`, `Contributor:`, or a `Translated ... by` credit that does not name the listed translator), which route to `needs-review` as `copyright-signal`. Only the header above the start marker is scanned, never the book text. Human verification of the edition (`idVerified`) remains the control for wrong ids and editions |
 | `pdJustification` | why the text is US public domain |
 | `idVerified` | `false` until a human confirmed the id (title, author, translator edition) against the catalogue. `--commit` refuses unverified ids unless `--allow-unverified-ids`; dry-run still reports them with a note |
 
