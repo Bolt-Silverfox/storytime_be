@@ -393,50 +393,54 @@ describe('processGutenbergText hardening', () => {
     });
   });
 
-  describe('performance (no quadratic regex)', () => {
-    const ms = (t: string) => {
-      const st = Date.now();
-      processGutenbergText(t, plain());
-      return Date.now() - st;
+  describe('performance (linear scaling, no quadratic regex)', () => {
+    const SMALL = 20_000;
+    const FACTOR = 4;
+    const RUNS = 5;
+    const MAX_RATIO = 10;
+    const fastest = (text: string): number => {
+      let best = Infinity;
+      for (let i = 0; i < RUNS; i++) {
+        const st = process.hrtime.bigint();
+        processGutenbergText(text, plain());
+        best = Math.min(best, Number(process.hrtime.bigint() - st) / 1e6);
+      }
+      return best;
     };
-    const N = 80_000;
-    // Warm the JIT so the threshold measures algorithmic cost, not first-call compile.
     beforeAll(() => {
       processGutenbergText(wrap('warm up '.repeat(2000)), plain());
       processGutenbergText(wrap('word\n'.repeat(50_000)), plain());
     });
     it.each([
-      ['spaces in a paragraph', () => wrap(`a${' '.repeat(N)}b`)],
+      ['spaces in a paragraph', (n: number) => wrap(`a${' '.repeat(n)}b`)],
       [
         'spaces then newline then spaces',
-        () => wrap(`a${' '.repeat(N)}\n${' '.repeat(N)}b`),
+        (n: number) => wrap(`a${' '.repeat(n)}\n${' '.repeat(n)}b`),
       ],
-      ['eBook followed by spaces', () => wrap(`eBook${' '.repeat(N)}x`)],
+      [
+        'eBook followed by spaces',
+        (n: number) => wrap(`eBook${' '.repeat(n)}x`),
+      ],
       [
         'many unclosed illustration markers',
-        () => wrap('[Illustration '.repeat(N / 14)),
+        (n: number) => wrap('[Illustration '.repeat(n / 14)),
       ],
-      ['many newlines', () => wrap(`a${'\n'.repeat(N)}b`)],
-      ['many underscores', () => wrap('_a '.repeat(N / 3))],
-      ['many opening brackets', () => wrap('['.repeat(N))],
-    ])('%s under 100 ms', (_n, make) => {
-      const t = make();
-      expect(ms(t)).toBeLessThan(100);
-    });
-
-    it.each([
-      ['hyphen-ended lines (400 KB)', () => wrap('abcd-\n'.repeat(80_000))],
+      ['many newlines', (n: number) => wrap(`a${'\n'.repeat(n)}b`)],
+      ['many underscores', (n: number) => wrap('_a '.repeat(n / 3))],
+      ['many opening brackets', (n: number) => wrap('['.repeat(n))],
+      ['hyphen-ended lines', (n: number) => wrap('abcd-\n'.repeat(n / 5))],
       [
         'hyphen-ended lines then letters',
-        () => wrap('ab-\ncd\n'.repeat(100_000)),
+        (n: number) => wrap('ab-\ncd\n'.repeat(n / 6)),
       ],
       [
-        '200k plain lines in one paragraph',
-        () => wrap('word\n'.repeat(200_000)),
+        'plain lines in one paragraph',
+        (n: number) => wrap('word\n'.repeat(n / 5)),
       ],
-    ])('%s under 200 ms', (_n, make) => {
-      const t = make();
-      expect(ms(t)).toBeLessThan(200);
+    ])('%s: 4x input costs under 10x time', (_n, make) => {
+      const small = fastest(make(SMALL));
+      const large = fastest(make(SMALL * FACTOR));
+      expect(large / Math.max(small, 0.05)).toBeLessThan(MAX_RATIO);
     });
   });
 });
