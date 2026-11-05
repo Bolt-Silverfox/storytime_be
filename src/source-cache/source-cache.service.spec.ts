@@ -1,5 +1,6 @@
 import {
   SourceCacheService,
+  isAbortError,
   SourceCacheFetchError,
   SourceCacheLeaseTimeoutError,
   SourceCacheLeaseLostError,
@@ -26,6 +27,18 @@ function makeFakePrisma() {
         : { id: `id-${rows.size + 1}`, ...create };
       rows.set(k, next);
       return Promise.resolve(next);
+    }),
+    updateMany: jest.fn(({ where, data }: any) => {
+      const row = rows.get(`${where.sourceName}|${where.sourceId}`);
+      if (
+        !row ||
+        (where.contentHash !== undefined &&
+          row.contentHash !== where.contentHash)
+      ) {
+        return Promise.resolve({ count: 0 });
+      }
+      rows.set(`${where.sourceName}|${where.sourceId}`, { ...row, ...data });
+      return Promise.resolve({ count: 1 });
     }),
     update: jest.fn(({ where, data }: any) => {
       const k = key(where);
@@ -168,7 +181,30 @@ describe('SourceCacheService', () => {
         now: NOW,
       });
       expect(same.contentChanged).toBe(true); // sticky until acknowledged
-      await svc.acknowledgeChange('s', '1');
+      expect(await svc.acknowledgeChange('s', '1', 'h2')).toBe(true);
+      expect((await svc.get('s', '1'))!.contentChanged).toBe(false);
+    });
+
+    it('does not clear the flag when the row changed after the reviewer looked (h2 -> h3)', async () => {
+      await svc.put({ sourceName: 's', sourceId: '1', result: ok(), now: NOW });
+      await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: ok({ contentHash: 'h2' }),
+        now: NOW,
+      });
+      await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: ok({ contentHash: 'h3' }),
+        now: NOW,
+      });
+      // Reviewer saw h2; the row is now h3.
+      expect(await svc.acknowledgeChange('s', '1', 'h2')).toBe(false);
+      const row = (await svc.get('s', '1'))!;
+      expect(row.contentChanged).toBe(true);
+      expect(row.contentHash).toBe('h3');
+      expect(await svc.acknowledgeChange('s', '1', 'h3')).toBe(true);
       expect((await svc.get('s', '1'))!.contentChanged).toBe(false);
     });
 
@@ -498,6 +534,60 @@ describe('SourceCacheService', () => {
           }),
       );
 
+    // Axios cancellation: CanceledError with code 'ERR_CANCELED'.
+    const axiosCanceled = () =>
+      Object.assign(new Error('canceled'), {
+        name: 'CanceledError',
+        code: 'ERR_CANCELED',
+      });
+
+    it('maps an Axios-style CanceledError after lease loss to the lease-lost result', async () => {
+      lease = makeFakeLease(0, false);
+      svc = new SourceCacheService(fake.prisma, lease);
+      await svc.put({
+        sourceName: 'g',
+        sourceId: '1',
+        result: ok({ contentHash: 'B-new' }),
+        now: new Date(NOW.getTime() - 10 * DAY),
+        ttlMs: DAY,
+      });
+      const r = await svc.getOrFetch(
+        'g',
+        '1',
+        failingOnAbort(axiosCanceled()),
+        { now: NOW, leaseMs: 30 },
+      );
+      expect(r.leaseLost).toBe(true);
+      expect(r.entry.contentHash).toBe('B-new');
+    });
+
+    it('isAbortError recognises Axios cancellation only when the signal is aborted', () => {
+      const c = new AbortController();
+      const err = axiosCanceled();
+      expect(isAbortError(err, c.signal)).toBe(false);
+      expect(
+        isAbortError(
+          Object.assign(new Error('x'), { code: 'ERR_CANCELED' }),
+          c.signal,
+        ),
+      ).toBe(false);
+      c.abort();
+      expect(isAbortError(err, c.signal)).toBe(true);
+      expect(isAbortError(new TypeError('boom'), c.signal)).toBe(false);
+    });
+
+    it('propagates a CanceledError unchanged when the signal was not aborted', async () => {
+      const err = axiosCanceled();
+      await expect(
+        svc.getOrFetch(
+          'g',
+          '1',
+          jest.fn(() => Promise.reject(err)),
+          { now: NOW },
+        ),
+      ).rejects.toBe(err);
+    });
+
     it('propagates a non-abort fetcher error raised after lease loss (not relabelled)', async () => {
       lease = makeFakeLease(0, false);
       svc = new SourceCacheService(fake.prisma, lease);
@@ -554,7 +644,12 @@ describe('SourceCacheService', () => {
 
   describe('upstream removal and 304 handling', () => {
     it('keeps the previous hash/payload and flags contentChanged when a 404 follows a 200', async () => {
-      await svc.put({ sourceName: 's', sourceId: '1', result: ok(), now: NOW });
+      await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: ok({ licenseSnapshot: 'CC-BY-4.0' }),
+        now: NOW,
+      });
       const e = await svc.put({
         sourceName: 's',
         sourceId: '1',
@@ -565,18 +660,29 @@ describe('SourceCacheService', () => {
       expect(e.contentHash).toBe('h1');
       expect(e.rawPayloadKey).toBe('raw/gutenberg/11.html');
       expect(e.contentChanged).toBe(true);
+      expect(e.licenseSnapshot).toBe('CC-BY-4.0');
     });
 
     it('keeps the previous hash and flags when a 200 arrives with no hash', async () => {
-      await svc.put({ sourceName: 's', sourceId: '1', result: ok(), now: NOW });
+      await svc.put({
+        sourceName: 's',
+        sourceId: '1',
+        result: ok({ licenseSnapshot: 'CC-BY-4.0' }),
+        now: NOW,
+      });
       const e = await svc.put({
         sourceName: 's',
         sourceId: '1',
-        result: { httpStatus: 200, contentHash: null },
+        result: {
+          httpStatus: 200,
+          contentHash: null,
+          licenseSnapshot: 'CC0',
+        },
         now: NOW,
       });
       expect(e.contentHash).toBe('h1');
       expect(e.contentChanged).toBe(true);
+      expect(e.licenseSnapshot).toBe('CC-BY-4.0');
     });
 
     it('a first-time 404 is not flagged', async () => {

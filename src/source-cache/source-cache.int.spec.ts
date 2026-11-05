@@ -111,7 +111,6 @@ describeDb('SourceCacheService (real Postgres)', () => {
   });
 
   it('never creates or publishes a story when content changes', async () => {
-    const before = await prisma.story.count();
     await svcA.put({
       sourceName: source,
       sourceId: 'np',
@@ -122,7 +121,9 @@ describeDb('SourceCacheService (real Postgres)', () => {
     await svcA.getOrFetch(source, 'np', () =>
       Promise.resolve({ httpStatus: 200, contentHash: 'b' }),
     );
-    expect(await prisma.story.count()).toBe(before);
+    // Scoped to this test's source: other suites may create stories in
+    // parallel, so a whole-table count would be flaky.
+    expect(await prisma.story.count({ where: { sourceName: source } })).toBe(0);
   });
 
   describe('no pool connection is held while fetching or waiting', () => {

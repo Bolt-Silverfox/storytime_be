@@ -164,7 +164,9 @@ per revalidation window.
   `contentHash` and `rawPayloadKey`, takes the new `httpStatus`, and is also
   flagged `contentChanged = true` (removed upstream; check `httpStatus`). The flag is a prompt for
   human review. Nothing creates, updates or publishes a story from it. It stays
-  set until `acknowledgeChange()` is called.
+  set until `acknowledgeChange(name, id, reviewedHash)` is called; it clears the
+  flag only if the row still has the hash the reviewer saw (returns false
+  otherwise).
 - `contentHash` comes from `contentHashOf()` (NFC, whitespace collapsed, trimmed,
   sha256 hex); the same function is used for `stories.contentHash`.
 

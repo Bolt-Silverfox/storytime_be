@@ -199,13 +199,20 @@ export class PrismaFetchLease implements FetchLease {
   }
 }
 
-/** True for an AbortError-style rejection (or the signal's own abort reason). */
-const isAbortError = (e: unknown, signal: AbortSignal): boolean =>
+/**
+ * True for an AbortError-style rejection (or the signal's own abort reason).
+ * Axios cancellation (CanceledError / ERR_CANCELED) counts only once the
+ * signal is actually aborted, so an unrelated cancel is never reclassified.
+ */
+export const isAbortError = (e: unknown, signal: AbortSignal): boolean =>
   (signal.aborted && e === signal.reason) ||
   (typeof e === 'object' &&
     e !== null &&
     ((e as { name?: unknown }).name === 'AbortError' ||
-      (e as { code?: unknown }).code === 'ABORT_ERR'));
+      (e as { code?: unknown }).code === 'ABORT_ERR' ||
+      (signal.aborted &&
+        ((e as { name?: unknown }).name === 'CanceledError' ||
+          (e as { code?: unknown }).code === 'ERR_CANCELED'))));
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -260,12 +267,23 @@ export class SourceCacheService {
     return !this.isFresh(entry, now);
   }
 
-  /** Clear the contentChanged flag after a human has reviewed the change. */
-  acknowledgeChange(sourceName: string, sourceId: string) {
-    return this.prisma.sourceCache.update({
-      where: { sourceName_sourceId: { sourceName, sourceId } },
+  /**
+   * Clear the contentChanged flag after a human has reviewed the change.
+   * `reviewedHash` is the contentHash the reviewer saw; the flag is cleared
+   * only if the row still has that hash, so a change that landed after the
+   * review (e.g. h2 -> h3) stays flagged. Returns false when nothing was
+   * cleared (row missing or changed since it was reviewed).
+   */
+  async acknowledgeChange(
+    sourceName: string,
+    sourceId: string,
+    reviewedHash: string | null,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.sourceCache.updateMany({
+      where: { sourceName, sourceId, contentHash: reviewedHash },
       data: { contentChanged: false },
     });
+    return count === 1;
   }
 
   async put(input: PutInput, db: Db = this.prisma): Promise<SourceCache> {
@@ -320,7 +338,11 @@ export class SourceCacheService {
       lastModified: result.lastModified ?? null,
       fetchedAt: now,
       revalidateAfter,
-      licenseSnapshot: result.licenseSnapshot ?? null,
+      // The snapshot describes the payload it was captured with: keep it with
+      // the retained payload when content was lost.
+      licenseSnapshot: lostContent
+        ? (existing?.licenseSnapshot ?? null)
+        : (result.licenseSnapshot ?? null),
       fetchedBy: input.fetchedBy ?? null,
     };
 

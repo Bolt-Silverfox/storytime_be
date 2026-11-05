@@ -24,6 +24,7 @@ export { VoiceType } from '@/voice/dto/voice.dto';
  */
 export class StoryCreditDto {
   @ApiPropertyOptional({
+    type: String,
     nullable: true,
     description:
       'Exact credit string to display with the story (author, licence, adaptation).',
@@ -31,10 +32,11 @@ export class StoryCreditDto {
   })
   attributionText?: string | null;
 
-  @ApiPropertyOptional({ nullable: true, example: 'A. Author' })
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'A. Author' })
   authorName?: string | null;
 
   @ApiPropertyOptional({
+    type: String,
     nullable: true,
     description: 'SPDX-style licence code',
     example: 'CC-BY-4.0',
@@ -42,19 +44,25 @@ export class StoryCreditDto {
   licenseCode?: string | null;
 
   @ApiPropertyOptional({
+    type: String,
     nullable: true,
     example: 'https://creativecommons.org/licenses/by/4.0/',
   })
   licenseUrl?: string | null;
 
   @ApiPropertyOptional({
+    type: String,
     nullable: true,
     description: 'Where the story came from (e.g. gutenberg, bookdash)',
     example: 'bookdash',
   })
   sourceName?: string | null;
 
-  @ApiPropertyOptional({ nullable: true, example: 'https://bookdash.org/' })
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'https://bookdash.org/',
+  })
   sourceUrl?: string | null;
 }
 
@@ -63,11 +71,11 @@ export class StoryImageDto {
   @IsString()
   url: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ type: String, required: false, nullable: true })
   @IsOptional()
   @IsString()
   @SanitizeHtml()
-  caption?: string;
+  caption?: string | null;
 }
 
 export class StoryBranchDto {
@@ -86,15 +94,15 @@ export class StoryBranchDto {
   @SanitizeHtml()
   optionB: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ type: String, required: false, nullable: true })
   @IsOptional()
   @IsString()
-  nextA?: string;
+  nextA?: string | null;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ type: String, required: false, nullable: true })
   @IsOptional()
   @IsString()
-  nextB?: string;
+  nextB?: string | null;
 }
 
 /** Response shape of GET /stories/:id (documentation only). */
@@ -103,9 +111,9 @@ export class StoryReadResponseDto extends StoryCreditDto {
   @ApiProperty() title: string;
   @ApiProperty() description: string;
   @ApiProperty() language: string;
-  @ApiProperty({ nullable: true }) coverImageUrl: string | null;
-  @ApiProperty({ nullable: true }) audioUrl: string | null;
-  @ApiProperty({ nullable: true }) textContent: string | null;
+  @ApiProperty({ type: String, nullable: true }) coverImageUrl: string | null;
+  @ApiProperty({ type: String, nullable: true }) audioUrl: string | null;
+  @ApiProperty({ type: String, nullable: true }) textContent: string | null;
   @ApiProperty() isInteractive: boolean;
   @ApiProperty() ageMin: number;
   @ApiProperty() ageMax: number;
@@ -475,10 +483,10 @@ export class CategoryDto {
   @ApiProperty()
   name: string;
 
-  @ApiProperty({ required: false, nullable: true })
+  @ApiProperty({ type: String, required: false, nullable: true })
   image?: string | null;
 
-  @ApiProperty({ required: false, nullable: true })
+  @ApiProperty({ type: String, required: false, nullable: true })
   description?: string | null;
 
   @ApiProperty({ required: false })
@@ -513,9 +521,9 @@ export class ThemeDto {
   id: string;
   @ApiProperty()
   name: string;
-  @ApiProperty({ required: false, nullable: true })
+  @ApiProperty({ type: String, required: false, nullable: true })
   image?: string | null;
-  @ApiProperty({ required: false, nullable: true })
+  @ApiProperty({ type: String, required: false, nullable: true })
   description?: string | null;
 }
 
@@ -675,7 +683,11 @@ export class PaginatedStoriesDto {
 }
 
 export class CursorPaginationMetaDto {
-  @ApiProperty({ description: 'Cursor for next page', nullable: true })
+  @ApiProperty({
+    type: String,
+    description: 'Cursor for next page',
+    nullable: true,
+  })
   nextCursor: string | null;
 
   @ApiProperty({ description: 'Whether more items exist' })
@@ -683,10 +695,10 @@ export class CursorPaginationMetaDto {
 }
 
 export class CursorPaginationStoriesMetaDto {
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ type: String, nullable: true })
   nextCursor: string | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ type: String, nullable: true })
   previousCursor: string | null;
 
   @ApiProperty()
