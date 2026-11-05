@@ -67,6 +67,26 @@ function decodeKey(raw: string): string {
   }
 }
 
+/**
+ * True when a (possibly percent-encoded, up to 3 layers) value itself carries a
+ * sensitive `k=v` pair, e.g. `continue=%2Fcb%3Ftoken%3Dsecret`.
+ */
+function hasNestedSecret(value: string): boolean {
+  let cur = value;
+  for (let i = 0; i < 4; i++) {
+    if (cur.includes('=') && scrubText(cur, false) !== cur) return true;
+    let next: string;
+    try {
+      next = decodeURIComponent(cur.replace(/\+/g, ' '));
+    } catch {
+      return false;
+    }
+    if (next === cur) return false;
+    cur = next;
+  }
+  return false;
+}
+
 /** Redact sensitive params in a `a=b&c=d` string (a leading `?` is allowed). */
 function scrubQueryString(qs: string): string {
   return qs
@@ -76,21 +96,32 @@ function scrubQueryString(qs: string): string {
       if (eq < 0) return pair;
       const rawKey = pair.slice(0, eq);
       const key = decodeKey(rawKey.startsWith('?') ? rawKey.slice(1) : rawKey);
-      return isSensitive(key) ? `${pair.slice(0, eq)}=${REDACTED}` : pair;
+      return isSensitive(key) || hasNestedSecret(pair.slice(eq + 1))
+        ? `${pair.slice(0, eq)}=${REDACTED}`
+        : pair;
     })
     .join('&');
 }
 
-/** Redact `?k=v` / `&k=v` / `#k=v` params embedded anywhere in free text. */
-function scrubText(text: string): string {
-  if (text.length > MAX_TEXT || !text.includes('=')) {
-    return text.length > MAX_TEXT ? REDACTED : text;
-  }
-  return text.replace(
-    /([?&#]|^)([^=&\s#?]{1,200})=([^&\s#"']*)/g,
-    (m, pre: string, k: string) =>
-      isSensitive(decodeKey(k)) ? `${pre}${k}=${REDACTED}` : m,
+/**
+ * Redact `k=v` params (after start, whitespace, `?`, `&` or `#`) and bearer or
+ * basic credentials embedded anywhere in free text.
+ */
+function scrubText(text: string, nested = true): string {
+  if (text.length > MAX_TEXT) return REDACTED;
+  let out = text.replace(
+    /\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/gi,
+    (_m, scheme: string) => `${scheme} ${REDACTED}`,
   );
+  if (!out.includes('=')) return out;
+  out = out.replace(
+    /([?&#\s]|^)([^=&\s#?]{1,200})=([^&\s#"']*)/g,
+    (m, pre: string, k: string, v: string) =>
+      isSensitive(decodeKey(k)) || (nested && hasNestedSecret(v))
+        ? `${pre}${k}=${REDACTED}`
+        : m,
+  );
+  return out;
 }
 
 const QUERY_KEYS = new Set([
@@ -214,6 +245,9 @@ export function scrubSentryEvent<E extends SentryEvent>(event: E): E {
     const stripped: E = {
       ...event,
       request: undefined,
+      message: undefined,
+      transaction: undefined,
+      exception: undefined,
       breadcrumbs: undefined,
       contexts: undefined,
       extra: undefined,

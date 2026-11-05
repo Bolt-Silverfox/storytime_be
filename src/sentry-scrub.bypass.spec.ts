@@ -183,7 +183,9 @@ describe('depth, text and failure handling', () => {
 
   it('never throws and never leaks when scrubbing fails (events)', () => {
     const ev: any = {
-      message: 'm',
+      message: 'failed token=SENT_F',
+      transaction: 'GET /cb?token=SENT_F',
+      exception: { values: [{ value: 'x token=SENT_F' }] },
       breadcrumbs: [{ data: { a: 'SENT_F' } }],
       contexts: { x: 'SENT_F' },
       request: {
@@ -196,10 +198,13 @@ describe('depth, text and failure handling', () => {
     expect(() => {
       out = buildSentryOptions().beforeSend(ev, {});
     }).not.toThrow();
-    expect(out.message).toBe('m');
+    expect(out.message).toBeUndefined();
     expect(out.request).toBeUndefined();
     expect(out.breadcrumbs).toBeUndefined();
     expect(out.contexts).toBeUndefined();
+    expect(dump(out)).not.toContain('SENT_F');
+    expect(out.transaction).toBeUndefined();
+    expect(out.exception).toBeUndefined();
     const tx: any = {
       type: 'transaction',
       spans: [{ data: { x: 'SENT_F' } }],
@@ -216,5 +221,44 @@ describe('depth, text and failure handling', () => {
       },
     };
     expect(buildSentryOptions().beforeBreadcrumb(crumb, {})).toBeNull();
+  });
+});
+
+describe('review findings: nested and free-text credentials', () => {
+  it.each([
+    ['plain nested', 'continue=/cb?token=SENT_N1'],
+    ['encoded nested', 'continue=%2Fcb%3Ftoken%3DSENT_N1'],
+    ['double encoded nested', 'continue=%252Fcb%253Ftoken%253DSENT_N1'],
+  ])('redacts %s secret in query_string and url', (_n, qs) => {
+    const e: any = scrubSentryEvent({
+      request: { query_string: qs, url: `https://x/login?${qs}&ok=1` },
+    } as any);
+    expect(dump(e)).not.toContain('SENT_N1');
+    expect(e.request.url).toContain('ok=1');
+  });
+
+  it('keeps benign nested values', () => {
+    const e: any = scrubSentryEvent({
+      request: { query_string: 'continue=%2Fhome%3Fpage%3D2' },
+    } as any);
+    expect(dump(e)).toContain('%2Fhome%3Fpage%3D2');
+  });
+
+  it.each([
+    'request failed: token=SENT_T1',
+    'bad\ttoken=SENT_T1 and more',
+    'Authorization: Bearer SENT_T1',
+    'header authorization=Bearer SENT_T1',
+  ])('scrubs free text %j', (msg) => {
+    const e: any = scrubSentryEvent({
+      message: msg,
+      exception: { values: [{ value: msg }] },
+    } as any);
+    expect(dump(e)).not.toContain('SENT_T1');
+  });
+
+  it('keeps benign free-text pairs', () => {
+    const e: any = scrubSentryEvent({ message: 'failed: ok=1' } as any);
+    expect(e.message).toBe('failed: ok=1');
   });
 });
