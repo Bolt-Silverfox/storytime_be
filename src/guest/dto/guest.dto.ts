@@ -1,3 +1,4 @@
+import { StoryCreditDto } from '@/story/dto/story.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
@@ -168,7 +169,7 @@ export class StorySceneDto {
   imageUrl: string;
 }
 
-export class GuestStoryResponseDto {
+export class GuestStoryResponseDto extends StoryCreditDto {
   @ApiProperty()
   id: string;
 

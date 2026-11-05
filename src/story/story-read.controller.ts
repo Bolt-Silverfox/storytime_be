@@ -10,7 +10,7 @@ import {
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 
-import { CreateStoryDto, ErrorResponseDto } from './dto/story.dto';
+import { ErrorResponseDto, StoryReadResponseDto } from './dto/story.dto';
 import { StoryService } from './story.service';
 
 import {
@@ -38,7 +38,7 @@ export class StoryReadController {
   @CheckStoryQuota()
   @ApiOperation({ summary: 'Get a story by id' })
   @ApiParam({ name: 'id', type: String })
-  @ApiOkResponse({ description: 'Story', type: CreateStoryDto })
+  @ApiOkResponse({ description: 'Story', type: StoryReadResponseDto })
   @ApiResponse({
     status: 400,
     description: 'Bad Request',

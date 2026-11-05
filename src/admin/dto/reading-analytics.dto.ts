@@ -93,12 +93,14 @@ export class TopStoryDto {
   @ApiProperty() storyId: string;
   @ApiProperty() title: string;
   @ApiProperty({
+    type: Number,
     nullable: true,
     description:
       'null when fewer than 5 distinct readers (privacy suppression)',
   })
   readerCount: number | null;
   @ApiProperty({
+    type: Number,
     nullable: true,
     description:
       'null when fewer than 5 distinct readers (privacy suppression)',
@@ -122,14 +124,16 @@ export class ReaderDto {
 export class StoryDetailDto {
   @ApiProperty() storyId: string;
   @ApiProperty() title: string;
-  @ApiProperty({ nullable: true }) readerCount: number | null;
+  @ApiProperty({ type: Number, nullable: true }) readerCount: number | null;
   @ApiProperty({
+    type: Number,
     nullable: true,
     description:
       'null when fewer than 5 distinct readers (privacy suppression)',
   })
   completionRate: number | null;
   @ApiProperty({
+    type: Number,
     nullable: true,
     description:
       'null when fewer than 5 distinct readers (privacy suppression)',
