@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   CompleteProfileDto,
@@ -137,6 +138,9 @@ export class OnboardingService {
     const user = await this.authRepository.findUserByIdWithProfile(userId);
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+    if (!user.isEmailVerified) {
+      throw new ForbiddenException('Email not verified');
     }
     if (user.onboardingStatus === OnboardingStatus.pin_setup) {
       throw new BadRequestException('Onboarding already completed');

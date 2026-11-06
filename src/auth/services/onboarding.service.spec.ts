@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OnboardingService } from './onboarding.service';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import {
   AUTH_REPOSITORY,
   IAuthRepository,
@@ -127,6 +127,57 @@ describe('OnboardingService', () => {
     });
   });
 
+  describe('registerV2', () => {
+    const dto = {
+      email: 'new@example.com',
+      password: 'Sup3rSecret#pw',
+      fullName: 'New Parent',
+    };
+
+    it('creates a marked account, mints no session and returns no tokens', async () => {
+      authRepository.findUserByEmail.mockResolvedValue(null);
+      passwordService.hashPassword.mockResolvedValue('hashed');
+      authRepository.createUser.mockResolvedValue(mockUser);
+
+      const result = await service.registerV2(dto);
+
+      expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+      expect(authRepository.createUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: dto.email,
+          verifyFirstRegisteredAt: expect.any(Date),
+        }),
+      );
+      expect(result).toEqual({
+        user: expect.objectContaining({ email: mockUser.email }),
+        requiresEmailVerification: true,
+      });
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'user.registered',
+        expect.objectContaining({ userId: mockUser.id }),
+      );
+    });
+
+    it('does not mark accounts created through v1 register', async () => {
+      authRepository.findUserByEmail.mockResolvedValue(null);
+      passwordService.hashPassword.mockResolvedValue('hashed');
+      authRepository.createUser.mockResolvedValue(mockUser);
+      tokenService.createTokenPair.mockResolvedValue({
+        jwt: 'j',
+        refreshToken: 'r',
+      });
+
+      const result = await service.register(dto);
+
+      expect(authRepository.createUser).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          verifyFirstRegisteredAt: expect.anything(),
+        }),
+      );
+      expect(result).toMatchObject({ jwt: 'j', refreshToken: 'r' });
+    });
+  });
+
   describe('completeProfile', () => {
     it('should complete profile successfully', async () => {
       authRepository.findUserByIdWithProfile.mockResolvedValue(mockUser);
@@ -143,6 +194,19 @@ describe('OnboardingService', () => {
 
       expect(result).toBeDefined();
       expect(authRepository.updateProfile).toHaveBeenCalled();
+    });
+
+    it('rejects a user whose email is not verified and writes nothing', async () => {
+      authRepository.findUserByIdWithProfile.mockResolvedValue({
+        ...mockUser,
+        isEmailVerified: false,
+      });
+
+      await expect(
+        service.completeProfile('user-1', { language: 'English' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(authRepository.updateProfile).not.toHaveBeenCalled();
+      expect(authRepository.upsertProfile).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when user does not exist', async () => {
