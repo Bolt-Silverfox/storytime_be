@@ -6,6 +6,7 @@ import { SourceCacheService } from '@/source-cache/source-cache.service';
 import { GUTENBERG_ALLOWLIST } from './allowlist';
 import { GutenbergImportModule } from './gutenberg-import.module';
 import {
+  exitCodeFor,
   formatReport,
   needsProductionConfirmation,
   parseCliArgs,
@@ -58,7 +59,7 @@ async function main(): Promise<number> {
       allowUnverifiedIds: args.allowUnverifiedIds,
     });
     console.log(formatReport(report));
-    return report.summary.error ? 1 : 0;
+    return exitCodeFor(report.summary);
   } finally {
     await app.close();
   }

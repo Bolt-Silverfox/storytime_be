@@ -11,6 +11,12 @@ export interface CliArgs {
   allowUnverifiedIds: boolean;
 }
 
+const MAX_TTL_DAYS = 3650;
+
+export function exitCodeFor(summary: Record<string, number>): 0 | 1 {
+  return summary.error || summary.rejected ? 1 : 0;
+}
+
 export function parseCliArgs(argv: string[]): CliArgs {
   const { values } = parseArgs({
     args: argv.filter((a) => a !== '--'),
@@ -40,8 +46,10 @@ export function parseCliArgs(argv: string[]): CliArgs {
   let ttlMs: number | undefined;
   if (values['ttl-days'] !== undefined) {
     const d = Number(values['ttl-days']);
-    if (!Number.isFinite(d) || d <= 0)
-      throw new Error('--ttl-days must be a positive number');
+    if (!Number.isFinite(d) || d <= 0 || d > MAX_TTL_DAYS)
+      throw new Error(
+        `--ttl-days must be a positive number of at most ${MAX_TTL_DAYS}`,
+      );
     ttlMs = d * 86_400_000;
   }
   return {

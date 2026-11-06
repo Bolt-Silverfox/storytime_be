@@ -72,8 +72,9 @@ export interface StoryStorePort {
     id: string;
     contentHash: string | null;
     isPublished: boolean;
+    isDeleted: boolean;
   } | null>;
-  findByHash(hash: string): Promise<{ id: string } | null>;
+  findByHash(hash: string): Promise<{ id: string; isDeleted: boolean } | null>;
   resolveTaxonomy(
     categories: string[],
     themes: string[],
@@ -137,6 +138,8 @@ export interface RunOptions {
   /** Let --commit import entries whose ebook id is not yet verified. */
   allowUnverifiedIds?: boolean;
 }
+
+const DELETED_REASON = 'deleted story holds this source id';
 
 const urlFor = (id: string) => `https://www.gutenberg.org/ebooks/${id}`;
 
@@ -242,6 +245,9 @@ export class GutenbergImporter {
 
     const hash = contentHashOf(processed.content);
     const existing = await this.deps.store.findBySource(entry.ebookId);
+    if (existing?.isDeleted) {
+      return { ...withNotes, outcome: 'needs-review', reason: DELETED_REASON };
+    }
     if (existing) {
       if (existing.contentHash && existing.contentHash !== hash) {
         // Upstream text moved on. Flag only: never update or publish.
@@ -256,6 +262,9 @@ export class GutenbergImporter {
       return { ...withNotes, outcome: 'skip-exists', storyId: existing.id };
     }
     const dupe = await this.deps.store.findByHash(hash);
+    if (dupe?.isDeleted) {
+      return { ...withNotes, outcome: 'needs-review', reason: DELETED_REASON };
+    }
     if (dupe) {
       return {
         ...withNotes,
@@ -337,19 +346,32 @@ export class GutenbergImporter {
     const { source, cache, payloads } = this.deps;
     const pOpts = { maxWords: this.deps.maxWords };
 
+    const readCached = async (
+      key: string,
+    ): Promise<
+      { kind: 'missing' } | { kind: 'ok'; processed: ProcessResult }
+    > => {
+      let text: string;
+      try {
+        text = await payloads.read(key);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+        const r = await source.fetch(id, new AbortController().signal);
+        if (r.status !== 200) return { kind: 'missing' };
+        text = r.text;
+      }
+      return {
+        kind: 'ok',
+        processed: processGutenbergText(text, entry, pOpts),
+      };
+    };
+
     if (mode === 'dry-run') {
       const hit = await cache.peek(id);
-      if (hit) {
+      if (hit && hit.revalidateAfter.getTime() > this.now().getTime()) {
         if (hit.httpStatus === 404 || !hit.rawPayloadKey)
           return { kind: 'missing' };
-        return {
-          kind: 'ok',
-          processed: processGutenbergText(
-            await payloads.read(hit.rawPayloadKey),
-            entry,
-            pOpts,
-          ),
-        };
+        return readCached(hit.rawPayloadKey);
       }
       const r = await source.fetch(id, new AbortController().signal);
       if (r.status !== 200) return { kind: 'missing' };
@@ -383,13 +405,6 @@ export class GutenbergImporter {
     });
     if (cached.httpStatus === 404 || !cached.rawPayloadKey)
       return { kind: 'missing' };
-    return {
-      kind: 'ok',
-      processed: processGutenbergText(
-        await payloads.read(cached.rawPayloadKey),
-        entry,
-        pOpts,
-      ),
-    };
+    return readCached(cached.rawPayloadKey);
   }
 }

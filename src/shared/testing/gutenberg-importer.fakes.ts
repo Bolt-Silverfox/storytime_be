@@ -40,7 +40,9 @@ export class MemoryPayloads implements PayloadStore {
   read(key: string) {
     const v = this.files.get(key);
     return v === undefined
-      ? Promise.reject(new Error('payload missing'))
+      ? Promise.reject(
+          Object.assign(new Error('payload missing'), { code: 'ENOENT' }),
+        )
       : Promise.resolve(v);
   }
 }
@@ -95,17 +97,25 @@ export class MemoryStore implements StoryStorePort {
   creates = 0;
   categories = new Set(['Fairytales & Folktales', 'Bedtime']);
   themes = new Set(['Courage / Bravery']);
+  deletedIds = new Set<string>();
   findBySource(sourceId: string) {
     const r = this.rows.find((x) => x.sourceId === sourceId);
     return Promise.resolve(
       r
-        ? { id: r.id, contentHash: r.contentHash, isPublished: r.isPublished }
+        ? {
+            id: r.id,
+            contentHash: r.contentHash,
+            isPublished: r.isPublished,
+            isDeleted: this.deletedIds.has(r.id),
+          }
         : null,
     );
   }
   findByHash(hash: string) {
     const r = this.rows.find((x) => x.contentHash === hash);
-    return Promise.resolve(r ? { id: r.id } : null);
+    return Promise.resolve(
+      r ? { id: r.id, isDeleted: this.deletedIds.has(r.id) } : null,
+    );
   }
   resolveTaxonomy(categories: string[], themes: string[]) {
     return Promise.resolve({

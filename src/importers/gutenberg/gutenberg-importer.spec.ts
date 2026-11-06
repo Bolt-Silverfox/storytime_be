@@ -304,6 +304,72 @@ describe('GutenbergImporter', () => {
     expect(cache.getOrFetchCalls).toBe(gets);
   });
 
+  it('dry-run ignores an expired cache entry and reads the file directly', async () => {
+    const { importer, source, cache, mk } = setup({});
+    await importer.run({ mode: 'commit', only: '90001' });
+    expect(cache.entries.get('90001')?.httpStatus).toBe(404);
+    source.texts['90001'] = fx('90001-0.txt');
+    const later = mk(new Date('2027-01-15T00:00:00Z'));
+    const r = await later.run({ mode: 'dry-run', only: '90001' });
+    expect(r.items[0].outcome).toBe('create');
+  });
+
+  it('dry-run still trusts a fresh cache entry', async () => {
+    const { importer, source, mk } = setup({});
+    await importer.run({ mode: 'commit', only: '90001' });
+    source.texts['90001'] = fx('90001-0.txt');
+    const r = await mk().run({ mode: 'dry-run', only: '90001' });
+    expect(r.items[0].outcome).toBe('missing-in-source');
+  });
+
+  it('a fresh cache row whose payload file is gone is re-read from the source, in dry-run and commit', async () => {
+    const { importer, source, payloads, store } = setup();
+    await importer.run({ mode: 'commit', only: '90001' });
+    store.rows = [];
+    payloads.files.clear();
+    const dry = await importer.run({ mode: 'dry-run', only: '90001' });
+    expect(dry.items[0].outcome).toBe('create');
+    const commit = await importer.run({ mode: 'commit', only: '90001' });
+    expect(commit.items[0].outcome).toBe('create');
+    expect(store.creates).toBe(2);
+    expect(source.calls.filter((c) => c === '90001').length).toBe(3);
+  });
+
+  it('a payload read error other than a missing file is still an error', async () => {
+    const { importer, payloads } = setup();
+    await importer.run({ mode: 'commit', only: '90001' });
+    payloads.read = () => Promise.reject(new Error('disk on fire'));
+    const r = await importer.run({ mode: 'dry-run', only: '90001' });
+    expect(r.items[0].outcome).toBe('error');
+  });
+
+  it('a soft-deleted story holding the source id is needs-review, not skip-exists', async () => {
+    const { importer, store } = setup();
+    await importer.run({ mode: 'commit', only: '90001' });
+    store.deletedIds.add(store.rows[0].id);
+    const r = await importer.run({ mode: 'dry-run', only: '90001' });
+    expect(r.items[0]).toEqual(
+      expect.objectContaining({
+        outcome: 'needs-review',
+        reason: 'deleted story holds this source id',
+      }),
+    );
+  });
+
+  it('a soft-deleted story with the same content hash is needs-review, not skip-duplicate', async () => {
+    const { importer, store } = setup();
+    await importer.run({ mode: 'commit', only: '90001' });
+    store.deletedIds.add(store.rows[0].id);
+    store.rows[0].sourceId = 'other';
+    const r = await importer.run({ mode: 'dry-run', only: '90001' });
+    expect(r.items[0]).toEqual(
+      expect.objectContaining({
+        outcome: 'needs-review',
+        reason: 'deleted story holds this source id',
+      }),
+    );
+  });
+
   it('report summary counts outcomes', async () => {
     const { importer } = setup();
     const r = await importer.run({ mode: 'dry-run' });

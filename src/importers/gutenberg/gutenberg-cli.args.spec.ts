@@ -2,6 +2,7 @@ import {
   parseCliArgs,
   formatReport,
   needsProductionConfirmation,
+  exitCodeFor,
 } from './gutenberg-cli.args';
 
 describe('parseCliArgs', () => {
@@ -130,5 +131,32 @@ describe('formatReport editor notes', () => {
       summary: { create: 1 },
     });
     expect(out).toMatch(/note: violence: review passages/);
+  });
+});
+
+describe('exitCodeFor', () => {
+  it('is 0 for a clean summary', () => {
+    expect(exitCodeFor({ create: 2, 'skip-exists': 1 })).toBe(0);
+  });
+  it('is 1 when any work errored', () => {
+    expect(exitCodeFor({ create: 1, error: 1 })).toBe(1);
+  });
+  it('is 1 when --only named an id that is not on the allow-list', () => {
+    expect(exitCodeFor({ rejected: 1 })).toBe(1);
+  });
+});
+
+describe('--ttl-days upper bound', () => {
+  it('rejects values above 3650 and non-finite values', () => {
+    for (const v of ['3651', '1e308', 'Infinity']) {
+      expect(() =>
+        parseCliArgs(['--source-dir', '/m', '--ttl-days', v]),
+      ).toThrow(/ttl-days/);
+    }
+  });
+  it('accepts 3650', () => {
+    expect(
+      parseCliArgs(['--source-dir', '/m', '--ttl-days', '3650']).ttlMs,
+    ).toBe(3650 * 86_400_000);
   });
 });

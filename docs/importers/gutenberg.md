@@ -27,9 +27,9 @@ pnpm import:gutenberg -- --source-dir /data/gutenberg
 pnpm import:gutenberg -- --commit --source-dir /data/gutenberg [--only 14838] [--ttl-days 30]
 ```
 
-Flags: `--dry-run` (default), `--commit`, `--allow-unverified-ids`, `--source-dir <dir>` (required), `--cache-dir <dir>`, `--only <ebook id>` (must be on the allow-list), `--ttl-days <n>`, `--yes-production` (required for `--commit` unless the `DATABASE_URL` host is clearly local: localhost, 127.0.0.1, ::1 or a unix socket; `*.local` names do NOT count as local; `NODE_ENV` is ignored; unknown or unparseable URLs count as remote). Limit: an SSH tunnel to a remote database looks like localhost and passes this guard, so it is a safety net against mistakes, not authorization. Exit code is 1 if any work errored.
+Flags: `--dry-run` (default), `--commit`, `--allow-unverified-ids`, `--source-dir <dir>` (required), `--cache-dir <dir>`, `--only <ebook id>` (must be on the allow-list), `--ttl-days <n>`, `--yes-production` (required for `--commit` unless the `DATABASE_URL` host is clearly local: localhost, 127.0.0.1, ::1 or a unix socket; `*.local` names do NOT count as local; `NODE_ENV` is ignored; unknown or unparseable URLs count as remote). Limit: an SSH tunnel to a remote database looks like localhost and passes this guard, so it is a safety net against mistakes, not authorization. Exit code is 1 if any work errored or `--only` named an id that is not on the allow-list.
 
-Dry-run reads an existing cache entry if there is one, otherwise reads the file directly; it never writes a story, a cache row or a payload file.
+Dry-run reads a cache entry only while it is still fresh (before its revalidate time), otherwise it reads the file directly; it never writes a story, a cache row or a payload file.
 
 ### Report outcomes
 

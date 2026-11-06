@@ -70,14 +70,19 @@ export class PrismaStoryStore implements StoryStorePort {
       omit: { contentHash: false },
     });
     return s
-      ? { id: s.id, contentHash: s.contentHash, isPublished: s.isPublished }
+      ? {
+          id: s.id,
+          contentHash: s.contentHash,
+          isPublished: s.isPublished,
+          isDeleted: s.isDeleted,
+        }
       : null;
   }
 
   async findByHash(hash: string) {
     const s = await this.prisma.story.findFirst({
       where: { contentHash: hash },
-      select: { id: true },
+      select: { id: true, isDeleted: true },
     });
     return s ?? null;
   }
