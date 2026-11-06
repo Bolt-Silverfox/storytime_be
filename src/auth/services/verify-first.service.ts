@@ -7,7 +7,6 @@ import { TokenType, UserDto } from '../dto/auth.dto';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
-import { revokePreVerificationAccess } from './verified-email-user';
 
 export const VERIFY_FIRST_INVALID_MESSAGE = 'Invalid or expired code';
 export const VERIFY_FIRST_MAX_ATTEMPTS = 5;
@@ -45,20 +44,24 @@ export class VerifyFirstService {
       throw this.invalid();
     }
 
-    const hardening = await revokePreVerificationAccess(
-      {
-        authRepository: this.authRepository,
-        passwordService: this.passwordService,
-      },
-      user.id,
-      { resetPassword: user.verifyFirstRegisteredAt === null },
-    );
-    const verified = await this.authRepository.updateUserWithRelations(
+    const resetPassword = user.verifyFirstRegisteredAt === null;
+    const verified = await this.authRepository.takeOverUnverifiedAccount(
       user.id,
       {
-        ...hardening,
         isEmailVerified: true,
         onboardingStatus: OnboardingStatus.email_verified,
+        pinHash: null,
+        biometricsEnabled: false,
+        googleId: null,
+        appleId: null,
+        ...(resetPassword
+          ? {
+              passwordHash: await this.passwordService.hashPassword(
+                crypto.randomBytes(16).toString('hex'),
+              ),
+              hasLocalPassword: false,
+            }
+          : {}),
       },
     );
 
