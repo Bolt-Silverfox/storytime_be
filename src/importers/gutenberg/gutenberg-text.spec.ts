@@ -755,7 +755,7 @@ describe('processGutenbergText hardening', () => {
       [
         'all-caps lines in one paragraph',
         300_000,
-        100,
+        400,
         (n: number) => wrap('CODE\n'.repeat(n / 5)),
       ],
       [
