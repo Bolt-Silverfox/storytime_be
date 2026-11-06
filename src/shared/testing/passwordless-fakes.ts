@@ -90,7 +90,7 @@ export class InMemoryLoginChallengeRepository implements ILoginChallengeReposito
     return r ? this.consumeById(r.id, now) : Promise.resolve(null);
   }
 
-  deleteExpiredBefore(cutoff: Date, _limit: number): Promise<number> {
+  deleteExpiredBefore(cutoff: Date): Promise<number> {
     const before = this.rows.length;
     this.rows = this.rows.filter(
       (r) => r.expiresAt.getTime() >= cutoff.getTime(),

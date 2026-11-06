@@ -7,7 +7,7 @@ describe('sentry-setup passwordless body protection', () => {
     jest.dontMock('@sentry/node');
   });
 
-  it('stops Sentry attaching request bodies of /auth/passwordless/* routes', () => {
+  it('stops Sentry attaching request bodies of /auth/passwordless/* routes', async () => {
     process.env.SENTRY_DSN = 'https://key@o0.ingest.sentry.io/1';
     const httpIntegration = jest.fn().mockReturnValue({ name: 'Http' });
     const init = jest.fn();
@@ -21,8 +21,8 @@ describe('sentry-setup passwordless body protection', () => {
       setupEventContextTrace: jest.fn(),
     }));
 
-    jest.isolateModules(() => {
-      require('./sentry-setup');
+    await jest.isolateModulesAsync(async () => {
+      await import('./sentry-setup');
     });
 
     const opts = httpIntegration.mock.calls[0][0] as {
