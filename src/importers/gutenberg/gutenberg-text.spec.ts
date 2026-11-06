@@ -37,7 +37,6 @@ describe('processGutenbergText', () => {
     expect(r.content).toContain('Once upon a time a small fox lived');
     expect(r.content).toContain('The fox was very surprised.');
     expect(r.content).not.toContain('_');
-    expect(r.content).not.toMatch(/CONTENTS/);
     expect(r.content).not.toMatch(/END OF|licen[cs]e/i);
     expect(r.wordCount).toBeGreaterThan(50);
     expect(r.notes.join(' ')).not.toMatch(GUTENBERG_REFERENCE);
@@ -459,6 +458,56 @@ describe('processGutenbergText hardening', () => {
       },
     );
 
+    it.each([
+      ['CONTENTS     PAGE'],
+      ['CONTENTS 3'],
+      ['CONTENTS ..... vii'],
+      ['CONTENTS\u2014'],
+      ['CONTENTS;'],
+      ['LIST OF PLATES'],
+      ['LIST OF FULL-PAGE ILLUSTRATIONS'],
+      ['ILLUSTRATIONS IN COLOUR'],
+      ['LIST OF COLOURED PLATES'],
+      ['INDEX TO FIRST LINES'],
+      ['CONTENTS OF THE FIRST VOLUME'],
+      ['CONTENTS OF\nVOLUME I.'],
+      ['CONTENT'],
+      ['LIST OF ILLUSTRATION'],
+      ['C O N T E N T S'],
+      ['CONTE\u0301NTS'],
+      ['\u0421ONTENTS'],
+      ['Index of Names'],
+      ['Contents: ' + 'x'.repeat(95)],
+    ])('a common heading form is ambiguous, not stored: %j', (heading) => {
+      expect(
+        contentOf(
+          `${heading}\n\nI. The Dark Wood\nII. The Lantern\n\n${STORY}`,
+        ),
+      ).toEqual(AMBIGUOUS);
+    });
+
+    it.each([
+      'THE INDEX FINGER POINTED',
+      'CHAPTER III. THE INDEX',
+      'THE CONTENTS OF THE BOX',
+      'Index fingers pointed at the moon.',
+      'INDEX OF ' + 'a very long line of ordinary story words '.repeat(3),
+    ])('keeps a story line that only resembles a heading: %s', (line) => {
+      const r = processGutenbergText(wrap(`${line}\n\n${STORY}`), plain());
+      expect(r.ok).toBe(true);
+    });
+
+    it.each([
+      ['contents.'],
+      ['contents: a key to the map'],
+      ['index of the great atlas'],
+      ['index:'],
+    ])('hard-wrapped prose with a line starting %j fails closed', (line) => {
+      expect(
+        contentOf(`The fox looked at the\n${line}\nand went home.\n\n${STORY}`),
+      ).toEqual(AMBIGUOUS);
+    });
+
     it('is ambiguous even when the heading comes mid-paragraph or last', () => {
       expect(contentOf(`${STORY}\nCONTENTS\nI. A`)).toEqual(AMBIGUOUS);
       expect(contentOf(`${STORY}\n\nCONTENTS`)).toEqual(AMBIGUOUS);
@@ -598,6 +647,12 @@ describe('processGutenbergText hardening', () => {
         250_000,
         90,
         (n: number) => wrap('ab-\ncd\n'.repeat(n / 6)),
+      ],
+      [
+        'lines mentioning an index in one paragraph',
+        300_000,
+        80,
+        (n: number) => wrap('the index finger\n' + 'word\n'.repeat(n / 5)),
       ],
       [
         'plain lines in one paragraph',

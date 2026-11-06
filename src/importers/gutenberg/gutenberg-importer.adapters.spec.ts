@@ -62,22 +62,29 @@ describe('PrismaStoryStore deleted rows', () => {
 
   it('findByHash prefers a live row over an older deleted one', async () => {
     const rows = [
-      { id: 'a', isDeleted: true, createdAt: 1 },
-      { id: 'b', isDeleted: false, createdAt: 2 },
+      { id: 'z', isDeleted: false, createdAt: 0, contentHash: 'other' },
+      { id: 'a', isDeleted: true, createdAt: 1, contentHash: 'h' },
+      { id: 'b', isDeleted: false, createdAt: 2, contentHash: 'h' },
+      { id: 'c', isDeleted: false, createdAt: 3, contentHash: 'h' },
     ];
     const findFirst = jest.fn(
-      (args: { orderBy: Record<string, 'asc' | 'desc'>[] }) => {
-        const key = (r: (typeof rows)[number], k: string) =>
+      (args: {
+        where: { contentHash: string };
+        orderBy: Record<string, 'asc' | 'desc'>[];
+      }) => {
+        const num = (r: (typeof rows)[number], k: string) =>
           Number(r[k as keyof typeof r]);
-        const sorted = [...rows].sort((x, y) => {
-          for (const o of args.orderBy) {
-            const [k] = Object.keys(o);
-            const d = key(x, k) - key(y, k);
-            if (d !== 0) return o[k] === 'asc' ? d : -d;
-          }
-          return 0;
-        });
-        return Promise.resolve(sorted[0]);
+        const sorted = rows
+          .filter((r) => r.contentHash === args.where?.contentHash)
+          .sort((x, y) => {
+            for (const o of args.orderBy) {
+              const [k] = Object.keys(o);
+              const d = num(x, k) - num(y, k);
+              if (d !== 0) return o[k] === 'asc' ? d : -d;
+            }
+            return 0;
+          });
+        return Promise.resolve(sorted[0] ?? null);
       },
     );
     const prisma = { story: { findFirst } } as unknown as PrismaService;

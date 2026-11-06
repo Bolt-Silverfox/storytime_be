@@ -191,22 +191,37 @@ const AMBIGUOUS_CONTENTS = {
   reason: 'table-of-contents-ambiguous',
 } as const;
 
-const CONTENTS_WORD = /contents|illustrations|index/i;
 const MAX_CONTENTS_HEADING_CHARS = 100;
 const CONTENTS_HEADING = [
   /^(?:table\s+of\s+)?contents[.:]?$/i,
-  /^contents:\s*\S/i,
   /^contents\s+of\s+(?:volume|vol\.?|book|part)\b/i,
   /^list\s+of\s+illustrations[.:]?$/i,
   /^illustrations[.:]?$/i,
   /^index(?:\s*[.:\u2026]+.*|\s+of\b.*)?$/i,
 ];
+const CONTENTS_LABELLED = /^contents:\s*\S/i;
+const PAGE_REFERENCE = /[\s.\u2026\u00b7]+[ivxlcdm\d]+\s*$/i;
+const CONTENTS_FAMILY =
+  /^(?:tableof)?(?:contents?|listof|illustrations?|index|plates|colou?redplates)/;
+
+const CONTENTS_WORD = /contents|illustrations|index/i;
+const NON_ASCII = /[^ -~\t\r\n]/;
+
+const mayBeContentsHeading = (line: string): boolean =>
+  CONTENTS_WORD.test(line) ||
+  NON_ASCII.test(line) ||
+  (line.length <= MAX_CONTENTS_HEADING_CHARS &&
+    !/\p{Ll}/u.test(line.replace(PAGE_REFERENCE, '')));
 
 const isContentsHeading = (line: string): boolean => {
+  if (!mayBeContentsHeading(line)) return false;
   const h = matchForm(line).trim();
+  if (CONTENTS_LABELLED.test(h)) return true;
+  if (h.length > MAX_CONTENTS_HEADING_CHARS) return false;
+  if (CONTENTS_HEADING.some((re) => re.test(h))) return true;
   return (
-    h.length <= MAX_CONTENTS_HEADING_CHARS &&
-    CONTENTS_HEADING.some((re) => re.test(h))
+    !/\p{Ll}/u.test(h.replace(PAGE_REFERENCE, '')) &&
+    CONTENTS_FAMILY.test(probe(h))
   );
 };
 
@@ -326,7 +341,7 @@ export function processGutenbergText(
       noteDepth += count(m, '[') - count(m, ']');
       continue;
     }
-    if (CONTENTS_WORD.test(m) && lines.some(isContentsHeading)) {
+    if (lines.some(isContentsHeading)) {
       return AMBIGUOUS_CONTENTS;
     }
     if (/^\[\s*transcriber/i.test(m)) {
