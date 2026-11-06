@@ -10,6 +10,10 @@ import { TokenService } from './token.service';
 import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
 import { AuthService } from '../auth.service';
 import { PrismaAuthRepository } from '../repositories/prisma-auth.repository';
+import { PrismaLoginChallengeRepository } from '../repositories/prisma-login-challenge.repository';
+import { PasswordlessService } from './passwordless.service';
+import { PasswordlessThrottleService } from './passwordless-throttle.service';
+import { InMemoryRedis } from '@/shared/testing/passwordless-fakes';
 
 const url = process.env.PASSWORDLESS_TEST_DATABASE_URL;
 const maybe = url && /throwaway|_test/.test(url) ? describe : describe.skip;
@@ -26,6 +30,9 @@ maybe('verify-first registration against Postgres', () => {
   let authService: AuthService;
   let passwordService: PasswordService;
   const codes = new Map<string, string>();
+  let passwordless: PasswordlessService;
+  const challenges: Array<{ email: string; code: string; linkToken: string }> =
+    [];
   let n = 0;
 
   const emailFor = () => `vf-it-${process.pid}-${++n}@example.com`;
@@ -81,6 +88,23 @@ maybe('verify-first registration against Postgres', () => {
       events,
     );
     authService = new AuthService(authRepo, tokenService, events);
+    events.on(
+      'passwordless.requested',
+      (p: { email?: string; code: string; linkToken: string }) =>
+        challenges.push({ email: p.email ?? '', ...p }),
+    );
+    passwordless = new PasswordlessService(
+      {
+        get: (k: string) => ({ PASSWORDLESS_PEPPER: 'p'.repeat(40) })[k],
+      } as never,
+      new PrismaLoginChallengeRepository(prisma as never),
+      new PasswordlessThrottleService(new InMemoryRedis() as never),
+      authRepo,
+      tokenService,
+      passwordService,
+      events,
+      { carryOver: () => Promise.resolve() } as never,
+    );
   });
 
   afterAll(async () => {
@@ -404,6 +428,62 @@ maybe('verify-first registration against Postgres', () => {
       await expect(
         authService.login({ email, password: PASSWORD }),
       ).resolves.toBeDefined();
+    });
+  });
+
+  describe('a v2-registered account verified through another path loses the registrant password', () => {
+    const attackerLogin = (email: string) =>
+      authService.login({ email, password: PASSWORD });
+
+    it('passwordless code', async () => {
+      const email = emailFor();
+      await onboarding.registerV2(registerDto(email));
+      await passwordless.request(email, '203.0.113.7');
+      const { code } = challenges[challenges.length - 1];
+
+      const res = await passwordless.verify(email, code, '198.51.100.9');
+
+      expect(res.jwt).toEqual(expect.any(String));
+      await expect(attackerLogin(email)).rejects.toMatchObject({ status: 400 });
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+      expect(user).toMatchObject({
+        isEmailVerified: true,
+        hasLocalPassword: false,
+      });
+    });
+
+    it('passwordless link', async () => {
+      const email = emailFor();
+      await onboarding.registerV2(registerDto(email));
+      await passwordless.request(email, '203.0.113.8');
+      const { linkToken } = challenges[challenges.length - 1];
+
+      await passwordless.consume(linkToken, '198.51.100.10');
+
+      await expect(attackerLogin(email)).rejects.toMatchObject({ status: 400 });
+    });
+
+    it.each([
+      ['google', { googleId: 'g-victim' }],
+      ['apple', { appleId: 'a-victim' }],
+    ])('%s sign-in', async (_name, ids) => {
+      const email = emailFor();
+      await onboarding.registerV2(registerDto(email));
+
+      const { newlyVerified } = await findOrCreateParentByVerifiedEmail(
+        { authRepository: authRepo, passwordService },
+        { email, emailVerified: true, ...ids },
+      );
+
+      expect(newlyVerified).toBe(true);
+      await expect(attackerLogin(email)).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('while the registrant verify-email still keeps the password', async () => {
+      const email = emailFor();
+      await onboarding.registerV2(registerDto(email));
+      await verifyFirst.verifyEmail(email, codes.get(email)!);
+      await expect(attackerLogin(email)).resolves.toBeDefined();
     });
   });
 
