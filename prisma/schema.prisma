@@ -95,6 +95,7 @@ model User {
   // Last successful login (any path that issues a new Session). Null until the
   // user next logs in; set best-effort by TokenService.createTokenPair.
   lastLoginAt             DateTime?
+  verifyFirstRegisteredAt DateTime?
   pinHash                 String?
   biometricsEnabled       Boolean                  @default(false)
   // SUSPENSION FIELDS
@@ -282,6 +283,7 @@ model Token {
   // SOFT DELETE FIELDS
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
+  attempts  Int       @default(0)
 
   @@index([userId])
   @@index([userId, type])
