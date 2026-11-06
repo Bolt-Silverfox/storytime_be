@@ -59,4 +59,30 @@ describe('PrismaStoryStore deleted rows', () => {
       }),
     );
   });
+
+  it('findByHash prefers a live row over an older deleted one', async () => {
+    const rows = [
+      { id: 'a', isDeleted: true, createdAt: 1 },
+      { id: 'b', isDeleted: false, createdAt: 2 },
+    ];
+    const findFirst = jest.fn(
+      (args: { orderBy: Record<string, 'asc' | 'desc'>[] }) => {
+        const key = (r: (typeof rows)[number], k: string) =>
+          Number(r[k as keyof typeof r]);
+        const sorted = [...rows].sort((x, y) => {
+          for (const o of args.orderBy) {
+            const [k] = Object.keys(o);
+            const d = key(x, k) - key(y, k);
+            if (d !== 0) return o[k] === 'asc' ? d : -d;
+          }
+          return 0;
+        });
+        return Promise.resolve(sorted[0]);
+      },
+    );
+    const prisma = { story: { findFirst } } as unknown as PrismaService;
+    expect(await new PrismaStoryStore(prisma).findByHash('h')).toEqual(
+      expect.objectContaining({ id: 'b', isDeleted: false }),
+    );
+  });
 });

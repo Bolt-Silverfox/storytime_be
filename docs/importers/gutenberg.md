@@ -81,13 +81,13 @@ Effective status order: `excluded`, `needs-review`, `dated-content` flag, transl
 
 ## What gets changed in the text
 
-Header and footer removed, licence text removed, producer and transcriber notes removed, `[Illustration]` placeholders removed, table of contents removed, hard line wraps rejoined into paragraphs separated by one blank line, `_italic_` markers removed, chapter headings kept as their own paragraph with capitals normalised, BOM/CRLF/zero-width characters/NBSP normalised, NFC. These changes, plus any editor notes (`violence` flag, unverified ebook id), are recorded in `adaptationNotes` (admin only), so reviewers see them on the story. Pages are not stored: the reader splits `textContent` into 30-word pages at read time (`splitStoryIntoPages`), so scenes and paragraph audio are unaffected. `wordCount` and `durationSeconds` (150 words per minute) are filled in.
+Header and footer removed, licence text removed, producer and transcriber notes removed, `[Illustration]` placeholders removed, hard line wraps rejoined into paragraphs separated by one blank line, `_italic_` markers removed, chapter headings kept as their own paragraph with capitals normalised, BOM/CRLF/zero-width characters/NBSP normalised, NFC. These changes, plus any editor notes (`violence` flag, unverified ebook id), are recorded in `adaptationNotes` (admin only), so reviewers see them on the story. Pages are not stored: the reader splits `textContent` into 30-word pages at read time (`splitStoryIntoPages`), so scenes and paragraph audio are unaffected. `wordCount` and `durationSeconds` (150 words per minute) are filled in.
 
 Rules enforced in code:
 
 - Matching is done on a folded copy (NFKC, soft hyphens and zero-width characters removed, hyphen line breaks joined, look-alike Cyrillic/Greek letters mapped to Latin, non-letters ignored), so "Guten-\nberg", full-width and homoglyph variants are recognised. The stored text keeps its typography (NFC).
 - Only recognised boilerplate paragraphs are dropped (produced/prepared/transcribed/digitized by, "This eBook/etext ...", Etext/eBook numbers, PG edition, Michael S. Hart, Distributed Proofreaders, "End of the Project ...", the project name at paragraph start, bracketed transcriber notes including multi-paragraph ones). A story paragraph that merely mentions the source is NOT silently removed: it fails the final residual check and the work becomes `needs-review`.
-- Also `needs-review`: missing start/end marker (strict, at line start, three asterisks), header not matching `expect`, an unlisted translator, any unbracketed "Transcriber's Note" paragraph (its extent is unknown), a contents block that is not a clean list that continues in order (`table-of-contents-ambiguous`), and any work over 8,000 words (about 270 pages), which must be split first. Alice, Oz and any anthology are currently over the cap.
+- Also `needs-review`: missing start/end marker (strict, at line start, three asterisks), header not matching `expect`, an unlisted translator, any unbracketed "Transcriber's Note" paragraph (its extent is unknown), any contents-like heading (CONTENTS, TABLE OF CONTENTS, CONTENTS OF VOLUME ..., LIST OF ILLUSTRATIONS, ILLUSTRATIONS, INDEX; `table-of-contents-ambiguous`), and any work over 8,000 words (about 270 pages), which must be split first. Alice, Oz and any anthology are currently over the cap.
 - An ebook/etext number inside a story sentence is never deleted (that would drop story words); the work fails closed to `needs-review`. The fold also strips combining marks and maps small-cap, Greek and Cyrillic look-alikes.
 - All cleaning is linear time (no backtracking-prone regexes) and is covered by a performance test.
 - Raw payload files are written 0600 in 0700 directories.
@@ -109,7 +109,7 @@ Rules enforced in code:
 - The ebook ids in the shipped allow-list were entered from memory and not checked against a mirror. The header check refuses a mismatch but cannot prove an edition is the intended translator's. Confirm each id before approving.
 - Death years and publication years in `pdJustification` are the team's reading of standard references.
 - The older "small print" licence layout (pre-2003 files without `*** START` markers) is not handled; those files become `needs-review`.
-- A table of contents is only recognised under a CONTENTS or TABLE OF CONTENTS heading, as a list numbered 1/I upward in order. Anything else after such a heading goes to `needs-review`; a story paragraph that merely starts with "Contents" is kept.
+- Tables of contents are never removed automatically. A short line that is a contents-like heading anywhere in the body makes the work `needs-review` (`table-of-contents-ambiguous`) and nothing is stored; an editor removes the block from the source or retells it. A sentence that merely contains the word ("Contents of the basket spilled...") is ordinary prose and is kept.
 
 ## Follow-ups (not in this change)
 

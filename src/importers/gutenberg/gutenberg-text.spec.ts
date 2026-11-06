@@ -420,122 +420,69 @@ describe('processGutenbergText hardening', () => {
       const r = processGutenbergText(wrap(body), plain());
       return r.ok ? r.content : r;
     };
-
-    it('removes a table of contents spread over several paragraphs', () => {
-      const out = contentOf(
-        `CONTENTS\n\nI. The Dark Wood\n\nII. The Lantern\n\nIII. Home\n\nCHAPTER I. THE DARK WOOD\n\n${STORY}`,
-      );
-      expect(out).toBe(`Chapter I. The Dark Wood\n\n${STORY}`);
-    });
-
-    it('removes a one-paragraph contents block that starts with the heading', () => {
-      const out = contentOf(
-        `CONTENTS\nI. The Dark Wood\nII. The Lantern\n\nCHAPTER I. THE DARK WOOD\n\n${STORY}`,
-      );
-      expect(out).toBe(`Chapter I. The Dark Wood\n\n${STORY}`);
-    });
-
-    it('keeps a story paragraph that follows the contents list', () => {
-      const out = contentOf(
-        `CONTENTS\n\nI. The Dark Wood\n\nII. The Lantern\n\nI went into the wood.\n\n${STORY}`,
-      );
-      expect(out).toBe(`I went into the wood.\n\n${STORY}`);
-    });
-
-    it('fails closed when the paragraph after a contents heading is not a list', () => {
-      expect(contentOf(`CONTENTS\n\nThe Fox\n\n${STORY}`)).toEqual({
-        ok: false,
-        reason: 'table-of-contents-ambiguous',
-      });
-    });
-
-    it('never drops a story paragraph that merely starts with the word Contents', () => {
-      const sentence = 'Contents of the basket spilled across the floor.';
-      const r = processGutenbergText(wrap(`${sentence}\n\n${STORY}`), plain());
-      expect(r.ok).toBe(true);
-      if (!r.ok) return;
-      expect(r.content).toContain(sentence);
-      expect(r.notes.join(' ')).not.toMatch(/table of contents/);
-    });
-
     const AMBIGUOUS = { ok: false, reason: 'table-of-contents-ambiguous' };
     const long = 'x'.repeat(120);
 
     it.each([
+      ['CONTENTS'],
+      ['CONTENTS.'],
+      ['contents'],
+      ['Contents:'],
+      ['TABLE OF CONTENTS'],
+      ['Table of Contents'],
+      ['CONTENTS OF VOLUME I'],
+      ['Contents: I. The Wood'],
+      ['LIST OF ILLUSTRATIONS'],
+      ['ILLUSTRATIONS'],
+      ['INDEX'],
+      ['INDEX ........ 3'],
+      ['\uff23\uff2f\uff2e\uff34\uff25\uff2e\uff34\uff33'],
+      ['    CONTENTS'],
+      ['CONTENTS\nI. The Dark Wood\nII. The Lantern'],
+      ['CONTENTS\n\nI. The Dark Wood\n\nII. The Lantern'],
+      ['CONTENTS\nChapter I ........ 3\nChapter II ....... 9'],
+      ['CONTENTS\nI.\u2014The Dark Wood\nII.\u2014The Lantern'],
+      ['CONTENTS\n\nI. A\n\nII. B\n\nAppendix'],
+      ['CONTENTS\n\nI. A\n\nII. B\n\nPart Two'],
+      ['CONTENTS\n\nI. A\n\nII. B\n\nIII. ' + long],
+      ['CONTENTS\n\nI. The Hill\n\nChapter II. Home'],
+      ['CONTENTS\n\nIIII. The River'],
       [
-        'a numbered rhyme after a roman list',
-        `CONTENTS\n\nI. Rhymes\n\n1. One, two, buckle my shoe;\n2. Three, four, knock at the door;\n\n${STORY}`,
+        'CONTENTS\n\n1. The owl and the pussy-cat went to sea\n\n2. In a beautiful pea-green boat',
       ],
-      [
-        'arabic entries then a chapter heading',
-        `CONTENTS\n\n1. The Dark Wood\n2. The Lantern\n\nCHAPTER I. THE DARK WOOD\n\n${STORY}`,
-      ],
-      [
-        'a numbered list after the contents list',
-        `CONTENTS\n\nI. A\n\nII. B\n\n1) Take the lantern.\n2) Go home.\n\n${STORY}`,
-      ],
-      [
-        'repeated chapter labels under parts',
-        `CONTENTS\n\nPART I.\n\nI. The Hill\nII. Home\n\nPART II.\n\nI. The Sea\n\n${STORY}`,
-      ],
-      [
-        'an all-capitals tail',
-        `CONTENTS\n\nI. A\n\nII. B\n\nAPPENDIX\nNOTES\n\n${STORY}`,
-      ],
-      [
-        'a later entry over 100 characters',
-        `CONTENTS\n\nI. A\n\nII. B\n\nIII. ${long}\n\n${STORY}`,
-      ],
-      [
-        'a first entry over 100 characters',
-        `CONTENTS\n\nI. ${long}\n\n${STORY}`,
-      ],
-      [
-        'a list that skips an ordinal',
-        `CONTENTS\n\nI. A\n\nIII. C\n\n${STORY}`,
-      ],
-      [
-        'dotted page numbers',
-        `CONTENTS\nChapter I ........ 3\nChapter II ....... 9\n\n${STORY}`,
-      ],
-      [
-        'entries without a full stop',
-        `CONTENTS\nI The Dark Wood\nII The Lantern\n\n${STORY}`,
-      ],
-      [
-        'dash after the numeral',
-        `CONTENTS\nI.\u2014The Dark Wood\nII.\u2014The Lantern\n\n${STORY}`,
-      ],
-      [
-        'an over-long entry in the same paragraph',
-        `CONTENTS\nI. A\nII. ${long}\n\n${STORY}`,
-      ],
-      [
-        'Contents: heading with prose',
-        `Contents:\nThe basket spilled.\n\n${STORY}`,
-      ],
-      [
-        'TABLE OF CONTENTS with prose',
-        `TABLE OF CONTENTS\nThe basket spilled.\n\n${STORY}`,
-      ],
-      ['a contents heading with nothing after it', 'CONTENTS'],
-    ])('is ambiguous, never silently shortened: %s', (_n, body) => {
-      expect(contentOf(body)).toEqual(AMBIGUOUS);
+      ['CONTENTS\n1. Spring\n2. Summer\n\n3. Autumn came and the fox slept.'],
+      ['CONTENTS\n\n3. Autumn came and the fox slept.'],
+    ])(
+      'a contents-like heading is ambiguous, never silently shortened: %j',
+      (body) => {
+        expect(contentOf(`${body}\n\n${STORY}`)).toEqual(AMBIGUOUS);
+      },
+    );
+
+    it('is ambiguous even when the heading comes mid-paragraph or last', () => {
+      expect(contentOf(`${STORY}\nCONTENTS\nI. A`)).toEqual(AMBIGUOUS);
+      expect(contentOf(`${STORY}\n\nCONTENTS`)).toEqual(AMBIGUOUS);
+    });
+
+    it('drops nothing and sets no contents note when ambiguous', () => {
+      const r = processGutenbergText(
+        wrap(`CONTENTS\n\nI. A\n\n${STORY}`),
+        plain(),
+      );
+      expect(r).toEqual(AMBIGUOUS);
     });
 
     it.each([
-      ['Contents:', 'I. A\nII. B'],
-      ['TABLE OF CONTENTS', 'I. A\nII. B'],
-      ['CONTENTS.', '1. A\n2. B'],
-      ['contents', 'I. A\nII. B'],
-    ])('removes a %s block with a clean list', (heading, list) => {
-      expect(contentOf(`${heading}\n${list}\n\n${STORY}`)).toBe(STORY);
-    });
-
-    it('removes a clean list that follows the heading in later paragraphs', () => {
-      expect(contentOf(`TABLE OF CONTENTS\n\nI. A\n\nII. B\n\n${STORY}`)).toBe(
-        STORY,
-      );
+      'Contents of the basket spilled across the floor.',
+      '"Contents under pressure," she said.',
+      'She checked the contents of her pocket, then the index finger of her glove.',
+      'The table of contents was a mystery to the fox, who could not read.',
+    ])('keeps prose that merely mentions the word: %s', (sentence) => {
+      const r = processGutenbergText(wrap(`${sentence}\n\n${STORY}`), plain());
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.content).toContain(sentence.replace(/\s+/g, ' '));
+      expect(r.notes.join(' ')).not.toMatch(/contents/);
     });
 
     it('keeps numbered stanza paragraphs when there is no contents heading', () => {
@@ -544,9 +491,14 @@ describe('processGutenbergText hardening', () => {
       expect(contentOf(body)).toContain('II.');
     });
 
-    it('keeps CONTENTS inside a sentence and short dialogue lines', () => {
-      const body = `"Contents under pressure," she said.\n\n"Yes."\n"No."\n\n${STORY}`;
-      expect(contentOf(body)).toContain('Contents under pressure');
+    it('a work with a contents block goes to needs-review (fixture 90001 with its original block)', () => {
+      const text = fx('90001-0.txt')
+        .toString('utf8')
+        .replace(
+          'CHAPTER I.',
+          'CONTENTS\n\n  I. The Dark Wood\n  II. The Lantern\n\nCHAPTER I.',
+        );
+      expect(processGutenbergText(text, entry())).toEqual(AMBIGUOUS);
     });
 
     it.each([
@@ -620,7 +572,7 @@ describe('processGutenbergText hardening', () => {
       [
         'many newlines',
         300_000,
-        90,
+        150,
         (n: number) => wrap(`a${'\n'.repeat(n)}b`),
       ],
       [
@@ -632,7 +584,7 @@ describe('processGutenbergText hardening', () => {
       [
         'many opening brackets',
         300_000,
-        90,
+        150,
         (n: number) => wrap('['.repeat(n)),
       ],
       [

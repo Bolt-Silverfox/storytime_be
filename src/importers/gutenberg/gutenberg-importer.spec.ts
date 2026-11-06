@@ -370,6 +370,25 @@ describe('GutenbergImporter', () => {
     );
   });
 
+  it('a work with a contents block is needs-review in dry-run and commit, and writes nothing', async () => {
+    const withContents = fx('90001-0.txt').replace(
+      'CHAPTER I.',
+      'CONTENTS\n\nI. The Dark Wood\n\nCHAPTER I.',
+    );
+    const { importer, store } = setup({ '90001': withContents });
+    for (const mode of ['dry-run', 'commit'] as const) {
+      const r = await importer.run({ mode, only: '90001' });
+      expect(r.items[0]).toEqual(
+        expect.objectContaining({
+          outcome: 'needs-review',
+          reason: 'table-of-contents-ambiguous',
+          written: false,
+        }),
+      );
+    }
+    expect(store.creates).toBe(0);
+  });
+
   it('report summary counts outcomes', async () => {
     const { importer } = setup();
     const r = await importer.run({ mode: 'dry-run' });

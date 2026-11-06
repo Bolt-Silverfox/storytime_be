@@ -191,124 +191,24 @@ const AMBIGUOUS_CONTENTS = {
   reason: 'table-of-contents-ambiguous',
 } as const;
 
-const CONTENTS_ENTRY =
-  /^(?:(chapter|book|part|section|story)\s+)?([ivxlcdm]+|\d+)[.:)](?:\s+(.*))?$/i;
-const CONTENTS_HEADING = /^(?:table\s+of\s+)?contents[.:]?$/i;
-const MAX_CONTENTS_ENTRY_CHARS = 100;
-const MAX_CONTENTS_CAPS_LINE_CHARS = 40;
-const ROMAN_VALUES: Record<string, number> = {
-  i: 1,
-  v: 5,
-  x: 10,
-  l: 50,
-  c: 100,
-  d: 500,
-  m: 1000,
-};
+const CONTENTS_WORD = /contents|illustrations|index/i;
+const MAX_CONTENTS_HEADING_CHARS = 100;
+const CONTENTS_HEADING = [
+  /^(?:table\s+of\s+)?contents[.:]?$/i,
+  /^contents:\s*\S/i,
+  /^contents\s+of\s+(?:volume|vol\.?|book|part)\b/i,
+  /^list\s+of\s+illustrations[.:]?$/i,
+  /^illustrations[.:]?$/i,
+  /^index(?:\s*[.:\u2026]+.*|\s+of\b.*)?$/i,
+];
 
-interface ContentsEntry {
-  prefix: string;
-  system: 'roman' | 'arabic';
-  ordinal: number;
-  title: string;
-  short: boolean;
-}
-
-function romanOrdinal(label: string): number | null {
-  let total = 0;
-  for (let i = 0; i < label.length; i++) {
-    const v = ROMAN_VALUES[label[i]];
-    total += v < (ROMAN_VALUES[label[i + 1]] ?? 0) ? -v : v;
-  }
-  const canonical = [
-    ['m', 1000],
-    ['cm', 900],
-    ['d', 500],
-    ['cd', 400],
-    ['c', 100],
-    ['xc', 90],
-    ['l', 50],
-    ['xl', 40],
-    ['x', 10],
-    ['ix', 9],
-    ['v', 5],
-    ['iv', 4],
-    ['i', 1],
-  ] as const;
-  let rest = total;
-  let out = '';
-  for (const [sym, val] of canonical) {
-    while (rest >= val) {
-      out += sym;
-      rest -= val;
-    }
-  }
-  return out === label ? total : null;
-}
-
-function parseContentsEntry(line: string): ContentsEntry | null {
-  const m = CONTENTS_ENTRY.exec(line);
-  if (!m) return null;
-  const label = m[2].toLowerCase();
-  const isArabic = /^\d+$/.test(label);
-  const ordinal = isArabic ? Number(label) : romanOrdinal(label);
-  if (ordinal === null || !Number.isSafeInteger(ordinal)) return null;
-  return {
-    prefix: (m[1] ?? '').toLowerCase(),
-    system: isArabic ? 'arabic' : 'roman',
-    ordinal,
-    title: m[3] ?? '',
-    short: line.length <= MAX_CONTENTS_ENTRY_CHARS,
-  };
-}
-
-type ContentsList =
-  { ok: true; first: ContentsEntry; last: ContentsEntry } | { ok: false };
-
-function parseContentsList(
-  lines: string[],
-  after: ContentsEntry | null,
-): ContentsList {
-  let prev = after;
-  let first: ContentsEntry | null = null;
-  for (const line of lines) {
-    const e = parseContentsEntry(line);
-    if (!e || !e.short) return { ok: false };
-    if (prev) {
-      if (
-        e.prefix !== prev.prefix ||
-        e.system !== prev.system ||
-        e.ordinal !== prev.ordinal + 1
-      )
-        return { ok: false };
-    } else if (e.ordinal !== 1) return { ok: false };
-    first ??= e;
-    prev = e;
-  }
-  return first && prev ? { ok: true, first, last: prev } : { ok: false };
-}
-
-const titleKey = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
-
-function restartsStory(lines: string[], first: ContentsEntry): boolean {
-  if (lines.length !== 1) return false;
-  const e = parseContentsEntry(lines[0]);
+const isContentsHeading = (line: string): boolean => {
+  const h = matchForm(line).trim();
   return (
-    !!e &&
-    HEADING.test(lines[0]) &&
-    e.system === first.system &&
-    e.ordinal === first.ordinal &&
-    titleKey(e.title) === titleKey(first.title)
+    h.length <= MAX_CONTENTS_HEADING_CHARS &&
+    CONTENTS_HEADING.some((re) => re.test(h))
   );
-}
-
-const isShortCapsBlock = (lines: string[]) =>
-  lines.every(
-    (l) =>
-      l.length <= MAX_CONTENTS_CAPS_LINE_CHARS &&
-      /\p{Lu}/u.test(l) &&
-      l === l.toUpperCase(),
-  );
+};
 
 const HEADING = /^(chapter|book|part)\s+([ivxlcdm\d]+)\b\.?\s*(.*)$/i;
 
@@ -415,10 +315,6 @@ export function processGutenbergText(
     'hard line wraps rejoined into paragraphs',
   ]);
   const out: string[] = [];
-  let contents:
-    | { stage: 'expect-list' }
-    | { stage: 'in-list'; first: ContentsEntry; last: ContentsEntry }
-    | null = null;
   let noteDepth = 0;
   const titleLc = matchForm(entry.title).toLowerCase();
 
@@ -430,41 +326,8 @@ export function processGutenbergText(
       noteDepth += count(m, '[') - count(m, ']');
       continue;
     }
-    if (contents) {
-      if (/^\[\s*illustration/i.test(m) && !stripIllustrations(flat).text)
-        continue;
-      const ml = lines.map(matchForm);
-      if (contents.stage === 'expect-list') {
-        const list = parseContentsList(ml, null);
-        if (!list.ok) return AMBIGUOUS_CONTENTS;
-        contents = { stage: 'in-list', first: list.first, last: list.last };
-        continue;
-      }
-      if (parseContentsEntry(ml[0])) {
-        if (!restartsStory(ml, contents.first)) {
-          const list = parseContentsList(ml, contents.last);
-          if (!list.ok) return AMBIGUOUS_CONTENTS;
-          contents = { ...contents, last: list.last };
-          continue;
-        }
-      } else if (isShortCapsBlock(ml)) {
-        return AMBIGUOUS_CONTENTS;
-      }
-      contents = null;
-    }
-    if (
-      /^(?:table|contents)/i.test(m) &&
-      CONTENTS_HEADING.test(matchForm(lines[0]))
-    ) {
-      notes.add('table of contents removed');
-      if (lines.length === 1) {
-        contents = { stage: 'expect-list' };
-        continue;
-      }
-      const list = parseContentsList(lines.slice(1).map(matchForm), null);
-      if (!list.ok) return AMBIGUOUS_CONTENTS;
-      contents = { stage: 'in-list', first: list.first, last: list.last };
-      continue;
+    if (CONTENTS_WORD.test(m) && lines.some(isContentsHeading)) {
+      return AMBIGUOUS_CONTENTS;
     }
     if (/^\[\s*transcriber/i.test(m)) {
       noteDepth = Math.max(0, count(m, '[') - count(m, ']'));
@@ -507,8 +370,6 @@ export function processGutenbergText(
     if (unItalic !== p) notes.add('italic markers removed');
     out.push(unItalic);
   }
-
-  if (contents?.stage === 'expect-list') return AMBIGUOUS_CONTENTS;
 
   const content = out.join('\n\n').trim();
   const wordCount = content ? content.split(/\s+/).length : 0;
