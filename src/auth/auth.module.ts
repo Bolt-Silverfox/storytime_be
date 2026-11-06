@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
+import { AuthV2Controller } from './auth-v2.controller';
+import { VerifyFirstService } from './services/verify-first.service';
+import { RegisterV2EnabledGuard } from './guards/register-v2-enabled.guard';
+import { RegisterV1DeprecationInterceptor } from './interceptors/v1-deprecation.interceptor';
 import { AuthService } from './auth.service';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -35,7 +39,7 @@ import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
     // EventEmitterModule is global (configured in app.module.ts)
   ],
 
-  controllers: [AuthController],
+  controllers: [AuthController, AuthV2Controller],
 
   providers: [
     AuthService,
@@ -48,6 +52,9 @@ import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
     GoogleAuthGuard,
     GoogleOAuthStrategy,
     EmailVerificationService,
+    VerifyFirstService,
+    RegisterV2EnabledGuard,
+    RegisterV1DeprecationInterceptor,
     {
       provide: AUTH_REPOSITORY,
       useClass: PrismaAuthRepository,
@@ -65,6 +72,7 @@ import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
     PassportModule,
     AUTH_REPOSITORY,
     EmailVerificationService,
+    VerifyFirstService,
   ],
 })
 export class AuthModule {}

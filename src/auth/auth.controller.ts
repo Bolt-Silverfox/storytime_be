@@ -11,6 +11,7 @@ import {
   Put,
   Req,
   UseGuards,
+  UseInterceptors,
   UnauthorizedException,
   BadRequestException,
   Res,
@@ -53,6 +54,7 @@ import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
 import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 import { ConfigService } from '@nestjs/config';
+import { RegisterV1DeprecationInterceptor } from './interceptors/v1-deprecation.interceptor';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -107,6 +109,7 @@ export class AuthController {
       ttl: THROTTLE_LIMITS.AUTH_REGISTER.ttl,
     },
   })
+  @UseInterceptors(RegisterV1DeprecationInterceptor)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Register new user',
