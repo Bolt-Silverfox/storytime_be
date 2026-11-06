@@ -7,7 +7,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
 import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 import { API_V2_ROUTE_BASE } from '@/shared/config/api-prefix';
@@ -31,7 +31,6 @@ export class AuthV2Controller {
   ) {}
 
   @Post('register')
-  @SkipThrottle()
   @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
