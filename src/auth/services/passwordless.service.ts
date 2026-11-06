@@ -392,9 +392,14 @@ export class PasswordlessService {
   }
 
   private async releaseGlobal(): Promise<void> {
-    await this.throttle.release(PASSWORDLESS_GLOBAL_KEY).catch(() => {
-      this.logger.error('Passwordless throttle store unavailable');
-    });
+    await this.throttle
+      .release(
+        PASSWORDLESS_GLOBAL_KEY,
+        PASSWORDLESS_LIMITS.requestGlobal.windowMs,
+      )
+      .catch(() => {
+        this.logger.error('Passwordless throttle store unavailable');
+      });
   }
 
   private knownNetworkKey(emailHash: string, ip: string | undefined): string {

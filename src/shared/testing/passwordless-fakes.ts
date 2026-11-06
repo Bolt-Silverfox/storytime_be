@@ -130,14 +130,17 @@ export class InMemoryRedis {
     decr: (key: string): Promise<number> => {
       if (this.down) return Promise.reject(new Error('redis down'));
       const cur = this.store.get(key);
-      if (!cur || cur.expiresAt <= Date.now()) return Promise.resolve(0);
+      if (!cur || cur.expiresAt <= Date.now()) {
+        this.store.set(key, { n: -1, expiresAt: Infinity });
+        return Promise.resolve(-1);
+      }
       cur.n -= 1;
       return Promise.resolve(cur.n);
     },
     set: (
       key: string,
-      _value: string,
-      _ex: string,
+      value: string,
+      unit: string,
       ttl: number,
       mode?: 'NX',
     ): Promise<string | null> => {
@@ -147,7 +150,10 @@ export class InMemoryRedis {
       if (mode === 'NX' && cur && cur.expiresAt > now) {
         return Promise.resolve(null);
       }
-      this.store.set(key, { n: 1, expiresAt: now + ttl * 1000 });
+      this.store.set(key, {
+        n: Number(value),
+        expiresAt: now + (unit === 'PX' ? ttl : ttl * 1000),
+      });
       return Promise.resolve('OK');
     },
   };

@@ -8,14 +8,11 @@ import { TokenService } from './token.service';
 import { PrismaAuthRepository } from '../repositories/prisma-auth.repository';
 import { PrismaLoginChallengeRepository } from '../repositories/prisma-login-challenge.repository';
 import { InMemoryRedis } from '@/shared/testing/passwordless-fakes';
+import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
+import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
 
 const url = process.env.PASSWORDLESS_TEST_DATABASE_URL;
-const databaseName = url ? new URL(url).pathname.replace(/^\//, '') : '';
-const isThrowawayDatabase =
-  databaseName === 'throwaway' ||
-  databaseName.endsWith('_throwaway') ||
-  databaseName.endsWith('_test');
-const maybe = isThrowawayDatabase ? describe : describe.skip;
+const maybe = isThrowawayDatabaseUrl(url) ? describe : describe.skip;
 
 maybe('PasswordlessService against Postgres', () => {
   let prisma: PrismaClient;
@@ -55,10 +52,12 @@ maybe('PasswordlessService against Postgres', () => {
 
   afterAll(async () => {
     await prisma.loginChallenge.deleteMany({
-      where: { emailNormalized: { startsWith: 'pwl-it-' } },
+      where: {
+        emailNormalized: { startsWith: 'pwl-it-', mode: 'insensitive' },
+      },
     });
     await prisma.user.deleteMany({
-      where: { email: { startsWith: 'pwl-it-' } },
+      where: { email: { startsWith: 'pwl-it-', mode: 'insensitive' } },
     });
     await prisma.$disconnect();
   });
@@ -561,7 +560,7 @@ maybe('PasswordlessService against Postgres', () => {
     );
   });
 
-  it('prefers the exact, then the verified, then the oldest account for a case-insensitive lookup', async () => {
+  it('prefers a verified account, then the exact case, then the oldest for a case-insensitive lookup', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
     const stamp = `${process.pid}-${++n}`;
     const upper = `PWL-IT-CASE-${stamp}@EXAMPLE.COM`;
@@ -577,6 +576,9 @@ maybe('PasswordlessService against Postgres', () => {
     expect((await authRepo.findUserByEmailInsensitive(lower))?.id).toBe(
       newer.id,
     );
+    expect((await authRepo.findUserByEmailInsensitive(upper))?.id).toBe(
+      older.id,
+    );
     expect((await authRepo.findUserByEmailInsensitive(mixed))?.id).toBe(
       older.id,
     );
@@ -589,7 +591,93 @@ maybe('PasswordlessService against Postgres', () => {
       newer.id,
     );
     expect((await authRepo.findUserByEmailInsensitive(upper))?.id).toBe(
-      older.id,
+      newer.id,
+    );
+  });
+
+  it('lands a lowercase sign-in on the verified mixed-case account, not on an attacker unverified lowercase row', async () => {
+    const stamp = `${process.pid}-${++n}`;
+    const mixed = `Pwl-It-Div-${stamp}@Example.com`;
+    const victim = await prisma.user.create({
+      data: {
+        email: mixed,
+        passwordHash: 'victim-hash',
+        isEmailVerified: true,
+      },
+    });
+    const attacker = await prisma.user.create({
+      data: {
+        email: mixed.toLowerCase(),
+        passwordHash: 'attacker-hash',
+        isEmailVerified: false,
+      },
+    });
+
+    const { code } = await issue(mixed.toLowerCase());
+    const res = await service.verify(mixed.toLowerCase(), code, '29.0.0.1');
+    expect(res.user.id).toBe(victim.id);
+    expect(res.isNewUser).toBe(false);
+    const untouched = await prisma.user.findUniqueOrThrow({
+      where: { id: attacker.id },
+    });
+    expect(untouched.isEmailVerified).toBe(false);
+    expect(untouched.passwordHash).toBe('attacker-hash');
+  });
+
+  it('lands an OAuth sign-in with the lowercase provider email on the verified account too', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${process.pid}-${++n}`;
+    const mixed = `Pwl-It-Oauth-${stamp}@Example.com`;
+    const victim = await prisma.user.create({
+      data: {
+        email: mixed,
+        passwordHash: 'victim-hash',
+        isEmailVerified: true,
+      },
+    });
+    const attacker = await prisma.user.create({
+      data: {
+        email: mixed.toLowerCase(),
+        passwordHash: 'a',
+        isEmailVerified: false,
+      },
+    });
+
+    const result = await findOrCreateParentByVerifiedEmail(
+      {
+        authRepository: authRepo,
+        passwordService: { hashPassword: () => Promise.resolve('x') } as never,
+      },
+      {
+        email: mixed.toLowerCase(),
+        emailVerified: true,
+        googleId: `pwl-it-oauth-g-${stamp}`,
+        refuseInactive: true,
+        matchEmailCaseInsensitively: true,
+      },
+    );
+
+    expect(result.user.id).toBe(victim.id);
+    expect(result.newlyVerified).toBe(false);
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: attacker.id } }))
+        .isEmailVerified,
+    ).toBe(false);
+  });
+
+  it('still lets the emailed link sign in after the code attempts are spent', async () => {
+    const email = emailFor();
+    const { code, linkToken } = await issue(email);
+    const wrong = code === '000000' ? '111111' : '000000';
+    for (let i = 0; i < 5; i++) {
+      await service.verify(email, wrong, `31.0.${i}.1`).catch(() => undefined);
+    }
+    await expect(service.verify(email, code, '31.0.9.1')).rejects.toThrow();
+
+    await expect(service.consume(linkToken, '31.0.9.1')).resolves.toMatchObject(
+      {
+        isNewUser: true,
+      },
     );
   });
 });
