@@ -76,6 +76,7 @@ export interface IAuthRepository {
     googleId?: string | null;
     appleId?: string | null;
     isEmailVerified?: boolean;
+    verifyFirstRegisteredAt?: Date;
     profile?: { create: { country: string } };
   }): Promise<UserWithProfileAndAvatar>;
   updateUser(
@@ -175,6 +176,16 @@ export interface IAuthRepository {
     type: TokenType,
   ): Promise<TokenWithUser | null>;
   deleteToken(id: string): Promise<void>;
+  findLatestUserTokenByType(
+    userId: string,
+    type: TokenType,
+  ): Promise<Token | null>;
+  recordTokenAttempt(
+    id: string,
+    now: Date,
+    maxAttempts: number,
+  ): Promise<boolean>;
+  consumeToken(id: string): Promise<boolean>;
   deleteUserTokensByType(userId: string, type: TokenType): Promise<void>;
 
   // Profile operations
