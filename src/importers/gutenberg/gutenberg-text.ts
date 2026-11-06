@@ -14,6 +14,8 @@ export type ProcessFailure =
   | 'unlisted-translator'
   | 'copyright-signal'
   | 'transcriber-note-unbracketed'
+  | 'transcriber-note-unclosed'
+  | 'boilerplate-mid-body'
   | 'table-of-contents-ambiguous'
   | 'residual-reference'
   | 'empty-after-clean'
@@ -186,6 +188,16 @@ const titleCase = (s: string): string =>
     )
     .join(' ');
 
+const UNCLOSED_NOTE = {
+  ok: false,
+  reason: 'transcriber-note-unclosed',
+} as const;
+const MID_BODY_BOILERPLATE = {
+  ok: false,
+  reason: 'boilerplate-mid-body',
+} as const;
+const NOTE_CLOSE_END = /\][.,;:!?)”"'’]*\s*$/;
+
 const AMBIGUOUS_CONTENTS = {
   ok: false,
   reason: 'table-of-contents-ambiguous',
@@ -199,18 +211,22 @@ const CONTENTS_HEADING = [
   /^illustrations[.:]?$/i,
   /^index(?:\s*[.:\u2026]+.*|\s+of\b.*)?$/i,
 ];
+const TRAILING_PAGE_LABEL =
+  /(?:\s+(?:page|pp?\.)|[\s.\u2026\u00b7\u2013\u2014-]+[ivxlcdm\d]+)\s*$/i;
 const CONTENTS_LABELLED = /^contents:\s*\S/i;
 const PAGE_REFERENCE = /[\s.\u2026\u00b7]+[ivxlcdm\d]+\s*$/i;
 const CONTENTS_FAMILY =
   /^(?:tableof)?(?:contents?|listof|illustrations?|index|plates|colou?redplates)/;
 
 const CONTENTS_WORD = /contents|illustrations|index/i;
+const HEADING_INITIAL = /^[^\p{L}\p{N}]*[CLITP\u0080-\uffff]/iu;
 const NON_ASCII = /[^ -~\t\r\n]/;
 
 const mayBeContentsHeading = (line: string): boolean =>
   CONTENTS_WORD.test(line) ||
   NON_ASCII.test(line) ||
   (line.length <= MAX_CONTENTS_HEADING_CHARS &&
+    HEADING_INITIAL.test(line) &&
     !/\p{Ll}/u.test(line.replace(PAGE_REFERENCE, '')));
 
 const isContentsHeading = (line: string): boolean => {
@@ -218,7 +234,8 @@ const isContentsHeading = (line: string): boolean => {
   const h = matchForm(line).trim();
   if (CONTENTS_LABELLED.test(h)) return true;
   if (h.length > MAX_CONTENTS_HEADING_CHARS) return false;
-  if (CONTENTS_HEADING.some((re) => re.test(h))) return true;
+  const bare = h.replace(TRAILING_PAGE_LABEL, '');
+  if (CONTENTS_HEADING.some((re) => re.test(h) || re.test(bare))) return true;
   return (
     !/\p{Ll}/u.test(h.replace(PAGE_REFERENCE, '')) &&
     CONTENTS_FAMILY.test(probe(h))
@@ -331,6 +348,7 @@ export function processGutenbergText(
   ]);
   const out: string[] = [];
   let noteDepth = 0;
+  let boilerplateAfterStory = false;
   const titleLc = matchForm(entry.title).toLowerCase();
 
   for (const lines of paras) {
@@ -338,14 +356,19 @@ export function processGutenbergText(
     const m = matchForm(flat);
 
     if (noteDepth > 0) {
+      if (HEADING.test(m)) return UNCLOSED_NOTE;
       noteDepth += count(m, '[') - count(m, ']');
+      if (noteDepth < 0 || (noteDepth === 0 && !NOTE_CLOSE_END.test(m)))
+        return UNCLOSED_NOTE;
       continue;
     }
     if (lines.some(isContentsHeading)) {
       return AMBIGUOUS_CONTENTS;
     }
     if (/^\[\s*transcriber/i.test(m)) {
-      noteDepth = Math.max(0, count(m, '[') - count(m, ']'));
+      noteDepth = count(m, '[') - count(m, ']');
+      if (noteDepth < 0 || (noteDepth === 0 && !NOTE_CLOSE_END.test(m)))
+        return UNCLOSED_NOTE;
       notes.add('transcriber and producer notes removed');
       continue;
     }
@@ -353,6 +376,7 @@ export function processGutenbergText(
       return { ok: false, reason: 'transcriber-note-unbracketed' };
     }
     if (BOILERPLATE_START.test(m)) {
+      if (out.length > 0) boilerplateAfterStory = true;
       notes.add('transcriber and producer notes removed');
       continue;
     }
@@ -383,8 +407,11 @@ export function processGutenbergText(
       '$1$2',
     );
     if (unItalic !== p) notes.add('italic markers removed');
+    if (boilerplateAfterStory) return MID_BODY_BOILERPLATE;
     out.push(unItalic);
   }
+
+  if (noteDepth > 0) return UNCLOSED_NOTE;
 
   const content = out.join('\n\n').trim();
   const wordCount = content ? content.split(/\s+/).length : 0;

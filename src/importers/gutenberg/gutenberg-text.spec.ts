@@ -550,6 +550,98 @@ describe('processGutenbergText hardening', () => {
       expect(processGutenbergText(text, entry())).toEqual(AMBIGUOUS);
     });
 
+    it('drops a leading producer line and trailing edition lines but not mid-body paragraphs', () => {
+      expect(
+        contentOf(
+          `Produced by Jane Doe at a library.\n\n${STORY}\n\nUpdated editions will replace this one.\n\nOnline Distributed Proofreading Team`,
+        ),
+      ).toBe(STORY);
+      for (const line of [
+        'Prepared by the cook, the soup was hot and the fox ate it all up.',
+        'Produced by the mill, the flour was fine.',
+        'Converted from the old tongue, the song was sweet.',
+        'This file was a gift, said the fox.',
+      ]) {
+        expect(
+          contentOf(`${STORY}\n\n${line}\n\nCHAPTER II. HOME\n\n${STORY}`),
+        ).toEqual({ ok: false, reason: 'boilerplate-mid-body' });
+      }
+    });
+
+    it.each([
+      ["[Transcriber's Note: the word [sic on page 3 is as printed.]"],
+      ["[Transcriber's Note: spelling is as printed."],
+    ])('an unclosed transcriber note fails closed: %s', (note) => {
+      expect(
+        contentOf(`${STORY}\n\n${note}\n\nCHAPTER II. HOME\n\n${STORY}`),
+      ).toEqual({ ok: false, reason: 'transcriber-note-unclosed' });
+      expect(contentOf(`${STORY}\n\n${note}\n\n${STORY}`)).toEqual({
+        ok: false,
+        reason: 'transcriber-note-unclosed',
+      });
+    });
+
+    it('a chapter heading inside an open note fails closed even if a later ] would balance it', () => {
+      expect(
+        contentOf(
+          `${STORY}\n\n[Transcriber's Note: spelling.\n\nCHAPTER II. HOME\n\nThe fox left.]\n\n${STORY}`,
+        ),
+      ).toEqual({ ok: false, reason: 'transcriber-note-unclosed' });
+    });
+
+    it.each([
+      ["[Transcriber's Note: a\n\nThe fox said ] and left."],
+      ["[Transcriber's Note: x] The fox ran home."],
+    ])(
+      'a note that closes before the paragraph ends fails closed: %s',
+      (note) => {
+        expect(contentOf(`${STORY}\n\n${note}\n\n${STORY}`)).toEqual({
+          ok: false,
+          reason: 'transcriber-note-unclosed',
+        });
+      },
+    );
+
+    it('keeps balanced notes, including [sic] and multi-paragraph ones', () => {
+      expect(
+        contentOf(
+          `${STORY}\n\n[Transcriber's Note: the word [sic] on page 3 is as printed.]\n\nCHAPTER II. HOME\n\n${STORY}`,
+        ),
+      ).toBe(`${STORY}\n\nChapter II. Home\n\n${STORY}`);
+    });
+
+    it.each([
+      ['Contents      Page'],
+      ['Contents vii'],
+      ['Contents  ix'],
+      ['Table of Contents   Page'],
+      ['CONTENTS\u2014vii'],
+      ['TABLE OF CONTENTS 5'],
+      ['TABLE OF CONTENTS VOLUME I'],
+      ['PLATES'],
+      ['COLOURED PLATES'],
+      ['COLORED PLATES'],
+      ['\uff23\uff4f\uff4e\uff54\uff45\uff4e\uff54\uff53\uff1a I. The Wood'],
+    ])(
+      'a heading with a page label or odd spelling is ambiguous: %j',
+      (heading) => {
+        expect(
+          contentOf(
+            `${heading}\n\nI. The Dark Wood\nII. The Lantern\n\n${STORY}`,
+          ),
+        ).toEqual(AMBIGUOUS);
+      },
+    );
+
+    it.each([
+      'Contents\u2014I said, and the fox smiled.',
+      'Contents 3 jars of jam.',
+    ])('keeps prose that starts with the word Contents: %s', (line) => {
+      expect(
+        processGutenbergText(wrap(`${line}\n\n${STORY}`), plain()).ok,
+      ).toBe(true);
+    });
+
     it.each([
       "Transcriber's Note: spelling kept as printed.\n\nMore about the edition.",
       "Transcriber's Notes\n\nMore about the edition.",
@@ -659,6 +751,12 @@ describe('processGutenbergText hardening', () => {
         300_000,
         80,
         (n: number) => wrap('word\n'.repeat(n / 5)),
+      ],
+      [
+        'all-caps lines in one paragraph',
+        300_000,
+        100,
+        (n: number) => wrap('CODE\n'.repeat(n / 5)),
       ],
       [
         'many one-line paragraphs',
