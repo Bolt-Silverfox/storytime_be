@@ -15,9 +15,9 @@ const SENTINELS = [
   'outgoingToken',
 ].map((k) => `sentinel-${k.toLowerCase()}-${k.length}x`);
 
-function run(mode: 'scrub' | 'raw'): string {
+function spawnRunner(mode: 'scrub' | 'raw' | 'fail') {
   const root = path.resolve(__dirname, '..');
-  const r = spawnSync(
+  return spawnSync(
     process.execPath,
     [
       '-r',
@@ -32,6 +32,10 @@ function run(mode: 'scrub' | 'raw'): string {
       maxBuffer: 64 * 1024 * 1024,
     },
   );
+}
+
+function run(mode: 'scrub' | 'raw'): string {
+  const r = spawnRunner(mode);
   expect(r.status).toBe(0);
   const m = /ENVELOPES_BEGIN([\s\S]*)ENVELOPES_END/.exec(r.stdout);
   expect(m).not.toBeNull();
@@ -50,5 +54,13 @@ describe('real HTTP request, default integrations, tracing on (child process)', 
     expect(out).toContain('hello from request');
     expect(out).toContain('"type":"transaction"');
     expect(SENTINELS.filter((s) => out.includes(s))).toEqual([]);
+  });
+
+  it('exits non-zero and writes the error to stderr when the scenario rejects', () => {
+    const r = spawnRunner('fail');
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(
+      'sentry-scrub-http-runner failed: Error: scenario failed on purpose',
+    );
   });
 });

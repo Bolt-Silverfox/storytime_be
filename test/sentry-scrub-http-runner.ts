@@ -2,7 +2,7 @@
  * Child-process driver for src/sentry-scrub.http.spec.ts. Runs in its own
  * process because Sentry's default integrations patch http and install global
  * handlers, which must not leak into the shared jest worker.
- * Usage: node -r ts-node/register/transpile-only test/sentry-scrub-http-runner.ts <scrub|raw>
+ * Usage: node -r ts-node/register/transpile-only test/sentry-scrub-http-runner.ts <scrub|raw|fail>
  */
 import * as http from 'http';
 import type { AddressInfo } from 'net';
@@ -45,7 +45,8 @@ function call(
   });
 }
 
-async function runScenario(scrub: boolean): Promise<string> {
+async function runScenario(mode: string): Promise<string> {
+  const scrub = mode === 'scrub';
   const envelopes: string[] = [];
   Sentry.init({
     ...(scrub ? buildSentryOptions() : {}),
@@ -77,6 +78,7 @@ async function runScenario(scrub: boolean): Promise<string> {
     });
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  if (mode === 'fail') throw new Error('scenario failed on purpose');
   const port = (server.address() as AddressInfo).port;
   const body = JSON.stringify({
     password: S.bodyPassword,
@@ -101,8 +103,15 @@ async function runScenario(scrub: boolean): Promise<string> {
   return envelopes.join('\n');
 }
 
-void runScenario(process.argv[2] === 'scrub').then((out) => {
-  process.stdout.write(`ENVELOPES_BEGIN${out}ENVELOPES_END`, () =>
-    process.exit(0),
-  );
-});
+runScenario(process.argv[2])
+  .then((out) => {
+    process.stdout.write(`ENVELOPES_BEGIN${out}ENVELOPES_END`, () =>
+      process.exit(0),
+    );
+  })
+  .catch((err: unknown) => {
+    process.stderr.write(
+      `sentry-scrub-http-runner failed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+      () => process.exit(1),
+    );
+  });
