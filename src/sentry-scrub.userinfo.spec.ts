@@ -115,78 +115,103 @@ describe('URL userinfo credentials in free text', () => {
     `postgres://${USER}:${PW}%23x@db/app`,
     `postgres://${USER}:${PW}%2Fx@db/app`,
     `redis://:${PW}%3Fx@cache:6379`,
+    `postgres://${USER}:${PW}%2Fx%40h/db`,
+    `redis://:${PW}%3Fx%40cache:6379`,
   ])('redacts %s passed as a query-string parameter value', (dsn) => {
     const out = scrubError({
       request: { url: 'https://api/x', query_string: `dsn=${dsn}&page=2` },
     });
     expect(JSON.stringify(out)).not.toContain(PW);
     expect(out.request.query_string).toContain('page=2');
+    const crumb: any = scrubSentryBreadcrumb({
+      data: { 'http.query': `dsn=${dsn}&page=2` },
+    });
+    expect(JSON.stringify(crumb)).not.toContain(PW);
   });
 });
 
 describe.each([
-  ['plain password', `redis://${USER}:${PW}@cache:6379`],
-  ['encoded hash', `postgres://${USER}:${PW}%23x@h/db`],
-  ['encoded slash', `postgres://${USER}:${PW}%2Fx@h/db`],
-  ['encoded question mark', `redis://:${PW}%3Fx@cache:6379`],
-])('connection string with %s in every event field', (_n, URL_WITH_SECRET) => {
-  const fullEvent = (): any => ({
-    message: `m ${URL_WITH_SECRET}`,
-    transaction: `t ${URL_WITH_SECRET}`,
-    exception: { values: [{ type: 'Error', value: `e ${URL_WITH_SECRET}` }] },
-    extra: { dsn: URL_WITH_SECRET, nested: [{ u: URL_WITH_SECRET }] },
-    breadcrumbs: [
-      { message: `b ${URL_WITH_SECRET}`, data: { target: URL_WITH_SECRET } },
-    ],
-    contexts: {
-      trace: {
-        trace_id: 't',
-        span_id: 's',
-        data: {
-          'db.connection_string': URL_WITH_SECRET,
-          other: URL_WITH_SECRET,
+  [
+    'plain password',
+    `redis://${USER}:${PW}@cache:6379`,
+    `redis://${REDACTED}@cache:6379`,
+  ],
+  [
+    'encoded hash',
+    `postgres://${USER}:${PW}%23x@h/db`,
+    `postgres://${REDACTED}@h/db`,
+  ],
+  [
+    'encoded slash',
+    `postgres://${USER}:${PW}%2Fx@h/db`,
+    `postgres://${REDACTED}@h/db`,
+  ],
+  [
+    'encoded question mark',
+    `redis://:${PW}%3Fx@cache:6379`,
+    `redis://${REDACTED}@cache:6379`,
+  ],
+])(
+  'connection string with %s in every event field',
+  (_n, URL_WITH_SECRET, EXPECTED) => {
+    const fullEvent = (): any => ({
+      message: `m ${URL_WITH_SECRET}`,
+      transaction: `t ${URL_WITH_SECRET}`,
+      exception: { values: [{ type: 'Error', value: `e ${URL_WITH_SECRET}` }] },
+      extra: { dsn: URL_WITH_SECRET, nested: [{ u: URL_WITH_SECRET }] },
+      breadcrumbs: [
+        { message: `b ${URL_WITH_SECRET}`, data: { target: URL_WITH_SECRET } },
+      ],
+      contexts: {
+        trace: {
+          trace_id: 't',
+          span_id: 's',
+          data: {
+            'db.connection_string': URL_WITH_SECRET,
+            other: URL_WITH_SECRET,
+          },
         },
       },
-    },
-    spans: [
-      {
-        span_id: 'a',
-        trace_id: 't',
-        description: `connect ${URL_WITH_SECRET}`,
-        data: { 'db.url': URL_WITH_SECRET, other: URL_WITH_SECRET },
-      },
-    ],
-    request: { url: URL_WITH_SECRET, method: 'GET' },
-  });
-
-  it('is gone from errors, transactions and breadcrumbs on the normal path', () => {
-    for (const out of [scrubError(fullEvent()), scrubTx(fullEvent())]) {
-      const dumped = JSON.stringify(out);
-      expect(dumped).not.toContain(PW);
-      expect(dumped).not.toContain(USER);
-      expect(dumped).toContain(`${REDACTED}@`);
-    }
-    const crumb: any = scrubSentryBreadcrumb(fullEvent().breadcrumbs[0]);
-    expect(JSON.stringify(crumb)).not.toContain(PW);
-  });
-
-  it('is gone on the fail-closed fallback path', () => {
-    const throwing = (): any => ({
-      ...fullEvent(),
-      request: {
-        url: URL_WITH_SECRET,
-        get headers() {
-          throw new Error('boom');
+      spans: [
+        {
+          span_id: 'a',
+          trace_id: 't',
+          description: `connect ${URL_WITH_SECRET}`,
+          data: { 'db.url': URL_WITH_SECRET, other: URL_WITH_SECRET },
         },
-      },
+      ],
+      request: { url: URL_WITH_SECRET, method: 'GET' },
     });
-    for (const out of [scrubError(throwing()), scrubTx(throwing())]) {
-      const dumped = JSON.stringify(out);
-      expect(dumped).not.toContain(PW);
-      expect(dumped).not.toContain(USER);
-    }
-  });
-});
+
+    it('is gone from errors, transactions and breadcrumbs on the normal path', () => {
+      for (const out of [scrubError(fullEvent()), scrubTx(fullEvent())]) {
+        const dumped = JSON.stringify(out);
+        expect(dumped).not.toContain(PW);
+        expect(dumped).not.toContain(USER);
+        expect(dumped).toContain(EXPECTED);
+      }
+      const crumb: any = scrubSentryBreadcrumb(fullEvent().breadcrumbs[0]);
+      expect(JSON.stringify(crumb)).not.toContain(PW);
+    });
+
+    it('is gone on the fail-closed fallback path', () => {
+      const throwing = (): any => ({
+        ...fullEvent(),
+        request: {
+          url: URL_WITH_SECRET,
+          get headers() {
+            throw new Error('boom');
+          },
+        },
+      });
+      for (const out of [scrubError(throwing()), scrubTx(throwing())]) {
+        const dumped = JSON.stringify(out);
+        expect(dumped).not.toContain(PW);
+        expect(dumped).not.toContain(USER);
+      }
+    });
+  },
+);
 
 describe('userinfo scrubbing stays linear', () => {
   const INPUTS: Array<[string, string]> = [

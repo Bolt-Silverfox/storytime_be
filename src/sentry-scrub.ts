@@ -129,7 +129,7 @@ function decodeKey(raw: string): string {
 function hasNestedSecret(value: string): boolean {
   let cur = value;
   for (let i = 0; i < 4; i++) {
-    if (/[=@]/.test(cur) && scrubText(cur, false) !== cur) return true;
+    if (/[=@]|%40/i.test(cur) && scrubText(cur, false) !== cur) return true;
     let next: string;
     try {
       next = decodeURIComponent(cur.replace(/\+/g, ' '));
