@@ -115,10 +115,9 @@ export class PasswordlessService {
       const knownNetwork = (await this.throttle.peek(knownNetworkKey)) > 0;
       const dayNetworkKey = `pwl:req:email:${emailHash}:net:${this.hmac(ipBlock(ip))}:d`;
       const dayEmailKey = `pwl:req:email:${emailHash}:d`;
-      const [dayNetwork, dayEmail, globalCount] = await Promise.all([
+      const [dayNetwork, dayEmail] = await Promise.all([
         this.throttle.peek(dayNetworkKey),
         this.throttle.peek(dayEmailKey),
-        this.throttle.peek(PASSWORDLESS_GLOBAL_KEY),
       ]);
       if (
         !knownNetwork &&
@@ -130,14 +129,18 @@ export class PasswordlessService {
         );
         return result;
       }
-      if (globalCount >= L.requestGlobal.max) {
+      const globalCount = await this.throttle.hit(
+        PASSWORDLESS_GLOBAL_KEY,
+        L.requestGlobal.windowMs,
+      );
+      if (globalCount > L.requestGlobal.max) {
+        await this.releaseGlobal();
         this.logger.error('Passwordless global send ceiling reached');
         return result;
       }
       sendCounters = [
         [dayNetworkKey, L.requestPerEmailDayPerNetwork.windowMs],
         [dayEmailKey, L.requestPerEmailDay.windowMs],
-        [PASSWORDLESS_GLOBAL_KEY, L.requestGlobal.windowMs],
       ];
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -152,15 +155,22 @@ export class PasswordlessService {
     const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
     const linkToken = crypto.randomBytes(32).toString('base64url');
 
-    await this.challenges.replaceOpenChallenge({
-      id,
-      emailNormalized,
-      codeHash: this.codeHash(id, code),
-      linkTokenHash: this.sha256(linkToken),
-      expiresAt: new Date(now.getTime() + PASSWORDLESS_CODE_TTL_SECONDS * 1000),
-      requestIpHash: ipHash,
-      now,
-    });
+    try {
+      await this.challenges.replaceOpenChallenge({
+        id,
+        emailNormalized,
+        codeHash: this.codeHash(id, code),
+        linkTokenHash: this.sha256(linkToken),
+        expiresAt: new Date(
+          now.getTime() + PASSWORDLESS_CODE_TTL_SECONDS * 1000,
+        ),
+        requestIpHash: ipHash,
+        now,
+      });
+    } catch (error) {
+      await this.releaseGlobal();
+      throw error;
+    }
 
     await Promise.all(
       sendCounters.map(([key, windowMs]) => this.throttle.hit(key, windowMs)),
@@ -379,6 +389,12 @@ export class PasswordlessService {
       this.logger.error('Passwordless throttle store unavailable');
       return true;
     }
+  }
+
+  private async releaseGlobal(): Promise<void> {
+    await this.throttle.release(PASSWORDLESS_GLOBAL_KEY).catch(() => {
+      this.logger.error('Passwordless throttle store unavailable');
+    });
   }
 
   private knownNetworkKey(emailHash: string, ip: string | undefined): string {

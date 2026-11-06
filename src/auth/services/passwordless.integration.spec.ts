@@ -10,7 +10,12 @@ import { PrismaLoginChallengeRepository } from '../repositories/prisma-login-cha
 import { InMemoryRedis } from '@/shared/testing/passwordless-fakes';
 
 const url = process.env.PASSWORDLESS_TEST_DATABASE_URL;
-const maybe = url && /throwaway|_test/.test(url) ? describe : describe.skip;
+const databaseName = url ? new URL(url).pathname.replace(/^\//, '') : '';
+const isThrowawayDatabase =
+  databaseName === 'throwaway' ||
+  databaseName.endsWith('_throwaway') ||
+  databaseName.endsWith('_test');
+const maybe = isThrowawayDatabase ? describe : describe.skip;
 
 maybe('PasswordlessService against Postgres', () => {
   let prisma: PrismaClient;
@@ -236,6 +241,10 @@ maybe('PasswordlessService against Postgres', () => {
     const repo = new PrismaLoginChallengeRepository(prisma as never);
     const email = emailFor();
     const old = new Date(Date.now() - 3 * 86_400_000);
+    const cutoff = new Date(Date.now() - 86_400_000);
+    await prisma.loginChallenge.deleteMany({
+      where: { expiresAt: { lt: cutoff } },
+    });
     await prisma.loginChallenge.createMany({
       data: Array.from({ length: 5 }, (_, i) => ({
         emailNormalized: email,
@@ -244,10 +253,9 @@ maybe('PasswordlessService against Postgres', () => {
         expiresAt: old,
       })),
     });
-    const cutoff = new Date(Date.now() - 86_400_000);
     expect(await repo.deleteExpiredBefore(cutoff, 2)).toBe(2);
     expect(await repo.deleteExpiredBefore(cutoff, 2)).toBe(2);
-    expect(await repo.deleteExpiredBefore(cutoff, 2)).toBeGreaterThanOrEqual(1);
+    expect(await repo.deleteExpiredBefore(cutoff, 2)).toBe(1);
     expect(
       await prisma.loginChallenge.count({ where: { emailNormalized: email } }),
     ).toBe(0);
@@ -528,5 +536,60 @@ maybe('PasswordlessService against Postgres', () => {
     expect(
       await prisma.deviceToken.count({ where: { userId: victim.id } }),
     ).toBe(1);
+  });
+
+  it('deletes reset and verification tokens the attacker requested before the takeover', async () => {
+    const stamp = `${process.pid}-${++n}`;
+    const email = `pwl-it-tok-${stamp}@example.com`;
+    const attacker = await prisma.user.create({
+      data: { email, passwordHash: 'attacker-hash', isEmailVerified: false },
+    });
+    await prisma.token.createMany({
+      data: ['PASSWORD_RESET', 'VERIFICATION'].map((type, i) => ({
+        userId: attacker.id,
+        token: `pwl-it-tok-${stamp}-${i}`,
+        type,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      })),
+    });
+
+    const { code } = await issue(email);
+    await service.verify(email, code, '28.0.0.1');
+
+    expect(await prisma.token.count({ where: { userId: attacker.id } })).toBe(
+      0,
+    );
+  });
+
+  it('prefers the exact, then the verified, then the oldest account for a case-insensitive lookup', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${process.pid}-${++n}`;
+    const upper = `PWL-IT-CASE-${stamp}@EXAMPLE.COM`;
+    const lower = upper.toLowerCase();
+    const older = await prisma.user.create({
+      data: { email: upper, passwordHash: 'h', isEmailVerified: false },
+    });
+    const newer = await prisma.user.create({
+      data: { email: lower, passwordHash: 'h', isEmailVerified: false },
+    });
+    const mixed = `Pwl-It-Case-${stamp}@Example.com`;
+
+    expect((await authRepo.findUserByEmailInsensitive(lower))?.id).toBe(
+      newer.id,
+    );
+    expect((await authRepo.findUserByEmailInsensitive(mixed))?.id).toBe(
+      older.id,
+    );
+
+    await prisma.user.update({
+      where: { id: newer.id },
+      data: { isEmailVerified: true },
+    });
+    expect((await authRepo.findUserByEmailInsensitive(mixed))?.id).toBe(
+      newer.id,
+    );
+    expect((await authRepo.findUserByEmailInsensitive(upper))?.id).toBe(
+      older.id,
+    );
   });
 });

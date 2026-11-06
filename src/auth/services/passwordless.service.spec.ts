@@ -219,9 +219,9 @@ describe('PasswordlessService', () => {
         );
       }
       await expectGeneric(service.verify('a@example.com', code, '4.4.4.9'));
-      await expectGeneric(
+      await expect(
         service.consume(captured[0].linkToken, '4.4.4.9'),
-      ).catch(() => undefined);
+      ).resolves.toMatchObject({ isNewUser: true });
     });
 
     it('the code consumes the challenge so the link cannot be replayed', async () => {
@@ -729,6 +729,24 @@ describe('PasswordlessService', () => {
       });
     });
 
+    it('never lets concurrent requests exceed the ceiling', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      jest.spyOn(Logger.prototype, 'log').mockImplementation();
+      const { service, captured, redis } = build();
+      for (let i = 0; i < 998; i++) {
+        await redis.client.eval('', 1, 'pwl:req:global', '3600000');
+      }
+
+      await Promise.all(
+        [0, 1, 2, 3, 4, 5].map((i) =>
+          service.request(`c${i}@example.com`, `50.${i}.0.1`),
+        ),
+      );
+
+      expect(captured).toHaveLength(2);
+      expect(await redis.client.get('pwl:req:global')).toBe('1000');
+    });
+
     it('logs at error level when the ceiling trips', async () => {
       const errorSpy = jest
         .spyOn(Logger.prototype, 'error')
@@ -799,7 +817,7 @@ describe('PasswordlessService', () => {
         service.request('target@example.com', '1.1.1.1'),
       ).rejects.toThrow('db');
 
-      expect(await redis.client.get('pwl:req:global')).toBeNull();
+      expect(Number((await redis.client.get('pwl:req:global')) ?? 0)).toBe(0);
     });
 
     it('does not count wrong codes against the address when no challenge is open', async () => {

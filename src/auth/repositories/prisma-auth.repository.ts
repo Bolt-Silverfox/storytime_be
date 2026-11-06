@@ -32,9 +32,11 @@ export class PrismaAuthRepository implements IAuthRepository {
   }
 
   async findUserByEmailInsensitive(email: string): Promise<User | null> {
+    const exact = await this.prisma.user.findUnique({ where: { email } });
+    if (exact) return exact;
     return this.prisma.user.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ isEmailVerified: 'desc' }, { createdAt: 'asc' }],
     });
   }
 
@@ -287,6 +289,7 @@ export class PrismaAuthRepository implements IAuthRepository {
     return this.prisma.$transaction(async (tx) => {
       await tx.session.deleteMany({ where: { userId: id } });
       await tx.deviceToken.deleteMany({ where: { userId: id } });
+      await tx.token.deleteMany({ where: { userId: id } });
       return tx.user.update({
         where: { id },
         data: data as Parameters<typeof tx.user.update>[0]['data'],

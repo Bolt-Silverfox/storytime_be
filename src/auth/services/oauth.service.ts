@@ -180,10 +180,16 @@ export class OAuthService {
           email,
           name,
           emailVerified: true,
+          refuseInactive: true,
+          matchEmailCaseInsensitively: true,
           googleId,
           appleId,
         },
       ));
+    }
+
+    if (user.isSuspended || user.isDeleted) {
+      throw new UnauthorizedException('This account is not available.');
     }
 
     // 4. Must be verified

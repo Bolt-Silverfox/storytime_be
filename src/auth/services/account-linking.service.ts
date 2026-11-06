@@ -40,6 +40,12 @@ export class AccountLinkingService {
     }
   }
 
+  private async assertSessionStillActive(sessionId?: string): Promise<void> {
+    if (sessionId && !(await this.authRepository.findSessionById(sessionId))) {
+      throw new UnauthorizedException('Session expired. Please sign in again.');
+    }
+  }
+
   async getLinkedAccounts(userId: string) {
     const user = await this.authRepository.findUserLinkedAccountInfo(userId);
 
@@ -126,6 +132,7 @@ export class AccountLinkingService {
     }
     if (updated.count === 0) {
       // Either user does not exist (or is soft-deleted), or googleId is already set
+      await this.assertSessionStillActive(sessionId);
       const user = await this.authRepository.findActiveUserById(userId);
       if (!user) throw new NotFoundException('User not found');
       if (!user.isEmailVerified)
@@ -187,6 +194,7 @@ export class AccountLinkingService {
     }
     if (updated.count === 0) {
       // Either user does not exist (or is soft-deleted), or appleId is already set
+      await this.assertSessionStillActive(sessionId);
       const user = await this.authRepository.findActiveUserById(userId);
       if (!user) throw new NotFoundException('User not found');
       if (!user.isEmailVerified)

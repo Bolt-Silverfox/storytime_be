@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import {
   BadRequestException,
   ForbiddenException,
+  UnauthorizedException,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -24,6 +25,7 @@ describe('AccountLinkingService', () => {
   let service: AccountLinkingService;
   let authRepository: {
     findActiveUserById: jest.Mock;
+    findSessionById: jest.Mock;
     findUserLinkedAccountInfo: jest.Mock;
     linkGoogleAccountIfUnset: jest.Mock;
     linkAppleAccountIfUnset: jest.Mock;
@@ -33,6 +35,7 @@ describe('AccountLinkingService', () => {
   beforeEach(async () => {
     const mockAuthRepository = {
       findActiveUserById: jest.fn(),
+      findSessionById: jest.fn(),
       findUserLinkedAccountInfo: jest.fn(),
       linkGoogleAccountIfUnset: jest.fn(),
       linkAppleAccountIfUnset: jest.fn(),
@@ -72,6 +75,19 @@ describe('AccountLinkingService', () => {
         await expect(service[method]('user-1', 'token')).rejects.toBeInstanceOf(
           ForbiddenException,
         );
+      });
+
+      it('reports an expired session instead of already linked when the caller session is gone', async () => {
+        authRepository[repoFn].mockResolvedValue({ count: 0 });
+        authRepository.findSessionById.mockResolvedValue(null);
+        authRepository.findActiveUserById.mockResolvedValue({
+          id: 'user-1',
+          isEmailVerified: true,
+        });
+
+        await expect(
+          service[method]('user-1', 'token', 'session-9'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
       });
 
       it('still reports an already linked provider for a verified account', async () => {

@@ -127,6 +127,13 @@ export class InMemoryRedis {
       cur.n += 1;
       return Promise.resolve(cur.n);
     },
+    decr: (key: string): Promise<number> => {
+      if (this.down) return Promise.reject(new Error('redis down'));
+      const cur = this.store.get(key);
+      if (!cur || cur.expiresAt <= Date.now()) return Promise.resolve(0);
+      cur.n -= 1;
+      return Promise.resolve(cur.n);
+    },
     set: (
       key: string,
       _value: string,
@@ -184,9 +191,13 @@ export class InMemoryAuthRepository {
       suspendedAt: null,
       isDeleted: false,
       deletedAt: null,
-      googleId: null,
-      appleId: null,
-      profile: { country: 'NG' } as Profile,
+      googleId: (data.googleId as string | null) ?? null,
+      appleId: (data.appleId as string | null) ?? null,
+      profile: {
+        country:
+          (data.profile as { create?: { country?: string } } | undefined)
+            ?.create?.country ?? 'NG',
+      } as Profile,
       avatar: null,
     } as unknown as User & { profile: Profile | null; avatar: Avatar | null };
     this.users.push(u);

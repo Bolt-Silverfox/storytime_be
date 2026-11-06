@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OAuthService } from './oauth.service';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
 import {
@@ -51,7 +51,7 @@ describe('OAuthService', () => {
     const mockAuthRepository = {
       findUserByGoogleId: jest.fn(),
       findUserByAppleId: jest.fn(),
-      findUserByEmail: jest.fn(),
+      findUserByEmailInsensitive: jest.fn(),
       updateUser: jest.fn(),
       updateUserWithRelations: jest.fn(),
       takeOverUnverifiedAccount: jest.fn(),
@@ -158,7 +158,9 @@ describe('OAuthService', () => {
           }),
         });
         authRepository.findUserByGoogleId.mockResolvedValue(null);
-        authRepository.findUserByEmail.mockResolvedValue(attackerOwned);
+        authRepository.findUserByEmailInsensitive.mockResolvedValue(
+          attackerOwned,
+        );
         authRepository.takeOverUnverifiedAccount.mockResolvedValue({
           ...attackerOwned,
           isEmailVerified: true,
@@ -197,7 +199,7 @@ describe('OAuthService', () => {
       });
 
       it('drops ids the attacker linked earlier when the owner arrives through Google', async () => {
-        authRepository.findUserByEmail.mockResolvedValue({
+        authRepository.findUserByEmailInsensitive.mockResolvedValue({
           ...attackerOwned,
           googleId: 'attacker-google-sub',
           appleId: 'attacker-apple-sub',
@@ -210,7 +212,7 @@ describe('OAuthService', () => {
       });
 
       it('leaves sessions and password alone for an already verified account', async () => {
-        authRepository.findUserByEmail.mockResolvedValue({
+        authRepository.findUserByEmailInsensitive.mockResolvedValue({
           ...attackerOwned,
           isEmailVerified: true,
         });
@@ -221,6 +223,92 @@ describe('OAuthService', () => {
           authRepository.updateUserWithRelations.mock.calls[0][1],
         ).not.toHaveProperty('passwordHash');
       });
+    });
+
+    describe('inactive accounts', () => {
+      it.each([
+        ['suspended', { isSuspended: true }],
+        ['deleted', { isDeleted: true }],
+      ])(
+        'refuses a %s account matched by email without issuing tokens or saying the email is unverified',
+        async (_label, flag) => {
+          googleClient.verifyIdToken.mockResolvedValue({
+            getPayload: () => ({
+              sub: 'g-sub',
+              email: 'owner@example.com',
+              email_verified: true,
+            }),
+          });
+          authRepository.findUserByGoogleId.mockResolvedValue(null);
+          authRepository.findUserByEmailInsensitive.mockResolvedValue({
+            ...mockUser,
+            isEmailVerified: false,
+            ...flag,
+          });
+
+          const err = await service
+            .loginWithGoogleIdToken('valid-token')
+            .catch((e: Error) => e);
+
+          expect(err).toBeInstanceOf(UnauthorizedException);
+          expect((err as Error).message).not.toMatch(/verified/i);
+          expect(
+            authRepository.takeOverUnverifiedAccount,
+          ).not.toHaveBeenCalled();
+          expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+        },
+      );
+
+      it('refuses a suspended account matched by provider id', async () => {
+        googleClient.verifyIdToken.mockResolvedValue({
+          getPayload: () => ({
+            sub: 'g-sub',
+            email: 'owner@example.com',
+            email_verified: true,
+          }),
+        });
+        authRepository.findUserByGoogleId.mockResolvedValue({
+          ...mockUser,
+          isSuspended: true,
+        });
+
+        await expect(
+          service.loginWithGoogleIdToken('valid-token'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+        expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+      });
+    });
+
+    it('matches the stored email case-insensitively', async () => {
+      googleClient.verifyIdToken.mockResolvedValue({
+        getPayload: () => ({
+          sub: 'g-sub',
+          email: 'mixed@example.com',
+          email_verified: true,
+        }),
+      });
+      authRepository.findUserByGoogleId.mockResolvedValue(null);
+      authRepository.findUserByEmailInsensitive.mockResolvedValue({
+        ...mockUser,
+        email: 'Mixed@Example.com',
+        isEmailVerified: true,
+      });
+      authRepository.updateUserWithRelations.mockResolvedValue({
+        ...mockUser,
+        isEmailVerified: true,
+      });
+      authRepository.countKidsByParentId.mockResolvedValue(0);
+      tokenService.createTokenPair.mockResolvedValue({
+        jwt: 'j',
+        refreshToken: 'r',
+      });
+
+      await service.loginWithGoogleIdToken('valid-token');
+
+      expect(authRepository.findUserByEmailInsensitive).toHaveBeenCalledWith(
+        'mixed@example.com',
+      );
+      expect(authRepository.createUser).not.toHaveBeenCalled();
     });
 
     describe('provider reports the email as unverified', () => {
@@ -235,11 +323,13 @@ describe('OAuthService', () => {
       beforeEach(() => {
         authRepository.findUserByGoogleId.mockResolvedValue(null);
         authRepository.findUserByAppleId.mockResolvedValue(null);
-        authRepository.findUserByEmail.mockResolvedValue(existing);
+        authRepository.findUserByEmailInsensitive.mockResolvedValue(existing);
       });
 
       const expectUntouched = () => {
-        expect(authRepository.findUserByEmail).not.toHaveBeenCalled();
+        expect(
+          authRepository.findUserByEmailInsensitive,
+        ).not.toHaveBeenCalled();
         expect(authRepository.updateUserWithRelations).not.toHaveBeenCalled();
         expect(authRepository.takeOverUnverifiedAccount).not.toHaveBeenCalled();
         expect(authRepository.createUser).not.toHaveBeenCalled();
