@@ -20,9 +20,9 @@ function expandIPv6(address: string): number[] | null {
     ...headGroups,
     ...(rest === undefined ? [] : Array<string>(missing).fill('0')),
     ...restGroups,
-  ].map((g) => parseInt(g, 16));
-  return groups.length === 8 && groups.every((g) => g >= 0 && g <= 0xffff)
-    ? groups
+  ];
+  return groups.length === 8 && groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))
+    ? groups.map((g) => parseInt(g, 16))
     : null;
 }
 

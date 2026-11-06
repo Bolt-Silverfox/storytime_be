@@ -285,7 +285,6 @@ export class PrismaAuthRepository implements IAuthRepository {
     data: Parameters<IAuthRepository['takeOverUnverifiedAccount']>[1],
   ): Promise<UserWithProfileAndAvatar> {
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${id} FOR UPDATE`;
       await tx.session.deleteMany({ where: { userId: id } });
       await tx.deviceToken.deleteMany({ where: { userId: id } });
       return tx.user.update({

@@ -421,4 +421,44 @@ maybe('PasswordlessService against Postgres', () => {
       expect(after.googleId).toBeNull();
     }
   });
+
+  it('makes a link that was waiting on the takeover see the revoked session', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${process.pid}-${++n}`;
+    const user = await prisma.user.create({
+      data: {
+        email: `pwl-it-wait-${stamp}@example.com`,
+        passwordHash: 'h',
+        isEmailVerified: false,
+      },
+    });
+    const session = await prisma.session.create({
+      data: {
+        userId: user.id,
+        token: `pwl-it-ws-${stamp}`,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
+    });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { isEmailVerified: true },
+    });
+
+    let link: Promise<{ count: number }> = Promise.resolve({ count: -1 });
+    await prisma.$transaction(async (tx) => {
+      await tx.session.deleteMany({ where: { userId: user.id } });
+      await tx.user.update({
+        where: { id: user.id },
+        data: { biometricsEnabled: false },
+      });
+      link = authRepo.linkGoogleAccountIfUnset(
+        user.id,
+        `pwl-it-wait-g-${stamp}`,
+        session.id,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+
+    expect(await link).toEqual({ count: 0 });
+  });
 });
