@@ -252,4 +252,105 @@ maybe('PasswordlessService against Postgres', () => {
       await prisma.loginChallenge.count({ where: { emailNormalized: email } }),
     ).toBe(0);
   });
+
+  it('strips every credential an attacker planted on an unverified account and keeps the kids', async () => {
+    const stamp = `${process.pid}-${++n}`;
+    const email = `pwl-it-victim-${stamp}@example.com`;
+    const attacker = await prisma.user.create({
+      data: {
+        email,
+        passwordHash: 'attacker-hash',
+        isEmailVerified: false,
+        googleId: `pwl-it-g-${stamp}`,
+        appleId: `pwl-it-a-${stamp}`,
+        pinHash: 'attacker-pin',
+        biometricsEnabled: true,
+        hasLocalPassword: true,
+      },
+    });
+    await prisma.session.create({
+      data: {
+        userId: attacker.id,
+        token: `pwl-it-sess-${stamp}`,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
+    });
+    await prisma.deviceToken.create({
+      data: {
+        userId: attacker.id,
+        token: `pwl-it-dev-${stamp}`,
+        platform: 'ios',
+      },
+    });
+    await prisma.kid.create({
+      data: { parentId: attacker.id, name: 'planted' },
+    });
+
+    const { code } = await issue(email);
+    const res = await service.verify(email, code, '26.0.0.1');
+
+    expect(res.isNewUser).toBe(false);
+    const after = await prisma.user.findUniqueOrThrow({
+      where: { id: attacker.id },
+    });
+    expect(after).toMatchObject({
+      isEmailVerified: true,
+      googleId: null,
+      appleId: null,
+      pinHash: null,
+      biometricsEnabled: false,
+      hasLocalPassword: false,
+    });
+    expect(after.passwordHash).not.toBe('attacker-hash');
+    expect(
+      await prisma.session.count({
+        where: { userId: attacker.id, token: `pwl-it-sess-${stamp}` },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.deviceToken.count({ where: { userId: attacker.id } }),
+    ).toBe(0);
+    expect(await prisma.kid.count({ where: { parentId: attacker.id } })).toBe(
+      1,
+    );
+    await prisma.kid.deleteMany({ where: { parentId: attacker.id } });
+  });
+
+  it('only links a provider to a verified account', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${process.pid}-${++n}`;
+    const unverified = await prisma.user.create({
+      data: {
+        email: `pwl-it-u-${stamp}@example.com`,
+        passwordHash: 'h',
+        isEmailVerified: false,
+      },
+    });
+    const verified = await prisma.user.create({
+      data: {
+        email: `pwl-it-v-${stamp}@example.com`,
+        passwordHash: 'h',
+        isEmailVerified: true,
+      },
+    });
+
+    expect(
+      await authRepo.linkGoogleAccountIfUnset(
+        unverified.id,
+        `pwl-it-g1-${stamp}`,
+      ),
+    ).toEqual({ count: 0 });
+    expect(
+      await authRepo.linkAppleAccountIfUnset(
+        unverified.id,
+        `pwl-it-a1-${stamp}`,
+      ),
+    ).toEqual({ count: 0 });
+    expect(
+      await authRepo.linkGoogleAccountIfUnset(
+        verified.id,
+        `pwl-it-g2-${stamp}`,
+      ),
+    ).toEqual({ count: 1 });
+  });
 });

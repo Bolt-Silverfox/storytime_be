@@ -54,6 +54,7 @@ describe('OAuthService', () => {
       updateUser: jest.fn(),
       updateUserWithRelations: jest.fn(),
       deleteAllUserSessions: jest.fn(),
+      deleteAllUserDeviceTokens: jest.fn(),
       createUser: jest.fn(),
       findAvatarByUrl: jest.fn(),
       createAvatar: jest.fn(),
@@ -181,7 +182,14 @@ describe('OAuthService', () => {
         expect(update[1]).toMatchObject({
           isEmailVerified: true,
           hasLocalPassword: false,
+          googleId: 'google-victim',
+          appleId: null,
+          pinHash: null,
+          biometricsEnabled: false,
         });
+        expect(authRepository.deleteAllUserDeviceTokens).toHaveBeenCalledWith(
+          'victim-account',
+        );
         expect(update[1].passwordHash).toBeDefined();
         expect(update[1].passwordHash).not.toBe('attacker-chosen-hash');
         expect(
@@ -189,6 +197,19 @@ describe('OAuthService', () => {
         ).toBeLessThan(
           authRepository.updateUserWithRelations.mock.invocationCallOrder[0],
         );
+      });
+
+      it('drops a Google id the attacker linked earlier when the owner arrives through Google', async () => {
+        authRepository.findUserByEmail.mockResolvedValue({
+          ...attackerOwned,
+          googleId: 'attacker-google-sub',
+          appleId: 'attacker-apple-sub',
+        });
+        await service.loginWithGoogleIdToken('valid-token');
+
+        const data = authRepository.updateUserWithRelations.mock.calls[0][1];
+        expect(data.googleId).toBe('google-victim');
+        expect(data.appleId).toBeNull();
       });
 
       it('leaves sessions and password alone for an already verified account', async () => {

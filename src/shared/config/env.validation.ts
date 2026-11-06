@@ -1,7 +1,18 @@
 import { z } from 'zod';
 import { Logger } from '@nestjs/common';
 
-export const envSchema = z
+export const isPeriodic = (value: string): boolean => {
+  for (let period = 1; period <= value.length / 2; period++) {
+    let periodic = true;
+    for (let i = period; i < value.length && periodic; i++) {
+      periodic = value[i] === value[i - period];
+    }
+    if (periodic) return true;
+  }
+  return false;
+};
+
+const envSchema = z
   .object({
     // Unset must be strict: nonProdThrottleMultiplier relaxes rate limits for
     // development/staging, so an absent NODE_ENV defaults to 'production'.
@@ -119,7 +130,8 @@ export const envSchema = z
         .refine(
           (v) =>
             !/change.?me|replace|placeholder|your[-_ ]/i.test(v) &&
-            new Set(v).size > 1,
+            new Set(v).size >= 16 &&
+            !isPeriodic(v),
           'PASSWORDLESS_PEPPER must not be a placeholder',
         )
         .optional(),

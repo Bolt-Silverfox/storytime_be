@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   ConflictException,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -12,6 +13,9 @@ import { ConfigService } from '@nestjs/config';
 import appleSigninAuth from 'apple-signin-auth';
 import { Prisma } from '@prisma/client';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
+
+const UNVERIFIED_LINK_MESSAGE =
+  'Verify your email before linking a sign-in provider.';
 
 /**
  * Owns account-linking concerns for authenticated users: listing linked
@@ -123,6 +127,8 @@ export class AccountLinkingService {
       // Either user does not exist (or is soft-deleted), or googleId is already set
       const user = await this.authRepository.findActiveUserById(userId);
       if (!user) throw new NotFoundException('User not found');
+      if (!user.isEmailVerified)
+        throw new ForbiddenException(UNVERIFIED_LINK_MESSAGE);
       throw new BadRequestException('Google account is already linked.');
     }
 
@@ -181,6 +187,8 @@ export class AccountLinkingService {
       // Either user does not exist (or is soft-deleted), or appleId is already set
       const user = await this.authRepository.findActiveUserById(userId);
       if (!user) throw new NotFoundException('User not found');
+      if (!user.isEmailVerified)
+        throw new ForbiddenException(UNVERIFIED_LINK_MESSAGE);
       throw new BadRequestException('Apple account is already linked.');
     }
 

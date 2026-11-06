@@ -549,6 +549,52 @@ describe('PasswordlessService', () => {
       expect(user.passwordHash).not.toBe('attacker-chosen-hash');
     });
 
+    it('removes every other credential the attacker planted on the unverified account', async () => {
+      const { service, captured, authRepo } = build();
+      const user = await seedAttackerAccount(authRepo, 'victim@example.com');
+      Object.assign(user, {
+        googleId: 'attacker-google-sub',
+        appleId: 'attacker-apple-sub',
+        pinHash: 'attacker-pin',
+        biometricsEnabled: true,
+      });
+      authRepo.deviceTokens.push({ userId: user.id, token: 'attacker-device' });
+      authRepo.deviceTokens.push({ userId: 'someone-else', token: 'other' });
+      await service.request('victim@example.com', '1.1.1.1');
+
+      await service.verify('victim@example.com', captured[0].code, '3.3.3.3');
+
+      expect(
+        await authRepo.findUserByGoogleId('attacker-google-sub'),
+      ).toBeNull();
+      expect(await authRepo.findUserByAppleId('attacker-apple-sub')).toBeNull();
+      expect(user.pinHash).toBeNull();
+      expect(user.biometricsEnabled).toBe(false);
+      expect(authRepo.deviceTokens).toEqual([
+        { userId: 'someone-else', token: 'other' },
+      ]);
+    });
+
+    it('keeps the linked providers and pin of an already verified account', async () => {
+      const { service, captured, authRepo } = build();
+      const user = await seedAttackerAccount(authRepo, 'owner@example.com');
+      Object.assign(user, {
+        isEmailVerified: true,
+        googleId: 'owner-google-sub',
+        pinHash: 'owner-pin',
+        biometricsEnabled: true,
+      });
+      authRepo.deviceTokens.push({ userId: user.id, token: 'owner-device' });
+      await service.request('owner@example.com', '1.1.1.1');
+
+      await service.verify('owner@example.com', captured[0].code, '3.3.3.3');
+
+      expect(user.googleId).toBe('owner-google-sub');
+      expect(user.pinHash).toBe('owner-pin');
+      expect(user.biometricsEnabled).toBe(true);
+      expect(authRepo.deviceTokens).toHaveLength(1);
+    });
+
     it('leaves the password and other sessions of an already verified account alone', async () => {
       const { service, captured, authRepo } = build();
       const user = await seedAttackerAccount(authRepo, 'owner@example.com');
@@ -684,11 +730,14 @@ describe('PasswordlessService', () => {
   });
 
   describe('long-term caps per email', () => {
-    it('stops sending after 10 emails to one address in a day, with an error log', async () => {
-      const errorSpy = jest
-        .spyOn(Logger.prototype, 'error')
-        .mockImplementation();
+    const quiet = () => {
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation();
       jest.spyOn(Logger.prototype, 'log').mockImplementation();
+      return jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    };
+
+    it('stops sending after 10 emails from one network to one address in a day, with an error log', async () => {
+      const errorSpy = quiet();
       const { service, captured } = build();
       for (let i = 0; i < 12; i++) {
         await service.request('target@example.com', '1.1.1.1');
@@ -698,37 +747,109 @@ describe('PasswordlessService', () => {
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('daily'));
     });
 
-    it('blocks further verification, even with the right code, after 20 failures in a day', async () => {
-      const errorSpy = jest
-        .spyOn(Logger.prototype, 'error')
-        .mockImplementation();
-      jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-      jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    it('does not let a stranger burn the owner quota from another network', async () => {
+      quiet();
       const { service, captured } = build();
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 12; i++) {
+        await service.request('owner@example.com', '66.66.66.6');
+        jest.advanceTimersByTime(13 * 60_000);
+      }
+      expect(captured).toHaveLength(10);
+
+      await service.request('owner@example.com', '203.0.113.9');
+
+      expect(captured).toHaveLength(11);
+      expect(captured[10].email).toBe('owner@example.com');
+    });
+
+    it('applies a 30 per day ceiling per address across networks', async () => {
+      const errorSpy = quiet();
+      const { service, captured } = build();
+      for (let i = 0; i < 33; i++) {
+        await service.request('target@example.com', `10.${i}.0.1`);
+        jest.advanceTimersByTime(13 * 60_000);
+      }
+      expect(captured).toHaveLength(30);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('daily'));
+    });
+
+    it('does not consume any send counter when the challenge cannot be stored', async () => {
+      quiet();
+      const { service, repo, redis } = build();
+      jest
+        .spyOn(repo, 'replaceOpenChallenge')
+        .mockRejectedValueOnce(new Error('db'));
+
+      await expect(
+        service.request('target@example.com', '1.1.1.1'),
+      ).rejects.toThrow('db');
+
+      expect(await redis.client.get('pwl:req:global')).toBeNull();
+    });
+
+    it('does not count wrong codes against the address when no challenge is open', async () => {
+      const errorSpy = quiet();
+      const { service, captured } = build();
+      for (let i = 0; i < 25; i++) {
         await expectGeneric(
-          service.verify('target@example.com', '123456', `40.0.0.${i}`),
+          service.verify('target@example.com', '123456', `40.0.${i}.1`),
         );
         if (i % 9 === 8) jest.advanceTimersByTime(16 * 60_000);
+      }
+      jest.advanceTimersByTime(16 * 60_000);
+      await service.request('target@example.com', '1.1.1.1');
+
+      await expect(
+        service.verify('target@example.com', captured[0].code, '41.0.0.1'),
+      ).resolves.toBeDefined();
+      expect(errorSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('failed-attempt cap'),
+      );
+    });
+
+    it('lets the correct code win after 20 failed guesses against real challenges, and logs the cap', async () => {
+      const errorSpy = quiet();
+      const { service, captured } = build();
+      for (let round = 0; round < 4; round++) {
+        await service.request('target@example.com', '1.1.1.1');
+        const real = captured[captured.length - 1].code;
+        for (let i = 0; i < 5; i++) {
+          await expectGeneric(
+            service.verify(
+              'target@example.com',
+              wrongCode(real),
+              `40.0.${i}.1`,
+            ),
+          );
+        }
+        jest.advanceTimersByTime(16 * 60_000);
       }
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('failed-attempt cap'),
       );
-      jest.advanceTimersByTime(16 * 60_000);
+
       await service.request('target@example.com', '1.1.1.1');
       await expect(
-        service.verify('target@example.com', captured[0].code, '41.0.0.1'),
-      ).rejects.toMatchObject({ status: 429 });
+        service.verify(
+          'target@example.com',
+          captured[captured.length - 1].code,
+          '41.0.0.1',
+        ),
+      ).resolves.toBeDefined();
     });
 
     it('lets the right code through before the cap is reached', async () => {
       const { service, captured } = build();
-      for (let i = 0; i < 5; i++) {
+      await service.request('target@example.com', '1.1.1.1');
+      for (let i = 0; i < 4; i++) {
         await expectGeneric(
-          service.verify('target@example.com', '123456', `40.0.0.${i}`),
+          service.verify(
+            'target@example.com',
+            wrongCode(captured[0].code),
+            `40.0.${i}.1`,
+          ),
         );
       }
-      await service.request('target@example.com', '1.1.1.1');
       await expect(
         service.verify('target@example.com', captured[0].code, '41.0.0.1'),
       ).resolves.toBeDefined();

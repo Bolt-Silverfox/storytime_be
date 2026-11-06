@@ -146,6 +146,7 @@ export class InMemoryRedis {
 export class InMemoryAuthRepository {
   users: Array<User & { profile: Profile | null; avatar: Avatar | null }> = [];
   sessions: Session[] = [];
+  deviceTokens: Array<{ userId: string; token: string }> = [];
   created: Array<Record<string, unknown>> = [];
 
   findUserByEmail = (email: string) =>
@@ -199,6 +200,17 @@ export class InMemoryAuthRepository {
     this.sessions = this.sessions.filter((s) => s.userId !== userId);
     return Promise.resolve();
   };
+
+  deleteAllUserDeviceTokens = (userId: string) => {
+    this.deviceTokens = this.deviceTokens.filter((t) => t.userId !== userId);
+    return Promise.resolve();
+  };
+
+  findUserByGoogleId = (googleId: string) =>
+    Promise.resolve(this.users.find((u) => u.googleId === googleId) ?? null);
+
+  findUserByAppleId = (appleId: string) =>
+    Promise.resolve(this.users.find((u) => u.appleId === appleId) ?? null);
 
   countKidsByParentId = () => Promise.resolve(0);
 

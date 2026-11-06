@@ -34,6 +34,9 @@ describe('sentry-setup passwordless body protection', () => {
     expect(opts.ignoreIncomingRequestBody('/auth/passwordless/consume')).toBe(
       true,
     );
+    expect(
+      opts.ignoreIncomingRequestBody('/api/v1/Auth/Passwordless/Verify'),
+    ).toBe(true);
     expect(opts.ignoreIncomingRequestBody('/api/v1/auth/login')).toBe(false);
     expect(init.mock.calls[0][0].integrations).toEqual([{ name: 'Http' }]);
   });

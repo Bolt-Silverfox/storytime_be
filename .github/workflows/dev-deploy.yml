@@ -327,21 +327,17 @@ jobs:
       # @nestjs 12 bumps (#630, #635, #636) landed on develop-v1.3.1 while
       # breaking 41 suites, and how a run logging "Test Suites: 85 failed"
       # was still reported as a passing check.
-      # The passwordless integration spec needs a real Postgres and is skipped
-      # when PASSWORDLESS_TEST_DATABASE_URL is unset, so a green full run alone
-      # does not prove it executed. Run it on its own here and fail the step if
-      # Jest reports anything skipped. The database is the migrated service
-      # container above; its name ends in _test, which the spec requires.
       - name: Run passwordless integration spec (must not skip)
+        shell: bash
         env:
           PASSWORDLESS_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storytime_test
         run: |
           pnpm exec jest src/auth/services/passwordless.integration.spec.ts --runInBand --ci 2>&1 | tee passwordless-integration.log
-          if grep -Eq "Tests:.*skipped" passwordless-integration.log; then
-            echo "::error::Passwordless integration spec was skipped"
+          if grep -Eq "^Tests:.*(failed|skipped|todo)" passwordless-integration.log; then
+            echo "::error::Passwordless integration spec failed or was skipped"
             exit 1
           fi
-          grep -Eq "Tests:.*[0-9]+ passed" passwordless-integration.log
+          grep -Eq "^Tests:[[:space:]]+[0-9]+ passed, [0-9]+ total" passwordless-integration.log
 
       - name: Run tests with coverage
         run: pnpm test --coverage

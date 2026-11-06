@@ -53,6 +53,10 @@ export async function findOrCreateParentByVerifiedEmail(
     const hardened: {
       passwordHash?: string;
       hasLocalPassword?: boolean;
+      pinHash?: string | null;
+      biometricsEnabled?: boolean;
+      googleId?: string | null;
+      appleId?: string | null;
       onboardingStatus?: string;
     } = {};
     if (takeover) {
@@ -61,14 +65,19 @@ export async function findOrCreateParentByVerifiedEmail(
         crypto.randomBytes(16).toString('hex'),
       );
       hardened.hasLocalPassword = false;
+      hardened.pinHash = null;
+      hardened.biometricsEnabled = false;
+      hardened.googleId = googleId ?? null;
+      hardened.appleId = appleId ?? null;
+      await authRepository.deleteAllUserDeviceTokens(existing.id);
       if (onboardingStatus) hardened.onboardingStatus = onboardingStatus;
     }
 
     const user = await authRepository.updateUserWithRelations(existing.id, {
-      ...hardened,
       isEmailVerified: emailVerified ? true : existing.isEmailVerified,
       googleId: googleId || existing.googleId,
       appleId: appleId || existing.appleId,
+      ...hardened,
     });
     return { user, isNewUser: false, newlyVerified: takeover };
   }

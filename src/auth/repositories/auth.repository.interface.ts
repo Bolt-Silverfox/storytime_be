@@ -94,6 +94,8 @@ export interface IAuthRepository {
     data: Partial<{
       passwordHash: string;
       hasLocalPassword: boolean;
+      pinHash: string | null;
+      biometricsEnabled: boolean;
       isEmailVerified: boolean;
       onboardingStatus: string;
       googleId: string | null;
@@ -134,6 +136,7 @@ export interface IAuthRepository {
   findSessionById(id: string): Promise<Session | null>;
   deleteSession(id: string): Promise<void>;
   deleteAllUserSessions(userId: string): Promise<void>;
+  deleteAllUserDeviceTokens(userId: string): Promise<void>;
   deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void>;
 
   // Security / IP tracking operations

@@ -1,8 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AccountLinkingService } from './account-linking.service';
 import { AUTH_REPOSITORY } from '../repositories';
+
+jest.mock('google-auth-library', () => ({
+  OAuth2Client: jest.fn().mockImplementation(() => ({
+    verifyIdToken: jest.fn().mockResolvedValue({
+      getPayload: () => ({ sub: 'google-sub' }),
+    }),
+  })),
+}));
+jest.mock('apple-signin-auth', () => ({
+  __esModule: true,
+  default: { verifyIdToken: jest.fn().mockResolvedValue({ sub: 'apple-sub' }) },
+}));
 
 describe('AccountLinkingService', () => {
   let service: AccountLinkingService;
@@ -29,13 +45,48 @@ describe('AccountLinkingService', () => {
       providers: [
         AccountLinkingService,
         { provide: AUTH_REPOSITORY, useValue: mockAuthRepository },
-        { provide: ConfigService, useValue: { get: jest.fn() } },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn((k: string) => `cfg-${k}`) },
+        },
       ],
     }).compile();
 
     service = module.get<AccountLinkingService>(AccountLinkingService);
     authRepository = module.get(AUTH_REPOSITORY);
   });
+
+  describe.each([
+    ['google', 'linkGoogle', 'linkGoogleAccountIfUnset'],
+    ['apple', 'linkApple', 'linkAppleAccountIfUnset'],
+  ] as const)(
+    '%s linking while the email is unverified',
+    (_p, method, repoFn) => {
+      it('refuses with a 403 instead of attaching the identity', async () => {
+        authRepository[repoFn].mockResolvedValue({ count: 0 });
+        authRepository.findActiveUserById.mockResolvedValue({
+          id: 'user-1',
+          isEmailVerified: false,
+        });
+
+        await expect(service[method]('user-1', 'token')).rejects.toBeInstanceOf(
+          ForbiddenException,
+        );
+      });
+
+      it('still reports an already linked provider for a verified account', async () => {
+        authRepository[repoFn].mockResolvedValue({ count: 0 });
+        authRepository.findActiveUserById.mockResolvedValue({
+          id: 'user-1',
+          isEmailVerified: true,
+        });
+
+        await expect(service[method]('user-1', 'token')).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+      });
+    },
+  );
 
   describe('getLinkedAccounts', () => {
     it('should throw NotFoundException when user does not exist', async () => {

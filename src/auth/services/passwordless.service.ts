@@ -27,6 +27,7 @@ import { PasswordlessGuestMergeService } from './passwordless-guest-merge.servic
 import { PasswordlessThrottleService } from './passwordless-throttle.service';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
+import { ipBlock } from './ip-block';
 import {
   findOrCreateParentByVerifiedEmail,
   VerifiedEmailResult,
@@ -83,6 +84,7 @@ export class PasswordlessService {
     };
 
     const L = PASSWORDLESS_LIMITS;
+    let sendCounters: Array<[string, number]> = [];
     try {
       const ipCount = await this.throttle.hit(
         `pwl:req:ip:${ipHash}`,
@@ -108,24 +110,31 @@ export class PasswordlessService {
       ) {
         return result;
       }
-      const dayCount = await this.throttle.hit(
-        `pwl:req:email:${emailHash}:d`,
-        L.requestPerEmailDay.windowMs,
-      );
-      if (dayCount > L.requestPerEmailDay.max) {
+      const dayNetworkKey = `pwl:req:email:${emailHash}:net:${this.hmac(ipBlock(ip))}:d`;
+      const dayEmailKey = `pwl:req:email:${emailHash}:d`;
+      const [dayNetwork, dayEmail, globalCount] = await Promise.all([
+        this.throttle.peek(dayNetworkKey),
+        this.throttle.peek(dayEmailKey),
+        this.throttle.peek(PASSWORDLESS_GLOBAL_KEY),
+      ]);
+      if (
+        dayNetwork >= L.requestPerEmailDayPerNetwork.max ||
+        dayEmail >= L.requestPerEmailDay.max
+      ) {
         this.logger.error(
           `Passwordless daily send cap hit for email hash ${emailHash.slice(0, 12)}`,
         );
         return result;
       }
-      const globalCount = await this.throttle.hit(
-        PASSWORDLESS_GLOBAL_KEY,
-        L.requestGlobal.windowMs,
-      );
-      if (globalCount > L.requestGlobal.max) {
+      if (globalCount >= L.requestGlobal.max) {
         this.logger.error('Passwordless global send ceiling reached');
         return result;
       }
+      sendCounters = [
+        [dayNetworkKey, L.requestPerEmailDayPerNetwork.windowMs],
+        [dayEmailKey, L.requestPerEmailDay.windowMs],
+        [PASSWORDLESS_GLOBAL_KEY, L.requestGlobal.windowMs],
+      ];
     } catch (error) {
       if (error instanceof HttpException) throw error;
       this.logger.error('Passwordless throttle store unavailable');
@@ -147,6 +156,12 @@ export class PasswordlessService {
       expiresAt: new Date(now.getTime() + PASSWORDLESS_CODE_TTL_SECONDS * 1000),
       requestIpHash: ipHash,
       now,
+    });
+
+    await Promise.all(
+      sendCounters.map(([key, windowMs]) => this.throttle.hit(key, windowMs)),
+    ).catch(() => {
+      this.logger.error('Passwordless throttle store unavailable');
     });
 
     this.eventEmitter.emit('passwordless.requested', {
@@ -179,14 +194,12 @@ export class PasswordlessService {
         this.codeHash(DUMMY_CHALLENGE_ID, code),
         this.codeHash(DUMMY_CHALLENGE_ID, '000000'),
       );
-      await this.recordFailure(emailHash);
       throw this.invalid();
     }
 
     const attempt = await this.challenges.recordAttempt(challengeId, now);
     if (!attempt) {
       this.logger.warn(`Passwordless challenge not usable ${challengeId}`);
-      await this.recordFailure(emailHash);
       throw this.invalid();
     }
     if (
@@ -321,14 +334,7 @@ export class PasswordlessService {
             L.verifyPerEmail.windowMs,
           )
         : 0;
-      const failures = emailHash
-        ? await this.throttle.peek(`pwl:fail:email:${emailHash}`)
-        : 0;
-      if (
-        ipCount > L.verifyPerIp.max ||
-        emailCount > L.verifyPerEmail.max ||
-        failures >= L.failedVerifyPerEmailDay.max
-      ) {
+      if (ipCount > L.verifyPerIp.max || emailCount > L.verifyPerEmail.max) {
         throw new HttpException(
           'Too many requests. Please try again later.',
           HttpStatus.TOO_MANY_REQUESTS,

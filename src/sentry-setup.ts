@@ -34,7 +34,7 @@ if (isSentryEnabled) {
       process.env.SENTRY_RELEASE || process.env.npm_package_version || '1.0.0',
     integrations: [
       Sentry.httpIntegration({
-        ignoreIncomingRequestBody: (url) => url.includes('/auth/passwordless/'),
+        ignoreIncomingRequestBody: (url) => /\/auth\/passwordless\//i.test(url),
       }),
     ],
     // Sampling for Sentry-side performance spans. Traces themselves are exported

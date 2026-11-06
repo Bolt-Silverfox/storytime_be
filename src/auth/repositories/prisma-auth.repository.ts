@@ -138,6 +138,8 @@ export class PrismaAuthRepository implements IAuthRepository {
     data: Partial<{
       passwordHash: string;
       hasLocalPassword: boolean;
+      pinHash: string | null;
+      biometricsEnabled: boolean;
       isEmailVerified: boolean;
       onboardingStatus: string;
       googleId: string | null;
@@ -197,7 +199,12 @@ export class PrismaAuthRepository implements IAuthRepository {
     googleId: string,
   ): Promise<{ count: number }> {
     return this.prisma.user.updateMany({
-      where: { id: userId, googleId: null, isDeleted: false },
+      where: {
+        id: userId,
+        googleId: null,
+        isDeleted: false,
+        isEmailVerified: true,
+      },
       data: { googleId },
     });
   }
@@ -207,7 +214,12 @@ export class PrismaAuthRepository implements IAuthRepository {
     appleId: string,
   ): Promise<{ count: number }> {
     return this.prisma.user.updateMany({
-      where: { id: userId, appleId: null, isDeleted: false },
+      where: {
+        id: userId,
+        appleId: null,
+        isDeleted: false,
+        isEmailVerified: true,
+      },
       data: { appleId },
     });
   }
@@ -255,6 +267,10 @@ export class PrismaAuthRepository implements IAuthRepository {
 
   async deleteAllUserSessions(userId: string): Promise<void> {
     await this.prisma.session.deleteMany({ where: { userId } });
+  }
+
+  async deleteAllUserDeviceTokens(userId: string): Promise<void> {
+    await this.prisma.deviceToken.deleteMany({ where: { userId } });
   }
 
   async deleteOtherSessions(
