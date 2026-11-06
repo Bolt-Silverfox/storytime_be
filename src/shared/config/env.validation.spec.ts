@@ -171,6 +171,7 @@ describe('validateEnv', () => {
       'your-pepper-goes-here-0000000000000000',
       'a'.repeat(40),
       'ab'.repeat(20),
+      'aabbabbaabbbababaabbbabbabaababbabab',
       'abcdefgh'.repeat(5),
       'abcdefghij1234567890'.repeat(2),
     ])('rejects the placeholder pepper %s', (placeholder) => {
