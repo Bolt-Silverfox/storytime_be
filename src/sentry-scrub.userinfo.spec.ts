@@ -57,6 +57,26 @@ const CARRIERS: Array<[string, string, string]> = [
     `postgres%3A%2F%2F${REDACTED}%40db%2Fapp`,
   ],
   [
+    'fully percent-encoded url followed by an encoded email',
+    `postgres%3A%2F%2F${USER}%3A${PW}%40db%2Fapp%3Fcontact%3Da%40b.c`,
+    `postgres%3A%2F%2F${REDACTED}%40db%2Fapp%3Fcontact%3Da%40b.c`,
+  ],
+  [
+    'password with percent-encoded hash',
+    `postgres://u:${PW}%23x@h/db`,
+    `postgres://${REDACTED}@h/db`,
+  ],
+  [
+    'password with percent-encoded slash',
+    `postgres://${USER}:${PW}%2Fx@h/db`,
+    `postgres://${REDACTED}@h/db`,
+  ],
+  [
+    'password with percent-encoded question mark and empty user',
+    `redis://:${PW}%3Fx@cache:6379`,
+    `redis://${REDACTED}@cache:6379`,
+  ],
+  [
     'url with query and fragment',
     `https://${USER}:${PW}@h/p?a=1#frag`,
     `https://${REDACTED}@h/p?a=1#frag`,
@@ -83,26 +103,33 @@ describe('URL userinfo credentials in free text', () => {
     'https://example.com#frag@x',
     'postgresql://db.internal:5432/app',
     'mailto:someone@example.com',
-    'user:pass@host',
+    'contact me at someone@example.com',
+    'git@github.com:org/repo.git',
+    'npm i @scope/pkg',
   ])('leaves %s unchanged', (text) => {
     expect(scrubMessage(text)).toBe(text);
   });
 
-  it('redacts a url passed as a query-string parameter value', () => {
+  it.each([
+    `postgres://${USER}:${PW}@db/app`,
+    `postgres://${USER}:${PW}%23x@db/app`,
+    `postgres://${USER}:${PW}%2Fx@db/app`,
+    `redis://:${PW}%3Fx@cache:6379`,
+  ])('redacts %s passed as a query-string parameter value', (dsn) => {
     const out = scrubError({
-      request: {
-        url: 'https://api/x',
-        query_string: `dsn=postgres://${USER}:${PW}@db/app&page=2`,
-      },
+      request: { url: 'https://api/x', query_string: `dsn=${dsn}&page=2` },
     });
     expect(JSON.stringify(out)).not.toContain(PW);
     expect(out.request.query_string).toContain('page=2');
   });
 });
 
-describe('connection string in every event field', () => {
-  const URL_WITH_SECRET = `redis://${USER}:${PW}@cache:6379`;
-
+describe.each([
+  ['plain password', `redis://${USER}:${PW}@cache:6379`],
+  ['encoded hash', `postgres://${USER}:${PW}%23x@h/db`],
+  ['encoded slash', `postgres://${USER}:${PW}%2Fx@h/db`],
+  ['encoded question mark', `redis://:${PW}%3Fx@cache:6379`],
+])('connection string with %s in every event field', (_n, URL_WITH_SECRET) => {
   const fullEvent = (): any => ({
     message: `m ${URL_WITH_SECRET}`,
     transaction: `t ${URL_WITH_SECRET}`,
@@ -137,7 +164,7 @@ describe('connection string in every event field', () => {
       const dumped = JSON.stringify(out);
       expect(dumped).not.toContain(PW);
       expect(dumped).not.toContain(USER);
-      expect(dumped).toContain(`redis://${REDACTED}@cache:6379`);
+      expect(dumped).toContain(`${REDACTED}@`);
     }
     const crumb: any = scrubSentryBreadcrumb(fullEvent().breadcrumbs[0]);
     expect(JSON.stringify(crumb)).not.toContain(PW);
@@ -177,9 +204,9 @@ describe('userinfo scrubbing stays linear', () => {
 
   it.each(INPUTS)('%s', (_name, text) => {
     scrubMessage('warm://up:pw@h');
-    const started = process.hrtime.bigint();
+    const started = process.cpuUsage();
     scrubMessage(text);
-    const ms = Number(process.hrtime.bigint() - started) / 1e6;
-    expect(ms).toBeLessThan(2000);
+    const spent = process.cpuUsage(started);
+    expect((spent.user + spent.system) / 1000).toBeLessThan(100);
   });
 });

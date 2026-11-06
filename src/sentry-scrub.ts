@@ -162,7 +162,7 @@ const KEY_VALUE_HEAD =
   /(?<![^\s=:&?#{}()[\],;<>"'])(["']?)([^\s=:&?#{}()[\],;<>"']{1,100})\1(?:[ \t]*(?:=>|[:=])[ \t]*|([ \t]+))/g;
 
 const URL_USERINFO =
-  /(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*(?::|%3A)(?:\/\/|%2F%2F))(?:(?!%2F|%3F|%23)[^\s/?#"'<>])*(@|%40)/gi;
+  /(?<![a-z0-9+.-])(?:([a-z][a-z0-9+.-]*(?::|%3A)\/\/)[^\s/?#"'<>]*(@|%40)|([a-z][a-z0-9+.-]*(?::|%3A)%2F%2F)(?:(?!%2F|%3F|%23)[^\s/?#"'<>])*(@|%40))/gi;
 
 const UNQUOTED_VALUE = /[^\s&,;"'})\]]+/y;
 
@@ -200,7 +200,13 @@ function scrubText(text: string, nested = true): string {
   const src = text
     .replace(
       URL_USERINFO,
-      (_m, head: string, at: string) => `${head}${REDACTED}${at}`,
+      (
+        _m,
+        rawHead: string | undefined,
+        rawAt: string | undefined,
+        encodedHead: string | undefined,
+        encodedAt: string | undefined,
+      ) => `${rawHead ?? encodedHead}${REDACTED}${rawAt ?? encodedAt}`,
     )
     .replace(
       /\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/gi,
